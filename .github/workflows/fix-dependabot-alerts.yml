@@ -5,8 +5,10 @@
 # fix-dependabot-alerts script, verifying the build for each fix,
 # and opening a pull request with the passing changes.
 #
-# Requires security-events: write permission for the GITHUB_TOKEN
-# to access the Dependabot alerts REST API.
+# Uses a GitHub App (via actions/create-github-app-token) to authenticate
+# with the Dependabot alerts REST API, since GITHUB_TOKEN lacks access
+# in the microsoft org. Requires DEPENDABOT_APP_ID (variable) and
+# DEPENDABOT_APP_PRIVATE_KEY (secret).
 
 name: fix-dependabot-alerts
 
@@ -62,9 +64,16 @@ jobs:
         working-directory: ts
         run: pnpm install --frozen-lockfile --strict-peer-dependencies
 
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.DEPENDABOT_APP_ID }}
+          private-key: ${{ secrets.DEPENDABOT_APP_PRIVATE_KEY }}
+
       - name: Verify gh authentication
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           gh auth status
           echo "---"
@@ -80,7 +89,7 @@ jobs:
         id: fix
         working-directory: ts
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           # ── Step 1: Discover fixable packages ───────────────────────
           echo "::group::Analysing alerts"
