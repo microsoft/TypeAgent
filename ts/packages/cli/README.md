@@ -141,12 +141,12 @@ There are 3 command under `agent-cli run`:
 `agent-cli connect` starts the interactive agent in connected mode, attaching to a running (or auto-started) agent server.
 
 ```bash
-agent-cli connect                        # resume most recently active session
+agent-cli connect                        # connect to the default session
 agent-cli connect --session <id>         # resume a specific session by ID
 agent-cli connect --port <port>          # connect to a server on a non-default port (default: 8999)
 ```
 
-- If `--session <id>` is omitted, the server resumes the most recently active session, or auto-creates a session named `"default"` if none exist.
+- If `--session <id>` is omitted, the server connects to the default session, or auto-creates a session named `"default"` if none exist.
 - The server is started automatically if it is not already running.
 
 ### `agent-cli sessions`
