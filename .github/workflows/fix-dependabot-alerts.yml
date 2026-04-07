@@ -238,7 +238,7 @@ jobs:
       - name: Create pull request
         if: ${{ steps.fix.outputs.changes == 'true' && steps.build.outputs.build_ok == 'true' }}
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           BRANCH="automated/fix-dependabot-alerts-$(date +%Y%m%d)"
 
