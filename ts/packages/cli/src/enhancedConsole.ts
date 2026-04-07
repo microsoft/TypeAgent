@@ -111,32 +111,31 @@ class TerminalLayout {
         this.inlineBuffer = "";
         const height = process.stdout.rows || 24;
         const scrollBottom = height - this.promptRows;
-        // Save cursor, move to bottom of scroll region, write, restore
+        const promptStart = scrollBottom + 1;
+        // Move to bottom of scroll region, scroll the region up by one line
+        // with "\n", write the content, then reposition to the start of the
+        // fixed region so render() can finalise the exact cursor position.
         process.stdout.write(
-            "\x1b[s" + `\x1b[${scrollBottom};1H` + "\n" + text + "\x1b[u",
+            `\x1b[${scrollBottom};1H` + "\n" + text + `\x1b[${promptStart};1H`,
         );
     }
 
-    /** Append inline (streaming) text. Accumulates in a buffer and re-renders
-     *  the full inline line at the scroll-region bottom on each call, so tokens
-     *  flow correctly on one line without a scroll-advance "\n" between them. */
+    /** Append inline (streaming) text. Accumulates tokens in a buffer without
+     *  writing to stdout. An empty-string flush signal (sent when streaming
+     *  ends) commits the full buffer as a single block via writeContent().
+     *  This avoids repeated in-place rewrites that produce duplicate output
+     *  on passive observer clients sharing the same scroll-region state. */
     writeInline(text: string) {
         if (!this.active) {
             process.stdout.write(text);
             return;
         }
-        this.inlineBuffer += text;
-        const height = process.stdout.rows || 24;
-        const scrollBottom = height - this.promptRows;
-        // Overwrite the current inline line in place: position at the start
-        // of the scroll-bottom row, clear the line, re-render the buffer.
-        process.stdout.write(
-            "\x1b[s" +
-                `\x1b[${scrollBottom};1H` +
-                "\x1b[2K" +
-                this.inlineBuffer +
-                "\x1b[u",
-        );
+        if (text === "") {
+            // End-of-stream flush signal — commit the accumulated buffer.
+            this.flushInline();
+        } else {
+            this.inlineBuffer += text;
+        }
     }
 
     /** Flush the inline buffer as a committed block line (called when the
