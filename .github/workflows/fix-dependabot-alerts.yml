@@ -73,7 +73,7 @@ jobs:
         run: |
           # ── Step 1: Discover fixable packages ───────────────────────
           echo "::group::Analysing alerts"
-          node tools/scripts/fix-dependabot-alerts.mjs --dry-run --json > /tmp/dep-analysis.json 2>&1 || true
+          node tools/scripts/fix-dependabot-alerts.mjs --dry-run --json > /tmp/dep-analysis.json 2>/tmp/dep-analysis.log || true
 
           if ! jq -e '.summary' /tmp/dep-analysis.json > /dev/null 2>&1; then
             echo "Script produced no JSON output"
@@ -119,20 +119,17 @@ jobs:
           for PKG in $FIXABLE; do
             echo "::group::Fixing $PKG"
 
-            # Snapshot current state so we can rollback
-            git stash push -q --include-untracked -m "pre-$PKG" || true
-
-            # Restore working state (stash saves a copy, pop it back)
-            git stash pop -q || true
-
             # Save a rollback point
-            cp ts/package.json /tmp/pkg-backup.json
-            cp ts/pnpm-lock.yaml /tmp/lock-backup.yaml 2>/dev/null || true
+            cp package.json /tmp/pkg-backup.json
+            cp pnpm-lock.yaml /tmp/lock-backup.yaml 2>/dev/null || true
 
             # Apply fix for this specific package
-            echo "Running: fix-dependabot-alerts.mjs $FLAGS=$PKG"
+            read -r -a fix_args <<< "$FLAGS"
+            last_index=$((${#fix_args[@]} - 1))
+            fix_args[$last_index]="${fix_args[$last_index]}=$PKG"
+            echo "Running: fix-dependabot-alerts.mjs ${fix_args[*]}"
             set +e
-            node tools/scripts/fix-dependabot-alerts.mjs "$FLAGS=$PKG" 2>&1
+            node tools/scripts/fix-dependabot-alerts.mjs "${fix_args[@]}" 2>&1
             fix_exit=$?
             set -e
 
@@ -149,8 +146,8 @@ jobs:
               if [ "$build_exit" -ne 0 ]; then
                 echo "::warning::Build failed after fixing $PKG — rolling back"
                 # Rollback: restore package.json and lockfile, reinstall
-                cp /tmp/pkg-backup.json ts/package.json
-                cp /tmp/lock-backup.yaml ts/pnpm-lock.yaml 2>/dev/null || true
+                cp /tmp/pkg-backup.json package.json
+                cp /tmp/lock-backup.yaml pnpm-lock.yaml 2>/dev/null || true
                 pnpm install 2>&1 || true
                 git checkout -- . 2>/dev/null || true
                 ROLLED_BACK="$ROLLED_BACK $PKG"

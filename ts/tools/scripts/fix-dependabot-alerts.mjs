@@ -10,7 +10,8 @@
  */
 
 import { spawnSync, execFile } from "node:child_process";
-import { readFileSync, writeFileSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -177,7 +178,6 @@ const clr = {
 const _cache = {
     packageDeps: new Map(),
     workspacePkgPaths: null,
-    shellProdDeps: null,
 };
 
 const _inflight = {
@@ -1615,8 +1615,6 @@ const SHELL_WORKSPACE = "agent-shell";
  */
 function getShellProductionDeps() {
     if (_cache.shellProdDeps) return _cache.shellProdDeps;
-    const deps = new Set();
-    _cache.shellProdDeps = deps;
 
     try {
         const output = runCmd(
@@ -1636,8 +1634,9 @@ function getShellProductionDeps() {
             warn(
                 "Could not resolve shell production deps — shell packaging post-check will still validate",
             );
-            return deps;
+            return new Set();
         }
+        const deps = new Set();
         const parsed = parsePaginatedJson(output);
         function collectDeps(node) {
             if (!node) return;
@@ -1650,13 +1649,15 @@ function getShellProductionDeps() {
             if (ws.dependencies) collectDeps(ws.dependencies);
         }
         verbose(`Shell production deps: ${deps.size} packages`);
+        _cache.shellProdDeps = deps;
+        return deps;
     } catch (e) {
         verbose(`getShellProductionDeps failed: ${e.message}`);
         warn(
             "Could not resolve shell production deps — shell packaging post-check will still validate",
         );
+        return new Set();
     }
-    return deps;
 }
 
 /**
@@ -1671,9 +1672,9 @@ function isInShellBundle(pkg) {
 }
 
 /**
- * Post-check: run `pnpm deploy --prod` for the shell workspace into a temp
- * directory, then run `electron-builder install-app-deps` to validate that
- * the dependency tree is consistent.  Returns { ok, error? }.
+ * Post-check: run `pnpm deploy --prod` for the shell workspace into a
+ * temporary directory, then run `electron-builder install-app-deps` to
+ * validate that the dependency tree is consistent.  Returns { ok, error? }.
  *
  * This catches any override that causes electron-builder's
  * traversalNodeModulesCollector to fail with "Production dependency not found".
@@ -1688,11 +1689,13 @@ async function verifyShellPackaging() {
         return { ok: true };
     }
     const shellDir = dirname(shellPath);
-    const deployDir = resolve(shellDir, "deploy");
+    const electronBuilderConfig = resolve(
+        shellDir,
+        "electron-builder.config.js",
+    );
+    const deployDir = mkdtempSync(resolve(tmpdir(), "depfix-shell-"));
 
     try {
-        // Use pnpm deploy --prod to create a clean production install
-        // (same as the real package script does).
         await runCmdAsync(
             "pnpm",
             [
@@ -1706,12 +1709,6 @@ async function verifyShellPackaging() {
             { timeout: 300000 },
         );
 
-        // electron-builder install-app-deps validates the dep tree
-        const electronBuilderConfig = resolve(
-            shellDir,
-            "..",
-            "electron-builder.config.js",
-        );
         await runCmdAsync(
             "npx",
             [
@@ -1728,7 +1725,6 @@ async function verifyShellPackaging() {
     } catch (e) {
         return { ok: false, error: e.message };
     } finally {
-        // Clean up the deploy directory
         try {
             rmSync(deployDir, { recursive: true, force: true });
         } catch {
