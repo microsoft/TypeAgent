@@ -1,7 +1,5 @@
 # AgentServer Sessions Architecture
 
-**Author:** George Ng
-
 ---
 
 ## Motivation

@@ -65,7 +65,8 @@ async function getCompletionsData(
 }
 
 export default class Connect extends Command {
-    static description = "Interactive mode";
+    static description =
+        "Connect to the agent server in interactive mode. Resumes the most recently active session, or specify --session <id> to join a specific one.";
     static flags = {
         request: Flags.string({
             description:

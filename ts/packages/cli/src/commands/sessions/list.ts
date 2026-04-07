@@ -19,7 +19,10 @@ function formatTable(sessions: SessionInfo[]): string {
         ...sessions.map((s) => (s.name ?? "").length),
     );
     const clientsWidth = "CLIENTS".length;
-    const createdWidth = "CREATED AT".length;
+    const createdWidth = Math.max(
+        "CREATED AT".length,
+        ...sessions.map((s) => s.createdAt.length),
+    );
 
     const header = [
         "SESSION ID".padEnd(idWidth),
