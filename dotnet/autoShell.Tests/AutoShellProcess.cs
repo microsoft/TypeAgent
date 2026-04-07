@@ -104,11 +104,11 @@ internal sealed class AutoShellProcess : IDisposable
     }
 
     /// <summary>
-    /// Sends {"quit":""} and waits for the process to exit.
+    /// Sends a quit command and waits for the process to exit.
     /// </summary>
     public void SendQuit(int timeoutMs = 5000)
     {
-        SendCommand("""{"quit":""}""");
+        SendCommand("""{"actionName":"quit","parameters":{}}""");
         _process.WaitForExit(timeoutMs);
     }
 

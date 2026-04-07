@@ -32,14 +32,12 @@ internal class PowerSettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    public void Handle(string key, JObject parameters)
     {
-        var param = JObject.Parse(value);
-
         switch (key)
         {
             case "BatterySaverActivationLevel":
-                HandleBatterySaverThreshold(param);
+                HandleBatterySaverThreshold(parameters);
                 break;
 
             case "SetPowerModeOnBattery":
@@ -49,9 +47,9 @@ internal class PowerSettingsHandler : ICommandHandler
         }
     }
 
-    private void HandleBatterySaverThreshold(JObject param)
+    private void HandleBatterySaverThreshold(JObject parameters)
     {
-        int threshold = param.Value<int?>("thresholdValue") ?? 20;
+        int threshold = parameters.Value<int?>("thresholdValue") ?? 20;
         threshold = Math.Clamp(threshold, 0, 100);
         _registry.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\Power\BatterySaver",

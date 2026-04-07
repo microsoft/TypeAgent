@@ -50,10 +50,8 @@ internal class MouseSettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    public void Handle(string key, JObject parameters)
     {
-        var param = JObject.Parse(value);
-
         switch (key)
         {
             case "AdjustMousePointerSize":
@@ -62,7 +60,7 @@ internal class MouseSettingsHandler : ICommandHandler
                 break;
 
             case "CursorTrail":
-                HandleMouseCursorTrail(value);
+                HandleMouseCursorTrail(parameters);
                 break;
 
             case "EnableTouchPad":
@@ -71,26 +69,26 @@ internal class MouseSettingsHandler : ICommandHandler
                 break;
 
             case "EnhancePointerPrecision":
-                HandleEnhancePointerPrecision(param);
+                HandleEnhancePointerPrecision(parameters);
                 break;
 
             case "MouseCursorSpeed":
-                HandleMouseCursorSpeed(param);
+                HandleMouseCursorSpeed(parameters);
                 break;
 
             case "MouseWheelScrollLines":
-                HandleMouseWheelScrollLines(param);
+                HandleMouseWheelScrollLines(parameters);
                 break;
 
             case "SetPrimaryMouseButton":
-                HandleSetPrimaryMouseButton(param);
+                HandleSetPrimaryMouseButton(parameters);
                 break;
         }
     }
 
-    private void HandleEnhancePointerPrecision(JObject param)
+    private void HandleEnhancePointerPrecision(JObject parameters)
     {
-        bool enable = param.Value<bool?>("enable") ?? true;
+        bool enable = parameters.Value<bool?>("enable") ?? true;
         int[] mouseParams = new int[3];
         _systemParams.GetParameter(SPI_GETMOUSE, 0, mouseParams, 0);
         // Set acceleration (third parameter): 1 = enhanced precision on, 0 = off
@@ -98,24 +96,22 @@ internal class MouseSettingsHandler : ICommandHandler
         _systemParams.SetParameter(SPI_SETMOUSE, 0, mouseParams, SPIF_UPDATEINIFILE_SENDCHANGE);
     }
 
-    private void HandleMouseCursorSpeed(JObject param)
+    private void HandleMouseCursorSpeed(JObject parameters)
     {
         // Speed range: 1-20 (default 10)
-        int speed = param.Value<int?>("speedLevel") ?? 10;
+        int speed = parameters.Value<int?>("speedLevel") ?? 10;
         speed = Math.Clamp(speed, 1, 20);
         _systemParams.SetParameter(SPI_SETMOUSESPEED, 0, (IntPtr)speed, SPIF_UPDATEINIFILE_SENDCHANGE);
     }
 
     /// <summary>
     /// Enables or disables the mouse cursor trail and sets its length.
-    /// Command: {"CursorTrail": "{\"enable\":true,\"length\":7}"}
     /// SPI_SETMOUSETRAILS: 0 = off, 2-12 = trail length
     /// </summary>
-    private void HandleMouseCursorTrail(string jsonParams)
+    private void HandleMouseCursorTrail(JObject parameters)
     {
-        var param = JObject.Parse(jsonParams);
-        var enable = param.Value<bool?>("enable") ?? true;
-        var length = param.Value<int?>("length") ?? 7;
+        var enable = parameters.Value<bool?>("enable") ?? true;
+        var length = parameters.Value<int?>("length") ?? 7;
 
         // Clamp trail length to valid range
         length = Math.Max(2, Math.Min(12, length));
@@ -128,16 +124,16 @@ internal class MouseSettingsHandler : ICommandHandler
             : "Cursor trail disabled");
     }
 
-    private void HandleMouseWheelScrollLines(JObject param)
+    private void HandleMouseWheelScrollLines(JObject parameters)
     {
-        int lines = param.Value<int?>("scrollLines") ?? 3;
+        int lines = parameters.Value<int?>("scrollLines") ?? 3;
         lines = Math.Clamp(lines, 1, 100);
         _systemParams.SetParameter(SPI_SETWHEELSCROLLLINES, lines, IntPtr.Zero, SPIF_UPDATEINIFILE_SENDCHANGE);
     }
 
-    private void HandleSetPrimaryMouseButton(JObject param)
+    private void HandleSetPrimaryMouseButton(JObject parameters)
     {
-        string button = param.Value<string>("primaryButton") ?? "left";
+        string button = parameters.Value<string>("primaryButton") ?? "left";
         bool leftPrimary = button.Equals("left", StringComparison.OrdinalIgnoreCase);
         _systemParams.SwapMouseButton(!leftPrimary);
     }

@@ -113,7 +113,7 @@ public class PersonalizationSettingsHandlerTests
 
     private void Handle(string key, string jsonValue)
     {
-        _handler.Handle(key, jsonValue, JObject.Parse(jsonValue));
+        _handler.Handle(key, JObject.Parse(jsonValue));
     }
 }
 
@@ -185,7 +185,7 @@ public class PrivacySettingsHandlerTests
 
     private void Handle(string key, string jsonValue)
     {
-        _handler.Handle(key, jsonValue, JObject.Parse(jsonValue));
+        _handler.Handle(key, JObject.Parse(jsonValue));
     }
 }
 
@@ -257,7 +257,7 @@ public class FileExplorerSettingsHandlerTests
 
     private void Handle(string key, string jsonValue)
     {
-        _handler.Handle(key, jsonValue, JObject.Parse(jsonValue));
+        _handler.Handle(key, JObject.Parse(jsonValue));
     }
 }
 
@@ -313,7 +313,7 @@ public class PowerSettingsHandlerTests
 
     private void Handle(string key, string jsonValue)
     {
-        _handler.Handle(key, jsonValue, JObject.Parse(jsonValue));
+        _handler.Handle(key, JObject.Parse(jsonValue));
     }
 }
 
@@ -436,7 +436,7 @@ public class AccessibilitySettingsHandlerTests
 
     private void Handle(string key, string jsonValue)
     {
-        _handler.Handle(key, jsonValue, JObject.Parse(jsonValue));
+        _handler.Handle(key, JObject.Parse(jsonValue));
     }
 }
 
@@ -621,7 +621,7 @@ public class MouseSettingsHandlerTests
 
     private void Handle(string key, string jsonValue)
     {
-        _handler.Handle(key, jsonValue, JObject.Parse(jsonValue));
+        _handler.Handle(key, JObject.Parse(jsonValue));
     }
 }
 
@@ -819,7 +819,7 @@ public class TaskbarSettingsHandlerTests
 
     private void Handle(string key, string jsonValue)
     {
-        _handler.Handle(key, jsonValue, JObject.Parse(jsonValue));
+        _handler.Handle(key, JObject.Parse(jsonValue));
     }
 }
 
@@ -1014,7 +1014,7 @@ public class DisplaySettingsHandlerTests
 
     private void Handle(string key, string jsonValue)
     {
-        _handler.Handle(key, jsonValue, JObject.Parse(jsonValue));
+        _handler.Handle(key, JObject.Parse(jsonValue));
     }
 }
 
@@ -1118,7 +1118,7 @@ public class SystemSettingsHandlerTests
 
     private void Handle(string key, string jsonValue)
     {
-        _handler.Handle(key, jsonValue, JObject.Parse(jsonValue));
+        _handler.Handle(key, JObject.Parse(jsonValue));
     }
 }
 

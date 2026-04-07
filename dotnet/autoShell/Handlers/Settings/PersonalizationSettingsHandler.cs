@@ -33,18 +33,16 @@ internal class PersonalizationSettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    public void Handle(string key, JObject parameters)
     {
-        var param = JObject.Parse(value);
-
         switch (key)
         {
             case "ApplyColorToTitleBar":
-                HandleApplyColorToTitleBar(param);
+                HandleApplyColorToTitleBar(parameters);
                 break;
 
             case "EnableTransparency":
-                HandleEnableTransparency(param);
+                HandleEnableTransparency(parameters);
                 break;
 
             case "HighContrastTheme":
@@ -52,14 +50,14 @@ internal class PersonalizationSettingsHandler : ICommandHandler
                 break;
 
             case "SystemThemeMode":
-                HandleSystemThemeMode(param);
+                HandleSystemThemeMode(parameters);
                 break;
         }
     }
 
-    private void HandleApplyColorToTitleBar(JObject param)
+    private void HandleApplyColorToTitleBar(JObject parameters)
     {
-        bool enable = param.Value<bool?>("enableColor") ?? true;
+        bool enable = parameters.Value<bool?>("enableColor") ?? true;
         _registry.SetValue(
             @"Software\Microsoft\Windows\DWM",
             "ColorPrevalence",
@@ -67,9 +65,9 @@ internal class PersonalizationSettingsHandler : ICommandHandler
             RegistryValueKind.DWord);
     }
 
-    private void HandleEnableTransparency(JObject param)
+    private void HandleEnableTransparency(JObject parameters)
     {
-        bool enable = param.Value<bool?>("enable") ?? true;
+        bool enable = parameters.Value<bool?>("enable") ?? true;
         _registry.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
             "EnableTransparency",
@@ -77,9 +75,9 @@ internal class PersonalizationSettingsHandler : ICommandHandler
             RegistryValueKind.DWord);
     }
 
-    private void HandleSystemThemeMode(JObject param)
+    private void HandleSystemThemeMode(JObject parameters)
     {
-        string mode = param.Value<string>("mode") ?? "dark";
+        string mode = parameters.Value<string>("mode") ?? "dark";
         int value = mode.Equals("light", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
 
         const string PersonalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";

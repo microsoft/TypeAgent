@@ -73,13 +73,15 @@ export async function runDesktopActions(
     schemaName?: string, // Schema name for disambiguation (e.g., "desktop-display", "desktop-taskbar")
 ) {
     let confirmationMessage = "OK";
-    let actionData = "";
     const actionName = action.actionName;
 
     // Log schema name for debugging duplicate action resolution
     if (schemaName) {
         debug(`Executing action '${actionName}' from schema '${schemaName}'`);
     }
+
+    // Preprocess actions that need TS-side work (mutate parameters in-place)
+    // and generate user-facing confirmation messages.
     switch (actionName) {
         case "SetWallpaper": {
             let file = action.parameters.filePath;
@@ -121,7 +123,7 @@ export async function runDesktopActions(
                     file.indexOf(":") == 2 ||
                     fs.existsSync(file)
                 ) {
-                    actionData = file;
+                    action.parameters.filePath = file;
                 } else {
                     // if the file path is relative we'll have to search for the image since we don't have root storage dir
                     // TODO: add shared agent storage or known storage location (requires permissions, trusted agents, etc.)
@@ -134,12 +136,12 @@ export async function runDesktopActions(
                         );
 
                     if (files.length > 0) {
-                        actionData = path.join(
+                        action.parameters.filePath = path.join(
                             rootTypeAgentDir,
                             files[0] as string,
                         );
                     } else {
-                        actionData = file;
+                        action.parameters.filePath = file;
                     }
                 }
             } else {
@@ -147,11 +149,12 @@ export async function runDesktopActions(
                 break;
             }
 
-            confirmationMessage = "Set wallpaper to " + actionData;
+            confirmationMessage =
+                "Set wallpaper to " + action.parameters.filePath;
             break;
         }
         case "LaunchProgram": {
-            actionData = await mapInputToAppName(
+            action.parameters.name = await mapInputToAppName(
                 action.parameters.name,
                 agentContext,
             );
@@ -159,7 +162,7 @@ export async function runDesktopActions(
             break;
         }
         case "CloseProgram": {
-            actionData = await mapInputToAppName(
+            action.parameters.name = await mapInputToAppName(
                 action.parameters.name,
                 agentContext,
             );
@@ -167,7 +170,7 @@ export async function runDesktopActions(
             break;
         }
         case "Maximize": {
-            actionData = await mapInputToAppName(
+            action.parameters.name = await mapInputToAppName(
                 action.parameters.name,
                 agentContext,
             );
@@ -175,7 +178,7 @@ export async function runDesktopActions(
             break;
         }
         case "Minimize": {
-            actionData = await mapInputToAppName(
+            action.parameters.name = await mapInputToAppName(
                 action.parameters.name,
                 agentContext,
             );
@@ -183,7 +186,7 @@ export async function runDesktopActions(
             break;
         }
         case "SwitchTo": {
-            actionData = await mapInputToAppName(
+            action.parameters.name = await mapInputToAppName(
                 action.parameters.name,
                 agentContext,
             );
@@ -191,300 +194,23 @@ export async function runDesktopActions(
             break;
         }
         case "Tile": {
-            const left = await mapInputToAppName(
+            action.parameters.leftWindow = await mapInputToAppName(
                 action.parameters.leftWindow,
                 agentContext,
             );
-            const right = await mapInputToAppName(
+            action.parameters.rightWindow = await mapInputToAppName(
                 action.parameters.rightWindow,
                 agentContext,
             );
-            actionData = `${left},${right}`;
-            confirmationMessage = `Tiled ${left} on the left and ${right} on the right`;
-            break;
-        }
-        case "Volume": {
-            actionData = action.parameters.targetVolume.toString();
-            break;
-        }
-        case "RestoreVolume": {
-            actionData = "";
-            break;
-        }
-        case "Mute": {
-            actionData = String(action.parameters.on);
-            break;
-        }
-        case "SetThemeMode": {
-            actionData = action.parameters!.mode;
-            confirmationMessage = `Changed theme to '${action.parameters.mode}'`;
-            break;
-        }
-        case "ConnectWifi": {
-            actionData = {
-                ssid: action.parameters.ssid,
-                password: action.parameters.password
-                    ? action.parameters.password
-                    : "",
-            } as unknown as string;
-            confirmationMessage = `Connecting to WiFi network '${action.parameters.ssid}'`;
-            break;
-        }
-        case "DisconnectWifi": {
-            actionData = "";
-            confirmationMessage = `Disconnecting from current WiFi network`;
-            break;
-        }
-        case "ToggleAirplaneMode": {
-            actionData = action.parameters.enable.toString();
-            confirmationMessage = `Turning airplane mode ${action.parameters.enable ? "on" : "off"}`;
-            break;
-        }
-        case "CreateDesktop": {
-            actionData =
-                action.parameters?.names !== undefined
-                    ? JSON.stringify(action.parameters.names)
-                    : JSON.stringify(["desktop 1"]);
-            confirmationMessage = `Creating new desktop`;
+            confirmationMessage = `Tiled ${action.parameters.leftWindow} on the left and ${action.parameters.rightWindow} on the right`;
             break;
         }
         case "MoveWindowToDesktop": {
-            const app = {
-                process: await mapInputToAppName(
-                    action.parameters.name,
-                    agentContext,
-                ),
-                desktop: action.parameters.desktopId,
-            };
-            actionData = JSON.stringify(app);
-            confirmationMessage = `Moving ${app.process} to desktop ${action.parameters.desktopId}`;
-            break;
-        }
-        case "PinWindow": {
-            actionData = action.parameters.name;
-            confirmationMessage = `Pinning '${action.parameters.name}' to all desktops`;
-            break;
-        }
-        case "SwitchDesktop": {
-            actionData = action.parameters.desktopId.toString();
-            confirmationMessage = `Switching to desktop ${action.parameters.desktopId}`;
-            break;
-        }
-        case "NextDesktop": {
-            actionData = "";
-            confirmationMessage = `Switching to next desktop`;
-            break;
-        }
-        case "PreviousDesktop": {
-            actionData = "";
-            confirmationMessage = `Switching to previous desktop`;
-            break;
-        }
-        case "ToggleNotifications": {
-            actionData = action.parameters.enable.toString();
-            confirmationMessage = `Toggling Action Center ${action.parameters.enable ? "on" : "off"}`;
-            break;
-        }
-        case "Debug": {
-            actionData = "";
-            confirmationMessage = `Debug action executed`;
-            break;
-        }
-        case "SetTextSize": {
-            actionData = action.parameters.size.toString();
-            confirmationMessage = `Set text size to ${action.parameters.size}%`;
-            break;
-        }
-        case "SetScreenResolution": {
-            actionData = {
-                width: action.parameters.width,
-                height: action.parameters.height,
-            } as unknown as string;
-            confirmationMessage = `Set screen resolution to ${action.parameters.width}x${action.parameters.height}`;
-            break;
-        }
-
-        // ===== New Settings Actions =====
-
-        // Network Settings
-        case "BluetoothToggle": {
-            actionData = JSON.stringify({
-                enableBluetooth: action.parameters.enableBluetooth ?? true,
-            });
-            confirmationMessage = `Bluetooth ${action.parameters.enableBluetooth !== false ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "EnableWifi": {
-            actionData = JSON.stringify({ enable: action.parameters.enable });
-            confirmationMessage = `WiFi ${action.parameters.enable ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "EnableMeteredConnections": {
-            actionData = JSON.stringify({ enable: action.parameters.enable });
-            confirmationMessage = `Metered connections ${action.parameters.enable ? "enabled" : "disabled"}`;
-            break;
-        }
-
-        // Display Settings
-        case "AdjustScreenBrightness": {
-            actionData = JSON.stringify({
-                brightnessLevel: action.parameters.brightnessLevel,
-            });
-            confirmationMessage = `Screen brightness ${action.parameters.brightnessLevel}d`;
-            break;
-        }
-        case "EnableBlueLightFilterSchedule": {
-            actionData = JSON.stringify({
-                schedule: action.parameters.schedule,
-                nightLightScheduleDisabled:
-                    action.parameters.nightLightScheduleDisabled,
-            });
-            confirmationMessage = `Night Light schedule ${action.parameters.nightLightScheduleDisabled ? "disabled" : "enabled"}`;
-            break;
-        }
-        case "AdjustColorTemperature": {
-            actionData = JSON.stringify({
-                filterEffect: action.parameters.filterEffect,
-            });
-            confirmationMessage = `Color temperature adjusted`;
-            break;
-        }
-        case "DisplayScaling": {
-            actionData = JSON.stringify({
-                sizeOverride: action.parameters.sizeOverride,
-            });
-            confirmationMessage = `Display scaling set to ${action.parameters.sizeOverride}%`;
-            break;
-        }
-        case "AdjustScreenOrientation": {
-            actionData = JSON.stringify({
-                orientation: action.parameters.orientation,
-            });
-            confirmationMessage = `Screen orientation set to ${action.parameters.orientation}`;
-            break;
-        }
-        case "RotationLock": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
-            confirmationMessage = `Rotation lock ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        }
-
-        // Personalization Settings
-        case "EnableTransparency": {
-            actionData = JSON.stringify({ enable: action.parameters.enable });
-            confirmationMessage = `Transparency effects ${action.parameters.enable ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "ApplyColorToTitleBar": {
-            actionData = JSON.stringify({
-                enableColor: action.parameters.enableColor,
-            });
-            confirmationMessage = `Title bar color ${action.parameters.enableColor ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "HighContrastTheme": {
-            actionData = JSON.stringify({});
-            confirmationMessage = `Opening high contrast theme settings`;
-            break;
-        }
-
-        // Taskbar Settings
-        case "AutoHideTaskbar": {
-            actionData = JSON.stringify({
-                hideWhenNotUsing: action.parameters.hideWhenNotUsing,
-                alwaysShow: action.parameters.alwaysShow,
-            });
-            confirmationMessage = `Taskbar auto-hide ${action.parameters.hideWhenNotUsing ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "TaskbarAlignment": {
-            actionData = JSON.stringify({
-                alignment: action.parameters.alignment,
-            });
-            confirmationMessage = `Taskbar aligned to ${action.parameters.alignment}`;
-            break;
-        }
-        case "TaskViewVisibility": {
-            actionData = JSON.stringify({
-                visibility: action.parameters.visibility,
-            });
-            confirmationMessage = `Task View button ${action.parameters.visibility ? "shown" : "hidden"}`;
-            break;
-        }
-        case "ToggleWidgetsButtonVisibility": {
-            actionData = JSON.stringify({
-                visibility: action.parameters.visibility,
-            });
-            confirmationMessage = `Widgets button ${action.parameters.visibility}`;
-            break;
-        }
-        case "ShowBadgesOnTaskbar": {
-            actionData = JSON.stringify({
-                enableBadging: action.parameters.enableBadging ?? true,
-            });
-            confirmationMessage = `Taskbar badges ${action.parameters.enableBadging !== false ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "DisplayTaskbarOnAllMonitors": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
-            confirmationMessage = `Taskbar on all monitors ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "DisplaySecondsInSystrayClock": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
-            confirmationMessage = `Seconds in clock ${action.parameters.enable !== false ? "shown" : "hidden"}`;
-            break;
-        }
-
-        // Mouse Settings
-        case "MouseCursorSpeed": {
-            actionData = JSON.stringify({
-                speedLevel: action.parameters.speedLevel,
-                reduceSpeed: action.parameters.reduceSpeed,
-            });
-            confirmationMessage = `Mouse cursor speed set to ${action.parameters.speedLevel}`;
-            break;
-        }
-        case "MouseWheelScrollLines": {
-            actionData = JSON.stringify({
-                scrollLines: action.parameters.scrollLines,
-            });
-            confirmationMessage = `Mouse wheel scroll lines set to ${action.parameters.scrollLines}`;
-            break;
-        }
-        case "SetPrimaryMouseButton": {
-            actionData = JSON.stringify({
-                primaryButton: action.parameters.primaryButton,
-            });
-            confirmationMessage = `Primary mouse button set to ${action.parameters.primaryButton}`;
-            break;
-        }
-        case "EnhancePointerPrecision": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
-            confirmationMessage = `Enhanced pointer precision ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "AdjustMousePointerSize": {
-            actionData = JSON.stringify({
-                sizeAdjustment: action.parameters.sizeAdjustment,
-            });
-            confirmationMessage = `Mouse pointer size adjusted`;
-            break;
-        }
-        case "MousePointerCustomization": {
-            actionData = JSON.stringify({
-                color: action.parameters.color,
-                style: action.parameters.style,
-            });
-            confirmationMessage = `Mouse pointer customized`;
+            action.parameters.name = await mapInputToAppName(
+                action.parameters.name,
+                agentContext,
+            );
+            confirmationMessage = `Moving ${action.parameters.name} to desktop ${action.parameters.desktopId}`;
             break;
         }
         case "CursorTrail": {
@@ -500,182 +226,207 @@ export async function runDesktopActions(
                         Math.min(maxTrail, trailLength),
                     );
                     trailNote = ` (requested ${requested}, adjusted to ${trailLength} — valid range is ${minTrail}–${maxTrail})`;
+                    action.parameters.length = trailLength;
                 }
             }
-            actionData = JSON.stringify({
-                enable: action.parameters.enable,
-                length: trailLength,
-            });
             confirmationMessage = action.parameters.enable
                 ? `Cursor trail enabled${trailNote || (trailLength ? ` with length ${trailLength}` : "")}`
                 : `Cursor trail disabled`;
             break;
         }
-
-        // Touchpad Settings
-        case "EnableTouchPad": {
-            actionData = JSON.stringify({ enable: action.parameters.enable });
+        case "Volume":
+            confirmationMessage = `Volume set to ${action.parameters.targetVolume}%`;
+            break;
+        case "Mute":
+            confirmationMessage = `${action.parameters.on ? "Muted" : "Unmuted"}`;
+            break;
+        case "RestoreVolume":
+            confirmationMessage = `Volume restored`;
+            break;
+        case "SetThemeMode":
+            confirmationMessage = `Changed theme to '${action.parameters.mode}'`;
+            break;
+        case "ConnectWifi":
+            confirmationMessage = `Connecting to WiFi network '${action.parameters.ssid}'`;
+            break;
+        case "DisconnectWifi":
+            confirmationMessage = `Disconnecting from current WiFi network`;
+            break;
+        case "ToggleAirplaneMode":
+            confirmationMessage = `Turning airplane mode ${action.parameters.enable ? "on" : "off"}`;
+            break;
+        case "CreateDesktop":
+            confirmationMessage = `Creating new desktop`;
+            break;
+        case "PinWindow":
+            confirmationMessage = `Pinning '${action.parameters.name}' to all desktops`;
+            break;
+        case "SwitchDesktop":
+            confirmationMessage = `Switching to desktop ${action.parameters.desktopId}`;
+            break;
+        case "NextDesktop":
+            confirmationMessage = `Switching to next desktop`;
+            break;
+        case "PreviousDesktop":
+            confirmationMessage = `Switching to previous desktop`;
+            break;
+        case "ToggleNotifications":
+            confirmationMessage = `Toggling Action Center ${action.parameters.enable ? "on" : "off"}`;
+            break;
+        case "Debug":
+            confirmationMessage = `Debug action executed`;
+            break;
+        case "SetTextSize":
+            confirmationMessage = `Set text size to ${action.parameters.size}%`;
+            break;
+        case "SetScreenResolution":
+            confirmationMessage = `Set screen resolution to ${action.parameters.width}x${action.parameters.height}`;
+            break;
+        case "BluetoothToggle":
+            confirmationMessage = `Bluetooth ${action.parameters.enableBluetooth !== false ? "enabled" : "disabled"}`;
+            break;
+        case "EnableWifi":
+            confirmationMessage = `WiFi ${action.parameters.enable ? "enabled" : "disabled"}`;
+            break;
+        case "EnableMeteredConnections":
+            confirmationMessage = `Metered connections ${action.parameters.enable ? "enabled" : "disabled"}`;
+            break;
+        case "AdjustScreenBrightness":
+            confirmationMessage = `Screen brightness ${action.parameters.brightnessLevel}d`;
+            break;
+        case "EnableBlueLightFilterSchedule":
+            confirmationMessage = `Night Light schedule ${action.parameters.nightLightScheduleDisabled ? "disabled" : "enabled"}`;
+            break;
+        case "AdjustColorTemperature":
+            confirmationMessage = `Color temperature adjusted`;
+            break;
+        case "DisplayScaling":
+            confirmationMessage = `Display scaling set to ${action.parameters.sizeOverride}%`;
+            break;
+        case "AdjustScreenOrientation":
+            confirmationMessage = `Screen orientation set to ${action.parameters.orientation}`;
+            break;
+        case "RotationLock":
+            confirmationMessage = `Rotation lock ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
+            break;
+        case "EnableTransparency":
+            confirmationMessage = `Transparency effects ${action.parameters.enable ? "enabled" : "disabled"}`;
+            break;
+        case "ApplyColorToTitleBar":
+            confirmationMessage = `Title bar color ${action.parameters.enableColor ? "enabled" : "disabled"}`;
+            break;
+        case "HighContrastTheme":
+            confirmationMessage = `Opening high contrast theme settings`;
+            break;
+        case "AutoHideTaskbar":
+            confirmationMessage = `Taskbar auto-hide ${action.parameters.hideWhenNotUsing ? "enabled" : "disabled"}`;
+            break;
+        case "TaskbarAlignment":
+            confirmationMessage = `Taskbar aligned to ${action.parameters.alignment}`;
+            break;
+        case "TaskViewVisibility":
+            confirmationMessage = `Task View button ${action.parameters.visibility ? "shown" : "hidden"}`;
+            break;
+        case "ToggleWidgetsButtonVisibility":
+            confirmationMessage = `Widgets button ${action.parameters.visibility}`;
+            break;
+        case "ShowBadgesOnTaskbar":
+            confirmationMessage = `Taskbar badges ${action.parameters.enableBadging !== false ? "enabled" : "disabled"}`;
+            break;
+        case "DisplayTaskbarOnAllMonitors":
+            confirmationMessage = `Taskbar on all monitors ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
+            break;
+        case "DisplaySecondsInSystrayClock":
+            confirmationMessage = `Seconds in clock ${action.parameters.enable !== false ? "shown" : "hidden"}`;
+            break;
+        case "MouseCursorSpeed":
+            confirmationMessage = `Mouse cursor speed set to ${action.parameters.speedLevel}`;
+            break;
+        case "MouseWheelScrollLines":
+            confirmationMessage = `Mouse wheel scroll lines set to ${action.parameters.scrollLines}`;
+            break;
+        case "SetPrimaryMouseButton":
+            confirmationMessage = `Primary mouse button set to ${action.parameters.primaryButton}`;
+            break;
+        case "EnhancePointerPrecision":
+            confirmationMessage = `Enhanced pointer precision ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
+            break;
+        case "AdjustMousePointerSize":
+            confirmationMessage = `Mouse pointer size adjusted`;
+            break;
+        case "MousePointerCustomization":
+            confirmationMessage = `Mouse pointer customized`;
+            break;
+        case "EnableTouchPad":
             confirmationMessage = `Touchpad ${action.parameters.enable ? "enabled" : "disabled"}`;
             break;
-        }
-        case "TouchpadCursorSpeed": {
-            actionData = JSON.stringify({ speed: action.parameters.speed });
+        case "TouchpadCursorSpeed":
             confirmationMessage = `Touchpad cursor speed adjusted`;
             break;
-        }
-
-        // Privacy Settings
-        case "ManageMicrophoneAccess": {
-            actionData = JSON.stringify({
-                accessSetting: action.parameters.accessSetting,
-            });
+        case "ManageMicrophoneAccess":
             confirmationMessage = `Microphone access set to ${action.parameters.accessSetting}`;
             break;
-        }
-        case "ManageCameraAccess": {
-            actionData = JSON.stringify({
-                accessSetting: action.parameters.accessSetting ?? "allow",
-            });
+        case "ManageCameraAccess":
             confirmationMessage = `Camera access set to ${action.parameters.accessSetting ?? "allow"}`;
             break;
-        }
-        case "ManageLocationAccess": {
-            actionData = JSON.stringify({
-                accessSetting: action.parameters.accessSetting ?? "allow",
-            });
+        case "ManageLocationAccess":
             confirmationMessage = `Location access set to ${action.parameters.accessSetting ?? "allow"}`;
             break;
-        }
-
-        // Power Settings
-        case "BatterySaverActivationLevel": {
-            actionData = JSON.stringify({
-                thresholdValue: action.parameters.thresholdValue,
-            });
+        case "BatterySaverActivationLevel":
             confirmationMessage = `Battery saver threshold set to ${action.parameters.thresholdValue}%`;
             break;
-        }
-        case "SetPowerModePluggedIn": {
-            actionData = JSON.stringify({
-                powerMode: action.parameters.powerMode,
-            });
+        case "SetPowerModePluggedIn":
             confirmationMessage = `Power mode when plugged in set to ${action.parameters.powerMode}`;
             break;
-        }
-        case "SetPowerModeOnBattery": {
-            actionData = JSON.stringify({ mode: action.parameters.mode });
+        case "SetPowerModeOnBattery":
             confirmationMessage = `Power mode on battery adjusted`;
             break;
-        }
-
-        // Gaming Settings
-        case "EnableGameMode": {
-            actionData = JSON.stringify({});
+        case "EnableGameMode":
             confirmationMessage = `Opening Game Mode settings`;
             break;
-        }
-
-        // Accessibility Settings
-        case "EnableNarratorAction": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
+        case "EnableNarratorAction":
             confirmationMessage = `Narrator ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
             break;
-        }
-        case "EnableMagnifier": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
+        case "EnableMagnifier":
             confirmationMessage = `Magnifier ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
             break;
-        }
-        case "EnableStickyKeys": {
-            actionData = JSON.stringify({ enable: action.parameters.enable });
+        case "EnableStickyKeys":
             confirmationMessage = `Sticky Keys ${action.parameters.enable ? "enabled" : "disabled"}`;
             break;
-        }
-        case "EnableFilterKeysAction": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
+        case "EnableFilterKeysAction":
             confirmationMessage = `Filter Keys ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
             break;
-        }
-        case "MonoAudioToggle": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
+        case "MonoAudioToggle":
             confirmationMessage = `Mono audio ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
             break;
-        }
-
-        // File Explorer Settings
-        case "ShowFileExtensions": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
+        case "ShowFileExtensions":
             confirmationMessage = `File extensions ${action.parameters.enable !== false ? "shown" : "hidden"}`;
             break;
-        }
-        case "ShowHiddenAndSystemFiles": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
+        case "ShowHiddenAndSystemFiles":
             confirmationMessage = `Hidden files ${action.parameters.enable !== false ? "shown" : "hidden"}`;
             break;
-        }
-
-        // Time & Region Settings
-        case "AutomaticTimeSettingAction": {
-            actionData = JSON.stringify({
-                enableAutoTimeSync: action.parameters.enableAutoTimeSync,
-            });
+        case "AutomaticTimeSettingAction":
             confirmationMessage = `Automatic time sync ${action.parameters.enableAutoTimeSync ? "enabled" : "disabled"}`;
             break;
-        }
-        case "AutomaticDSTAdjustment": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
+        case "AutomaticDSTAdjustment":
             confirmationMessage = `Automatic DST adjustment ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
             break;
-        }
-
-        // Focus Assist Settings
-        case "EnableQuietHours": {
-            actionData = JSON.stringify({
-                startHour: action.parameters.startHour,
-                endHour: action.parameters.endHour,
-            });
+        case "EnableQuietHours":
             confirmationMessage = `Focus Assist settings opened`;
             break;
-        }
-
-        // Multi-Monitor Settings
-        case "RememberWindowLocations": {
-            actionData = JSON.stringify({ enable: action.parameters.enable });
+        case "RememberWindowLocations":
             confirmationMessage = `Remember window locations ${action.parameters.enable ? "enabled" : "disabled"}`;
             break;
-        }
-        case "MinimizeWindowsOnMonitorDisconnectAction": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
+        case "MinimizeWindowsOnMonitorDisconnectAction":
             confirmationMessage = `Minimize windows on disconnect ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
             break;
-        }
-
         default:
             throw new Error(`Unknown action: ${actionName}`);
     }
 
-    // send message to child process
-    let message: Record<string, string> = {};
-    message[actionName] = actionData;
-
+    // Send the original action JSON directly to autoShell
     const desktopProcess = await ensureAutomationProcess(agentContext);
-    desktopProcess.stdin?.write(JSON.stringify(message) + "\r\n");
+    desktopProcess.stdin?.write(JSON.stringify(action) + "\r\n");
 
     return confirmationMessage;
 }
@@ -691,8 +442,7 @@ async function fetchInstalledApps(desktopProcess: child_process.ChildProcess) {
     });
 
     const appsPromise = new Promise<string[] | undefined>((resolve, reject) => {
-        let message: Record<string, string> = {};
-        message["ListAppNames"] = "";
+        let message = { actionName: "ListAppNames", parameters: {} };
 
         let allOutput = "";
         const dataCallBack = (data: any) => {

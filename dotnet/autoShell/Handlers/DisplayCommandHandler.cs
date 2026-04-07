@@ -32,7 +32,7 @@ internal class DisplayCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    public void Handle(string key, JObject parameters)
     {
         switch (key)
         {
@@ -50,40 +50,14 @@ internal class DisplayCommandHandler : ICommandHandler
             case "SetScreenResolution":
                 try
                 {
-                    uint width;
-                    uint height;
-                    uint? refreshRate = null;
-
-                    if (rawValue.Type == JTokenType.Object)
+                    uint width = parameters.Value<uint>("width");
+                    uint height = parameters.Value<uint>("height");
+                    if (width == 0 || height == 0)
                     {
-                        width = rawValue.Value<uint>("width");
-                        height = rawValue.Value<uint>("height");
-                        if (rawValue["refreshRate"] != null)
-                        {
-                            refreshRate = rawValue.Value<uint>("refreshRate");
-                        }
+                        break;
                     }
-                    else
-                    {
-                        string resString = rawValue.ToString();
-                        string[] parts = resString.ToLowerInvariant().Split('x', '@');
-                        if (parts.Length < 2)
-                        {
-                            _logger.Warning("Invalid resolution format. Use 'WIDTHxHEIGHT' or 'WIDTHxHEIGHT@REFRESH' (e.g., '1920x1080' or '1920x1080@60')");
-                            return;
-                        }
 
-                        if (!uint.TryParse(parts[0].Trim(), out width) || !uint.TryParse(parts[1].Trim(), out height))
-                        {
-                            _logger.Warning("Invalid resolution values. Width and height must be positive integers.");
-                            return;
-                        }
-
-                        if (parts.Length >= 3 && uint.TryParse(parts[2].Trim(), out uint parsedRefresh))
-                        {
-                            refreshRate = parsedRefresh;
-                        }
-                    }
+                    uint? refreshRate = parameters.Value<uint?>("refreshRate");
 
                     string result = _display.SetResolution(width, height, refreshRate);
                     Console.WriteLine(result);
@@ -97,10 +71,13 @@ internal class DisplayCommandHandler : ICommandHandler
             case "SetTextSize":
                 try
                 {
-                    if (int.TryParse(value, out int textSizePct))
+                    int textSizePct = parameters.Value<int?>("size") ?? -1;
+                    if (textSizePct < 0)
                     {
-                        _display.SetTextSize(textSizePct);
+                        break;
                     }
+
+                    _display.SetTextSize(textSizePct);
                 }
                 catch (Exception ex)
                 {

@@ -19,12 +19,12 @@ public class CommandDispatcherTests
     }
 
     /// <summary>
-    /// Verifies that dispatching a JSON object with a "quit" key returns true.
+    /// Verifies that dispatching a JSON object with a "quit" actionName returns true.
     /// </summary>
     [Fact]
     public void Dispatch_QuitKey_ReturnsTrue()
     {
-        var json = JObject.Parse("""{"quit": true}""");
+        var json = JObject.Parse("""{"actionName":"quit","parameters":{}}""");
         bool result = _dispatcher.Dispatch(json);
         Assert.True(result);
     }
@@ -36,13 +36,13 @@ public class CommandDispatcherTests
     public void Dispatch_NonQuitKey_ReturnsFalse()
     {
         _dispatcher.Register(new StubHandler("TestCmd"));
-        var json = JObject.Parse("""{"TestCmd": "value"}""");
+        var json = JObject.Parse("""{"actionName":"TestCmd","parameters":{}}""");
         bool result = _dispatcher.Dispatch(json);
         Assert.False(result);
     }
 
     /// <summary>
-    /// Verifies that commands are routed to the correct handler with the expected key and value.
+    /// Verifies that commands are routed to the correct handler with the expected key and parameters.
     /// </summary>
     [Fact]
     public void Dispatch_RoutesToCorrectHandler()
@@ -50,13 +50,13 @@ public class CommandDispatcherTests
         var handler = new StubHandler("Alpha", "Beta");
         _dispatcher.Register(handler);
 
-        _dispatcher.Dispatch(JObject.Parse("""{"Alpha": "1"}"""));
+        _dispatcher.Dispatch(JObject.Parse("""{"actionName":"Alpha","parameters":{}}"""));
         Assert.Equal("Alpha", handler.LastKey);
-        Assert.Equal("1", handler.LastValue);
+        Assert.NotNull(handler.LastParameters);
 
-        _dispatcher.Dispatch(JObject.Parse("""{"Beta": "2"}"""));
+        _dispatcher.Dispatch(JObject.Parse("""{"actionName":"Beta","parameters":{}}"""));
         Assert.Equal("Beta", handler.LastKey);
-        Assert.Equal("2", handler.LastValue);
+        Assert.NotNull(handler.LastParameters);
     }
 
     /// <summary>
@@ -65,7 +65,7 @@ public class CommandDispatcherTests
     [Fact]
     public void Dispatch_UnknownCommand_DoesNotThrow()
     {
-        var json = JObject.Parse("""{"UnknownCmd": "value"}""");
+        var json = JObject.Parse("""{"actionName":"UnknownCmd","parameters":{}}""");
         var ex = Record.Exception(() => _dispatcher.Dispatch(json));
         Assert.Null(ex);
     }
@@ -81,7 +81,7 @@ public class CommandDispatcherTests
     }
 
     /// <summary>
-    /// Verifies that a "quit" key stops processing of any subsequent keys in the same JSON object.
+    /// Verifies that a quit dispatch does not invoke any registered handlers.
     /// </summary>
     [Fact]
     public void Dispatch_QuitStopsProcessingSubsequentKeys()
@@ -89,11 +89,8 @@ public class CommandDispatcherTests
         var handler = new StubHandler("After");
         _dispatcher.Register(handler);
 
-        // quit comes first — handler for "After" should not be called
-        var json = JObject.Parse("""{"quit": true, "After": "value"}""");
-        bool result = _dispatcher.Dispatch(json);
+        _dispatcher.Dispatch(JObject.Parse("""{"actionName":"quit","parameters":{}}"""));
 
-        Assert.True(result);
         Assert.Null(handler.LastKey);
     }
 
@@ -106,43 +103,44 @@ public class CommandDispatcherTests
         var handler = new ThrowingHandler("Boom");
         _dispatcher.Register(handler);
 
-        var json = JObject.Parse("""{"Boom": "value"}""");
+        var json = JObject.Parse("""{"actionName":"Boom","parameters":{}}""");
         var ex = Record.Exception(() => _dispatcher.Dispatch(json));
         Assert.Null(ex);
     }
 
     /// <summary>
-    /// Verifies that after a handler throws, subsequent keys in the same dispatch are still processed.
+    /// Verifies that a handler exception does not prevent subsequent dispatches from working.
     /// </summary>
     [Fact]
-    public void Dispatch_HandlerException_ContinuesToNextKey()
+    public void Dispatch_HandlerException_DoesNotAffectSubsequentDispatches()
     {
         var throwing = new ThrowingHandler("Boom");
         var normal = new StubHandler("Ok");
         _dispatcher.Register(throwing, normal);
 
-        _dispatcher.Dispatch(JObject.Parse("""{"Boom": "x", "Ok": "y"}"""));
+        _dispatcher.Dispatch(JObject.Parse("""{"actionName":"Boom","parameters":{}}"""));
+        _dispatcher.Dispatch(JObject.Parse("""{"actionName":"Ok","parameters":{}}"""));
         Assert.Equal("Ok", normal.LastKey);
     }
 
     /// <summary>
-    /// Stub handler that records the last key/value it received.
+    /// Stub handler that records the last key and parameters it received.
     /// </summary>
     private class StubHandler : ICommandHandler
     {
         public IEnumerable<string> SupportedCommands { get; }
         public string? LastKey { get; private set; }
-        public string? LastValue { get; private set; }
+        public JObject? LastParameters { get; private set; }
 
         public StubHandler(params string[] commands)
         {
             SupportedCommands = commands;
         }
 
-        public void Handle(string key, string value, JToken rawValue)
+        public void Handle(string key, JObject parameters)
         {
             LastKey = key;
-            LastValue = value;
+            LastParameters = parameters;
         }
     }
 
@@ -158,7 +156,7 @@ public class CommandDispatcherTests
             SupportedCommands = commands;
         }
 
-        public void Handle(string key, string value, JToken rawValue)
+        public void Handle(string key, JObject parameters)
         {
             throw new InvalidOperationException("Test exception");
         }

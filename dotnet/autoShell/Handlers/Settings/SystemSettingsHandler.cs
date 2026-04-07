@@ -36,12 +36,12 @@ internal class SystemSettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    public void Handle(string key, JObject parameters)
     {
         switch (key)
         {
             case "AutomaticDSTAdjustment":
-                HandleAutomaticDSTAdjustment(value);
+                HandleAutomaticDSTAdjustment(parameters);
                 break;
 
             case "AutomaticTimeSettingAction":
@@ -63,10 +63,10 @@ internal class SystemSettingsHandler : ICommandHandler
         }
     }
 
-    private void HandleAutomaticDSTAdjustment(string jsonParams)
+    private void HandleAutomaticDSTAdjustment(JObject parameters)
     {
-        var param = JObject.Parse(jsonParams);
-        bool enable = param.Value<bool?>("enable") ?? true;
+
+        bool enable = parameters.Value<bool?>("enable") ?? true;
 
         _registry.SetValueLocalMachine(
             @"SYSTEM\CurrentControlSet\Control\TimeZoneInformation",

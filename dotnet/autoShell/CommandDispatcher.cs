@@ -102,37 +102,42 @@ internal class CommandDispatcher
     }
 
     /// <summary>
-    /// Dispatches all commands in a JSON object to their handlers.
+    /// Dispatches a command in the format <c>{"actionName":"Volume","parameters":{"targetVolume":50}}</c>
+    /// to the appropriate handler.
     /// </summary>
     /// <returns>True if a "quit" command was encountered; otherwise false.</returns>
     public bool Dispatch(JObject root)
     {
-        foreach (var kvp in root)
+        string actionName = root.Value<string>("actionName");
+        if (string.IsNullOrEmpty(actionName))
         {
-            string key = kvp.Key;
+            _logger.Debug("Missing actionName in command JSON");
+            return false;
+        }
 
-            if (key == "quit")
-            {
-                return true;
-            }
+        if (string.Equals(actionName, "quit", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
 
-            try
+        JObject parameters = root["parameters"] as JObject ?? new JObject();
+
+        try
+        {
+            if (_handlers.TryGetValue(actionName, out ICommandHandler handler))
             {
-                if (_handlers.TryGetValue(key, out ICommandHandler handler))
-                {
-                    string value = kvp.Value?.ToString();
-                    handler.Handle(key, value, kvp.Value);
-                }
-                else
-                {
-                    _logger.Debug("Unknown command: " + key);
-                }
+                handler.Handle(actionName, parameters);
             }
-            catch (Exception ex)
+            else
             {
-                _logger.Error(ex);
+                _logger.Debug("Unknown action: " + actionName);
             }
         }
+        catch (Exception ex)
+        {
+            _logger.Error(ex);
+        }
+
         return false;
     }
 }

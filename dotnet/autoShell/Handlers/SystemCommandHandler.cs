@@ -29,7 +29,7 @@ internal class SystemCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    public void Handle(string key, JObject parameters)
     {
         switch (key)
         {

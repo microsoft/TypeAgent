@@ -32,9 +32,9 @@ internal class PrivacySettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    public void Handle(string key, JObject parameters)
     {
-        var param = JObject.Parse(value);
+
 
         string subKey = key switch
         {
@@ -46,13 +46,13 @@ internal class PrivacySettingsHandler : ICommandHandler
 
         if (subKey != null)
         {
-            SetAccessSetting(param, subKey);
+            SetAccessSetting(parameters, subKey);
         }
     }
 
-    private void SetAccessSetting(JObject param, string capability)
+    private void SetAccessSetting(JObject parameters, string capability)
     {
-        string setting = param.Value<string>("accessSetting") ?? "Allow";
+        string setting = parameters.Value<string>("accessSetting") ?? "Allow";
         string regValue = setting.Equals("deny", StringComparison.OrdinalIgnoreCase) ? "Deny" : "Allow";
 
         _registry.SetValue(

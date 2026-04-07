@@ -33,37 +33,35 @@ internal class AccessibilitySettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    public void Handle(string key, JObject parameters)
     {
-        var param = JObject.Parse(value);
-
         switch (key)
         {
             case "EnableFilterKeysAction":
-                HandleFilterKeys(param);
+                HandleFilterKeys(parameters);
                 break;
 
             case "EnableMagnifier":
-                HandleToggleProcess(param, "magnify.exe", "Magnify");
+                HandleToggleProcess(parameters, "magnify.exe", "Magnify");
                 break;
 
             case "EnableNarratorAction":
-                HandleToggleProcess(param, "narrator.exe", "Narrator");
+                HandleToggleProcess(parameters, "narrator.exe", "Narrator");
                 break;
 
             case "EnableStickyKeys":
-                HandleStickyKeys(param);
+                HandleStickyKeys(parameters);
                 break;
 
             case "MonoAudioToggle":
-                HandleMonoAudio(param);
+                HandleMonoAudio(parameters);
                 break;
         }
     }
 
-    private void HandleFilterKeys(JObject param)
+    private void HandleFilterKeys(JObject parameters)
     {
-        bool enable = param.Value<bool?>("enable") ?? true;
+        bool enable = parameters.Value<bool?>("enable") ?? true;
         _registry.SetValue(
             @"Control Panel\Accessibility\Keyboard Response",
             "Flags",
@@ -71,9 +69,9 @@ internal class AccessibilitySettingsHandler : ICommandHandler
             RegistryValueKind.String);
     }
 
-    private void HandleStickyKeys(JObject param)
+    private void HandleStickyKeys(JObject parameters)
     {
-        bool enable = param.Value<bool?>("enable") ?? true;
+        bool enable = parameters.Value<bool?>("enable") ?? true;
         _registry.SetValue(
             @"Control Panel\Accessibility\StickyKeys",
             "Flags",
@@ -81,9 +79,9 @@ internal class AccessibilitySettingsHandler : ICommandHandler
             RegistryValueKind.String);
     }
 
-    private void HandleMonoAudio(JObject param)
+    private void HandleMonoAudio(JObject parameters)
     {
-        bool enable = param.Value<bool?>("enable") ?? true;
+        bool enable = parameters.Value<bool?>("enable") ?? true;
         _registry.SetValue(
             @"Software\Microsoft\Multimedia\Audio",
             "AccessibilityMonoMixState",
@@ -91,9 +89,9 @@ internal class AccessibilitySettingsHandler : ICommandHandler
             RegistryValueKind.DWord);
     }
 
-    private void HandleToggleProcess(JObject param, string exeName, string processName)
+    private void HandleToggleProcess(JObject parameters, string exeName, string processName)
     {
-        bool enable = param.Value<bool?>("enable") ?? true;
+        bool enable = parameters.Value<bool?>("enable") ?? true;
 
         if (enable)
         {

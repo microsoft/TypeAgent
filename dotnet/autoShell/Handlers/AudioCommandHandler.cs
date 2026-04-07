@@ -29,21 +29,23 @@ internal class AudioCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    public void Handle(string key, JObject parameters)
     {
         switch (key)
         {
             case "Mute":
-                if (bool.TryParse(value, out bool mute))
-                {
-                    _audio.SetMute(mute);
-                }
+            {
+                bool mute = parameters.Value<bool?>("on") ?? false;
+                _audio.SetMute(mute);
                 break;
+            }
             case "RestoreVolume":
                 _audio.SetVolume((int)_savedVolumePct);
                 break;
             case "Volume":
-                if (int.TryParse(value, out int pct))
+            {
+                int pct = parameters.Value<int?>("targetVolume") ?? -1;
+                if (pct >= 0)
                 {
                     int currentVolume = _audio.GetVolume();
                     if (currentVolume > 0)
@@ -53,6 +55,7 @@ internal class AudioCommandHandler : ICommandHandler
                     _audio.SetVolume(pct);
                 }
                 break;
+            }
         }
     }
 }

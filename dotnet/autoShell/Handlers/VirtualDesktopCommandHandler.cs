@@ -40,17 +40,22 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    public void Handle(string key, JObject parameters)
     {
         switch (key)
         {
             case "CreateDesktop":
-                _virtualDesktop.CreateDesktops(value);
+            {
+                JToken names = parameters["names"];
+                string namesJson = names?.ToString() ?? "[\"desktop 1\"]";
+                _virtualDesktop.CreateDesktops(namesJson);
                 break;
+            }
 
             case "MoveWindowToDesktop":
-                string process = rawValue.SelectToken("process")?.ToString();
-                string desktop = rawValue.SelectToken("desktop")?.ToString();
+            {
+                string process = parameters.Value<string>("name");
+                string desktop = parameters.Value<string>("desktopId");
                 if (!string.IsNullOrEmpty(process) && !string.IsNullOrEmpty(desktop))
                 {
                     string resolvedName = _appRegistry.ResolveProcessName(process);
@@ -61,13 +66,16 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
                     }
                 }
                 break;
+            }
 
             case "NextDesktop":
                 _virtualDesktop.NextDesktop();
                 break;
 
             case "PinWindow":
-                string pinProcess = _appRegistry.ResolveProcessName(value);
+            {
+                string name = parameters.Value<string>("name");
+                string pinProcess = _appRegistry.ResolveProcessName(name);
                 IntPtr pinHWnd = _window.FindProcessWindowHandle(pinProcess);
                 if (pinHWnd != IntPtr.Zero)
                 {
@@ -75,17 +83,21 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
                 }
                 else
                 {
-                    _logger.Warning($"The window handle for '{value}' could not be found");
+                    _logger.Warning($"The window handle for '{name}' could not be found");
                 }
                 break;
+            }
 
             case "PreviousDesktop":
                 _virtualDesktop.PreviousDesktop();
                 break;
 
             case "SwitchDesktop":
-                _virtualDesktop.SwitchDesktop(value);
+            {
+                string desktopId = parameters.Value<string>("desktopId");
+                _virtualDesktop.SwitchDesktop(desktopId);
                 break;
+            }
         }
     }
 }

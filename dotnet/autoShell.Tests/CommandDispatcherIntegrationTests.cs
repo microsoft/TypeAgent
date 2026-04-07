@@ -53,7 +53,7 @@ public class CommandDispatcherIntegrationTests
     {
         _audioMock.Setup(a => a.GetVolume()).Returns(50);
 
-        Dispatch("""{"Volume": "75"}""");
+        Dispatch("""{"actionName":"Volume","parameters":{"targetVolume":75}}""");
 
         _audioMock.Verify(a => a.SetVolume(75), Times.Once);
     }
@@ -64,7 +64,7 @@ public class CommandDispatcherIntegrationTests
     [Fact]
     public void Dispatch_Mute_ReachesAudioService()
     {
-        Dispatch("""{"Mute": "true"}""");
+        Dispatch("""{"actionName":"Mute","parameters":{"on":true}}""");
 
         _audioMock.Verify(a => a.SetMute(true), Times.Once);
     }
@@ -79,7 +79,7 @@ public class CommandDispatcherIntegrationTests
         _processMock.Setup(p => p.GetProcessesByName("notepad")).Returns([]);
         _appRegistryMock.Setup(a => a.GetExecutablePath("notepad")).Returns("notepad.exe");
 
-        Dispatch("""{"LaunchProgram": "notepad"}""");
+        Dispatch("""{"actionName":"LaunchProgram","parameters":{"name":"notepad"}}""");
 
         _processMock.Verify(p => p.Start(It.IsAny<System.Diagnostics.ProcessStartInfo>()), Times.Once);
     }
@@ -90,7 +90,7 @@ public class CommandDispatcherIntegrationTests
     [Fact]
     public void Dispatch_SetWallpaper_ReachesSystemParamsService()
     {
-        Dispatch("""{"SetWallpaper": "C:\\wallpaper.jpg"}""");
+        Dispatch("""{"actionName":"SetWallpaper","parameters":{"filePath":"C:\\wallpaper.jpg"}}""");
 
         _systemParamsMock.Verify(s => s.SetParameter(0x0014, 0, @"C:\wallpaper.jpg", 3), Times.Once);
     }
@@ -101,7 +101,7 @@ public class CommandDispatcherIntegrationTests
     [Fact]
     public void Dispatch_ConnectWifi_ReachesNetworkService()
     {
-        Dispatch("""{"ConnectWifi": "{\"ssid\": \"MyNetwork\", \"password\": \"pass123\"}"}""");
+        Dispatch("""{"actionName":"ConnectWifi","parameters":{"ssid":"MyNetwork","password":"pass123"}}""");
 
         _networkMock.Verify(n => n.ConnectToWifi(It.IsAny<string>(), It.IsAny<string>()), Times.Once);
     }
@@ -112,7 +112,7 @@ public class CommandDispatcherIntegrationTests
     [Fact]
     public void Dispatch_NextDesktop_ReachesVirtualDesktopService()
     {
-        Dispatch("""{"NextDesktop": ""}""");
+        Dispatch("""{"actionName":"NextDesktop","parameters":{}}""");
 
         _virtualDesktopMock.Verify(v => v.NextDesktop(), Times.Once);
     }
@@ -123,7 +123,7 @@ public class CommandDispatcherIntegrationTests
     [Fact]
     public void Dispatch_SetThemeMode_ReachesRegistryService()
     {
-        Dispatch("""{"SetThemeMode": "dark"}""");
+        Dispatch("""{"actionName":"SetThemeMode","parameters":{"mode":"dark"}}""");
 
         _registryMock.Verify(r => r.SetValue(
             It.IsAny<string>(), "AppsUseLightTheme", 0, It.IsAny<Microsoft.Win32.RegistryValueKind>()), Times.Once);
@@ -135,20 +135,21 @@ public class CommandDispatcherIntegrationTests
     [Fact]
     public void Dispatch_UnknownCommand_DoesNotThrow()
     {
-        var ex = Record.Exception(() => Dispatch("""{"NonExistentCommand": "value"}"""));
+        var ex = Record.Exception(() => Dispatch("""{"actionName":"NonExistentCommand","parameters":{}}"""));
 
         Assert.Null(ex);
     }
 
     /// <summary>
-    /// Verifies that multiple commands in a single JSON object are all dispatched.
+    /// Verifies that multiple commands dispatched separately all reach their services.
     /// </summary>
     [Fact]
     public void Dispatch_MultipleCommands_AllReachServices()
     {
         _audioMock.Setup(a => a.GetVolume()).Returns(50);
 
-        Dispatch("""{"Volume": "80", "Mute": "false"}""");
+        Dispatch("""{"actionName":"Volume","parameters":{"targetVolume":80}}""");
+        Dispatch("""{"actionName":"Mute","parameters":{"on":false}}""");
 
         _audioMock.Verify(a => a.SetVolume(80), Times.Once);
         _audioMock.Verify(a => a.SetMute(false), Times.Once);
@@ -160,7 +161,7 @@ public class CommandDispatcherIntegrationTests
     [Fact]
     public void Dispatch_Quit_ReturnsTrue()
     {
-        bool result = _dispatcher.Dispatch(JObject.Parse("""{"quit": ""}"""));
+        bool result = _dispatcher.Dispatch(JObject.Parse("""{"actionName":"quit","parameters":{}}"""));
 
         Assert.True(result);
     }

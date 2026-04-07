@@ -42,10 +42,8 @@ internal class DisplaySettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    public void Handle(string key, JObject parameters)
     {
-        var param = JObject.Parse(value);
-
         switch (key)
         {
             case "AdjustColorTemperature":
@@ -53,7 +51,7 @@ internal class DisplaySettingsHandler : ICommandHandler
                 break;
 
             case "AdjustScreenBrightness":
-                HandleAdjustScreenBrightness(param);
+                HandleAdjustScreenBrightness(parameters);
                 break;
 
             case "AdjustScreenOrientation":
@@ -62,22 +60,22 @@ internal class DisplaySettingsHandler : ICommandHandler
                 break;
 
             case "DisplayScaling":
-                HandleDisplayScaling(param);
+                HandleDisplayScaling(parameters);
                 break;
 
             case "EnableBlueLightFilterSchedule":
-                HandleBlueLightFilter(param);
+                HandleBlueLightFilter(parameters);
                 break;
 
             case "RotationLock":
-                HandleRotationLock(param);
+                HandleRotationLock(parameters);
                 break;
         }
     }
 
-    private void HandleAdjustScreenBrightness(JObject param)
+    private void HandleAdjustScreenBrightness(JObject parameters)
     {
-        string level = param.Value<string>("brightnessLevel");
+        string level = parameters.Value<string>("brightnessLevel");
         bool increase = level == "increase";
 
         byte currentBrightness = _brightness.GetCurrentBrightness();
@@ -89,9 +87,9 @@ internal class DisplaySettingsHandler : ICommandHandler
         _logger.Debug($"Brightness adjusted to: {newBrightness}%");
     }
 
-    private void HandleDisplayScaling(JObject param)
+    private void HandleDisplayScaling(JObject parameters)
     {
-        string sizeStr = param.Value<string>("sizeOverride");
+        string sizeStr = parameters.Value<string>("sizeOverride");
 
         if (int.TryParse(sizeStr, out int percentage))
         {
@@ -111,9 +109,9 @@ internal class DisplaySettingsHandler : ICommandHandler
         }
     }
 
-    private void HandleBlueLightFilter(JObject param)
+    private void HandleBlueLightFilter(JObject parameters)
     {
-        bool disabled = param.Value<bool?>("nightLightScheduleDisabled") ?? false;
+        bool disabled = parameters.Value<bool?>("nightLightScheduleDisabled") ?? false;
         byte[] data = disabled
             ? [0x02, 0x00, 0x00, 0x00]
             : [0x02, 0x00, 0x00, 0x01];
@@ -125,9 +123,9 @@ internal class DisplaySettingsHandler : ICommandHandler
             RegistryValueKind.Binary);
     }
 
-    private void HandleRotationLock(JObject param)
+    private void HandleRotationLock(JObject parameters)
     {
-        bool enable = param.Value<bool?>("enable") ?? true;
+        bool enable = parameters.Value<bool?>("enable") ?? true;
         _registry.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\ImmersiveShell",
             "RotationLockPreference",

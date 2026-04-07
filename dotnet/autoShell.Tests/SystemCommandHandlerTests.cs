@@ -25,7 +25,7 @@ public class SystemCommandHandlerTests
     [Fact]
     public void Debug_LaunchesDebugger()
     {
-        Handle("Debug", "");
+        _handler.Handle("Debug", new JObject());
 
         _debuggerMock.Verify(d => d.Launch(), Times.Once);
     }
@@ -36,13 +36,8 @@ public class SystemCommandHandlerTests
     [Fact]
     public void ToggleNotifications_OpensActionCenter()
     {
-        Handle("ToggleNotifications", "");
+        _handler.Handle("ToggleNotifications", new JObject());
 
         _processMock.Verify(p => p.StartShellExecute("ms-actioncenter:"), Times.Once);
-    }
-
-    private void Handle(string key, string value)
-    {
-        _handler.Handle(key, value, JToken.FromObject(value));
     }
 }

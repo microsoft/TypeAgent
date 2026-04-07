@@ -28,7 +28,7 @@ public class ThemeCommandHandlerTests
     [Fact]
     public void SetWallpaper_CallsSetParameter()
     {
-        Handle("SetWallpaper", @"C:\wallpaper.jpg");
+        _handler.Handle("SetWallpaper", new JObject { ["filePath"] = @"C:\wallpaper.jpg" });
 
         _systemParamsMock.Verify(s => s.SetParameter(
             0x0014, 0, @"C:\wallpaper.jpg", 3), Times.Once);
@@ -40,7 +40,7 @@ public class ThemeCommandHandlerTests
     [Fact]
     public void SetThemeMode_Dark_WritesRegistryValues()
     {
-        Handle("SetThemeMode", "dark");
+        _handler.Handle("SetThemeMode", new JObject { ["mode"] = "dark" });
 
         const string Path = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
         _registryMock.Verify(r => r.SetValue(Path, "AppsUseLightTheme", 0, RegistryValueKind.DWord), Times.Once);
@@ -53,7 +53,7 @@ public class ThemeCommandHandlerTests
     [Fact]
     public void SetThemeMode_Light_WritesRegistryValues()
     {
-        Handle("SetThemeMode", "light");
+        _handler.Handle("SetThemeMode", new JObject { ["mode"] = "light" });
 
         const string Path = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
         _registryMock.Verify(r => r.SetValue(Path, "AppsUseLightTheme", 1, RegistryValueKind.DWord), Times.Once);
@@ -66,7 +66,7 @@ public class ThemeCommandHandlerTests
     [Fact]
     public void ApplyTheme_UnknownTheme_DoesNotCallProcess()
     {
-        Handle("ApplyTheme", "nonexistent_theme_xyz_12345");
+        _handler.Handle("ApplyTheme", new JObject { ["filePath"] = "nonexistent_theme_xyz_12345" });
 
         _processMock.Verify(p => p.StartShellExecute(It.IsAny<string>()), Times.Never);
     }
@@ -77,7 +77,7 @@ public class ThemeCommandHandlerTests
     [Fact]
     public void ListThemes_ReturnsWithoutError()
     {
-        var ex = Record.Exception(() => Handle("ListThemes", "{}"));
+        var ex = Record.Exception(() => _handler.Handle("ListThemes", new JObject()));
 
         Assert.Null(ex);
     }
@@ -92,7 +92,7 @@ public class ThemeCommandHandlerTests
         // Current mode is light (1), so toggle should set dark (0)
         _registryMock.Setup(r => r.GetValue(Path, "AppsUseLightTheme", null)).Returns(1);
 
-        Handle("SetThemeMode", "toggle");
+        _handler.Handle("SetThemeMode", new JObject { ["mode"] = "toggle" });
 
         _registryMock.Verify(r => r.GetValue(Path, "AppsUseLightTheme", null), Times.Once);
         _registryMock.Verify(r => r.SetValue(Path, "AppsUseLightTheme", 0, RegistryValueKind.DWord), Times.Once);
@@ -105,7 +105,7 @@ public class ThemeCommandHandlerTests
     [Fact]
     public void SetThemeMode_BoolTrue_SetsLightMode()
     {
-        Handle("SetThemeMode", "true");
+        _handler.Handle("SetThemeMode", new JObject { ["mode"] = "true" });
 
         const string Path = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
         _registryMock.Verify(r => r.SetValue(Path, "AppsUseLightTheme", 1, RegistryValueKind.DWord), Times.Once);
@@ -117,7 +117,7 @@ public class ThemeCommandHandlerTests
     [Fact]
     public void SetThemeMode_BoolFalse_SetsDarkMode()
     {
-        Handle("SetThemeMode", "false");
+        _handler.Handle("SetThemeMode", new JObject { ["mode"] = "false" });
 
         const string Path = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
         _registryMock.Verify(r => r.SetValue(Path, "AppsUseLightTheme", 0, RegistryValueKind.DWord), Times.Once);
@@ -129,7 +129,7 @@ public class ThemeCommandHandlerTests
     [Fact]
     public void SetThemeMode_InvalidValue_DoesNothing()
     {
-        Handle("SetThemeMode", "invalidvalue");
+        _handler.Handle("SetThemeMode", new JObject { ["mode"] = "invalidvalue" });
 
         _registryMock.Verify(r => r.SetValue(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<object>(), It.IsAny<RegistryValueKind>()), Times.Never);
@@ -142,13 +142,8 @@ public class ThemeCommandHandlerTests
     public void ApplyTheme_Previous_RevertsToPreviousTheme()
     {
         // Applying "previous" with no previous theme should not call StartShellExecute
-        Handle("ApplyTheme", "previous");
+        _handler.Handle("ApplyTheme", new JObject { ["filePath"] = "previous" });
 
         _processMock.Verify(p => p.StartShellExecute(It.IsAny<string>()), Times.Never);
-    }
-
-    private void Handle(string key, string value)
-    {
-        _handler.Handle(key, value, JToken.FromObject(value));
     }
 }

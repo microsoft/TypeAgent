@@ -38,16 +38,18 @@ internal class AppCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    public void Handle(string key, JObject parameters)
     {
+        string name = parameters.Value<string>("name");
+
         switch (key)
         {
             case "CloseProgram":
-                CloseApplication(value);
+                CloseApplication(name);
                 break;
 
             case "LaunchProgram":
-                OpenApplication(value);
+                OpenApplication(name);
                 break;
 
             case "ListAppNames":

@@ -17,22 +17,23 @@ public class AudioCommandHandlerTests
     {
         _handler = new AudioCommandHandler(_audioMock.Object);
     }
+
     // --- Volume ---
 
     /// <summary>
     /// Verifies that valid integer percentage values are forwarded to <see cref="IAudioService.SetVolume"/>.
     /// </summary>
     [Theory]
-    [InlineData("0", 0)]
-    [InlineData("50", 50)]
-    [InlineData("100", 100)]
-    public void Volume_ValidPercent_SetsVolume(string input, int expected)
+    [InlineData(0)]
+    [InlineData(50)]
+    [InlineData(100)]
+    public void Volume_ValidPercent_SetsVolume(int targetVolume)
     {
         _audioMock.Setup(a => a.GetVolume()).Returns(75);
 
-        Handle("Volume", input);
+        _handler.Handle("Volume", new JObject { ["targetVolume"] = targetVolume });
 
-        _audioMock.Verify(a => a.SetVolume(expected), Times.Once);
+        _audioMock.Verify(a => a.SetVolume(targetVolume), Times.Once);
     }
 
     /// <summary>
@@ -43,22 +44,18 @@ public class AudioCommandHandlerTests
     {
         _audioMock.Setup(a => a.GetVolume()).Returns(42);
 
-        Handle("Volume", "80");
+        _handler.Handle("Volume", new JObject { ["targetVolume"] = 80 });
 
-        // GetVolume should have been called to save the current level
         _audioMock.Verify(a => a.GetVolume(), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that non-integer input does not trigger a <see cref="IAudioService.SetVolume"/> call.
+    /// Verifies that a missing targetVolume does not trigger a <see cref="IAudioService.SetVolume"/> call.
     /// </summary>
-    [Theory]
-    [InlineData("")]
-    [InlineData("abc")]
-    [InlineData("12.5")]
-    public void Volume_InvalidInput_DoesNotCallSetVolume(string input)
+    [Fact]
+    public void Volume_MissingTargetVolume_DoesNotCallSetVolume()
     {
-        Handle("Volume", input);
+        _handler.Handle("Volume", new JObject());
 
         _audioMock.Verify(a => a.SetVolume(It.IsAny<int>()), Times.Never);
     }
@@ -73,12 +70,10 @@ public class AudioCommandHandlerTests
     {
         _audioMock.Setup(a => a.GetVolume()).Returns(65);
 
-        // First set volume (saves 65)
-        Handle("Volume", "20");
+        _handler.Handle("Volume", new JObject { ["targetVolume"] = 20 });
         _audioMock.Invocations.Clear();
 
-        // Then restore
-        Handle("RestoreVolume", "");
+        _handler.Handle("RestoreVolume", new JObject());
 
         _audioMock.Verify(a => a.SetVolume(65), Times.Once);
     }
@@ -89,7 +84,7 @@ public class AudioCommandHandlerTests
     [Fact]
     public void RestoreVolume_WithoutPriorChange_RestoresZero()
     {
-        Handle("RestoreVolume", "");
+        _handler.Handle("RestoreVolume", new JObject());
 
         _audioMock.Verify(a => a.SetVolume(0), Times.Once);
     }
@@ -103,10 +98,10 @@ public class AudioCommandHandlerTests
     {
         _audioMock.Setup(a => a.GetVolume()).Returns(30);
 
-        Handle("Volume", "80");
+        _handler.Handle("Volume", new JObject { ["targetVolume"] = 80 });
         _audioMock.Invocations.Clear();
 
-        Handle("RestoreVolume", "");
+        _handler.Handle("RestoreVolume", new JObject());
 
         _audioMock.Verify(a => a.SetVolume(30), Times.Once);
     }
@@ -114,33 +109,27 @@ public class AudioCommandHandlerTests
     // --- Mute ---
 
     /// <summary>
-    /// Verifies that valid boolean string values are forwarded to <see cref="IAudioService.SetMute"/>.
+    /// Verifies that the on parameter is forwarded to <see cref="IAudioService.SetMute"/>.
     /// </summary>
     [Theory]
-    [InlineData("true", true)]
-    [InlineData("True", true)]
-    [InlineData("false", false)]
-    [InlineData("False", false)]
-    public void Mute_ValidBool_SetsMute(string input, bool expected)
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Mute_SetsMute(bool on)
     {
-        Handle("Mute", input);
+        _handler.Handle("Mute", new JObject { ["on"] = on });
 
-        _audioMock.Verify(a => a.SetMute(expected), Times.Once);
+        _audioMock.Verify(a => a.SetMute(on), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that non-boolean input does not trigger a <see cref="IAudioService.SetMute"/> call.
+    /// Verifies that a missing on parameter defaults to muting (false).
     /// </summary>
-    [Theory]
-    [InlineData("")]
-    [InlineData("yes")]
-    [InlineData("1")]
-    [InlineData("on")]
-    public void Mute_InvalidInput_DoesNotCallSetMute(string input)
+    [Fact]
+    public void Mute_MissingOn_DefaultsToFalse()
     {
-        Handle("Mute", input);
+        _handler.Handle("Mute", new JObject());
 
-        _audioMock.Verify(a => a.SetMute(It.IsAny<bool>()), Times.Never);
+        _audioMock.Verify(a => a.SetMute(false), Times.Once);
     }
 
     // --- Unknown key ---
@@ -151,13 +140,8 @@ public class AudioCommandHandlerTests
     [Fact]
     public void Handle_UnknownKey_DoesNothing()
     {
-        Handle("UnknownAudioCmd", "value");
+        _handler.Handle("UnknownAudioCmd", new JObject());
 
         _audioMock.VerifyNoOtherCalls();
-    }
-
-    private void Handle(string key, string value)
-    {
-        _handler.Handle(key, value, JToken.FromObject(value));
     }
 }

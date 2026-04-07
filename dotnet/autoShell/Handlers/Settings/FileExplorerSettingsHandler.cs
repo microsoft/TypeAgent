@@ -38,18 +38,16 @@ internal partial class FileExplorerSettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    public void Handle(string key, JObject parameters)
     {
-        var param = JObject.Parse(value);
-
         switch (key)
         {
             case "ShowFileExtensions":
-                HandleShowFileExtensions(param);
+                HandleShowFileExtensions(parameters);
                 break;
 
             case "ShowHiddenAndSystemFiles":
-                HandleShowHiddenAndSystemFiles(param);
+                HandleShowHiddenAndSystemFiles(parameters);
                 break;
         }
 
@@ -68,16 +66,16 @@ internal partial class FileExplorerSettingsHandler : ICommandHandler
         }
     }
 
-    private void HandleShowFileExtensions(JObject param)
+    private void HandleShowFileExtensions(JObject parameters)
     {
-        bool enable = param.Value<bool?>("enable") ?? true;
+        bool enable = parameters.Value<bool?>("enable") ?? true;
         // Inverted: enable showing extensions = HideFileExt 0
         _registry.SetValue(ExplorerAdvanced, "HideFileExt", enable ? 0 : 1, RegistryValueKind.DWord);
     }
 
-    private void HandleShowHiddenAndSystemFiles(JObject param)
+    private void HandleShowHiddenAndSystemFiles(JObject parameters)
     {
-        bool enable = param.Value<bool?>("enable") ?? true;
+        bool enable = parameters.Value<bool?>("enable") ?? true;
         // 1 = show hidden files, 2 = don't show hidden files
         _registry.SetValue(ExplorerAdvanced, "Hidden", enable ? 1 : 2, RegistryValueKind.DWord);
         // Show protected operating system files

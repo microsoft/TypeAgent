@@ -39,13 +39,12 @@ internal class NetworkCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    public void Handle(string key, JObject parameters)
     {
         switch (key)
         {
             case "BluetoothToggle":
-                var btParam = JObject.Parse(value);
-                bool enableBt = btParam.Value<bool?>("enableBluetooth") ?? true;
+                bool enableBt = parameters.Value<bool?>("enableBluetooth") ?? true;
                 _network.ToggleBluetooth(enableBt);
                 break;
 
@@ -54,15 +53,13 @@ internal class NetworkCommandHandler : ICommandHandler
                 break;
 
             case "EnableWifi":
-                var wifiParam = JObject.Parse(value);
-                bool enableWifi = wifiParam.Value<bool?>("enable") ?? true;
+                bool enableWifi = parameters.Value<bool?>("enable") ?? true;
                 _network.EnableWifi(enableWifi);
                 break;
 
             case "ConnectWifi":
-                var netInfo = JObject.Parse(value);
-                string ssid = netInfo.Value<string>("ssid");
-                string password = netInfo["password"] is not null ? netInfo.Value<string>("password") : "";
+                string ssid = parameters.Value<string>("ssid");
+                string password = parameters["password"] is not null ? parameters.Value<string>("password") : "";
                 _network.ConnectToWifi(ssid, password);
                 break;
 
@@ -75,15 +72,11 @@ internal class NetworkCommandHandler : ICommandHandler
                 break;
 
             case "ToggleAirplaneMode":
-                if (bool.TryParse(value, out bool airplaneMode))
-                {
-                    _network.SetAirplaneMode(airplaneMode);
-                }
-                else
-                {
-                    _logger.Warning($"ToggleAirplaneMode: invalid boolean value '{value}'");
-                }
+            {
+                bool airplaneMode = parameters.Value<bool?>("enable") ?? false;
+                _network.SetAirplaneMode(airplaneMode);
                 break;
+            }
         }
     }
 }

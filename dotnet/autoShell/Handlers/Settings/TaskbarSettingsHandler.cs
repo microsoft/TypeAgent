@@ -44,32 +44,30 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    public void Handle(string key, JObject parameters)
     {
-        var param = JObject.Parse(value);
-
         switch (key)
         {
             case "AutoHideTaskbar":
-                HandleAutoHideTaskbar(param);
+                HandleAutoHideTaskbar(parameters);
                 break;
             case "DisplaySecondsInSystrayClock":
-                SetToggle(param, "enable", "ShowSecondsInSystemClock");
+                SetToggle(parameters, "enable", "ShowSecondsInSystemClock");
                 break;
             case "DisplayTaskbarOnAllMonitors":
-                SetToggle(param, "enable", "MMTaskbarEnabled");
+                SetToggle(parameters, "enable", "MMTaskbarEnabled");
                 break;
             case "ShowBadgesOnTaskbar":
-                SetToggle(param, "enableBadging", "TaskbarBadges");
+                SetToggle(parameters, "enableBadging", "TaskbarBadges");
                 break;
             case "TaskbarAlignment":
-                HandleTaskbarAlignment(param);
+                HandleTaskbarAlignment(parameters);
                 break;
             case "TaskViewVisibility":
-                SetToggle(param, "visibility", "ShowTaskViewButton");
+                SetToggle(parameters, "visibility", "ShowTaskViewButton");
                 break;
             case "ToggleWidgetsButtonVisibility":
-                SetToggle(param, "visibility", "TaskbarDa", trueValue: "show");
+                SetToggle(parameters, "visibility", "TaskbarDa", trueValue: "show");
                 break;
         }
 
@@ -88,9 +86,9 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
         }
     }
 
-    private void HandleAutoHideTaskbar(JObject param)
+    private void HandleAutoHideTaskbar(JObject parameters)
     {
-        bool hide = param.Value<bool>("hideWhenNotUsing");
+        bool hide = parameters.Value<bool>("hideWhenNotUsing");
 
         // Auto-hide uses a binary blob in a different registry path
         if (_registry.GetValue(StuckRects3, "Settings", null) is byte[] settings && settings.Length >= 9)
@@ -109,9 +107,9 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
         }
     }
 
-    private void HandleTaskbarAlignment(JObject param)
+    private void HandleTaskbarAlignment(JObject parameters)
     {
-        string alignment = param.Value<string>("alignment") ?? "center";
+        string alignment = parameters.Value<string>("alignment") ?? "center";
         // 0 = left, 1 = center
         bool useCenter = alignment.Equals("center", StringComparison.OrdinalIgnoreCase);
         _registry.SetValue(ExplorerAdvanced, "TaskbarAl", useCenter ? 1 : 0, RegistryValueKind.DWord);
@@ -122,17 +120,17 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
     /// For bool JSON values, true=1 false=0.
     /// For string JSON values, compares against <paramref name="trueValue"/>.
     /// </summary>
-    private void SetToggle(JObject param, string jsonProperty, string registryValue, string trueValue = null)
+    private void SetToggle(JObject parameters, string jsonProperty, string registryValue, string trueValue = null)
     {
         int regValue;
         if (trueValue != null)
         {
-            string val = param.Value<string>(jsonProperty) ?? "";
+            string val = parameters.Value<string>(jsonProperty) ?? "";
             regValue = val.Equals(trueValue, StringComparison.OrdinalIgnoreCase) ? 1 : 0;
         }
         else
         {
-            regValue = (param.Value<bool?>(jsonProperty) ?? true) ? 1 : 0;
+            regValue = (parameters.Value<bool?>(jsonProperty) ?? true) ? 1 : 0;
         }
 
         _registry.SetValue(ExplorerAdvanced, registryValue, regValue, RegistryValueKind.DWord);

@@ -29,7 +29,7 @@ public class DisplayCommandHandlerTests
     {
         _displayMock.Setup(d => d.ListResolutions()).Returns("[{\"Width\":1920}]");
 
-        Handle("ListResolutions", "");
+        _handler.Handle("ListResolutions", new JObject());
 
         _displayMock.Verify(d => d.ListResolutions(), Times.Once);
     }
@@ -44,7 +44,7 @@ public class DisplayCommandHandlerTests
     {
         _displayMock.Setup(d => d.SetResolution(1920, 1080, null)).Returns("ok");
 
-        Handle("SetScreenResolution", "1920x1080");
+        _handler.Handle("SetScreenResolution", new JObject { ["width"] = 1920u, ["height"] = 1080u });
 
         _displayMock.Verify(d => d.SetResolution(1920, 1080, null), Times.Once);
     }
@@ -57,7 +57,7 @@ public class DisplayCommandHandlerTests
     {
         _displayMock.Setup(d => d.SetResolution(1920, 1080, (uint)60)).Returns("ok");
 
-        Handle("SetScreenResolution", "1920x1080@60");
+        _handler.Handle("SetScreenResolution", new JObject { ["width"] = 1920u, ["height"] = 1080u, ["refreshRate"] = 60u });
 
         _displayMock.Verify(d => d.SetResolution(1920, 1080, (uint)60), Times.Once);
     }
@@ -70,19 +70,51 @@ public class DisplayCommandHandlerTests
     {
         _displayMock.Setup(d => d.SetResolution(2560, 1440, null)).Returns("ok");
 
-        var rawValue = JObject.FromObject(new { width = 2560, height = 1440 });
-        _handler.Handle("SetScreenResolution", "", rawValue);
+        _handler.Handle("SetScreenResolution", new JObject { ["width"] = 2560u, ["height"] = 1440u });
 
         _displayMock.Verify(d => d.SetResolution(2560, 1440, null), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that an invalid resolution string does not invoke the display service.
+    /// Verifies that zero-valued dimensions do not invoke the display service.
     /// </summary>
     [Fact]
-    public void SetScreenResolution_InvalidFormat_DoesNotCallService()
+    public void SetScreenResolution_ZeroDimensions_DoesNotCallService()
     {
-        Handle("SetScreenResolution", "invalid");
+        _handler.Handle("SetScreenResolution", new JObject { ["width"] = 0u, ["height"] = 0u });
+
+        _displayMock.Verify(d => d.SetResolution(It.IsAny<uint>(), It.IsAny<uint>(), It.IsAny<uint?>()), Times.Never);
+    }
+
+    /// <summary>
+    /// Verifies that missing dimensions do not invoke the display service.
+    /// </summary>
+    [Fact]
+    public void SetScreenResolution_MissingDimensions_DoesNotCallService()
+    {
+        _handler.Handle("SetScreenResolution", new JObject());
+
+        _displayMock.Verify(d => d.SetResolution(It.IsAny<uint>(), It.IsAny<uint>(), It.IsAny<uint?>()), Times.Never);
+    }
+
+    /// <summary>
+    /// Verifies that providing only width (no height) does not invoke the display service.
+    /// </summary>
+    [Fact]
+    public void SetScreenResolution_WidthOnly_DoesNotCallService()
+    {
+        _handler.Handle("SetScreenResolution", new JObject { ["width"] = 1920u });
+
+        _displayMock.Verify(d => d.SetResolution(It.IsAny<uint>(), It.IsAny<uint>(), It.IsAny<uint?>()), Times.Never);
+    }
+
+    /// <summary>
+    /// Verifies that providing only height (no width) does not invoke the display service.
+    /// </summary>
+    [Fact]
+    public void SetScreenResolution_HeightOnly_DoesNotCallService()
+    {
+        _handler.Handle("SetScreenResolution", new JObject { ["height"] = 1080u });
 
         _displayMock.Verify(d => d.SetResolution(It.IsAny<uint>(), It.IsAny<uint>(), It.IsAny<uint?>()), Times.Never);
     }
@@ -95,7 +127,7 @@ public class DisplayCommandHandlerTests
     [Fact]
     public void SetTextSize_ValidPercent_CallsService()
     {
-        Handle("SetTextSize", "150");
+        _handler.Handle("SetTextSize", new JObject { ["size"] = 150 });
 
         _displayMock.Verify(d => d.SetTextSize(150), Times.Once);
     }
@@ -106,7 +138,7 @@ public class DisplayCommandHandlerTests
     [Fact]
     public void SetTextSize_InvalidInput_DoesNotCallService()
     {
-        Handle("SetTextSize", "abc");
+        _handler.Handle("SetTextSize", new JObject { ["size"] = "abc" });
 
         _displayMock.Verify(d => d.SetTextSize(It.IsAny<int>()), Times.Never);
     }
@@ -119,7 +151,7 @@ public class DisplayCommandHandlerTests
     [Fact]
     public void Handle_UnknownKey_DoesNothing()
     {
-        Handle("UnknownDisplayCmd", "value");
+        _handler.Handle("UnknownDisplayCmd", new JObject());
 
         _displayMock.VerifyNoOtherCalls();
     }
@@ -132,14 +164,8 @@ public class DisplayCommandHandlerTests
     {
         _displayMock.Setup(d => d.SetResolution(2560, 1440, (uint)144)).Returns("ok");
 
-        var rawValue = JObject.FromObject(new { width = 2560, height = 1440, refreshRate = 144 });
-        _handler.Handle("SetScreenResolution", "", rawValue);
+        _handler.Handle("SetScreenResolution", new JObject { ["width"] = 2560u, ["height"] = 1440u, ["refreshRate"] = 144u });
 
         _displayMock.Verify(d => d.SetResolution(2560, 1440, (uint)144), Times.Once);
-    }
-
-    private void Handle(string key, string value)
-    {
-        _handler.Handle(key, value, JToken.FromObject(value));
     }
 }

@@ -19,8 +19,7 @@ internal interface ICommandHandler
     /// <summary>
     /// Handles the command identified by <paramref name="key"/>.
     /// </summary>
-    /// <param name="key">The command key from the incoming JSON object.</param>
-    /// <param name="value">The string representation of the command's value.</param>
-    /// <param name="rawValue">The original JToken value for commands that need structured data.</param>
-    void Handle(string key, string value, JToken rawValue);
+    /// <param name="key">The command key (action name).</param>
+    /// <param name="parameters">The action parameters as a JObject.</param>
+    void Handle(string key, JObject parameters);
 }

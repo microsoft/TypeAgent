@@ -65,12 +65,12 @@ internal partial class ThemeCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    public void Handle(string key, JObject parameters)
     {
         switch (key)
         {
             case "ApplyTheme":
-                ApplyTheme(value);
+                ApplyTheme(parameters.Value<string>("filePath"));
                 break;
 
             case "ListThemes":
@@ -79,12 +79,18 @@ internal partial class ThemeCommandHandler : ICommandHandler
                 break;
 
             case "SetThemeMode":
-                HandleSetThemeMode(value);
+            {
+                string mode = parameters.Value<string>("mode");
+                HandleSetThemeMode(mode);
                 break;
+            }
 
             case "SetWallpaper":
-                _systemParams.SetParameter(SPI_SETDESKWALLPAPER, 0, value, SPIF_UPDATEINIFILE_SENDCHANGE);
+            {
+                string filePath = parameters.Value<string>("filePath");
+                _systemParams.SetParameter(SPI_SETDESKWALLPAPER, 0, filePath, SPIF_UPDATEINIFILE_SENDCHANGE);
                 break;
+            }
         }
     }
 
@@ -245,6 +251,8 @@ internal partial class ThemeCommandHandler : ICommandHandler
     /// </summary>
     private void HandleSetThemeMode(string value)
     {
+        if (string.IsNullOrEmpty(value)) return;
+
         if (value.Equals("toggle", StringComparison.OrdinalIgnoreCase))
         {
             ToggleLightDarkMode();

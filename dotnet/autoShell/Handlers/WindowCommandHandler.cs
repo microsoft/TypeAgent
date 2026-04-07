@@ -31,35 +31,48 @@ internal class WindowCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    public void Handle(string key, JObject parameters)
     {
         switch (key)
         {
             case "Maximize":
-                string maxProcess = _appRegistry.ResolveProcessName(value);
+            {
+                string name = parameters.Value<string>("name");
+                string maxProcess = _appRegistry.ResolveProcessName(name);
                 _window.MaximizeWindow(maxProcess);
                 break;
+            }
 
             case "Minimize":
-                string minProcess = _appRegistry.ResolveProcessName(value);
+            {
+                string name = parameters.Value<string>("name");
+                string minProcess = _appRegistry.ResolveProcessName(name);
                 _window.MinimizeWindow(minProcess);
                 break;
+            }
 
             case "SwitchTo":
-                string switchProcess = _appRegistry.ResolveProcessName(value);
-                string path = _appRegistry.GetExecutablePath(value);
+            {
+                string name = parameters.Value<string>("name");
+                string switchProcess = _appRegistry.ResolveProcessName(name);
+                string path = _appRegistry.GetExecutablePath(name);
                 _window.RaiseWindow(switchProcess, path);
                 break;
+            }
 
             case "Tile":
-                string[] apps = value.Split(',');
-                if (apps.Length == 2)
+            {
+                string leftName = parameters.Value<string>("leftWindow");
+                string rightName = parameters.Value<string>("rightWindow");
+
+                if (leftName != null && rightName != null)
                 {
-                    string processName1 = _appRegistry.ResolveProcessName(apps[0]);
-                    string processName2 = _appRegistry.ResolveProcessName(apps[1]);
+                    string processName1 = _appRegistry.ResolveProcessName(leftName);
+                    string processName2 = _appRegistry.ResolveProcessName(rightName);
                     _window.TileWindows(processName1, processName2);
                 }
                 break;
+            }
         }
     }
 }
