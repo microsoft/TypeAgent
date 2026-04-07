@@ -24,6 +24,7 @@ export class DisplayLog {
     private entries: DisplayLogEntry[] = [];
     private nextSeq: number = 0;
     private dirty: boolean = false;
+    private saveTimer: ReturnType<typeof setImmediate> | undefined = undefined;
 
     constructor(private readonly dirPath: string | undefined) {}
 
@@ -192,6 +193,18 @@ export class DisplayLog {
         this.entries.length = 0;
         this.nextSeq = 0;
         this.dirty = true;
+    }
+
+    /**
+     * Schedule a save at the end of the current event-loop tick.
+     * Multiple calls within the same tick are coalesced into one write.
+     */
+    saveQueued(): void {
+        if (this.saveTimer !== undefined) return;
+        this.saveTimer = setImmediate(() => {
+            this.saveTimer = undefined;
+            this.save().catch(() => {});
+        });
     }
 
     /**

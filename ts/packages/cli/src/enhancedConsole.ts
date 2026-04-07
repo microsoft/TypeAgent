@@ -448,9 +448,9 @@ export function createEnhancedClientIO(
             // Scroll region is active — write content into the scroll region.
             // The prompt stays anchored at the bottom automatically.
             if (appendMode !== "inline") {
-                // writeContent() already clears inlineBuffer, so no need to
-                // flushInline() first — that would write the buffer AND then
-                // write displayText, causing the streamed text to appear twice.
+                // Any accumulated inline buffer is intentionally discarded here —
+                // writeContent() clears inlineBuffer before writing, so partial
+                // streaming tokens won't be re-emitted with the new block content.
                 terminalLayout.writeContent(displayText);
             } else {
                 terminalLayout.writeInline(displayText);

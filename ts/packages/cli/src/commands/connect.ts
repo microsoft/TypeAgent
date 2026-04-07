@@ -131,7 +131,7 @@ export default class Connect extends Command {
                 },
             );
             console.log(`Connected to session '${name}'.`);
-            bindDispatcher?.(dispatcher);
+            bindDispatcher(dispatcher);
             await replayDisplayHistory(dispatcher, clientIO);
             try {
                 let processed = false;

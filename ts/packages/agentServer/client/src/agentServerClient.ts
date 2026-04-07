@@ -10,6 +10,7 @@ import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
 import WebSocket from "isomorphic-ws";
 import { spawn } from "child_process";
 import fs from "fs";
+import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -252,19 +253,45 @@ function isServerRunning(url: string): Promise<boolean> {
     });
 }
 
-function spawnAgentServer(serverPath: string): void {
-    debug(`Starting agent server from ${serverPath}`);
-    const isWindows = process.platform === "win32";
-    const child = spawn("node", [serverPath], {
-        // On Unix, detached creates a new session so the child survives parent exit.
-        // On Windows, detached creates a visible console window, so we skip it —
-        // stdio: 'ignore' + unref() is sufficient for the child to outlive the parent.
-        detached: !isWindows,
-        stdio: "ignore",
-        windowsHide: true,
-    });
-    child.unref();
-    debug(`Agent server process spawned (pid: ${child.pid})`);
+function spawnAgentServer(serverPath: string, port: number): void {
+    // Use an exclusive lock file to prevent two concurrent client processes from
+    // both concluding the server is down and each spawning their own copy.
+    // fs.openSync with 'wx' is atomic: exactly one caller creates the file.
+    const lockFile = path.join(
+        os.tmpdir(),
+        `typeagent-server-${port}.spawn.lock`,
+    );
+    let fd: number;
+    try {
+        fd = fs.openSync(lockFile, "wx");
+    } catch {
+        // Another process is already spawning the server — just wait for it.
+        debug(
+            `Agent server spawn lock held by another process, skipping spawn`,
+        );
+        return;
+    }
+    try {
+        debug(`Starting agent server from ${serverPath}`);
+        const isWindows = process.platform === "win32";
+        const child = spawn("node", [serverPath], {
+            // On Unix, detached creates a new session so the child survives parent exit.
+            // On Windows, detached creates a visible console window, so we skip it —
+            // stdio: 'ignore' + unref() is sufficient for the child to outlive the parent.
+            detached: !isWindows,
+            stdio: "ignore",
+            windowsHide: true,
+        });
+        child.unref();
+        debug(`Agent server process spawned (pid: ${child.pid})`);
+    } finally {
+        fs.closeSync(fd);
+        try {
+            fs.unlinkSync(lockFile);
+        } catch {
+            // Best effort — lock file cleanup
+        }
+    }
 }
 
 async function waitForServer(
@@ -293,7 +320,7 @@ export async function ensureAndConnectDispatcher(
     const url = `ws://localhost:${port}`;
     if (!(await isServerRunning(url))) {
         const serverPath = getAgentServerEntryPoint();
-        spawnAgentServer(serverPath);
+        spawnAgentServer(serverPath, port);
         await waitForServer(url);
     }
     return connectDispatcher(clientIO, url, options, onDisconnect);
@@ -308,7 +335,7 @@ export async function ensureAndConnectSession(
     const url = `ws://localhost:${port}`;
     if (!(await isServerRunning(url))) {
         const serverPath = getAgentServerEntryPoint();
-        spawnAgentServer(serverPath);
+        spawnAgentServer(serverPath, port);
         await waitForServer(url);
     }
     const connection = await connectAgentServer(url, onDisconnect);

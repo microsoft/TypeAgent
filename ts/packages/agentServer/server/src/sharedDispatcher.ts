@@ -175,22 +175,21 @@ export async function createSharedDispatcher(
         orig.setUserRequest = (requestId, ...args) => {
             origSetUserRequest(requestId, ...args);
             log.logUserRequest(requestId, args[0]);
-            // Save asynchronously after each user request is registered.
-            log.save().catch(() => {});
+            log.saveQueued();
         };
 
         const origSetDisplay = orig.setDisplay.bind(orig);
         orig.setDisplay = (message) => {
             origSetDisplay(message);
             log.logSetDisplay(message);
-            log.save().catch(() => {});
+            log.saveQueued();
         };
 
         const origAppendDisplay = orig.appendDisplay.bind(orig);
         orig.appendDisplay = (message, mode, ...rest) => {
             origAppendDisplay(message, mode, ...rest);
             log.logAppendDisplay(message, mode);
-            log.save().catch(() => {});
+            log.saveQueued();
         };
     }
 

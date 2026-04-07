@@ -18,7 +18,10 @@ function formatTable(sessions: SessionInfo[]): string {
         "NAME".length,
         ...sessions.map((s) => (s.name ?? "").length),
     );
-    const clientsWidth = "CLIENTS".length;
+    const clientsWidth = Math.max(
+        "CLIENTS".length,
+        ...sessions.map((s) => String(s.clientCount).length),
+    );
     const createdWidth = Math.max(
         "CREATED AT".length,
         ...sessions.map((s) => s.createdAt.length),

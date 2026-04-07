@@ -246,7 +246,7 @@ agent-cli connect                        # resume most recently active session
 agent-cli connect --session <id>         # resume a specific session by ID
 ```
 
-`connect.ts` passes `{ sessionId: flags.session }` to `ensureAndConnectDispatcher()` when `--session` is provided; omitting the flag calls `joinSession()` without a session ID, letting the server resolve the most recently active session (or auto-create `"default"`).
+`connect.ts` passes `{ sessionId: flags.session }` to `ensureAndConnectSession()` when `--session` is provided; omitting the flag calls `joinSession()` without a session ID, letting the server resolve the most recently active session (or auto-create `"default"`).
 
 #### `sessions` topic — session CRUD
 
