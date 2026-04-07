@@ -1840,3 +1840,49 @@ function getNextInput(
 export function getEnhancedConsolePrompt(_text: string): string {
     return `${getVerboseIndicator()}❯ `;
 }
+
+/**
+ * Replay display history entries from a previous (or concurrent) session onto
+ * the given clientIO so that the user sees the chat history when joining.
+ *
+ * User requests are printed as styled prompt lines; agent display entries are
+ * forwarded through setDisplay / appendDisplay exactly as live messages would
+ * be. Notifications and display-info entries are skipped — they are ephemeral.
+ */
+export async function replayDisplayHistory(
+    dispatcher: Dispatcher,
+    clientIO: ClientIO,
+): Promise<void> {
+    const entries = await dispatcher.getDisplayHistory();
+    if (entries.length === 0) {
+        return;
+    }
+
+    const width = process.stdout.columns || 80;
+    process.stdout.write(
+        chalk.dim(
+            "─── session history " + "─".repeat(Math.max(0, width - 20)),
+        ) + "\n",
+    );
+
+    for (const entry of entries) {
+        switch (entry.type) {
+            case "user-request":
+                process.stdout.write(
+                    chalk.cyanBright(`❯ `) + chalk.dim(entry.command) + "\n",
+                );
+                break;
+            case "set-display":
+                clientIO.setDisplay(entry.message);
+                break;
+            case "append-display":
+                clientIO.appendDisplay(entry.message, entry.mode);
+                break;
+            // notify and set-display-info are ephemeral — skip them
+        }
+    }
+
+    process.stdout.write(
+        chalk.dim("─── now " + "─".repeat(Math.max(0, width - 8))) + "\n",
+    );
+}

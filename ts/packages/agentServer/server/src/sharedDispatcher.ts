@@ -161,6 +161,39 @@ export async function createSharedDispatcher(
         ...options,
         clientIO,
     });
+
+    // Intercept the three display methods on the shared clientIO so that all
+    // display traffic is mirrored into the DisplayLog for later replay.
+    // We patch context.clientIO (which IS the broadcast `clientIO` object above)
+    // rather than the local variable so any future reference through context also
+    // sees the patched version.
+    {
+        const log = context.displayLog;
+        const orig = context.clientIO;
+
+        const origSetUserRequest = orig.setUserRequest.bind(orig);
+        orig.setUserRequest = (requestId, ...args) => {
+            origSetUserRequest(requestId, ...args);
+            log.logUserRequest(requestId, args[0]);
+            // Save asynchronously after each user request is registered.
+            log.save().catch(() => {});
+        };
+
+        const origSetDisplay = orig.setDisplay.bind(orig);
+        orig.setDisplay = (message) => {
+            origSetDisplay(message);
+            log.logSetDisplay(message);
+            log.save().catch(() => {});
+        };
+
+        const origAppendDisplay = orig.appendDisplay.bind(orig);
+        orig.appendDisplay = (message, mode, ...rest) => {
+            origAppendDisplay(message, mode, ...rest);
+            log.logAppendDisplay(message, mode);
+            log.save().catch(() => {});
+        };
+    }
+
     const dispatchers = new Map<string, Dispatcher>();
     const shared: SharedDispatcher = {
         get clientCount() {

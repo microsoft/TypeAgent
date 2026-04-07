@@ -6,6 +6,7 @@ import { Dispatcher } from "agent-dispatcher";
 import {
     getEnhancedConsolePrompt,
     processCommandsEnhanced,
+    replayDisplayHistory,
     withEnhancedConsoleClientIO,
 } from "../enhancedConsole.js";
 import { isSlashCommand, getSlashCompletions } from "../slashCommands.js";
@@ -130,6 +131,7 @@ export default class Connect extends Command {
                 },
             );
             bindDispatcher?.(dispatcher);
+            await replayDisplayHistory(dispatcher, clientIO);
             try {
                 let processed = false;
                 if (flags.request) {
