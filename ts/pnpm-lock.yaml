@@ -2392,37 +2392,6 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
-  packages/agents/powerpoint:
-    dependencies:
-      '@typeagent/agent-sdk':
-        specifier: workspace:*
-        version: link:../../agentSdk
-      ws:
-        specifier: ^8.18.0
-        version: 8.19.0
-    devDependencies:
-      '@typeagent/action-schema-compiler':
-        specifier: workspace:*
-        version: link:../../actionSchemaCompiler
-      '@types/ws':
-        specifier: ^8.5.12
-        version: 8.18.1
-      action-grammar-compiler:
-        specifier: workspace:*
-        version: link:../../actionGrammarCompiler
-      concurrently:
-        specifier: ^9.1.2
-        version: 9.1.2
-      prettier:
-        specifier: ^3.5.3
-        version: 3.5.3
-      rimraf:
-        specifier: ^6.0.1
-        version: 6.0.1
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
-
   packages/agents/scriptflow:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
@@ -3435,9 +3404,6 @@ importers:
       photo-agent:
         specifier: workspace:*
         version: link:../agents/photo
-      powerpoint-agent:
-        specifier: workspace:*
-        version: link:../agents/powerpoint
       proper-lockfile:
         specifier: ^4.1.2
         version: 4.1.2
