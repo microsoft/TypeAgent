@@ -240,7 +240,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          BRANCH="automated/fix-dependabot-alerts-$(date +%Y%m%d)"
+          BRANCH="automated/fix-dependabot-alerts-$(date +%Y%m%d)-${{ github.run_number }}"
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
