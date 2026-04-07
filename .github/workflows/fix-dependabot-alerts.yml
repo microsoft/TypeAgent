@@ -4,6 +4,11 @@
 # Automatically remediate Dependabot security alerts by running the
 # fix-dependabot-alerts script, verifying the build for each fix,
 # and opening a pull request with the passing changes.
+#
+# REQUIRED: A repository secret named DEPENDABOT_PAT containing a
+# Personal Access Token (classic) with the `security_events` scope,
+# or a fine-grained token with "Dependabot alerts" read permission.
+# The default GITHUB_TOKEN cannot access the Dependabot alerts API.
 
 name: fix-dependabot-alerts
 
@@ -69,14 +74,19 @@ jobs:
         id: fix
         working-directory: ts
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # NOTE: GITHUB_TOKEN cannot access Dependabot alerts API (403).
+          # A PAT with security_events scope must be stored as DEPENDABOT_PAT.
+          GH_TOKEN: ${{ secrets.DEPENDABOT_PAT || secrets.GITHUB_TOKEN }}
         run: |
           # ── Step 1: Discover fixable packages ───────────────────────
           echo "::group::Analysing alerts"
           node tools/scripts/fix-dependabot-alerts.mjs --dry-run --json > /tmp/dep-analysis.json 2>/tmp/dep-analysis.log || true
 
           if ! jq -e '.summary' /tmp/dep-analysis.json > /dev/null 2>&1; then
-            echo "Script produced no JSON output"
+            echo "::error::Script produced no valid JSON output"
+            echo "--- stderr log ---"
+            cat /tmp/dep-analysis.log || true
+            echo "--- end stderr log ---"
             echo "resolved=0" >> "$GITHUB_OUTPUT"
             echo "blocked=0" >> "$GITHUB_OUTPUT"
             echo "failed=0" >> "$GITHUB_OUTPUT"
