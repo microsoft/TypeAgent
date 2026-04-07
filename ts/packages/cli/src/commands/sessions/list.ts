@@ -51,7 +51,8 @@ function formatTable(sessions: SessionInfo[]): string {
 }
 
 export default class SessionsList extends Command {
-    static description = "List sessions on the agent server";
+    static description =
+        "List sessions on the agent server. Usage: sessions list [--name <filter>]";
     static flags = {
         port: Flags.integer({
             description: "Port for type agent server",

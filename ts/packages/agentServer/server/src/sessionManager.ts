@@ -54,7 +54,7 @@ export type SessionManager = {
         clientIO: ClientIO,
         closeFn: () => void,
         options?: DispatcherConnectOptions,
-    ): Promise<{ dispatcher: Dispatcher; connectionId: string }>;
+    ): Promise<{ dispatcher: Dispatcher; connectionId: string; name: string }>;
     leaveSession(sessionId: string, connectionId: string): Promise<void>;
     listSessions(name?: string): SessionInfo[];
     renameSession(sessionId: string, newName: string): Promise<void>;
@@ -272,7 +272,11 @@ export async function createSessionManager(
             clientIO: ClientIO,
             closeFn: () => void,
             options?: DispatcherConnectOptions,
-        ): Promise<{ dispatcher: Dispatcher; connectionId: string }> {
+        ): Promise<{
+            dispatcher: Dispatcher;
+            connectionId: string;
+            name: string;
+        }> {
             const record = sessions.get(sessionId);
             if (record === undefined) {
                 throw new Error(`Session not found: ${sessionId}`);
@@ -295,6 +299,7 @@ export async function createSessionManager(
             return {
                 dispatcher,
                 connectionId: dispatcher.connectionId!,
+                name: record.name,
             };
         },
 

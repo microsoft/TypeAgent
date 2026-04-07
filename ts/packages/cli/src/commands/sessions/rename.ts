@@ -5,7 +5,8 @@ import { Args, Command, Flags } from "@oclif/core";
 import { connectAgentServer } from "@typeagent/agent-server-client";
 
 export default class SessionsRename extends Command {
-    static description = "Rename a session on the agent server";
+    static description =
+        "Rename a session on the agent server. Usage: sessions rename <id> <newName>";
     static flags = {
         port: Flags.integer({
             description: "Port for type agent server",

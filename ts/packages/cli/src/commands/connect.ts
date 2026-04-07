@@ -10,7 +10,7 @@ import {
     withEnhancedConsoleClientIO,
 } from "../enhancedConsole.js";
 import { isSlashCommand, getSlashCompletions } from "../slashCommands.js";
-import { ensureAndConnectDispatcher } from "@typeagent/agent-server-client";
+import { ensureAndConnectSession } from "@typeagent/agent-server-client";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
 
 type CompletionData = {
@@ -121,7 +121,7 @@ export default class Connect extends Command {
         installDebugInterceptor();
 
         await withEnhancedConsoleClientIO(async (clientIO, bindDispatcher) => {
-            const dispatcher = await ensureAndConnectDispatcher(
+            const { dispatcher, name } = await ensureAndConnectSession(
                 clientIO,
                 flags.port,
                 flags.session ? { sessionId: flags.session } : undefined,
@@ -130,6 +130,7 @@ export default class Connect extends Command {
                     process.exit(1);
                 },
             );
+            console.log(`Connected to session '${name}'.`);
             bindDispatcher?.(dispatcher);
             await replayDisplayHistory(dispatcher, clientIO);
             try {

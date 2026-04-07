@@ -17,6 +17,7 @@ export type SessionInfo = {
 export type JoinSessionResult = {
     connectionId: string;
     sessionId: string;
+    name: string;
 };
 
 export type AgentServerInvokeFunctions = {

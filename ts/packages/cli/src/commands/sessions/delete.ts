@@ -7,7 +7,7 @@ import { createInterface } from "readline/promises";
 
 export default class SessionsDelete extends Command {
     static description =
-        "Delete a session and its persisted data from the agent server";
+        "Delete a session and its persisted data from the agent server. Usage: sessions delete <id>";
     static flags = {
         port: Flags.integer({
             description: "Port for type agent server",

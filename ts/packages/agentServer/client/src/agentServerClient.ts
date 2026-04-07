@@ -30,6 +30,7 @@ const debugErr = registerDebug("typeagent:agent-server-client:error");
 export type SessionDispatcher = {
     dispatcher: Dispatcher;
     sessionId: string;
+    name: string;
 };
 
 export type AgentServerConnection = {
@@ -121,7 +122,11 @@ export async function connectAgentServer(
                     connectionId: result.connectionId,
                 });
 
-                return { dispatcher, sessionId };
+                return {
+                    dispatcher,
+                    sessionId,
+                    name: result.name,
+                };
             },
 
             async leaveSession(sessionId: string): Promise<void> {
@@ -292,6 +297,26 @@ export async function ensureAndConnectDispatcher(
         await waitForServer(url);
     }
     return connectDispatcher(clientIO, url, options, onDisconnect);
+}
+
+export async function ensureAndConnectSession(
+    clientIO: ClientIO,
+    port: number = 8999,
+    options?: DispatcherConnectOptions,
+    onDisconnect?: () => void,
+): Promise<SessionDispatcher> {
+    const url = `ws://localhost:${port}`;
+    if (!(await isServerRunning(url))) {
+        const serverPath = getAgentServerEntryPoint();
+        spawnAgentServer(serverPath);
+        await waitForServer(url);
+    }
+    const connection = await connectAgentServer(url, onDisconnect);
+    const session = await connection.joinSession(clientIO, options);
+    session.dispatcher.close = async () => {
+        await connection.close();
+    };
+    return session;
 }
 
 export async function stopAgentServer(port: number = 8999): Promise<void> {

@@ -5,7 +5,8 @@ import { Args, Command, Flags } from "@oclif/core";
 import { connectAgentServer } from "@typeagent/agent-server-client";
 
 export default class SessionsCreate extends Command {
-    static description = "Create a new named session on the agent server";
+    static description =
+        "Create a new named session on the agent server. Usage: sessions create <name>";
     static flags = {
         port: Flags.integer({
             description: "Port for type agent server",
