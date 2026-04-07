@@ -288,8 +288,10 @@ export class CollaborationManager {
         });
 
         // Add connection event logging
-        provider.on("connection-open", () => {
-            console.log("[WEBSOCKET] Connection opened");
+        provider.on("status", (event: { status: string }) => {
+            if (event.status === "connected") {
+                console.log("[WEBSOCKET] Connection opened");
+            }
         });
 
         provider.on("connection-close", () => {
