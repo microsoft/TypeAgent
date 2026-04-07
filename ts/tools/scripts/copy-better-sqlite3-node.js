@@ -96,7 +96,9 @@ for (const entry of entries) {
             execFileSync(
                 process.execPath,
                 [
-                    require.resolve("prebuild-install/bin"),
+                    require.resolve("prebuild-install/bin", {
+                        paths: [pkgDir],
+                    }),
                     "--runtime",
                     "node",
                     "--target",
