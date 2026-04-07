@@ -91,7 +91,7 @@ async function handleRefineSchema(
             role: "system" as const,
             content:
                 "You are a TypeScript expert. Modify the given TypeAgent action schema according to the instructions. " +
-                "Preserve all copyright headers and existing structure. Return only the updated TypeScript file content.",
+                "Preserve all copyright headers and existing structure. Respond in JSON format. Return a JSON object with a single `schema` key containing the updated TypeScript file content as a string.",
         },
         {
             role: "user" as const,
@@ -171,7 +171,7 @@ function buildSchemaPrompt(
                 "- Parameters use camelCase names\n" +
                 "- Optional parameters use `?: type` syntax\n" +
                 "- Include the copyright header\n" +
-                "Return only the TypeScript file content.",
+                "Respond in JSON format. Return a JSON object with a single `schema` key containing the TypeScript file content as a string.",
         },
         {
             role: "user",
@@ -185,6 +185,13 @@ function buildSchemaPrompt(
 }
 
 function extractTypeScript(llmResponse: string): string {
+    // Try to parse as JSON first (when using json_object response format)
+    try {
+        const parsed = JSON.parse(llmResponse);
+        if (parsed.schema) return parsed.schema.trim();
+    } catch {
+        // Not JSON, fall through to other extraction methods
+    }
     // Strip markdown code fences if present
     const fenceMatch = llmResponse.match(/```(?:typescript|ts)?\n([\s\S]*?)```/);
     if (fenceMatch) return fenceMatch[1].trim();

@@ -170,7 +170,7 @@ function buildGrammarPrompt(
                 "The file must end with:\n" +
                 "  import { ActionType } from \"./schemaFile.ts\";\n" +
                 "  <Start> : ActionType = <Rule1> | <Rule2> | ...;\n\n" +
-                "Return only the .agr file content.",
+                "Respond in JSON format. Return a JSON object with a single `grammar` key containing the .agr file content as a string.",
         },
         {
             role: "user",
@@ -184,6 +184,13 @@ function buildGrammarPrompt(
 }
 
 function extractGrammarContent(llmResponse: string): string {
+    // Try to parse as JSON first (when using json_object response format)
+    try {
+        const parsed = JSON.parse(llmResponse);
+        if (parsed.grammar) return parsed.grammar.trim();
+    } catch {
+        // Not JSON, fall through to other extraction methods
+    }
     const fenceMatch = llmResponse.match(/```(?:agr)?\n([\s\S]*?)```/);
     if (fenceMatch) return fenceMatch[1].trim();
     return llmResponse.trim();
