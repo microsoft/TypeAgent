@@ -68,6 +68,17 @@
     "pnpm": ">=10"
   },
   "pnpm": {
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "@azure/core-rest-pipeline": "*",
+        "jest": "*",
+        "zod": "*"
+      },
+      "ignoreMissing": [
+        "eslint",
+        "zod"
+      ]
+    },
     "onlyBuiltDependencies": [
       "@azure/msal-node-extensions",
       "@azure/msal-node-runtime",
@@ -120,17 +131,6 @@
       "router>path-to-regexp": ">=8.4.0 <9.0.0",
       "serialize-javascript": ">=7.0.5 <8.0.0"
     },
-    "ignoredBuiltDependencies": [],
-    "peerDependencyRules": {
-      "ignoreMissing": [
-        "eslint",
-        "zod"
-      ],
-      "allowedVersions": {        
-        "@azure/core-rest-pipeline": "*",
-        "jest": "*",
-        "zod": "*"
-      }
-    }
+    "ignoredBuiltDependencies": []
   }
 }
