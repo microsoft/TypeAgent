@@ -6,8 +6,8 @@
 # and opening a pull request with the passing changes.
 #
 # Uses a GitHub App (via actions/create-github-app-token) to authenticate
-# with the Dependabot alerts REST API, since GITHUB_TOKEN lacks access
-# in the microsoft org. Requires DEPENDABOT_APP_ID (variable) and
+# with the Dependabot alerts REST API, since GITHUB_TOKEN does not have
+# access to this endpoint. Requires DEPENDABOT_APP_ID (variable) and
 # DEPENDABOT_APP_PRIVATE_KEY (secret).
 
 name: fix-dependabot-alerts
