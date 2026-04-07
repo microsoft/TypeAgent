@@ -1634,7 +1634,8 @@ function getShellProductionDeps() {
             warn(
                 "Could not resolve shell production deps — shell packaging post-check will still validate",
             );
-            return new Set();
+            _cache.shellProdDeps = new Set();
+            return _cache.shellProdDeps;
         }
         const deps = new Set();
         const parsed = parsePaginatedJson(output);
@@ -1656,7 +1657,8 @@ function getShellProductionDeps() {
         warn(
             "Could not resolve shell production deps — shell packaging post-check will still validate",
         );
-        return new Set();
+        _cache.shellProdDeps = new Set();
+        return _cache.shellProdDeps;
     }
 }
 
@@ -1703,8 +1705,8 @@ async function verifyShellPackaging() {
                 "--filter",
                 SHELL_WORKSPACE,
                 "--prod",
-                deployDir,
                 "--ignore-scripts",
+                deployDir,
             ],
             { timeout: 300000 },
         );

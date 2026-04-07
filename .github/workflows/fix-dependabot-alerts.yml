@@ -123,13 +123,23 @@ jobs:
             cp package.json /tmp/pkg-backup.json
             cp pnpm-lock.yaml /tmp/lock-backup.yaml 2>/dev/null || true
 
-            # Apply fix for this specific package
-            read -r -a fix_args <<< "$FLAGS"
-            last_index=$((${#fix_args[@]} - 1))
-            fix_args[$last_index]="${fix_args[$last_index]}=$PKG"
-            echo "Running: fix-dependabot-alerts.mjs ${fix_args[*]}"
+            # Apply fix for this specific package — always use --auto-fix=$PKG
+            # regardless of other flags, so each package is targeted individually
+            read -r -a extra_args <<< "$FLAGS"
+            filtered_args=()
+            for arg in "${extra_args[@]}"; do
+              case "$arg" in
+                --auto-fix|--auto-fix=*)
+                  ;;
+                *)
+                  filtered_args+=("$arg")
+                  ;;
+              esac
+            done
+            filtered_args+=("--auto-fix=$PKG")
+            echo "Running: fix-dependabot-alerts.mjs ${filtered_args[*]}"
             set +e
-            node tools/scripts/fix-dependabot-alerts.mjs "${fix_args[@]}" 2>&1
+            node tools/scripts/fix-dependabot-alerts.mjs "${filtered_args[@]}" 2>&1
             fix_exit=$?
             set -e
 
