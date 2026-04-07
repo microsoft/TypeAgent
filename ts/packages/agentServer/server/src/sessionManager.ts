@@ -40,22 +40,21 @@ type SessionRecord = {
 
 type PersistedMetadata = {
     sessions: SessionMetadata[];
-    lastActiveSessionId: string | undefined;
 };
 
 export type SessionManager = {
     createSession(name: string): Promise<SessionInfo>;
     /**
-     * Resolve a session ID. If undefined, returns the most recently active
-     * session, creating a default one if none exist.
+     * Resolve a session ID. If undefined, returns the default session,
+     * creating one if none exist.
      */
     resolveSessionId(sessionId: string | undefined): Promise<string>;
     /**
-     * Pre-initialize the most recently active session's dispatcher so it is
-     * ready before the first client connects. If no sessions exist, a "default"
-     * session is created. Safe to call multiple times.
+     * Pre-initialize the default session's dispatcher so it is ready before
+     * the first client connects. If no sessions exist, a "default" session is
+     * created. Safe to call multiple times.
      */
-    prewarmMostRecentSession(): Promise<void>;
+    prewarmDefaultSession(): Promise<void>;
     joinSession(
         sessionId: string,
         clientIO: ClientIO,
@@ -79,7 +78,6 @@ export async function createSessionManager(
     await fs.promises.mkdir(sessionsDir, { recursive: true });
 
     const sessions = new Map<string, SessionRecord>();
-    let lastActiveSessionId: string | undefined;
 
     // Load persisted metadata
     await loadMetadata();
@@ -100,7 +98,6 @@ export async function createSessionManager(
                     idleTimer: undefined,
                 });
             }
-            lastActiveSessionId = persisted.lastActiveSessionId;
             debugSession(`Loaded ${sessions.size} session(s) from metadata`);
         } catch (e: any) {
             if (e?.code === "ENOENT") {
@@ -138,7 +135,6 @@ export async function createSessionManager(
         }
         const persisted: PersistedMetadata = {
             sessions: entries,
-            lastActiveSessionId,
         };
         await fs.promises.writeFile(
             tmpPath,
@@ -225,16 +221,19 @@ export async function createSessionManager(
         const record = sessions.get(sessionId);
         if (record) {
             record.lastActiveAt = Date.now();
-            lastActiveSessionId = sessionId;
         }
     }
 
-    function getMostRecentSessionId(): string | undefined {
-        // Prefer explicitly tracked last active session
-        if (lastActiveSessionId && sessions.has(lastActiveSessionId)) {
-            return lastActiveSessionId;
+    function getDefaultSessionId(): string | undefined {
+        for (const [id, record] of sessions) {
+            if (record.name === "default") {
+                return id;
+            }
         }
-        // Fall back to any existing session
+        return undefined;
+    }
+
+    function getAnySessionId(): string | undefined {
         for (const id of sessions.keys()) {
             return id;
         }
@@ -264,7 +263,6 @@ export async function createSessionManager(
                 idleTimer: undefined,
             };
             sessions.set(sessionId, record);
-            lastActiveSessionId = sessionId;
             await saveMetadata();
             debugSession(`Session created: "${name}" (${sessionId})`);
             return {
@@ -282,7 +280,8 @@ export async function createSessionManager(
                 }
                 return sessionId;
             }
-            const resolved = getMostRecentSessionId();
+            // Prefer the session named "default"; fall back to any existing session
+            const resolved = getDefaultSessionId() ?? getAnySessionId();
             if (resolved !== undefined) {
                 return resolved;
             }
@@ -291,7 +290,7 @@ export async function createSessionManager(
             return info.sessionId;
         },
 
-        async prewarmMostRecentSession(): Promise<void> {
+        async prewarmDefaultSession(): Promise<void> {
             const sessionId = await manager.resolveSessionId(undefined);
             const record = sessions.get(sessionId)!;
             cancelIdleTimer(record);
@@ -404,11 +403,6 @@ export async function createSessionManager(
             }
 
             sessions.delete(sessionId);
-
-            // Update last active if we just deleted it
-            if (lastActiveSessionId === sessionId) {
-                lastActiveSessionId = getMostRecentSessionId();
-            }
 
             // Remove persist directory
             const persistDir = getSessionPersistDir(sessionId);

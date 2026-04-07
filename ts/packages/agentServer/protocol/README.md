@@ -37,11 +37,11 @@ getClientIOChannelName(sessionId: string): string // "clientio:<sessionId>"
 
 **`DispatcherConnectOptions`** — options passed to `joinSession`:
 
-| Field        | Type      | Description                                                                       |
-| ------------ | --------- | --------------------------------------------------------------------------------- |
-| `sessionId`  | `string`  | Join a specific session by UUID. Omit to resume the most recently active session. |
-| `clientType` | `string`  | Identifies the client (`"shell"`, `"extension"`, etc.)                            |
-| `filter`     | `boolean` | If true, only receive ClientIO messages for this connection's requests            |
+| Field        | Type      | Description                                                              |
+| ------------ | --------- | ------------------------------------------------------------------------ |
+| `sessionId`  | `string`  | Join a specific session by UUID. Omit to connect to the default session. |
+| `clientType` | `string`  | Identifies the client (`"shell"`, `"extension"`, etc.)                   |
+| `filter`     | `boolean` | If true, only receive ClientIO messages for this connection's requests   |
 
 ## RPC methods
 

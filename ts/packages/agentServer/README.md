@@ -91,11 +91,10 @@ Client calls joinSession({ sessionId?, clientType, filter })
   │   ├─ Yes → look up sessions.json
   │   │   ├─ Found → load SharedDispatcher (lazy init if not in memory)
   │   │   └─ Not found → error: "Session not found"
-  │   └─ No → resume most recently active session
+  │   └─ No → connect to the default session
   │       └─ No sessions exist → auto-create session named "default"
   │
   ├─ Register client in session's SharedDispatcher routing table
-  ├─ Update lastActiveSessionId in sessions.json
   └─ Return { connectionId, sessionId }
 ```
 
