@@ -78,7 +78,7 @@
     "rimraf": "^6.0.1",
     "sanitize-filename": "^1.6.3",
     "typescript": "~5.4.5",
-    "vite": "^6.4.1"
+    "vite": "^6.4.2"
   },
   "fluidBuild": {
     "tasks": {

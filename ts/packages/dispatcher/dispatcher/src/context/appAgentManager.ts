@@ -123,6 +123,7 @@ export class AppAgentManager implements ActionConfigProvider {
     private readonly loadingSchemas = new Set<string>();
     private readonly flowRegistry = new Map<string, FlowDefinition>();
     private readonly transientAgents: Record<string, boolean | undefined> = {};
+    private readyWaiters: Array<() => void> = [];
     private readonly actionSemanticMap?: ActionSchemaSemanticMap;
     private readonly actionSchemaFileCache: ActionSchemaFileCache;
     private nextPortIndex = 0;
@@ -388,6 +389,8 @@ export class AppAgentManager implements ActionConfigProvider {
             } catch (e: any) {
                 record.schemaErrors.set(schemaName, e);
                 this.loadingSchemas.delete(schemaName);
+            } finally {
+                this.notifyReadyIfDone();
             }
         }
     }
@@ -718,6 +721,25 @@ export class AppAgentManager implements ActionConfigProvider {
     }
     public getActionConfigs() {
         return Array.from(this.actionConfigs.values());
+    }
+
+    /** Resolves immediately if no schemas are loading, otherwise waits until all pending async schema loads complete. */
+    public waitUntilReady(): Promise<void> {
+        if (this.loadingSchemas.size === 0) {
+            return Promise.resolve();
+        }
+        return new Promise((resolve) => {
+            this.readyWaiters.push(resolve);
+        });
+    }
+
+    private notifyReadyIfDone(): void {
+        if (this.loadingSchemas.size === 0 && this.readyWaiters.length > 0) {
+            const waiters = this.readyWaiters.splice(0);
+            for (const resolve of waiters) {
+                resolve();
+            }
+        }
     }
 
     public getAppAgent(appAgentName: string): AppAgent {

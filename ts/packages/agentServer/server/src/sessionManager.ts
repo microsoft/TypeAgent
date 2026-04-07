@@ -34,6 +34,7 @@ type SessionRecord = {
     createdAt: string;
     lastActiveAt: number;
     sharedDispatcher: SharedDispatcher | undefined; // undefined = not yet restored
+    sharedDispatcherP: Promise<SharedDispatcher> | undefined; // in-progress init
     idleTimer: ReturnType<typeof setTimeout> | undefined;
 };
 
@@ -49,6 +50,12 @@ export type SessionManager = {
      * session, creating a default one if none exist.
      */
     resolveSessionId(sessionId: string | undefined): Promise<string>;
+    /**
+     * Pre-initialize the most recently active session's dispatcher so it is
+     * ready before the first client connects. If no sessions exist, a "default"
+     * session is created. Safe to call multiple times.
+     */
+    prewarmMostRecentSession(): Promise<void>;
     joinSession(
         sessionId: string,
         clientIO: ClientIO,
@@ -89,6 +96,7 @@ export async function createSessionManager(
                     createdAt: entry.createdAt,
                     lastActiveAt: 0,
                     sharedDispatcher: undefined, // lazy restore
+                    sharedDispatcherP: undefined,
                     idleTimer: undefined,
                 });
             }
@@ -143,22 +151,37 @@ export async function createSessionManager(
         return path.join(sessionsDir, sessionId);
     }
 
-    async function ensureDispatcher(
+    function ensureDispatcher(
         record: SessionRecord,
     ): Promise<SharedDispatcher> {
-        if (record.sharedDispatcher === undefined) {
-            const persistDir = getSessionPersistDir(record.sessionId);
-            await fs.promises.mkdir(persistDir, { recursive: true });
-            record.sharedDispatcher = await createSharedDispatcher(hostName, {
-                ...baseOptions,
-                persistDir,
-                persistSession: true,
-            });
-            debugSession(
-                `Dispatcher initialized for session "${record.name}" (${record.sessionId})`,
-            );
+        if (record.sharedDispatcher !== undefined) {
+            return Promise.resolve(record.sharedDispatcher);
         }
-        return record.sharedDispatcher;
+        if (record.sharedDispatcherP === undefined) {
+            const persistDir = getSessionPersistDir(record.sessionId);
+            record.sharedDispatcherP = fs.promises
+                .mkdir(persistDir, { recursive: true })
+                .then(() =>
+                    createSharedDispatcher(hostName, {
+                        ...baseOptions,
+                        persistDir,
+                        persistSession: true,
+                    }),
+                )
+                .then((dispatcher) => {
+                    record.sharedDispatcher = dispatcher;
+                    record.sharedDispatcherP = undefined;
+                    debugSession(
+                        `Dispatcher initialized for session "${record.name}" (${record.sessionId})`,
+                    );
+                    return dispatcher;
+                })
+                .catch((e) => {
+                    record.sharedDispatcherP = undefined;
+                    throw e;
+                });
+        }
+        return record.sharedDispatcherP;
     }
 
     function cancelIdleTimer(record: SessionRecord): void {
@@ -237,6 +260,7 @@ export async function createSessionManager(
                 createdAt,
                 lastActiveAt: Date.now(),
                 sharedDispatcher: undefined,
+                sharedDispatcherP: undefined,
                 idleTimer: undefined,
             };
             sessions.set(sessionId, record);
@@ -265,6 +289,16 @@ export async function createSessionManager(
             // No sessions exist — auto-create a default
             const info = await manager.createSession("default");
             return info.sessionId;
+        },
+
+        async prewarmMostRecentSession(): Promise<void> {
+            const sessionId = await manager.resolveSessionId(undefined);
+            const record = sessions.get(sessionId)!;
+            cancelIdleTimer(record);
+            await ensureDispatcher(record);
+            debugSession(
+                `Pre-warmed dispatcher for session "${record.name}" (${sessionId})`,
+            );
         },
 
         async joinSession(

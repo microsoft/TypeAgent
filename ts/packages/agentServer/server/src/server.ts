@@ -60,6 +60,11 @@ async function main() {
         instanceDir,
     );
 
+    // Pre-initialize the default session dispatcher before accepting clients,
+    // so the first joinSession call is fast and concurrent joinSession calls
+    // don't race to initialize the same dispatcher.
+    await sessionManager.prewarmMostRecentSession();
+
     const wss = await createWebSocketChannelServer(
         { port: 8999 },
         (channelProvider: ChannelProvider, closeFn: () => void) => {

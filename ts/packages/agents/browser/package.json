@@ -142,7 +142,7 @@
     "rollup-plugin-copy": "^3.5.0",
     "ts-jest": "^29.3.2",
     "ts-loader": "^9.5.1",
-    "vite": "^6.4.1"
+    "vite": "^6.4.2"
   },
   "fluidBuild": {
     "tasks": {
