@@ -126,10 +126,10 @@
         "eslint",
         "zod"
       ],
-      "allowedVersions": {
-        "zod": "*",
+      "allowedVersions": {        
+        "@azure/core-rest-pipeline": "*",
         "jest": "*",
-        "@azure/core-rest-pipeline": "*"
+        "zod": "*"
       }
     }
   }
