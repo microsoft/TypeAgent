@@ -81,7 +81,7 @@ export async function runDesktopActions(
         debug(`Executing action '${actionName}' from schema '${schemaName}'`);
     }
     switch (actionName) {
-        case "setWallpaper": {
+        case "SetWallpaper": {
             let file = action.parameters.filePath;
             const rootTypeAgentDir = path.join(os.homedir(), ".typeagent");
 
@@ -150,7 +150,7 @@ export async function runDesktopActions(
             confirmationMessage = "Set wallpaper to " + actionData;
             break;
         }
-        case "launchProgram": {
+        case "LaunchProgram": {
             actionData = await mapInputToAppName(
                 action.parameters.name,
                 agentContext,
@@ -158,7 +158,7 @@ export async function runDesktopActions(
             confirmationMessage = "Launched " + action.parameters.name;
             break;
         }
-        case "closeProgram": {
+        case "CloseProgram": {
             actionData = await mapInputToAppName(
                 action.parameters.name,
                 agentContext,
@@ -166,7 +166,7 @@ export async function runDesktopActions(
             confirmationMessage = "Closed " + action.parameters.name;
             break;
         }
-        case "maximize": {
+        case "Maximize": {
             actionData = await mapInputToAppName(
                 action.parameters.name,
                 agentContext,
@@ -174,7 +174,7 @@ export async function runDesktopActions(
             confirmationMessage = "Maximized " + action.parameters.name;
             break;
         }
-        case "minimize": {
+        case "Minimize": {
             actionData = await mapInputToAppName(
                 action.parameters.name,
                 agentContext,
@@ -182,7 +182,7 @@ export async function runDesktopActions(
             confirmationMessage = "Minimized " + action.parameters.name;
             break;
         }
-        case "switchTo": {
+        case "SwitchTo": {
             actionData = await mapInputToAppName(
                 action.parameters.name,
                 agentContext,
@@ -190,7 +190,7 @@ export async function runDesktopActions(
             confirmationMessage = "Switched to " + action.parameters.name;
             break;
         }
-        case "tile": {
+        case "Tile": {
             const left = await mapInputToAppName(
                 action.parameters.leftWindow,
                 agentContext,
@@ -203,24 +203,24 @@ export async function runDesktopActions(
             confirmationMessage = `Tiled ${left} on the left and ${right} on the right`;
             break;
         }
-        case "volume": {
+        case "Volume": {
             actionData = action.parameters.targetVolume.toString();
             break;
         }
-        case "restoreVolume": {
+        case "RestoreVolume": {
             actionData = "";
             break;
         }
-        case "mute": {
+        case "Mute": {
             actionData = String(action.parameters.on);
             break;
         }
-        case "setThemeMode": {
+        case "SetThemeMode": {
             actionData = action.parameters!.mode;
             confirmationMessage = `Changed theme to '${action.parameters.mode}'`;
             break;
         }
-        case "connectWifi": {
+        case "ConnectWifi": {
             actionData = {
                 ssid: action.parameters.ssid,
                 password: action.parameters.password
@@ -230,17 +230,17 @@ export async function runDesktopActions(
             confirmationMessage = `Connecting to WiFi network '${action.parameters.ssid}'`;
             break;
         }
-        case "disconnectWifi": {
+        case "DisconnectWifi": {
             actionData = "";
             confirmationMessage = `Disconnecting from current WiFi network`;
             break;
         }
-        case "toggleAirplaneMode": {
+        case "ToggleAirplaneMode": {
             actionData = action.parameters.enable.toString();
             confirmationMessage = `Turning airplane mode ${action.parameters.enable ? "on" : "off"}`;
             break;
         }
-        case "createDesktop": {
+        case "CreateDesktop": {
             actionData =
                 action.parameters?.names !== undefined
                     ? JSON.stringify(action.parameters.names)
@@ -248,7 +248,7 @@ export async function runDesktopActions(
             confirmationMessage = `Creating new desktop`;
             break;
         }
-        case "moveWindowToDesktop": {
+        case "MoveWindowToDesktop": {
             const app = {
                 process: await mapInputToAppName(
                     action.parameters.name,
@@ -260,42 +260,42 @@ export async function runDesktopActions(
             confirmationMessage = `Moving ${app.process} to desktop ${action.parameters.desktopId}`;
             break;
         }
-        case "pinWindow": {
+        case "PinWindow": {
             actionData = action.parameters.name;
             confirmationMessage = `Pinning '${action.parameters.name}' to all desktops`;
             break;
         }
-        case "switchDesktop": {
+        case "SwitchDesktop": {
             actionData = action.parameters.desktopId.toString();
             confirmationMessage = `Switching to desktop ${action.parameters.desktopId}`;
             break;
         }
-        case "nextDesktop": {
+        case "NextDesktop": {
             actionData = "";
             confirmationMessage = `Switching to next desktop`;
             break;
         }
-        case "previousDesktop": {
+        case "PreviousDesktop": {
             actionData = "";
             confirmationMessage = `Switching to previous desktop`;
             break;
         }
-        case "toggleNotifications": {
+        case "ToggleNotifications": {
             actionData = action.parameters.enable.toString();
             confirmationMessage = `Toggling Action Center ${action.parameters.enable ? "on" : "off"}`;
             break;
         }
-        case "debug": {
+        case "Debug": {
             actionData = "";
             confirmationMessage = `Debug action executed`;
             break;
         }
-        case "setTextSize": {
+        case "SetTextSize": {
             actionData = action.parameters.size.toString();
             confirmationMessage = `Set text size to ${action.parameters.size}%`;
             break;
         }
-        case "setScreenResolution": {
+        case "SetScreenResolution": {
             actionData = {
                 width: action.parameters.width,
                 height: action.parameters.height,
@@ -314,12 +314,12 @@ export async function runDesktopActions(
             confirmationMessage = `Bluetooth ${action.parameters.enableBluetooth !== false ? "enabled" : "disabled"}`;
             break;
         }
-        case "enableWifi": {
+        case "EnableWifi": {
             actionData = JSON.stringify({ enable: action.parameters.enable });
             confirmationMessage = `WiFi ${action.parameters.enable ? "enabled" : "disabled"}`;
             break;
         }
-        case "enableMeteredConnections": {
+        case "EnableMeteredConnections": {
             actionData = JSON.stringify({ enable: action.parameters.enable });
             confirmationMessage = `Metered connections ${action.parameters.enable ? "enabled" : "disabled"}`;
             break;
@@ -342,7 +342,7 @@ export async function runDesktopActions(
             confirmationMessage = `Night Light schedule ${action.parameters.nightLightScheduleDisabled ? "disabled" : "enabled"}`;
             break;
         }
-        case "adjustColorTemperature": {
+        case "AdjustColorTemperature": {
             actionData = JSON.stringify({
                 filterEffect: action.parameters.filterEffect,
             });
@@ -458,7 +458,7 @@ export async function runDesktopActions(
             confirmationMessage = `Mouse wheel scroll lines set to ${action.parameters.scrollLines}`;
             break;
         }
-        case "setPrimaryMouseButton": {
+        case "SetPrimaryMouseButton": {
             actionData = JSON.stringify({
                 primaryButton: action.parameters.primaryButton,
             });
@@ -479,7 +479,7 @@ export async function runDesktopActions(
             confirmationMessage = `Mouse pointer size adjusted`;
             break;
         }
-        case "mousePointerCustomization": {
+        case "MousePointerCustomization": {
             actionData = JSON.stringify({
                 color: action.parameters.color,
                 style: action.parameters.style,
@@ -555,7 +555,7 @@ export async function runDesktopActions(
             confirmationMessage = `Battery saver threshold set to ${action.parameters.thresholdValue}%`;
             break;
         }
-        case "setPowerModePluggedIn": {
+        case "SetPowerModePluggedIn": {
             actionData = JSON.stringify({
                 powerMode: action.parameters.powerMode,
             });
@@ -569,7 +569,7 @@ export async function runDesktopActions(
         }
 
         // Gaming Settings
-        case "enableGameMode": {
+        case "EnableGameMode": {
             actionData = JSON.stringify({});
             confirmationMessage = `Opening Game Mode settings`;
             break;
@@ -590,7 +590,7 @@ export async function runDesktopActions(
             confirmationMessage = `Magnifier ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
             break;
         }
-        case "enableStickyKeys": {
+        case "EnableStickyKeys": {
             actionData = JSON.stringify({ enable: action.parameters.enable });
             confirmationMessage = `Sticky Keys ${action.parameters.enable ? "enabled" : "disabled"}`;
             break;
@@ -692,7 +692,7 @@ async function fetchInstalledApps(desktopProcess: child_process.ChildProcess) {
 
     const appsPromise = new Promise<string[] | undefined>((resolve, reject) => {
         let message: Record<string, string> = {};
-        message["listAppNames"] = "";
+        message["ListAppNames"] = "";
 
         let allOutput = "";
         const dataCallBack = (data: any) => {

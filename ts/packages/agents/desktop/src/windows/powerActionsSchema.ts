@@ -16,7 +16,7 @@ export type BatterySaverActivationLevelAction = {
 
 // Sets power mode when plugged in
 export type SetPowerModePluggedInAction = {
-    actionName: "setPowerModePluggedIn";
+    actionName: "SetPowerModePluggedIn";
     parameters: {
         powerMode: "bestPerformance" | "balanced" | "bestPowerEfficiency";
     };
