@@ -34,7 +34,7 @@ concurrency:
 permissions:
   contents: write
   pull-requests: write
-  security-events: read
+  security-events: write
 
 env:
   ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
