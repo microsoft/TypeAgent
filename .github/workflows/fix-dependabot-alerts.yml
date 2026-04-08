@@ -220,6 +220,60 @@ jobs:
             git diff --stat
           fi
 
+      # ── Fix docs workspace alerts ────────────────────────────────────
+      - name: Install docs dependencies
+        working-directory: docs
+        run: |
+          corepack enable
+          pnpm install --frozen-lockfile
+
+      - name: Fix docs workspace alerts
+        id: docs-fix
+        working-directory: docs
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          echo "::group::Analysing docs alerts"
+          node ../ts/tools/scripts/fix-dependabot-alerts.mjs --dry-run --json --skip-install > /tmp/docs-analysis.json 2>/tmp/docs-analysis.log || true
+
+          if ! jq -e '.summary' /tmp/docs-analysis.json > /dev/null 2>&1; then
+            echo "No docs alerts to fix (or script produced no output)"
+            echo "docs_changes=false" >> "$GITHUB_OUTPUT"
+            echo "::endgroup::"
+            exit 0
+          fi
+
+          FIXABLE=$(jq -r '.resolved[].package' /tmp/docs-analysis.json | sort -u)
+          FIXABLE_COUNT=$(echo "$FIXABLE" | grep -c . || true)
+          echo "Fixable docs packages ($FIXABLE_COUNT): $FIXABLE"
+          echo "::endgroup::"
+
+          if [ "$FIXABLE_COUNT" -eq 0 ] || [ "${{ inputs.dry-run }}" == "true" ]; then
+            echo "docs_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Docs workspace is simple — just pnpm update for each fixable package
+          for PKG in $FIXABLE; do
+            echo "::group::Fixing docs/$PKG"
+            pnpm update "$PKG" 2>&1 || echo "⚠️ pnpm update $PKG failed"
+            echo "::endgroup::"
+          done
+
+          # Update overrides if needed
+          node ../ts/tools/scripts/fix-dependabot-alerts.mjs --auto-fix --skip-install 2>&1 || true
+
+          # Verify docs build
+          pnpm run build 2>&1
+          if [ $? -eq 0 ]; then
+            echo "✅ Docs build passed"
+            echo "docs_changes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "⚠️ Docs build failed, reverting"
+            git checkout -- .
+            echo "docs_changes=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # ── Final build + shell packaging verification ──────────────────
       - name: Final build verification
         if: ${{ steps.fix.outputs.changes == 'true' }}
@@ -242,7 +296,7 @@ jobs:
 
       # ── Create PR ───────────────────────────────────────────────────
       - name: Create pull request
-        if: ${{ steps.fix.outputs.changes == 'true' && steps.build.outputs.build_ok == 'true' }}
+        if: ${{ (steps.fix.outputs.changes == 'true' && steps.build.outputs.build_ok == 'true') || steps.docs-fix.outputs.docs_changes == 'true' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |

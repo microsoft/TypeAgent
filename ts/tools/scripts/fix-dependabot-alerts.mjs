@@ -13,13 +13,12 @@ import { spawnSync, execFile } from "node:child_process";
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 import { AsyncLocalStorage } from "node:async_hooks";
 import chalk from "chalk";
 import semver from "semver";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, "../..");
+// Use cwd as ROOT so the script works from any workspace (ts/, docs/, etc.)
+const ROOT = resolve(process.cwd());
 
 const args = process.argv.slice(2);
 const KNOWN_FLAG_PREFIXES = [
@@ -2082,6 +2081,26 @@ function fetchAlerts() {
 
     // Only npm ecosystem alerts
     alerts = alerts.filter((a) => a.dependency?.package?.ecosystem === "npm");
+
+    // Filter to alerts belonging to the current workspace.
+    // Determine the workspace prefix from cwd relative to the git root
+    // so that running from ts/ only processes ts/pnpm-lock.yaml alerts
+    // and running from docs/ only processes docs/pnpm-lock.yaml alerts.
+    const gitRoot = runCmd("git", ["rev-parse", "--show-toplevel"]).replace(/\\/g, "/");
+    const cwd = process.cwd().replace(/\\/g, "/");
+    const wsPrefix = cwd.startsWith(gitRoot)
+        ? cwd.slice(gitRoot.length + 1) // e.g. "ts" or "docs"
+        : "";
+    if (wsPrefix) {
+        const before = alerts.length;
+        alerts = alerts.filter((a) => {
+            const manifest = a.dependency?.manifest_path ?? "";
+            return manifest.startsWith(wsPrefix + "/") || manifest === wsPrefix;
+        });
+        if (alerts.length < before) {
+            verbose(`  Filtered to ${alerts.length}/${before} alerts matching workspace "${wsPrefix}/"`);
+        }
+    }
 
     if (alerts.length === 0) {
         log("  No open npm Dependabot alerts found. 🎉");
