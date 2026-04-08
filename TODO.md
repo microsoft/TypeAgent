@@ -25,7 +25,7 @@ This file collates all TODO comments found across the repository, organized by t
 | `dotnet/typeagent/src/aiclient/OpenAIChatModel.cs` | 137 | track other meta data? object, id, created, etc. |
 | `dotnet/typeagent/src/aiclient/OpenAIModelApiSettings.cs` | 54 | Load retry settings |
 | `dotnet/typeagent/src/conversationMemory/Podcast.cs` | 75 | add branching for other JSON formats |
-| `dotnet/typeagent/src/knowpro/ConversationAnswer.cs` | 27 | bool chunking = false; // TODO: chunking not implemented yet |
+| `dotnet/typeagent/src/knowpro/ConversationAnswer.cs` | 27 | chunking not implemented yet |
 | `dotnet/typeagent/src/knowpro/ConversationExtensions.cs` | 44 | lower this method the collection |
 | `dotnet/typeagent/src/knowpro/ConversationSearch.cs` | 12 | Handle cancellation in these APIS |
 | `dotnet/typeagent/src/knowpro/ConversationSearch.cs` | 13 | Add overloads on these APIS |
@@ -68,36 +68,34 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/examples/cacheRESTEndpoint/src/index.ts` | 56 | actually parse the schema instead of using regex |
 | `ts/examples/chat/src/codeChat/commandTransformer.ts` | 59 | Validate that result.data is a valid NamedArgs? |
 | `ts/examples/chat/src/codeChat/commandTransformer.ts` | 170 | the same for args (currently not used by code chat) |
-| `ts/examples/chat/watchdata.py` | 18 | assert not sys.argv[2:], "Too many arguments."  # TODO |
 | `ts/examples/commandHistogram/src/main.ts` | 65 | move DB name to .env/config? |
 | `ts/examples/commandHistogram/src/main.ts` | 67 | move collection name to .env/config? |
 | `ts/examples/docuProc/src/pdfImporter.ts` | 210 | Try pre-computing embeddings in parallel to fill the embeddings cache (is that cache safe?) |
 | `ts/examples/docuProc/src/pdfImporter.ts` | 344 | Apply URL escaping to key. NOTE: Currently unused. TODO: Therefore remove. |
 | `ts/examples/docuProc/src/pdfQNAInteractiveApp.ts` | 1024 | Allow for multiple concurrent sessions. |
-| `ts/examples/docuProc/src/pdfQNAInteractiveApp.ts` | 1031 | recentAnswers.splice(20); // TODO: Cut off by total size, not count. |
+| `ts/examples/docuProc/src/pdfQNAInteractiveApp.ts` | 1031 | Cut off by total size, not count. |
 | `ts/examples/docuProc/src/pdfQNAInteractiveApp.ts` | 1151 | limit how much we write per blob too (if there are multiple). |
-| `ts/examples/docuProc/src/pdfQNAInteractiveApp.ts` | 1178 | if (line.startsWith("```")) inCodeBlock = !inCodeBlock; // TODO: Colorize code blocks. |
+| `ts/examples/docuProc/src/pdfQNAInteractiveApp.ts` | 1178 | Colorize code blocks. |
 | `ts/examples/memoryProviders/src/sqlite/keyValueTable.ts` | 195 | support |
 | `ts/examples/memoryProviders/src/sqlite/textTable.ts` | 333 | use IN clause |
 | `ts/examples/memoryProviders/src/sqlite/textTable.ts` | 381 | use a JOIN |
 | `ts/examples/memoryProviders/src/sqlite/textTable.ts` | 511 | optimize by lowering into DB if possible |
 | `ts/examples/memoryProviders/src/sqlite/textTable.ts` | 613 | Optimize |
 | `ts/examples/memoryProviders/src/sqlite/vectorTable.ts` | 70 | ID generation |
-| `ts/examples/schemaStudio/src/schemaCommands.ts` | 94 | "TODO: Generating settings command schemas... |
+| `ts/examples/schemaStudio/src/schemaCommands.ts` | 94 | Generating settings command schemas... |
 | `ts/examples/schemaStudio/src/urlCommands.ts` | 88 | handle redirects + default parameters, etc. |
-| `ts/examples/spelunker/design.md` | 105 | The rest is TODO. For now just see the code. |
 | `ts/examples/spelunker/src/main.ts` | 44 | switch to whatever interactive-app uses to parse the command line? |
 | `ts/examples/spelunker/src/main.ts` | 77 | Use a proper command-line parser? |
 | `ts/examples/spelunker/src/pythonChunker.ts` | 81 | validate that JSON matches our schema. |
 | `ts/examples/spelunker/src/pythonImporter.ts` | 4 | Most of this is not Python specific; generalize to other languages. |
 | `ts/examples/spelunker/src/pythonImporter.ts` | 71 | Chunkify Python files using a helper program. (TODO: Make generic over languages) |
-| `ts/examples/spelunker/src/pythonImporter.ts` | 128 | const concurrency = 8; // TODO: Make this a function argument |
+| `ts/examples/spelunker/src/pythonImporter.ts` | 128 | Make this a function argument |
 | `ts/examples/spelunker/src/pythonImporter.ts` | 181 | Try pre-computing embeddings in parallel to fill the embeddings cache (is that cache safe?) |
 | `ts/examples/spelunker/src/pythonImporter.ts` | 302 | Apply URL escaping to key. NOTE: Currently unused. TODO: Therefore remove. |
 | `ts/examples/spelunker/src/queryInterface.ts` | 905 | Allow for multiple concurrent sessions. |
-| `ts/examples/spelunker/src/queryInterface.ts` | 912 | recentAnswers.splice(20); // TODO: Cut off by total size, not count. |
+| `ts/examples/spelunker/src/queryInterface.ts` | 912 | Cut off by total size, not count. |
 | `ts/examples/spelunker/src/queryInterface.ts` | 1035 | limit how much we write per blob too (if there are multiple). |
-| `ts/examples/spelunker/src/queryInterface.ts` | 1056 | if (line.startsWith("```")) inCodeBlock = !inCodeBlock; // TODO: Colorize code blocks. |
+| `ts/examples/spelunker/src/queryInterface.ts` | 1056 | Colorize code blocks. |
 | `ts/examples/websiteAliases/src/pageContentKeywords.ts` | 284 | handle multi-modal content |
 | `ts/examples/websiteAliases/src/searchEngineKeywords.ts` | 284 | handle multi-modal content |
 | `ts/packages/actionGrammar/src/agentGrammarRegistry.ts` | 552 | Implement async DFA compilation |
@@ -105,7 +103,7 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/actionGrammar/src/grammarCompiler.ts` | 359 | Find a better way to discover entities instead of deriving them |
 | `ts/packages/actionGrammar/src/grammarCompiler.ts` | 953 | create regexp |
 | `ts/packages/actionGrammar/src/grammarRuleParser.ts` | 84 | Support nested instead of just Rule Ref |
-| `ts/packages/actionGrammar/src/grammarTypes.ts` | 174 | optional?: undefined; // TODO: support optional string parts |
+| `ts/packages/actionGrammar/src/grammarTypes.ts` | 174 | support optional string parts |
 | `ts/packages/actionGrammar/src/grammarTypes.ts` | 177 | cache the regexp? |
 | `ts/packages/actionGrammar/src/grammarValueTypeValidator.ts` | 1035 | look up entity return types from the entity registry instead of hard-coding |
 | `ts/packages/actionGrammar/src/nfaCompletion.ts` | 293 | The NFA path does not yet track wildcard-at-EOI states. |
@@ -124,10 +122,10 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/agentRpc/src/client.ts` | 633 | Clean up the associated options. |
 | `ts/packages/agentSdk/src/agentInterface.ts` | 57 | enable non-stringify pas content. |
 | `ts/packages/agentSdk/src/agentInterface.ts` | 234 | only utf8 & base64 is supported for now. |
-| `ts/packages/agentSdkWrapper/src/webtask/tracing/types.ts` | 138 | keyElements?: KeyElement[] \| undefined; // TODO Phase 2: Extract key elements from HTML |
+| `ts/packages/agentSdkWrapper/src/webtask/tracing/types.ts` | 138 | Phase 2: Extract key elements from HTML |
 | `ts/packages/agents/browser/src/extension/serviceWorker/index.ts` | 347 | sniffing the RPC call arguments. Fix typing. |
 | `ts/packages/agents/browser/src/extension/views/entityGraphView.ts` | 1341 | limit this to "contains" relationships |
-| `ts/packages/agents/browser/src/extension/views/extensionServiceBase.ts` | 579 | ...options, // TODO: remove "type" from this dictionary. That will remove the need to wrap these values in a "parameters" object |
+| `ts/packages/agents/browser/src/extension/views/extensionServiceBase.ts` | 579 | remove "type" from this dictionary. That will remove the need to wrap these values in a "parameters" object |
 | `ts/packages/agents/browser/src/extension/views/macrosLibrary.ts` | 650 | Implement macro editing |
 | `ts/packages/agents/browser/src/extension/views/topicGraphView.ts` | 296 | Implement topic viewport neighborhood functionality |
 | `ts/packages/agents/browser/src/views/client/pdf/core/pdfViewer.ts` | 245 | Implement text search functionality |
@@ -138,9 +136,9 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/agents/calendar/src/calendarActionHandlerV3.ts` | 1126 | Implement sophisticated time parsing |
 | `ts/packages/agents/desktop/src/connector.ts` | 127 | add shared agent storage or known storage location (requires permissions, trusted agents, etc.) |
 | `ts/packages/agents/desktop/src/programNameIndex.ts` | 96 | Retry with back-off for 429 responses |
-| `ts/packages/agents/greeting/src/greetingCommandHandler.ts` | 292 | personalize list based on user preferences |
+| `ts/packages/agents/greeting/src/greetingCommandHandler.ts` | 292 | //TODO: personalize list based on user preferences |
 | `ts/packages/agents/list/src/listActionHandler.ts` | 386 | formalize the schema for activityContext |
-| `ts/packages/agents/montage/src/agent/montageActionHandler.ts` | 187 | minScore: 0.5, // TODO tune? |
+| `ts/packages/agents/montage/src/agent/montageActionHandler.ts` | 187 | tune? |
 | `ts/packages/agents/montage/src/agent/montageActionHandler.ts` | 261 | allow the montage agent to switch between image indexes |
 | `ts/packages/agents/montage/src/agent/montageActionHandler.ts` | 262 | handle the case where the image index is locked |
 | `ts/packages/agents/montage/src/agent/montageActionHandler.ts` | 263 | handle image index that has been updated since we loaded it |
@@ -157,16 +155,16 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/agents/player/src/search.ts` | 561 | cache this. |
 | `ts/packages/agents/player/src/trackFilter.ts` | 326 | year ranges |
 | `ts/packages/agents/player/src/userData.ts` | 301 | return names of playlists, sorted by timestamp |
-| `ts/packages/agents/settings/src/settingsCommandHandler.ts` | 53 | apply this setting to the local system. '${action.parameters.originalRequest}'`, |
-| `ts/packages/agents/spelunker/src/chunker.py` | 61 | codeName: str  # function/class/module name (TODO: dotted names) |
-| `ts/packages/agents/spelunker/src/embeddings.ts` | 37 | console_log(`[This embedding model does not support batch operations]`); // TODO: Fix this |
-| `ts/packages/agents/spelunker/src/embeddings.ts` | 47 | const maxCharacters = 100000; // TODO: tune |
-| `ts/packages/agents/spelunker/src/embeddings.ts` | 186 | console_log(`[This embedding model does not support batch operations]`); // TODO: Fix this |
-| `ts/packages/agents/spelunker/src/eval.ts` | 27 | Read this from a file that can be edited before each run, |
+| `ts/packages/agents/settings/src/settingsCommandHandler.ts` | 53 | apply this setting to the local system. '${action.parameters.originalRequest} |
+| `ts/packages/agents/spelunker/src/chunker.py` | 61 | function/class/module name (TODO: dotted names) |
+| `ts/packages/agents/spelunker/src/embeddings.ts` | 37 | Fix this |
+| `ts/packages/agents/spelunker/src/embeddings.ts` | 47 | tune |
+| `ts/packages/agents/spelunker/src/embeddings.ts` | 186 | Fix this |
+| `ts/packages/agents/spelunker/src/eval.ts` | 27 | Read this from a file that can be edited before each run |
 | `ts/packages/agents/spelunker/src/pythonChunker.ts` | 51 | validate that JSON matches our schema. |
-| `ts/packages/agents/spelunker/src/searchCode.ts` | 237 | const batchLimit = process.env.OPENAI_API_KEY ? 100000 : 100000; // TODO: tune |
-| `ts/packages/agents/spelunker/src/searchCode.ts` | 238 | const batches = makeBatches(allChunks, batchLimit, 60); // TODO: tune |
-| `ts/packages/agents/spelunker/src/searchCode.ts` | 268 | const maxKeep = process.env.OPENAI_API_KEY ? 100000 : 100000; // TODO: tune |
+| `ts/packages/agents/spelunker/src/searchCode.ts` | 237 | tune |
+| `ts/packages/agents/spelunker/src/searchCode.ts` | 238 | tune |
+| `ts/packages/agents/spelunker/src/searchCode.ts` | 268 | tune |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 287 | Prompt engineering |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 358 | Break into multiple functions. |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 381 | Factor into simpler functions |
@@ -178,12 +176,12 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/agents/spelunker/src/summarizing.ts` | 42 | Prompt engineering |
 | `ts/packages/agents/spelunker/src/summarizing.ts` | 160 | Remove export once we're using summaries again. |
 | `ts/packages/agents/spelunker/src/summarizing.ts` | 178 | Make the values two elements, comment start and comment end |
-| `ts/packages/agents/spelunker/src/typescriptChunker.ts` | 198 | const lineStarts = sourceFile.getLineStarts(); // TODO: Move to caller? |
+| `ts/packages/agents/spelunker/src/typescriptChunker.ts` | 198 | Move to caller? |
 | `ts/packages/agents/video/src/videoActionHandler.ts` | 54 | dynamic duration |
 | `ts/packages/agents/weather/src/weatherActionHandler.ts` | 227 | Add more sophisticated validation: |
-| `ts/packages/aiclient/src/models.ts` | 31 | schema: any; // TODO: JsonSchemaType |
-| `ts/packages/aiclient/src/models.ts` | 39 | parameters?: any; // TODO: JsonSchemaType |
-| `ts/packages/aiclient/src/models.ts` | 176 | input_reference?: ImageInPaintItem[]; // TODO: add support for videos |
+| `ts/packages/aiclient/src/models.ts` | 31 | JsonSchemaType |
+| `ts/packages/aiclient/src/models.ts` | 39 | JsonSchemaType |
+| `ts/packages/aiclient/src/models.ts` | 176 | add support for videos |
 | `ts/packages/aiclient/src/openai.ts` | 580 | remove after API endpoint correctly handles this case |
 | `ts/packages/aiclient/src/tokenCounter.ts` | 58 | intermittently cache these with the session |
 | `ts/packages/api/src/webDispatcher.ts` | 81 | expose executeAction so we can call that directly instead of running it through a command |
@@ -209,33 +207,32 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/cache/src/explanation/v5/explanationV5.ts` | 282 | consider to improve this for cases where different actions have the same parameters schema. |
 | `ts/packages/cache/src/explanation/v5/explanationV5.ts` | 645 | Don't use other synonyms or alternatives info for entities for now |
 | `ts/packages/cache/src/explanation/v5/propertyExplainationV5.ts` | 114 | fuzzy match |
-| `ts/packages/cache/src/explanation/validateExplanation.ts` | 91 | let curr = actionProps as ParamFieldType; // TODO: Is there a better typing |
-| `ts/packages/cache/src/explanation/validateExplanation.ts` | 184 | value[key], // TODO: better typing |
-| `ts/packages/cache/src/explanation/validateExplanation.ts` | 209 | (actionProps as any)[key], // TODO: better typing |
+| `ts/packages/cache/src/explanation/validateExplanation.ts` | 91 | Is there a better typing |
+| `ts/packages/cache/src/explanation/validateExplanation.ts` | 184 | better typing |
+| `ts/packages/cache/src/explanation/validateExplanation.ts` | 209 | better typing |
 | `ts/packages/cache/src/utils/language.ts` | 396 | initial implementation. Can be over-broad and incomplete. |
 | `ts/packages/cli/src/enhancedConsole.ts` | 655 | Not implemented |
 | `ts/packages/cli/src/enhancedConsole.ts` | 784 | Ignored |
-| `ts/packages/coda/src/handleEditorCodeActions.ts` | 505 | fullSnippet += `${innerIndent}// TODO: implement\n`; |
-| `ts/packages/defaultAgentProvider/test/construction.spec.ts` | 74 | once MatchPart allow matches ignoring diacritical marks, |
+| `ts/packages/defaultAgentProvider/test/construction.spec.ts` | 74 | once MatchPart allow matches ignoring diacritical marks |
 | `ts/packages/defaultAgentProvider/test/construction.spec.ts` | 86 | Validating the lower case action |
 | `ts/packages/defaultAgentProvider/test/construction.spec.ts` | 88 | needs fix these |
 | `ts/packages/defaultAgentProvider/test/constructionCacheTestCommon.ts` | 240 | needs fix these |
-| `ts/packages/defaultAgentProvider/test/grammar.spec.ts` | 93 | once MatchPart allow matches ignoring diacritical marks, |
+| `ts/packages/defaultAgentProvider/test/grammar.spec.ts` | 93 | once MatchPart allow matches ignoring diacritical marks |
 | `ts/packages/defaultAgentProvider/test/schema.spec.ts` | 18 | mcpfilesystem schema can't be loaded without allowDirectory to start up the server. |
-| `ts/packages/dispatcher/dispatcher/src/context/appAgentManager.ts` | 1151 | record.name === "browser", // TODO: Make this not hard coded |
+| `ts/packages/dispatcher/dispatcher/src/context/appAgentManager.ts` | 1151 | Make this not hard coded |
 | `ts/packages/dispatcher/dispatcher/src/context/appAgentManager.ts` | 1182 | unload agent as well? |
 | `ts/packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts` | 623 | instead of disabling this let's find a way to gracefully handle this |
 | `ts/packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts` | 101 | formalize the schema for activityContext |
 | `ts/packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts` | 190 | cache this? |
 | `ts/packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts` | 223 | This translation can probably more scoped based on the `actionName` field. |
 | `ts/packages/dispatcher/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts` | 201 | This does not support activities. |
-| `ts/packages/dispatcher/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts` | 328 | optional: true, // can be optional since the user can supply images and no text // TODO: revisit |
+| `ts/packages/dispatcher/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts` | 328 | can be optional since the user can supply images and no text // TODO: revisit |
 | `ts/packages/dispatcher/dispatcher/src/context/indexManager.ts` | 18 | add support to be able to "disable" an index |
 | `ts/packages/dispatcher/dispatcher/src/context/indexManager.ts` | 58 | find a good way to make a shared cache of .kr files and thumbnails for images |
 | `ts/packages/dispatcher/dispatcher/src/context/indexManager.ts` | 252 | get notification of when the index is rebuilt so that we can notify users that they could/should reload their index instances |
 | `ts/packages/dispatcher/dispatcher/src/context/memory.ts` | 236 | how about entities? |
-| `ts/packages/dispatcher/dispatcher/src/context/session.ts` | 220 | clarify: false, // TODO: enable when it is ready. |
-| `ts/packages/dispatcher/dispatcher/src/context/session.ts` | 225 | activity: false, // TODO: experimental. |
+| `ts/packages/dispatcher/dispatcher/src/context/session.ts` | 220 | enable when it is ready. |
+| `ts/packages/dispatcher/dispatcher/src/context/session.ts` | 225 | experimental. |
 | `ts/packages/dispatcher/dispatcher/src/context/system/handlers/configCommandHandlers.ts` | 418 | implement in agent config/manifests |
 | `ts/packages/dispatcher/dispatcher/src/context/system/handlers/indexCommandHandler.ts` | 202 | implement |
 | `ts/packages/dispatcher/dispatcher/src/dispatcher.ts` | 279 | Note this doesn't prevent the function continue to be call if is saved. |
@@ -263,8 +260,8 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/dispatcher/dispatcher/src/translation/requestCompletion.ts` | 128 | assuming the partial action doesn't change the possible values. |
 | `ts/packages/dispatcher/dispatcher/src/translation/translateRequest.ts` | 392 | streaming currently doesn't not support multiple actions |
 | `ts/packages/dispatcher/dispatcher/src/translation/translateRequest.ts` | 644 | What to do with attachments with multiple actions? |
-| `ts/packages/dispatcher/dispatcher/src/translation/translateRequest.ts` | 661 | undefined, // TODO: What to do with attachments with multiple actions? |
-| `ts/packages/dispatcher/dispatcher/src/translation/unknownSwitcher.ts` | 142 | const limit = assistantSelectionLimit; // TODO: this should be adjusted based on model used. |
+| `ts/packages/dispatcher/dispatcher/src/translation/translateRequest.ts` | 661 | What to do with attachments with multiple actions? |
+| `ts/packages/dispatcher/dispatcher/src/translation/unknownSwitcher.ts` | 142 | this should be adjusted based on model used. |
 | `ts/packages/dispatcher/dispatcher/src/translation/unknownSwitcher.ts` | 186 | we can parallelize this |
 | `ts/packages/dispatcher/dispatcher/src/utils/test/explanationTestData.ts` | 49 | Test data only support a single schema name for now. |
 | `ts/packages/dispatcher/types/src/clientIO.ts` | 92 | Notification (TODO: turn these in to dispatcher events) |
@@ -284,12 +281,12 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/knowledgeProcessor/src/conversation/actions.ts` | 223 | parallelize |
 | `ts/packages/knowledgeProcessor/src/conversation/answerContext.ts` | 101 | split entities, topics, actions |
 | `ts/packages/knowledgeProcessor/src/conversation/conversation.ts` | 407 | Migrate to file system storage provider |
-| `ts/packages/knowledgeProcessor/src/conversation/conversation.ts` | 411 | removeTopics(2), // TODO: what about topics at other levels? |
+| `ts/packages/knowledgeProcessor/src/conversation/conversation.ts` | 411 | what about topics at other levels? |
 | `ts/packages/knowledgeProcessor/src/conversation/entities.ts` | 273 | parallelize |
 | `ts/packages/knowledgeProcessor/src/conversation/topics.ts` | 638 | use aliases here for better matching |
 | `ts/packages/knowledgeProcessor/src/conversation/topics.ts` | 683 | combine this and the one below |
 | `ts/packages/knowledgeProcessor/src/images/image.ts` | 147 | add actions for all extracted entities being photographed/contained by image |
-| `ts/packages/knowledgeProcessor/src/images/image.ts` | 195 | sender: "", // TODO: logged in user for now? |
+| `ts/packages/knowledgeProcessor/src/images/image.ts` | 195 | logged in user for now? |
 | `ts/packages/knowledgeProcessor/src/setOperations.ts` | 587 | Optimize. |
 | `ts/packages/knowledgeProcessor/src/setOperations.ts` | 606 | Optimize. |
 | `ts/packages/knowledgeProcessor/src/storageProvider.ts` | 131 | implement this once conversation is cleaned up and message Index is also backed by storageProvider |
@@ -306,7 +303,7 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/memory/image/src/imageCollection.ts` | 78 | select other Facets/meta data fields |
 | `ts/packages/memory/image/src/imageCollection.ts` | 79 | put everything in a single table? |
 | `ts/packages/memory/image/src/imageCollection.ts` | 133 | add additional meta data tables |
-| `ts/packages/memory/image/src/imageMeta.ts` | 151 | indirectObjectEntityName: "ME", // TODO: image taker name |
+| `ts/packages/memory/image/src/imageMeta.ts` | 151 | image taker name |
 | `ts/packages/memory/image/src/imageMeta.ts` | 356 | Ensure localization |
 | `ts/packages/memory/image/src/indexingService.ts` | 5 | add support for "monitoring" the indexed folder for changes |
 | `ts/packages/memory/image/src/indexingService.ts` | 23 | add token stats |
@@ -319,7 +316,7 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/shell/src/renderer/src/main.ts` | 128 | wire up any other functionality (player agent?) |
 | `ts/packages/shell/src/renderer/src/main.ts` | 196 | append data instead of replace |
 | `ts/packages/shell/src/renderer/src/main.ts` | 311 | Design for toast notifications in shell |
-| `ts/packages/shell/src/renderer/src/messageContainer.ts` | 506 | const minSpeak = 10; // TODO: Adjust this value. |
+| `ts/packages/shell/src/renderer/src/messageContainer.ts` | 506 | Adjust this value. |
 | `ts/packages/shell/src/renderer/src/webSocketAPI.ts` | 128 | Not implemented yet. |
 | `ts/packages/shell/src/renderer/src/webSocketAPI.ts` | 137 | Not implemented yet. |
 | `ts/packages/shell/test/configCommands.spec.ts` | 87 | Test action correction |
