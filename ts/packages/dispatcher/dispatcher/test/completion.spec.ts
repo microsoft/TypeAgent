@@ -800,8 +800,9 @@ describe("Command Completion - startIndex", () => {
             );
             expect(result).toBeDefined();
             // "run" is the default subcommand, so subcommand alternatives
-            // are included.  separatorMode defaults to undefined ("space").
-            expect(result!.completions[0].separatorMode).toBeUndefined();
+            // are included.  Per-group separatorMode is "optionalSpace"
+            // because the trailing whitespace is already consumed.
+            expect(result!.completions[0].separatorMode).toBe("optionalSpace");
             // startIndex includes trailing whitespace.
             expect(result!.startIndex).toBe(10);
         });
@@ -813,7 +814,10 @@ describe("Command Completion - startIndex", () => {
                 context,
             );
             expect(result).toBeDefined();
-            expect(result!.completions[0].separatorMode).toBeUndefined();
+            // Subcommand group gets "optionalSpace" — no explicit
+            // subcommand was typed, alternatives offered at the agent
+            // boundary.
+            expect(result!.completions[0].separatorMode).toBe("optionalSpace");
             expect(result!.startIndex).toBe(9);
             // Default subcommand has agent completions → not exhaustive.
             expect(result!.closedSet).toBe(false);
@@ -835,20 +839,19 @@ describe("Command Completion - startIndex", () => {
             expect(result!.closedSet).toBe(true);
         });
 
-        it("does not set separatorMode for parameter completions only", async () => {
+        it("returns optionalSpace separatorMode for parameter completions after space", async () => {
             const result = await getCommandCompletion(
                 "@comptest run bu",
                 "forward",
                 context,
             );
             expect(result).toBeDefined();
-            // Partial parameter token — only parameter completions returned,
-            // no subcommand group.  Each group carries its own separatorMode
-            // (undefined means "space" — the documented default).
-            expect(result!.completions[0].separatorMode).toBeUndefined();
+            // Partial parameter token — the space before "bu" was already
+            // consumed, so the group's separatorMode is "optionalSpace".
+            expect(result!.completions[0].separatorMode).toBe("optionalSpace");
         });
 
-        it("returns no separatorMode for partial unmatched token consumed as param", async () => {
+        it("returns optionalSpace separatorMode for partial unmatched token consumed as param", async () => {
             const result = await getCommandCompletion(
                 "@comptest ne",
                 "forward",
@@ -856,15 +859,14 @@ describe("Command Completion - startIndex", () => {
             );
             expect(result).toBeDefined();
             // "ne" is fully consumed as the "task" arg by parameter
-            // parsing.  No trailing space.  startIndex = 10
-            // (after "@comptest "), which is ≤ commandConsumedLength
-            // (10), so sibling subcommands are included (separatorMode
-            // defaults to undefined/"space").
+            // parsing.  startIndex = 10 (after "@comptest "), which is ≤
+            // commandConsumedLength (10), so sibling subcommands are
+            // included with per-group separatorMode.
             const subcommands = result!.completions.find(
                 (g) => g.name === "Subcommands",
             );
             expect(subcommands).toBeDefined();
-            expect(subcommands!.separatorMode).toBeUndefined();
+            expect(subcommands!.separatorMode).toBe("optionalSpace");
             expect(result!.startIndex).toBe(10);
         });
     });

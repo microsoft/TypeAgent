@@ -457,12 +457,14 @@ Trie-backed prefix filtering:
 Controls what character is required between the matched prefix and completion
 text.
 
-| Value                | Meaning                             | Use case                                                                                                                                                                                                                                                                   |
-| -------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"space"`            | Whitespace required                 | Commands, flags, agent names                                                                                                                                                                                                                                               |
-| `"spacePunctuation"` | Whitespace or Unicode punctuation   | Latin-script grammar completions                                                                                                                                                                                                                                           |
-| `"optionalSpace"`    | Separator accepted but not required | CJK / mixed-script grammars; also digit–Latin boundaries (digits are Unicode script "Common", not "Latin", so a transition like `"0"→"i"` is a script change that does not require a separator)                                                                            |
-| `"none"`             | No separator                        | Grammar rules annotated with `[spacing=none]`. At the top level, no leading or trailing whitespace is consumed. For nested rules, the parent rule's spacing controls the boundaries around the child; the child's `"none"` only affects its own internal token boundaries. |
+| Value                        | Meaning                                                                              | Use case                                                                                                                                                                                                                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"space"`                    | Whitespace required                                                                  | Commands, flags, agent names                                                                                                                                                                                                                                               |
+| `"spacePunctuation"`         | Whitespace or Unicode punctuation                                                    | Latin-script grammar completions                                                                                                                                                                                                                                           |
+| `"optionalSpacePunctuation"` | Separator accepted but not required; when present, whitespace or Unicode punctuation | Grammar rules annotated with `[spacing=optional]`; also the resolved form of `"autoSpacePunctuation"` when no separator is needed between the adjacent characters                                                                                                          |
+| `"optionalSpace"`            | Separator accepted but not required; when present, only whitespace                   | Command/flag-level completions where trailing whitespace was already consumed into `startIndex`; subcommand and agent-name completions                                                                                                                                     |
+| `"none"`                     | No separator                                                                         | Grammar rules annotated with `[spacing=none]`. At the top level, no leading or trailing whitespace is consumed. For nested rules, the parent rule's spacing controls the boundaries around the child; the child's `"none"` only affects its own internal token boundaries. |
+| `"autoSpacePunctuation"`     | Per-item; resolved by the consumer                                                   | Grammar auto-spacing mode (default). The consumer inspects the character pair (last input char, first completion char) and resolves each item to `"spacePunctuation"` or `"optionalSpacePunctuation"`. The shell resolves this in `toPartitions()`.                        |
 
 See `actionGrammar.md` Spacing modes for how the grammar matcher
 determines `separatorMode` from spacing annotations. The matcher
@@ -837,10 +839,13 @@ Closed only if ALL sources are closed.
 _Impact:_ Premature "accept" when one source is open — user misses
 completions from that source.
 
-**#13 — `separatorMode`: strongest requirement wins.**
-`"space"` > `"spacePunctuation"` > `"optionalSpacePunctuation"` > `"optionalSpace"` > `"none"`.
-_Impact:_ Fused display if a weak mode wins over a strong one, or
-unnecessary separation if the reverse.
+**#13 — `separatorMode`: per-group, no cross-group merging.**
+Each `CompletionGroup` carries its own `separatorMode`. The shell's
+SepLevel model (see `partialCompletionSession.ts`) partitions groups
+by mode and shows/hides them based on the user's trailing separator
+state. No merging or priority ordering is needed.
+_Impact:_ Fused display if a group's mode is wrong, or unnecessary
+separation if a wrong mode is applied.
 
 **#14 — `directionSensitive`: OR-merge.**
 Sensitive if ANY source is sensitive.
@@ -861,19 +866,12 @@ definite completions to slide — `"some"` triggers re-fetch instead.
   handles this correctly. The two-pass invariant check skips this case
   (when `forwardAtP.matchedPrefixLength < P`).
 
-### Direction asymmetry and separator-mode conflicts
+### Direction asymmetry
 
-Two related mechanisms protect the invariants when rules with different
+One mechanism protects the invariants when rules with different
 spacing modes compete for the same `maxPrefixLength`:
 
-1. **Separator-mode conflict filtering** (`filterSepConflicts` in
-   `grammarCompletion.ts`, post-loop in `grammarStore.ts`): when
-   `"none"` and requiring-separator candidates coexist, filters by
-   trailing separator state, advances P, and forces `closedSet=false`.
-   Protects invariant #9 (`separatorMode="none"` for `[spacing=none]`
-   rules) and #13 (strongest separator requirement wins at merge).
-
-2. **Deferred shadow candidates** (`DeferredShadowCandidate` in
+1. **Deferred shadow candidates** (`DeferredShadowCandidate` in
    `grammarCompletion.ts`): when Category 3b backward backs up past the
    forward position, a shadow candidate is collected and flushed after
    Phase 2. Protects invariant #3 (truncated-forward idempotency),

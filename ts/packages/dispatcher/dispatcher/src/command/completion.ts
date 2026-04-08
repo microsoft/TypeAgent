@@ -76,14 +76,17 @@ function detectPendingFlag(
     };
 }
 
-// True when text[0..index) ends with whitespace — i.e., the user
-// has typed trailing whitespace after the last token.  Trailing
-// whitespace acts as a commit signal: the token before it is
-// considered committed and the whitespace itself is consumed, so
-// startIndex should include it and separatorMode should be
-// "optionalSpace" (no additional separator needed).
-function hasWhitespaceBefore(text: string, index: number): boolean {
-    return index > 0 && /\s/.test(text[index - 1]);
+// Returns the separatorMode implied by the position in the input.
+// When the position is 0 (beginning of input) or preceded by
+// whitespace, the separator is already satisfied → "optionalSpace".
+// Otherwise returns undefined (defaults to "space" per CompletionGroup contract).
+function inferSeparatorMode(
+    text: string,
+    index: number,
+): SeparatorMode | undefined {
+    return index === 0 || /\s/.test(text[index - 1])
+        ? "optionalSpace"
+        : undefined;
 }
 
 // True if surrounded by quotes at both ends (matching single or double quotes).
@@ -224,9 +227,7 @@ function resolveCompletionTarget(
             isPartialValue: false,
             includeFlags: true,
             booleanFlagName,
-            separatorMode: hasWhitespaceBefore(input, remainderIndex)
-                ? "optionalSpace"
-                : undefined,
+            separatorMode: inferSeparatorMode(input, remainderIndex),
             directionSensitive: false,
         };
     }
@@ -257,9 +258,7 @@ function resolveCompletionTarget(
                 isPartialValue: true,
                 includeFlags: false,
                 booleanFlagName: undefined,
-                separatorMode: hasWhitespaceBefore(input, startIndex)
-                    ? "optionalSpace"
-                    : undefined,
+                separatorMode: inferSeparatorMode(input, startIndex),
                 directionSensitive: false,
             };
         }
@@ -275,11 +274,11 @@ function resolveCompletionTarget(
     // Trailing whitespace commits the flag — direction no longer matters.
     // When the user typed "--level " (with whitespace), they've moved on;
     // fall through to 2b for value completions regardless of direction.
-    const trailingWhitespace = hasWhitespaceBefore(input, remainderIndex);
+    const trailingSepMode = inferSeparatorMode(input, remainderIndex);
     if (
         pendingFlag !== undefined &&
         direction === "backward" &&
-        !trailingWhitespace
+        trailingSepMode === undefined
     ) {
         const flagToken = tokens[tokens.length - 1];
         const flagTokenStart = remainderIndex - flagToken.length;
@@ -289,9 +288,7 @@ function resolveCompletionTarget(
             isPartialValue: false,
             includeFlags: true,
             booleanFlagName,
-            separatorMode: hasWhitespaceBefore(input, flagTokenStart)
-                ? "optionalSpace"
-                : undefined,
+            separatorMode: inferSeparatorMode(input, flagTokenStart),
             directionSensitive: true,
         };
     }
@@ -310,8 +307,8 @@ function resolveCompletionTarget(
             isPartialValue: false,
             includeFlags: false,
             booleanFlagName: undefined,
-            separatorMode: trailingWhitespace ? "optionalSpace" : undefined,
-            directionSensitive: !trailingWhitespace,
+            separatorMode: trailingSepMode,
+            directionSensitive: trailingSepMode === undefined,
         };
     }
     return {
@@ -320,7 +317,7 @@ function resolveCompletionTarget(
         isPartialValue: false,
         includeFlags: true,
         booleanFlagName,
-        separatorMode: trailingWhitespace ? "optionalSpace" : undefined,
+        separatorMode: trailingSepMode,
         directionSensitive: false,
     };
 }
@@ -469,7 +466,10 @@ async function getCommandParameterCompletion(
             startIndex = target.startIndex + groupPrefixLength;
             completions.length = 0; // grammar overrides built-in completions
         } else {
-            // Override separatorMode if matchedPrefixLength is undefined or zero
+            // Override separatorMode if matchedPrefixLength is undefined or zero.
+            // Intentionally mutates the agent's group objects in-place — the
+            // groups are single-use results from the agent callback and are
+            // not retained by the agent.
             for (const group of agentResult.groups) {
                 if (
                     group.separatorMode === "autoSpacePunctuation" ||

@@ -19,6 +19,9 @@ import {
 } from "action-grammar";
 
 const debug = registerDebug("typeagent:cache:grammarStore");
+const debugCompletion = registerDebug(
+    "typeagent:cache:grammarStore:completion",
+);
 import {
     CompletionDirection,
     CompletionGroup,
@@ -303,6 +306,7 @@ export class GrammarStoreImpl implements GrammarStore {
             if (filter && !filter.has(name)) {
                 continue;
             }
+            debugCompletion(`Processing grammar: ${name}`);
             if (this.useDFA && entry.dfa) {
                 // DFA-based completions
                 const tokens = input
@@ -335,6 +339,12 @@ export class GrammarStoreImpl implements GrammarStore {
                                 ),
                             ],
                             names: [p.propertyPath],
+                            // Property completions represent free-form entity
+                            // slots — the actual values come from agents at
+                            // runtime, so the grammar cannot know the first
+                            // character.  "autoSpacePunctuation" defers
+                            // resolution to the shell, which inspects the
+                            // character pair per item.
                             separatorMode: "autoSpacePunctuation",
                         });
                     }
@@ -375,6 +385,8 @@ export class GrammarStoreImpl implements GrammarStore {
                                 ),
                             ],
                             names: p.propertyNames,
+                            // See DFA property comment above — auto
+                            // mode for the same reason.
                             separatorMode: "autoSpacePunctuation",
                         });
                     }

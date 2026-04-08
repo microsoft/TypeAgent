@@ -78,14 +78,18 @@ export type CommandDescriptors =
 //                        Latin-script completions.
 //   "optionalSpacePunctuation" — separator accepted but not required;
 //                        when present, both whitespace and Unicode
-//                        punctuation are valid separators.  Used by
+//                        punctuation are valid separators.  Produced by
 //                        the grammar matcher for [spacing=optional]
-//                        annotated rules.
+//                        annotated rules, and as the resolved form of
+//                        "autoSpacePunctuation" when no separator is
+//                        needed between the adjacent characters.
 //   "optionalSpace"         — separator accepted but not required; when
 //                        present, only whitespace is treated as a
-//                        separator.  Used for CJK / mixed-script
-//                        grammar completions and consumed-separator
-//                        overrides.
+//                        separator.  Used at the command/flag level
+//                        when trailing whitespace was already consumed
+//                        into startIndex (no additional separator
+//                        needed), and for subcommand/agent-name
+//                        completions.
 //   "none"             — no separator at all; menu shown immediately.
 //                        Used for [spacing=none] grammars.
 //   "autoSpacePunctuation" — per-item mode determined by the consumer.

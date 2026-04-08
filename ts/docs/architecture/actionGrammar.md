@@ -853,70 +853,25 @@ flow through the cache, dispatcher, and shell layers, and
 `completion.md` § Invariants for the full catalog of correctness
 invariants, their user-visible impact, and which tests verify them.
 
-### Separator-mode conflict filtering
+### Per-group separator modes (replaces conflict filtering)
 
-When fixed candidates at the same `maxPrefixLength` come from rules
-with different `spacingMode` values — for example, a `[spacing=none]`
-rule and a default-spacing rule that both match the same prefix — the
-single merged `separatorMode` cannot correctly represent all of them.
-A `"none"` candidate rejects any trailing separator, while a
-`"spacePunctuation"` candidate requires one. The conflict-filtering
-logic in `filterSepConflicts()` (called from `finalizeCandidates()`) resolves this:
+When candidates at the same `maxPrefixLength` come from rules with
+different `spacingMode` values — for example, a `[spacing=none]`
+rule and a default-spacing rule that both match the same prefix —
+each candidate's `separatorMode` is recorded in its own
+`GrammarCompletionGroup`. The grammar matcher no longer merges
+separator modes or filters conflicting candidates; instead, each
+group carries its own `separatorMode` and the shell's **SepLevel**
+model (see `partialCompletionSession.ts`) shows or hides groups
+based on the user's trailing separator state.
 
-Three-way compatibility:
+This means:
 
-| Trailing sep? | `spacePunctuation` | `optional` | `none` |
-| ------------- | ------------------ | ---------- | ------ |
-| No            | drop               | keep       | keep   |
-| Yes           | keep               | keep       | drop   |
-
-1. **Detect:** Compute each candidate's individual `SeparatorMode` via
-   `computeCandidateSeparatorMode()`. A conflict exists when both
-   `isRequiringSepMode()` candidates (need separator) and `"none"`
-   candidates (reject separator) are present.
-
-2. **Filter by trailing separator state:** Inspect `input[maxPrefixLength]`:
-
-   - Trailing separator present → drop `"none"` candidates (they would
-     reject the existing separator).
-   - No trailing separator → drop requiring candidates (a separator
-     would need to be inserted).
-
-3. **Advance P by one character:** When trailing separator is present
-   and candidates were dropped, advance `maxPrefixLength` by exactly
-   one character (not past all consecutive separators). This ensures
-   backspace triggers a re-fetch (the anchor diverges). Override
-   `separatorMode` to `"optionalSpace"` since the separator is already
-   consumed into P.
-
-   Advance-1 is preferred over advance-all because:
-
-   - Each backspace in the separator run produces a distinct anchor,
-     giving the shell a re-fetch opportunity at every keystroke.
-   - With advance-all, deleting the _last_ separator in a multi-
-     separator run is the only keystroke that triggers a re-fetch;
-     intermediate deletes are invisible to the completion system.
-   - Advance-1 matches the shell's `separatorMode="optionalSpace"` contract:
-     the session sees one consumed separator and treats the rest as
-     ordinary prefix text. The shell strips leading whitespace for
-     `"optionalSpace"` mode (just as it does for requiring modes), so extra
-     separators do not pollute the trie — the menu stays visible with
-     an empty or narrowed prefix.
-   - The re-fetch cost is negligible — the grammar matcher runs in
-     sub-millisecond time.
-
-4. **Force `closedSet=false`:** When candidates are dropped, the
-   completion list is no longer exhaustive. The shell must re-fetch when
-   the separator state changes (typing or deleting a space).
-
-5. **Force `afterWildcard` `"all"` → `"some"`:** When candidates are
-   dropped and all surviving candidates are after a wildcard,
-   `afterWildcard` is downgraded from `"all"` to `"some"` to prevent
-   the shell from using the "slide" `noMatchPolicy` (which would
-   suppress the re-fetch).
-
-The same conflict-detection logic is applied cross-grammar in
-`grammarStore.ts` after collecting per-grammar results.
+- No candidates are dropped at the grammar level.
+- `closedSet` is not forced to `false` by separator conflicts.
+- `afterWildcard` is not downgraded by separator conflicts.
+- Cross-grammar conflict filtering in `grammarStore.ts` is no longer
+  needed — each grammar's groups are passed through directly.
 
 ### Direction asymmetry: why only Category 3b needs shadow candidates
 

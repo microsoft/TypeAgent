@@ -14,7 +14,7 @@ import {
 } from "../../preload/electronTypes.js";
 import registerDebug from "debug";
 
-// Inline auto-separator resolution (mirrors action-grammar's
+// Inline auto-separator resolution (copy of action-grammar's
 // needsSeparatorInAutoMode).  Inlined to avoid importing action-grammar
 // into the renderer — that package has Node.js-only modules that the
 // Vite browser bundle can't resolve.
@@ -787,7 +787,5 @@ function toPartitions(
             }
         }
     }
-    return Array.from(map, ([mode, items]) => ({ mode, items })).filter(
-        (p) => p.items.length > 0,
-    );
+    return Array.from(map, ([mode, items]) => ({ mode, items }));
 }

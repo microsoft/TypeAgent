@@ -291,7 +291,10 @@ export function computeNFACompletions(
         groups: [
             {
                 completions: uniqueCompletions,
-                separatorMode: "space",
+                // NFA does not track per-rule spacing modes, so use
+                // auto mode — the consumer resolves per-item based on
+                // the character pair (last input char, first completion char).
+                separatorMode: "autoSpacePunctuation",
             },
         ],
         directionSensitive: false,
