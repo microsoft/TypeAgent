@@ -289,5 +289,5 @@ server.on("error", (err: NodeJS.ErrnoException) => {
     } else {
         console.error(`Server error: ${err.message}`);
     }
-    process.exit(1);
+    process.exitCode = 1;
 });
