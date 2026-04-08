@@ -154,7 +154,10 @@ export class BaseServer {
                 );
                 server.removeListener("error", onStartupError);
                 server.on("error", (err: NodeJS.ErrnoException) => {
-                    debug(`Server runtime error: ${err.message}`);
+                    console.error(
+                        `Server runtime error on port ${this.config.port}:`,
+                        err,
+                    );
                 });
                 resolve();
             });
