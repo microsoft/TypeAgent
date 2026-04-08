@@ -1984,8 +1984,10 @@ async function createViewServiceHost(
                     },
                 });
 
-                childProcess.on("message", function (message) {
-                    if (message === "Success") {
+                childProcess.on("message", function (message: any) {
+                    if (message?.type === "Success") {
+                        context.agentContext.localHostPort = message.port;
+                        context.setLocalHostPort(message.port);
                         resolve(childProcess);
                     } else if (message === "Failure") {
                         resolve(undefined);

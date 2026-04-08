@@ -176,7 +176,6 @@ async function initializeDispatcher(
                 indexingServiceRegistry,
                 constructionProvider: getDefaultConstructionProvider(),
                 allowSharedLocalView: ["browser"],
-                portBase: isProd ? 9001 : 9050,
             });
         }
 
