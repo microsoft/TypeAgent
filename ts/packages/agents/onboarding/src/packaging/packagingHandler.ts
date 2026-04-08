@@ -18,7 +18,10 @@ import {
     loadState,
     updatePhase,
     readArtifact,
+    readArtifactJson,
+    writeArtifact,
 } from "../lib/workspace.js";
+import { getPackagingModel } from "../lib/llm.js";
 import { spawn } from "child_process";
 import path from "path";
 import fs from "fs/promises";
@@ -35,6 +38,11 @@ export async function executePackagingAction(
             );
         case "validatePackage":
             return handleValidatePackage(action.parameters.integrationName);
+        case "generateDemo":
+            return handleGenerateDemo(
+                action.parameters.integrationName,
+                action.parameters.durationMinutes,
+            );
     }
 }
 
@@ -180,6 +188,211 @@ async function handleValidatePackage(integrationName: string): Promise<ActionRes
     }
 
     return createActionResultFromMarkdownDisplay(lines.join("\n"));
+}
+
+async function handleGenerateDemo(
+    integrationName: string,
+    durationMinutes?: string,
+): Promise<ActionResult> {
+    const state = await loadState(integrationName);
+    if (!state) return { error: `Integration "${integrationName}" not found.` };
+    if (state.phases.testing.status !== "approved") {
+        return { error: `Testing phase must be approved before generating a demo.` };
+    }
+
+    // Load discovery artifacts
+    const apiSurface = await readArtifactJson<{
+        actions: { name: string; description: string; category?: string }[];
+    }>(integrationName, "discovery", "api-surface.json");
+    if (!apiSurface) {
+        return { error: `No approved API surface found. Complete discovery first.` };
+    }
+
+    const subSchemaGroups = await readArtifactJson<
+        Record<string, string[]>
+    >(integrationName, "discovery", "sub-schema-groups.json");
+
+    // Load the generated schema
+    const schemaTs = await readArtifact(
+        integrationName,
+        "schemaGen",
+        "schema.ts",
+    );
+
+    const duration = durationMinutes ?? "3-5";
+    const description = state.config.description ?? integrationName;
+
+    // Build action listing — grouped by sub-schema if available
+    let actionListing: string;
+    if (subSchemaGroups) {
+        const groupLines: string[] = [];
+        for (const [group, actionNames] of Object.entries(subSchemaGroups)) {
+            groupLines.push(`### ${group}`);
+            for (const actionName of actionNames) {
+                const action = apiSurface.actions.find(
+                    (a) => a.name === actionName,
+                );
+                groupLines.push(
+                    `- **${actionName}**: ${action?.description ?? "(no description)"}`,
+                );
+            }
+            groupLines.push("");
+        }
+        actionListing = groupLines.join("\n");
+    } else {
+        actionListing = apiSurface.actions
+            .map((a) => `- **${a.name}**: ${a.description}`)
+            .join("\n");
+    }
+
+    const model = getPackagingModel();
+    const prompt = buildDemoPrompt(
+        integrationName,
+        description,
+        actionListing,
+        schemaTs ?? "",
+        duration,
+    );
+
+    const result = await model.complete(prompt);
+    if (!result.success) {
+        return { error: `Demo generation failed: ${result.message}` };
+    }
+
+    // Parse the LLM response — expect two fenced blocks:
+    //   ```demo ... ```  and  ```narration ... ```
+    const responseText = result.data;
+    const demoScript = extractFencedBlock(responseText, "demo") ??
+        extractFirstFencedBlock(responseText) ?? responseText;
+    const narrationScript = extractFencedBlock(responseText, "narration") ??
+        extractSecondFencedBlock(responseText) ?? "";
+
+    // Find the scaffolded agent directory
+    const scaffoldedTo = await readArtifact(
+        integrationName,
+        "scaffolder",
+        "scaffolded-to.txt",
+    );
+
+    // Write to the shell demo directory alongside other demo scripts
+    const shellDemoDir = path.resolve(
+        scaffoldedTo?.trim() ?? ".",
+        "../../shell/demo",
+    );
+    await fs.mkdir(shellDemoDir, { recursive: true });
+
+    const demoFilename = `${integrationName}_agent.txt`;
+    const narrationFilename = `${integrationName}_agent_narration.md`;
+
+    const demoPath = path.join(shellDemoDir, demoFilename);
+    const narrationPath = path.join(shellDemoDir, narrationFilename);
+
+    await fs.writeFile(demoPath, demoScript, "utf-8");
+    await fs.writeFile(narrationPath, narrationScript, "utf-8");
+
+    // Also save as artifacts in the onboarding workspace
+    await writeArtifact(integrationName, "packaging", demoFilename, demoScript);
+    await writeArtifact(
+        integrationName,
+        "packaging",
+        narrationFilename,
+        narrationScript,
+    );
+
+    const lines = [
+        `## Demo scripts generated: ${integrationName}`,
+        ``,
+        `**Demo script:** \`${demoPath}\``,
+        `**Narration script:** \`${narrationPath}\``,
+        ``,
+        `**Target duration:** ${duration} minutes`,
+        ``,
+        `### Demo script preview`,
+        `\`\`\``,
+        demoScript.split("\n").slice(0, 20).join("\n"),
+        demoScript.split("\n").length > 20 ? "..." : "",
+        `\`\`\``,
+        ``,
+        `### Narration preview`,
+        narrationScript.split("\n").slice(0, 15).join("\n"),
+        narrationScript.split("\n").length > 15 ? "\n..." : "",
+    ];
+
+    return createActionResultFromMarkdownDisplay(lines.join("\n"));
+}
+
+function buildDemoPrompt(
+    integrationName: string,
+    description: string,
+    actionListing: string,
+    schemaTs: string,
+    duration: string,
+): string {
+    return `You are generating a demo script for a TypeAgent integration called "${integrationName}".
+
+**Integration description:** ${description}
+
+**Available actions (grouped by category if applicable):**
+${actionListing}
+
+${schemaTs ? `**TypeScript action schema:**\n\`\`\`typescript\n${schemaTs}\n\`\`\`` : ""}
+
+Generate TWO outputs:
+
+## 1. Demo script (shell format)
+
+Create a demo script with 5-8 acts that showcase each action category. The demo should be ${duration} minutes long (approximately 50-80 natural language commands).
+
+Format rules:
+- One natural language command per line (what a user would type, NOT @action syntax)
+- Use \`# Section Title\` comments for section headers
+- Use \`@pauseForInput\` between acts/sections
+- Commands should be realistic, conversational requests a user would make
+- Progress from simple to complex usage
+- Show off different capabilities in each act
+- Include some multi-step scenarios
+
+Wrap the entire demo script in a fenced code block with the label \`demo\`:
+\`\`\`demo
+# Act 1: Getting Started
+...
+\`\`\`
+
+## 2. Narration script (markdown)
+
+Create a matching narration script with timestamped sections that correspond to each act. Include:
+- Approximate timestamp for each section (e.g., [0:00], [0:30])
+- Voice-over text explaining what is being demonstrated
+- Key talking points for each act
+- Transition text between acts
+
+Wrap the narration in a fenced code block with the label \`narration\`:
+\`\`\`narration
+# Demo Narration: ${integrationName} Agent
+...
+\`\`\``;
+}
+
+function extractFencedBlock(text: string, label: string): string | undefined {
+    const regex = new RegExp(
+        "```" + label + "\\s*\\n([\\s\\S]*?)\\n```",
+        "i",
+    );
+    const match = text.match(regex);
+    return match?.[1]?.trim();
+}
+
+function extractFirstFencedBlock(text: string): string | undefined {
+    const match = text.match(/```[\w]*\s*\n([\s\S]*?)\n```/);
+    return match?.[1]?.trim();
+}
+
+function extractSecondFencedBlock(text: string): string | undefined {
+    const blocks = [...text.matchAll(/```[\w]*\s*\n([\s\S]*?)\n```/g)];
+    if (blocks.length >= 2) {
+        return blocks[1][1]?.trim();
+    }
+    return undefined;
 }
 
 async function registerWithDispatcher(

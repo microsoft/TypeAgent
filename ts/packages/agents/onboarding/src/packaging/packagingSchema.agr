@@ -29,7 +29,21 @@
     }
 };
 
+<GenerateDemo> = generate (a)? demo (script)? for $(integrationName:wildcard) -> {
+    actionName: "generateDemo",
+    parameters: {
+        integrationName
+    }
+}
+  | create (a)? demo for $(integrationName:wildcard) -> {
+    actionName: "generateDemo",
+    parameters: {
+        integrationName
+    }
+};
+
 import { PackagingActions } from "./packagingSchema.ts";
 
 <Start> : PackagingActions = <PackageAgent>
-  | <ValidatePackage>;
+  | <ValidatePackage>
+  | <GenerateDemo>;
