@@ -55,6 +55,7 @@
     "desktop-automation": "workspace:*",
     "dispatcher-node-providers": "workspace:*",
     "email": "workspace:*",
+    "excalidraw-agent": "workspace:*",
     "exifreader": "^4.30.1",
     "file-size": "^1.0.0",
     "glob": "^13.0.0",

@@ -66,6 +66,10 @@
     },
     "utility": {
       "name": "utility-typeagent"
+    },
+    "excalidraw": {
+      "name": "excalidraw-agent",
+      "execMode": "dispatcher"
     }
   },
   "mcpServers": {

@@ -65,6 +65,10 @@
     "weather": {
       "name": "weather-agent",
       "path": "../agents/weather"
+    },
+    "excalidraw": {
+      "name": "excalidraw-agent",
+      "execMode": "dispatcher"
     }
   },
   "mcpServers": {

@@ -1,0 +1,57 @@
+{
+  "name": "excalidraw-agent",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Excalidraw diagram generation agent - converts documents and descriptions into Excalidraw diagrams",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/agents/excalidraw"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/excalidrawManifest.json",
+    "./agent/handlers": "./dist/excalidrawActionHandler.js"
+  },
+  "scripts": {
+    "asc": "asc -i ./src/excalidrawActionSchema.ts -o ./dist/excalidrawSchema.pas.json -t ExcalidrawAction",
+    "build": "concurrently npm:tsc npm:asc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
+    "aiclient": "workspace:*",
+    "telemetry": "workspace:*",
+    "typechat-utils": "workspace:*"
+  },
+  "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
+    "concurrently": "^9.1.2",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "asc": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/excalidrawActionSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/excalidrawSchema.pas.json"
+          ]
+        }
+      }
+    }
+  }
+}

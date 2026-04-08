@@ -1,0 +1,10 @@
+{
+  "emojiChar": "📐",
+  "description": "Agent to create Excalidraw diagrams from documents, descriptions, and structured content",
+  "schema": {
+    "description": "Excalidraw agent that generates diagrams from text, markdown, Visio XML, Mermaid, and architecture descriptions using AI.",
+    "originalSchemaFile": "./excalidrawActionSchema.ts",
+    "schemaFile": "../dist/excalidrawSchema.pas.json",
+    "schemaType": "ExcalidrawAction"
+  }
+}
