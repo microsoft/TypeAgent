@@ -60,12 +60,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `dotnet/typeagent/src/typechat.schema/TypescriptWriter.cs` | 201 | validation here to verify Begin & End match |
 | `dotnet/typeagent/tests/typeChat.test/TestVocab.cs` | 59 | better checks for correctness |
 
-## Python (`python/`)
-
-| File | Line | TODO |
-|------|------|------|
-| `python/nprData/btt_chunk.py` | 16 | move these to argparser |
-
 ## TypeScript (`ts/`)
 
 | File | Line | TODO |
@@ -74,7 +68,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/examples/cacheRESTEndpoint/src/index.ts` | 56 | actually parse the schema instead of using regex |
 | `ts/examples/chat/src/codeChat/commandTransformer.ts` | 59 | Validate that result.data is a valid NamedArgs? |
 | `ts/examples/chat/src/codeChat/commandTransformer.ts` | 170 | the same for args (currently not used by code chat) |
-| `ts/examples/chat/watchdata.py` | 16 | argparse |
 | `ts/examples/chat/watchdata.py` | 18 | assert not sys.argv[2:], "Too many arguments."  # TODO |
 | `ts/examples/commandHistogram/src/main.ts` | 65 | move DB name to .env/config? |
 | `ts/examples/commandHistogram/src/main.ts` | 67 | move collection name to .env/config? |
@@ -90,12 +83,9 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/examples/memoryProviders/src/sqlite/textTable.ts` | 511 | optimize by lowering into DB if possible |
 | `ts/examples/memoryProviders/src/sqlite/textTable.ts` | 613 | Optimize |
 | `ts/examples/memoryProviders/src/sqlite/vectorTable.ts` | 70 | ID generation |
-| `ts/examples/schemaStudio/src/schemaCommands.ts` | 94 | "TODO: Generating settings command schemas..." + |
+| `ts/examples/schemaStudio/src/schemaCommands.ts` | 94 | "TODO: Generating settings command schemas... |
 | `ts/examples/schemaStudio/src/urlCommands.ts` | 88 | handle redirects + default parameters, etc. |
-| `ts/examples/spelunker/TODO.md` | 1 | (Mac version) |
-| `ts/examples/spelunker/design.md` | 103 |  |
 | `ts/examples/spelunker/design.md` | 105 | The rest is TODO. For now just see the code. |
-| `ts/examples/spelunker/src/chunker.py` | 185 | Include immediately preceding comment blocks. |
 | `ts/examples/spelunker/src/main.ts` | 44 | switch to whatever interactive-app uses to parse the command line? |
 | `ts/examples/spelunker/src/main.ts` | 77 | Use a proper command-line parser? |
 | `ts/examples/spelunker/src/pythonChunker.ts` | 81 | validate that JSON matches our schema. |
@@ -167,12 +157,8 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/agents/player/src/search.ts` | 561 | cache this. |
 | `ts/packages/agents/player/src/trackFilter.ts` | 326 | year ranges |
 | `ts/packages/agents/player/src/userData.ts` | 301 | return names of playlists, sorted by timestamp |
-| `ts/packages/agents/playerLocal/README.md` | 131 | s |
-| `ts/packages/agents/settings/src/settingsCommandHandler.ts` | 53 | `TODO: apply this setting to the local system. '${action.parameters.originalRequest}'`, |
-| `ts/packages/agents/spelunker/evals/src/evalsetup.py` | 167 | Table to record eval runs (the eval tool can create-or-insert that) |
-| `ts/packages/agents/spelunker/scaling.md` | 53 |  |
+| `ts/packages/agents/settings/src/settingsCommandHandler.ts` | 53 | apply this setting to the local system. '${action.parameters.originalRequest}'`, |
 | `ts/packages/agents/spelunker/src/chunker.py` | 61 | codeName: str  # function/class/module name (TODO: dotted names) |
-| `ts/packages/agents/spelunker/src/chunker.py` | 197 | Include immediately preceding comment blocks. |
 | `ts/packages/agents/spelunker/src/embeddings.ts` | 37 | console_log(`[This embedding model does not support batch operations]`); // TODO: Fix this |
 | `ts/packages/agents/spelunker/src/embeddings.ts` | 47 | const maxCharacters = 100000; // TODO: tune |
 | `ts/packages/agents/spelunker/src/embeddings.ts` | 186 | console_log(`[This embedding model does not support batch operations]`); // TODO: Fix this |
@@ -230,8 +216,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/cli/src/enhancedConsole.ts` | 655 | Not implemented |
 | `ts/packages/cli/src/enhancedConsole.ts` | 784 | Ignored |
 | `ts/packages/coda/src/handleEditorCodeActions.ts` | 505 | fullSnippet += `${innerIndent}// TODO: implement\n`; |
-| `ts/packages/coda/src/handleEditorCodeActions.ts` | 529 | : "✅ Inserted block with TODO placeholder.", |
-| `ts/packages/coda/src/handleEditorCodeActions.ts` | 728 | : "✅ Inserted block with TODO placeholder.", |
 | `ts/packages/defaultAgentProvider/test/construction.spec.ts` | 74 | once MatchPart allow matches ignoring diacritical marks, |
 | `ts/packages/defaultAgentProvider/test/construction.spec.ts` | 86 | Validating the lower case action |
 | `ts/packages/defaultAgentProvider/test/construction.spec.ts` | 88 | needs fix these |
