@@ -218,9 +218,9 @@ describe("ConstructionCache.completion()", () => {
             const cache = makeCache([c]);
             const result = cache.completion("play ", defaultOptions);
             expect(result).toBeDefined();
-            // The matcher consumes "play" (4 chars). With per-group
-            // separator modes, the grammar's native mode is preserved.
-            expect(firstSepMode(result!)).toBe("spacePunctuation");
+            // The matcher consumes "play" (4 chars). Construction cache
+            // defers per-item separator resolution to the shell.
+            expect(firstSepMode(result!)).toBe("autoSpacePunctuation");
         });
 
         it("returns spacePunctuation between adjacent word characters", () => {
@@ -243,8 +243,8 @@ describe("ConstructionCache.completion()", () => {
                 flatCompletions(result!).length > 0 &&
                 result!.matchedPrefixLength === 4
             ) {
-                // 'y' and 's' are both Latin word-boundary — needs separator
-                expect(firstSepMode(result!)).toBe("spacePunctuation");
+                // Construction cache defers resolution → autoSpacePunctuation
+                expect(firstSepMode(result!)).toBe("autoSpacePunctuation");
             }
         });
 
@@ -261,8 +261,8 @@ describe("ConstructionCache.completion()", () => {
             const cache = makeCache([c]);
             const result = cache.completion("hey! ", defaultOptions);
             if (result && flatCompletions(result).length > 0) {
-                // ' ' is not a word char → optional
-                expect(firstSepMode(result!)).toBe("optionalSpacePunctuation");
+                // Construction cache defers resolution → autoSpacePunctuation
+                expect(firstSepMode(result!)).toBe("autoSpacePunctuation");
             }
         });
 
@@ -282,8 +282,8 @@ describe("ConstructionCache.completion()", () => {
                 flatCompletions(result).length > 0 &&
                 result.matchedPrefixLength === 5
             ) {
-                // '3' and '4' are digits → needs separator
-                expect(firstSepMode(result!)).toBe("spacePunctuation");
+                // Construction cache defers resolution → autoSpacePunctuation
+                expect(firstSepMode(result!)).toBe("autoSpacePunctuation");
             }
         });
     });
@@ -457,7 +457,7 @@ describe("ConstructionCache.completion()", () => {
             expect(result).toBeDefined();
             expect(flatCompletions(result!)).toEqual(["song"]);
             expect(result!.matchedPrefixLength).toBe(4);
-            expect(firstSepMode(result!)).toBe("spacePunctuation");
+            expect(firstSepMode(result!)).toBe("autoSpacePunctuation");
             expect(result!.closedSet).toBe(true);
         });
 
@@ -466,10 +466,10 @@ describe("ConstructionCache.completion()", () => {
             expect(result).toBeDefined();
             expect(flatCompletions(result!)).toEqual(["song"]);
             // Trailing space consumed → matchedPrefixLength advances to 5.
-            // With per-group separator modes, the grammar's native mode
-            // is preserved (no advance-1 demotion).
+            // Construction cache defers per-item separator resolution
+            // to the shell.
             expect(result!.matchedPrefixLength).toBe(5);
-            expect(firstSepMode(result!)).toBe("spacePunctuation");
+            expect(firstSepMode(result!)).toBe("autoSpacePunctuation");
         });
 
         it("prefix 'play s' — partial intra-part on second part, returns completions", () => {

@@ -30,10 +30,7 @@ import {
     ConstructionCacheJSON,
     constructionCacheJSONVersion,
 } from "./constructionJSONTypes.js";
-import {
-    getLanguageTools,
-    needsSeparatorInAutoMode,
-} from "../utils/language.js";
+import { getLanguageTools } from "../utils/language.js";
 const debugConst = registerDebug("typeagent:const");
 const debugConstMatchStat = registerDebug("typeagent:const:match:stat");
 const debugCompletion = registerDebug("typeagent:const:completion");
@@ -612,20 +609,7 @@ export class ConstructionCache {
                         ) {
                             continue;
                         }
-                        let mode: SeparatorMode = "optionalSpacePunctuation";
-                        if (
-                            candidatePrefixLength > 0 &&
-                            completionText.length > 0
-                        ) {
-                            const needsSep = needsSeparatorInAutoMode(
-                                input[candidatePrefixLength - 1],
-                                completionText[0],
-                            );
-                            mode = needsSep
-                                ? "spacePunctuation"
-                                : "optionalSpacePunctuation";
-                        }
-                        addCompletion(completionText, mode);
+                        addCompletion(completionText, "autoSpacePunctuation");
                     }
                 }
             }

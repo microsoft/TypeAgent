@@ -468,6 +468,22 @@ async function getCommandParameterCompletion(
         if (groupPrefixLength !== undefined && groupPrefixLength !== 0) {
             startIndex = target.startIndex + groupPrefixLength;
             completions.length = 0; // grammar overrides built-in completions
+        } else {
+            // Override separatorMode if matchedPrefixLength is undefined or zero
+            for (const group of agentResult.groups) {
+                if (
+                    group.separatorMode === "autoSpacePunctuation" ||
+                    group.separatorMode === "spacePunctuation" ||
+                    group.separatorMode === "optionalSpacePunctuation"
+                ) {
+                    group.separatorMode =
+                        target.separatorMode === "optionalSpace"
+                            ? "optionalSpacePunctuation"
+                            : "spacePunctuation";
+                } else {
+                    group.separatorMode = target.separatorMode;
+                }
+            }
         }
         completions.push(...agentResult.groups);
         agentInvoked = true;
@@ -541,6 +557,7 @@ async function completeDescriptor(
         completions.push({
             name: "Subcommands",
             completions: Object.keys(table!.commands),
+            separatorMode: "optionalSpace",
         });
     }
 
@@ -691,7 +708,7 @@ export async function getCommandCompletion(
             completions.push({
                 name: "Subcommands",
                 completions: Object.keys(table!.commands),
-                separatorMode: "none",
+                separatorMode: "optionalSpace",
             });
             directionSensitive = true;
             // closedSet stays true: subcommand names are exhaustive.

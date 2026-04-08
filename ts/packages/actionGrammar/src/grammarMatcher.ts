@@ -96,32 +96,6 @@ export function requiresSeparator(
     }
 }
 
-// Convert a per-candidate (needsSep, spacingMode) pair into a
-// SeparatorMode value.  When needsSep is true (separator required),
-// the grammar always uses spacePunctuation separators.
-// When needsSep is false:
-//   "none" spacingMode  → "none"
-//   "optional" spacingMode → "optionalSpacePunctuation" (explicit
-//       [spacing=optional] annotation; separator not required, but
-//       when present may be whitespace or punctuation)
-//   auto (undefined)    → "optionalSpace" (CJK/digit/mixed — separator
-//       not required; when present only whitespace is meaningful)
-export function candidateSeparatorMode(
-    needsSep: boolean,
-    spacingMode: CompiledSpacingMode,
-): SeparatorMode {
-    if (needsSep) {
-        return "spacePunctuation";
-    }
-    if (spacingMode === "none") {
-        return "none";
-    }
-    if (spacingMode === "optional") {
-        return "optionalSpacePunctuation";
-    }
-    return "optionalSpace";
-}
-
 export function isBoundarySatisfied(
     request: string,
     index: number,
