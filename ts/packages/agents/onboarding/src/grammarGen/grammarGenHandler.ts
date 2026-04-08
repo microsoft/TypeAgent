@@ -26,6 +26,7 @@ import { getGrammarGenModel } from "../lib/llm.js";
 import { ApiSurface } from "../discovery/discoveryHandler.js";
 import { PhraseSet } from "../phraseGen/phraseGenHandler.js";
 import { spawn } from "child_process";
+import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -89,6 +90,15 @@ async function handleCompileGrammar(integrationName: string): Promise<ActionResu
     const grammarContent = await readArtifact(integrationName, "grammarGen", "schema.agr");
     if (!grammarContent) {
         return { error: `No grammar file found for "${integrationName}". Run generateGrammar first.` };
+    }
+
+    // Copy the schema .ts file into grammarGen/ so the agr import resolves
+    const schemaSrc = path.join(getPhasePath(integrationName, "schemaGen"), "schema.ts");
+    const schemaDst = path.join(getPhasePath(integrationName, "grammarGen"), "schema.ts");
+    try {
+        await fs.copyFile(schemaSrc, schemaDst);
+    } catch {
+        return { error: `Could not copy schema.ts into grammarGen/ for compilation. Ensure schema is approved.` };
     }
 
     return new Promise((resolve) => {
@@ -172,12 +182,22 @@ function buildGrammarPrompt(
                 "  <RuleName> = pattern -> { actionName: \"name\", parameters: { ... } }\n" +
                 "  | alternative -> { ... };\n\n" +
                 "Pattern syntax:\n" +
-                "  - $(paramName:wildcard) captures 1+ words\n" +
-                "  - $(paramName:word) captures exactly 1 word\n" +
+                "  - $(paramName:wildcard) captures 1+ words into a variable\n" +
+                "  - $(paramName:word) captures exactly 1 word into a variable\n" +
                 "  - (optional)? makes tokens optional\n" +
                 "  - word matches a literal word\n" +
                 "  - | separates alternatives\n\n" +
-                "The file must end with:\n" +
+                "IMPORTANT: In the action output object after ->, reference captured parameters by BARE NAME only, NOT with $() syntax.\n" +
+                "Example:\n" +
+                "  <AddItems> = add $(item:wildcard) to (the)? $(listName:wildcard) list -> {\n" +
+                "    actionName: \"addItems\",\n" +
+                "    parameters: {\n" +
+                "        items: [item],\n" +
+                "        listName\n" +
+                "    }\n" +
+                "  };\n\n" +
+                "The action output must use multi-line format with proper indentation as shown above.\n" +
+                "The file must start with a copyright header comment and end with:\n" +
                 "  import { ActionType } from \"./schemaFile.ts\";\n" +
                 "  <Start> : ActionType = <Rule1> | <Rule2> | ...;\n\n" +
                 "Respond in JSON format. Return a JSON object with a single `grammar` key containing the .agr file content as a string.",
