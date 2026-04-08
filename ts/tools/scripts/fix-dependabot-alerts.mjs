@@ -2036,10 +2036,6 @@ async function classifyWithFixPlan(entry, whyData) {
 // ── Stage functions ──────────────────────────────────────────────────────────
 
 /** Stage 1: Fetch open Dependabot alerts from GitHub. */
-// Parsed from git remote in fetchAlerts(); used by dismissResolvedAlerts().
-let _repoOwner = "";
-let _repoName = "";
-
 function fetchAlerts() {
     header("Fetching open Dependabot alerts from GitHub");
 
@@ -2063,8 +2059,6 @@ function fetchAlerts() {
                 `Unexpected characters in owner/repo parsed from remote: ${owner}/${repo}`,
             );
         }
-        _repoOwner = owner;
-        _repoName = repo;
         log(`  Repository: ${clr.chrome(owner + "/" + repo)}`);
 
         const raw = runCmd(
@@ -2095,41 +2089,6 @@ function fetchAlerts() {
     }
 
     return alerts;
-}
-
-/**
- * Dismiss resolved Dependabot alerts via the REST API.
- * Each alert is PATCHed with state "dismissed" and reason "fix_started",
- * plus a comment noting the fix was applied automatically.
- */
-async function dismissResolvedAlerts(resolved) {
-    if (!_repoOwner || !_repoName) return;
-
-    const alertNums = resolved.flatMap((a) => a.alertNums || []);
-    if (alertNums.length === 0) return;
-
-    header("Dismissing resolved Dependabot alerts");
-    let dismissed = 0;
-    let failed = 0;
-
-    for (const num of alertNums) {
-        try {
-            runCmd("gh", [
-                "api",
-                "--method", "PATCH",
-                `/repos/${encodeURIComponent(_repoOwner)}/${encodeURIComponent(_repoName)}/dependabot/alerts/${num}`,
-                "-f", "state=dismissed",
-                "-f", "dismissed_reason=fix_started",
-                "-f", "dismissed_comment=Automatically resolved by fix-dependabot-alerts script",
-            ]);
-            dismissed++;
-        } catch (e) {
-            verbose(`Failed to dismiss alert #${num}: ${e.message}`);
-            failed++;
-        }
-    }
-
-    log(`  Dismissed ${dismissed} alert(s)${failed > 0 ? `, ${failed} failed` : ""}`);
 }
 
 /** Stage 2: Group alerts by vulnerable package, keeping the highest required patch version. */
@@ -2969,11 +2928,6 @@ async function main() {
     const byPackage = deduplicateAlerts(alerts);
     const analyses = await analyzeVulnerabilities(byPackage);
     const results = await executeResolutions(analyses);
-
-    // Dismiss resolved alerts via the GitHub API so they don't linger
-    if (!DRY_RUN && results.resolved.length > 0) {
-        await dismissResolvedAlerts(results.resolved);
-    }
 
     if (JSON_OUTPUT) {
         emitJson(results);
