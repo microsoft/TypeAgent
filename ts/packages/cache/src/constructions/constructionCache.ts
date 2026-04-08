@@ -7,6 +7,7 @@ import {
     SeparatorMode,
     AfterWildcard,
 } from "@typeagent/agent-sdk";
+import type { CompiledSpacingMode } from "action-grammar";
 import {
     ExecutableAction,
     HistoryContext,
@@ -80,6 +81,7 @@ export type MatchOptions = {
 export type CompletionProperty = {
     actions: ExecutableAction[];
     names: string[];
+    spacingMode?: CompiledSpacingMode | undefined; // undefined = auto (default)
 };
 
 export type CompletionResult = {

@@ -374,6 +374,7 @@ export class GrammarStoreImpl implements GrammarStore {
                                 ),
                             ],
                             names: p.propertyNames,
+                            spacingMode: p.spacingMode,
                         });
                     }
                 }
@@ -452,6 +453,7 @@ export class GrammarStoreImpl implements GrammarStore {
                                 ),
                             ],
                             names: p.propertyNames,
+                            spacingMode: p.spacingMode,
                         });
                     }
                 }

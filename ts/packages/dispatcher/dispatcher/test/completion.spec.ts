@@ -800,9 +800,8 @@ describe("Command Completion - startIndex", () => {
             );
             expect(result).toBeDefined();
             // "run" is the default subcommand, so subcommand alternatives
-            // are included and the group has separatorMode: "space".
-            // Subcommand completions at the boundary retain "space".
-            expect(result!.completions[0].separatorMode).toBe("space");
+            // are included.  separatorMode defaults to undefined ("space").
+            expect(result!.completions[0].separatorMode).toBeUndefined();
             // startIndex includes trailing whitespace.
             expect(result!.startIndex).toBe(10);
         });
@@ -814,7 +813,7 @@ describe("Command Completion - startIndex", () => {
                 context,
             );
             expect(result).toBeDefined();
-            expect(result!.completions[0].separatorMode).toBe("space");
+            expect(result!.completions[0].separatorMode).toBeUndefined();
             expect(result!.startIndex).toBe(9);
             // Default subcommand has agent completions → not exhaustive.
             expect(result!.closedSet).toBe(false);
@@ -824,13 +823,13 @@ describe("Command Completion - startIndex", () => {
             const result = await getCommandCompletion("@", "forward", context);
             expect(result).toBeDefined();
             // Top-level completions (agent names, system subcommands)
-            // follow '@' — baseMode is "space" since there's no trailing
-            // whitespace after the '@' marker.
+            // follow '@' — agent names use optionalSpace since the '@'
+            // marker doesn't require whitespace before the name.
             const agentNamesGroup = result!.completions.find(
                 (g) => g.name === "Agent Names",
             );
             expect(agentNamesGroup).toBeDefined();
-            expect(agentNamesGroup!.separatorMode).toBe("space");
+            expect(agentNamesGroup!.separatorMode).toBe("optionalSpace");
             expect(agentNamesGroup!.completions).toContain("comptest");
             // Subcommand + agent name sets are finite → exhaustive.
             expect(result!.closedSet).toBe(true);
@@ -844,8 +843,9 @@ describe("Command Completion - startIndex", () => {
             );
             expect(result).toBeDefined();
             // Partial parameter token — only parameter completions returned,
-            // no subcommand group.  Each group carries its own separatorMode.
-            expect(result!.completions[0].separatorMode).toBe("space");
+            // no subcommand group.  Each group carries its own separatorMode
+            // (undefined means "space" — the documented default).
+            expect(result!.completions[0].separatorMode).toBeUndefined();
         });
 
         it("returns no separatorMode for partial unmatched token consumed as param", async () => {
@@ -858,13 +858,13 @@ describe("Command Completion - startIndex", () => {
             // "ne" is fully consumed as the "task" arg by parameter
             // parsing.  No trailing space.  startIndex = 10
             // (after "@comptest "), which is ≤ commandConsumedLength
-            // (10), so sibling subcommands are included with
-            // separatorMode="space".
+            // (10), so sibling subcommands are included (separatorMode
+            // defaults to undefined/"space").
             const subcommands = result!.completions.find(
                 (g) => g.name === "Subcommands",
             );
             expect(subcommands).toBeDefined();
-            expect(subcommands!.separatorMode).toBe("space");
+            expect(subcommands!.separatorMode).toBeUndefined();
             expect(result!.startIndex).toBe(10);
         });
     });

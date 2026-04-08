@@ -24,16 +24,16 @@ export type {
 export { writeGrammarRules } from "./grammarRuleWriter.js";
 
 export { matchGrammar, GrammarMatchResult } from "./grammarMatcher.js";
+export { candidateSeparatorMode, requiresSeparator } from "./grammarMatcher.js";
 
 export {
     matchGrammarCompletion,
     GrammarCompletionResult,
-    isRequiringSepMode,
-    hasTrailingSeparator,
 } from "./grammarCompletion.js";
 export type {
     AfterWildcard,
     GrammarCompletionGroup,
+    GrammarCompletionProperty,
 } from "./grammarCompletion.js";
 
 // Entity system

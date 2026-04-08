@@ -122,45 +122,6 @@ export function candidateSeparatorMode(
     return "optionalSpace";
 }
 
-// Merge a new candidate's separator mode into the running aggregate.
-// The mode requiring the strongest separator wins (i.e. the mode that
-// demands the most from the user):
-//   space > spacePunctuation > optionalSpacePunctuation > optional > none.
-export function mergeSeparatorMode(
-    current: SeparatorMode | undefined,
-    needsSep: boolean,
-    spacingMode: CompiledSpacingMode,
-): SeparatorMode {
-    const candidateMode = candidateSeparatorMode(needsSep, spacingMode);
-    if (current === undefined) {
-        return candidateMode;
-    }
-    // "space" requires strict whitespace — strongest requirement.
-    if (current === "space" || candidateMode === "space") {
-        return "space";
-    }
-    // "spacePunctuation" requires a separator — next strongest.
-    if (
-        current === "spacePunctuation" ||
-        candidateMode === "spacePunctuation"
-    ) {
-        return "spacePunctuation";
-    }
-    // "optionalSpacePunctuation" — separator not required but includes
-    // punctuation when present.  Stronger than plain "optionalSpace".
-    if (
-        current === "optionalSpacePunctuation" ||
-        candidateMode === "optionalSpacePunctuation"
-    ) {
-        return "optionalSpacePunctuation";
-    }
-    // "optionalSpace" is a stronger requirement than "none".
-    if (current === "optionalSpace" || candidateMode === "optionalSpace") {
-        return "optionalSpace";
-    }
-    return "none";
-}
-
 export function isBoundarySatisfied(
     request: string,
     index: number,

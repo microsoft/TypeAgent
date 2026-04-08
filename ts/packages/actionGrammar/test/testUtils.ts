@@ -6,6 +6,7 @@ import { matchGrammar } from "../src/grammarMatcher.js";
 import {
     matchGrammarCompletion,
     type GrammarCompletionResult,
+    type GrammarCompletionProperty,
 } from "../src/grammarCompletion.js";
 import { compileGrammarToNFA } from "../src/nfaCompiler.js";
 import { matchGrammarWithNFA } from "../src/nfaMatcher.js";
@@ -579,7 +580,7 @@ export function expectMetadata(
         closedSet?: boolean;
         directionSensitive?: boolean;
         afterWildcard?: string;
-        properties?: unknown[];
+        properties?: Partial<GrammarCompletionProperty>[];
     },
 ): void {
     if ("groups" in expected && "completions" in expected) {
@@ -642,6 +643,36 @@ export function expectMetadata(
         expect(result.afterWildcard).toBe(expected.afterWildcard);
     }
     if ("properties" in expected) {
-        expect(result.properties).toEqual(expected.properties);
+        // Sort properties by propertyNames so order is not significant.
+        const sortProps = <T extends { propertyNames?: string[] }>(
+            arr: T[],
+        ): T[] =>
+            [...arr].sort((a, b) =>
+                [...(a.propertyNames ?? [])]
+                    .sort()
+                    .join(",")
+                    .localeCompare(
+                        [...(b.propertyNames ?? [])].sort().join(","),
+                    ),
+            );
+
+        // When the expected property objects omit spacingMode, strip it
+        // from actuals so existing tests don't break.  Tests that want to
+        // assert spacingMode include it explicitly.
+        const checkSpacingMode = (expected.properties ?? []).some(
+            (p) => "spacingMode" in p,
+        );
+        if (checkSpacingMode) {
+            expect(sortProps(result.properties ?? [])).toEqual(
+                sortProps(expected.properties ?? []),
+            );
+        } else {
+            const stripped = (result.properties ?? []).map(
+                ({ spacingMode: _, ...rest }) => rest,
+            );
+            expect(sortProps(stripped)).toEqual(
+                sortProps(expected.properties ?? []),
+            );
+        }
     }
 }

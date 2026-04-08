@@ -98,6 +98,9 @@ export class PartialCompletionSession {
 
     // Items partitioned by separatorMode from the last result.
     private partitions: ItemPartition[] = [];
+    // Precomputed item counts per SepLevel.  Updated whenever
+    // partitions change (setPartitions / resetToIdle).
+    private levelCounts: LevelCounts = [0, 0, 0];
     // The SepLevel at which the trie is currently loaded.
     // Items in the trie correspond to itemsAtLevel(partitions, menuSepLevel).
     // The trie is only reloaded when: (a) the user narrows past the
@@ -130,6 +133,12 @@ export class PartialCompletionSession {
     private loadLevel(level: SepLevel): void {
         this.menuSepLevel = level;
         this.menu.setChoices(itemsAtLevel(this.partitions, level));
+    }
+
+    // Update partitions and recompute levelCounts.
+    private setPartitions(partitions: ItemPartition[]): void {
+        this.partitions = partitions;
+        this.levelCounts = computeLevelCounts(partitions);
     }
 
     // Strip the separator from rawPrefix at the current menuSepLevel,
@@ -181,7 +190,7 @@ export class PartialCompletionSession {
     public resetToIdle(): void {
         this.anchor = undefined;
         this.completionP = undefined;
-        this.partitions = [];
+        this.setPartitions([]);
         this.menuSepLevel = 0;
         this.explicitCloseAnchor = undefined;
     }
@@ -217,7 +226,7 @@ export class PartialCompletionSession {
             const rawPrefix = input.substring(this.anchor.length);
             const sepLevel = computeSepLevel(rawPrefix);
             if (sepLevel !== this.menuSepLevel) {
-                const newLevel = targetLevel(this.partitions, sepLevel);
+                const newLevel = targetLevel(this.levelCounts, sepLevel);
                 if (newLevel !== this.menuSepLevel) {
                     this.loadLevel(newLevel);
                     this.positionMenu(rawPrefix, getPosition);
@@ -249,7 +258,7 @@ export class PartialCompletionSession {
         if (computeSepLevel(rawPrefix) < this.menuSepLevel) {
             return undefined;
         }
-        if (itemsAtLevel(this.partitions, this.menuSepLevel).length === 0) {
+        if (this.levelCounts[this.menuSepLevel] === 0) {
             return undefined;
         }
         return stripAtLevel(rawPrefix, this.menuSepLevel);
@@ -345,7 +354,7 @@ export class PartialCompletionSession {
         // ── B. Menu anchor — is the trie at the right level? ─────────
 
         if (sepLevel < this.menuSepLevel) {
-            if (itemsAtLevel(this.partitions, sepLevel).length > 0) {
+            if (this.levelCounts[sepLevel] > 0) {
                 // [B1] NARROW — user backed into a lower level that has items.
                 this.loadLevel(sepLevel);
                 // Fall through to C.
@@ -376,10 +385,7 @@ export class PartialCompletionSession {
         // At the anchor with no items loaded — hide and wait.
         // Covers error-recovery (anchor preserved but no data) and
         // genuinely empty results at rawPrefix="".
-        if (
-            rawPrefix === "" &&
-            itemsAtLevel(this.partitions, this.menuSepLevel).length === 0
-        ) {
+        if (rawPrefix === "" && this.levelCounts[this.menuSepLevel] === 0) {
             debug(
                 `Partial completion deferred: no items at menuSepLevel=${this.menuSepLevel}`,
             );
@@ -461,7 +467,7 @@ export class PartialCompletionSession {
         this.menu.hide();
         this.menu.setChoices([]);
         this.anchor = input;
-        this.partitions = [];
+        this.setPartitions([]);
         this.menuSepLevel = 0;
         this.noMatchPolicy = "refetch";
         const completionP = this.dispatcher.getCommandCompletion(
@@ -491,7 +497,7 @@ export class PartialCompletionSession {
                     debug(
                         `Partial completion skipped: No completions for '${input}'`,
                     );
-                    this.partitions = [];
+                    this.setPartitions([]);
                     return;
                 }
 
@@ -502,14 +508,14 @@ export class PartialCompletionSession {
                         ? input.substring(0, result.startIndex)
                         : input;
                 this.anchor = partial;
-                this.partitions = partitions;
+                this.setPartitions(partitions);
 
                 // Pick the best trie level for the caller's input:
                 // highest level ≤ inputSepLevel with items, falling
                 // back to lowestLevelWithItems for skip-ahead.
                 const rawPrefix = input.substring(partial.length);
                 this.loadLevel(
-                    targetLevel(partitions, computeSepLevel(rawPrefix)),
+                    targetLevel(this.levelCounts, computeSepLevel(rawPrefix)),
                 );
 
                 // If triggered by an explicit close, only reopen when the
@@ -609,6 +615,7 @@ function isModeAtLevel(
 
 // Returns items from partitions whose separatorMode belongs to the
 // given level.  Non-cumulative — each level has its own item set.
+// Only called by loadLevel (which needs the actual items).
 function itemsAtLevel(
     partitions: ItemPartition[],
     level: SepLevel,
@@ -624,11 +631,27 @@ function itemsAtLevel(
     return result;
 }
 
+// Precomputed item counts per SepLevel.  Avoids rebuilding arrays
+// on every keystroke for the many count-only checks.
+type LevelCounts = [number, number, number];
+
+function computeLevelCounts(partitions: ItemPartition[]): LevelCounts {
+    const counts: LevelCounts = [0, 0, 0];
+    for (const p of partitions) {
+        for (let level = 0; level <= 2; level++) {
+            if (isModeAtLevel(p.mode, level as SepLevel)) {
+                counts[level] += p.items.length;
+            }
+        }
+    }
+    return counts;
+}
+
 // Returns the lowest SepLevel that has items.  Used for skip-ahead:
 // when no items exist at level 0, jump to the first level that does.
-function lowestLevelWithItems(partitions: ItemPartition[]): SepLevel {
-    for (let level: SepLevel = 0; level <= 2; level++) {
-        if (itemsAtLevel(partitions, level as SepLevel).length > 0) {
+function lowestLevelWithItems(counts: LevelCounts): SepLevel {
+    for (let level = 0; level <= 2; level++) {
+        if (counts[level] > 0) {
             return level as SepLevel;
         }
     }
@@ -638,16 +661,13 @@ function lowestLevelWithItems(partitions: ItemPartition[]): SepLevel {
 // Returns the highest SepLevel ≤ maxLevel that has items, falling back
 // to lowestLevelWithItems when nothing exists at or below maxLevel
 // (e.g. entities that only appear at level 1+).
-function targetLevel(
-    partitions: ItemPartition[],
-    maxLevel: SepLevel,
-): SepLevel {
+function targetLevel(counts: LevelCounts, maxLevel: SepLevel): SepLevel {
     for (let l = maxLevel; l > 0; l--) {
-        if (itemsAtLevel(partitions, l as SepLevel).length > 0) {
+        if (counts[l] > 0) {
             return l as SepLevel;
         }
     }
-    return lowestLevelWithItems(partitions);
+    return lowestLevelWithItems(counts);
 }
 
 // Strip leading separator characters from rawPrefix based on the level.

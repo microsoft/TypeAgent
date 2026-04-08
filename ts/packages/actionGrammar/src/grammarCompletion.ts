@@ -289,6 +289,7 @@ function findPartialKeywordInWildcard(
 export type GrammarCompletionProperty = {
     match: unknown;
     propertyNames: string[];
+    spacingMode?: CompiledSpacingMode | undefined; // undefined = auto (default)
 };
 
 // Describes how the grammar rules that produced completions at this
@@ -361,6 +362,8 @@ export type GrammarCompletionResult = {
 // A completion group within a GrammarCompletionResult.
 // Intentionally parallel to CompletionGroup in @typeagent/agent-sdk
 // but defined here because actionGrammar has no dependency on agentSdk.
+// Unlike the SDK's CompletionGroup (where separatorMode is optional,
+// defaulting to "space"), the grammar always sets this field.
 export type GrammarCompletionGroup = {
     completions: string[];
     separatorMode: SeparatorMode;
@@ -369,6 +372,7 @@ export type GrammarCompletionGroup = {
 function getGrammarCompletionProperty(
     state: MatchState,
     valueId: number,
+    spacingMode: CompiledSpacingMode,
 ): GrammarCompletionProperty | undefined {
     const temp = { ...state };
 
@@ -392,6 +396,7 @@ function getGrammarCompletionProperty(
     return {
         match,
         propertyNames: wildcardPropertyNames,
+        spacingMode,
     };
 }
 
@@ -625,14 +630,6 @@ type DeferredShadowCandidate = {
     candidate: FixedCandidate;
 };
 
-// True when a separator character (whitespace or punctuation) exists
-// at the given position in the input.  Used by both within-grammar
-// conflict filtering (filterSepConflicts) and cross-grammar conflict
-// filtering (grammarStore) to determine trailing separator state.
-export function hasTrailingSeparator(input: string, position: number): boolean {
-    return nextNonSeparatorIndex(input, position) > position;
-}
-
 // True when a separator is needed between the character at
 // `position - 1` in `input` and `firstCompletionChar` according
 // to `spacingMode`.  Used by computeCandidateSeparatorMode.
@@ -660,11 +657,6 @@ function computeCandidateSeparatorMode(
         computeNeedsSep(input, position, firstCompletionChar, spacingMode),
         spacingMode,
     );
-}
-
-// True when a SeparatorMode requires a separator character to be present.
-export function isRequiringSepMode(mode: SeparatorMode): boolean {
-    return mode === "space" || mode === "spacePunctuation";
 }
 
 // --- CompletionContext: mutable state shared across completion phases ---
@@ -1617,6 +1609,7 @@ function materializeCandidates(
             const completionProperty = getGrammarCompletionProperty(
                 c.state,
                 c.valueId,
+                c.spacingMode,
             );
             if (completionProperty !== undefined) {
                 properties.push(completionProperty);
@@ -1696,6 +1689,7 @@ function materializeCandidates(
                 const completionProperty = getGrammarCompletionProperty(
                     c.state,
                     c.valueId,
+                    c.spacingMode,
                 );
                 if (completionProperty !== undefined) {
                     properties.push(completionProperty);
