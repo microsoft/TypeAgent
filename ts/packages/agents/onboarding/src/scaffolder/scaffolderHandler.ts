@@ -19,13 +19,27 @@ import {
     updatePhase,
     writeArtifact,
     readArtifact,
+    readArtifactJson,
 } from "../lib/workspace.js";
 import fs from "fs/promises";
 import path from "path";
+import { fileURLToPath } from "url";
+
+// Sub-schema group type matching discovery/sub-schema-groups.json
+type SubSchemaGroup = {
+    name: string;
+    description: string;
+    actions: string[];
+};
+
+type SubSchemaSuggestion = {
+    recommended: boolean;
+    groups: SubSchemaGroup[];
+};
 
 // Default output root within the TypeAgent repo
 const AGENTS_DIR = path.resolve(
-    new URL(import.meta.url).pathname,
+    fileURLToPath(import.meta.url),
     "../../../../../../packages/agents",
 );
 
@@ -76,7 +90,19 @@ async function handleScaffoldAgent(
 
     await fs.mkdir(srcDir, { recursive: true });
 
-    // Write schema and grammar
+    // Check if sub-schema groups exist from the discovery phase
+    const subSchemaSuggestion =
+        await readArtifactJson<SubSchemaSuggestion>(
+            integrationName,
+            "discovery",
+            "sub-schema-groups.json",
+        );
+    const subGroups =
+        subSchemaSuggestion?.recommended && subSchemaSuggestion.groups.length > 0
+            ? subSchemaSuggestion.groups
+            : undefined;
+
+    // Write core schema and grammar
     await writeFile(
         path.join(srcDir, `${integrationName}Schema.ts`),
         schemaTs,
@@ -89,27 +115,83 @@ async function handleScaffoldAgent(
         ),
     );
 
-    // Stamp out manifest
+    // Track all files created for the output summary
+    const files: string[] = [
+        `src/${integrationName}Schema.ts`,
+        `src/${integrationName}Schema.agr`,
+    ];
+
+    // If sub-schema groups exist, generate per-group schema and grammar files
+    if (subGroups) {
+        const actionsDir = path.join(srcDir, "actions");
+        await fs.mkdir(actionsDir, { recursive: true });
+
+        for (const group of subGroups) {
+            const groupPascal = toPascalCase(group.name);
+
+            // Generate a filtered schema file for this group
+            const groupSchemaContent = buildSubSchemaTs(
+                integrationName,
+                pascalName,
+                group,
+                groupPascal,
+                schemaTs,
+            );
+            await writeFile(
+                path.join(actionsDir, `${group.name}ActionsSchema.ts`),
+                groupSchemaContent,
+            );
+            files.push(`src/actions/${group.name}ActionsSchema.ts`);
+
+            // Generate a filtered grammar file for this group
+            const groupGrammarContent = buildSubSchemaAgr(
+                integrationName,
+                group,
+                groupPascal,
+                grammarAgr,
+            );
+            await writeFile(
+                path.join(actionsDir, `${group.name}ActionsSchema.agr`),
+                groupGrammarContent,
+            );
+            files.push(`src/actions/${group.name}ActionsSchema.agr`);
+        }
+    }
+
+    // Stamp out manifest (with sub-action manifests if groups exist)
     await writeFile(
         path.join(srcDir, `${integrationName}Manifest.json`),
         JSON.stringify(
-            buildManifest(integrationName, pascalName, state.config.description ?? ""),
+            buildManifest(
+                integrationName,
+                pascalName,
+                state.config.description ?? "",
+                subGroups,
+            ),
             null,
             2,
         ),
     );
+    files.push(`src/${integrationName}Manifest.json`);
 
     // Stamp out handler
     await writeFile(
         path.join(srcDir, `${integrationName}ActionHandler.ts`),
         buildHandler(integrationName, pascalName),
     );
+    files.push(`src/${integrationName}ActionHandler.ts`);
 
-    // Stamp out package.json
+    // Stamp out package.json (with sub-schema build scripts if groups exist)
+    const subSchemaNames = subGroups?.map((g) => g.name);
     await writeFile(
         path.join(targetDir, "package.json"),
-        JSON.stringify(buildPackageJson(integrationName, packageName, pascalName), null, 2),
+        JSON.stringify(
+            buildPackageJson(integrationName, packageName, pascalName, subSchemaNames),
+            null,
+            2,
+        ),
     );
+    files.push(`package.json`);
 
     // Stamp out tsconfigs
     await writeFile(
@@ -120,6 +202,7 @@ async function handleScaffoldAgent(
         path.join(srcDir, "tsconfig.json"),
         JSON.stringify(SRC_TSCONFIG, null, 2),
     );
+    files.push(`tsconfig.json`, `src/tsconfig.json`);
 
     // Also copy to workspace scaffolder dir for reference
     await writeArtifact(
@@ -131,23 +214,117 @@ async function handleScaffoldAgent(
 
     await updatePhase(integrationName, "scaffolder", { status: "approved" });
 
-    const files = [
-        `src/${integrationName}Schema.ts`,
-        `src/${integrationName}Schema.agr`,
-        `src/${integrationName}Manifest.json`,
-        `src/${integrationName}ActionHandler.ts`,
-        `package.json`,
-        `tsconfig.json`,
-        `src/tsconfig.json`,
-    ];
+    let subSchemaNote = "";
+    if (subGroups) {
+        subSchemaNote =
+            `\n\n**Sub-schemas generated:** ${subGroups.length} groups\n` +
+            subGroups
+                .map(
+                    (g) =>
+                        `- **${g.name}** (${g.actions.length} actions): ${g.description}`,
+                )
+                .join("\n");
+    }
 
     return createActionResultFromMarkdownDisplay(
         `## Agent scaffolded: ${integrationName}\n\n` +
             `**Output directory:** \`${targetDir}\`\n\n` +
             `**Files created:**\n` +
             files.map((f) => `- \`${f}\``).join("\n") +
+            subSchemaNote +
             `\n\n**Next step:** Phase 6 — use \`generateTests\` and \`runTests\` to validate.`,
     );
+}
+
+// Build a sub-schema TypeScript file that re-exports only the actions belonging
+// to this group. It imports from the main schema and creates a union type.
+function buildSubSchemaTs(
+    _integrationName: string,
+    _pascalName: string,
+    group: SubSchemaGroup,
+    groupPascal: string,
+    fullSchemaTs: string,
+): string {
+    // Extract individual action type names from the full schema that match the
+    // group's action list. TypeAgent schema files define types like:
+    //   export type BoldAction = { actionName: "bold"; parameters: {...} };
+    // and then a union:
+    //   export type FooActions = BoldAction | ItalicAction | ...;
+    //
+    // We emit a new file that re-exports only the relevant action types and
+    // creates a new union type for this sub-schema group.
+
+    const actionTypeNames = group.actions.map(
+        (a) => `${a.charAt(0).toUpperCase()}${a.slice(1)}Action`,
+    );
+
+    // Find action type blocks in the full schema that belong to this group
+    const actionBlocks: string[] = [];
+    for (const actionName of group.actions) {
+        // Match "export type XxxAction = ..." blocks
+        const typeName = `${actionName.charAt(0).toUpperCase()}${actionName.slice(1)}Action`;
+        const regex = new RegExp(
+            `(export\\s+type\\s+${typeName}\\s*=\\s*\\{[\\s\\S]*?\\};)`,
+        );
+        const match = fullSchemaTs.match(regex);
+        if (match) {
+            actionBlocks.push(match[1]);
+        }
+    }
+
+    const unionType = `export type ${groupPascal}Actions =\n    | ${actionTypeNames.join("\n    | ")};`;
+
+    return `// Copyright (c) Microsoft Corporation.\n// Licensed under the MIT License.\n\n// Sub-schema: ${group.name} — ${group.description}\n// Auto-generated by the onboarding scaffolder.\n\n${actionBlocks.join("\n\n")}\n\n${unionType}\n`;
+}
+
+// Build a sub-schema grammar file that includes only the rules relevant to
+// this group's actions.
+function buildSubSchemaAgr(
+    integrationName: string,
+    group: SubSchemaGroup,
+    groupPascal: string,
+    fullGrammarAgr: string,
+): string {
+    // Grammar files contain rule blocks that typically start with the action name.
+    // We extract lines that reference actions in this group and build a new .agr.
+    const lines = fullGrammarAgr.split("\n");
+    const relevantLines: string[] = [];
+    let inRelevantBlock = false;
+    const actionSet = new Set(group.actions);
+
+    for (const line of lines) {
+        // Check if line starts a new action rule (e.g., "actionName:" or
+        // a line that contains an action name as an identifier)
+        const ruleMatch = line.match(/^(\w+)\s*:/);
+        if (ruleMatch) {
+            inRelevantBlock = actionSet.has(ruleMatch[1]);
+        }
+
+        // Also include header/import lines (lines starting with '#' or 'from')
+        const isHeader =
+            line.startsWith("#") ||
+            line.startsWith("from ") ||
+            line.startsWith("//") ||
+            line.trim() === "";
+
+        if (inRelevantBlock || isHeader) {
+            relevantLines.push(line);
+        }
+    }
+
+    // Fix the schema file reference to point to the sub-schema
+    let content = relevantLines.join("\n");
+    content = content.replace(
+        /from "\.\/[^"]*Schema\.ts"/g,
+        `from "./actions/${group.name}ActionsSchema.ts"`,
+    );
+    // Update the schema type reference
+    content = content.replace(
+        /from "\.\/[^"]*"/g,
+        `from "./actions/${group.name}ActionsSchema.ts"`,
+    );
+
+    return `// Sub-schema grammar: ${group.name} — ${group.description}\n// Auto-generated by the onboarding scaffolder.\n\n${content}\n`;
 }
 
 async function handleScaffoldPlugin(
@@ -209,8 +386,13 @@ function toPascalCase(str: string): string {
         .join("");
 }
 
-function buildManifest(name: string, pascalName: string, description: string) {
-    return {
+function buildManifest(
+    name: string,
+    pascalName: string,
+    description: string,
+    subGroups?: SubSchemaGroup[],
+) {
+    const manifest: Record<string, unknown> = {
         emojiChar: "🔌",
         description: description || `Agent for ${name}`,
         defaultEnabled: false,
@@ -222,6 +404,25 @@ function buildManifest(name: string, pascalName: string, description: string) {
             schemaType: `${pascalName}Actions`,
         },
     };
+
+    if (subGroups && subGroups.length > 0) {
+        const subActionManifests: Record<string, unknown> = {};
+        for (const group of subGroups) {
+            const groupPascal = toPascalCase(group.name);
+            subActionManifests[group.name] = {
+                schema: {
+                    description: group.description,
+                    originalSchemaFile: `./actions/${group.name}ActionsSchema.ts`,
+                    schemaFile: `../dist/actions/${group.name}ActionsSchema.pas.json`,
+                    grammarFile: `../dist/actions/${group.name}ActionsSchema.ag.json`,
+                    schemaType: `${groupPascal}Actions`,
+                },
+            };
+        }
+        manifest.subActionManifests = subActionManifests;
+    }
+
+    return manifest;
 }
 
 function buildHandler(name: string, pascalName: string): string {
@@ -260,7 +461,34 @@ async function executeAction(
 `;
 }
 
-function buildPackageJson(name: string, packageName: string, pascalName: string) {
+function buildPackageJson(
+    name: string,
+    packageName: string,
+    pascalName: string,
+    subSchemaNames?: string[],
+) {
+    const scripts: Record<string, string> = {
+        asc: `asc -i ./src/${name}Schema.ts -o ./dist/${name}Schema.pas.json -t ${pascalName}Actions`,
+        agc: `agc -i ./src/${name}Schema.agr -o ./dist/${name}Schema.ag.json`,
+        tsc: "tsc -b",
+        clean: "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    };
+
+    // Generate asc:<group> and agc:<group> scripts for each sub-schema
+    const buildTargets = ["npm:tsc", "npm:asc", "npm:agc"];
+    if (subSchemaNames && subSchemaNames.length > 0) {
+        for (const groupName of subSchemaNames) {
+            const groupPascal = toPascalCase(groupName);
+            scripts[`asc:${groupName}`] =
+                `asc -i ./src/actions/${groupName}ActionsSchema.ts -o ./dist/actions/${groupName}ActionsSchema.pas.json -t ${groupPascal}Actions`;
+            scripts[`agc:${groupName}`] =
+                `agc -i ./src/actions/${groupName}ActionsSchema.agr -o ./dist/actions/${groupName}ActionsSchema.ag.json`;
+            buildTargets.push(`npm:asc:${groupName}`, `npm:agc:${groupName}`);
+        }
+    }
+
+    scripts.build = `concurrently ${buildTargets.join(" ")}`;
+
     return {
         name: packageName,
         version: "0.0.1",
@@ -273,13 +501,7 @@ function buildPackageJson(name: string, packageName: string, pascalName: string)
             "./agent/manifest": `./src/${name}Manifest.json`,
             "./agent/handlers": `./dist/${name}ActionHandler.js`,
         },
-        scripts: {
-            asc: `asc -i ./src/${name}Schema.ts -o ./dist/${name}Schema.pas.json -t ${pascalName}Actions`,
-            agc: `agc -i ./src/${name}Schema.agr -o ./dist/${name}Schema.ag.json`,
-            build: "concurrently npm:tsc npm:asc npm:agc",
-            clean: "rimraf --glob dist *.tsbuildinfo *.done.build.log",
-            tsc: "tsc -b",
-        },
+        scripts,
         dependencies: {
             "@typeagent/agent-sdk": "workspace:*",
         },

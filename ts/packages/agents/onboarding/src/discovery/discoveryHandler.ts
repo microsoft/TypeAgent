@@ -454,10 +454,108 @@ async function handleApproveApiSurface(
     await writeArtifactJson(integrationName, "discovery", "api-surface.json", updated);
     await updatePhase(integrationName, "discovery", { status: "approved" });
 
+    // If many actions, recommend sub-schema categorization
+    let subSchemaNote = "";
+    if (approved.length > 20) {
+        subSchemaNote = await generateSubSchemaRecommendation(
+            integrationName,
+            approved,
+        );
+    }
+
     return createActionResultFromMarkdownDisplay(
         `## API surface approved: ${integrationName}\n\n` +
             `**Approved actions:** ${approved.length}\n\n` +
             approved.map((a) => `- \`${a.name}\`: ${a.description}`).join("\n") +
+            subSchemaNote +
             `\n\n**Next step:** Phase 2 — use \`generatePhrases\` to create natural language samples.`,
+    );
+}
+
+// When the approved action count exceeds 20, ask the LLM to categorize them
+// into logical groups and save a sub-schema-groups.json artifact so that the
+// scaffolder phase can generate sub-action manifests.
+type SubSchemaGroup = {
+    name: string;
+    description: string;
+    actions: string[];
+};
+
+type SubSchemaSuggestion = {
+    recommended: boolean;
+    groups: SubSchemaGroup[];
+};
+
+async function generateSubSchemaRecommendation(
+    integrationName: string,
+    approved: DiscoveredAction[],
+): Promise<string> {
+    const model = getDiscoveryModel();
+    const actionList = approved
+        .map((a) => `- ${a.name}: ${a.description}`)
+        .join("\n");
+
+    const prompt = [
+        {
+            role: "system" as const,
+            content:
+                "You are an API architect. Given a list of API actions, categorize them " +
+                "into logical groups suitable for sub-schema separation in a TypeAgent agent. " +
+                "Each group should have a short camelCase name, a description, and the list of action names belonging to it. " +
+                "Every action must appear in exactly one group. Aim for 3-7 groups. " +
+                "Return ONLY a JSON array of objects with keys: name, description, actions.",
+        },
+        {
+            role: "user" as const,
+            content:
+                `Categorize these ${approved.length} actions for the "${integrationName}" integration into logical sub-schema groups:\n\n${actionList}`,
+        },
+    ];
+
+    const result = await model.complete(prompt);
+    if (!result.success) {
+        // Non-fatal — just skip the recommendation
+        return "\n\n> **Note:** Could not generate sub-schema recommendation (LLM error). You can still proceed.";
+    }
+
+    let groups: SubSchemaGroup[] = [];
+    try {
+        const jsonMatch = result.data.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+            groups = JSON.parse(jsonMatch[0]);
+        }
+    } catch {
+        return "\n\n> **Note:** Could not parse sub-schema recommendation. You can still proceed.";
+    }
+
+    if (groups.length === 0) {
+        return "";
+    }
+
+    const suggestion: SubSchemaSuggestion = {
+        recommended: true,
+        groups,
+    };
+
+    await writeArtifactJson(
+        integrationName,
+        "discovery",
+        "sub-schema-groups.json",
+        suggestion,
+    );
+
+    const groupSummary = groups
+        .map(
+            (g) =>
+                `- **${g.name}** (${g.actions.length} actions): ${g.description}`,
+        )
+        .join("\n");
+
+    return (
+        `\n\n---\n### Sub-schema recommendation\n\n` +
+        `With **${approved.length} actions**, we recommend splitting into sub-schemas for better organization:\n\n` +
+        groupSummary +
+        `\n\nThis grouping has been saved to \`discovery/sub-schema-groups.json\`. ` +
+        `The scaffolder will use it to generate separate schema and grammar files per group.`
     );
 }

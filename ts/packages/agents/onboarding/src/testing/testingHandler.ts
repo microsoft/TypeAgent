@@ -312,17 +312,32 @@ async function handleProposeRepair(
         return { error: `Repair proposal failed: ${result.message}` };
     }
 
+    // Try to parse as JSON first (when using json_object response format)
+    let responseText = result.data;
+    let schemaFromJson: string | undefined;
+    let grammarFromJson: string | undefined;
+    try {
+        const parsed = JSON.parse(result.data);
+        responseText = parsed.explanation || result.data;
+        schemaFromJson = parsed.schema;
+        grammarFromJson = parsed.grammar;
+    } catch {
+        // Not JSON, fall through to regex extraction
+    }
+
     const repair: ProposedRepair = {
         integrationName,
         proposedAt: new Date().toISOString(),
-        rationale: result.data,
+        rationale: responseText,
     };
 
     // Extract suggested schema and grammar changes from the response
-    const schemaMatch = result.data.match(/```typescript([\s\S]*?)```/);
-    const grammarMatch = result.data.match(/```(?:agr)?([\s\S]*?)```/);
-    if (schemaMatch) repair.schemaChanges = schemaMatch[1].trim();
-    if (grammarMatch) repair.grammarChanges = grammarMatch[1].trim();
+    const schemaMatch = schemaFromJson ? null : result.data.match(/```typescript([\s\S]*?)```/);
+    const grammarMatch = grammarFromJson ? null : result.data.match(/```(?:agr)?([\s\S]*?)```/);
+    if (schemaFromJson) repair.schemaChanges = schemaFromJson.trim();
+    else if (schemaMatch) repair.schemaChanges = schemaMatch[1].trim();
+    if (grammarFromJson) repair.grammarChanges = grammarFromJson.trim();
+    else if (grammarMatch) repair.grammarChanges = grammarMatch[1].trim();
 
     await writeArtifactJson(
         integrationName,
@@ -551,7 +566,7 @@ function buildRepairPrompt(
                 "You are a TypeAgent grammar and schema expert. Analyze failing phrase-to-action test cases " +
                 "and propose specific fixes to the TypeScript schema and/or .agr grammar file. " +
                 "Explain what is wrong and why your changes will fix it. " +
-                "Provide the updated TypeScript schema in a ```typescript block and/or the updated grammar in a ```agr block.",
+                "Respond in JSON format. Return a JSON object with optional `schema` and `grammar` keys containing the updated file contents as strings, and an `explanation` key describing the fixes.",
         },
         {
             role: "user",

@@ -29,7 +29,35 @@
     }
 };
 
+<GenerateDemo> = generate (a)? demo (script)? for $(integrationName:wildcard) -> {
+    actionName: "generateDemo",
+    parameters: {
+        integrationName
+    }
+}
+  | create (a)? demo for $(integrationName:wildcard) -> {
+    actionName: "generateDemo",
+    parameters: {
+        integrationName
+    }
+};
+
+<GenerateReadme> = generate (a)? readme for $(integrationName:wildcard) -> {
+    actionName: "generateReadme",
+    parameters: {
+        integrationName
+    }
+}
+  | create (a)? readme for (the)? $(integrationName:wildcard) (agent)? -> {
+    actionName: "generateReadme",
+    parameters: {
+        integrationName
+    }
+};
+
 import { PackagingActions } from "./packagingSchema.ts";
 
 <Start> : PackagingActions = <PackageAgent>
-  | <ValidatePackage>;
+  | <ValidatePackage>
+  | <GenerateDemo>
+  | <GenerateReadme>;
