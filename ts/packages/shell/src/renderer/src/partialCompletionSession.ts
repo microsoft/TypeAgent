@@ -8,11 +8,17 @@ import {
     CompletionGroup,
     SeparatorMode,
 } from "@typeagent/agent-sdk";
+import {
+    SearchMenuItem,
+    SearchMenuPosition,
+} from "../../preload/electronTypes.js";
+import registerDebug from "debug";
 
 // Inline auto-separator resolution (mirrors action-grammar's
 // needsSeparatorInAutoMode).  Inlined to avoid importing action-grammar
 // into the renderer — that package has Node.js-only modules that the
 // Vite browser bundle can't resolve.
+// SYNC: keep in sync with grammarMatcher.ts needsSeparatorInAutoMode.
 const wordBoundaryScriptRe =
     /\p{Script=Latin}|\p{Script=Cyrillic}|\p{Script=Greek}|\p{Script=Armenian}|\p{Script=Georgian}|\p{Script=Hangul}|\p{Script=Arabic}|\p{Script=Hebrew}|\p{Script=Devanagari}|\p{Script=Bengali}|\p{Script=Tamil}|\p{Script=Telugu}|\p{Script=Kannada}|\p{Script=Malayalam}|\p{Script=Gujarati}|\p{Script=Gurmukhi}|\p{Script=Oriya}|\p{Script=Sinhala}|\p{Script=Ethiopic}|\p{Script=Mongolian}/u;
 const digitRe = /[0-9]/;
@@ -30,11 +36,6 @@ function needsSeparatorInAutoMode(a: string, b: string): boolean {
     };
     return isWordBoundary(a) && isWordBoundary(b);
 }
-import {
-    SearchMenuItem,
-    SearchMenuPosition,
-} from "../../preload/electronTypes.js";
-import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:shell:partial");
 const debugError = registerDebug("typeagent:shell:partial:error");
@@ -249,7 +250,7 @@ export class PartialCompletionSession {
             const sepLevel = computeSepLevel(rawPrefix);
             if (sepLevel !== this.menuSepLevel) {
                 const newLevel = targetLevel(this.levelCounts, sepLevel);
-                if (newLevel !== this.menuSepLevel) {
+                if (newLevel !== undefined && newLevel !== this.menuSepLevel) {
                     this.loadLevel(newLevel);
                     this.positionMenu(rawPrefix, getPosition);
                     return;
@@ -445,7 +446,9 @@ export class PartialCompletionSession {
             // ── D. Exhaustion cascade ────────────────────────────────
 
             // [D1] WIDEN — higher level available, reload trie.
-            if (sepLevel > this.menuSepLevel) {
+            // Guard: menuSepLevel can only increase (0→1→2) and sepLevel
+            // is at most 2, so the loop terminates in ≤2 iterations.
+            if (sepLevel > this.menuSepLevel && this.menuSepLevel < 2) {
                 this.loadLevel((this.menuSepLevel + 1) as SepLevel);
                 debug(
                     `Partial completion widen: menuSepLevel=${this.menuSepLevel}`,
@@ -539,9 +542,12 @@ export class PartialCompletionSession {
                 // Pick the best trie level for the caller's input:
                 // highest level ≤ inputSepLevel with items, falling
                 // back to lowestLevelWithItems for skip-ahead.
+                // When no level has items (shouldn't happen — we
+                // checked partitions.length > 0), default to level 0.
                 const rawPrefix = input.substring(partial.length);
                 this.loadLevel(
-                    targetLevel(this.levelCounts, computeSepLevel(rawPrefix)),
+                    targetLevel(this.levelCounts, computeSepLevel(rawPrefix)) ??
+                        0,
                 );
 
                 // If triggered by an explicit close, only reopen when the
@@ -584,14 +590,19 @@ export class PartialCompletionSession {
 // Level 0 (none):      No separator.  Items needing no separator.
 // Level 1 (space):     Whitespace present.  Strip whitespace only.
 // Level 2 (spacePunc): Whitespace + punctuation.  Strip both.
-//
+
+// SeparatorMode after "autoSpacePunctuation" has been resolved per-item
+// and undefined has been defaulted to "space".  Partitions always use
+// this type — no deferred or missing modes at the shell level.
+type ResolvedSeparatorMode = Exclude<SeparatorMode, "autoSpacePunctuation">;
+
 // Visibility matrix (non-cumulative, per-level):
 //
-//   SeparatorMode               Lv0  Lv1  Lv2
+//   ResolvedSeparatorMode       Lv0  Lv1  Lv2
 //   "none"                       ✓    —    —
 //   "optionalSpace"              ✓    ✓    —
 //   "optionalSpacePunctuation"   ✓    ✓    ✓
-//   undefined / "space"          —    ✓    —
+//   "space"                      —    ✓    —
 //   "spacePunctuation"           —    ✓    ✓
 //
 // Each level has its own set of items.  Widening replaces the trie
@@ -612,10 +623,7 @@ function computeSepLevel(rawPrefix: string): SepLevel {
 
 // Returns true when a partition's separatorMode belongs to the given
 // level per the visibility matrix.  Non-cumulative.
-function isModeAtLevel(
-    mode: SeparatorMode | undefined,
-    level: SepLevel,
-): boolean {
+function isModeAtLevel(mode: ResolvedSeparatorMode, level: SepLevel): boolean {
     switch (level) {
         case 0:
             return (
@@ -625,7 +633,6 @@ function isModeAtLevel(
             );
         case 1:
             return (
-                mode === undefined ||
                 mode === "space" ||
                 mode === "optionalSpace" ||
                 mode === "optionalSpacePunctuation" ||
@@ -673,21 +680,25 @@ function computeLevelCounts(partitions: ItemPartition[]): LevelCounts {
     return counts;
 }
 
-// Returns the lowest SepLevel that has items.  Used for skip-ahead:
-// when no items exist at level 0, jump to the first level that does.
-function lowestLevelWithItems(counts: LevelCounts): SepLevel {
+// Returns the lowest SepLevel that has items, or undefined when all
+// counts are zero.
+function lowestLevelWithItems(counts: LevelCounts): SepLevel | undefined {
     for (let level = 0; level <= 2; level++) {
         if (counts[level] > 0) {
             return level as SepLevel;
         }
     }
-    return 0;
+    return undefined;
 }
 
 // Returns the highest SepLevel ≤ maxLevel that has items, falling back
 // to lowestLevelWithItems when nothing exists at or below maxLevel
-// (e.g. entities that only appear at level 1+).
-function targetLevel(counts: LevelCounts, maxLevel: SepLevel): SepLevel {
+// (e.g. entities that only appear at level 1+).  Returns undefined when
+// no level has items at all.
+function targetLevel(
+    counts: LevelCounts,
+    maxLevel: SepLevel,
+): SepLevel | undefined {
     for (let l = maxLevel; l > 0; l--) {
         if (counts[l] > 0) {
             return l as SepLevel;
@@ -711,7 +722,7 @@ function stripAtLevel(rawPrefix: string, level: SepLevel): string {
 // An items-by-mode bucket.  Each partition holds the items from one or more
 // CompletionGroups that share the same separatorMode.
 type ItemPartition = {
-    mode: SeparatorMode | undefined;
+    mode: ResolvedSeparatorMode;
     items: SearchMenuItem[];
 };
 
@@ -728,11 +739,11 @@ function toPartitions(
     input: string,
     startIndex: number,
 ): ItemPartition[] {
-    const map = new Map<SeparatorMode | undefined, SearchMenuItem[]>();
+    const map = new Map<ResolvedSeparatorMode, SearchMenuItem[]>();
     let sortIndex = 0;
 
     function addItem(
-        mode: SeparatorMode | undefined,
+        mode: ResolvedSeparatorMode,
         choice: string,
         group: CompletionGroup,
     ): void {
@@ -761,10 +772,7 @@ function toPartitions(
                 const needsSep =
                     startIndex > 0 &&
                     choice.length > 0 &&
-                    needsSeparatorInAutoMode(
-                        input[startIndex - 1],
-                        choice[0],
-                    );
+                    needsSeparatorInAutoMode(input[startIndex - 1], choice[0]);
                 addItem(
                     needsSep ? "spacePunctuation" : "optionalSpacePunctuation",
                     choice,
@@ -772,8 +780,10 @@ function toPartitions(
                 );
             }
         } else {
+            // Resolve undefined → "space" (the default separatorMode).
+            const mode: ResolvedSeparatorMode = group.separatorMode ?? "space";
             for (const choice of sorted) {
-                addItem(group.separatorMode, choice, group);
+                addItem(mode, choice, group);
             }
         }
     }

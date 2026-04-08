@@ -91,8 +91,7 @@ The return path carries `CommandCompletionResult`:
 ```typescript
 {
   startIndex: number;           // where the resolved prefix ends
-  completions: CompletionGroup[];
-  separatorMode?: SeparatorMode;  // "space" | "spacePunctuation" | "optionalSpacePunctuation" | "optionalSpace" | "none"
+  completions: CompletionGroup[];  // each group carries its own separatorMode
   closedSet: boolean;           // true → list is exhaustive
   directionSensitive: boolean;  // true → completion(input[0..P], backward) ≠ completion(input[0..P], forward)
   afterWildcard: AfterWildcard;        // "none" | "some" | "all" — wildcard boundary ambiguity
@@ -280,24 +279,21 @@ Agents implement this optional method to provide domain-specific completions
 type CompletionGroups = {
   groups: CompletionGroup[];
   matchedPrefixLength?: number; // grammar override for startIndex
-  separatorMode?: SeparatorMode;
   closedSet?: boolean;
 };
 ```
 
 Each `CompletionGroup` carries:
 
-| Field         | Purpose                                                   |
-| ------------- | --------------------------------------------------------- |
-| `name`        | Group label                                               |
-| `completions` | String values                                             |
-| `needQuotes`  | Quote values containing spaces                            |
-| `emojiChar`   | Optional icon                                             |
-| `sorted`      | Whether already sorted                                    |
-| `kind`        | `"literal"` (grammar tokens) or `"entity"` (agent values) |
-
-**Helper:** `mergeSeparatorMode(a, b)` resolves conflicts by picking the
-strongest requirement.
+| Field           | Purpose                                                    |
+| --------------- | ---------------------------------------------------------- |
+| `name`          | Group label                                                |
+| `completions`   | String values                                              |
+| `needQuotes`    | Quote values containing spaces                             |
+| `emojiChar`     | Optional icon                                              |
+| `sorted`        | Whether already sorted                                     |
+| `kind`          | `"literal"` (grammar tokens) or `"entity"` (agent values)  |
+| `separatorMode` | What separator is required before this group's completions |
 
 ---
 
