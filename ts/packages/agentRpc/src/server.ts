@@ -451,7 +451,7 @@ export function createAgentRpcServer(
                 });
             },
             setLocalHostPort(port: number) {
-                rpc.send("setLocalHostPort", { contextId, port });
+                return rpc.invoke("setLocalHostPort", { contextId, port });
             },
             addDynamicAgent: async (
                 name: string,
