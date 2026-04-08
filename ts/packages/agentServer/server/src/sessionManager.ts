@@ -161,6 +161,7 @@ export async function createSessionManager(
                     createSharedDispatcher(hostName, {
                         ...baseOptions,
                         persistDir,
+                        instanceDir: baseDir, // global instance root — shared across all server sessions
                         persistSession: true,
                     }),
                 )
