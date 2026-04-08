@@ -1238,10 +1238,11 @@ export class AppAgentManager implements ActionConfigProvider {
             return;
         }
 
-        // Unload cached schema files so they get reloaded from disk
+        // Unload cached schema files and semantic map entries so they get reloaded
         for (const schemaName of this.actionConfigs.keys()) {
             if (getAppAgentName(schemaName) === appAgentName) {
                 this.actionSchemaFileCache.unloadActionSchemaFile(schemaName);
+                this.actionSemanticMap?.removeActionSchemaFile(schemaName);
             }
         }
 

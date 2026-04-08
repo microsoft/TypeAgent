@@ -4,7 +4,6 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
-import fetch, { FormData, Blob } from "node-fetch";
 import Mic from "mic";
 import OpenAI from "openai";
 import * as speechSDK from "microsoft-cognitiveservices-speech-sdk";

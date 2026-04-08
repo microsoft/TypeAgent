@@ -55,7 +55,7 @@ export async function executeScript(
         "-AllowedCmdletsJson",
         JSON.stringify(request.sandbox.allowedCmdlets),
         "-NetworkAccess",
-        String(request.sandbox.networkAccess),
+        request.sandbox.networkAccess ? "true" : "false",
         "-TimeoutSeconds",
         String(request.sandbox.maxExecutionTime),
     ];

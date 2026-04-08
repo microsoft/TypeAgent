@@ -59,7 +59,6 @@
     "@fluidframework/build-tools": "^0.57.0",
     "@types/node": "^20.17.28",
     "markdown-link-check": "^3.14.2",
-    "prebuild-install": "^7.1.3",
     "prettier": "^3.5.3",
     "shx": "^0.4.0"
   },
@@ -69,6 +68,17 @@
     "pnpm": ">=10"
   },
   "pnpm": {
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "@azure/core-rest-pipeline": "*",
+        "jest": "*",
+        "zod": "*"
+      },
+      "ignoreMissing": [
+        "eslint",
+        "zod"
+      ]
+    },
     "onlyBuiltDependencies": [
       "@azure/msal-node-extensions",
       "@azure/msal-node-runtime",
@@ -87,7 +97,22 @@
       "sharp"
     ],
     "allowedDeprecatedVersions": {
-      "crx": "5"
+      "@cliqz/adblocker": "*",
+      "@cliqz/adblocker-content": "*",
+      "@cliqz/adblocker-extended-selectors": "*",
+      "@cliqz/adblocker-puppeteer": "*",
+      "@xmldom/xmldom": "<0.9.9",
+      "abab": "*",
+      "boolean": "*",
+      "crx": "5",
+      "domexception": "*",
+      "glob": "<12",
+      "inflight": "*",
+      "lodash.isequal": "*",
+      "node-domexception": "*",
+      "prebuild-install": "*",
+      "rimraf": "<4",
+      "whatwg-encoding": "*"
     },
     "supportedArchitectures": {
       "cpu": [
@@ -106,19 +131,6 @@
       "router>path-to-regexp": ">=8.4.0 <9.0.0",
       "serialize-javascript": ">=7.0.5 <8.0.0"
     },
-    "ignoredBuiltDependencies": [
-      "leveldown"
-    ]
-  },
-  "peerDependencyRules": {
-    "ignoreMissing": [
-      "eslint",
-      "zod"
-    ],
-    "allowedVersions": {
-      "zod": "*",
-      "jest": "*",
-      "@azure/core-rest-pipeline": "*"
-    }
+    "ignoredBuiltDependencies": []
   }
 }
