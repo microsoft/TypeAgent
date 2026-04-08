@@ -110,6 +110,10 @@ jobs:
           TOTAL_BLOCKED=$(jq '.summary.blocked' /tmp/dep-analysis.json)
           TOTAL_NO_PATCH=$(jq '.summary.noPatch' /tmp/dep-analysis.json)
 
+          # Get blocked and no-patch package names
+          BLOCKED_PACKAGES=$(jq -r '[.blocked[].package] | unique | join(", ")' /tmp/dep-analysis.json)
+          NO_PATCH_PACKAGES=$(jq -r '[.noPatch[].package] | unique | join(", ")' /tmp/dep-analysis.json)
+
           # Get the list of packages the script would resolve
           FIXABLE=$(jq -r '.resolved[].package' /tmp/dep-analysis.json | sort -u)
           FIXABLE_COUNT=$(echo "$FIXABLE" | grep -c . || true)
@@ -204,6 +208,8 @@ jobs:
           echo "failed=$ROLLED_BACK_COUNT" >> "$GITHUB_OUTPUT"
           echo "applied_packages=$APPLIED" >> "$GITHUB_OUTPUT"
           echo "rolled_back_packages=$ROLLED_BACK" >> "$GITHUB_OUTPUT"
+          echo "blocked_packages=$BLOCKED_PACKAGES" >> "$GITHUB_OUTPUT"
+          echo "no_patch_packages=$NO_PATCH_PACKAGES" >> "$GITHUB_OUTPUT"
 
           cd ..
           if git diff --quiet; then
@@ -266,6 +272,8 @@ jobs:
           RESOLVED="${{ steps.fix.outputs.resolved }}"
           BLOCKED="${{ steps.fix.outputs.blocked }}"
           FAILED="${{ steps.fix.outputs.failed }}"
+          BLOCKED_PKGS="${{ steps.fix.outputs.blocked_packages }}"
+          NO_PATCH_PKGS="${{ steps.fix.outputs.no_patch_packages }}"
 
           BODY=$(cat <<'PREOF'
           ## Automated Dependabot Alert Remediation
@@ -279,7 +287,8 @@ jobs:
 
           BODY="$BODY
           - **Applied ($RESOLVED):**$APPLIED
-          - **Blocked:** $BLOCKED package(s) (require manual intervention)
+          - **Blocked ($BLOCKED):**${BLOCKED_PKGS:- (none)}
+          - **No patch available:**${NO_PATCH_PKGS:- (none)}
           - **Rolled back ($FAILED):**${ROLLED:- (none)}
           - **Build:** ✅ Passed
           - **Shell packaging:** ${{ steps.shell.outputs.shell_ok == 'true' && '✅ Passed' || '⚠️ Skipped' }}

@@ -6,6 +6,7 @@ export {
     AgentServerConnection,
     SessionDispatcher,
     connectDispatcher,
+    ensureAgentServer,
     ensureAndConnectDispatcher,
     ensureAndConnectSession,
     stopAgentServer,

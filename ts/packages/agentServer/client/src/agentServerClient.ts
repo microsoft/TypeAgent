@@ -274,7 +274,7 @@ function spawnAgentServer(serverPath: string, port: number): void {
     try {
         debug(`Starting agent server from ${serverPath}`);
         const isWindows = process.platform === "win32";
-        const child = spawn("node", [serverPath], {
+        const child = spawn("node", [serverPath, "--port", String(port)], {
             // On Unix, detached creates a new session so the child survives parent exit.
             // On Windows, detached creates a visible console window, so we skip it —
             // stdio: 'ignore' + unref() is sufficient for the child to outlive the parent.
@@ -311,18 +311,23 @@ async function waitForServer(
     );
 }
 
-export async function ensureAndConnectDispatcher(
-    clientIO: ClientIO,
-    port: number = 8999,
-    options?: DispatcherConnectOptions,
-    onDisconnect?: () => void,
-): Promise<Dispatcher> {
+export async function ensureAgentServer(port: number = 8999): Promise<void> {
     const url = `ws://localhost:${port}`;
     if (!(await isServerRunning(url))) {
         const serverPath = getAgentServerEntryPoint();
         spawnAgentServer(serverPath, port);
         await waitForServer(url);
     }
+}
+
+export async function ensureAndConnectDispatcher(
+    clientIO: ClientIO,
+    port: number = 8999,
+    options?: DispatcherConnectOptions,
+    onDisconnect?: () => void,
+): Promise<Dispatcher> {
+    await ensureAgentServer(port);
+    const url = `ws://localhost:${port}`;
     return connectDispatcher(clientIO, url, options, onDisconnect);
 }
 
@@ -332,12 +337,8 @@ export async function ensureAndConnectSession(
     options?: DispatcherConnectOptions,
     onDisconnect?: () => void,
 ): Promise<SessionDispatcher> {
+    await ensureAgentServer(port);
     const url = `ws://localhost:${port}`;
-    if (!(await isServerRunning(url))) {
-        const serverPath = getAgentServerEntryPoint();
-        spawnAgentServer(serverPath, port);
-        await waitForServer(url);
-    }
     const connection = await connectAgentServer(url, onDisconnect);
     const session = await connection.joinSession(clientIO, options);
     session.dispatcher.close = async () => {

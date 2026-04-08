@@ -141,25 +141,28 @@ There are 3 command under `agent-cli run`:
 `agent-cli connect` starts the interactive agent in connected mode, attaching to a running (or auto-started) agent server.
 
 ```bash
-agent-cli connect                        # connect to the default session
-agent-cli connect --session <id>         # resume a specific session by ID
+agent-cli connect                        # connect to the 'CLI' session (created if absent)
+agent-cli connect --resume               # resume the last used session
+agent-cli connect --session <id>         # connect to a specific session by ID
 agent-cli connect --port <port>          # connect to a server on a non-default port (default: 8999)
 ```
 
-- If `--session <id>` is omitted, the server connects to the default session, or auto-creates a session named `"default"` if none exist.
+- By default, `connect` targets a session named `"CLI"`. If no such session exists on the server it is created automatically.
+- Pass `--resume` / `-r` to instead resume the last used session (persisted client-side in `~/.typeagent/cli-state.json`). If that session no longer exists, you will be prompted to join the `"CLI"` session.
+- Pass `--session` / `-s <id>` to connect to any specific session by its UUID. Takes priority over `--resume` if both are provided.
 - The server is started automatically if it is not already running.
 
 ### `agent-cli sessions`
 
 `agent-cli sessions` provides full CRUD management of agent server sessions.
 
-#### `agent-cli sessions create <name>`
+#### `agent-cli sessions create [name]`
 
-Create a new named session on the server and print its session ID.
+Create a new named session on the server and print its session ID. If `name` is omitted, defaults to `"CLI"`.
 
 ```bash
-agent-cli sessions create "workout playlist setup"
-# Created session 'workout playlist setup' (a1b2c3d4-e5f6-...)
+agent-cli sessions create                          # Created session 'CLI' (a1b2c3d4-e5f6-...)
+agent-cli sessions create "workout playlist setup" # Created session 'workout playlist setup' (a1b2c3d4-e5f6-...)
 ```
 
 #### `agent-cli sessions list`

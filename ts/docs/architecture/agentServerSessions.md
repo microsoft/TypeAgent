@@ -235,16 +235,24 @@ SessionInfo[]
 
 ### CLI
 
-The CLI implements the full session management surface described in this document.
+The CLI implements the full session management surface described in this document, with client-side session persistence.
 
 #### `connect` — join a session
 
 ```bash
-agent-cli connect                        # connect to the default session
-agent-cli connect --session <id>         # resume a specific session by ID
+agent-cli connect                        # connect to the 'CLI' session (created if absent)
+agent-cli connect --resume               # resume the last used session
+agent-cli connect --session <id>         # connect to a specific session by ID
+agent-cli connect --port <port>          # connect to a server on a non-default port (default: 8999)
 ```
 
-`connect.ts` passes `{ sessionId: flags.session }` to `ensureAndConnectSession()` when `--session` is provided; omitting the flag calls `joinSession()` without a session ID, letting the server connect to the default session (or auto-create `"default"` if none exist).
+By default (no flags), `connect` targets a session named `"CLI"`. It calls `listSessions("CLI")` and joins the first match, or calls `createSession("CLI")` if none exists.
+
+Pass `--resume` / `-r` to instead resume the last used session, whose ID is persisted client-side in `~/.typeagent/cli-state.json`. If that session is no longer found on the server, the user is prompted to join the `"CLI"` session (find-or-create). If the user declines, the stale ID is cleared and the command exits.
+
+Pass `--session` / `-s <id>` to connect to a specific session by UUID. This takes priority over `--resume` if both are provided; errors propagate as-is without the recovery prompt.
+
+On every successful connection the connected session ID is written to `~/.typeagent/cli-state.json` for use by future `--resume` invocations.
 
 #### `sessions` topic — session CRUD
 
