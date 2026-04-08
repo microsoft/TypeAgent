@@ -14,6 +14,7 @@
   "type": "module",
   "exports": {
     ".": "./dist/index.js",
+    "./completion": "./dist/completion.js",
     "./rules": "./dist/indexRules.js",
     "./generation": "./dist/generation/index.js"
   },

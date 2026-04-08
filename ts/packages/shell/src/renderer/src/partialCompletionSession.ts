@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { CommandCompletionResult } from "agent-dispatcher";
+import { needsSeparatorInAutoMode } from "agent-dispatcher/helpers/completion";
 import {
     AfterWildcard,
     CompletionDirection,
@@ -13,29 +14,6 @@ import {
     SearchMenuPosition,
 } from "../../preload/electronTypes.js";
 import registerDebug from "debug";
-
-// Inline auto-separator resolution (copy of action-grammar's
-// needsSeparatorInAutoMode).  Inlined to avoid importing action-grammar
-// into the renderer — that package has Node.js-only modules that the
-// Vite browser bundle can't resolve.
-// SYNC: keep in sync with grammarMatcher.ts needsSeparatorInAutoMode.
-const wordBoundaryScriptRe =
-    /\p{Script=Latin}|\p{Script=Cyrillic}|\p{Script=Greek}|\p{Script=Armenian}|\p{Script=Georgian}|\p{Script=Hangul}|\p{Script=Arabic}|\p{Script=Hebrew}|\p{Script=Devanagari}|\p{Script=Bengali}|\p{Script=Tamil}|\p{Script=Telugu}|\p{Script=Kannada}|\p{Script=Malayalam}|\p{Script=Gujarati}|\p{Script=Gurmukhi}|\p{Script=Oriya}|\p{Script=Sinhala}|\p{Script=Ethiopic}|\p{Script=Mongolian}/u;
-const digitRe = /[0-9]/;
-
-function needsSeparatorInAutoMode(a: string, b: string): boolean {
-    if (digitRe.test(a) && digitRe.test(b)) {
-        return true;
-    }
-    const isWordBoundary = (c: string): boolean => {
-        const code = c.charCodeAt(0);
-        if (code < 128) {
-            return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
-        }
-        return wordBoundaryScriptRe.test(c);
-    };
-    return isWordBoundary(a) && isWordBoundary(b);
-}
 
 const debug = registerDebug("typeagent:shell:partial");
 const debugError = registerDebug("typeagent:shell:partial:error");

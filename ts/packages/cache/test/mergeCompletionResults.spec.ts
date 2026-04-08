@@ -723,4 +723,189 @@ describe("mergeCompletionResults", () => {
             expect(result.matchedPrefixLength).toBe(17);
         });
     });
+
+    // ── Gap 7: cross-layer per-group separatorMode preservation ──────
+
+    describe("per-group separatorMode preservation through merge", () => {
+        it("preserves different separatorMode values across merged groups", () => {
+            const first: CompletionResult = {
+                groups: [
+                    {
+                        name: "grammar-keywords",
+                        completions: ["play", "stop"],
+                        separatorMode: "spacePunctuation",
+                    },
+                ],
+                matchedPrefixLength: 5,
+            };
+            const second: CompletionResult = {
+                groups: [
+                    {
+                        name: "grammar-entities",
+                        completions: ["rock", "jazz"],
+                        separatorMode: "autoSpacePunctuation",
+                    },
+                ],
+                matchedPrefixLength: 5,
+            };
+            const result = mergeCompletionResults(first, second, Infinity)!;
+            expect(result.groups).toHaveLength(2);
+            const kw = result.groups.find((g) => g.name === "grammar-keywords");
+            const ent = result.groups.find(
+                (g) => g.name === "grammar-entities",
+            );
+            expect(kw).toBeDefined();
+            expect(ent).toBeDefined();
+            expect(kw!.separatorMode).toBe("spacePunctuation");
+            expect(ent!.separatorMode).toBe("autoSpacePunctuation");
+        });
+
+        it("keeps optionalSpacePunctuation and none groups intact when merging", () => {
+            const first: CompletionResult = {
+                groups: [
+                    {
+                        name: "optional-group",
+                        completions: ["タワー"],
+                        separatorMode: "optionalSpacePunctuation",
+                    },
+                ],
+                matchedPrefixLength: 3,
+            };
+            const second: CompletionResult = {
+                groups: [
+                    {
+                        name: "none-group",
+                        completions: ["suffix"],
+                        separatorMode: "none",
+                    },
+                ],
+                matchedPrefixLength: 3,
+            };
+            const result = mergeCompletionResults(first, second, Infinity)!;
+            expect(result.groups).toHaveLength(2);
+            expect(
+                result.groups.find((g) => g.name === "optional-group")!
+                    .separatorMode,
+            ).toBe("optionalSpacePunctuation");
+            expect(
+                result.groups.find((g) => g.name === "none-group")!
+                    .separatorMode,
+            ).toBe("none");
+        });
+
+        it("discards shorter-prefix groups while preserving winner's per-group modes", () => {
+            const shorter: CompletionResult = {
+                groups: [
+                    {
+                        name: "short",
+                        completions: ["a"],
+                        separatorMode: "none",
+                    },
+                ],
+                matchedPrefixLength: 3,
+            };
+            const longer: CompletionResult = {
+                groups: [
+                    {
+                        name: "long-kw",
+                        completions: ["b"],
+                        separatorMode: "spacePunctuation",
+                    },
+                    {
+                        name: "long-ent",
+                        completions: ["c"],
+                        separatorMode: "autoSpacePunctuation",
+                    },
+                ],
+                matchedPrefixLength: 7,
+            };
+            const result = mergeCompletionResults(shorter, longer, Infinity)!;
+            expect(result.matchedPrefixLength).toBe(7);
+            expect(result.groups).toHaveLength(2);
+            expect(
+                result.groups.find((g) => g.name === "long-kw")!.separatorMode,
+            ).toBe("spacePunctuation");
+            expect(
+                result.groups.find((g) => g.name === "long-ent")!.separatorMode,
+            ).toBe("autoSpacePunctuation");
+            // shorter group is discarded
+            expect(
+                result.groups.find((g) => g.name === "short"),
+            ).toBeUndefined();
+        });
+
+        it("handles all six SeparatorMode values in a single merge", () => {
+            const first: CompletionResult = {
+                groups: [
+                    {
+                        name: "g-space",
+                        completions: ["a"],
+                        separatorMode: "space",
+                    },
+                    {
+                        name: "g-spacePunct",
+                        completions: ["b"],
+                        separatorMode: "spacePunctuation",
+                    },
+                    {
+                        name: "g-optSpace",
+                        completions: ["c"],
+                        separatorMode: "optionalSpace",
+                    },
+                ],
+                matchedPrefixLength: 5,
+            };
+            const second: CompletionResult = {
+                groups: [
+                    {
+                        name: "g-optSpacePunct",
+                        completions: ["d"],
+                        separatorMode: "optionalSpacePunctuation",
+                    },
+                    {
+                        name: "g-none",
+                        completions: ["e"],
+                        separatorMode: "none",
+                    },
+                    {
+                        name: "g-auto",
+                        completions: ["f"],
+                        separatorMode: "autoSpacePunctuation",
+                    },
+                ],
+                matchedPrefixLength: 5,
+            };
+            const result = mergeCompletionResults(first, second, Infinity)!;
+            expect(result.groups).toHaveLength(6);
+
+            const modes = result.groups.map((g) => ({
+                name: g.name,
+                mode: g.separatorMode,
+            }));
+            expect(modes).toContainEqual({
+                name: "g-space",
+                mode: "space",
+            });
+            expect(modes).toContainEqual({
+                name: "g-spacePunct",
+                mode: "spacePunctuation",
+            });
+            expect(modes).toContainEqual({
+                name: "g-optSpace",
+                mode: "optionalSpace",
+            });
+            expect(modes).toContainEqual({
+                name: "g-optSpacePunct",
+                mode: "optionalSpacePunctuation",
+            });
+            expect(modes).toContainEqual({
+                name: "g-none",
+                mode: "none",
+            });
+            expect(modes).toContainEqual({
+                name: "g-auto",
+                mode: "autoSpacePunctuation",
+            });
+        });
+    });
 });

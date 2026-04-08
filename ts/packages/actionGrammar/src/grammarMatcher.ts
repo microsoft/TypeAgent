@@ -67,7 +67,6 @@ function isWordBoundaryScript(c: string): boolean {
     }
     return wordBoundaryScriptRe.test(c);
 }
-// SYNC: partialCompletionSession.ts inlines a copy for the browser bundle.
 export function needsSeparatorInAutoMode(a: string, b: string): boolean {
     if (digitRe.test(a) && digitRe.test(b)) {
         return true;
