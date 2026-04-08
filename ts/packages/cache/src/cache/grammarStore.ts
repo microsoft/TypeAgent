@@ -335,6 +335,7 @@ export class GrammarStoreImpl implements GrammarStore {
                                 ),
                             ],
                             names: [p.propertyPath],
+                            separatorMode: "autoSpacePunctuation",
                         });
                     }
                 }
@@ -374,7 +375,7 @@ export class GrammarStoreImpl implements GrammarStore {
                                 ),
                             ],
                             names: p.propertyNames,
-                            spacingMode: p.spacingMode,
+                            separatorMode: "autoSpacePunctuation",
                         });
                     }
                 }
@@ -453,7 +454,7 @@ export class GrammarStoreImpl implements GrammarStore {
                                 ),
                             ],
                             names: p.propertyNames,
-                            spacingMode: p.spacingMode,
+                            separatorMode: p.separatorMode,
                         });
                     }
                 }

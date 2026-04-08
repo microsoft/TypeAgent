@@ -88,12 +88,19 @@ export type CommandDescriptors =
 //                        overrides.
 //   "none"             — no separator at all; menu shown immediately.
 //                        Used for [spacing=none] grammars.
+//   "autoSpacePunctuation" — per-item mode determined by the consumer.
+//                        The consumer inspects the character pair
+//                        (last input char, first completion char)
+//                        and resolves each item to either
+//                        "spacePunctuation" or "optionalSpacePunctuation".
+//                        Used for grammar auto-spacing mode.
 export type SeparatorMode =
     | "space"
     | "spacePunctuation"
     | "optionalSpacePunctuation"
     | "optionalSpace"
-    | "none";
+    | "none"
+    | "autoSpacePunctuation";
 
 // Indicates the user's editing direction, provided by the host.
 //   "forward"  — the user is moving ahead (appending characters,

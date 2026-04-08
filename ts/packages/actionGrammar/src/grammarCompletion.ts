@@ -11,7 +11,6 @@ import {
     type SeparatorMode,
     separatorRegExpStr,
     requiresSeparator,
-    candidateSeparatorMode,
     isBoundarySatisfied,
     nextNonSeparatorIndex,
     getWildcardStr,
@@ -289,7 +288,7 @@ function findPartialKeywordInWildcard(
 export type GrammarCompletionProperty = {
     match: unknown;
     propertyNames: string[];
-    spacingMode?: CompiledSpacingMode | undefined; // undefined = auto (default)
+    separatorMode: SeparatorMode;
 };
 
 // Describes how the grammar rules that produced completions at this
@@ -396,7 +395,7 @@ function getGrammarCompletionProperty(
     return {
         match,
         propertyNames: wildcardPropertyNames,
-        spacingMode,
+        separatorMode: spacingModeToSeparatorMode(spacingMode),
     };
 }
 
@@ -630,33 +629,22 @@ type DeferredShadowCandidate = {
     candidate: FixedCandidate;
 };
 
-// True when a separator is needed between the character at
-// `position - 1` in `input` and `firstCompletionChar` according
-// to `spacingMode`.  Used by computeCandidateSeparatorMode.
-function computeNeedsSep(
-    input: string,
-    position: number,
-    firstCompletionChar: string,
-    spacingMode: CompiledSpacingMode,
-): boolean {
-    return (
-        position > 0 &&
-        spacingMode !== "none" &&
-        requiresSeparator(input[position - 1], firstCompletionChar, spacingMode)
-    );
-}
-
-// Compute a candidate's individual SeparatorMode at a given position.
-function computeCandidateSeparatorMode(
-    input: string,
-    position: number,
-    firstCompletionChar: string,
-    spacingMode: CompiledSpacingMode,
+// Map a compiled spacing mode to the corresponding SeparatorMode.
+// Only "autoSpacePunctuation" (undefined) produces a mode that requires per-item
+// resolution by the consumer; the other modes map deterministically.
+export function spacingModeToSeparatorMode(
+    mode: CompiledSpacingMode,
 ): SeparatorMode {
-    return candidateSeparatorMode(
-        computeNeedsSep(input, position, firstCompletionChar, spacingMode),
-        spacingMode,
-    );
+    switch (mode) {
+        case "required":
+            return "spacePunctuation";
+        case "optional":
+            return "optionalSpacePunctuation";
+        case "none":
+            return "none";
+        case undefined: // auto
+            return "autoSpacePunctuation";
+    }
 }
 
 // --- CompletionContext: mutable state shared across completion phases ---
@@ -1598,13 +1586,10 @@ function materializeCandidates(
             partialKeywordBackup = true;
         }
         if (c.kind === "string") {
-            const mode = computeCandidateSeparatorMode(
-                input,
-                ctx.maxPrefixLength,
-                c.completionText[0],
-                c.spacingMode,
+            addCompletion(
+                c.completionText,
+                spacingModeToSeparatorMode(c.spacingMode),
             );
-            addCompletion(c.completionText, mode);
         } else {
             const completionProperty = getGrammarCompletionProperty(
                 c.state,
@@ -1676,13 +1661,10 @@ function materializeCandidates(
                     partial !== undefined &&
                     !hasCompletion(partial.remainingText)
                 ) {
-                    const mode = computeCandidateSeparatorMode(
-                        input,
-                        ctx.maxPrefixLength,
-                        partial.remainingText[0],
-                        c.spacingMode,
+                    addCompletion(
+                        partial.remainingText,
+                        spacingModeToSeparatorMode(c.spacingMode),
                     );
-                    addCompletion(partial.remainingText, mode);
                     anyAfterWildcard = true;
                 }
             } else {

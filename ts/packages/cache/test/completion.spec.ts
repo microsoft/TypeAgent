@@ -262,7 +262,7 @@ describe("ConstructionCache.completion()", () => {
             const result = cache.completion("hey! ", defaultOptions);
             if (result && flatCompletions(result).length > 0) {
                 // ' ' is not a word char → optional
-                expect(firstSepMode(result!)).toBe("optionalSpace");
+                expect(firstSepMode(result!)).toBe("optionalSpacePunctuation");
             }
         });
 

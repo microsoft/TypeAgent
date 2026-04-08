@@ -41,7 +41,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -57,7 +57,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -74,7 +74,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -87,7 +87,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -103,7 +103,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -117,7 +117,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -132,7 +132,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -155,7 +155,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -170,7 +170,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [",world"],
                     matchedPrefixLength: 5,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -186,7 +186,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [",world"],
                     matchedPrefixLength: 5,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -199,7 +199,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [",world"],
                     matchedPrefixLength: 5,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -213,7 +213,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [",world"],
                     matchedPrefixLength: 5,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -236,7 +236,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -251,7 +251,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["."],
                     matchedPrefixLength: 5,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -266,7 +266,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -279,7 +279,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 7,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -293,7 +293,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 7,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -316,7 +316,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -330,7 +330,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -344,7 +344,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -357,7 +357,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -373,7 +373,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["next"],
                     matchedPrefixLength: 11,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -386,7 +386,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["next"],
                     matchedPrefixLength: 11,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -403,7 +403,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["next"],
                     matchedPrefixLength: 11,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -427,7 +427,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello "],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -443,7 +443,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -458,7 +458,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["next"],
                     matchedPrefixLength: 11,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -493,7 +493,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["hello"],
                         matchedPrefixLength: 0,
-                        separatorMode: "optionalSpace",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: false,
                         afterWildcard: "none",
@@ -509,7 +509,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: [" world"],
                         matchedPrefixLength: 5,
-                        separatorMode: "optionalSpace",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -524,7 +524,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: [" world"],
                         matchedPrefixLength: 5,
-                        separatorMode: "optionalSpace",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -543,7 +543,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["next"],
                         matchedPrefixLength: 11,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -560,7 +560,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["next"],
                         matchedPrefixLength: 12,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -580,7 +580,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: [" world"],
                         matchedPrefixLength: 5,
-                        separatorMode: "optionalSpace",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -607,7 +607,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: [" world"],
                         matchedPrefixLength: 5,
-                        separatorMode: "optionalSpace",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -626,7 +626,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["next"],
                         matchedPrefixLength: 11,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -647,7 +647,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["hello"],
                         matchedPrefixLength: 0,
-                        separatorMode: "optionalSpace",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: false,
                         afterWildcard: "none",
@@ -665,7 +665,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: [" world"],
                         matchedPrefixLength: 5,
-                        separatorMode: "optionalSpace",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -683,7 +683,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["next"],
                         matchedPrefixLength: 11,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -701,7 +701,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["next"],
                         matchedPrefixLength: 11,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -837,7 +837,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello-world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -851,7 +851,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello-world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -864,7 +864,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello-world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -879,7 +879,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["next"],
                     matchedPrefixLength: 11,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -902,7 +902,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["set:"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -917,7 +917,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["value"],
                     matchedPrefixLength: 4,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -930,7 +930,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["value"],
                     matchedPrefixLength: 4,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -945,7 +945,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done"],
                     matchedPrefixLength: 10,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -959,7 +959,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["value"],
                     matchedPrefixLength: 4,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -982,7 +982,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -996,7 +996,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["..."],
                     matchedPrefixLength: 5,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1010,7 +1010,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 8,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1023,7 +1023,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 9,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1046,7 +1046,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["..."],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -1064,7 +1064,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1085,7 +1085,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["..."],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -1098,7 +1098,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1125,7 +1125,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [",done"],
                     matchedPrefixLength: 5,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -1140,7 +1140,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [",done"],
                     matchedPrefixLength: 5,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -1157,7 +1157,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [",done"],
                     matchedPrefixLength: 5,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -1186,7 +1186,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 6,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1207,7 +1207,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 6,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1229,7 +1229,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 6,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1263,7 +1263,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [".world"],
                     matchedPrefixLength: 10,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -1278,7 +1278,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [".world"],
                     matchedPrefixLength: 10,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -1307,7 +1307,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1326,7 +1326,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1347,7 +1347,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -1365,7 +1365,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1396,7 +1396,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -1414,7 +1414,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["next"],
                     matchedPrefixLength: 11,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1438,7 +1438,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,", "hello."],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -1453,7 +1453,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1468,7 +1468,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1493,7 +1493,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -1507,7 +1507,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1521,7 +1521,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1543,7 +1543,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -1725,7 +1725,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["..."],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -1740,7 +1740,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 3,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1761,7 +1761,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 3,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1793,7 +1793,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -1807,7 +1807,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world!"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1821,7 +1821,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["thanks."],
                     matchedPrefixLength: 13,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1838,7 +1838,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["thanks."],
                     matchedPrefixLength: 13,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1873,7 +1873,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -1895,7 +1895,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -1922,7 +1922,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 10,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -1949,7 +1949,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["worldly"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1966,7 +1966,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["things"],
                     matchedPrefixLength: 14,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1993,7 +1993,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2007,7 +2007,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["next"],
                     matchedPrefixLength: 11,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2031,7 +2031,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["don't"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2045,7 +2045,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["stop"],
                     matchedPrefixLength: 5,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2063,7 +2063,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["stop"],
                     matchedPrefixLength: 5,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2087,7 +2087,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["price"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2100,7 +2100,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["1.99"],
                     matchedPrefixLength: 5,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2113,7 +2113,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done"],
                     matchedPrefixLength: 10,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2135,7 +2135,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2148,7 +2148,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2179,7 +2179,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 11,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2204,7 +2204,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2222,7 +2222,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 11,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2246,7 +2246,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,", "shuffle"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2260,7 +2260,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 11,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2274,7 +2274,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2300,7 +2300,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["."],
                     matchedPrefixLength: 5,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2315,7 +2315,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["."],
                     matchedPrefixLength: 5,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2341,7 +2341,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["."],
                     matchedPrefixLength: 5,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2366,7 +2366,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["v1.0"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2379,7 +2379,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["is"],
                     matchedPrefixLength: 4,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2393,7 +2393,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["released"],
                     matchedPrefixLength: 7,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2416,7 +2416,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2429,7 +2429,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2444,7 +2444,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2468,7 +2468,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2482,7 +2482,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2504,7 +2504,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2558,7 +2558,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2576,7 +2576,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2600,7 +2600,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2615,7 +2615,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2645,7 +2645,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 15,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2666,7 +2666,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2692,7 +2692,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello, world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2706,7 +2706,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2741,7 +2741,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [",world"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2762,7 +2762,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [",world"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2786,7 +2786,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [",world"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2804,7 +2804,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done"],
                     matchedPrefixLength: 10,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2829,7 +2829,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [","],
                     matchedPrefixLength: 3,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2852,7 +2852,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 0,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2885,7 +2885,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [" done"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2908,7 +2908,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [" done"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2934,7 +2934,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello "],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2955,7 +2955,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello "],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2980,7 +2980,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["-done"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -3001,7 +3001,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["-done"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -3024,7 +3024,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["-done"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optionalSpace",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -3050,7 +3050,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done!"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -3070,7 +3070,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done!"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -3092,7 +3092,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done!"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -3127,7 +3127,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -3148,7 +3148,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -3168,7 +3168,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",

@@ -3,6 +3,7 @@
 
 import { isDeepStrictEqual } from "node:util";
 import { matchGrammar } from "../src/grammarMatcher.js";
+import type { SeparatorMode } from "../src/grammarMatcher.js";
 import {
     matchGrammarCompletion,
     type GrammarCompletionResult,
@@ -145,6 +146,7 @@ function testCompletionDFA(
         properties: result.properties?.map((p) => ({
             match: { actionName: p.actionName },
             propertyNames: [p.propertyPath],
+            separatorMode: "autoSpacePunctuation" as const,
         })),
         directionSensitive: false,
         afterWildcard: "none",
@@ -570,13 +572,7 @@ export function expectMetadata(
         completions?: string[];
         groups?: { completions: string[]; separatorMode: string }[];
         matchedPrefixLength?: number;
-        separatorMode?:
-            | "space"
-            | "spacePunctuation"
-            | "optionalSpacePunctuation"
-            | "optionalSpace"
-            | "none"
-            | undefined;
+        separatorMode?: SeparatorMode | undefined;
         closedSet?: boolean;
         directionSensitive?: boolean;
         afterWildcard?: string;
@@ -656,19 +652,19 @@ export function expectMetadata(
                     ),
             );
 
-        // When the expected property objects omit spacingMode, strip it
+        // When the expected property objects omit separatorMode, strip it
         // from actuals so existing tests don't break.  Tests that want to
-        // assert spacingMode include it explicitly.
-        const checkSpacingMode = (expected.properties ?? []).some(
-            (p) => "spacingMode" in p,
+        // assert separatorMode include it explicitly.
+        const checkSeparatorMode = (expected.properties ?? []).some(
+            (p) => "separatorMode" in p,
         );
-        if (checkSpacingMode) {
+        if (checkSeparatorMode) {
             expect(sortProps(result.properties ?? [])).toEqual(
                 sortProps(expected.properties ?? []),
             );
         } else {
             const stripped = (result.properties ?? []).map(
-                ({ spacingMode: _, ...rest }) => rest,
+                ({ separatorMode: _, ...rest }) => rest,
             );
             expect(sortProps(stripped)).toEqual(
                 sortProps(expected.properties ?? []),

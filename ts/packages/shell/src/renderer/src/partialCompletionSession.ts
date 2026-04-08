@@ -8,6 +8,28 @@ import {
     CompletionGroup,
     SeparatorMode,
 } from "@typeagent/agent-sdk";
+
+// Inline auto-separator resolution (mirrors action-grammar's
+// needsSeparatorInAutoMode).  Inlined to avoid importing action-grammar
+// into the renderer — that package has Node.js-only modules that the
+// Vite browser bundle can't resolve.
+const wordBoundaryScriptRe =
+    /\p{Script=Latin}|\p{Script=Cyrillic}|\p{Script=Greek}|\p{Script=Armenian}|\p{Script=Georgian}|\p{Script=Hangul}|\p{Script=Arabic}|\p{Script=Hebrew}|\p{Script=Devanagari}|\p{Script=Bengali}|\p{Script=Tamil}|\p{Script=Telugu}|\p{Script=Kannada}|\p{Script=Malayalam}|\p{Script=Gujarati}|\p{Script=Gurmukhi}|\p{Script=Oriya}|\p{Script=Sinhala}|\p{Script=Ethiopic}|\p{Script=Mongolian}/u;
+const digitRe = /[0-9]/;
+
+function needsSeparatorInAutoMode(a: string, b: string): boolean {
+    if (digitRe.test(a) && digitRe.test(b)) {
+        return true;
+    }
+    const isWordBoundary = (c: string): boolean => {
+        const code = c.charCodeAt(0);
+        if (code < 128) {
+            return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+        }
+        return wordBoundaryScriptRe.test(c);
+    };
+    return isWordBoundary(a) && isWordBoundary(b);
+}
 import {
     SearchMenuItem,
     SearchMenuPosition,
@@ -491,7 +513,11 @@ export class PartialCompletionSession {
                 );
                 this.directionSensitive = result.directionSensitive;
 
-                const partitions = toPartitions(result.completions);
+                const partitions = toPartitions(
+                    result.completions,
+                    input,
+                    result.startIndex,
+                );
 
                 if (partitions.length === 0) {
                     debug(
@@ -691,27 +717,64 @@ type ItemPartition = {
 
 // Convert backend CompletionGroups into partitions keyed by separatorMode,
 // preserving group order and sorting within each group.
-function toPartitions(groups: CompletionGroup[]): ItemPartition[] {
+//
+// Groups with separatorMode="autoSpacePunctuation" are resolved per-item:
+// each completion is assigned "spacePunctuation" or
+// "optionalSpacePunctuation" based on the character pair
+// (input[startIndex-1], completion[0]).  This preserves the agent's
+// original ordering across the resulting partitions via sortIndex.
+function toPartitions(
+    groups: CompletionGroup[],
+    input: string,
+    startIndex: number,
+): ItemPartition[] {
     const map = new Map<SeparatorMode | undefined, SearchMenuItem[]>();
     let sortIndex = 0;
-    for (const group of groups) {
-        const sorted = group.sorted
-            ? group.completions
-            : [...group.completions].sort();
-        const mode = group.separatorMode;
+
+    function addItem(
+        mode: SeparatorMode | undefined,
+        choice: string,
+        group: CompletionGroup,
+    ): void {
         let bucket = map.get(mode);
         if (bucket === undefined) {
             bucket = [];
             map.set(mode, bucket);
         }
-        for (const choice of sorted) {
-            bucket.push({
-                matchText: choice,
-                selectedText: choice,
-                sortIndex: sortIndex++,
-                needQuotes: group.needQuotes,
-                emojiChar: group.emojiChar,
-            });
+        bucket.push({
+            matchText: choice,
+            selectedText: choice,
+            sortIndex: sortIndex++,
+            needQuotes: group.needQuotes,
+            emojiChar: group.emojiChar,
+        });
+    }
+
+    for (const group of groups) {
+        const sorted = group.sorted
+            ? group.completions
+            : [...group.completions].sort();
+        if (group.separatorMode === "autoSpacePunctuation") {
+            // Resolve per-item: inspect character pair to determine
+            // whether a separator is needed.
+            for (const choice of sorted) {
+                const needsSep =
+                    startIndex > 0 &&
+                    choice.length > 0 &&
+                    needsSeparatorInAutoMode(
+                        input[startIndex - 1],
+                        choice[0],
+                    );
+                addItem(
+                    needsSep ? "spacePunctuation" : "optionalSpacePunctuation",
+                    choice,
+                    group,
+                );
+            }
+        } else {
+            for (const choice of sorted) {
+                addItem(group.separatorMode, choice, group);
+            }
         }
     }
     return Array.from(map, ([mode, items]) => ({ mode, items })).filter(

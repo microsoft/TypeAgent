@@ -337,6 +337,7 @@ function buildGrammarProperties(
                 parameters: {},
             },
             propertyNames: [prop.propertyPath],
+            separatorMode: "autoSpacePunctuation",
         });
     }
 

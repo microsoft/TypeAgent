@@ -82,7 +82,7 @@ describeForEachCompletion(
             expectMetadata(result, {
                 completions: ["by"],
                 matchedPrefixLength: 15,
-                separatorMode: "spacePunctuation",
+                separatorMode: "autoSpacePunctuation",
                 afterWildcard: "all",
             });
         });
@@ -92,7 +92,7 @@ describeForEachCompletion(
             expectMetadata(result, {
                 completions: ["by"],
                 matchedPrefixLength: 14,
-                separatorMode: "spacePunctuation",
+                separatorMode: "autoSpacePunctuation",
                 afterWildcard: "all",
             });
         });

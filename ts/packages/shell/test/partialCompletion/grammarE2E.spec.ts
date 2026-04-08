@@ -1300,7 +1300,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             await flush();
 
             // Double space: anchor is "ab " (P=3), rawPrefix=" " (second space).
-            // separatorMode="optionalSpace" → needsSep=false, but "optionalSpace"
+            // separatorMode="optionalSpacePunctuation" → needsSep=false, but "optionalSpacePunctuation"
             // still strips leading whitespace → completionPrefix="".
             // Empty prefix matches all completions → menu shows.
             session.update("ab  ", getPos);
@@ -1339,7 +1339,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             session.update("ab ", getPos);
             await flush();
 
-            // At anchor "ab " (P=3), separatorMode="optionalSpace",
+            // At anchor "ab " (P=3), separatorMode="optionalSpacePunctuation",
             // rawPrefix="c" → trie prefix "c" → matches "cd".
             session.update("ab c", getPos);
 

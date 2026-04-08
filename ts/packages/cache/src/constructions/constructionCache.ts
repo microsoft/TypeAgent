@@ -7,7 +7,6 @@ import {
     SeparatorMode,
     AfterWildcard,
 } from "@typeagent/agent-sdk";
-import type { CompiledSpacingMode } from "action-grammar";
 import {
     ExecutableAction,
     HistoryContext,
@@ -81,7 +80,7 @@ export type MatchOptions = {
 export type CompletionProperty = {
     actions: ExecutableAction[];
     names: string[];
-    spacingMode?: CompiledSpacingMode | undefined; // undefined = auto (default)
+    separatorMode: SeparatorMode;
 };
 
 export type CompletionResult = {
@@ -613,7 +612,7 @@ export class ConstructionCache {
                         ) {
                             continue;
                         }
-                        let mode: SeparatorMode = "optionalSpace";
+                        let mode: SeparatorMode = "optionalSpacePunctuation";
                         if (
                             candidatePrefixLength > 0 &&
                             completionText.length > 0
@@ -624,7 +623,7 @@ export class ConstructionCache {
                             );
                             mode = needsSep
                                 ? "spacePunctuation"
-                                : "optionalSpace";
+                                : "optionalSpacePunctuation";
                         }
                         addCompletion(completionText, mode);
                     }
@@ -659,6 +658,7 @@ export class ConstructionCache {
                         completionProperty.push({
                             actions: result.match.actions,
                             names: queryPropertyNames,
+                            separatorMode: "autoSpacePunctuation",
                         });
                         closedSet = false;
                     }

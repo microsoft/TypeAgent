@@ -71,9 +71,9 @@ describe("Cross-grammar separator-mode conflict filtering", () => {
         expect(flatCompletions(result!)).toContain("cd");
         // Both grammars survive — closedSet true (same completions).
         expect(result!.closedSet).toBe(true);
-        // Two groups: one "none" (from noneSchema), one "spacePunctuation" (from autoSchema).
+        // Two groups: one "none" (from noneSchema), one "autoSpacePunctuation" (from autoSchema).
         const modes = result!.groups.map((g) => g.separatorMode).sort();
-        expect(modes).toEqual(["none", "spacePunctuation"]);
+        expect(modes).toEqual(["autoSpacePunctuation", "none"]);
     });
 
     test("'ab ' trailing separator: both grammars survive with per-group modes", () => {
@@ -84,7 +84,7 @@ describe("Cross-grammar separator-mode conflict filtering", () => {
         expect(result!.closedSet).toBe(true);
         // Two groups with their respective separator modes.
         const modes = result!.groups.map((g) => g.separatorMode).sort();
-        expect(modes).toEqual(["none", "spacePunctuation"]);
+        expect(modes).toEqual(["autoSpacePunctuation", "none"]);
     });
 
     test("afterWildcard preserved when no grammars dropped", () => {

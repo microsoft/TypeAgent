@@ -24,11 +24,12 @@ export type {
 export { writeGrammarRules } from "./grammarRuleWriter.js";
 
 export { matchGrammar, GrammarMatchResult } from "./grammarMatcher.js";
-export { candidateSeparatorMode, requiresSeparator } from "./grammarMatcher.js";
+export { needsSeparatorInAutoMode } from "./grammarMatcher.js";
 
 export {
     matchGrammarCompletion,
     GrammarCompletionResult,
+    spacingModeToSeparatorMode,
 } from "./grammarCompletion.js";
 export type {
     AfterWildcard,

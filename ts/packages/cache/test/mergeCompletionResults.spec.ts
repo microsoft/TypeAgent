@@ -253,10 +253,12 @@ describe("mergeCompletionResults", () => {
             const prop1 = {
                 actions: [],
                 names: ["name1"],
+                separatorMode: "autoSpacePunctuation" as const,
             };
             const prop2 = {
                 actions: [],
                 names: ["name2"],
+                separatorMode: "autoSpacePunctuation" as const,
             };
             const first: CompletionResult = {
                 groups: [
@@ -278,6 +280,7 @@ describe("mergeCompletionResults", () => {
             const prop1 = {
                 actions: [],
                 names: ["name1"],
+                separatorMode: "autoSpacePunctuation" as const,
             };
             const first: CompletionResult = {
                 groups: [
@@ -298,6 +301,7 @@ describe("mergeCompletionResults", () => {
             const prop2 = {
                 actions: [],
                 names: ["name2"],
+                separatorMode: "autoSpacePunctuation" as const,
             };
             const first: CompletionResult = {
                 groups: [

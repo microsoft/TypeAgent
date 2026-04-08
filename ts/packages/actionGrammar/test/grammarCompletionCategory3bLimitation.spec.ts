@@ -172,7 +172,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["midi", "music"],
                         matchedPrefixLength: 4,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                     });
                 });
 
@@ -183,7 +183,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["midi", "music"],
                         matchedPrefixLength: 4,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                     });
                 });
             });
@@ -205,7 +205,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["映画", "音楽"],
                         matchedPrefixLength: 2,
-                        separatorMode: "optionalSpace",
+                        separatorMode: "autoSpacePunctuation",
                     });
                 });
             });
@@ -224,7 +224,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["play"],
                         matchedPrefixLength: 0,
-                        separatorMode: "optionalSpace",
+                        separatorMode: "autoSpacePunctuation",
                     });
                 });
             });
@@ -280,7 +280,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["音楽"],
                         matchedPrefixLength: 4,
-                        separatorMode: "optionalSpace",
+                        separatorMode: "autoSpacePunctuation",
                     });
                 });
             });

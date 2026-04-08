@@ -11,8 +11,6 @@ import {
     SeparatorMode,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
-import type { CompiledSpacingMode } from "action-grammar";
-import { candidateSeparatorMode, requiresSeparator } from "action-grammar";
 import { DeepPartialUndefined } from "@typeagent/common-utils";
 import {
     ActionParamType,
@@ -129,9 +127,7 @@ export async function requestCompletion(
                 completionProperty.actions,
                 context,
                 propertyCompletions,
-                completionProperty.spacingMode,
-                input,
-                matchedPrefixLength ?? 0,
+                completionProperty.separatorMode,
             );
         }
     }
@@ -146,31 +142,12 @@ export async function requestCompletion(
     };
 }
 
-// Compute the SeparatorMode for a completion string given the
-// spacing mode, the input text, and the matched prefix length.
-function completionSeparatorMode(
-    completion: string,
-    spacingMode: CompiledSpacingMode,
-    input: string,
-    prefixLength: number,
-): SeparatorMode {
-    if (prefixLength <= 0 || completion.length === 0) {
-        return spacingMode === "none" ? "none" : "optionalSpace";
-    }
-    const needsSep =
-        spacingMode !== "none" &&
-        requiresSeparator(input[prefixLength - 1], completion[0], spacingMode);
-    return candidateSeparatorMode(needsSep, spacingMode);
-}
-
 async function collectActionCompletions(
     properties: string[],
     partialActions: ExecutableAction[],
     context: CommandHandlerContext,
     propertyCompletions: Map<string, CompletionGroup>,
-    spacingMode: CompiledSpacingMode,
-    input: string,
-    matchedPrefixLength: number,
+    separatorMode: SeparatorMode,
 ) {
     for (const propertyName of properties) {
         const { action, parameterName } = getPropertyInfo(
@@ -190,41 +167,15 @@ async function collectActionCompletions(
         );
 
         if (paramCompletion !== undefined) {
-            // Partition completions by their computed separator mode,
-            // creating one CompletionGroup per (property, mode) pair.
-            const byMode = new Map<SeparatorMode, string[]>();
-            for (const c of paramCompletion.completions) {
-                const mode = completionSeparatorMode(
-                    c,
-                    spacingMode,
-                    input,
-                    matchedPrefixLength,
-                );
-                let bucket = byMode.get(mode);
-                if (bucket === undefined) {
-                    bucket = [];
-                    byMode.set(mode, bucket);
-                }
-                bucket.push(c);
-            }
-
-            for (const [mode, completions] of byMode) {
-                // Use a composite key so multiple modes from the same
-                // property don't overwrite each other.
-                const key =
-                    byMode.size === 1
-                        ? propertyName
-                        : `${propertyName}:${mode}`;
-                propertyCompletions.set(key, {
-                    name: `property ${propertyName}`,
-                    completions,
-                    emojiChar: paramCompletion.emojiChar,
-                    separatorMode: mode,
-                    needQuotes: false, // Request completions are partial, no quotes needed
-                    sorted: true, // REVIEW: assume property completions are already in desired order by the agent.
-                    kind: "entity",
-                });
-            }
+            propertyCompletions.set(propertyName, {
+                name: `property ${propertyName}`,
+                completions: paramCompletion.completions,
+                emojiChar: paramCompletion.emojiChar,
+                separatorMode,
+                needQuotes: false, // Request completions are partial, no quotes needed
+                sorted: true, // REVIEW: assume property completions are already in desired order by the agent.
+                kind: "entity",
+            });
         }
     }
 }
