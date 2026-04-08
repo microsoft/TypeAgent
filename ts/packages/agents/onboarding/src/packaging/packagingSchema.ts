@@ -4,7 +4,8 @@
 export type PackagingActions =
     | PackageAgentAction
     | ValidatePackageAction
-    | GenerateDemoAction;
+    | GenerateDemoAction
+    | GenerateReadmeAction;
 
 export type PackageAgentAction = {
     actionName: "packageAgent";
@@ -20,6 +21,15 @@ export type ValidatePackageAction = {
     actionName: "validatePackage";
     parameters: {
         // Integration name whose package to validate
+        integrationName: string;
+    };
+};
+
+// Generates a README.md for the onboarded agent
+export type GenerateReadmeAction = {
+    actionName: "generateReadme";
+    parameters: {
+        // Name of the integration
         integrationName: string;
     };
 };

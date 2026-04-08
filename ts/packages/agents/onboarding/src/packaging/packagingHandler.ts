@@ -43,6 +43,8 @@ export async function executePackagingAction(
                 action.parameters.integrationName,
                 action.parameters.durationMinutes,
             );
+        case "generateReadme":
+            return handleGenerateReadme(action.parameters.integrationName);
     }
 }
 
@@ -449,6 +451,117 @@ async function runCommand(
             resolve({ success: false, output: err.message });
         });
     });
+}
+
+async function handleGenerateReadme(
+    integrationName: string,
+): Promise<ActionResult> {
+    const state = await loadState(integrationName);
+    if (!state) return { error: `Integration "${integrationName}" not found.` };
+
+    // Read artifacts for context
+    const surface = await readArtifactJson<{
+        actions: { name: string; description: string }[];
+    }>(integrationName, "discovery", "api-surface.json");
+    const subGroups = await readArtifactJson<{
+        recommended: boolean;
+        groups: { name: string; description: string; actions: string[] }[];
+    }>(integrationName, "discovery", "sub-schema-groups.json");
+    const scaffoldedTo = await readArtifact(integrationName, "scaffolder", "scaffolded-to.txt");
+
+    const description = state.config.description ?? `Agent for ${integrationName}`;
+    const totalActions = surface?.actions.length ?? 0;
+
+    // Build action listing for the LLM
+    let actionListing: string;
+    if (subGroups?.recommended && subGroups.groups.length > 0) {
+        actionListing = subGroups.groups
+            .map(
+                (g) =>
+                    `**${g.name}** (${g.actions.length} actions) — ${g.description}\n` +
+                    g.actions.map((a) => `  - ${a}`).join("\n"),
+            )
+            .join("\n\n");
+    } else {
+        actionListing =
+            surface?.actions
+                .map((a) => `- **${a.name}** — ${a.description}`)
+                .join("\n") ?? "No actions discovered.";
+    }
+
+    const model = getPackagingModel();
+    const prompt = [
+        {
+            role: "system" as const,
+            content:
+                "You are a technical writer generating a README.md for a TypeAgent agent package. " +
+                "Write clear, concise documentation in GitHub-flavored Markdown. " +
+                "Include: overview, architecture diagram (ASCII), action categories table, " +
+                "prerequisites, quick start, manual setup, project structure, " +
+                "API limitations (if any actions report limitations), and troubleshooting. " +
+                "Respond in JSON format with a single `readme` key containing the full Markdown content.",
+        },
+        {
+            role: "user" as const,
+            content:
+                `Generate a README.md for the "${integrationName}" TypeAgent agent.\n\n` +
+                `Description: ${description}\n\n` +
+                `Total actions: ${totalActions}\n\n` +
+                `Actions:\n${actionListing}\n\n` +
+                `The agent uses a WebSocket bridge pattern where a Node.js bridge server ` +
+                `connects to an Office Add-in running inside the application. ` +
+                `The bridge port is 5680. The add-in dev server runs on port 3003.\n\n` +
+                `The agent was created using the TypeAgent onboarding pipeline.\n\n` +
+                (subGroups?.recommended
+                    ? `The agent uses ${subGroups.groups.length} sub-schemas: ${subGroups.groups.map((g) => g.name).join(", ")}.\n\n`
+                    : "") +
+                `Include a quick start section that references:\n` +
+                `  pnpm run build packages/agents/${integrationName}\n` +
+                `  npx office-addin-dev-certs install\n` +
+                `  pnpm run ${integrationName}:addin\n`,
+        },
+    ];
+
+    const result = await model.complete(prompt);
+    if (!result.success) {
+        return { error: `README generation failed: ${result.message}` };
+    }
+
+    // Extract README content
+    let readmeContent: string;
+    try {
+        const parsed = JSON.parse(result.data);
+        readmeContent = parsed.readme ?? result.data;
+    } catch {
+        readmeContent = result.data;
+    }
+
+    // Write to the agent directory
+    const agentDir = scaffoldedTo?.trim();
+    if (agentDir) {
+        try {
+            await fs.writeFile(
+                path.join(agentDir, "README.md"),
+                readmeContent,
+                "utf-8",
+            );
+        } catch {
+            // Fall through — still save as artifact
+        }
+    }
+
+    // Save as artifact
+    await writeArtifact(integrationName, "packaging", "README.md", readmeContent);
+
+    return createActionResultFromMarkdownDisplay(
+        `## README generated: ${integrationName}\n\n` +
+            (agentDir
+                ? `Written to \`${path.join(agentDir, "README.md")}\`\n\n`
+                : "") +
+            `**Preview (first 2000 chars):**\n\n` +
+            readmeContent.slice(0, 2000) +
+            (readmeContent.length > 2000 ? "\n\n_...truncated_" : ""),
+    );
 }
 
 async function fileExists(p: string): Promise<boolean> {
