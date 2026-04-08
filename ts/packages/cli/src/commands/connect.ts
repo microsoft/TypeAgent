@@ -22,6 +22,7 @@ import * as path from "path";
 import * as readline from "readline";
 
 const CLI_STATE_FILE = path.join(os.homedir(), ".typeagent", "cli-state.json");
+const CLI_SESSION_NAME = "CLI";
 
 function loadLastSessionId(): string | undefined {
     try {
@@ -188,17 +189,26 @@ export default class Connect extends Command {
         await withEnhancedConsoleClientIO(async (clientIO, bindDispatcher) => {
             const url = `ws://localhost:${flags.port}`;
 
-            // Ensure the server is running once; all connectAgentServer calls below are safe.
-            await ensureAgentServer(flags.port);
+            const onDisconnect = () => {
+                console.error("Disconnected from dispatcher");
+                process.exit(1);
+            };
 
             // Helper: find the "CLI" session by name (creating it if absent) and join it.
             const connectToCliSession = async () => {
-                const connection = await connectAgentServer(url);
-                const existing = await connection.listSessions("CLI");
+                await ensureAgentServer(flags.port);
+                const connection = await connectAgentServer(url, onDisconnect);
+                const existing =
+                    await connection.listSessions(CLI_SESSION_NAME);
+                const match = existing.find(
+                    (s) =>
+                        s.name.toLowerCase() === CLI_SESSION_NAME.toLowerCase(),
+                );
                 const cliSessionId =
-                    existing.length > 0
-                        ? existing[0].sessionId
-                        : (await connection.createSession("CLI")).sessionId;
+                    match !== undefined
+                        ? match.sessionId
+                        : (await connection.createSession(CLI_SESSION_NAME))
+                              .sessionId;
                 const session = await connection.joinSession(clientIO, {
                     sessionId: cliSessionId,
                 });
@@ -218,10 +228,7 @@ export default class Connect extends Command {
                           clientIO,
                           flags.port,
                           { sessionId: persistedSessionId },
-                          () => {
-                              console.error("Disconnected from dispatcher");
-                              process.exit(1);
-                          },
+                          onDisconnect,
                       ).catch(async (err: any) => {
                           if (
                               isDefaultSession &&
@@ -232,7 +239,7 @@ export default class Connect extends Command {
                                   `The last used session no longer exists on the server.`,
                               );
                               const join = await promptYesNo(
-                                  `Join the default 'CLI' session?`,
+                                  `Join the default '${CLI_SESSION_NAME}' session?`,
                               );
                               if (!join) {
                                   clearLastSessionId();

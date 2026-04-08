@@ -65,8 +65,12 @@ async function main() {
     // don't race to initialize the same dispatcher.
     await sessionManager.prewarmDefaultSession();
 
+    const portIdx = process.argv.indexOf("--port");
+    const port =
+        portIdx !== -1 ? parseInt(process.argv[portIdx + 1], 10) : 8999;
+
     const wss = await createWebSocketChannelServer(
-        { port: 8999 },
+        { port },
         (channelProvider: ChannelProvider, closeFn: () => void) => {
             // Track which sessions this WebSocket connection has joined
             // sessionId → { dispatcher, connectionId }
@@ -220,7 +224,7 @@ async function main() {
         },
     );
 
-    console.log("Agent server started at ws://localhost:8999");
+    console.log(`Agent server started at ws://localhost:${port}`);
 }
 
 await main();

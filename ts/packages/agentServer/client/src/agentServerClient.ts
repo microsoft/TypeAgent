@@ -274,7 +274,7 @@ function spawnAgentServer(serverPath: string, port: number): void {
     try {
         debug(`Starting agent server from ${serverPath}`);
         const isWindows = process.platform === "win32";
-        const child = spawn("node", [serverPath], {
+        const child = spawn("node", [serverPath, "--port", String(port)], {
             // On Unix, detached creates a new session so the child survives parent exit.
             // On Windows, detached creates a visible console window, so we skip it —
             // stdio: 'ignore' + unref() is sufficient for the child to outlive the parent.
