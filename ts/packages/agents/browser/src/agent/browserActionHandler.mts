@@ -550,9 +550,11 @@ async function closeBrowserContext(
     }
     if (context.agentContext.browserProcess) {
         context.agentContext.browserProcess.kill();
+        context.agentContext.browserProcess = undefined;
     }
     if (context.agentContext.viewProcess) {
         context.agentContext.viewProcess.kill();
+        context.agentContext.viewProcess = undefined;
     }
 }
 

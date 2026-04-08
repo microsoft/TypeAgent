@@ -152,9 +152,13 @@ export class BaseServer {
                 debug(
                     `Registered features: ${Array.from(this.features.keys()).join(", ")}`,
                 );
+                server.removeListener("error", onStartupError);
+                server.on("error", (err: NodeJS.ErrnoException) => {
+                    debug(`Server runtime error: ${err.message}`);
+                });
                 resolve();
             });
-            server.on("error", (err: NodeJS.ErrnoException) => {
+            const onStartupError = (err: NodeJS.ErrnoException) => {
                 if (err.code === "EADDRINUSE") {
                     reject(
                         new Error(
@@ -164,7 +168,8 @@ export class BaseServer {
                 } else {
                     reject(err);
                 }
-            });
+            };
+            server.on("error", onStartupError);
         });
     }
 }
