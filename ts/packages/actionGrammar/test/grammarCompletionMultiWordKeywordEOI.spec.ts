@@ -181,8 +181,8 @@ describeForEachCompletion(
                     undefined,
                     "forward",
                 );
-                expect(result.completions).toContain("by");
                 expectMetadata(result, {
+                    completions: ["by"],
                     matchedPrefixLength: 17,
                     separatorMode: "spacePunctuation",
                     closedSet: true,
@@ -202,14 +202,18 @@ describeForEachCompletion(
                 // Trailing space is inside the wildcard content, not
                 // after a committed keyword boundary — backward still
                 // backs up to the wildcard start.
-                expect(result.properties).toBeDefined();
-                expect(result.properties!.length).toBeGreaterThan(0);
                 expectMetadata(result, {
                     matchedPrefixLength: 4,
                     separatorMode: "spacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
+                    properties: [
+                        {
+                            match: {},
+                            propertyNames: ["name"],
+                        },
+                    ],
                 });
             });
 
@@ -220,8 +224,8 @@ describeForEachCompletion(
                     undefined,
                     "backward",
                 );
-                expect(result.completions).toContain("played");
                 expectMetadata(result, {
+                    completions: ["played"],
                     matchedPrefixLength: 10,
                     separatorMode: "spacePunctuation",
                     closedSet: true,
@@ -265,8 +269,8 @@ describeForEachCompletion(
                     undefined,
                     "backward",
                 );
-                expect(result.completions).toContain("by");
                 expectMetadata(result, {
+                    completions: ["by"],
                     matchedPrefixLength: 17,
                     separatorMode: "spacePunctuation",
                     closedSet: true,

@@ -262,7 +262,7 @@ export function computeNFACompletions(
     if (reachableStates.length === 0) {
         debugCompletion(`  → no reachable states, returning empty`);
         return {
-            completions: [],
+            groups: [],
             directionSensitive: false,
             afterWildcard: "none",
         };
@@ -288,7 +288,12 @@ export function computeNFACompletions(
     );
 
     const result: GrammarCompletionResult = {
-        completions: uniqueCompletions,
+        groups: [
+            {
+                completions: uniqueCompletions,
+                separatorMode: "space",
+            },
+        ],
         directionSensitive: false,
         // TODO: The NFA path does not yet track wildcard-at-EOI states.
         // If NFA grammars gain wildcard support, this should be computed

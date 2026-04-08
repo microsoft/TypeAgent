@@ -135,7 +135,12 @@ function testCompletionDFA(
     const tokens = tokenizeRequest(prefix);
     const result = getDFACompletions(dfa, tokens);
     return {
-        completions: result.completions ?? [],
+        groups: [
+            {
+                completions: result.completions ?? [],
+                separatorMode: "space",
+            },
+        ],
         properties: result.properties?.map((p) => ({
             match: { actionName: p.actionName },
             propertyNames: [p.propertyPath],
@@ -210,13 +215,25 @@ function completionResultsEqual(
 }
 
 /**
- * Return a copy of a completion result with completions sorted.
+ * Sort completions within each group and sort groups by separatorMode.
+ * Both completion order and group order are not significant.
+ */
+function normalizeGroups<
+    T extends { completions: string[]; separatorMode: string },
+>(groups: T[]): T[] {
+    return groups
+        .map((g) => ({ ...g, completions: [...g.completions].sort() }))
+        .sort((a, b) => a.separatorMode.localeCompare(b.separatorMode));
+}
+
+/**
+ * Return a copy of a completion result with normalized groups.
  * Completion order is not significant — normalize before comparing.
  */
 function normalizeCompletionResult(r: GrammarCompletionResult) {
     return {
         ...r,
-        completions: [...r.completions].sort(),
+        groups: normalizeGroups(r.groups),
     };
 }
 
@@ -250,7 +267,7 @@ function assertSingleResultInvariants(
 
     // 2. closedSet ↔ properties consistency
     const hasProperties = (result.properties?.length ?? 0) > 0;
-    const hasCompletions = result.completions.length > 0;
+    const hasCompletions = result.groups.some((g) => g.completions.length > 0);
     if (hasProperties && result.closedSet !== false) {
         throw new Error(
             `Invariant: properties present but closedSet=${result.closedSet} (should be false) ${ctx}`,
@@ -538,11 +555,19 @@ function withInvariantChecks(baseFn: TestCompletionFn): TestCompletionFn {
 /**
  * Assert completion metadata fields in a canonical order.
  * Only the fields present in `expected` are checked.
+ *
+ * Supports two formats:
+ *   - Flat (backward-compatible): { completions, separatorMode, ... }
+ *     When the result has exactly one group, `completions` and
+ *     `separatorMode` are checked against that single group.
+ *   - Grouped: { groups: [{ completions, separatorMode }, ...], ... }
+ *     Each group is checked individually.
  */
 export function expectMetadata(
     result: GrammarCompletionResult,
     expected: {
         completions?: string[];
+        groups?: { completions: string[]; separatorMode: string }[];
         matchedPrefixLength?: number;
         separatorMode?:
             | "space"
@@ -555,24 +580,57 @@ export function expectMetadata(
         directionSensitive?: boolean;
         afterWildcard?: string;
         properties?: unknown[];
-        sortCompletions?: boolean;
     },
 ): void {
-    if ("completions" in expected) {
-        const actual = expected.sortCompletions
-            ? [...result.completions].sort()
-            : result.completions;
-        expect(actual).toEqual(expected.completions);
+    if ("groups" in expected && "completions" in expected) {
+        throw new Error(
+            "expectMetadata: 'groups' and 'completions' are mutually exclusive",
+        );
+    }
+
+    // Convert flat format to grouped, then use a common check path.
+    let expectedGroups:
+        | { completions: string[]; separatorMode?: string }[]
+        | undefined;
+    if ("groups" in expected && expected.groups !== undefined) {
+        expectedGroups = expected.groups;
+    } else if ("completions" in expected) {
+        expectedGroups =
+            expected.completions.length === 0
+                ? []
+                : [
+                      {
+                          completions: expected.completions,
+                          ...("separatorMode" in expected &&
+                          expected.separatorMode !== undefined
+                              ? { separatorMode: expected.separatorMode }
+                              : {}),
+                      },
+                  ];
+    }
+
+    // Common check path for groups.
+    if (expectedGroups !== undefined) {
+        const checkSeparatorMode = expectedGroups.some(
+            (g) => g.separatorMode !== undefined,
+        );
+        const normalizedActual = normalizeGroups(result.groups);
+        const normalizedExpected = normalizeGroups(
+            expectedGroups.map((g) => ({
+                ...g,
+                separatorMode: g.separatorMode ?? "space",
+            })),
+        );
+        if (checkSeparatorMode) {
+            expect(normalizedActual).toEqual(normalizedExpected);
+        } else {
+            expect(normalizedActual.map((g) => g.completions)).toEqual(
+                normalizedExpected.map((g) => g.completions),
+            );
+        }
     }
     if ("matchedPrefixLength" in expected) {
         expect(result.matchedPrefixLength).toBe(expected.matchedPrefixLength);
-    }
-    if ("separatorMode" in expected) {
-        if (expected.separatorMode === undefined) {
-            expect(result.separatorMode).toBeUndefined();
-        } else {
-            expect(result.separatorMode).toBe(expected.separatorMode);
-        }
     }
     if ("closedSet" in expected) {
         expect(result.closedSet).toBe(expected.closedSet);

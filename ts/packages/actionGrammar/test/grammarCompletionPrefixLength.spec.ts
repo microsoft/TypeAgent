@@ -222,7 +222,6 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "play ");
                 expectMetadata(result, {
                     completions: ["music", "video"],
-                    sortCompletions: true,
                     matchedPrefixLength: 4,
                     separatorMode: "spacePunctuation",
                     closedSet: true,
@@ -2826,14 +2825,7 @@ describeForEachCompletion(
                         matchedPrefixLength: 4,
                         directionSensitive: true,
                     });
-                    // Completions and position match; directionSensitive
-                    // may differ (backward from exact match is always
-                    // direction-agnostic, forward at truncated prefix
-                    // is direction-sensitive for partial matches).
-                    expect(backward.completions).toEqual(forward.completions);
-                    expect(backward.matchedPrefixLength).toBe(
-                        forward.matchedPrefixLength,
-                    );
+                    expect(backward).toEqual(forward);
                 });
 
                 it("backward on 'play' equals forward on ''", () => {
@@ -2885,12 +2877,7 @@ describeForEachCompletion(
                         matchedPrefixLength: 4,
                         directionSensitive: true,
                     });
-                    // Completions and position match; directionSensitive
-                    // may differ.
-                    expect(backward.completions).toEqual(forward.completions);
-                    expect(backward.matchedPrefixLength).toBe(
-                        forward.matchedPrefixLength,
-                    );
+                    expect(backward).toEqual(forward);
                 });
             });
 
@@ -3372,8 +3359,8 @@ describeForEachCompletion(
                 // Rule B (literal): "b" partial-matches "beautiful"
                 //   at mpl=4, which is shorter — discarded.
                 // Only wildcard candidates survive → afterWildcard="all".
-                expect(result.completions).toContain("by");
                 expectMetadata(result, {
+                    completions: ["by"],
                     matchedPrefixLength: 6,
                     closedSet: true,
                     directionSensitive: true,
@@ -3394,9 +3381,8 @@ describeForEachCompletion(
                 // Rule A: wildcard-at-EOI, Phase 2 offers "by"
                 //   (after-wildcard completion).
                 // Both at mpl=14.  Mixed → afterWildcard="some".
-                expect(result.completions).toContain("music");
-                expect(result.completions).toContain("by");
                 expectMetadata(result, {
+                    completions: ["music", "by"],
                     matchedPrefixLength: 14,
                     closedSet: true,
                     directionSensitive: true,
@@ -3417,9 +3403,8 @@ describeForEachCompletion(
                 // Rule B: "hello" doesn't match "beautiful" — no
                 //   contribution at this prefix length.
                 // Only wildcard candidates → afterWildcard="all".
-                expect(result.completions).toContain("by");
-                expect(result.completions).not.toContain("beautiful");
                 expectMetadata(result, {
+                    completions: ["by"],
                     matchedPrefixLength: 10,
                     closedSet: true,
                     directionSensitive: true,
@@ -3708,7 +3693,6 @@ describeForEachCompletion(
                 // should appear: "by", "from", "track", "song".
                 expectMetadata(result, {
                     completions: ["by", "from", "song", "track"],
-                    sortCompletions: true,
                     matchedPrefixLength: 18,
                     afterWildcard: "all",
                     directionSensitive: true,
@@ -3724,7 +3708,6 @@ describeForEachCompletion(
                 );
                 expectMetadata(result, {
                     completions: ["by", "from", "song", "track"],
-                    sortCompletions: true,
                     matchedPrefixLength: 18,
                     afterWildcard: "all",
                     directionSensitive: true,
@@ -3743,7 +3726,6 @@ describeForEachCompletion(
                 );
                 expectMetadata(result, {
                     completions: ["song", "the", "track"],
-                    sortCompletions: true,
                     matchedPrefixLength: 4,
                     afterWildcard: "none",
                     directionSensitive: true,
@@ -3779,7 +3761,6 @@ describeForEachCompletion(
                 );
                 expectMetadata(result, {
                     completions: ["by", "cut", "from", "one", "song", "track"],
-                    sortCompletions: true,
                     matchedPrefixLength: 18,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -3798,7 +3779,6 @@ describeForEachCompletion(
                 // and "cut" from PlayTrackNumberCommand's (<Item>)?.
                 expectMetadata(result, {
                     completions: ["by", "cut", "from", "one", "song", "track"],
-                    sortCompletions: true,
                     matchedPrefixLength: 18,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -3857,8 +3837,10 @@ describeForEachCompletion(
                     undefined,
                     "forward",
                 );
-                expect(result.completions).toContain("by");
-                expect(result.matchedPrefixLength).toBe(15);
+                expectMetadata(result, {
+                    completions: ["by", "one", "cut", "track", "song", "from"],
+                    matchedPrefixLength: 15,
+                });
             });
         });
     },

@@ -720,8 +720,8 @@ describe("Grammar Integration", () => {
 
             // May or may not have completions depending on grammar structure
             // Main assertion is that completion() works without error in NFA mode
-            if (completions && completions.completions.length > 0) {
-                const completionStrings = completions.completions.map((c) =>
+            if (completions && completions.groups.flatMap(g => g.completions).length > 0) {
+                const completionStrings = completions.groups.flatMap(g => g.completions).map((c) =>
                     c.toLowerCase(),
                 );
                 console.log("NFA completions:", completionStrings);
@@ -759,10 +759,10 @@ describe("Grammar Integration", () => {
             expect(completions).toBeDefined();
 
             // Completion system exists and works in completion-based mode
-            if (completions && completions.completions.length > 0) {
+            if (completions && completions.groups.flatMap(g => g.completions).length > 0) {
                 console.log(
                     "Completion-based completions:",
-                    completions.completions,
+                    completions.groups.flatMap(g => g.completions),
                 );
             }
         });
@@ -881,7 +881,7 @@ describe("Grammar Integration", () => {
             // separator before "b" is stripped), NOT at 17 (EOI where
             // localPlayer's wildcard absorbs everything)
             expect(completions!.matchedPrefixLength).toBe(15);
-            expect(completions!.completions).toContain("by");
+            expect(completions!.groups.flatMap(g => g.completions)).toContain("by");
         });
     });
 

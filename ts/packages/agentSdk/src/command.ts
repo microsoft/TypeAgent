@@ -116,6 +116,7 @@ export type AfterWildcard = "none" | "some" | "all";
 export type CompletionGroup = {
     name: string; // The group name for the completion
     completions: string[]; // The list of completions in the group
+    separatorMode?: SeparatorMode | undefined; // What separator is required before this group's completions. Default is "space".
     needQuotes?: boolean; // If true, the completion should be quoted if it has spaces.
     emojiChar?: string | undefined; // Optional icon for the completion category
     sorted?: boolean; // If true, the completions are already sorted. Default is false, and the completions sorted alphabetically.
@@ -131,10 +132,6 @@ export type CompletionGroups = {
     // completions at this offset; clients need not split on spaces
     // (which fails for CJK and other non-space-delimited scripts).
     matchedPrefixLength?: number | undefined;
-    // What kind of separator is required between the matched prefix and
-    // the completion text.  When omitted, defaults to "space" (whitespace
-    // required before completions are shown).  See SeparatorMode.
-    separatorMode?: SeparatorMode | undefined;
     // True when the completions form a closed set — if the user types
     // something not in the list, no further completions can exist
     // beyond it.  When true and the user types something that doesn't

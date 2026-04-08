@@ -1437,7 +1437,6 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "");
                 expectMetadata(result, {
                     completions: ["hello,", "hello."],
-                    sortCompletions: true,
                     matchedPrefixLength: 0,
                     separatorMode: "optionalSpace",
                     closedSet: true,
@@ -2246,7 +2245,6 @@ describeForEachCompletion(
                 // requiresSeparator("y", "h" or "s", auto) → both Latin → "spacePunctuation"
                 expectMetadata(result, {
                     completions: ["hello,", "shuffle"],
-                    sortCompletions: true,
                     matchedPrefixLength: 4,
                     separatorMode: "spacePunctuation",
                     closedSet: true,

@@ -31,7 +31,10 @@ export {
     isRequiringSepMode,
     hasTrailingSeparator,
 } from "./grammarCompletion.js";
-export type { AfterWildcard } from "./grammarCompletion.js";
+export type {
+    AfterWildcard,
+    GrammarCompletionGroup,
+} from "./grammarCompletion.js";
 
 // Entity system
 export type { EntityValidator, EntityConverter } from "./entityRegistry.js";

@@ -6,6 +6,11 @@ import {
     mergeCompletionResults,
 } from "../src/constructions/constructionCache.js";
 
+// Helpers for per-group CompletionResult access
+function flatCompletions(result: CompletionResult): string[] {
+    return result.groups.flatMap((g) => g.completions);
+}
+
 describe("mergeCompletionResults", () => {
     // Infinity as prefixLength disables the EOI-wildcard preference
     // logic (matchedLen >= Infinity is never true), letting tests
@@ -22,7 +27,13 @@ describe("mergeCompletionResults", () => {
 
         it("returns first when second is undefined", () => {
             const first: CompletionResult = {
-                completions: ["a"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["a"],
+                        separatorMode: "space",
+                    },
+                ],
                 matchedPrefixLength: 5,
             };
             const result = mergeCompletionResults(first, undefined, Infinity);
@@ -31,7 +42,13 @@ describe("mergeCompletionResults", () => {
 
         it("returns second when first is undefined", () => {
             const second: CompletionResult = {
-                completions: ["b"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["b"],
+                        separatorMode: "space",
+                    },
+                ],
                 matchedPrefixLength: 3,
             };
             const result = mergeCompletionResults(undefined, second, Infinity);
@@ -40,106 +57,194 @@ describe("mergeCompletionResults", () => {
 
         it("discards shorter-prefix completions when second is longer", () => {
             const first: CompletionResult = {
-                completions: ["a"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["a"],
+                        separatorMode: "space",
+                    },
+                ],
                 matchedPrefixLength: 5,
             };
             const second: CompletionResult = {
-                completions: ["b"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["b"],
+                        separatorMode: "space",
+                    },
+                ],
                 matchedPrefixLength: 10,
             };
             const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.matchedPrefixLength).toBe(10);
-            expect(result.completions).toEqual(["b"]);
+            expect(flatCompletions(result)).toEqual(["b"]);
         });
 
         it("discards shorter-prefix completions when first is longer", () => {
             const first: CompletionResult = {
-                completions: ["a"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["a"],
+                        separatorMode: "space",
+                    },
+                ],
                 matchedPrefixLength: 12,
             };
             const second: CompletionResult = {
-                completions: ["b"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["b"],
+                        separatorMode: "space",
+                    },
+                ],
                 matchedPrefixLength: 3,
             };
             const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.matchedPrefixLength).toBe(12);
-            expect(result.completions).toEqual(["a"]);
+            expect(flatCompletions(result)).toEqual(["a"]);
         });
 
         it("merges completions when both have equal matchedPrefixLength", () => {
             const first: CompletionResult = {
-                completions: ["a"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["a"],
+                        separatorMode: "space",
+                    },
+                ],
                 matchedPrefixLength: 5,
             };
             const second: CompletionResult = {
-                completions: ["b"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["b"],
+                        separatorMode: "space",
+                    },
+                ],
                 matchedPrefixLength: 5,
             };
             const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.matchedPrefixLength).toBe(5);
-            expect(result.completions).toEqual(["a", "b"]);
+            expect(flatCompletions(result)).toEqual(["a", "b"]);
         });
 
         it("returns undefined matchedPrefixLength when both are missing", () => {
             const first: CompletionResult = {
-                completions: ["a"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["a"],
+                        separatorMode: "space",
+                    },
+                ],
             };
             const second: CompletionResult = {
-                completions: ["b"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["b"],
+                        separatorMode: "space",
+                    },
+                ],
             };
             const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.matchedPrefixLength).toBeUndefined();
-            expect(result.completions).toEqual(["a", "b"]);
+            expect(flatCompletions(result)).toEqual(["a", "b"]);
         });
 
         it("discards second when only first has matchedPrefixLength", () => {
             const first: CompletionResult = {
-                completions: ["a"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["a"],
+                        separatorMode: "space",
+                    },
+                ],
                 matchedPrefixLength: 7,
             };
             const second: CompletionResult = {
-                completions: ["b"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["b"],
+                        separatorMode: "space",
+                    },
+                ],
             };
             const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.matchedPrefixLength).toBe(7);
-            expect(result.completions).toEqual(["a"]);
+            expect(flatCompletions(result)).toEqual(["a"]);
         });
 
         it("discards first when only second has matchedPrefixLength", () => {
             const first: CompletionResult = {
-                completions: [],
+                groups: [
+                    { name: "test", completions: [], separatorMode: "space" },
+                ],
             };
             const second: CompletionResult = {
-                completions: ["b"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["b"],
+                        separatorMode: "space",
+                    },
+                ],
                 matchedPrefixLength: 4,
             };
             const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.matchedPrefixLength).toBe(4);
-            expect(result.completions).toEqual(["b"]);
+            expect(flatCompletions(result)).toEqual(["b"]);
         });
     });
 
     describe("completions merging", () => {
         it("merges completions from both results", () => {
             const first: CompletionResult = {
-                completions: ["a", "b"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["a", "b"],
+                        separatorMode: "space",
+                    },
+                ],
             };
             const second: CompletionResult = {
-                completions: ["c", "d"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["c", "d"],
+                        separatorMode: "space",
+                    },
+                ],
             };
             const result = mergeCompletionResults(first, second, Infinity)!;
-            expect(result.completions).toEqual(["a", "b", "c", "d"]);
+            expect(flatCompletions(result)).toEqual(["a", "b", "c", "d"]);
         });
 
         it("handles empty completions", () => {
             const first: CompletionResult = {
-                completions: [],
+                groups: [
+                    { name: "test", completions: [], separatorMode: "space" },
+                ],
             };
             const second: CompletionResult = {
-                completions: ["c"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["c"],
+                        separatorMode: "space",
+                    },
+                ],
             };
             const result = mergeCompletionResults(first, second, Infinity)!;
-            expect(result.completions).toEqual(["c"]);
+            expect(flatCompletions(result)).toEqual(["c"]);
         });
     });
 
@@ -154,11 +259,15 @@ describe("mergeCompletionResults", () => {
                 names: ["name2"],
             };
             const first: CompletionResult = {
-                completions: [],
+                groups: [
+                    { name: "test", completions: [], separatorMode: "space" },
+                ],
                 properties: [prop1],
             };
             const second: CompletionResult = {
-                completions: [],
+                groups: [
+                    { name: "test", completions: [], separatorMode: "space" },
+                ],
                 properties: [prop2],
             };
             const result = mergeCompletionResults(first, second, Infinity)!;
@@ -171,11 +280,15 @@ describe("mergeCompletionResults", () => {
                 names: ["name1"],
             };
             const first: CompletionResult = {
-                completions: [],
+                groups: [
+                    { name: "test", completions: [], separatorMode: "space" },
+                ],
                 properties: [prop1],
             };
             const second: CompletionResult = {
-                completions: [],
+                groups: [
+                    { name: "test", completions: [], separatorMode: "space" },
+                ],
             };
             const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.properties).toBe(first.properties);
@@ -187,10 +300,14 @@ describe("mergeCompletionResults", () => {
                 names: ["name2"],
             };
             const first: CompletionResult = {
-                completions: [],
+                groups: [
+                    { name: "test", completions: [], separatorMode: "space" },
+                ],
             };
             const second: CompletionResult = {
-                completions: [],
+                groups: [
+                    { name: "test", completions: [], separatorMode: "space" },
+                ],
                 properties: [prop2],
             };
             const result = mergeCompletionResults(first, second, Infinity)!;
@@ -199,83 +316,108 @@ describe("mergeCompletionResults", () => {
 
         it("returns undefined properties when neither has them", () => {
             const first: CompletionResult = {
-                completions: [],
+                groups: [
+                    { name: "test", completions: [], separatorMode: "space" },
+                ],
             };
             const second: CompletionResult = {
-                completions: [],
+                groups: [
+                    { name: "test", completions: [], separatorMode: "space" },
+                ],
             };
             const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.properties).toBeUndefined();
         });
     });
 
-    describe("separatorMode merging", () => {
-        it("returns undefined when neither has separatorMode", () => {
-            const first: CompletionResult = { completions: ["a"] };
-            const second: CompletionResult = { completions: ["b"] };
-            const result = mergeCompletionResults(first, second, Infinity)!;
-            expect(result.separatorMode).toBeUndefined();
-        });
-
-        it("returns first separatorMode when second is undefined", () => {
+    describe("per-group separatorMode preservation", () => {
+        it("preserves per-group separatorMode when merging same-length results", () => {
             const first: CompletionResult = {
-                completions: ["a"],
-                separatorMode: "spacePunctuation",
-            };
-            const second: CompletionResult = { completions: ["b"] };
-            const result = mergeCompletionResults(first, second, Infinity)!;
-            expect(result.separatorMode).toBe("spacePunctuation");
-        });
-
-        it("returns second separatorMode when first is undefined", () => {
-            const first: CompletionResult = { completions: ["a"] };
-            const second: CompletionResult = {
-                completions: ["b"],
-                separatorMode: "spacePunctuation",
-            };
-            const result = mergeCompletionResults(first, second, Infinity)!;
-            expect(result.separatorMode).toBe("spacePunctuation");
-        });
-
-        it("returns most restrictive when both have separatorMode", () => {
-            const first: CompletionResult = {
-                completions: ["a"],
-                separatorMode: "spacePunctuation",
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["a"],
+                        separatorMode: "spacePunctuation",
+                    },
+                ],
+                matchedPrefixLength: 5,
             };
             const second: CompletionResult = {
-                completions: ["b"],
-                separatorMode: "optionalSpace",
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["b"],
+                        separatorMode: "optionalSpace",
+                    },
+                ],
+                matchedPrefixLength: 5,
             };
             const result = mergeCompletionResults(first, second, Infinity)!;
-            expect(result.separatorMode).toBe("spacePunctuation");
+            // Groups are concatenated, each preserving its own separatorMode.
+            expect(result.groups.length).toBe(2);
+            expect(result.groups[0].separatorMode).toBe("spacePunctuation");
+            expect(result.groups[1].separatorMode).toBe("optionalSpace");
         });
 
         it("preserves separatorMode when first is undefined result", () => {
             const second: CompletionResult = {
-                completions: ["b"],
-                separatorMode: "spacePunctuation",
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["b"],
+                        separatorMode: "spacePunctuation",
+                    },
+                ],
             };
             const result = mergeCompletionResults(undefined, second, Infinity);
             expect(result).toBe(second);
-            expect(result!.separatorMode).toBe("spacePunctuation");
+            expect(result!.groups[0].separatorMode).toBe("spacePunctuation");
         });
     });
 
     describe("closedSet merging", () => {
         it("returns undefined when neither has closedSet", () => {
-            const first: CompletionResult = { completions: ["a"] };
-            const second: CompletionResult = { completions: ["b"] };
+            const first: CompletionResult = {
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["a"],
+                        separatorMode: "space",
+                    },
+                ],
+            };
+            const second: CompletionResult = {
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["b"],
+                        separatorMode: "space",
+                    },
+                ],
+            };
             const result = mergeCompletionResults(first, second, Infinity)!;
             expect(result.closedSet).toBeUndefined();
         });
 
         it("returns true only when both are true", () => {
             const first: CompletionResult = {
-                completions: ["a"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["a"],
+                        separatorMode: "space",
+                    },
+                ],
                 closedSet: true,
             };
             const second: CompletionResult = {
-                completions: ["b"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["b"],
+                        separatorMode: "space",
+                    },
+                ],
                 closedSet: true,
             };
             const result = mergeCompletionResults(first, second, Infinity)!;
@@ -284,11 +426,23 @@ describe("mergeCompletionResults", () => {
 
         it("returns false when first is true and second is false", () => {
             const first: CompletionResult = {
-                completions: ["a"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["a"],
+                        separatorMode: "space",
+                    },
+                ],
                 closedSet: true,
             };
             const second: CompletionResult = {
-                completions: ["b"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["b"],
+                        separatorMode: "space",
+                    },
+                ],
                 closedSet: false,
             };
             const result = mergeCompletionResults(first, second, Infinity)!;
@@ -297,11 +451,23 @@ describe("mergeCompletionResults", () => {
 
         it("returns false when first is false and second is true", () => {
             const first: CompletionResult = {
-                completions: ["a"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["a"],
+                        separatorMode: "space",
+                    },
+                ],
                 closedSet: false,
             };
             const second: CompletionResult = {
-                completions: ["b"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["b"],
+                        separatorMode: "space",
+                    },
+                ],
                 closedSet: true,
             };
             const result = mergeCompletionResults(first, second, Infinity)!;
@@ -310,11 +476,23 @@ describe("mergeCompletionResults", () => {
 
         it("returns false when both are false", () => {
             const first: CompletionResult = {
-                completions: ["a"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["a"],
+                        separatorMode: "space",
+                    },
+                ],
                 closedSet: false,
             };
             const second: CompletionResult = {
-                completions: ["b"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["b"],
+                        separatorMode: "space",
+                    },
+                ],
                 closedSet: false,
             };
             const result = mergeCompletionResults(first, second, Infinity)!;
@@ -323,11 +501,23 @@ describe("mergeCompletionResults", () => {
 
         it("returns false when only first has closedSet=true and second is undefined", () => {
             const first: CompletionResult = {
-                completions: ["a"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["a"],
+                        separatorMode: "space",
+                    },
+                ],
                 closedSet: true,
             };
             const second: CompletionResult = {
-                completions: ["b"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["b"],
+                        separatorMode: "space",
+                    },
+                ],
             };
             const result = mergeCompletionResults(first, second, Infinity)!;
             // undefined treated as false → true && false = false
@@ -336,10 +526,22 @@ describe("mergeCompletionResults", () => {
 
         it("returns false when only second has closedSet=true and first is undefined", () => {
             const first: CompletionResult = {
-                completions: ["a"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["a"],
+                        separatorMode: "space",
+                    },
+                ],
             };
             const second: CompletionResult = {
-                completions: ["b"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["b"],
+                        separatorMode: "space",
+                    },
+                ],
                 closedSet: true,
             };
             const result = mergeCompletionResults(first, second, Infinity)!;
@@ -349,7 +551,13 @@ describe("mergeCompletionResults", () => {
 
         it("preserves closedSet when first result is undefined", () => {
             const second: CompletionResult = {
-                completions: ["b"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["b"],
+                        separatorMode: "space",
+                    },
+                ],
                 closedSet: true,
             };
             const result = mergeCompletionResults(undefined, second, Infinity);
@@ -359,7 +567,13 @@ describe("mergeCompletionResults", () => {
 
         it("preserves closedSet when second result is undefined", () => {
             const first: CompletionResult = {
-                completions: ["a"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["a"],
+                        separatorMode: "space",
+                    },
+                ],
                 closedSet: false,
             };
             const result = mergeCompletionResults(first, undefined, Infinity);
@@ -371,81 +585,137 @@ describe("mergeCompletionResults", () => {
     describe("open wildcard at EOI — prefer anchored result", () => {
         it("keeps shorter anchored result when longer is afterWildcard at EOI", () => {
             const anchored: CompletionResult = {
-                completions: ["by"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["by"],
+                        separatorMode: "space",
+                    },
+                ],
                 matchedPrefixLength: 16,
                 afterWildcard: "all",
             };
             const eoi: CompletionResult = {
-                completions: ["track", "song"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["track", "song"],
+                        separatorMode: "space",
+                    },
+                ],
                 matchedPrefixLength: 17,
                 afterWildcard: "all",
             };
             // prefixLength=17: eoi is at EOI, anchored is inside input
             const result = mergeCompletionResults(anchored, eoi, 17)!;
-            expect(result.completions).toEqual(["by"]);
+            expect(flatCompletions(result)).toEqual(["by"]);
             expect(result.matchedPrefixLength).toBe(16);
         });
 
         it("keeps shorter anchored result regardless of argument order", () => {
             const anchored: CompletionResult = {
-                completions: ["by"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["by"],
+                        separatorMode: "space",
+                    },
+                ],
                 matchedPrefixLength: 16,
                 afterWildcard: "all",
             };
             const eoi: CompletionResult = {
-                completions: ["track", "song"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["track", "song"],
+                        separatorMode: "space",
+                    },
+                ],
                 matchedPrefixLength: 17,
                 afterWildcard: "all",
             };
             // Reversed argument order
             const result = mergeCompletionResults(eoi, anchored, 17)!;
-            expect(result.completions).toEqual(["by"]);
+            expect(flatCompletions(result)).toEqual(["by"]);
             expect(result.matchedPrefixLength).toBe(16);
         });
 
         it("still prefers longer when both are below EOI", () => {
             const shorter: CompletionResult = {
-                completions: ["a"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["a"],
+                        separatorMode: "space",
+                    },
+                ],
                 matchedPrefixLength: 5,
                 afterWildcard: "all",
             };
             const longer: CompletionResult = {
-                completions: ["b"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["b"],
+                        separatorMode: "space",
+                    },
+                ],
                 matchedPrefixLength: 10,
                 afterWildcard: "all",
             };
             const result = mergeCompletionResults(shorter, longer, 20)!;
-            expect(result.completions).toEqual(["b"]);
+            expect(flatCompletions(result)).toEqual(["b"]);
             expect(result.matchedPrefixLength).toBe(10);
         });
 
         it("still prefers longer when longer is at EOI but shorter has no completions", () => {
             const shorter: CompletionResult = {
-                completions: [],
+                groups: [
+                    { name: "test", completions: [], separatorMode: "space" },
+                ],
                 matchedPrefixLength: 0,
             };
             const eoi: CompletionResult = {
-                completions: ["track"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["track"],
+                        separatorMode: "space",
+                    },
+                ],
                 matchedPrefixLength: 17,
                 afterWildcard: "all",
             };
             const result = mergeCompletionResults(shorter, eoi, 17)!;
-            expect(result.completions).toEqual(["track"]);
+            expect(flatCompletions(result)).toEqual(["track"]);
             expect(result.matchedPrefixLength).toBe(17);
         });
 
         it('still prefers longer when afterWildcard is "none"', () => {
             const anchored: CompletionResult = {
-                completions: ["by"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["by"],
+                        separatorMode: "space",
+                    },
+                ],
                 matchedPrefixLength: 16,
             };
             const eoi: CompletionResult = {
-                completions: ["track"],
+                groups: [
+                    {
+                        name: "test",
+                        completions: ["track"],
+                        separatorMode: "space",
+                    },
+                ],
                 matchedPrefixLength: 17,
                 afterWildcard: "none",
             };
             const result = mergeCompletionResults(anchored, eoi, 17)!;
-            expect(result.completions).toEqual(["track"]);
+            expect(flatCompletions(result)).toEqual(["track"]);
             expect(result.matchedPrefixLength).toBe(17);
         });
     });

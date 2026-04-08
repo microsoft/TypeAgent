@@ -41,7 +41,6 @@ function grammarCompletion(token: string): CompletionGroups {
                 },
             ],
             matchedPrefixLength: quoteOffset + 5,
-            separatorMode: "space",
         };
     }
     if (text.startsWith("東京")) {
@@ -54,10 +53,10 @@ function grammarCompletion(token: string): CompletionGroups {
                 {
                     name: "Grammar",
                     completions: ["タワー", "駅"],
+                    separatorMode: "optionalSpace",
                 },
             ],
             matchedPrefixLength: quoteOffset + 2,
-            separatorMode: "optionalSpace",
         };
     }
     // No prefix matched — offer initial completions.
@@ -69,7 +68,6 @@ function grammarCompletion(token: string): CompletionGroups {
             },
         ],
         ...(token.length > 0 ? { matchedPrefixLength: 0 } : {}),
-        separatorMode: "space",
     };
 }
 
@@ -364,10 +362,10 @@ const handlers = {
                         {
                             name: "Keywords",
                             completions: ["by", "from"],
+                            separatorMode: "spacePunctuation",
                         },
                     ],
                     matchedPrefixLength: 5,
-                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -804,7 +802,7 @@ describe("Command Completion - startIndex", () => {
             // "run" is the default subcommand, so subcommand alternatives
             // are included and the group has separatorMode: "space".
             // Subcommand completions at the boundary retain "space".
-            expect(result!.separatorMode).toBe("space");
+            expect(result!.completions[0].separatorMode).toBe("space");
             // startIndex includes trailing whitespace.
             expect(result!.startIndex).toBe(10);
         });
@@ -816,8 +814,7 @@ describe("Command Completion - startIndex", () => {
                 context,
             );
             expect(result).toBeDefined();
-            expect(result!.separatorMode).toBe("space");
-            // No trailing whitespace to trim — startIndex stays at end
+            expect(result!.completions[0].separatorMode).toBe("space");
             expect(result!.startIndex).toBe(9);
             // Default subcommand has agent completions → not exhaustive.
             expect(result!.closedSet).toBe(false);
@@ -827,16 +824,14 @@ describe("Command Completion - startIndex", () => {
             const result = await getCommandCompletion("@", "forward", context);
             expect(result).toBeDefined();
             // Top-level completions (agent names, system subcommands)
-            // follow '@' — space is accepted but not required.
-            expect(result!.separatorMode).toBe("optionalSpace");
-            // Agent names are offered when no agent was recognized,
-            // independent of which branch (descriptor/table/neither)
-            // produced the subcommand completions.
-            const agentGroup = result!.completions.find(
+            // follow '@' — baseMode is "space" since there's no trailing
+            // whitespace after the '@' marker.
+            const agentNamesGroup = result!.completions.find(
                 (g) => g.name === "Agent Names",
             );
-            expect(agentGroup).toBeDefined();
-            expect(agentGroup!.completions).toContain("comptest");
+            expect(agentNamesGroup).toBeDefined();
+            expect(agentNamesGroup!.separatorMode).toBe("space");
+            expect(agentNamesGroup!.completions).toContain("comptest");
             // Subcommand + agent name sets are finite → exhaustive.
             expect(result!.closedSet).toBe(true);
         });
@@ -849,9 +844,8 @@ describe("Command Completion - startIndex", () => {
             );
             expect(result).toBeDefined();
             // Partial parameter token — only parameter completions returned,
-            // no subcommand group.  separatorMode set to "optionalSpace"
-            // due to trailing space advancement.
-            expect(result!.separatorMode).toBe("optionalSpace");
+            // no subcommand group.  Each group carries its own separatorMode.
+            expect(result!.completions[0].separatorMode).toBe("space");
         });
 
         it("returns no separatorMode for partial unmatched token consumed as param", async () => {
@@ -866,11 +860,11 @@ describe("Command Completion - startIndex", () => {
             // (after "@comptest "), which is ≤ commandConsumedLength
             // (10), so sibling subcommands are included with
             // separatorMode="space".
-            expect(result!.separatorMode).toBe("space");
             const subcommands = result!.completions.find(
                 (g) => g.name === "Subcommands",
             );
             expect(subcommands).toBeDefined();
+            expect(subcommands!.separatorMode).toBe("space");
             expect(result!.startIndex).toBe(10);
         });
     });

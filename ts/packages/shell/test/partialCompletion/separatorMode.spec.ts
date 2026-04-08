@@ -8,6 +8,7 @@ import {
     makeCompletionResult,
     getPos,
     anyPosition,
+    makeMultiGroupResult,
 } from "./helpers.js";
 
 // ── separatorMode: "space" ────────────────────────────────────────────────────
@@ -21,17 +22,18 @@ describe("PartialCompletionSession — separatorMode: space", () => {
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
 
-        // Input without trailing space: "play" — choices are loaded but menu is not shown
+        // Input without trailing space: "play" — no visible items (need space)
         session.update("play", getPos);
         await Promise.resolve();
 
-        // setChoices IS called with actual items (trie is populated for later)
-        expect(menu.setChoices).toHaveBeenCalledWith(
+        // Trie is preloaded with all items but the menu stays hidden.
+        expect(menu.setChoices).toHaveBeenLastCalledWith(
             expect.arrayContaining([
                 expect.objectContaining({ selectedText: "music" }),
             ]),
         );
-        // But updatePrefix is NOT called yet (menu not shown)
+        expect(menu.isActive()).toBe(false);
+        // updatePrefix is NOT called (menu not shown)
         expect(menu.updatePrefix).not.toHaveBeenCalled();
     });
 
@@ -57,9 +59,7 @@ describe("PartialCompletionSession — separatorMode: space", () => {
 
     test("menu shown after trailing space is typed", async () => {
         const menu = makeMenu();
-        const result = makeCompletionResult(["music"], 4, {
-            separatorMode: undefined,
-        });
+        const result = makeCompletionResult(["music"], 4);
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
 
@@ -427,6 +427,326 @@ describe("PartialCompletionSession — separatorMode edge cases", () => {
         session.update("play ", getPos);
 
         expect(menu.updatePrefix).toHaveBeenCalledWith("", anyPosition);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+});
+
+// ── SepLevel: widen / narrow / skip-ahead ──────────────────────────────────
+
+describe("PartialCompletionSession — SepLevel transitions", () => {
+    // Two groups at different levels:
+    //   level 0: "optionalSpace" group  →  ["alpha"]
+    //   level 1: "space" group          →  ["beta"]
+    // (Both visible at level 1, only optionalSpace at level 0.)
+    function makeTwoLevelResult() {
+        return makeMultiGroupResult(
+            [
+                { completions: ["alpha"], separatorMode: "optionalSpace" },
+                { completions: ["beta"], separatorMode: "space" },
+            ],
+            4, // anchor = "play"
+        );
+    }
+
+    test("D1 WIDEN: space group exhausted, punctuation widens to level 2", async () => {
+        const menu = makeMenu();
+        // Level 1 has both (space and spacePunctuation visible at lv1).
+        // Level 2 has only "beta" (spacePunctuation).
+        const result = makeMultiGroupResult(
+            [
+                { completions: ["alpha"], separatorMode: "space" },
+                { completions: ["beta"], separatorMode: "spacePunctuation" },
+            ],
+            4,
+        );
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // menuSepLevel = 1 via lowestLevelWithItems.
+        // rawPrefix="" → sepLevel=0, B2 BEFORE-MENU (hide).
+        expect(menu.isActive()).toBe(false);
+
+        // Type space: sepLevel=1, menuSepLevel=1. Trie has alpha+beta.
+        session.update("play ", getPos);
+        expect(menu.isActive()).toBe(true);
+
+        // No extra setChoices between B2→show — the existing trie at level 1
+        // already had the right items loaded by startNewSession.
+        // (startNewSession calls loadLevel once; the space update just
+        // runs updatePrefix on the already-loaded trie.)
+
+        // Type "play.": anchor "play", rawPrefix=".", sepLevel=2.
+        // Trie is at level 1 (alpha+beta). prefix at level 1 = trimStart(".") = ".".
+        // "." doesn't match "alpha" or "beta". Menu not active (C3 fails).
+        // D1: sepLevel(2) > menuSepLevel(1) → widen to level 2.
+        // Level 2: only "beta" (spacePunctuation). Trie reloaded.
+        // Stripped prefix at level 2: strip "." → "". Matches "beta".
+        menu.setChoices.mockClear();
+        session.update("play.", getPos);
+        // Exactly one setChoices for the widen reload.
+        expect(menu.setChoices).toHaveBeenCalledTimes(1);
+        expect(menu.setChoices).toHaveBeenCalledWith(
+            expect.arrayContaining([
+                expect.objectContaining({ matchText: "beta" }),
+            ]),
+        );
+        expect(menu.isActive()).toBe(true);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("B1 NARROW: backspace from level 1 to level 0 reloads trie", async () => {
+        const menu = makeMenu();
+        const result = makeTwoLevelResult();
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // menuSepLevel=0, trie has "alpha" (optionalSpace at level 0).
+        expect(menu.isActive()).toBe(true);
+
+        // Type space: sepLevel=1, menuSepLevel=0.
+        // D1: sepLevel(1) > menuSepLevel(0) → widen to level 1.
+        // Level 1: "alpha" + "beta". Trie reloaded, prefix="" → shows both.
+        session.update("play ", getPos);
+        expect(menu.isActive()).toBe(true);
+
+        // Backspace to "play": rawPrefix="", sepLevel=0.
+        // B1: sepLevel(0) < menuSepLevel(1) + items at level 0 → NARROW.
+        // Trie reloaded with level-0 items ("alpha" only).
+        menu.setChoices.mockClear();
+        session.update("play", getPos);
+        // Exactly one setChoices for the narrow reload.
+        expect(menu.setChoices).toHaveBeenCalledTimes(1);
+        expect(menu.setChoices).toHaveBeenCalledWith(
+            expect.arrayContaining([
+                expect.objectContaining({ matchText: "alpha" }),
+            ]),
+        );
+        // Only "alpha" — "beta" (space mode) not visible at level 0.
+        expect(menu.setChoices).not.toHaveBeenCalledWith(
+            expect.arrayContaining([
+                expect.objectContaining({ matchText: "beta" }),
+            ]),
+        );
+        expect(menu.isActive()).toBe(true);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("B2 BEFORE-MENU: skip-ahead hides menu until separator typed", async () => {
+        const menu = makeMenu();
+        // Only "space" mode items — nothing at level 0.
+        const result = makeMultiGroupResult(
+            [{ completions: ["music"], separatorMode: "space" }],
+            4,
+        );
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // lowestLevelWithItems → 1. menuSepLevel=1.
+        // rawPrefix="" → sepLevel=0 < menuSepLevel=1 → B2 BEFORE-MENU.
+        expect(menu.isActive()).toBe(false);
+
+        // Same input again — still B2.
+        session.update("play", getPos);
+        expect(menu.isActive()).toBe(false);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+
+        // Type space — separator typed, sepLevel matches menuSepLevel.
+        session.update("play ", getPos);
+        expect(menu.isActive()).toBe(true);
+        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
+            "",
+            expect.anything(),
+        );
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("no trie reload when sepLevel stays at same menuSepLevel", async () => {
+        const menu = makeMenu();
+        const result = makeTwoLevelResult();
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // menuSepLevel=0. Trie loaded once with level-0 items.
+        // Type more characters that don't change sepLevel:
+        menu.setChoices.mockClear();
+        session.update("playa", getPos);
+        session.update("playalp", getPos);
+
+        // setChoices NOT called — trie stays loaded at level 0.
+        expect(menu.setChoices).not.toHaveBeenCalled();
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("widen then narrow round-trip preserves correct items", async () => {
+        const menu = makeMenu();
+        const result = makeTwoLevelResult();
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // Level 0: "alpha". Level 1: "alpha"+"beta".
+        expect(menu.isActive()).toBe(true); // "alpha" at level 0
+
+        // Widen: type space → level 1.
+        session.update("play ", getPos);
+        expect(menu.isActive()).toBe(true);
+
+        // Narrow: backspace → level 0.
+        session.update("play", getPos);
+        expect(menu.isActive()).toBe(true);
+
+        // Widen again: type space → level 1.
+        menu.setChoices.mockClear();
+        session.update("play ", getPos);
+        // Exactly one setChoices for the widen reload.
+        expect(menu.setChoices).toHaveBeenCalledTimes(1);
+        expect(menu.setChoices).toHaveBeenCalledWith(
+            expect.arrayContaining([
+                expect.objectContaining({ matchText: "alpha" }),
+                expect.objectContaining({ matchText: "beta" }),
+            ]),
+        );
+        expect(menu.isActive()).toBe(true);
+
+        // All within one session — no re-fetch.
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("optionalSpacePunctuation visible at all three levels", async () => {
+        const menu = makeMenu();
+        const result = makeMultiGroupResult(
+            [
+                {
+                    completions: ["gamma"],
+                    separatorMode: "optionalSpacePunctuation",
+                },
+            ],
+            4,
+        );
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // Level 0: "gamma" visible (optionalSpacePunctuation at lv0).
+        expect(menu.isActive()).toBe(true);
+        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
+            "",
+            expect.anything(),
+        );
+
+        // Level 1 (space): still visible. optionalSpacePunctuation is in
+        // both level 0 and 1 — widen reloads the trie with level-1 items,
+        // but it's the same single item.
+        menu.setChoices.mockClear();
+        session.update("play ", getPos);
+        expect(menu.isActive()).toBe(true);
+        // Widen from 0→1 reloads trie (1 setChoices call).
+        expect(menu.setChoices).toHaveBeenCalledTimes(1);
+
+        // Level 2 (punctuation): still visible. Widen from 1→2.
+        menu.setChoices.mockClear();
+        session.update("play.", getPos);
+        expect(menu.isActive()).toBe(true);
+        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
+            "",
+            expect.anything(),
+        );
+        // Widen from 1→2 reloads trie (1 setChoices call).
+        expect(menu.setChoices).toHaveBeenCalledTimes(1);
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("spacePunctuation visible at levels 1 and 2 but not 0", async () => {
+        const menu = makeMenu();
+        const result = makeMultiGroupResult(
+            [
+                {
+                    completions: ["delta"],
+                    separatorMode: "spacePunctuation",
+                },
+            ],
+            4,
+        );
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // Level 0: no items (spacePunctuation not at level 0).
+        // Skip-ahead to level 1. B2 at anchor → hidden.
+        expect(menu.isActive()).toBe(false);
+
+        // Level 1 (space): visible.
+        // No extra setChoices — trie was already loaded at level 1 by startNewSession.
+        menu.setChoices.mockClear();
+        session.update("play ", getPos);
+        expect(menu.isActive()).toBe(true);
+        expect(menu.setChoices).not.toHaveBeenCalled();
+
+        // Backspace → hidden (B2 at anchor).
+        session.update("play", getPos);
+        expect(menu.isActive()).toBe(false);
+        // No setChoices on B2 — trie stays loaded at level 1.
+        expect(menu.setChoices).not.toHaveBeenCalled();
+
+        // Level 2 (punctuation): visible. Widen from 1→2.
+        menu.setChoices.mockClear();
+        session.update("play.", getPos);
+        expect(menu.isActive()).toBe(true);
+        expect(menu.setChoices).toHaveBeenCalledTimes(1);
+
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("none mode only visible at level 0", async () => {
+        const menu = makeMenu();
+        const result = makeMultiGroupResult(
+            [{ completions: ["epsilon"], separatorMode: "none" }],
+            4,
+        );
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // Level 0: visible.
+        expect(menu.isActive()).toBe(true);
+        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
+            "",
+            expect.anything(),
+        );
+
+        // Level 1 (space): "none" mode is NOT visible at level 1.
+        // Trie at level 0 has "epsilon", stripped prefix at level 0 = " ".
+        // " " doesn't match "epsilon" → C3 fails.
+        // D1: sepLevel(1) > menuSepLevel(0) → widen to level 1.
+        // Level 1: no items for "none" mode. Empty trie.
+        // D4: accept (closedSet=true).
+        // Widen loaded empty trie at level 1 — exactly 1 setChoices.
+        menu.setChoices.mockClear();
+        session.update("play ", getPos);
+        expect(menu.isActive()).toBe(false);
+        expect(menu.setChoices).toHaveBeenCalledTimes(1);
+
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 });
