@@ -79,11 +79,13 @@ function detectPendingFlag(
 // Returns the separatorMode implied by the position in the input.
 // When the position is 0 (beginning of input) or preceded by
 // whitespace, the separator is already satisfied → "optionalSpace".
-// Otherwise returns undefined (defaults to "space" per CompletionGroup contract).
+// Otherwise returns undefined — callers treat undefined as "separator
+// not yet present" and leave the group's own separatorMode intact
+// (which defaults to "space" per the CompletionGroup contract).
 function inferSeparatorMode(
     text: string,
     index: number,
-): SeparatorMode | undefined {
+): "optionalSpace" | undefined {
     return index === 0 || /\s/.test(text[index - 1])
         ? "optionalSpace"
         : undefined;

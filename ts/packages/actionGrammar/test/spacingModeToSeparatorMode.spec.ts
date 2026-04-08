@@ -23,11 +23,9 @@ describe("spacingModeToSeparatorMode", () => {
     });
 
     it('maps undefined (auto) → "autoSpacePunctuation"', () => {
-        expect(
-            spacingModeToSeparatorMode(
-                undefined as unknown as CompiledSpacingMode,
-            ),
-        ).toBe("autoSpacePunctuation");
+        expect(spacingModeToSeparatorMode(undefined)).toBe(
+            "autoSpacePunctuation",
+        );
     });
 
     it("covers all CompiledSpacingMode values exhaustively", () => {
@@ -36,7 +34,7 @@ describe("spacingModeToSeparatorMode", () => {
             "required",
             "optional",
             "none",
-            undefined as unknown as CompiledSpacingMode,
+            undefined,
         ];
         for (const mode of modes) {
             const result = spacingModeToSeparatorMode(mode);

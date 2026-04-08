@@ -133,21 +133,23 @@ evaluated against the adjacent characters to produce a `separatorMode`
 [Completion matching](#completion-matching-matchgrammarcompletion) and
 `completion.md`):
 
-| Annotation           | `CompiledSpacingMode` | Resulting `separatorMode`                                                                                                                                                  |
-| -------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| _(none / default)_   | `auto`                | `"spacePunctuation"` if both adjacent characters are word-boundary scripts (Latin, Cyrillic, etc.); `"optionalSpace"` if either is CJK or another non-word-boundary script |
-| `[spacing=required]` | `"required"`          | Always `"spacePunctuation"`                                                                                                                                                |
-| `[spacing=optional]` | `"optional"`          | Always `"optionalSpacePunctuation"`                                                                                                                                        |
-| `[spacing=none]`     | `"none"`              | Always `"none"` — no separator consumed or required                                                                                                                        |
+| Annotation           | `CompiledSpacingMode` | Resulting `separatorMode`                                                                                                                                                                                                                           |
+| -------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| _(none / default)_   | `auto`                | `"autoSpacePunctuation"` — resolved per-item by the consumer: `"spacePunctuation"` if both adjacent characters are word-boundary scripts (Latin, Cyrillic, etc.); `"optionalSpacePunctuation"` if either is CJK or another non-word-boundary script |
+| `[spacing=required]` | `"required"`          | Always `"spacePunctuation"`                                                                                                                                                                                                                         |
+| `[spacing=optional]` | `"optional"`          | Always `"optionalSpacePunctuation"`                                                                                                                                                                                                                 |
+| `[spacing=none]`     | `"none"`              | Always `"none"` — no separator consumed or required                                                                                                                                                                                                 |
 
 **Note:** The table above describes the _baseline_ `separatorMode`
-from the spacing annotation. When the consumed prefix already ends with
-whitespace (i.e., the separator is already present in `matchedPrefixLength`),
-the grammar matcher overrides to `"optionalSpace"` because no additional
-separator is needed. Digits are Unicode script "Common" (not a
-word-boundary script), so `auto` spacing at a digit–Latin boundary
-(e.g., `$(n:number)` followed by a Latin keyword) also produces
-`"optionalSpace"`.
+from the spacing annotation. For `auto` mode, the grammar emits
+`"autoSpacePunctuation"` and the shell resolves each item to
+`"spacePunctuation"` or `"optionalSpacePunctuation"` based on the
+character pair (see `toPartitions()` in `partialCompletionSession.ts`).
+At the command/flag level, the dispatcher may override to
+`"optionalSpace"` when trailing whitespace was already consumed.
+Digits are Unicode script "Common" (not a word-boundary script),
+so `auto` spacing at a digit–Latin boundary (e.g., `$(n:number)`
+followed by a Latin keyword) resolves to `"optionalSpacePunctuation"`.
 
 ### Entities
 
