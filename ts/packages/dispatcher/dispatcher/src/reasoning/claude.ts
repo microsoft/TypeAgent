@@ -261,7 +261,10 @@ function getClaudeOptions(
     let actionIndex = 1;
     const executeSchema = {
         schemaName: z.union(activeSchemas.map((s) => z.literal(s))),
-        action: z.object({ actionName: z.string(), parameters: z.any() }),
+        action: z.object({
+            actionName: z.string(),
+            parameters: z.any().optional(),
+        }),
     };
     const executeTool: SdkMcpToolDefinition<typeof executeSchema> = {
         name: "execute_action",
@@ -275,7 +278,15 @@ function getClaudeOptions(
             if (!validator) {
                 throw new Error(`Invalid schema name '${args.schemaName}'`);
             }
-            const actionJson = args.action;
+            const actionJson = { ...args.action };
+            // Remove empty parameters object to support actions without parameters
+            if (
+                actionJson.parameters &&
+                typeof actionJson.parameters === "object" &&
+                Object.keys(actionJson.parameters).length === 0
+            ) {
+                delete actionJson.parameters;
+            }
             const validationResult = validator.validate(actionJson);
             if (!validationResult.success) {
                 // For unknown action names, include the schema text so the model
@@ -539,6 +550,33 @@ function getClaudeOptions(
                           "4. **Structure multi-step scripts as functions** with clear param() blocks for extractability.",
                           "5. **Output structured data** when possible (objects, not formatted strings).",
                           '6. Execute scripts via Bash tool: `powershell -NoProfile -Command "& { <script> }"`',
+                          "",
+                          "## ConstrainedLanguage Mode Restrictions (CRITICAL)",
+                          "",
+                          "ScriptFlow executes scripts in PowerShell ConstrainedLanguage mode for security.",
+                          "This mode BLOCKS the following — scripts using these will fail at runtime:",
+                          "",
+                          "**BLOCKED (will cause script failure):**",
+                          "- .NET type accelerators and methods: `[math]::Round()`, `[System.IO.File]::ReadAllText()`, `[datetime]::Now`",
+                          "- Add-Type or compiled code",
+                          "- COM objects",
+                          "- Reflection and dynamic method invocation",
+                          "- Creating custom types with `class` keyword",
+                          "",
+                          "**USE INSTEAD:**",
+                          "- Formatting numbers: Use `-f` format operator → `'{0:N2}' -f $value` (not `[math]::Round($value, 2)`)",
+                          "- Date/time: Use `Get-Date` cmdlet (not `[datetime]::Now`)",
+                          "- File operations: Use `Get-Content`, `Set-Content` cmdlets (not `[System.IO.File]::*`)",
+                          "- String manipulation: Use `-replace`, `-split`, `.Substring()` on string objects",
+                          "",
+                          "Example — converting MB with rounding:",
+                          "```powershell",
+                          "# WRONG - will fail in ConstrainedLanguage mode:",
+                          "$sizeMB = [math]::Round($_.Length / 1MB, 2)",
+                          "",
+                          "# CORRECT - use format operator:",
+                          "$sizeMB = '{0:N2}' -f ($_.Length / 1MB)",
+                          "```",
                           "",
                           "# ScriptFlow Integration (MANDATORY)",
                           "",
