@@ -111,21 +111,29 @@ async function handleCrawlDocUrl(
         return { error: `Failed to fetch ${url}: ${err?.message ?? err}` };
     }
 
+    // Strip HTML tags and collapse whitespace to get readable text content
+    const textContent = stripHtml(pageContent);
+
+    // Follow links up to maxDepth levels
+    const linkedContent = await crawlLinks(url, pageContent, maxDepth, integrationName);
+
     // Use LLM to extract API actions from the page content
     const prompt = [
         {
             role: "system" as const,
             content:
-                "You are an API documentation analyzer. Extract a list of API actions/operations from the provided documentation HTML. " +
+                "You are an API documentation analyzer. Extract a list of user-facing API actions/operations from the provided documentation. " +
                 "For each action, identify: name (camelCase), description, HTTP method (if applicable), endpoint path (if applicable), and parameters. " +
-                "Return a JSON array of actions.",
+                "IMPORTANT: Only include actions that represent real operations a user would invoke. " +
+                "Exclude internal/infrastructure methods like: load, sync, toJSON, context, track, untrack, set, get (bare getters/setters without a domain concept). " +
+                "Return a JSON array of actions with shape: { name, description, method?, path?, parameters?: [{name, type, description?, required?}] }[]",
         },
         {
             role: "user" as const,
             content:
-                `Extract all API actions from this documentation page for the "${integrationName}" integration.\n\n` +
-                `URL: ${url}\n\n` +
-                `Content (truncated to 8000 chars):\n${pageContent.slice(0, 8000)}`,
+                `Extract all user-facing API actions from this documentation for the "${integrationName}" integration.\n\n` +
+                `Primary URL: ${url}\n\n` +
+                `Content:\n${(textContent + "\n\n" + linkedContent).slice(0, 16000)}`,
         },
     ];
 
@@ -145,8 +153,10 @@ async function handleCrawlDocUrl(
         return { error: "Failed to parse LLM response as JSON action list." };
     }
 
-    // Add source URL to each action
-    actions = actions.map((a) => ({ ...a, sourceUrl: url }));
+    // Add source URL to each action; filter out internal framework methods
+    actions = actions
+        .map((a) => ({ ...a, sourceUrl: url }))
+        .filter((a) => !isInternalAction(a.name));
 
     // Merge with any existing discovered actions
     const existing = await readArtifactJson<ApiSurface>(
@@ -186,6 +196,91 @@ async function handleCrawlDocUrl(
                 : "") +
             `\n\nReview with \`listDiscoveredActions\`, then \`approveApiSurface\` to proceed.`,
     );
+}
+
+// ── HTML helpers ─────────────────────────────────────────────────────────────
+
+// Strip HTML tags and collapse whitespace to extract readable text.
+function stripHtml(html: string): string {
+    return html
+        .replace(/<script[\s\S]*?<\/script>/gi, "")
+        .replace(/<style[\s\S]*?<\/style>/gi, "")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&")
+        .replace(/&quot;/g, '"')
+        .replace(/\s{2,}/g, " ")
+        .trim();
+}
+
+// Extract same-origin links from an HTML page.
+function extractLinks(baseUrl: string, html: string): string[] {
+    const base = new URL(baseUrl);
+    const links: string[] = [];
+    const hrefRe = /href=["']([^"'#?]+)["']/gi;
+    let m: RegExpExecArray | null;
+    while ((m = hrefRe.exec(html)) !== null) {
+        try {
+            const resolved = new URL(m[1], baseUrl);
+            // Only follow links on the same hostname and path prefix
+            if (
+                resolved.hostname === base.hostname &&
+                resolved.pathname.startsWith(base.pathname.split("/").slice(0, -1).join("/"))
+            ) {
+                links.push(resolved.href);
+            }
+        } catch {
+            // skip malformed URLs
+        }
+    }
+    // Deduplicate
+    return [...new Set(links)].slice(0, 30); // cap at 30 links
+}
+
+// Crawl linked pages up to maxDepth and return combined text (capped to 8000 chars per page).
+async function crawlLinks(
+    baseUrl: string,
+    baseHtml: string,
+    maxDepth: number,
+    _integrationName: string,
+): Promise<string> {
+    if (maxDepth <= 1) return "";
+
+    const links = extractLinks(baseUrl, baseHtml);
+    const visited = new Set<string>([baseUrl]);
+    const chunks: string[] = [];
+
+    for (const link of links.slice(0, 15)) {
+        if (visited.has(link)) continue;
+        visited.add(link);
+        try {
+            const resp = await fetch(link);
+            if (!resp.ok) continue;
+            const html = await resp.text();
+            const text = stripHtml(html).slice(0, 8000);
+            chunks.push(`\n--- ${link} ---\n${text}`);
+        } catch {
+            // skip unreachable pages
+        }
+    }
+
+    return chunks.join("\n").slice(0, 40000);
+}
+
+// Names that are internal Office.js / API framework infrastructure, not user-facing operations.
+const INTERNAL_ACTION_NAMES = new Set([
+    "load", "sync", "toJSON", "track", "untrack", "context",
+    "getItem", "getCount", "getItemOrNullObject", "getFirstOrNullObject",
+    "getLastOrNullObject", "getLast", "getFirst", "items",
+]);
+
+function isInternalAction(name: string): boolean {
+    if (INTERNAL_ACTION_NAMES.has(name)) return true;
+    // Bare getters/setters with no domain concept (e.g. "get", "set", "load")
+    if (/^(get|set|load|read|fetch)$/.test(name)) return true;
+    return false;
 }
 
 async function handleParseOpenApiSpec(

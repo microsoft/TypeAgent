@@ -47,20 +47,21 @@ export async function executeSchemaGenAction(
 async function handleGenerateSchema(integrationName: string): Promise<ActionResult> {
     const state = await loadState(integrationName);
     if (!state) return { error: `Integration "${integrationName}" not found.` };
-    if (state.phases.phraseGen.status !== "approved") {
-        return { error: `Phrase generation phase must be approved first. Run approvePhrases.` };
+    if (state.phases.discovery.status !== "approved") {
+        return { error: `Discovery phase must be approved first. Run approveApiSurface.` };
     }
 
     const surface = await readArtifactJson<ApiSurface>(integrationName, "discovery", "api-surface.json");
-    const phraseSet = await readArtifactJson<PhraseSet>(integrationName, "phraseGen", "phrases.json");
-    if (!surface || !phraseSet) {
-        return { error: `Missing discovery or phrase artifacts for "${integrationName}".` };
+    if (!surface) {
+        return { error: `Missing discovery artifact for "${integrationName}".` };
     }
+    // phraseSet is optional — we can still generate a schema without sample phrases
+    const phraseSet = await readArtifactJson<PhraseSet>(integrationName, "phraseGen", "phrases.json");
 
     await updatePhase(integrationName, "schemaGen", { status: "in-progress" });
 
     const model = getSchemaGenModel();
-    const prompt = buildSchemaPrompt(integrationName, surface, phraseSet, state.config.description);
+    const prompt = buildSchemaPrompt(integrationName, surface, phraseSet ?? null, state.config.description);
     const result = await model.complete(prompt);
     if (!result.success) {
         return { error: `Schema generation failed: ${result.message}` };
@@ -138,12 +139,12 @@ async function handleApproveSchema(integrationName: string): Promise<ActionResul
 function buildSchemaPrompt(
     integrationName: string,
     surface: ApiSurface,
-    phraseSet: PhraseSet,
+    phraseSet: PhraseSet | null,
     description?: string,
 ): { role: "system" | "user"; content: string }[] {
     const actionSummary = surface.actions
         .map((a) => {
-            const phrases = phraseSet.phrases[a.name] ?? [];
+            const phrases = phraseSet?.phrases[a.name] ?? [];
             return (
                 `Action: ${a.name}\n` +
                 `Description: ${a.description}\n` +
