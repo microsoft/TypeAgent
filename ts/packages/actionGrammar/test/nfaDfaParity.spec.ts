@@ -118,7 +118,9 @@ function assertCompletionParity(
     const dfaComp = getDFACompletions(dfa, prefixTokens);
 
     // Literal token completions (sort for deterministic comparison)
-    const nfaLiterals = [...(nfaComp.completions ?? [])].sort();
+    const nfaLiterals = [
+        ...nfaComp.groups.flatMap((g) => g.completions),
+    ].sort();
     const dfaLiterals = [...(dfaComp.completions ?? [])].sort();
     expect(dfaLiterals).toEqual(nfaLiterals);
 
@@ -1822,7 +1824,9 @@ describe("PhraseSet Completion Parity", () => {
         // Verify DFA produces a superset.
         const nfaComp = computeNFACompletions(nfa, []);
         const dfaComp = getDFACompletions(dfa, []);
-        const nfaLiterals = [...(nfaComp.completions ?? [])].sort();
+        const nfaLiterals = [
+            ...nfaComp.groups.flatMap((g) => g.completions),
+        ].sort();
         const dfaLiterals = [...(dfaComp.completions ?? [])].sort();
         expect(dfaLiterals.length).toBeGreaterThanOrEqual(nfaLiterals.length);
         expect(dfaLiterals).toContain("please");

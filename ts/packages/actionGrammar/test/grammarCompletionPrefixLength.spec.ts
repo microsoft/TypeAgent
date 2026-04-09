@@ -20,7 +20,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["play"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -33,7 +33,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["play"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -50,7 +50,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["music"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -65,7 +65,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["play"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -79,7 +79,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["music"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -93,7 +93,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["music"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -108,7 +108,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["music"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -131,7 +131,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["play"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -145,7 +145,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["music"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -158,7 +158,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["music"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -173,7 +173,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["play"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -186,7 +186,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["music"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -200,7 +200,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["music"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -222,9 +222,8 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "play ");
                 expectMetadata(result, {
                     completions: ["music", "video"],
-                    sortCompletions: true,
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -247,7 +246,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -260,7 +259,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["now"],
                     matchedPrefixLength: 10,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -273,7 +272,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["now"],
                     matchedPrefixLength: 10,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -291,7 +290,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["play"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -307,7 +306,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -334,7 +333,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["再生"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -348,7 +347,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["音楽"],
                     matchedPrefixLength: 2,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -361,7 +360,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["音楽"],
                     matchedPrefixLength: 2,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -375,7 +374,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["音楽"],
                     matchedPrefixLength: 2,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -395,7 +394,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["再生"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -410,7 +409,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["音楽"],
                     matchedPrefixLength: 2,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -430,7 +429,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 2,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -442,7 +441,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["停止"],
                     matchedPrefixLength: 8,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -465,7 +464,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["音楽"],
                     matchedPrefixLength: 2,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -488,7 +487,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["音楽"],
                     matchedPrefixLength: 4,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -525,12 +524,12 @@ describeForEachCompletion(
             ].join("\n");
             const grammar = loadGrammarRules("test.grammar", g);
 
-            it("reports optional separatorMode when spacing=optional", () => {
+            it("reports optionalSpacePunctuation separatorMode when spacing=optional", () => {
                 const result = matchGrammarCompletion(grammar, "play");
                 expectMetadata(result, {
                     completions: ["music"],
                     matchedPrefixLength: 4,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -554,7 +553,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -575,7 +574,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -608,7 +607,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["music"],
                         matchedPrefixLength: 4,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -627,7 +626,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["music"],
                         matchedPrefixLength: 4,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -652,7 +651,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["music"],
                         matchedPrefixLength: 4,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -670,7 +669,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["now"],
                         matchedPrefixLength: 10,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -698,7 +697,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["music"],
                         matchedPrefixLength: 4,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -716,7 +715,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["now"],
                         matchedPrefixLength: 10,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -744,7 +743,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: [],
                         matchedPrefixLength: 4,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -771,7 +770,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: [],
                         matchedPrefixLength: 4,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -808,7 +807,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["now"],
                         matchedPrefixLength: 10,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "all",
@@ -829,7 +828,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["now"],
                         matchedPrefixLength: 14,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "all",
@@ -858,7 +857,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["now"],
                         matchedPrefixLength: 16,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "all",
@@ -878,7 +877,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["right"],
                         matchedPrefixLength: 20,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "all",
@@ -909,7 +908,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: [],
                         matchedPrefixLength: 4,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -935,7 +934,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["by"],
                         matchedPrefixLength: 13,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "all",
@@ -1000,7 +999,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["play"],
                         matchedPrefixLength: 0,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: false,
                         afterWildcard: "none",
@@ -1020,7 +1019,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["play"],
                         matchedPrefixLength: 0,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: false,
                         afterWildcard: "none",
@@ -1038,7 +1037,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["music"],
                         matchedPrefixLength: 4,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1056,7 +1055,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["music"],
                         matchedPrefixLength: 4,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1077,7 +1076,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["play"],
                         matchedPrefixLength: 0,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: false,
                         afterWildcard: "none",
@@ -1099,7 +1098,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["music"],
                         matchedPrefixLength: 4,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1129,7 +1128,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["music"],
                         matchedPrefixLength: 4,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1166,7 +1165,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["songs"],
                         matchedPrefixLength: 6,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "all",
@@ -1187,7 +1186,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: [],
                         matchedPrefixLength: 4,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1213,7 +1212,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["songs"],
                         matchedPrefixLength: 6,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "all",
@@ -1242,7 +1241,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["now"],
                         matchedPrefixLength: 10,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1260,7 +1259,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["now"],
                         matchedPrefixLength: 10,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1279,7 +1278,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["music"],
                         matchedPrefixLength: 4,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1389,7 +1388,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["now"],
                         matchedPrefixLength: 10,
-                        separatorMode: "optional",
+                        separatorMode: "optionalSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1407,7 +1406,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["music"],
                         matchedPrefixLength: 4,
-                        separatorMode: "optional",
+                        separatorMode: "optionalSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1519,7 +1518,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["停止"],
                         matchedPrefixLength: 5,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1539,7 +1538,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["音楽"],
                         matchedPrefixLength: 2,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1570,7 +1569,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["next"],
                         matchedPrefixLength: 11,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1590,7 +1589,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["hello world"],
                         matchedPrefixLength: 0,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: false,
                         afterWildcard: "none",
@@ -1610,7 +1609,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["hello world"],
                         matchedPrefixLength: 0,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: false,
                         afterWildcard: "none",
@@ -1632,7 +1631,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["hello world"],
                         matchedPrefixLength: 0,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: false,
                         afterWildcard: "none",
@@ -1652,7 +1651,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["next"],
                         matchedPrefixLength: 11,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1734,7 +1733,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["world"],
                         matchedPrefixLength: 6,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1756,7 +1755,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["hello "],
                         matchedPrefixLength: 0,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: false,
                         afterWildcard: "none",
@@ -1775,7 +1774,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["world"],
                         matchedPrefixLength: 6,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1796,7 +1795,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["world"],
                         matchedPrefixLength: 6,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1814,7 +1813,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["next"],
                         matchedPrefixLength: 11,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1834,7 +1833,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["world"],
                         matchedPrefixLength: 6,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1852,7 +1851,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["next"],
                         matchedPrefixLength: 11,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1871,7 +1870,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["next"],
                         matchedPrefixLength: 11,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -1895,7 +1894,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["shuffle", "music"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1913,7 +1912,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["shuffle", "music"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1931,7 +1930,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["music"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1949,7 +1948,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["shuffle", "music"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1967,7 +1966,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["music"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1986,7 +1985,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["music"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2006,7 +2005,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["shuffle", "music"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2031,7 +2030,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["play"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2052,7 +2051,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2077,7 +2076,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2114,7 +2113,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["music", "video"],
                     matchedPrefixLength: 9,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2135,7 +2134,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["music", "video"],
                     matchedPrefixLength: 9,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2153,7 +2152,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["music", "video"],
                     matchedPrefixLength: 9,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2171,7 +2170,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["some"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2189,7 +2188,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["play"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2217,7 +2216,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 10,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2244,7 +2243,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 10,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2279,7 +2278,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["now", "song"],
                     matchedPrefixLength: 9,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2297,7 +2296,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["song"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2315,7 +2314,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["now", "song"],
                     matchedPrefixLength: 14,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2333,7 +2332,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["now", "song"],
                     matchedPrefixLength: 9,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2360,7 +2359,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["song", "now"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2378,7 +2377,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["now", "song"],
                     matchedPrefixLength: 9,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2448,7 +2447,7 @@ describeForEachCompletion(
                 expectMetadata(forward, {
                     completions: ["music"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2458,7 +2457,7 @@ describeForEachCompletion(
                 expectMetadata(backward, {
                     completions: ["play"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2482,7 +2481,7 @@ describeForEachCompletion(
                 expectMetadata(forward, {
                     completions: ["music"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2826,14 +2825,7 @@ describeForEachCompletion(
                         matchedPrefixLength: 4,
                         directionSensitive: true,
                     });
-                    // Completions and position match; directionSensitive
-                    // may differ (backward from exact match is always
-                    // direction-agnostic, forward at truncated prefix
-                    // is direction-sensitive for partial matches).
-                    expect(backward.completions).toEqual(forward.completions);
-                    expect(backward.matchedPrefixLength).toBe(
-                        forward.matchedPrefixLength,
-                    );
+                    expect(backward).toEqual(forward);
                 });
 
                 it("backward on 'play' equals forward on ''", () => {
@@ -2885,12 +2877,7 @@ describeForEachCompletion(
                         matchedPrefixLength: 4,
                         directionSensitive: true,
                     });
-                    // Completions and position match; directionSensitive
-                    // may differ.
-                    expect(backward.completions).toEqual(forward.completions);
-                    expect(backward.matchedPrefixLength).toBe(
-                        forward.matchedPrefixLength,
-                    );
+                    expect(backward).toEqual(forward);
                 });
             });
 
@@ -3037,7 +3024,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["music", "by"],
                         matchedPrefixLength: 14,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "some",
@@ -3058,7 +3045,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["beautiful"],
                         matchedPrefixLength: 4,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -3097,7 +3084,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["good", "by"],
                         matchedPrefixLength: 14,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "some",
@@ -3133,7 +3120,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["by"],
                         matchedPrefixLength: 9,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "some",
@@ -3182,7 +3169,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["by"],
                         matchedPrefixLength: 14,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "all",
@@ -3216,7 +3203,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["music", "by"],
                         matchedPrefixLength: 14,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "some",
@@ -3235,7 +3222,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["music", "by"],
                         matchedPrefixLength: 14,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "some",
@@ -3265,7 +3252,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["music", "by"],
                         matchedPrefixLength: 14,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "some",
@@ -3297,7 +3284,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["by"],
                         matchedPrefixLength: 19,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "all",
@@ -3332,7 +3319,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["by"],
                         matchedPrefixLength: 10,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "all",
@@ -3372,8 +3359,8 @@ describeForEachCompletion(
                 // Rule B (literal): "b" partial-matches "beautiful"
                 //   at mpl=4, which is shorter — discarded.
                 // Only wildcard candidates survive → afterWildcard="all".
-                expect(result.completions).toContain("by");
                 expectMetadata(result, {
+                    completions: ["by"],
                     matchedPrefixLength: 6,
                     closedSet: true,
                     directionSensitive: true,
@@ -3394,9 +3381,8 @@ describeForEachCompletion(
                 // Rule A: wildcard-at-EOI, Phase 2 offers "by"
                 //   (after-wildcard completion).
                 // Both at mpl=14.  Mixed → afterWildcard="some".
-                expect(result.completions).toContain("music");
-                expect(result.completions).toContain("by");
                 expectMetadata(result, {
+                    completions: ["music", "by"],
                     matchedPrefixLength: 14,
                     closedSet: true,
                     directionSensitive: true,
@@ -3417,9 +3403,8 @@ describeForEachCompletion(
                 // Rule B: "hello" doesn't match "beautiful" — no
                 //   contribution at this prefix length.
                 // Only wildcard candidates → afterWildcard="all".
-                expect(result.completions).toContain("by");
-                expect(result.completions).not.toContain("beautiful");
                 expectMetadata(result, {
+                    completions: ["by"],
                     matchedPrefixLength: 10,
                     closedSet: true,
                     directionSensitive: true,
@@ -3474,7 +3459,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: [],
                         matchedPrefixLength: 4,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -3547,7 +3532,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["..."],
                         matchedPrefixLength: 0,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: false,
                         afterWildcard: "none",
@@ -3564,7 +3549,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["done"],
                         matchedPrefixLength: 3,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -3708,7 +3693,6 @@ describeForEachCompletion(
                 // should appear: "by", "from", "track", "song".
                 expectMetadata(result, {
                     completions: ["by", "from", "song", "track"],
-                    sortCompletions: true,
                     matchedPrefixLength: 18,
                     afterWildcard: "all",
                     directionSensitive: true,
@@ -3724,7 +3708,6 @@ describeForEachCompletion(
                 );
                 expectMetadata(result, {
                     completions: ["by", "from", "song", "track"],
-                    sortCompletions: true,
                     matchedPrefixLength: 18,
                     afterWildcard: "all",
                     directionSensitive: true,
@@ -3743,7 +3726,6 @@ describeForEachCompletion(
                 );
                 expectMetadata(result, {
                     completions: ["song", "the", "track"],
-                    sortCompletions: true,
                     matchedPrefixLength: 4,
                     afterWildcard: "none",
                     directionSensitive: true,
@@ -3779,7 +3761,6 @@ describeForEachCompletion(
                 );
                 expectMetadata(result, {
                     completions: ["by", "cut", "from", "one", "song", "track"],
-                    sortCompletions: true,
                     matchedPrefixLength: 18,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -3798,7 +3779,6 @@ describeForEachCompletion(
                 // and "cut" from PlayTrackNumberCommand's (<Item>)?.
                 expectMetadata(result, {
                     completions: ["by", "cut", "from", "one", "song", "track"],
-                    sortCompletions: true,
                     matchedPrefixLength: 18,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -3857,8 +3837,10 @@ describeForEachCompletion(
                     undefined,
                     "forward",
                 );
-                expect(result.completions).toContain("by");
-                expect(result.matchedPrefixLength).toBe(15);
+                expectMetadata(result, {
+                    completions: ["by", "one", "cut", "track", "song", "from"],
+                    matchedPrefixLength: 15,
+                });
             });
         });
     },

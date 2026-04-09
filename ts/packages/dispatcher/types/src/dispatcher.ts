@@ -6,7 +6,6 @@ import {
     CompletionGroup,
     DisplayType,
     DynamicDisplay,
-    SeparatorMode,
     TemplateSchema,
     TypeAgentAction,
     AfterWildcard,
@@ -81,10 +80,6 @@ export type CommandCompletionResult = {
     // resolved; completions describe what can follow after that prefix.
     startIndex: number;
     completions: CompletionGroup[]; // completions available at the current position
-    // What kind of separator is required between the matched prefix and
-    // the completion text.  When omitted, defaults to "space".
-    // See SeparatorMode in @typeagent/agent-sdk.
-    separatorMode?: SeparatorMode | undefined;
     // True when the completions form a closed set — if the user types
     // something not in the list, no further completions can exist
     // beyond it.  When true and the user types something that doesn't

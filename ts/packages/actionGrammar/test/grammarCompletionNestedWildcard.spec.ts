@@ -29,22 +29,46 @@ describeForEachCompletion(
             // After matching "play", the next part is $(trackName:<TrackPhrase>)
             // which ultimately resolves to a wildcard. The completion should
             // include a property for that wildcard, not just "by".
-            expect(result.properties).toBeDefined();
-            expect(result.properties!.length).toBeGreaterThan(0);
+            expectMetadata(result, {
+                properties: [
+                    {
+                        match: {
+                            actionName: "playTrack",
+                            parameters: {
+                                trackName: undefined,
+                                artists: [undefined],
+                            },
+                        },
+                        propertyNames: ["parameters.trackName"],
+                    },
+                ],
+            });
         });
 
         it('should return completionProperty for wildcard after "play "', () => {
             const result = matchGrammarCompletion(grammar, "play ");
             // Same as above but with trailing space
-            expect(result.properties).toBeDefined();
-            expect(result.properties!.length).toBeGreaterThan(0);
+            expectMetadata(result, {
+                properties: [
+                    {
+                        match: {
+                            actionName: "playTrack",
+                            parameters: {
+                                trackName: undefined,
+                                artists: [undefined],
+                            },
+                        },
+                        propertyNames: ["parameters.trackName"],
+                    },
+                ],
+            });
         });
 
         it('should return "by" as completion after wildcard text', () => {
             const result = matchGrammarCompletion(grammar, "play some song");
             // After the wildcard has captured text, "by" should appear as a
             // completion for the next string part.
-            expect(result.completions).toContain("by");
+            expectMetadata(result, { completions: ["by"] });
         });
 
         it('forward: partial keyword "b" anchors at partial position, not end-of-input', () => {
@@ -55,20 +79,20 @@ describeForEachCompletion(
             // against the typed "b", rather than position 17 (end-of-input)
             // with separatorMode "spacePunctuation" which hides the menu.
             const result = matchGrammarCompletion(grammar, "play This Train b");
-            expect(result.completions).toContain("by");
             expectMetadata(result, {
+                completions: ["by"],
                 matchedPrefixLength: 15,
-                separatorMode: "spacePunctuation",
+                separatorMode: "autoSpacePunctuation",
                 afterWildcard: "all",
             });
         });
 
         it('forward: partial keyword "b" works with single-word wildcard', () => {
             const result = matchGrammarCompletion(grammar, "play Nevermind b");
-            expect(result.completions).toContain("by");
             expectMetadata(result, {
+                completions: ["by"],
                 matchedPrefixLength: 14,
-                separatorMode: "spacePunctuation",
+                separatorMode: "autoSpacePunctuation",
                 afterWildcard: "all",
             });
         });
@@ -77,7 +101,7 @@ describeForEachCompletion(
             // "play some song" — no trailing partial keyword.
             // "by" is offered at end-of-input (position 14).
             const result = matchGrammarCompletion(grammar, "play some song");
-            expect(result.completions).toContain("by");
+            expectMetadata(result, { completions: ["by"] });
         });
     },
 );

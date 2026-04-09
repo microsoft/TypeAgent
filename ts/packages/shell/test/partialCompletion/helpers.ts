@@ -8,7 +8,7 @@ import {
     PartialCompletionSession,
 } from "../../src/renderer/src/partialCompletionSession.js";
 import { SearchMenuPosition } from "../../src/preload/electronTypes.js";
-import { CompletionGroup } from "@typeagent/agent-sdk";
+import { CompletionGroup, SeparatorMode } from "@typeagent/agent-sdk";
 import { CommandCompletionResult } from "agent-dispatcher";
 import { SearchMenuBase } from "../../src/renderer/src/searchMenuBase.js";
 
@@ -62,7 +62,6 @@ export function makeDispatcher(
     result: CommandCompletionResult = {
         startIndex: 0,
         completions: [],
-        separatorMode: undefined,
         closedSet: true,
         directionSensitive: false,
         afterWildcard: "none",
@@ -81,13 +80,42 @@ export const getPos = (_prefix: string) => anyPosition;
 export function makeCompletionResult(
     completions: string[],
     startIndex: number = 0,
-    opts: Partial<CommandCompletionResult> = {},
+    opts: Partial<CommandCompletionResult> & {
+        separatorMode?: SeparatorMode;
+    } = {},
 ): CommandCompletionResult {
-    const group: CompletionGroup = { name: "test", completions };
+    const { separatorMode = "space", ...rest } = opts;
+    const group: CompletionGroup = {
+        name: "test",
+        completions,
+        separatorMode,
+    };
     return {
         startIndex,
         completions: [group],
         closedSet: false,
+        directionSensitive: false,
+        afterWildcard: "none",
+        ...rest,
+    };
+}
+
+// Build a CommandCompletionResult with multiple CompletionGroups,
+// each with its own separatorMode.
+export function makeMultiGroupResult(
+    groups: { completions: string[]; separatorMode?: SeparatorMode }[],
+    startIndex: number = 0,
+    opts: Partial<CommandCompletionResult> = {},
+): CommandCompletionResult {
+    const completions: CompletionGroup[] = groups.map((g, i) => ({
+        name: `group-${i}`,
+        completions: g.completions,
+        separatorMode: g.separatorMode,
+    }));
+    return {
+        startIndex,
+        completions,
+        closedSet: true,
         directionSensitive: false,
         afterWildcard: "none",
         ...opts,

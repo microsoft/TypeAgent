@@ -189,20 +189,27 @@ describe("PartialCompletionSession — @command routing", () => {
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
 
-        // User types "@config" → completions loaded, menu deferred (no separator yet)
+        // User types "@config" → completions loaded, deferred (no separator yet)
         session.update("@config", getPos);
         await Promise.resolve();
 
-        expect(menu.setChoices).toHaveBeenCalledWith(
+        // No items are immediately visible (all require a space separator),
+        // so the trie is preloaded with all items but the menu stays hidden.
+        expect(menu.setChoices).toHaveBeenLastCalledWith(
             expect.arrayContaining([
                 expect.objectContaining({ selectedText: "clear" }),
             ]),
         );
+        expect(menu.isActive()).toBe(false);
         expect(menu.updatePrefix).not.toHaveBeenCalled();
 
-        // User types space → separator present, menu appears
+        // User types space → separator present, items become visible.
+        // The trie was already preloaded so no redundant setChoices call.
+        menu.setChoices.mockClear();
         session.update("@config ", getPos);
 
+        expect(menu.setChoices).not.toHaveBeenCalled();
+        expect(menu.isActive()).toBe(true);
         expect(menu.updatePrefix).toHaveBeenCalledWith("", anyPosition);
         // No re-fetch — same session handles both states
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
