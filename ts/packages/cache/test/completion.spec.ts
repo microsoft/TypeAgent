@@ -6,6 +6,7 @@ import {
     WildcardMode,
 } from "../src/constructions/constructions.js";
 import {
+    CompletionResult,
     ConstructionCache,
     MatchOptions,
 } from "../src/constructions/constructionCache.js";
@@ -15,6 +16,16 @@ import {
     MatchSet,
     TransformInfo,
 } from "../src/constructions/matchPart.js";
+
+// Helpers for backward-compat access to per-group CompletionResult
+function flatCompletions(result: CompletionResult): string[] {
+    return result.groups.flatMap((g) => g.completions);
+}
+function firstSepMode(result: CompletionResult) {
+    return result.groups.length > 0
+        ? result.groups[0].separatorMode
+        : undefined;
+}
 
 function makeTransformInfo(name: string): TransformInfo {
     return {
@@ -68,7 +79,7 @@ describe("ConstructionCache.completion()", () => {
             const cache = makeCache([c1, c2]);
             const result = cache.completion("", defaultOptions);
             expect(result).toBeDefined();
-            expect(result!.completions.sort()).toEqual(["play", "stop"]);
+            expect(flatCompletions(result!).sort()).toEqual(["play", "stop"]);
             expect(result!.matchedPrefixLength).toBe(0);
             expect(result!.closedSet).toBe(true);
         });
@@ -88,7 +99,7 @@ describe("ConstructionCache.completion()", () => {
             const result = cache.completion("", defaultOptions);
             expect(result).toBeDefined();
             // Should return the first non-optional part's completions
-            expect(result!.completions).toEqual(["play"]);
+            expect(flatCompletions(result!)).toEqual(["play"]);
         });
     });
 
@@ -104,7 +115,7 @@ describe("ConstructionCache.completion()", () => {
             const cache = makeCache([c]);
             const result = cache.completion("play ", defaultOptions);
             expect(result).toBeDefined();
-            expect(result!.completions).toContain("song");
+            expect(flatCompletions(result!)).toContain("song");
             // The matcher consumes "play" (4 chars); the trailing space
             // is consumed as a trailing separator → matchedPrefixLength=5.
             expect(result!.matchedPrefixLength).toBe(5);
@@ -119,7 +130,7 @@ describe("ConstructionCache.completion()", () => {
             // "pl" partially matches "play"
             const result = cache.completion("pl", defaultOptions);
             expect(result).toBeDefined();
-            if (result!.completions.length > 0) {
+            if (flatCompletions(result!).length > 0) {
                 expect(result!.matchedPrefixLength).toBeGreaterThanOrEqual(0);
             }
         });
@@ -189,7 +200,7 @@ describe("ConstructionCache.completion()", () => {
             // Property names → closedSet becomes false
             expect(result!.closedSet).toBe(false);
             // Should still include the literal completions from the matchSet
-            expect(result!.completions.sort()).toEqual(["pop", "rock"]);
+            expect(flatCompletions(result!).sort()).toEqual(["pop", "rock"]);
         });
     });
 
@@ -207,9 +218,9 @@ describe("ConstructionCache.completion()", () => {
             const cache = makeCache([c]);
             const result = cache.completion("play ", defaultOptions);
             expect(result).toBeDefined();
-            // The matcher consumes "play" (4 chars). Trailing space
-            // is consumed, so separatorMode is demoted to "optional".
-            expect(result!.separatorMode).toBe("optional");
+            // The matcher consumes "play" (4 chars). Construction cache
+            // defers per-item separator resolution to the shell.
+            expect(firstSepMode(result!)).toBe("autoSpacePunctuation");
         });
 
         it("returns spacePunctuation between adjacent word characters", () => {
@@ -229,11 +240,11 @@ describe("ConstructionCache.completion()", () => {
             const result = cache.completion("play", defaultOptions);
             expect(result).toBeDefined();
             if (
-                result!.completions.length > 0 &&
+                flatCompletions(result!).length > 0 &&
                 result!.matchedPrefixLength === 4
             ) {
-                // 'y' and 's' are both Latin word-boundary — needs separator
-                expect(result!.separatorMode).toBe("spacePunctuation");
+                // Construction cache defers resolution → autoSpacePunctuation
+                expect(firstSepMode(result!)).toBe("autoSpacePunctuation");
             }
         });
 
@@ -249,9 +260,9 @@ describe("ConstructionCache.completion()", () => {
             );
             const cache = makeCache([c]);
             const result = cache.completion("hey! ", defaultOptions);
-            if (result && result.completions.length > 0) {
-                // ' ' is not a word char → optional
-                expect(result!.separatorMode).toBe("optional");
+            if (result && flatCompletions(result).length > 0) {
+                // Construction cache defers resolution → autoSpacePunctuation
+                expect(firstSepMode(result!)).toBe("autoSpacePunctuation");
             }
         });
 
@@ -268,11 +279,11 @@ describe("ConstructionCache.completion()", () => {
             const result = cache.completion("item3", defaultOptions);
             if (
                 result &&
-                result.completions.length > 0 &&
+                flatCompletions(result).length > 0 &&
                 result.matchedPrefixLength === 5
             ) {
-                // '3' and '4' are digits → needs separator
-                expect(result!.separatorMode).toBe("spacePunctuation");
+                // Construction cache defers resolution → autoSpacePunctuation
+                expect(firstSepMode(result!)).toBe("autoSpacePunctuation");
             }
         });
     });
@@ -289,7 +300,7 @@ describe("ConstructionCache.completion()", () => {
             const cache = makeCache([c]);
             const result = cache.completion("play ", defaultOptions);
             expect(result).toBeDefined();
-            expect(result!.completions.sort()).toEqual([
+            expect(flatCompletions(result!).sort()).toEqual([
                 "album",
                 "song",
                 "track",
@@ -307,7 +318,7 @@ describe("ConstructionCache.completion()", () => {
             expect(result).toBeDefined();
             // Exact match advances maxPrefixLength to requestPrefix.length
             expect(result!.matchedPrefixLength).toBe(4);
-            expect(result!.completions).toEqual([]);
+            expect(flatCompletions(result!)).toEqual([]);
         });
 
         it("returns completions from multiple constructions with same prefix length", () => {
@@ -328,7 +339,7 @@ describe("ConstructionCache.completion()", () => {
             const cache = makeCache([c1, c2]);
             const result = cache.completion("play ", defaultOptions);
             expect(result).toBeDefined();
-            expect(result!.completions.sort()).toEqual(["album", "song"]);
+            expect(flatCompletions(result!).sort()).toEqual(["album", "song"]);
         });
     });
 
@@ -364,11 +375,11 @@ describe("ConstructionCache.completion()", () => {
 
             const r1 = cache.completion("", { namespaceKeys: ["ns1"] });
             expect(r1).toBeDefined();
-            expect(r1!.completions).toEqual(["play"]);
+            expect(flatCompletions(r1!)).toEqual(["play"]);
 
             const r2 = cache.completion("", { namespaceKeys: ["ns2"] });
             expect(r2).toBeDefined();
-            expect(r2!.completions).toEqual(["stop"]);
+            expect(flatCompletions(r2!)).toEqual(["stop"]);
         });
 
         it("returns completions from all namespaces when no filter", () => {
@@ -386,7 +397,7 @@ describe("ConstructionCache.completion()", () => {
 
             const result = cache.completion("", {});
             expect(result).toBeDefined();
-            expect(result!.completions.sort()).toEqual(["play", "stop"]);
+            expect(flatCompletions(result!).sort()).toEqual(["play", "stop"]);
         });
 
         it("returns no completions for empty namespace keys", () => {
@@ -429,7 +440,7 @@ describe("ConstructionCache.completion()", () => {
             // "p" doesn't fully match "play" but the partial match
             // succeeds and returns the first part's candidates.
             // The caller filters by the remaining text ("p").
-            expect(result!.completions).toContain("play");
+            expect(flatCompletions(result!)).toContain("play");
             expect(result!.matchedPrefixLength).toBe(0);
             expect(result!.closedSet).toBe(true);
         });
@@ -437,27 +448,28 @@ describe("ConstructionCache.completion()", () => {
         it("prefix 'pl' — partial prefix returns first part completions", () => {
             const result = cache.completion("pl", defaultOptions);
             expect(result).toBeDefined();
-            expect(result!.completions).toContain("play");
+            expect(flatCompletions(result!)).toContain("play");
             expect(result!.matchedPrefixLength).toBe(0);
         });
 
         it("prefix 'play' — first part fully matched, offers second part", () => {
             const result = cache.completion("play", defaultOptions);
             expect(result).toBeDefined();
-            expect(result!.completions).toEqual(["song"]);
+            expect(flatCompletions(result!)).toEqual(["song"]);
             expect(result!.matchedPrefixLength).toBe(4);
-            expect(result!.separatorMode).toBe("spacePunctuation");
+            expect(firstSepMode(result!)).toBe("autoSpacePunctuation");
             expect(result!.closedSet).toBe(true);
         });
 
         it("prefix 'play ' — trailing space consumed, still offers second part", () => {
             const result = cache.completion("play ", defaultOptions);
             expect(result).toBeDefined();
-            expect(result!.completions).toEqual(["song"]);
-            // Trailing space consumed → matchedPrefixLength advances to 5,
-            // separatorMode demoted to "optional".
+            expect(flatCompletions(result!)).toEqual(["song"]);
+            // Trailing space consumed → matchedPrefixLength advances to 5.
+            // Construction cache defers per-item separator resolution
+            // to the shell.
             expect(result!.matchedPrefixLength).toBe(5);
-            expect(result!.separatorMode).toBe("optional");
+            expect(firstSepMode(result!)).toBe("autoSpacePunctuation");
         });
 
         it("prefix 'play s' — partial intra-part on second part, returns completions", () => {
@@ -465,14 +477,14 @@ describe("ConstructionCache.completion()", () => {
             expect(result).toBeDefined();
             // "play" is fully matched (4 chars), " s" remains as
             // partial prefix for the second part.
-            expect(result!.completions).toContain("song");
+            expect(flatCompletions(result!)).toContain("song");
             expect(result!.matchedPrefixLength).toBe(4);
         });
 
         it("prefix 'play song' — exact full match, empty completions", () => {
             const result = cache.completion("play song", defaultOptions);
             expect(result).toBeDefined();
-            expect(result!.completions).toEqual([]);
+            expect(flatCompletions(result!)).toEqual([]);
             expect(result!.matchedPrefixLength).toBe(9);
             expect(result!.closedSet).toBe(true);
         });
@@ -491,11 +503,19 @@ describe("ConstructionCache.completion()", () => {
 
             const r1 = cache.completion("play", defaultOptions);
             expect(r1).toBeDefined();
-            expect(r1!.completions.sort()).toEqual(["album", "song", "track"]);
+            expect(flatCompletions(r1!).sort()).toEqual([
+                "album",
+                "song",
+                "track",
+            ]);
 
             const r2 = cache.completion("start", defaultOptions);
             expect(r2).toBeDefined();
-            expect(r2!.completions.sort()).toEqual(["album", "song", "track"]);
+            expect(flatCompletions(r2!).sort()).toEqual([
+                "album",
+                "song",
+                "track",
+            ]);
         });
     });
 
@@ -511,7 +531,7 @@ describe("ConstructionCache.completion()", () => {
             const cache = makeCache([c]);
             const result = cache.completion("PLAY", defaultOptions);
             expect(result).toBeDefined();
-            expect(result!.completions).toEqual(["song"]);
+            expect(flatCompletions(result!)).toEqual(["song"]);
             expect(result!.matchedPrefixLength).toBe(4);
         });
     });
@@ -529,7 +549,7 @@ describe("ConstructionCache.completion()", () => {
             const cache = makeCache([c]);
             const result = cache.completion("play the ", defaultOptions);
             expect(result).toBeDefined();
-            expect(result!.completions.sort()).toEqual(["album", "song"]);
+            expect(flatCompletions(result!).sort()).toEqual(["album", "song"]);
         });
 
         it("returns merged match set completions after merge", () => {
@@ -546,7 +566,7 @@ describe("ConstructionCache.completion()", () => {
             // After merge, the match set should contain both "play" and "stop"
             const result = cache.completion("", defaultOptions);
             expect(result).toBeDefined();
-            expect(result!.completions.sort()).toEqual(["play", "stop"]);
+            expect(flatCompletions(result!).sort()).toEqual(["play", "stop"]);
         });
     });
 
@@ -594,7 +614,7 @@ describe("ConstructionCache.completion()", () => {
                 const result = cache.completion("play my song", defaultOptions);
                 expect(result).toBeDefined();
                 // Wildcard consumes "my song" → exact match, no completions.
-                expect(result!.completions).toEqual([]);
+                expect(flatCompletions(result!)).toEqual([]);
                 expect(result!.matchedPrefixLength).toBe(12);
             });
         });
@@ -641,7 +661,7 @@ describe("ConstructionCache.completion()", () => {
                     defaultOptions,
                 );
                 expect(result).toBeDefined();
-                expect(result!.completions).toContain("by");
+                expect(flatCompletions(result!)).toContain("by");
                 expect(result!.matchedPrefixLength).toBe(14);
             });
 
@@ -662,7 +682,7 @@ describe("ConstructionCache.completion()", () => {
                     defaultOptions,
                 );
                 expect(result).toBeDefined();
-                expect(result!.completions).toEqual([]);
+                expect(flatCompletions(result!)).toEqual([]);
                 expect(result!.matchedPrefixLength).toBe(22);
             });
 
@@ -696,7 +716,7 @@ describe("ConstructionCache.completion()", () => {
                 // so the matcher advances past it to offer "music".
                 const result = cache.completion("play rock ", defaultOptions);
                 expect(result).toBeDefined();
-                expect(result!.completions).toContain("music");
+                expect(flatCompletions(result!)).toContain("music");
             });
 
             it("offers wildcard-enabled part completions when literal doesn't match", () => {
@@ -717,7 +737,10 @@ describe("ConstructionCache.completion()", () => {
                 // literal matches and property names.
                 const result = cache.completion("play ", defaultOptions);
                 expect(result).toBeDefined();
-                expect(result!.completions.sort()).toEqual(["pop", "rock"]);
+                expect(flatCompletions(result!).sort()).toEqual([
+                    "pop",
+                    "rock",
+                ]);
                 expect(result!.closedSet).toBe(false);
             });
 
@@ -740,7 +763,7 @@ describe("ConstructionCache.completion()", () => {
                 // text. The next literal "music" is offered.
                 const result = cache.completion("play jazz ", defaultOptions);
                 expect(result).toBeDefined();
-                expect(result!.completions).toContain("music");
+                expect(flatCompletions(result!)).toContain("music");
             });
         });
 
@@ -773,7 +796,7 @@ describe("ConstructionCache.completion()", () => {
                 const cache = makeCache([c]);
                 const result = cache.completion("some song", defaultOptions);
                 expect(result).toBeDefined();
-                expect(result!.completions).toContain("by");
+                expect(flatCompletions(result!)).toContain("by");
             });
         });
     });
@@ -798,7 +821,7 @@ describe("ConstructionCache.completion()", () => {
                 // Backs up to last part start ("play" consumed 4
                 // chars; the space is a separator, not part of any
                 // match part).
-                expect(result!.completions).toContain("song");
+                expect(flatCompletions(result!)).toContain("song");
                 expect(result!.matchedPrefixLength).toBe(4);
             });
 
@@ -815,7 +838,7 @@ describe("ConstructionCache.completion()", () => {
                 );
                 expect(result).toBeDefined();
                 // Single part — backs up to 0 (the start of the only part).
-                expect(result!.completions).toContain("play");
+                expect(flatCompletions(result!)).toContain("play");
                 expect(result!.matchedPrefixLength).toBe(0);
             });
 
@@ -834,7 +857,7 @@ describe("ConstructionCache.completion()", () => {
                     "forward",
                 );
                 expect(result).toBeDefined();
-                expect(result!.completions).toEqual([]);
+                expect(flatCompletions(result!)).toEqual([]);
                 expect(result!.matchedPrefixLength).toBe(9);
             });
         });
@@ -855,7 +878,7 @@ describe("ConstructionCache.completion()", () => {
                     "backward",
                 );
                 expect(result).toBeDefined();
-                expect(result!.completions.sort()).toEqual([
+                expect(flatCompletions(result!).sort()).toEqual([
                     "album",
                     "song",
                     "track",
@@ -901,7 +924,7 @@ describe("ConstructionCache.completion()", () => {
                     "forward",
                 );
                 expect(result).toBeDefined();
-                expect(result!.completions).toEqual([]);
+                expect(flatCompletions(result!)).toEqual([]);
                 expect(result!.matchedPrefixLength).toBe(12);
             });
         });
@@ -951,7 +974,7 @@ describe("ConstructionCache.completion()", () => {
                 expect(result).toBeDefined();
                 // No trailing space — backward backs up to offer
                 // "play" at position 0.
-                expect(result!.completions).toContain("play");
+                expect(flatCompletions(result!)).toContain("play");
                 expect(result!.matchedPrefixLength).toBe(0);
             });
 
@@ -972,7 +995,7 @@ describe("ConstructionCache.completion()", () => {
                 expect(result).toBeDefined();
                 // Trailing space is a commit signal — direction no
                 // longer matters.  Should offer "song" same as forward.
-                expect(result!.completions).toContain("song");
+                expect(flatCompletions(result!)).toContain("song");
                 expect(result!.matchedPrefixLength).toBe(5);
             });
 
@@ -991,7 +1014,7 @@ describe("ConstructionCache.completion()", () => {
                     "forward",
                 );
                 expect(result).toBeDefined();
-                expect(result!.completions).toContain("song");
+                expect(flatCompletions(result!)).toContain("song");
                 expect(result!.matchedPrefixLength).toBe(5);
             });
         });
@@ -1013,7 +1036,7 @@ describe("ConstructionCache.completion()", () => {
                     "backward",
                 );
                 expect(result).toBeDefined();
-                expect(result!.completions).toContain("song");
+                expect(flatCompletions(result!)).toContain("song");
                 expect(result!.matchedPrefixLength).toBe(4);
             });
 
@@ -1033,7 +1056,7 @@ describe("ConstructionCache.completion()", () => {
                     "forward",
                 );
                 expect(result).toBeDefined();
-                expect(result!.completions).toContain("now");
+                expect(flatCompletions(result!)).toContain("now");
                 expect(result!.matchedPrefixLength).toBe(9);
             });
         });
@@ -1059,7 +1082,7 @@ describe("ConstructionCache.completion()", () => {
                     "backward",
                 );
                 expect(result).toBeDefined();
-                expect(result!.completions).toContain("song");
+                expect(flatCompletions(result!)).toContain("song");
                 expect(result!.matchedPrefixLength).toBe(4);
             });
         });
@@ -1085,7 +1108,7 @@ describe("ConstructionCache.completion()", () => {
                 expect(result).toBeDefined();
                 // Trailing comma is a separator — commits "play".
                 // Should offer "song" same as forward.
-                expect(result!.completions).toContain("song");
+                expect(flatCompletions(result!)).toContain("song");
                 expect(result!.matchedPrefixLength).toBe(5);
             });
 
@@ -1104,7 +1127,7 @@ describe("ConstructionCache.completion()", () => {
                     "backward",
                 );
                 expect(result).toBeDefined();
-                expect(result!.completions).toContain("song");
+                expect(flatCompletions(result!)).toContain("song");
                 expect(result!.matchedPrefixLength).toBe(5);
             });
 
@@ -1123,7 +1146,7 @@ describe("ConstructionCache.completion()", () => {
                     "backward",
                 );
                 expect(result).toBeDefined();
-                expect(result!.completions).toContain("play");
+                expect(flatCompletions(result!)).toContain("play");
                 expect(result!.matchedPrefixLength).toBe(0);
             });
 
@@ -1144,7 +1167,7 @@ describe("ConstructionCache.completion()", () => {
                 );
                 expect(result).toBeDefined();
                 // Trailing comma after second word commits "song".
-                expect(result!.completions).toContain("now");
+                expect(flatCompletions(result!)).toContain("now");
                 expect(result!.matchedPrefixLength).toBe(10);
             });
         });
@@ -1346,7 +1369,7 @@ describe("ConstructionCache.completion()", () => {
             expect(result).toBeDefined();
             // c2 dominates at prefix length 9.
             expect(result!.directionSensitive).toBe(true);
-            expect(result!.completions).toContain("now");
+            expect(flatCompletions(result!)).toContain("now");
         });
 
         it("not sensitive when trailing space commits across all constructions", () => {

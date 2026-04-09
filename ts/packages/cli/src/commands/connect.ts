@@ -102,11 +102,12 @@ async function getCompletionsData(
         const filterStartIndex = result.startIndex;
         const prefix = line.substring(0, filterStartIndex);
 
-        const separator =
-            result.separatorMode === "space" ||
-            result.separatorMode === "spacePunctuation"
-                ? " "
-                : "";
+        const needsSep = result.completions.some(
+            (g) =>
+                g.separatorMode === "space" ||
+                g.separatorMode === "spacePunctuation",
+        );
+        const separator = needsSep ? " " : "";
 
         return {
             allCompletions,

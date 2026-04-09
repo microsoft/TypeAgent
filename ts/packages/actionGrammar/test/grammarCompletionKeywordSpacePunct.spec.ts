@@ -37,11 +37,11 @@ describeForEachCompletion(
                 // Empty input → first keyword offered; separator before "hello,"
                 // is N/A (no prior char). separatorMode reflects the gap
                 // between matchedPrefixLength and the completion text.
-                // At position 0 with no prior char, auto mode: "optional"
+                // At position 0 with no prior char, auto mode: "optionalSpace"
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -53,11 +53,11 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "hel");
                 // Category 3b (dirty partial): "hel" partially matches "hello,".
                 // Prefix-filter match → directionSensitive = false
-                // mpl=0, no prior char → "optional"
+                // mpl=0, no prior char → "optionalSpace"
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -70,11 +70,11 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "hello,");
                 // "hello," fully matched, no trailing separator.
                 // Backward would back up; forward advances. → direction-sensitive
-                // requiresSeparator(",", "w", auto) → comma is punct → "optional"
+                // requiresSeparator(",", "w", auto) → comma is punct → "optionalSpace"
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -87,7 +87,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -98,12 +98,12 @@ describeForEachCompletion(
             it("separatorMode: comma-ending word before Latin word", () => {
                 // After "hello," the next char is "w" (Latin).
                 // requiresSeparator(",", "w", auto) → false (comma not word-boundary)
-                // → separatorMode should be "optional"
+                // → separatorMode should be "optionalSpace"
                 const result = matchGrammarCompletion(grammar, "hello,");
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -117,7 +117,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -128,11 +128,11 @@ describeForEachCompletion(
             it("offers second segment for partial second word 'wor'", () => {
                 const result = matchGrammarCompletion(grammar, "hello, wor");
                 // Category 3b: "wor" partially matches "world" → prefix-filter
-                // requiresSeparator(",", "w", auto) → comma is punct → "optional"
+                // requiresSeparator(",", "w", auto) → comma is punct → "optionalSpace"
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -155,7 +155,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -166,11 +166,11 @@ describeForEachCompletion(
             it("offers second segment after 'hello'", () => {
                 const result = matchGrammarCompletion(grammar, "hello");
                 // "hello" fully matched, no trailing sep → direction-sensitive
-                // requiresSeparator("o", ",", auto) → comma is punct → "optional"
+                // requiresSeparator("o", ",", auto) → comma is punct → "optionalSpace"
                 expectMetadata(result, {
                     completions: [",world"],
                     matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -181,12 +181,12 @@ describeForEachCompletion(
             it("separatorMode: Latin word before comma-starting word", () => {
                 // After "hello" the next char is "," (punctuation).
                 // requiresSeparator("o", ",", auto) → false (comma not word-boundary)
-                // → separatorMode should be "optional"
+                // → separatorMode should be "optionalSpace"
                 const result = matchGrammarCompletion(grammar, "hello");
                 expectMetadata(result, {
                     completions: [",world"],
                     matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -199,7 +199,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [",world"],
                     matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -213,7 +213,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [",world"],
                     matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -236,7 +236,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -247,11 +247,11 @@ describeForEachCompletion(
             it("offers dot segment after 'hello'", () => {
                 const result = matchGrammarCompletion(grammar, "hello");
                 // "hello" fully matched, no trailing sep → direction-sensitive
-                // requiresSeparator("o", ".", auto) → dot is punct → false → "optional"
+                // requiresSeparator("o", ".", auto) → dot is punct → false → "optionalSpace"
                 expectMetadata(result, {
                     completions: ["."],
                     matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -262,11 +262,11 @@ describeForEachCompletion(
             it("offers 'world' after 'hello.'", () => {
                 const result = matchGrammarCompletion(grammar, "hello.");
                 // "hello." two segments matched, no trailing sep → direction-sensitive
-                // requiresSeparator(".", "w", auto) → false → "optional"
+                // requiresSeparator(".", "w", auto) → false → "optionalSpace"
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -279,7 +279,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 7,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -293,7 +293,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 7,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -316,7 +316,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -330,7 +330,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -344,7 +344,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -357,7 +357,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -373,7 +373,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["next"],
                     matchedPrefixLength: 11,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -386,7 +386,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["next"],
                     matchedPrefixLength: 11,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -403,7 +403,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["next"],
                     matchedPrefixLength: 11,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -427,7 +427,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello "],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -439,11 +439,11 @@ describeForEachCompletion(
                 // "hello " fully matches segment "hello "
                 const result = matchGrammarCompletion(grammar, "hello ");
                 // "hello " fully matched, no trailing sep → direction-sensitive
-                // requiresSeparator(" ", "w", auto) → space is not script boundary → "optional"
+                // requiresSeparator(" ", "w", auto) → space is not script boundary → "optionalSpace"
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -458,7 +458,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["next"],
                     matchedPrefixLength: 11,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -493,7 +493,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["hello"],
                         matchedPrefixLength: 0,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: false,
                         afterWildcard: "none",
@@ -505,11 +505,11 @@ describeForEachCompletion(
                     // "hello" fully matches first segment; next is " world"
                     const result = matchGrammarCompletion(grammar, "hello");
                     // "hello" fully matched, no trailing sep → direction-sensitive
-                    // requiresSeparator("o", " ", auto) → space is not word-boundary → "optional"
+                    // requiresSeparator("o", " ", auto) → space is not word-boundary → "optionalSpace"
                     expectMetadata(result, {
                         completions: [" world"],
                         matchedPrefixLength: 5,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -519,12 +519,12 @@ describeForEachCompletion(
 
                 it("separatorMode after 'hello' before ' world'", () => {
                     // requiresSeparator("o", " ", auto) → " " not word-boundary → false
-                    // → separatorMode = "optional"
+                    // → separatorMode = "optionalSpace"
                     const result = matchGrammarCompletion(grammar, "hello");
                     expectMetadata(result, {
                         completions: [" world"],
                         matchedPrefixLength: 5,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -543,7 +543,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["next"],
                         matchedPrefixLength: 11,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -560,7 +560,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["next"],
                         matchedPrefixLength: 12,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -580,7 +580,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: [" world"],
                         matchedPrefixLength: 5,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -602,12 +602,12 @@ describeForEachCompletion(
                         undefined,
                         "backward",
                     );
-                    // requiresSeparator("o", " ", auto) → "optional"
+                    // requiresSeparator("o", " ", auto) → "optionalSpace"
                     // Backward differs from forward → direction-sensitive
                     expectMetadata(result, {
                         completions: [" world"],
                         matchedPrefixLength: 5,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -626,7 +626,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["next"],
                         matchedPrefixLength: 11,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -642,12 +642,12 @@ describeForEachCompletion(
                         undefined,
                         "backward",
                     );
-                    // mpl=0 → "optional"
+                    // mpl=0 → "optionalSpace"
                     // Backed up to start — at P=0 forward and backward agree
                     expectMetadata(result, {
                         completions: ["hello"],
                         matchedPrefixLength: 0,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: false,
                         afterWildcard: "none",
@@ -665,7 +665,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: [" world"],
                         matchedPrefixLength: 5,
-                        separatorMode: "optional",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -683,7 +683,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["next"],
                         matchedPrefixLength: 11,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -701,7 +701,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["next"],
                         matchedPrefixLength: 11,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -760,7 +760,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["next"],
                         matchedPrefixLength: 11,
-                        separatorMode: "optional",
+                        separatorMode: "optionalSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -837,7 +837,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello-world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -851,7 +851,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello-world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -864,7 +864,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello-world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -879,7 +879,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["next"],
                     matchedPrefixLength: 11,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -902,7 +902,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["set:"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -913,11 +913,11 @@ describeForEachCompletion(
             it("offers 'value' after 'set:'", () => {
                 const result = matchGrammarCompletion(grammar, "set:");
                 // "set:" fully matched, no trailing sep → direction-sensitive
-                // requiresSeparator(":", "v", auto) → colon is punct → "optional"
+                // requiresSeparator(":", "v", auto) → colon is punct → "optionalSpace"
                 expectMetadata(result, {
                     completions: ["value"],
                     matchedPrefixLength: 4,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -930,7 +930,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["value"],
                     matchedPrefixLength: 4,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -945,7 +945,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done"],
                     matchedPrefixLength: 10,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -954,12 +954,12 @@ describeForEachCompletion(
             });
 
             it("separatorMode: colon-ending word before Latin word", () => {
-                // requiresSeparator(":", "v", auto) → false → "optional"
+                // requiresSeparator(":", "v", auto) → false → "optionalSpace"
                 const result = matchGrammarCompletion(grammar, "set:");
                 expectMetadata(result, {
                     completions: ["value"],
                     matchedPrefixLength: 4,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -982,7 +982,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -992,11 +992,11 @@ describeForEachCompletion(
 
             it("offers '...' after 'hello'", () => {
                 const result = matchGrammarCompletion(grammar, "hello");
-                // requiresSeparator("o", ".", auto) → dot is punct → false → "optional"
+                // requiresSeparator("o", ".", auto) → dot is punct → false → "optionalSpace"
                 expectMetadata(result, {
                     completions: ["..."],
                     matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1006,11 +1006,11 @@ describeForEachCompletion(
 
             it("offers 'world' after 'hello...'", () => {
                 const result = matchGrammarCompletion(grammar, "hello...");
-                // requiresSeparator(".", "w", auto) → false → "optional"
+                // requiresSeparator(".", "w", auto) → false → "optionalSpace"
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 8,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1023,7 +1023,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 9,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1046,7 +1046,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["..."],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -1060,11 +1060,11 @@ describeForEachCompletion(
                 // backward would back up → direction-sensitive.
                 // Consistent with Latin keyword behavior (e.g., "hello"
                 // in grammar "hello done" → directionSensitive=true).
-                // requiresSeparator(".", "d", auto) → false → "optional"
+                // requiresSeparator(".", "d", auto) → false → "optionalSpace"
                 expectMetadata(result, {
                     completions: ["done"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1081,11 +1081,11 @@ describeForEachCompletion(
                 );
                 // "..." fully matched, no trailing separator → backward
                 // backs up to offer "..." at position 0.
-                // mpl=0, backward exact match → "optional"
+                // mpl=0, backward exact match → "optionalSpace"
                 expectMetadata(result, {
                     completions: ["..."],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -1098,7 +1098,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1121,11 +1121,11 @@ describeForEachCompletion(
                 // Wildcard finalized at EOI, keyword follows → afterWildcard
                 // Keyword completion → closedSet true
                 // Wildcard finalized at EOI → direction-sensitive
-                // requiresSeparator("o", ",", auto) → false → "optional"
+                // requiresSeparator("o", ",", auto) → false → "optionalSpace"
                 expectMetadata(result, {
                     completions: [",done"],
                     matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -1140,7 +1140,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [",done"],
                     matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -1153,11 +1153,11 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "hello,d");
                 // Forward findPartialKeywordInWildcard finds ",d" at
                 // position 5 as partial of ",done" → mpl=5.
-                // requiresSeparator("o", ",", auto) → comma is punct → "optional"
+                // requiresSeparator("o", ",", auto) → comma is punct → "optionalSpace"
                 expectMetadata(result, {
                     completions: [",done"],
                     matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -1182,11 +1182,11 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "hello,");
                 // Entity wildcard → closedSet false
                 // Keyword matched, wildcard is next (not at EOI boundary) → afterWildcard "none"
-                // requiresSeparator(",", "a", auto) → comma is punct → "optional"
+                // requiresSeparator(",", "a", auto) → comma is punct → "optionalSpace"
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1207,7 +1207,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1229,7 +1229,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1259,11 +1259,11 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "hello, foo");
                 // Wildcard finalized at EOI, keyword follows → afterWildcard
                 // Keyword completion → closedSet true
-                // requiresSeparator("o", ".", auto) → dot is punct → "optional"
+                // requiresSeparator("o", ".", auto) → dot is punct → "optionalSpace"
                 expectMetadata(result, {
                     completions: [".world"],
                     matchedPrefixLength: 10,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -1273,12 +1273,12 @@ describeForEachCompletion(
 
             it("offers '.world' terminator after wildcard + space", () => {
                 const result = matchGrammarCompletion(grammar, "hello, foo ");
-                // Trailing space absorbed by wildcard → "optional"
+                // Trailing space absorbed by wildcard → "optionalSpace"
                 // Wildcard finalized at EOI → direction-sensitive
                 expectMetadata(result, {
                     completions: [".world"],
                     matchedPrefixLength: 10,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -1302,12 +1302,12 @@ describeForEachCompletion(
                     undefined,
                     "backward",
                 );
-                // requiresSeparator(",", "w", auto) → "optional"
+                // requiresSeparator(",", "w", auto) → "optionalSpace"
                 // Backward differs from forward → direction-sensitive
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1326,7 +1326,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1342,12 +1342,12 @@ describeForEachCompletion(
                     "backward",
                 );
                 // "hello," fully matched, no trailing separator → backs up
-                // mpl=0 → "optional"
+                // mpl=0 → "optionalSpace"
                 // Backed up to start — at P=0 forward and backward agree
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -1365,7 +1365,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1391,12 +1391,12 @@ describeForEachCompletion(
                 );
                 // "hello world" is one segment — no trailing separator,
                 // backward should back up to start
-                // mpl=0 → "optional"
+                // mpl=0 → "optionalSpace"
                 // Backed up to start — at P=0 forward and backward agree
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -1414,7 +1414,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["next"],
                     matchedPrefixLength: 11,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1437,9 +1437,8 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "");
                 expectMetadata(result, {
                     completions: ["hello,", "hello."],
-                    sortCompletions: true,
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -1450,11 +1449,11 @@ describeForEachCompletion(
             it("offers 'world' after 'hello,'", () => {
                 const result = matchGrammarCompletion(grammar, "hello,");
                 // Only the comma variant should match
-                // requiresSeparator(",", "w", auto) → "optional"
+                // requiresSeparator(",", "w", auto) → "optionalSpace"
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1465,11 +1464,11 @@ describeForEachCompletion(
             it("offers 'world' after 'hello.'", () => {
                 const result = matchGrammarCompletion(grammar, "hello.");
                 // Only the dot variant should match
-                // requiresSeparator(".", "w", auto) → "optional"
+                // requiresSeparator(".", "w", auto) → "optionalSpace"
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1494,7 +1493,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -1504,11 +1503,11 @@ describeForEachCompletion(
 
             it("offers second segment after 'hello,'", () => {
                 const result = matchGrammarCompletion(grammar, "hello,");
-                // requiresSeparator(",", "w", auto) → "optional"
+                // requiresSeparator(",", "w", auto) → "optionalSpace"
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1522,7 +1521,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1544,7 +1543,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -1586,11 +1585,11 @@ describeForEachCompletion(
 
             it("offers second segment after 'hello,'", () => {
                 const result = matchGrammarCompletion(grammar, "hello,");
-                // optional mode: requiresSeparator always false → "optional"
+                // optional mode: requiresSeparator always false → "optionalSpacePunctuation"
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1598,12 +1597,12 @@ describeForEachCompletion(
                 });
             });
 
-            it("separatorMode should be 'optional'", () => {
+            it("separatorMode should be 'optionalSpacePunctuation'", () => {
                 const result = matchGrammarCompletion(grammar, "hello,");
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1726,7 +1725,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["..."],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -1737,11 +1736,11 @@ describeForEachCompletion(
             it("offers property completion after '...'", () => {
                 const result = matchGrammarCompletion(grammar, "...");
                 // Entity wildcard → closedSet false
-                // requiresSeparator(".", wildcard-first-char, auto) → false → "optional"
+                // requiresSeparator(".", wildcard-first-char, auto) → false → "optionalSpace"
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 3,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1762,7 +1761,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 3,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1794,7 +1793,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -1804,11 +1803,11 @@ describeForEachCompletion(
 
             it("offers 'world!' after 'hello,'", () => {
                 const result = matchGrammarCompletion(grammar, "hello,");
-                // requiresSeparator(",", "w", auto) → "optional"
+                // requiresSeparator(",", "w", auto) → "optionalSpace"
                 expectMetadata(result, {
                     completions: ["world!"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1818,11 +1817,11 @@ describeForEachCompletion(
 
             it("offers 'thanks.' after 'hello, world!'", () => {
                 const result = matchGrammarCompletion(grammar, "hello, world!");
-                // requiresSeparator("!", "t", auto) → "optional"
+                // requiresSeparator("!", "t", auto) → "optionalSpace"
                 expectMetadata(result, {
                     completions: ["thanks."],
                     matchedPrefixLength: 13,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1839,7 +1838,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["thanks."],
                     matchedPrefixLength: 13,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1874,7 +1873,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -1896,7 +1895,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -1918,12 +1917,12 @@ describeForEachCompletion(
                 );
                 // "hello," fully matched as keyword word 0 → next word "world"
                 // Wildcard absorbs all input → afterWildcard
-                // requiresSeparator(",", "w", auto) → comma is punct → "optional"
+                // requiresSeparator(",", "w", auto) → comma is punct → "optionalSpace"
                 // Backward would differ (backs up past wildcard) → direction-sensitive
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 10,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -1946,11 +1945,11 @@ describeForEachCompletion(
                 // "world" is a partial prefix of "worldly", not a full match
                 const result = matchGrammarCompletion(grammar, "hello, world");
                 // 3b dirty partial with prefix-filter
-                // requiresSeparator(",", "w", auto) → "optional"
+                // requiresSeparator(",", "w", auto) → "optionalSpace"
                 expectMetadata(result, {
                     completions: ["worldly"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1967,7 +1966,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["things"],
                     matchedPrefixLength: 14,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1994,7 +1993,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2008,7 +2007,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["next"],
                     matchedPrefixLength: 11,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2032,7 +2031,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["don't"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2046,7 +2045,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["stop"],
                     matchedPrefixLength: 5,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2064,7 +2063,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["stop"],
                     matchedPrefixLength: 5,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2088,7 +2087,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["price"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2101,7 +2100,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["1.99"],
                     matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2114,7 +2113,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done"],
                     matchedPrefixLength: 10,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2136,7 +2135,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2149,7 +2148,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 6,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2176,11 +2175,11 @@ describeForEachCompletion(
                     undefined,
                     "forward",
                 );
-                // requiresSeparator(",", "w", auto) → "optional"
+                // requiresSeparator(",", "w", auto) → "optionalSpace"
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 11,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2205,7 +2204,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2223,7 +2222,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 11,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2246,9 +2245,8 @@ describeForEachCompletion(
                 // requiresSeparator("y", "h" or "s", auto) → both Latin → "spacePunctuation"
                 expectMetadata(result, {
                     completions: ["hello,", "shuffle"],
-                    sortCompletions: true,
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2258,11 +2256,11 @@ describeForEachCompletion(
 
             it("offers 'world' after 'play hello,'", () => {
                 const result = matchGrammarCompletion(grammar, "play hello,");
-                // requiresSeparator(",", "w", auto) → "optional"
+                // requiresSeparator(",", "w", auto) → "optionalSpace"
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 11,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2276,7 +2274,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2298,11 +2296,11 @@ describeForEachCompletion(
             it("offers '.' terminator after wildcard content", () => {
                 const result = matchGrammarCompletion(grammar, "hello");
                 // Wildcard finalized at EOI → afterWildcard
-                // requiresSeparator("o", ".", auto) → "optional"
+                // requiresSeparator("o", ".", auto) → "optionalSpace"
                 expectMetadata(result, {
                     completions: ["."],
                     matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2312,12 +2310,12 @@ describeForEachCompletion(
 
             it("offers '.' terminator after wildcard + space", () => {
                 const result = matchGrammarCompletion(grammar, "hello ");
-                // Trailing space absorbed by wildcard → "optional"
+                // Trailing space absorbed by wildcard → "optionalSpace"
                 // Wildcard finalized at EOI → direction-sensitive
                 expectMetadata(result, {
                     completions: ["."],
                     matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2338,12 +2336,12 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "hello.");
                 // Under exhaustive matching: ["."]
                 // Under non-exhaustive matching: would be []
-                // Exhaustive: wildcard absorbed dot → "optional"
+                // Exhaustive: wildcard absorbed dot → "optionalSpace"
                 // Wildcard finalized at EOI → direction-sensitive
                 expectMetadata(result, {
                     completions: ["."],
                     matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2368,7 +2366,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["v1.0"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2381,7 +2379,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["is"],
                     matchedPrefixLength: 4,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2395,7 +2393,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["released"],
                     matchedPrefixLength: 7,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2418,7 +2416,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2431,7 +2429,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2446,7 +2444,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2470,7 +2468,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2484,7 +2482,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello,"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2506,7 +2504,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2560,7 +2558,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2578,7 +2576,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2602,7 +2600,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2612,12 +2610,12 @@ describeForEachCompletion(
 
             it("offers 'hello world' after wildcard + space", () => {
                 const result = matchGrammarCompletion(grammar, "foo ");
-                // Trailing space absorbed by wildcard → "optional"
+                // Trailing space absorbed by wildcard → "optionalSpace"
                 // Wildcard finalized at EOI → direction-sensitive
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2647,7 +2645,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 15,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2668,7 +2666,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2694,7 +2692,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello, world"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2708,7 +2706,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -2738,12 +2736,12 @@ describeForEachCompletion(
             it("forward on 'foo' offers ',world' after wildcard", () => {
                 const result = matchGrammarCompletion(grammar, "foo");
                 // Wildcard absorbs all input → mpl = input length
-                // requiresSeparator("o", ",", auto) → "optional"
+                // requiresSeparator("o", ",", auto) → "optionalSpace"
                 // Wildcard to reconsider → direction-sensitive
                 expectMetadata(result, {
                     completions: [",world"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2764,7 +2762,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [",world"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2788,7 +2786,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [",world"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2806,7 +2804,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done"],
                     matchedPrefixLength: 10,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2831,7 +2829,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [","],
                     matchedPrefixLength: 3,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2854,7 +2852,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -2887,7 +2885,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [" done"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2910,7 +2908,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [" done"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2936,7 +2934,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello "],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2957,7 +2955,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello "],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -2982,7 +2980,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["-done"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -3003,7 +3001,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["-done"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -3026,7 +3024,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["-done"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -3052,7 +3050,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done!"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -3072,7 +3070,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done!"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -3094,7 +3092,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["done!"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -3129,7 +3127,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -3150,7 +3148,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -3170,7 +3168,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello world"],
                     matchedPrefixLength: 3,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",

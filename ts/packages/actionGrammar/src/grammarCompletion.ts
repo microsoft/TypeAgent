@@ -11,8 +11,6 @@ import {
     type SeparatorMode,
     separatorRegExpStr,
     requiresSeparator,
-    candidateSeparatorMode,
-    mergeSeparatorMode,
     isBoundarySatisfied,
     nextNonSeparatorIndex,
     getWildcardStr,
@@ -290,6 +288,7 @@ function findPartialKeywordInWildcard(
 export type GrammarCompletionProperty = {
     match: unknown;
     propertyNames: string[];
+    separatorMode: SeparatorMode;
 };
 
 // Describes how the grammar rules that produced completions at this
@@ -304,24 +303,16 @@ export type GrammarCompletionProperty = {
 export type AfterWildcard = "none" | "some" | "all";
 
 export type GrammarCompletionResult = {
-    completions: string[];
+    // Per-group completions, partitioned by separator mode.
+    // Each group carries its own separatorMode — the shell shows/hides
+    // groups based on the user's trailing separator state.
+    // When only a single mode is present, there is one group.
+    groups: GrammarCompletionGroup[];
     properties?: GrammarCompletionProperty[] | undefined;
     // Number of characters from the input prefix that the grammar consumed
     // before the completion point.  The shell uses this to determine where
     // to insert/filter completions.
     matchedPrefixLength?: number | undefined;
-    // What kind of separator is expected between the content at
-    // `matchedPrefixLength` and the completion text.  This is a
-    // *completion-result* concept (SeparatorMode), derived from the
-    // per-rule *match-time* spacing rules (CompiledSpacingMode /
-    // spacingMode) but distinct from them.
-    //   "spacePunctuation" — whitespace or punctuation required
-    //     (Latin "y" → "m" requires a separator).
-    //   "optional" — separator accepted but not required
-    //     (CJK 再生 → 音楽 does not require a separator).
-    //   "none" — no separator at all ([spacing=none] grammars).
-    // Omitted when no completions were generated.
-    separatorMode?: SeparatorMode | undefined;
     // True when `completions` is the closed set of valid
     // continuations after the matched prefix — if the user types
     // something not in the list, no further completions can exist
@@ -367,9 +358,20 @@ export type GrammarCompletionResult = {
     afterWildcard: AfterWildcard;
 };
 
+// A completion group within a GrammarCompletionResult.
+// Intentionally parallel to CompletionGroup in @typeagent/agent-sdk
+// but defined here because actionGrammar has no dependency on agentSdk.
+// Unlike the SDK's CompletionGroup (where separatorMode is optional,
+// defaulting to "space"), the grammar always sets this field.
+export type GrammarCompletionGroup = {
+    completions: string[];
+    separatorMode: SeparatorMode;
+};
+
 function getGrammarCompletionProperty(
     state: MatchState,
     valueId: number,
+    spacingMode: CompiledSpacingMode,
 ): GrammarCompletionProperty | undefined {
     const temp = { ...state };
 
@@ -393,6 +395,7 @@ function getGrammarCompletionProperty(
     return {
         match,
         propertyNames: wildcardPropertyNames,
+        separatorMode: spacingModeToSeparatorMode(spacingMode),
     };
 }
 
@@ -626,75 +629,22 @@ type DeferredShadowCandidate = {
     candidate: FixedCandidate;
 };
 
-// Sentinel character for property candidates in separator mode
-// computation.  Property completions represent free-form entity
-// slots (not literal keywords), so any word character works —
-// when passed to `requiresSeparator()`, "a" is a word character
-// (matches \w), so it causes `requiresSeparator` to return true
-// for word-boundary spacing modes.
-const PROPERTY_SENTINEL_CHAR = "a";
-
-// True when a separator character (whitespace or punctuation) exists
-// at the given position in the input.  Used by both within-grammar
-// conflict filtering (filterSepConflicts) and cross-grammar conflict
-// filtering (grammarStore) to determine trailing separator state.
-export function hasTrailingSeparator(input: string, position: number): boolean {
-    return nextNonSeparatorIndex(input, position) > position;
-}
-
-// True when a separator is needed between the character at
-// `position - 1` in `input` and `firstCompletionChar` according
-// to `spacingMode`.  Shared by mergeSepMode, computeCandidateSeparatorMode,
-// computeRangeNeedsSep, and (indirectly) filterSepConflicts.
-function computeNeedsSep(
-    input: string,
-    position: number,
-    firstCompletionChar: string,
-    spacingMode: CompiledSpacingMode,
-): boolean {
-    return (
-        position > 0 &&
-        spacingMode !== "none" &&
-        requiresSeparator(input[position - 1], firstCompletionChar, spacingMode)
-    );
-}
-
-// Compute whether a separator is needed between the character at
-// `position - 1` in `input` and `firstCompletionChar`, then merge
-// the result into the running `current` separator mode.
-function mergeSepMode(
-    input: string,
-    current: SeparatorMode | undefined,
-    position: number,
-    firstCompletionChar: string,
-    spacingMode: CompiledSpacingMode,
-): SeparatorMode | undefined {
-    return mergeSeparatorMode(
-        current,
-        computeNeedsSep(input, position, firstCompletionChar, spacingMode),
-        spacingMode,
-    );
-}
-
-// Compute a candidate's individual SeparatorMode at a given position.
-// Uses the same (position, firstCompletionChar, spacingMode) logic as
-// mergeSepMode, but returns the per-candidate mode instead of merging
-// into the running aggregate.
-function computeCandidateSeparatorMode(
-    input: string,
-    position: number,
-    firstCompletionChar: string,
-    spacingMode: CompiledSpacingMode,
+// Map a compiled spacing mode to the corresponding SeparatorMode.
+// Only "autoSpacePunctuation" (undefined) produces a mode that requires per-item
+// resolution by the consumer; the other modes map deterministically.
+export function spacingModeToSeparatorMode(
+    mode: CompiledSpacingMode,
 ): SeparatorMode {
-    return candidateSeparatorMode(
-        computeNeedsSep(input, position, firstCompletionChar, spacingMode),
-        spacingMode,
-    );
-}
-
-// True when a SeparatorMode requires a separator character to be present.
-export function isRequiringSepMode(mode: SeparatorMode): boolean {
-    return mode === "space" || mode === "spacePunctuation";
+    switch (mode) {
+        case "required":
+            return "spacePunctuation";
+        case "optional":
+            return "optionalSpacePunctuation";
+        case "none":
+            return "none";
+        case undefined: // auto
+            return "autoSpacePunctuation";
+    }
 }
 
 // --- CompletionContext: mutable state shared across completion phases ---
@@ -748,19 +698,6 @@ type CompletionContext = {
     /** Shadow candidates from backward Cat 3b, deferred until
      *  maxPrefixLength is finalized so the check is order-independent. */
     deferredShadowCandidates: DeferredShadowCandidate[];
-    /** True when fixedCandidates have a separator mode conflict
-     *  (some require a separator, others reject it).
-     *  Set by filterSepConflicts.  Implies candidates were dropped. */
-    hasSepConflict: boolean;
-    /** True when trailing separator characters follow maxPrefixLength
-     *  during a separator conflict.  Set by filterSepConflicts. */
-    hasTrailingSep: boolean;
-    /** Effective trailing-sep state for conflict filtering.  False for
-     *  backward (treats separator as absent); equals hasTrailingSep
-     *  for forward.  Set by filterSepConflicts; used by
-     *  computeRangeNeedsSep to avoid recomputing the trailing-separator
-     *  check and backward-direction override for each range candidate. */
-    effectiveTrailingSep: boolean;
 };
 
 // Update maxPrefixLength.  When it increases, all previously
@@ -1225,9 +1162,6 @@ function collectCandidates(
         rangeCandidates: [],
         wildcardEoiDescriptors: [],
         deferredShadowCandidates: [],
-        hasSepConflict: false,
-        hasTrailingSep: false,
-        effectiveTrailingSep: false,
     };
 
     // Seed the work-list with one MatchState per top-level grammar rule.
@@ -1434,113 +1368,12 @@ function injectForwardEoiCandidates(
     }
 }
 
-// --- Separator mode conflict detection and filtering ---
-//
-// When fixed candidates at the same maxPrefixLength come from
-// rules with different spacing modes, some require a separator
-// while others reject it.  This function detects the conflict,
-// removes the incompatible set based on the trailing separator
-// state, advances P past the separator when needed, and records
-// the conflict state on ctx for materializeCandidates to use
-// during range candidate processing and output adjustment.
-//
-// Three-way compatibility:
-//   Trailing sep?  spacePunctuation  optional  none
-//   No             drop              keep      keep
-//   Yes            keep              keep      drop
-//
-// When candidates are dropped, closedSet is forced to false (by
-// materializeCandidates) so the shell re-fetches when the
-// separator state changes.  When trailing separator is present
-// and candidates are filtered, maxPrefixLength is advanced past
-// the separator so the shell's anchor diverges on backspace,
-// triggering an automatic re-fetch.
-function filterSepConflicts(ctx: CompletionContext): void {
-    const { input } = ctx;
-    // Snapshot the current candidates array.  The filter below
-    // replaces ctx.fixedCandidates with a new array; keeping a
-    // local reference avoids confusion between old and new.
-    const originalCandidates = ctx.fixedCandidates;
-
-    // Compute each candidate's separator mode once; reused by the
-    // filter pass below when a conflict is detected.
-    const modes: SeparatorMode[] = new Array(originalCandidates.length);
-    let hasRequiring = false;
-    let hasNoneMode = false;
-    for (let i = 0; i < originalCandidates.length; i++) {
-        const c = originalCandidates[i];
-        const firstChar =
-            c.kind === "string" ? c.completionText[0] : PROPERTY_SENTINEL_CHAR;
-        const mode = computeCandidateSeparatorMode(
-            input,
-            ctx.maxPrefixLength,
-            firstChar,
-            c.spacingMode,
-        );
-        modes[i] = mode;
-        if (isRequiringSepMode(mode)) {
-            hasRequiring = true;
-        }
-        if (mode === "none") {
-            hasNoneMode = true;
-        }
-    }
-
-    // A true separator conflict occurs only when "none" mode
-    // (rejects separator) coexists with requiring modes (needs
-    // separator).  "optional" is compatible with both states and
-    // does not participate in the conflict.
-    ctx.hasSepConflict = hasRequiring && hasNoneMode;
-    if (!ctx.hasSepConflict) return;
-
-    ctx.hasTrailingSep = hasTrailingSeparator(input, ctx.maxPrefixLength);
-
-    // Backward resolves the conflict as if there were no trailing
-    // separator: it will return mpl at the scan position (before the
-    // separator), so the separator is beyond its anchor and should not
-    // influence which candidates survive.  Treating hasTrailingSep as
-    // false for backward makes its candidate set match what forward
-    // would compute on input[0..mpl] (no trailing sep), satisfying
-    // Invariant #3.
-    ctx.effectiveTrailingSep =
-        ctx.direction === "backward" ? false : ctx.hasTrailingSep;
-
-    // Filter fixed candidates in place using the pre-computed
-    // modes, avoiding a second computeCandidateSeparatorMode call.
-    if (ctx.effectiveTrailingSep) {
-        // Trailing separator: drop "none" (rejects separator).
-        ctx.fixedCandidates = originalCandidates.filter(
-            (_, i) => modes[i] !== "none",
-        );
-        // Advance P past exactly one separator so backspace triggers
-        // re-fetch.  Only one character (not all consecutive
-        // separators) is consumed: each backspace in a multi-separator
-        // run produces a distinct anchor.  Remaining separators are
-        // stripped by the shell's "optional" mode handling, keeping the
-        // menu visible with a clean trie prefix.
-        //
-        // Safe unconditionally: hasSepConflict is true (checked above),
-        // so both "none" and requiring candidates coexist — the filter
-        // above always drops at least one candidate.
-        ctx.maxPrefixLength += 1;
-    } else {
-        // No trailing separator (or backward): drop requiring modes.
-        // Backward does not advance: its anchor stays at the scan
-        // position (before the separator).  This keeps
-        // backward.mpl < forward.mpl, satisfying Invariant #7.
-        ctx.fixedCandidates = originalCandidates.filter(
-            (_, i) => !isRequiringSepMode(modes[i]),
-        );
-    }
-}
-
-// --- Phase 2 (finalize): wildcard anchors, shadows, EOI, sep conflicts ---
+// --- Phase 2 (finalize): wildcard anchors, shadows, EOI ---
 //
 // Resolves deferred wildcard-at-EOI descriptors, flushes shadow
-// candidates, injects forward EOI candidates as fixedCandidates,
-// and filters separator mode conflicts.  After this function
-// returns, fixedCandidates are pre-filtered, rangeCandidates are
-// ready, and maxPrefixLength is finalized — ready for Phase 3
+// candidates, and injects forward EOI candidates as fixedCandidates.
+// After this function returns, fixedCandidates and rangeCandidates
+// are ready, and maxPrefixLength is finalized — ready for Phase 3
 // (materializeCandidates).
 //
 // wildcardEoiDescriptors contains all wildcard-at-EOI string
@@ -1560,8 +1393,6 @@ function filterSepConflicts(ctx: CompletionContext): void {
 //      via injectForwardEoiCandidates.
 //   2. Shadow candidates are flushed (consumedLength must match
 //      the now-settled maxPrefixLength).
-//   3. Separator mode conflicts are filtered via
-//      filterSepConflicts.
 function finalizeCandidates(ctx: CompletionContext): void {
     const {
         input,
@@ -1674,12 +1505,10 @@ function finalizeCandidates(ctx: CompletionContext): void {
         }
     }
 
-    // The three post-loop steps MUST run in this order:
+    // The two post-loop steps MUST run in this order:
     //   1. injectForwardEoiCandidates — may clear fixedCandidates
     //      and advance maxPrefixLength (displace path).
     //   2. flushShadowCandidates — checks maxPrefixLength set by (1).
-    //   3. filterSepConflicts — operates on the final fixedCandidates
-    //      populated by (1) and (2).
     // (Steps 1 and 2 are direction-exclusive — forward early-returns
     // in injectForwardEoiCandidates; shadows are only collected during
     // backward — so their internal order is interchangeable.  Forward
@@ -1697,38 +1526,6 @@ function finalizeCandidates(ctx: CompletionContext): void {
 
     // Flush deferred shadow candidates into fixedCandidates.
     flushShadowCandidates(ctx);
-
-    // Filter separator mode conflicts among fixed candidates.
-    filterSepConflicts(ctx);
-}
-
-// Compute needsSep for a range candidate and check whether it
-// should be dropped due to a separator conflict.  Returns a
-// tri-state: "needsSep" (separator required, candidate survives),
-// "noSep" (no separator needed, candidate survives), or "drop"
-// (candidate filtered out by separator conflict).
-function computeRangeNeedsSep(
-    ctx: CompletionContext,
-    firstCompletionChar: string,
-    spacingMode: CompiledSpacingMode,
-): "needsSep" | "noSep" | "drop" {
-    const needsSep = computeNeedsSep(
-        ctx.input,
-        ctx.maxPrefixLength,
-        firstCompletionChar,
-        spacingMode,
-    );
-    if (ctx.hasSepConflict) {
-        const mode = candidateSeparatorMode(needsSep, spacingMode);
-        if (
-            ctx.effectiveTrailingSep
-                ? mode === "none"
-                : isRequiringSepMode(mode)
-        ) {
-            return "drop";
-        }
-    }
-    return needsSep ? "needsSep" : "noSep";
 }
 
 // --- Phase 3 (materialize): Convert candidates to final completions/properties ---
@@ -1745,43 +1542,39 @@ function computeRangeNeedsSep(
 // expansion states of the same rule) can produce the same
 // completion text at the same maxPrefixLength.  Showing
 // duplicates in the menu is unhelpful, so we deduplicate
-// globally.
+// globally within each separator mode group.
 
 function materializeCandidates(
     ctx: CompletionContext,
 ): GrammarCompletionResult {
     const { input, direction, fixedCandidates, rangeCandidates } = ctx;
-    const completions = new Set<string>();
+
+    // Per-mode buckets for string completions (deduplicated).
+    const modeCompletions = new Map<SeparatorMode, Set<string>>();
     const properties: GrammarCompletionProperty[] = [];
 
-    // Derive output fields from surviving fixed candidates — only
-    // candidates at the final maxPrefixLength contribute.  The
-    // implicit reset when updateMaxPrefixLength clears fixedCandidates
-    // is automatic (no surviving candidate ⇒ default value).
-    // separatorMode, closedSet, and afterWildcard may be updated by
-    // range candidates and forward EOI candidates below.
-    let separatorMode: SeparatorMode | undefined;
     let closedSet = true;
-    // Two booleans that accumulate independently during candidate
-    // processing, then combine into the output AfterWildcard
-    // tri-state at the end.  Order-independent: each candidate
-    // sets one flag without needing to know what came before.
-    //   anyAfterWildcard:        true if ANY candidate is after a wildcard
-    //   hasNonWildcardCompletion: true if ANY STRING candidate is NOT
-    //                             after a wildcard
-    // Property completions don't affect hasNonWildcardCompletion —
-    // they don't go into the shell's trie (they are metadata for
-    // the dispatcher to request agent property values, gated by
-    // closedSet=false).
-    //
-    // A single tri-state can't replace these two booleans because
-    // candidateorder is arbitrary: both "none → wildcard → all"
-    // and "none → non-wildcard string → none" are valid prefixes,
-    // but the tri-state can't distinguish "none (empty)" from
-    // "none (has non-wildcard string)" when a wildcard arrives.
     let anyAfterWildcard = false;
     let hasNonWildcardCompletion = false;
     let partialKeywordBackup = false;
+
+    // Helper: add a string completion to its mode bucket.
+    function addCompletion(text: string, mode: SeparatorMode): void {
+        let bucket = modeCompletions.get(mode);
+        if (bucket === undefined) {
+            bucket = new Set<string>();
+            modeCompletions.set(mode, bucket);
+        }
+        bucket.add(text);
+    }
+
+    // Helper: check global dedup across all mode buckets.
+    function hasCompletion(text: string): boolean {
+        for (const bucket of modeCompletions.values()) {
+            if (bucket.has(text)) return true;
+        }
+        return false;
+    }
 
     for (const c of fixedCandidates) {
         if (c.isAfterWildcard) {
@@ -1793,51 +1586,21 @@ function materializeCandidates(
             partialKeywordBackup = true;
         }
         if (c.kind === "string") {
-            completions.add(c.completionText);
-            separatorMode = mergeSepMode(
-                input,
-                separatorMode,
-                ctx.maxPrefixLength,
-                c.completionText[0],
-                c.spacingMode,
+            addCompletion(
+                c.completionText,
+                spacingModeToSeparatorMode(c.spacingMode),
             );
         } else {
             const completionProperty = getGrammarCompletionProperty(
                 c.state,
                 c.valueId,
+                c.spacingMode,
             );
             if (completionProperty !== undefined) {
                 properties.push(completionProperty);
                 closedSet = false;
-                separatorMode = mergeSepMode(
-                    input,
-                    separatorMode,
-                    ctx.maxPrefixLength,
-                    PROPERTY_SENTINEL_CHAR,
-                    c.spacingMode,
-                );
             }
         }
-    }
-
-    // When P was advanced past trailing separator chars (trailing-sep
-    // conflict path), the separator is already consumed into P.
-    // Override separatorMode to "optional" — no *additional* separator
-    // is required between the (advanced) P and the completion text.
-    // mergeSepMode may have computed "spacePunctuation" because
-    // input[P-1] is a separator character, but that separator is the
-    // one we consumed, not a new requirement.
-    //
-    // Not applied for backward: backward does not advance P past the
-    // separator (see filterSepConflicts), so input[P-1] is still the
-    // last matched character (not a separator), and no override is needed.
-    if (
-        ctx.hasTrailingSep &&
-        ctx.hasSepConflict &&
-        ctx.direction !== "backward" &&
-        separatorMode !== undefined
-    ) {
-        separatorMode = "optional";
     }
 
     // Range candidates replace the old two-pass backward retrigger
@@ -1896,21 +1659,11 @@ function materializeCandidates(
                 );
                 if (
                     partial !== undefined &&
-                    !completions.has(partial.remainingText)
+                    !hasCompletion(partial.remainingText)
                 ) {
-                    const sepResult = computeRangeNeedsSep(
-                        ctx,
-                        partial.remainingText[0],
-                        c.spacingMode,
-                    );
-                    if (sepResult === "drop") {
-                        continue;
-                    }
-                    completions.add(partial.remainingText);
-                    separatorMode = mergeSeparatorMode(
-                        separatorMode,
-                        sepResult === "needsSep",
-                        c.spacingMode,
+                    addCompletion(
+                        partial.remainingText,
+                        spacingModeToSeparatorMode(c.spacingMode),
                     );
                     anyAfterWildcard = true;
                 }
@@ -1918,34 +1671,15 @@ function materializeCandidates(
                 const completionProperty = getGrammarCompletionProperty(
                     c.state,
                     c.valueId,
+                    c.spacingMode,
                 );
                 if (completionProperty !== undefined) {
-                    const sepResult = computeRangeNeedsSep(
-                        ctx,
-                        PROPERTY_SENTINEL_CHAR,
-                        c.spacingMode,
-                    );
-                    if (sepResult === "drop") {
-                        continue;
-                    }
                     properties.push(completionProperty);
-                    separatorMode = mergeSeparatorMode(
-                        separatorMode,
-                        sepResult === "needsSep",
-                        c.spacingMode,
-                    );
                     anyAfterWildcard = true;
                     closedSet = false;
                 }
             }
         }
-    }
-
-    // If candidates were dropped due to separator conflict,
-    // force closedSet=false so the shell re-fetches when the
-    // separator state changes (typing/deleting a space).
-    if (ctx.hasSepConflict) {
-        closedSet = false;
     }
 
     // See the directionSensitive field comment on
@@ -1957,26 +1691,25 @@ function materializeCandidates(
     // Combine the two accumulation booleans into the output
     // tri-state.  Order-independent: each boolean was set by
     // any candidate that matched its condition.
-    //
-    // When candidates were dropped due to separator conflict
-    // filtering, force "all" → "some" to prevent the shell
-    // from using the "slide" noMatchPolicy (which would
-    // suppress re-fetch when the separator state changes).
-    const rawAfterWildcard: AfterWildcard = !anyAfterWildcard
+    const afterWildcard: AfterWildcard = !anyAfterWildcard
         ? "none"
         : hasNonWildcardCompletion
           ? "some"
           : "all";
-    const afterWildcard: AfterWildcard =
-        ctx.hasSepConflict && rawAfterWildcard === "all"
-            ? "some"
-            : rawAfterWildcard;
+
+    // Build per-mode groups.
+    const groups: GrammarCompletionGroup[] = [];
+    for (const [mode, bucket] of modeCompletions) {
+        groups.push({
+            completions: [...bucket],
+            separatorMode: mode,
+        });
+    }
 
     return {
-        completions: [...completions],
+        groups,
         properties,
         matchedPrefixLength: ctx.maxPrefixLength,
-        separatorMode,
         closedSet,
         directionSensitive,
         afterWildcard,
@@ -1995,7 +1728,7 @@ export function matchGrammarCompletion(
 
     // Phase 1 (collect)
     const ctx = collectCandidates(grammar, input, minPrefixLength, direction);
-    // Phase 2 (finalize): wildcard anchors, shadows, EOI, sep conflicts
+    // Phase 2 (finalize): wildcard anchors, shadows, EOI
     finalizeCandidates(ctx);
     // Phase 3 (materialize): convert candidates to final completions/properties
     const result = materializeCandidates(ctx);

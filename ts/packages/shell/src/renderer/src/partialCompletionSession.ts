@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { CommandCompletionResult } from "agent-dispatcher";
+import { needsSeparatorInAutoMode } from "agent-dispatcher/helpers/completion";
 import {
     AfterWildcard,
     CompletionDirection,
@@ -67,32 +68,26 @@ function computeNoMatchPolicy(
 //   PENDING     anchor !== undefined && completionP !== undefined
 //   ACTIVE      anchor !== undefined && completionP === undefined
 //
+// Two-anchor model:
+//   - `anchor` (data validity): the prefix for which the backend result was
+//     computed.  Past it → re-fetch.
+//   - `menuSepLevel` (trie matching level): items in the trie correspond to
+//     one SepLevel (0/1/2).  The trie is only reloaded when the user narrows
+//     past the menu anchor or the menu is exhausted and a higher level exists.
+//
 // Design principles:
-//   - Completion result fields (separatorMode, etc.) are stored as-is
-//     from the backend response and never mutated as the user keeps typing.
-//     reuseSession() reads them to decide whether to show, hide, or re-fetch.
-//   - reuseSession() makes exactly four kinds of decisions:
-//       1. Re-fetch  — input has moved past what the current result covers
-//       2. Show/update menu — input satisfies the result's constraints;
-//          trie filters the loaded completions against the typed prefix.
-//       3. Hide menu, keep session — input is within the anchor but the
-//          result's constraints aren't satisfied yet (separator not typed,
-//          or no completions exist).  A re-fetch would return the same result.
-//       4. Uniquely satisfied — the user has exactly typed one completion
-//          entry (and it is not a prefix of any other).  Always re-fetches
-//          for the NEXT level's completions — the direction to use for the
-//          re-fetch is determined by the caller.
-//   - The `noMatchPolicy` controls the no-match fallthrough: when the trie
-//     has zero matches for the typed prefix:
-//       "accept"  → nothing else exists, stay quiet
-//       "refetch" → backend may know more, re-fetch
+//   - Completion result fields (per-group separatorMode, etc.) are stored as-is
+//     from the backend response and never mutated.
+//   - Per-group separatorMode determines which groups belong to each SepLevel.
+//     Non-cumulative: each level has its own set of items.  Widening replaces
+//     the trie rather than appending.
+//   - reuseSession() follows a decision table: A (session validity),
+//     B (menu anchor), C (trie matching), D (exhaustion cascade).
+//     See the method comment for the full table.
+//   - The `noMatchPolicy` controls the no-match fallthrough at D2–D4:
+//       "accept"  → exhaustive set, stay quiet
+//       "refetch" → open-ended, backend may know more
 //       "slide"   → wildcard boundary, slide anchor forward
-//   - The anchor is never advanced after a result is received (except
-//     when noMatchPolicy is "slide", which slides the anchor forward).
-//     When `separatorMode` requires a separator, or is "optional"
-//     (set by conflict filtering after consuming one separator into P),
-//     leading separator characters in the raw prefix are stripped before
-//     being passed to the menu, so the trie still matches.
 //
 // Architecture: docs/architecture/completion.md — §5 Shell — Completion Session
 // This class has no DOM dependencies and is fully unit-testable with Jest.
@@ -102,8 +97,17 @@ export class PartialCompletionSession {
     // the backend reports how much the grammar consumed.  `undefined` = IDLE.
     private anchor: string | undefined = undefined;
 
-    // Saved as-is from the last completion result.
-    private separatorMode: SeparatorMode = "space";
+    // Items partitioned by separatorMode from the last result.
+    private partitions: ItemPartition[] = [];
+    // Precomputed item counts per SepLevel.  Updated whenever
+    // partitions change (setPartitions / resetToIdle).
+    private levelCounts: LevelCounts = [0, 0, 0];
+    // The SepLevel at which the trie is currently loaded.
+    // Items in the trie correspond to itemsAtLevel(partitions, menuSepLevel).
+    // The trie is only reloaded when: (a) the user narrows past the
+    // menu anchor (sepLevel < menuSepLevel), or (b) the menu is
+    // exhausted and a higher level is available (widen).
+    private menuSepLevel: SepLevel = 0;
     // Computed from the backend's closedSet + afterWildcard fields.
     // Controls what happens when the local trie has no matches.
     private noMatchPolicy: NoMatchPolicy = "refetch";
@@ -123,6 +127,37 @@ export class PartialCompletionSession {
         private readonly menu: ISearchMenu,
         private readonly dispatcher: ICompletionDispatcher,
     ) {}
+
+    // Load the trie with items for the given level and set menuSepLevel.
+    // Shared by reuseSession (narrow/widen), startNewSession (initial load),
+    // and explicitHide (level change on dismiss).
+    private loadLevel(level: SepLevel): void {
+        this.menuSepLevel = level;
+        this.menu.setChoices(itemsAtLevel(this.partitions, level));
+    }
+
+    // Update partitions and recompute levelCounts.
+    private setPartitions(partitions: ItemPartition[]): void {
+        this.partitions = partitions;
+        this.levelCounts = computeLevelCounts(partitions);
+    }
+
+    // Strip the separator from rawPrefix at the current menuSepLevel,
+    // compute the menu position, and update the trie prefix.  Returns
+    // true when the prefix uniquely satisfies one entry; hides the menu
+    // when position cannot be determined.
+    private positionMenu(
+        rawPrefix: string,
+        getPosition: (prefix: string) => SearchMenuPosition | undefined,
+    ): boolean {
+        const completionPrefix = stripAtLevel(rawPrefix, this.menuSepLevel);
+        const position = getPosition(completionPrefix);
+        if (position !== undefined) {
+            return this.menu.updatePrefix(completionPrefix, position);
+        }
+        this.menu.hide();
+        return false;
+    }
 
     // Main entry point.  Called by PartialCompletion.update() after DOM checks pass.
     //   input:       trimmed input text (ghost text stripped, leading whitespace stripped)
@@ -156,35 +191,55 @@ export class PartialCompletionSession {
     public resetToIdle(): void {
         this.anchor = undefined;
         this.completionP = undefined;
+        this.setPartitions([]);
+        this.menuSepLevel = 0;
         this.explicitCloseAnchor = undefined;
     }
 
     // Called when the user explicitly dismisses the menu (e.g. Escape key).
-    // Hides the menu and — when conditions allow — issues a background refetch
-    // with the full current input.  The menu is only reopened if the backend
-    // returns a different anchor (startIndex changed), indicating the grammar
-    // found a new parse point.  If the anchor is unchanged the completions
-    // would be the same ones the user just dismissed, so reopening is suppressed.
     //
-    // Conditions where refetch is skipped (result guaranteed identical):
-    //   IDLE          — no active session
-    //   input===anchor — no prefix typed; same input was already fetched
-    //   noMatchPolicy !== "refetch":
-    //     "accept"    — closed set; backend cannot offer more completions
-    //     "slide"     — wildcard boundary; refetch returns same anchor shifted
+    // Three outcomes:
+    //   1. Level shift — a different SepLevel has items the user hasn't
+    //      seen.  Shift the trie and show the new items (no backend call).
+    //   2. No advance — IDLE or input equals anchor.  A refetch would
+    //      return identical data.  Just hide the menu.
+    //   3. Hide/slide — noMatchPolicy is "accept" or "slide" and the
+    //      input still extends the anchor.  No refetch can help.
+    //   4. Refetch — input advanced past the anchor at the same level
+    //      and noMatchPolicy allows it.  When the backend returns the
+    //      same anchor (startIndex unchanged), reopening is suppressed.
     public explicitHide(
         input: string,
         getPosition: (prefix: string) => SearchMenuPosition | undefined,
         direction: CompletionDirection,
     ): void {
         this.completionP = undefined; // cancel any in-flight fetch
-        this.menu.hide();
 
-        if (
-            this.anchor === undefined ||
-            input === this.anchor ||
-            this.noMatchPolicy !== "refetch"
-        ) {
+        // IDLE — no session data, nothing to shift or refetch.
+        if (this.anchor === undefined) {
+            this.menu.hide();
+            return;
+        }
+
+        // If a different SepLevel is reachable, shift to it — the user
+        // sees new items without a backend round-trip.
+        if (input.startsWith(this.anchor)) {
+            const rawPrefix = input.substring(this.anchor.length);
+            const sepLevel = computeSepLevel(rawPrefix);
+            if (sepLevel !== this.menuSepLevel) {
+                const newLevel = targetLevel(this.levelCounts, sepLevel);
+                if (newLevel !== undefined && newLevel !== this.menuSepLevel) {
+                    this.loadLevel(newLevel);
+                    this.positionMenu(rawPrefix, getPosition);
+                    return;
+                }
+            }
+        }
+
+        // No level shift available.  If input hasn't advanced past
+        // the anchor, a refetch would return identical results — just hide.
+        if (input === this.anchor || this.noMatchPolicy !== "refetch") {
+            this.menu.hide();
             return;
         }
 
@@ -194,117 +249,73 @@ export class PartialCompletionSession {
     }
 
     // Returns the text typed after the anchor, or undefined when
-    // the input has diverged past the anchor or the separator is not yet present.
+    // the input has diverged past the anchor or no items are loaded.
     public getCompletionPrefix(input: string): string | undefined {
         const anchor = this.anchor;
         if (anchor === undefined || !input.startsWith(anchor)) {
             return undefined;
         }
         const rawPrefix = input.substring(anchor.length);
-        const sepMode = this.separatorMode;
-        if (requiresSeparator(sepMode)) {
-            // The separator must be present and is not part of the replaceable prefix.
-            if (!separatorRegex(sepMode).test(rawPrefix)) {
-                return undefined;
-            }
+        if (computeSepLevel(rawPrefix) < this.menuSepLevel) {
+            return undefined;
         }
-        // Strip leading separators for all modes except "none".
-        return sepMode !== "none"
-            ? stripLeadingSeparator(rawPrefix, sepMode)
-            : rawPrefix;
+        if (this.levelCounts[this.menuSepLevel] === 0) {
+            return undefined;
+        }
+        return stripAtLevel(rawPrefix, this.menuSepLevel);
     }
 
     // Decides whether the current session can service `input` without a new
     // backend fetch.  Returns true to reuse, false to trigger a re-fetch.
     //
-    // Decision order:
-    //   PENDING    — a fetch is in flight; wait for it (return true, no-op).
-    //   RE-FETCH   — input has moved outside the anchor; the saved result no
-    //                longer applies (return false).
-    //   HIDE+KEEP  — input is within the anchor but the separator hasn't
-    //                been typed yet; hide the menu but don't re-fetch
-    //                (return true).
-    //   UNIQUE     — prefix exactly matches one entry and is not a prefix of
-    //                any other; re-fetch for the NEXT level (return false).
-    //   SHOW       — constraints satisfied; update the menu.  The final
-    //                decision uses `noMatchPolicy`:
-    //                reuse when the trie still has matches.  When the trie
-    //                is empty: "accept" → reuse, "refetch" → re-fetch,
-    //                "slide" → slide anchor forward.
+    // Decision table (two-anchor model — see docs/architecture/completion.md):
     //
-    // Re-fetch triggers (returns false → startNewSession):
+    // A. Session validity — is the data still usable?
+    //   A1  PENDING    completionP !== undefined                   → wait
+    //   A2  IDLE       anchor === undefined                        → re-fetch
+    //   A3  DIVERGED   !input.startsWith(anchor)                   → re-fetch
+    //   A4  DIR-SENS   backward + dirSensitive + input===anchor    → re-fetch
     //
-    // A. Session invalidation — anchor is stale; backend result was computed
-    //    for a prefix that no longer matches the input.  Unconditional.
-    //   1. No session       — anchor is undefined (IDLE state).
-    //   2. Anchor diverged  — input no longer starts with the saved anchor
-    //                         (e.g. backspace deleted into the anchor region).
-    //   3. Bad separator    — separatorMode requires whitespace (or punctuation)
-    //                         immediately after anchor, but a non-separator
-    //                         character was typed instead. The constraint can
-    //                         never be satisfied, so treat as new input.
-    //   4. Direction changed — the user switched between forward and backward
-    //                         AND the last result was direction-sensitive
-    //                         AND the input is at the exact anchor (no text
-    //                         typed past it).  Once the user types past the
-    //                         anchor, the direction-sensitive boundary has been
-    //                         passed and the loaded completions are still valid.
+    // B. Menu anchor — is the trie at the right level?
+    //   B1  NARROW     sepLevel < menuSepLevel + items at sepLevel → narrow, → C
+    //   B2  BEFORE-MENU  sepLevel < menuSepLevel + no items        → hide+keep
     //
-    // B. Hierarchical navigation — user completed this level; re-fetch for
-    //    the NEXT level's completions.
-    //   1. Uniquely satisfied — typed prefix exactly matches one completion and
-    //                         is not a prefix of any other. Always re-fetch
-    //                         for the NEXT level.
-    //   2. Committed past boundary — prefix contains a separator after a valid
-    //                         completion match (e.g. "set " where "set" matches
-    //                         but so does "setWindowState"). The user committed
-    //                         by typing a separator; re-fetch for next level.
+    // C. Trie matching — does the menu have results?
+    //   C1  UNIQUE     uniquelySatisfied                           → re-fetch
+    //   C2  COMMITTED  committed past boundary                     → re-fetch
+    //   C3  ACTIVE     menu.isActive()                             → reuse
     //
-    // C. Open-set discovery — trie has zero matches and the set is not
-    //    exhaustive; the backend may know about completions not yet loaded.
-    //    Gated by closedSet === false.
-    //   1. No matches + open set — trie has zero matches for the typed prefix
-    //                         AND noMatchPolicy is "refetch". The backend may
-    //                         know about completions not yet loaded.
-    private reuseSession(
+    // D. Exhaustion cascade — menu has no matches
+    //   D1  WIDEN      sepLevel > menuSepLevel                     → widen, → C
+    //   D2  SLIDE      noMatchPolicy=slide                         → slide anchor
+    //   D3  REFETCH    noMatchPolicy=refetch                       → re-fetch
+    //   D4  ACCEPT     noMatchPolicy=accept                        → reuse (quiet)
+    // ── A. Session validity ─────────────────────────────────────────
+    // Returns the anchor when the session is active and valid for
+    // the given input, or `undefined` when a re-fetch is needed.
+    // Checks A2 (IDLE), A3 (DIVERGED), A4 (DIR-SENS).
+    // Caller must check A1 (PENDING) before calling.
+    private getActiveAnchor(
         input: string,
-        getPosition: (prefix: string) => SearchMenuPosition | undefined,
         direction: CompletionDirection,
-    ): boolean {
-        // [A1] No session — IDLE state, must fetch.
+    ): string | undefined {
+        // [A2] IDLE — no session, must fetch.
         if (this.anchor === undefined) {
             debug(`Partial completion re-fetch: no active session (IDLE)`);
-            return false;
+            return undefined;
         }
 
-        // PENDING — a fetch is already in flight.
-        if (this.completionP !== undefined) {
-            debug(`Partial completion pending: ${this.anchor}`);
-            return true;
+        const { anchor } = this;
+
+        // [A3] DIVERGED — input moved past the anchor.
+        if (!input.startsWith(anchor)) {
+            debug(
+                `Partial completion re-fetch: anchor diverged (anchor='${anchor}', input='${input}')`,
+            );
+            return undefined;
         }
 
-        // ACTIVE from here.
-        const { anchor, separatorMode: sepMode, noMatchPolicy } = this;
-
-        // [A4] Backward at a direction-sensitive anchor.
-        // The two-pass backward approach means the loaded result is
-        // always a forward-at-P result.  When the user is at the
-        // anchor going backward, the loaded forward result does not
-        // apply — re-fetch to get backward's backed-up result.
-        //
-        // Only backward needs this check: forward at the anchor
-        // matches the loaded result (which is forward-at-P).
-        //
-        // Once the user has typed past the anchor (rawPrefix is
-        // non-empty), the direction-sensitive point has been passed:
-        // the trailing text acts as a commit signal, and backward is
-        // neutralized by the content after the anchor.  The loaded
-        // completions are still valid for trie filtering.
-        //
-        // If input is shorter than anchor, A2 (anchor diverged) will
-        // catch it.  If input is longer but the separator isn't
-        // satisfied, A3 will catch it.  So this check only needs to
-        // handle the exact-anchor case.
+        // [A4] DIR-SENS — backward at a direction-sensitive anchor.
         if (
             direction === "backward" &&
             this.directionSensitive &&
@@ -313,167 +324,140 @@ export class PartialCompletionSession {
             debug(
                 `Partial completion re-fetch: backward at anchor, directionSensitive`,
             );
-            return false;
+            return undefined;
         }
 
-        // [A2] RE-FETCH — input moved past the anchor (e.g. backspace, new word).
-        if (!input.startsWith(anchor)) {
-            debug(
-                `Partial completion re-fetch: anchor diverged (anchor='${anchor}', input='${input}')`,
-            );
-            return false;
+        return anchor;
+    }
+
+    private reuseSession(
+        input: string,
+        getPosition: (prefix: string) => SearchMenuPosition | undefined,
+        direction: CompletionDirection,
+    ): boolean {
+        // ── A. Session validity ──────────────────────────────────────
+        // [A1] PENDING — a fetch is already in flight, wait.
+        if (this.completionP !== undefined) {
+            debug(`Partial completion pending: ${this.anchor}`);
+            return true;
         }
 
-        // Separator handling: the character immediately after the anchor must
-        // satisfy the separatorMode constraint.
-        //   "space":            whitespace required
-        //   "spacePunctuation": whitespace or Unicode punctuation required
-        //   "optional"/"none":  no separator needed, fall through to SHOW
-        //
-        // Three sub-cases when a separator IS required:
-        //   ""        — separator not typed yet: HIDE+KEEP (separator may still arrive)
-        //   " …"      — separator present: SHOW (fall through, strip it below)
-        //   "x…"      — non-separator typed right after anchor: RE-FETCH (the
-        //               separator constraint can never be satisfied without
-        //               backtracking, so treat this as a new input)
-        //
-        // NOTE: The anchor (derived from startIndex) may already
-        // include whitespace when the grammar consumed it (e.g.
-        // an escaped literal space like `hello\ ` in a grammar
-        // rule, where the space is part of the token itself).
-        // In that case separatorMode may still require a separator
-        // — this is intentional and means the grammar expects a
-        // *second* separator after the anchor.  Do not "fix" this
-        // by trimming the anchor or adjusting startIndex; the
-        // agent is the authority on where it stopped parsing.
+        // [A2] - [A4]
+        const anchor = this.getActiveAnchor(input, direction);
+        if (anchor === undefined) {
+            return false;
+        }
+        const { noMatchPolicy } = this;
+
         const rawPrefix = input.substring(anchor.length);
-        const needsSep = requiresSeparator(sepMode);
-        if (needsSep) {
-            if (rawPrefix === "") {
+        const sepLevel = computeSepLevel(rawPrefix);
+
+        // ── B. Menu anchor — is the trie at the right level? ─────────
+
+        if (sepLevel < this.menuSepLevel) {
+            if (this.levelCounts[sepLevel] > 0) {
+                // [B1] NARROW — user backed into a lower level that has items.
+                this.loadLevel(sepLevel);
+                // Fall through to C.
+            } else if (rawPrefix === "") {
+                // [B2] BEFORE-MENU — at anchor, waiting for separator.
                 debug(
-                    `Partial completion deferred: still waiting for separator`,
+                    `Partial completion deferred: sepLevel=${sepLevel} < menuSepLevel=${this.menuSepLevel}, no items`,
                 );
                 this.menu.hide();
-                return true; // HIDE+KEEP
-            }
-            if (!separatorRegex(sepMode).test(rawPrefix)) {
-                // [A3] noMatchPolicy is not consulted for "accept" vs
-                // "refetch" here: it describes whether the completion
-                // *entries* are exhaustive, not whether the anchor
-                // token can extend.  The grammar may parse the longer
-                // input on a completely different path.
-                //
-                // However, when noMatchPolicy is "slide", the anchor
-                // sits at a sliding wildcard boundary — the user is
-                // still typing within the wildcard, and re-fetching
-                // would produce the same result at a shifted position.
-                // Instead, slide the anchor forward to the current
-                // input: the trie and metadata stay intact, so the menu
-                // will re-appear at the next word boundary when the
-                // user types a separator.
-                if (noMatchPolicy === "slide") {
-                    debug(
-                        `Partial completion anchor slide (A3): '${anchor}' → '${input}' (slide)`,
-                    );
-                    this.anchor = input;
-                    this.menu.hide();
-                    return true;
-                }
+                return true;
+            } else if (noMatchPolicy === "slide") {
+                // Separator expected but non-separator typed; slide anchor.
                 debug(
-                    `Partial completion re-fetch: non-separator after anchor (mode='${sepMode}', rawPrefix='${rawPrefix}')`,
+                    `Partial completion anchor slide: '${anchor}' → '${input}'`,
                 );
-                return false; // RE-FETCH (session invalidation)
+                this.anchor = input;
+                this.menu.hide();
+                return true;
+            } else {
+                // Separator expected but non-separator typed; re-fetch.
+                debug(
+                    `Partial completion re-fetch: non-separator at sepLevel=${sepLevel}, menuSepLevel=${this.menuSepLevel}`,
+                );
+                return false;
             }
         }
 
-        // SHOW — strip the leading separator (if any) before passing to the
-        // menu trie, so completions like "music" match prefix "" not " ".
-        // "optional" mode: separator is not required, but when present it
-        // should be stripped so the trie sees clean completion text.
-        const completionPrefix =
-            needsSep || sepMode === "optional"
-                ? stripLeadingSeparator(rawPrefix, sepMode)
-                : rawPrefix;
-
-        const position = getPosition(completionPrefix);
-        if (position !== undefined) {
+        // At the anchor with no items loaded — hide and wait.
+        // Covers error-recovery (anchor preserved but no data) and
+        // genuinely empty results at rawPrefix="".
+        if (rawPrefix === "" && this.levelCounts[this.menuSepLevel] === 0) {
             debug(
-                `Partial completion update: '${completionPrefix}' @ ${JSON.stringify(position)}`,
+                `Partial completion deferred: no items at menuSepLevel=${this.menuSepLevel}`,
             );
-            const uniquelySatisfied = this.menu.updatePrefix(
-                completionPrefix,
-                position,
-            );
+            this.menu.hide();
+            return true;
+        }
 
-            // [B1] The user has typed text that exactly matches one
-            // completion and is not a prefix of any other.
-            // Always re-fetch for the next level — the direction
-            // for the re-fetch comes from the caller.
+        // ── C + D loop: trie matching with exhaustion cascade ────────
+
+        for (;;) {
+            const uniquelySatisfied = this.positionMenu(rawPrefix, getPosition);
+
+            // [C1] UNIQUE — exactly one match, re-fetch for next level.
             if (uniquelySatisfied) {
-                debug(
-                    `Partial completion re-fetch: '${completionPrefix}' uniquely satisfied`,
-                );
-                return false; // RE-FETCH (hierarchical navigation)
+                debug(`Partial completion re-fetch: uniquely satisfied`);
+                return false;
             }
 
-            // [B2] Committed-past-boundary: the prefix contains whitespace
-            // or punctuation, meaning the user typed past a completion entry.
-            // If the text before the first separator exactly matches a
-            // completion, re-fetch for the next level.  This handles the
-            // case where an entry (e.g. "set") is also a prefix of other
-            // entries ("setWindowState") so uniquelySatisfied is false,
-            // but the user committed by typing a separator.
+            // [C2] COMMITTED — separator after a valid match.
+            const completionPrefix = stripAtLevel(rawPrefix, this.menuSepLevel);
             const sepMatch = completionPrefix.match(/^(.+?)[\s\p{P}]/u);
             if (sepMatch !== null && this.menu.hasExactMatch(sepMatch[1])) {
                 debug(
                     `Partial completion re-fetch: '${sepMatch[1]}' committed with separator`,
                 );
-                return false; // RE-FETCH (hierarchical navigation)
+                return false;
             }
-        } else {
-            debug(
-                `Partial completion: no position for prefix '${completionPrefix}', hiding menu`,
-            );
-            this.menu.hide();
-        }
 
-        // [C1] When the menu is still active (trie has matches) we always
-        // reuse — the loaded completions are still useful.  When there are
-        // NO matches, the decision depends on `noMatchPolicy`:
-        //   "accept"  → the set is exhaustive; the user typed past all
-        //               valid continuations, so re-fetching won't help.
-        //   "refetch" → the set is open-ended; the user may have typed
-        //               something valid that wasn't loaded, so re-fetch
-        //               with the longer input (open-set discovery).
-        //   "slide"   → the anchor sits at a sliding wildcard boundary;
-        //               slide forward instead of re-fetching (wasteful,
-        //               same result) or giving up (stuck).  The trie
-        //               stays intact so the menu will re-appear at the
-        //               next word boundary.
-        const active = this.menu.isActive();
-        if (!active) {
-            switch (noMatchPolicy) {
-                case "slide":
-                    debug(
-                        `Partial completion anchor slide (C1): '${anchor}' → '${input}' (slide)`,
-                    );
-                    this.anchor = input;
-                    this.menu.hide();
-                    return true;
-                case "accept":
-                    debug(
-                        `Partial completion reuse: noMatchPolicy=accept, menuActive=false`,
-                    );
-                    return true;
-                case "refetch":
-                    debug(
-                        `Partial completion re-fetch: noMatchPolicy=refetch, menuActive=false`,
-                    );
-                    return false;
+            // [C3] ACTIVE — trie has matches, menu visible.
+            if (this.menu.isActive()) {
+                debug(`Partial completion reuse: menuActive=true`);
+                return true;
             }
+
+            // ── D. Exhaustion cascade ────────────────────────────────
+
+            // [D1] WIDEN — higher level available, reload trie.
+            // Guard: menuSepLevel can only increase (0→1→2) and sepLevel
+            // is at most 2, so the loop terminates in ≤2 iterations.
+            if (sepLevel > this.menuSepLevel && this.menuSepLevel < 2) {
+                this.loadLevel((this.menuSepLevel + 1) as SepLevel);
+                debug(
+                    `Partial completion widen: menuSepLevel=${this.menuSepLevel}`,
+                );
+                continue; // loop back to C
+            }
+
+            // [D2] SLIDE — wildcard boundary, slide anchor forward.
+            if (noMatchPolicy === "slide") {
+                debug(
+                    `Partial completion anchor slide: '${anchor}' → '${input}'`,
+                );
+                this.anchor = input;
+                this.menu.hide();
+                return true;
+            }
+
+            // [D3] REFETCH — open-ended set, backend may know more.
+            if (noMatchPolicy === "refetch") {
+                debug(
+                    `Partial completion re-fetch: noMatchPolicy=refetch, menu exhausted`,
+                );
+                return false;
+            }
+
+            // [D4] ACCEPT — exhaustive set, nothing else to show.
+            debug(
+                `Partial completion reuse: noMatchPolicy=accept, menu exhausted`,
+            );
+            return true;
         }
-        debug(`Partial completion reuse: menuActive=true`);
-        return true;
     }
 
     // Start a new completion session: issue backend request and process result.
@@ -486,7 +470,8 @@ export class PartialCompletionSession {
         this.menu.hide();
         this.menu.setChoices([]);
         this.anchor = input;
-        this.separatorMode = "space";
+        this.setPartitions([]);
+        this.menuSepLevel = 0;
         this.noMatchPolicy = "refetch";
         const completionP = this.dispatcher.getCommandCompletion(
             input,
@@ -503,29 +488,23 @@ export class PartialCompletionSession {
                 this.completionP = undefined;
                 debug(`Partial completion result: `, result);
 
-                this.separatorMode = result.separatorMode ?? "space";
                 this.noMatchPolicy = computeNoMatchPolicy(
                     result.closedSet,
                     result.afterWildcard,
                 );
                 this.directionSensitive = result.directionSensitive;
 
-                const completions = toMenuItems(result.completions);
+                const partitions = toPartitions(
+                    result.completions,
+                    input,
+                    result.startIndex,
+                );
 
-                if (completions.length === 0) {
+                if (partitions.length === 0) {
                     debug(
                         `Partial completion skipped: No completions for '${input}'`,
                     );
-                    // Keep anchor at the full input so the anchor
-                    // covers the entire typed text.  The menu stays empty,
-                    // so reuseSession()'s SHOW path will use noMatchPolicy
-                    // to decide: "accept" → reuse (nothing more exists);
-                    // "refetch" → re-fetch when new input arrives.
-                    //
-                    // Override separatorMode: with no completions, there is
-                    // nothing to separate from, so the separator check in
-                    // reuseSession() should not interfere.
-                    this.separatorMode = "none";
+                    this.setPartitions([]);
                     return;
                 }
 
@@ -536,8 +515,18 @@ export class PartialCompletionSession {
                         ? input.substring(0, result.startIndex)
                         : input;
                 this.anchor = partial;
+                this.setPartitions(partitions);
 
-                this.menu.setChoices(completions);
+                // Pick the best trie level for the caller's input:
+                // highest level ≤ inputSepLevel with items, falling
+                // back to lowestLevelWithItems for skip-ahead.
+                // When no level has items (shouldn't happen — we
+                // checked partitions.length > 0), default to level 0.
+                const rawPrefix = input.substring(partial.length);
+                this.loadLevel(
+                    targetLevel(this.levelCounts, computeSepLevel(rawPrefix)) ??
+                        0,
+                );
 
                 // If triggered by an explicit close, only reopen when the
                 // anchor advanced.  Same anchor means the same completions at
@@ -555,7 +544,7 @@ export class PartialCompletionSession {
                 }
 
                 // Re-run update with captured input to show the menu (or defer
-                // if the separator has not been typed yet).
+                // if no items are visible yet).
                 this.reuseSession(input, getPosition, direction);
             })
             .catch((e) => {
@@ -569,49 +558,212 @@ export class PartialCompletionSession {
     }
 }
 
-// ── Separator helpers ────────────────────────────────────────────────────────
+// ── SepLevel: separator progression model ────────────────────────────────
+//
+// Three ordered levels describing the leading separator characters in
+// rawPrefix (text typed after the anchor).  Each level defines which
+// SeparatorMode values are visible and how to strip the separator
+// before passing the remainder to the trie.
+//
+// Level 0 (none):      No separator.  Items needing no separator.
+// Level 1 (space):     Whitespace present.  Strip whitespace only.
+// Level 2 (spacePunc): Whitespace + punctuation.  Strip both.
 
-function requiresSeparator(mode: SeparatorMode): boolean {
-    return mode === "space" || mode === "spacePunctuation";
+// SeparatorMode after "autoSpacePunctuation" has been resolved per-item
+// and undefined has been defaulted to "space".  Partitions always use
+// this type — no deferred or missing modes at the shell level.
+type ResolvedSeparatorMode = Exclude<SeparatorMode, "autoSpacePunctuation">;
+
+// Visibility matrix (non-cumulative, per-level):
+//
+//   ResolvedSeparatorMode       Lv0  Lv1  Lv2
+//   "none"                       ✓    —    —
+//   "optionalSpace"              ✓    ✓    —
+//   "optionalSpacePunctuation"   ✓    ✓    ✓
+//   "space"                      —    ✓    —
+//   "spacePunctuation"           —    ✓    ✓
+//
+// Each level has its own set of items.  Widening replaces the trie
+// (not appends).
+
+type SepLevel = 0 | 1 | 2;
+
+function computeSepLevel(rawPrefix: string): SepLevel {
+    if (rawPrefix === "") return 0;
+    // Check the leading separator portion for whitespace and punctuation.
+    const leadingSep = rawPrefix.match(/^[\s\p{P}]+/u);
+    if (leadingSep === null) return 0;
+    const sep = leadingSep[0];
+    if (/\p{P}/u.test(sep)) return 2;
+    // Only whitespace in the leading separator portion.
+    return 1;
 }
 
-function separatorRegex(mode: SeparatorMode): RegExp {
-    return mode === "space" ? /^\s/ : /^[\s\p{P}]/u;
+// Returns true when a partition's separatorMode belongs to the given
+// level per the visibility matrix.  Non-cumulative.
+function isModeAtLevel(mode: ResolvedSeparatorMode, level: SepLevel): boolean {
+    switch (level) {
+        case 0:
+            return (
+                mode === "none" ||
+                mode === "optionalSpace" ||
+                mode === "optionalSpacePunctuation"
+            );
+        case 1:
+            return (
+                mode === "space" ||
+                mode === "optionalSpace" ||
+                mode === "optionalSpacePunctuation" ||
+                mode === "spacePunctuation"
+            );
+        case 2:
+            return (
+                mode === "optionalSpacePunctuation" ||
+                mode === "spacePunctuation"
+            );
+    }
 }
 
-// Strip leading separator characters from rawPrefix.
-// For "space" and "optional" modes, only whitespace is stripped.
-// ("optional" uses whitespace-only because the consumed separator
-// in conflict filtering was a whitespace character.)
-// For "spacePunctuation" mode, leading whitespace and punctuation are stripped.
-function stripLeadingSeparator(rawPrefix: string, mode: SeparatorMode): string {
-    return mode === "space" || mode === "optional"
-        ? rawPrefix.trimStart()
-        : rawPrefix.replace(/^[\s\p{P}]+/u, "");
+// Returns items from partitions whose separatorMode belongs to the
+// given level.  Non-cumulative — each level has its own item set.
+// Only called by loadLevel (which needs the actual items).
+function itemsAtLevel(
+    partitions: ItemPartition[],
+    level: SepLevel,
+): SearchMenuItem[] {
+    const result: SearchMenuItem[] = [];
+    for (const p of partitions) {
+        if (isModeAtLevel(p.mode, level)) {
+            for (const item of p.items) {
+                result.push(item);
+            }
+        }
+    }
+    return result;
 }
 
-// Convert backend CompletionGroups into flat SearchMenuItems,
+// Precomputed item counts per SepLevel.  Avoids rebuilding arrays
+// on every keystroke for the many count-only checks.
+type LevelCounts = [number, number, number];
+
+function computeLevelCounts(partitions: ItemPartition[]): LevelCounts {
+    const counts: LevelCounts = [0, 0, 0];
+    for (const p of partitions) {
+        for (let level = 0; level <= 2; level++) {
+            if (isModeAtLevel(p.mode, level as SepLevel)) {
+                counts[level] += p.items.length;
+            }
+        }
+    }
+    return counts;
+}
+
+// Returns the lowest SepLevel that has items, or undefined when all
+// counts are zero.
+function lowestLevelWithItems(counts: LevelCounts): SepLevel | undefined {
+    for (let level = 0; level <= 2; level++) {
+        if (counts[level] > 0) {
+            return level as SepLevel;
+        }
+    }
+    return undefined;
+}
+
+// Returns the highest SepLevel ≤ maxLevel that has items, falling back
+// to lowestLevelWithItems when nothing exists at or below maxLevel
+// (e.g. entities that only appear at level 1+).  Returns undefined when
+// no level has items at all.
+function targetLevel(
+    counts: LevelCounts,
+    maxLevel: SepLevel,
+): SepLevel | undefined {
+    for (let l = maxLevel; l > 0; l--) {
+        if (counts[l] > 0) {
+            return l as SepLevel;
+        }
+    }
+    return lowestLevelWithItems(counts);
+}
+
+// Strip leading separator characters from rawPrefix based on the level.
+function stripAtLevel(rawPrefix: string, level: SepLevel): string {
+    switch (level) {
+        case 0:
+            return rawPrefix;
+        case 1:
+            return rawPrefix.trimStart();
+        case 2:
+            return rawPrefix.replace(/^[\s\p{P}]+/u, "");
+    }
+}
+
+// An items-by-mode bucket.  Each partition holds the items from one or more
+// CompletionGroups that share the same separatorMode.
+type ItemPartition = {
+    mode: ResolvedSeparatorMode;
+    items: SearchMenuItem[];
+};
+
+// Convert backend CompletionGroups into partitions keyed by separatorMode,
 // preserving group order and sorting within each group.
-function toMenuItems(groups: CompletionGroup[]): SearchMenuItem[] {
-    const items: SearchMenuItem[] = [];
+//
+// Groups with separatorMode="autoSpacePunctuation" are resolved per-item:
+// each completion is assigned "spacePunctuation" or
+// "optionalSpacePunctuation" based on the character pair
+// (input[startIndex-1], completion[0]).  This preserves the agent's
+// original ordering across the resulting partitions via sortIndex.
+function toPartitions(
+    groups: CompletionGroup[],
+    input: string,
+    startIndex: number,
+): ItemPartition[] {
+    const map = new Map<ResolvedSeparatorMode, SearchMenuItem[]>();
     let sortIndex = 0;
+
+    function addItem(
+        mode: ResolvedSeparatorMode,
+        choice: string,
+        group: CompletionGroup,
+    ): void {
+        let bucket = map.get(mode);
+        if (bucket === undefined) {
+            bucket = [];
+            map.set(mode, bucket);
+        }
+        bucket.push({
+            matchText: choice,
+            selectedText: choice,
+            sortIndex: sortIndex++,
+            needQuotes: group.needQuotes,
+            emojiChar: group.emojiChar,
+        });
+    }
+
     for (const group of groups) {
         const sorted = group.sorted
             ? group.completions
             : [...group.completions].sort();
-        for (const choice of sorted) {
-            items.push({
-                matchText: choice,
-                selectedText: choice,
-                sortIndex: sortIndex++,
-                ...(group.needQuotes !== undefined
-                    ? { needQuotes: group.needQuotes }
-                    : {}),
-                ...(group.emojiChar !== undefined
-                    ? { emojiChar: group.emojiChar }
-                    : {}),
-            });
+        if (group.separatorMode === "autoSpacePunctuation") {
+            // Resolve per-item: inspect character pair to determine
+            // whether a separator is needed.
+            for (const choice of sorted) {
+                const needsSep =
+                    startIndex > 0 &&
+                    choice.length > 0 &&
+                    needsSeparatorInAutoMode(input[startIndex - 1], choice[0]);
+                addItem(
+                    needsSep ? "spacePunctuation" : "optionalSpacePunctuation",
+                    choice,
+                    group,
+                );
+            }
+        } else {
+            // Resolve undefined → "space" (the default separatorMode).
+            const mode: ResolvedSeparatorMode = group.separatorMode ?? "space";
+            for (const choice of sorted) {
+                addItem(mode, choice, group);
+            }
         }
     }
-    return items;
+    return Array.from(map, ([mode, items]) => ({ mode, items }));
 }

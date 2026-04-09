@@ -19,10 +19,10 @@ describeForEachCompletion(
 
             it("completes first part for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toContain("first");
                 expectMetadata(result, {
+                    completions: ["first"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -32,10 +32,10 @@ describeForEachCompletion(
 
             it("completes second part after first matched", () => {
                 const result = matchGrammarCompletion(grammar, "first");
-                expect(result.completions).toContain("second");
                 expectMetadata(result, {
+                    completions: ["second"],
                     matchedPrefixLength: 5,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -45,10 +45,10 @@ describeForEachCompletion(
 
             it("completes second part after first matched with space", () => {
                 const result = matchGrammarCompletion(grammar, "first ");
-                expect(result.completions).toContain("second");
                 expectMetadata(result, {
+                    completions: ["second"],
                     matchedPrefixLength: 5,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -58,10 +58,10 @@ describeForEachCompletion(
 
             it("completes third part after first two matched", () => {
                 const result = matchGrammarCompletion(grammar, "first second");
-                expect(result.completions).toContain("third");
                 expectMetadata(result, {
+                    completions: ["third"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -71,10 +71,10 @@ describeForEachCompletion(
 
             it("completes third part after first two matched with space", () => {
                 const result = matchGrammarCompletion(grammar, "first second ");
-                expect(result.completions).toContain("third");
                 expectMetadata(result, {
+                    completions: ["third"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -91,7 +91,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["third"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -111,7 +111,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["third"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -124,10 +124,10 @@ describeForEachCompletion(
                     grammar,
                     "first second th",
                 );
-                expect(result.completions).toContain("third");
                 expectMetadata(result, {
+                    completions: ["third"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -151,10 +151,10 @@ describeForEachCompletion(
                     grammar,
                     "alpha bravo charlie",
                 );
-                expect(result.completions).toContain("delta");
                 expectMetadata(result, {
+                    completions: ["delta"],
                     matchedPrefixLength: 19,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -164,10 +164,10 @@ describeForEachCompletion(
 
             it("completes charlie after two parts matched", () => {
                 const result = matchGrammarCompletion(grammar, "alpha bravo");
-                expect(result.completions).toContain("charlie");
                 expectMetadata(result, {
+                    completions: ["charlie"],
                     matchedPrefixLength: 11,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -193,10 +193,10 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "alpha bravo");
                 // Short rule matches exactly, no completion from it.
                 // Long rule matches alpha + bravo and offers "charlie".
-                expect(result.completions).toContain("charlie");
                 expectMetadata(result, {
+                    completions: ["charlie"],
                     matchedPrefixLength: 11,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -207,10 +207,10 @@ describeForEachCompletion(
             it("both rules offer completions at same depth for first part", () => {
                 const result = matchGrammarCompletion(grammar, "alpha");
                 // Both rules need "bravo" next.
-                expect(result.completions).toContain("bravo");
                 expectMetadata(result, {
+                    completions: ["bravo"],
                     matchedPrefixLength: 5,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -230,11 +230,10 @@ describeForEachCompletion(
 
             it("offers both alternatives after shared prefix", () => {
                 const result = matchGrammarCompletion(grammar, "prefix");
-                expect(result.completions).toContain("suffix_x");
-                expect(result.completions).toContain("suffix_y");
                 expectMetadata(result, {
+                    completions: ["suffix_x", "suffix_y"],
                     matchedPrefixLength: 6,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -253,7 +252,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["suffix_x", "suffix_y"],
                     matchedPrefixLength: 6,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -274,11 +273,10 @@ describeForEachCompletion(
             it("offers both optional and skip alternatives after first part", () => {
                 const result = matchGrammarCompletion(grammar, "begin");
                 // Should offer "middle" (optional) and "finish" (skipping optional)
-                expect(result.completions).toContain("middle");
-                expect(result.completions).toContain("finish");
                 expectMetadata(result, {
+                    completions: ["middle", "finish"],
                     matchedPrefixLength: 5,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -288,10 +286,10 @@ describeForEachCompletion(
 
             it("offers finish after optional part matched", () => {
                 const result = matchGrammarCompletion(grammar, "begin middle");
-                expect(result.completions).toContain("finish");
                 expectMetadata(result, {
+                    completions: ["finish"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -307,10 +305,10 @@ describeForEachCompletion(
                 //     offers "finish" at matchedPrefixLength=5 — but this
                 //     is filtered out because a longer match (12) exists.
                 const result = matchGrammarCompletion(grammar, "begin middle");
-                expect(result.completions).toContain("finish");
                 expectMetadata(result, {
+                    completions: ["finish"],
                     matchedPrefixLength: 12,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -327,10 +325,10 @@ describeForEachCompletion(
 
             it("completes 'percent' after number matched", () => {
                 const result = matchGrammarCompletion(grammar, "set volume 50");
-                expect(result.completions).toContain("percent");
                 expectMetadata(result, {
+                    completions: ["percent"],
                     matchedPrefixLength: 13,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -343,10 +341,10 @@ describeForEachCompletion(
                     grammar,
                     "set volume 50 ",
                 );
-                expect(result.completions).toContain("percent");
                 expectMetadata(result, {
+                    completions: ["percent"],
                     matchedPrefixLength: 13,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -363,7 +361,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["percent"],
                     matchedPrefixLength: 13,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -385,12 +383,10 @@ describeForEachCompletion(
 
             it("offers all genre alternatives after 'play'", () => {
                 const result = matchGrammarCompletion(grammar, "play");
-                expect(result.completions).toContain("rock");
-                expect(result.completions).toContain("pop");
-                expect(result.completions).toContain("jazz");
                 expectMetadata(result, {
+                    completions: ["rock", "pop", "jazz"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -402,12 +398,10 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "play r");
                 // All genre alternatives are reported after the longest
                 // complete match "play"; the caller filters by "r".
-                expect(result.completions).toContain("rock");
-                expect(result.completions).toContain("pop");
-                expect(result.completions).toContain("jazz");
                 expectMetadata(result, {
+                    completions: ["rock", "pop", "jazz"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -418,12 +412,10 @@ describeForEachCompletion(
             it("all alternatives offered with 'p' trailing text", () => {
                 const result = matchGrammarCompletion(grammar, "play p");
                 // All are reported; caller filters by "p".
-                expect(result.completions).toContain("pop");
-                expect(result.completions).toContain("rock");
-                expect(result.completions).toContain("jazz");
                 expectMetadata(result, {
+                    completions: ["rock", "pop", "jazz"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -433,10 +425,10 @@ describeForEachCompletion(
 
             it("closedSet=true for first string part on empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toContain("play");
                 expectMetadata(result, {
+                    completions: ["play"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -451,7 +443,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["rock", "pop", "jazz"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -470,24 +462,27 @@ describeForEachCompletion(
 
             it("offers wildcard property after 'play'", () => {
                 const result = matchGrammarCompletion(grammar, "play");
-                // Wildcard is next, should have property completion
-                expect(result.properties).toBeDefined();
-                expect(result.properties!.length).toBeGreaterThan(0);
                 expectMetadata(result, {
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
+                    properties: [
+                        {
+                            match: {},
+                            propertyNames: ["name"],
+                        },
+                    ],
                 });
             });
 
             it("offers 'by' terminator after wildcard text", () => {
                 const result = matchGrammarCompletion(grammar, "play hello");
-                expect(result.completions).toContain("by");
                 expectMetadata(result, {
+                    completions: ["by"],
                     matchedPrefixLength: 10,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -497,15 +492,18 @@ describeForEachCompletion(
 
             it("offers artist wildcard property after 'by'", () => {
                 const result = matchGrammarCompletion(grammar, "play hello by");
-                // After "by", the next part is the artist wildcard
-                expect(result.properties).toBeDefined();
-                expect(result.properties!.length).toBeGreaterThan(0);
                 expectMetadata(result, {
                     matchedPrefixLength: 13,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "all",
+                    properties: [
+                        {
+                            match: { name: "hello" },
+                            propertyNames: ["artist"],
+                        },
+                    ],
                 });
             });
         });
@@ -520,10 +518,10 @@ describeForEachCompletion(
 
             it("completes 'deep' for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toContain("deep");
                 expectMetadata(result, {
+                    completions: ["deep"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -533,10 +531,10 @@ describeForEachCompletion(
 
             it("completes 'done' after deeply nested match", () => {
                 const result = matchGrammarCompletion(grammar, "deep");
-                expect(result.completions).toContain("done");
                 expectMetadata(result, {
+                    completions: ["done"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -552,10 +550,10 @@ describeForEachCompletion(
 
             it("offers 'hello' for empty input", () => {
                 const result = matchGrammarCompletion(grammar, "");
-                expect(result.completions).toContain("hello");
                 expectMetadata(result, {
+                    completions: ["hello"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -566,11 +564,10 @@ describeForEachCompletion(
             it("offers repeat alternatives after 'hello'", () => {
                 const result = matchGrammarCompletion(grammar, "hello");
                 // After "hello", the ()+ group requires at least one match
-                expect(result.completions).toContain("world");
-                expect(result.completions).toContain("earth");
                 expectMetadata(result, {
+                    completions: ["world", "earth"],
                     matchedPrefixLength: 5,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -581,15 +578,10 @@ describeForEachCompletion(
             it("offers 'done' and repeat alternatives after first repeat match", () => {
                 const result = matchGrammarCompletion(grammar, "hello world");
                 // After one repeat match, can repeat or proceed to "done"
-                expect(result.completions).toContain("done");
-                // Also should offer repeat alternatives
-                expect(
-                    result.completions.includes("world") ||
-                        result.completions.includes("earth"),
-                ).toBe(true);
                 expectMetadata(result, {
+                    completions: ["done", "world", "earth"],
                     matchedPrefixLength: 11,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -602,10 +594,10 @@ describeForEachCompletion(
                     grammar,
                     "hello world earth",
                 );
-                expect(result.completions).toContain("done");
                 expectMetadata(result, {
+                    completions: ["done", "world", "earth"],
                     matchedPrefixLength: 17,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -639,9 +631,9 @@ describeForEachCompletion(
                 // matchedPrefixLength should be at least 10 (from the longest match).
                 expect(result.matchedPrefixLength).toBeGreaterThanOrEqual(10);
                 // "gamma" must appear as completion from the longer match.
-                expect(result.completions).toContain("gamma");
                 expectMetadata(result, {
-                    separatorMode: "spacePunctuation",
+                    completions: ["gamma"],
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -657,7 +649,7 @@ describeForEachCompletion(
                 // We verify maxPrefixLength is from the longest match.
                 expectMetadata(result, {
                     matchedPrefixLength: 10,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -675,10 +667,10 @@ describeForEachCompletion(
 
             it("completes after case-insensitive match", () => {
                 const result = matchGrammarCompletion(grammar, "hello");
-                expect(result.completions).toContain("World");
                 expectMetadata(result, {
+                    completions: ["World"],
                     matchedPrefixLength: 5,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -688,10 +680,10 @@ describeForEachCompletion(
 
             it("completes after uppercase input", () => {
                 const result = matchGrammarCompletion(grammar, "HELLO");
-                expect(result.completions).toContain("World");
                 expectMetadata(result, {
+                    completions: ["World"],
                     matchedPrefixLength: 5,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -701,10 +693,10 @@ describeForEachCompletion(
 
             it("partial prefix is case insensitive", () => {
                 const result = matchGrammarCompletion(grammar, "hello WO");
-                expect(result.completions).toContain("World");
                 expectMetadata(result, {
+                    completions: ["World"],
                     matchedPrefixLength: 5,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -726,12 +718,10 @@ describeForEachCompletion(
 
             it("only matching rule offers completions for 'play'", () => {
                 const result = matchGrammarCompletion(grammar, "play");
-                expect(result.completions).toContain("rock");
-                expect(result.completions).not.toContain("now");
-                expect(result.completions).not.toContain("stop");
                 expectMetadata(result, {
+                    completions: ["rock"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -741,12 +731,10 @@ describeForEachCompletion(
 
             it("only matching rule offers completions for 'stop'", () => {
                 const result = matchGrammarCompletion(grammar, "stop");
-                expect(result.completions).toContain("now");
-                expect(result.completions).not.toContain("rock");
-                expect(result.completions).not.toContain("play");
                 expectMetadata(result, {
+                    completions: ["now"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -759,10 +747,10 @@ describeForEachCompletion(
                 // Nothing consumed; all first string parts from every rule
                 // are offered at prefixLength 0.  The caller filters by
                 // the trailing text "dance".
-                expect(result.completions.sort()).toEqual(["play", "stop"]);
                 expectMetadata(result, {
+                    completions: ["play", "stop"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -783,23 +771,27 @@ describeForEachCompletion(
 
             it("entity wildcard produces property completion", () => {
                 const result = matchGrammarCompletion(grammar, "play");
-                expect(result.properties).toBeDefined();
-                expect(result.properties!.length).toBeGreaterThan(0);
                 expectMetadata(result, {
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
+                    properties: [
+                        {
+                            match: {},
+                            propertyNames: ["song"],
+                        },
+                    ],
                 });
             });
 
             it("string terminator after entity text", () => {
                 const result = matchGrammarCompletion(grammar, "play mysong");
-                expect(result.completions).toContain("next");
                 expectMetadata(result, {
+                    completions: ["next"],
                     matchedPrefixLength: 11,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -822,21 +814,16 @@ describeForEachCompletion(
                 const r1 = matchGrammarCompletion(grammar, "one");
                 const r2 = matchGrammarCompletion(grammar, "one ");
                 const r3 = matchGrammarCompletion(grammar, "one  ");
-                expect(r1.completions).toEqual(r2.completions);
-                expect(r2.completions).toEqual(r3.completions);
-                expect(r1.completions).toContain("two");
-                expect(r1.separatorMode).toBe("spacePunctuation");
-                expect(r2.separatorMode).toBe("spacePunctuation");
-                expect(r3.separatorMode).toBe("spacePunctuation");
-                expect(r1.closedSet).toBe(true);
-                expect(r2.closedSet).toBe(true);
-                expect(r3.closedSet).toBe(true);
-                expect(r1.afterWildcard).toBe("none");
-                expect(r2.afterWildcard).toBe("none");
-                expect(r3.afterWildcard).toBe("none");
-                expect(r1.properties).toEqual([]);
-                expect(r2.properties).toEqual([]);
-                expect(r3.properties).toEqual([]);
+                const shared = {
+                    completions: ["two"],
+                    separatorMode: "autoSpacePunctuation" as const,
+                    closedSet: true,
+                    afterWildcard: "none",
+                    properties: [],
+                };
+                expectMetadata(r1, shared);
+                expectMetadata(r2, shared);
+                expectMetadata(r3, shared);
             });
 
             it("matchedPrefixLength does not include trailing whitespace", () => {
@@ -844,13 +831,14 @@ describeForEachCompletion(
                 const r2 = matchGrammarCompletion(grammar, "one ");
                 const r3 = matchGrammarCompletion(grammar, "one  ");
                 // matchedPrefixLength stays at 3 regardless of trailing space.
-                expect(r1.matchedPrefixLength).toBe(3);
-                expect(r2.matchedPrefixLength).toBe(3);
-                expect(r3.matchedPrefixLength).toBe(3);
                 // directionSensitive: true (P > 0)
-                expect(r1.directionSensitive).toBe(true);
-                expect(r2.directionSensitive).toBe(true);
-                expect(r3.directionSensitive).toBe(true);
+                const shared = {
+                    matchedPrefixLength: 3,
+                    directionSensitive: true,
+                };
+                expectMetadata(r1, shared);
+                expectMetadata(r2, shared);
+                expectMetadata(r3, shared);
             });
         });
 
@@ -868,15 +856,19 @@ describeForEachCompletion(
                     ].join("\n");
                     const grammar = loadGrammarRules("test.grammar", g);
                     const result = matchGrammarCompletion(grammar, "play");
-                    expect(result.matchedPrefixLength).toBe(4);
-                    expect(result.completions).toContain("shuffle");
-                    expect(result.properties).toBeDefined();
-                    expect(result.properties!.length).toBeGreaterThan(0);
                     expectMetadata(result, {
-                        separatorMode: "spacePunctuation",
+                        completions: ["shuffle"],
+                        matchedPrefixLength: 4,
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
                         afterWildcard: "none",
+                        properties: [
+                            {
+                                match: { action: "search" },
+                                propertyNames: ["song"],
+                            },
+                        ],
                     });
                 });
 
@@ -888,15 +880,19 @@ describeForEachCompletion(
                     ].join("\n");
                     const grammar = loadGrammarRules("test.grammar", g);
                     const result = matchGrammarCompletion(grammar, "play");
-                    expect(result.matchedPrefixLength).toBe(4);
-                    expect(result.completions).toContain("shuffle");
-                    expect(result.properties).toBeDefined();
-                    expect(result.properties!.length).toBeGreaterThan(0);
                     expectMetadata(result, {
-                        separatorMode: "spacePunctuation",
+                        completions: ["shuffle"],
+                        matchedPrefixLength: 4,
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
                         afterWildcard: "none",
+                        properties: [
+                            {
+                                match: { action: "search" },
+                                propertyNames: ["song"],
+                            },
+                        ],
                     });
                 });
             });
@@ -921,10 +917,10 @@ describeForEachCompletion(
                     // Rule 1 matches alpha (5 chars) and offers entity
                     // (closedSet=false) — but this is at a shorter prefix
                     // length so it's discarded.
-                    expect(result.completions).toContain("finish");
                     expectMetadata(result, {
+                        completions: ["finish"],
                         matchedPrefixLength: 11,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "none",
@@ -946,10 +942,10 @@ describeForEachCompletion(
                         grammar,
                         "play hello",
                     );
-                    expect(result.completions).toContain("by");
                     expectMetadata(result, {
+                        completions: ["by"],
                         matchedPrefixLength: 10,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "all",
@@ -962,10 +958,10 @@ describeForEachCompletion(
                         grammar,
                         "play my favorite song",
                     );
-                    expect(result.completions).toContain("by");
                     expectMetadata(result, {
+                        completions: ["by"],
                         matchedPrefixLength: 21,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "all",
@@ -987,7 +983,7 @@ describeForEachCompletion(
                     );
                     expectMetadata(result, {
                         matchedPrefixLength: 13,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
                         afterWildcard: "all",
@@ -1014,7 +1010,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["by"],
                         matchedPrefixLength: 13,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
                         afterWildcard: "all",
@@ -1074,8 +1070,8 @@ describeForEachCompletion(
                         undefined,
                         "backward",
                     );
-                    expect(result.completions).toContain("by");
                     expectMetadata(result, {
+                        completions: ["by"],
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "all",
@@ -1090,14 +1086,18 @@ describeForEachCompletion(
                         grammar,
                         "play something by",
                     );
-                    expect(result.properties).toBeDefined();
-                    expect(result.properties!.length).toBeGreaterThan(0);
                     expectMetadata(result, {
                         matchedPrefixLength: 17,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
                         afterWildcard: "all",
+                        properties: [
+                            {
+                                match: { name: "something" },
+                                propertyNames: ["artist"],
+                            },
+                        ],
                     });
                 });
 
@@ -1111,8 +1111,8 @@ describeForEachCompletion(
                         undefined,
                         "backward",
                     );
-                    expect(result.completions).toContain("by");
                     expectMetadata(result, {
+                        completions: ["by"],
                         closedSet: true,
                         directionSensitive: true,
                         afterWildcard: "all",
@@ -1136,7 +1136,7 @@ describeForEachCompletion(
                     expectMetadata(result, {
                         completions: ["by"],
                         matchedPrefixLength: 13,
-                        separatorMode: "spacePunctuation",
+                        separatorMode: "autoSpacePunctuation",
                         closedSet: false,
                         directionSensitive: true,
                         afterWildcard: "all",
@@ -1159,10 +1159,10 @@ describeForEachCompletion(
 
             it("forward: offers 'by' with afterWildcard=\"all\"", () => {
                 const result = matchGrammarCompletion(grammar, "play Never b");
-                expect(result.completions).toContain("by");
                 expectMetadata(result, {
+                    completions: ["by"],
                     matchedPrefixLength: 10,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -1177,10 +1177,10 @@ describeForEachCompletion(
                     undefined,
                     "backward",
                 );
-                expect(result.completions).toContain("by");
                 expectMetadata(result, {
+                    completions: ["by"],
                     matchedPrefixLength: 10,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -1193,10 +1193,10 @@ describeForEachCompletion(
                     grammar,
                     "play my favorite song b",
                 );
-                expect(result.completions).toContain("by");
                 expectMetadata(result, {
+                    completions: ["by"],
                     matchedPrefixLength: 21,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -1211,10 +1211,10 @@ describeForEachCompletion(
                     undefined,
                     "backward",
                 );
-                expect(result.completions).toContain("by");
                 expectMetadata(result, {
+                    completions: ["by"],
                     matchedPrefixLength: 21,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -1236,8 +1236,8 @@ describeForEachCompletion(
                     undefined,
                     "backward",
                 );
-                expect(result.completions).toContain("playedby");
                 expectMetadata(result, {
+                    completions: ["playedby"],
                     matchedPrefixLength: 9,
                     separatorMode: "none",
                     closedSet: true,
@@ -1254,8 +1254,8 @@ describeForEachCompletion(
                     undefined,
                     "backward",
                 );
-                expect(result.completions).toContain("playedby");
                 expectMetadata(result, {
+                    completions: ["playedby"],
                     matchedPrefixLength: 9,
                     separatorMode: "none",
                     closedSet: true,
@@ -1272,8 +1272,8 @@ describeForEachCompletion(
                     undefined,
                     "backward",
                 );
-                expect(result.completions).toContain("playedby");
                 expectMetadata(result, {
+                    completions: ["playedby"],
                     matchedPrefixLength: 13,
                     separatorMode: "none",
                     closedSet: true,

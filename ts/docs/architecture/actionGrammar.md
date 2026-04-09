@@ -133,21 +133,23 @@ evaluated against the adjacent characters to produce a `separatorMode`
 [Completion matching](#completion-matching-matchgrammarcompletion) and
 `completion.md`):
 
-| Annotation           | `CompiledSpacingMode` | Resulting `separatorMode`                                                                                                                                             |
-| -------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| _(none / default)_   | `auto`                | `"spacePunctuation"` if both adjacent characters are word-boundary scripts (Latin, Cyrillic, etc.); `"optional"` if either is CJK or another non-word-boundary script |
-| `[spacing=required]` | `"required"`          | Always `"spacePunctuation"`                                                                                                                                           |
-| `[spacing=optional]` | `"optional"`          | Always `"optional"`                                                                                                                                                   |
-| `[spacing=none]`     | `"none"`              | Always `"none"` — no separator consumed or required                                                                                                                   |
+| Annotation           | `CompiledSpacingMode` | Resulting `separatorMode`                                                                                                                                                                                                                           |
+| -------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| _(none / default)_   | `auto`                | `"autoSpacePunctuation"` — resolved per-item by the consumer: `"spacePunctuation"` if both adjacent characters are word-boundary scripts (Latin, Cyrillic, etc.); `"optionalSpacePunctuation"` if either is CJK or another non-word-boundary script |
+| `[spacing=required]` | `"required"`          | Always `"spacePunctuation"`                                                                                                                                                                                                                         |
+| `[spacing=optional]` | `"optional"`          | Always `"optionalSpacePunctuation"`                                                                                                                                                                                                                 |
+| `[spacing=none]`     | `"none"`              | Always `"none"` — no separator consumed or required                                                                                                                                                                                                 |
 
 **Note:** The table above describes the _baseline_ `separatorMode`
-from the spacing annotation. When the consumed prefix already ends with
-whitespace (i.e., the separator is already present in `matchedPrefixLength`),
-the grammar matcher overrides to `"optional"` because no additional
-separator is needed. Digits are Unicode script "Common" (not a
-word-boundary script), so `auto` spacing at a digit–Latin boundary
-(e.g., `$(n:number)` followed by a Latin keyword) also produces
-`"optional"`.
+from the spacing annotation. For `auto` mode, the grammar emits
+`"autoSpacePunctuation"` and the shell resolves each item to
+`"spacePunctuation"` or `"optionalSpacePunctuation"` based on the
+character pair (see `toPartitions()` in `partialCompletionSession.ts`).
+At the command/flag level, the dispatcher may override to
+`"optionalSpace"` when trailing whitespace was already consumed.
+Digits are Unicode script "Common" (not a word-boundary script),
+so `auto` spacing at a digit–Latin boundary (e.g., `$(n:number)`
+followed by a Latin keyword) resolves to `"optionalSpacePunctuation"`.
 
 ### Entities
 
@@ -777,7 +779,7 @@ Rationale:
    `separatorMode` accurately reflects the grammar's spacing annotation
    (e.g., `"spacePunctuation"` for Latin auto-spacing). If P advanced
    past the space, the separator is already present and `separatorMode`
-   collapses to `"optional"` — losing the information about what kind of
+   collapses to `"optionalSpace"` — losing the information about what kind of
    separator the grammar expects. The shell needs the un-collapsed mode
    to decide whether a non-space punctuation character should trigger a
    re-fetch.
@@ -822,16 +824,16 @@ already covers this case.
 - `separatorMode` — determined by the grammar rule's `[spacing=...]`
   annotation (see [Spacing modes](#spacing-modes) above). Special cases:
   - When `matchedPrefixLength=0` (nothing consumed), `separatorMode` is
-    always `"optional"` (or `"none"` for `[spacing=none]` rules) because
+    always `"optionalSpace"` (or `"none"` for `[spacing=none]` rules) because
     there is no preceding character to require a separator against.
   - When the consumed prefix already ends with whitespace (e.g.,
-    `"play "`), `separatorMode` is `"optional"` because the separator is
+    `"play "`), `separatorMode` is `"optionalSpace"` because the separator is
     already present — no additional separator is needed.
   - For `auto` spacing, `"spacePunctuation"` is produced only when both
     the last consumed character and the first completion character are
     word-boundary scripts (Latin, Cyrillic, etc.) and no separator has
     been consumed; digit–Latin transitions (e.g., `"50"` → `"percent"`)
-    produce `"optional"` because digits are Unicode script "Common", not
+    produce `"optionalSpace"` because digits are Unicode script "Common", not
     a word-boundary script.
 - `closedSet` is `true` when all completions are grammar keywords
   (no entity/wildcard values).
@@ -853,70 +855,25 @@ flow through the cache, dispatcher, and shell layers, and
 `completion.md` § Invariants for the full catalog of correctness
 invariants, their user-visible impact, and which tests verify them.
 
-### Separator-mode conflict filtering
+### Per-group separator modes (replaces conflict filtering)
 
-When fixed candidates at the same `maxPrefixLength` come from rules
-with different `spacingMode` values — for example, a `[spacing=none]`
-rule and a default-spacing rule that both match the same prefix — the
-single merged `separatorMode` cannot correctly represent all of them.
-A `"none"` candidate rejects any trailing separator, while a
-`"spacePunctuation"` candidate requires one. The conflict-filtering
-logic in `filterSepConflicts()` (called from `finalizeCandidates()`) resolves this:
+When candidates at the same `maxPrefixLength` come from rules with
+different `spacingMode` values — for example, a `[spacing=none]`
+rule and a default-spacing rule that both match the same prefix —
+each candidate's `separatorMode` is recorded in its own
+`GrammarCompletionGroup`. The grammar matcher no longer merges
+separator modes or filters conflicting candidates; instead, each
+group carries its own `separatorMode` and the shell's **SepLevel**
+model (see `partialCompletionSession.ts`) shows or hides groups
+based on the user's trailing separator state.
 
-Three-way compatibility:
+This means:
 
-| Trailing sep? | `spacePunctuation` | `optional` | `none` |
-| ------------- | ------------------ | ---------- | ------ |
-| No            | drop               | keep       | keep   |
-| Yes           | keep               | keep       | drop   |
-
-1. **Detect:** Compute each candidate's individual `SeparatorMode` via
-   `computeCandidateSeparatorMode()`. A conflict exists when both
-   `isRequiringSepMode()` candidates (need separator) and `"none"`
-   candidates (reject separator) are present.
-
-2. **Filter by trailing separator state:** Inspect `input[maxPrefixLength]`:
-
-   - Trailing separator present → drop `"none"` candidates (they would
-     reject the existing separator).
-   - No trailing separator → drop requiring candidates (a separator
-     would need to be inserted).
-
-3. **Advance P by one character:** When trailing separator is present
-   and candidates were dropped, advance `maxPrefixLength` by exactly
-   one character (not past all consecutive separators). This ensures
-   backspace triggers a re-fetch (the anchor diverges). Override
-   `separatorMode` to `"optional"` since the separator is already
-   consumed into P.
-
-   Advance-1 is preferred over advance-all because:
-
-   - Each backspace in the separator run produces a distinct anchor,
-     giving the shell a re-fetch opportunity at every keystroke.
-   - With advance-all, deleting the _last_ separator in a multi-
-     separator run is the only keystroke that triggers a re-fetch;
-     intermediate deletes are invisible to the completion system.
-   - Advance-1 matches the shell's `separatorMode="optional"` contract:
-     the session sees one consumed separator and treats the rest as
-     ordinary prefix text. The shell strips leading whitespace for
-     `"optional"` mode (just as it does for requiring modes), so extra
-     separators do not pollute the trie — the menu stays visible with
-     an empty or narrowed prefix.
-   - The re-fetch cost is negligible — the grammar matcher runs in
-     sub-millisecond time.
-
-4. **Force `closedSet=false`:** When candidates are dropped, the
-   completion list is no longer exhaustive. The shell must re-fetch when
-   the separator state changes (typing or deleting a space).
-
-5. **Force `afterWildcard` `"all"` → `"some"`:** When candidates are
-   dropped and all surviving candidates are after a wildcard,
-   `afterWildcard` is downgraded from `"all"` to `"some"` to prevent
-   the shell from using the "slide" `noMatchPolicy` (which would
-   suppress the re-fetch).
-
-The same conflict-detection logic is applied cross-grammar in
-`grammarStore.ts` after collecting per-grammar results.
+- No candidates are dropped at the grammar level.
+- `closedSet` is not forced to `false` by separator conflicts.
+- `afterWildcard` is not downgraded by separator conflicts.
+- Cross-grammar conflict filtering in `grammarStore.ts` is no longer
+  needed — each grammar's groups are passed through directly.
 
 ### Direction asymmetry: why only Category 3b needs shadow candidates
 
