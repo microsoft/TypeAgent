@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { createSessionContext } from "../src/execute/sessionContext.js";
+import { initializeCommandHandlerContext } from "../src/context/commandHandlerContext.js";
 
 function makeContext(overrides: {
     instanceDir?: string | undefined;
@@ -79,6 +80,47 @@ describe("createSessionContext storage routing", () => {
         );
         expect(calls2.find((c) => c.name === "myAgent")?.baseDir).toBe(
             "/global/instance",
+        );
+    });
+
+    test("instanceStorage is undefined when neither instanceDir nor persistDir is set", () => {
+        const { context } = makeContext({
+            instanceDir: undefined,
+            persistDir: undefined,
+        });
+        const sessionCtx = createSessionContext("myAgent", {}, context, false);
+        expect(sessionCtx.instanceStorage).toBeUndefined();
+    });
+});
+
+describe("initializeCommandHandlerContext option validation", () => {
+    test("instanceDir without storageProvider throws", async () => {
+        await expect(
+            initializeCommandHandlerContext("test", {
+                instanceDir: "/some/instance/dir",
+            }),
+        ).rejects.toThrow(
+            "persistDir and instanceDir require storageProvider to be set in options.",
+        );
+    });
+
+    test("persistDir without storageProvider throws", async () => {
+        await expect(
+            initializeCommandHandlerContext("test", {
+                persistDir: "/some/persist/dir",
+            }),
+        ).rejects.toThrow(
+            "persistDir and instanceDir require storageProvider to be set in options.",
+        );
+    });
+
+    test("persistSession without persistDir throws", async () => {
+        await expect(
+            initializeCommandHandlerContext("test", {
+                persistSession: true,
+            }),
+        ).rejects.toThrow(
+            "Persist session requires persistDir to be set in options.",
         );
     });
 });
