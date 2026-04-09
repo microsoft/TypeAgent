@@ -69,7 +69,7 @@ async function importPythonFiles(
         await purgeNormalizedFile(io, chunkyIndex, fileName, verbose);
     }
 
-    // Chunkify Python files using a helper program. (TODO: Make generic over languages)
+    // Chunkify files using a helper program.
     const t0 = Date.now();
     const results = await chunkifyPythonFiles(filenames);
     const t1 = Date.now();
