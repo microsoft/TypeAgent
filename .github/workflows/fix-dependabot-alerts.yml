@@ -127,7 +127,11 @@ jobs:
             if [ "$WS_DIR" != "ts" ] && [ -f package.json ]; then
               echo "::group::Installing $WS_DIR dependencies"
               corepack enable
-              pnpm install --frozen-lockfile 2>&1 || true
+              if ! pnpm install --frozen-lockfile 2>&1; then
+                echo "::warning::Dependency install failed for $WS_DIR — skipping (analysis would be unreliable)"
+                echo "::endgroup::"
+                continue
+              fi
               echo "::endgroup::"
             fi
 
@@ -195,9 +199,36 @@ jobs:
               fix_exit=$?
               set -e
 
+              if [ "$fix_exit" -ne 0 ] && git diff --quiet; then
+                echo "::warning::Script failed for $PKG in $WS_DIR (exit $fix_exit) with no file changes"
+                TOTAL_FAILED=$((TOTAL_FAILED + 1))
+                echo "::endgroup::"
+                continue
+              fi
+
               if ! git diff --quiet; then
                 echo "Changes detected, reinstalling and verifying build..."
-                pnpm install 2>&1 || true
+                set +e
+                if [ "$WS_DIR" = "ts" ]; then
+                  pnpm install --frozen-lockfile --strict-peer-dependencies 2>&1
+                else
+                  pnpm install --frozen-lockfile 2>&1
+                fi
+                install_exit=$?
+                set -e
+
+                if [ "$install_exit" -ne 0 ]; then
+                  echo "::warning::pnpm install failed after fixing $PKG in $WS_DIR — rolling back"
+                  cp /tmp/pkg-backup.json package.json
+                  cp /tmp/lock-backup.yaml pnpm-lock.yaml 2>/dev/null || true
+                  pnpm install 2>&1 || true
+                  git checkout -- . 2>/dev/null || true
+                  ALL_ROLLED_BACK="$ALL_ROLLED_BACK $PKG"
+                  TOTAL_FAILED=$((TOTAL_FAILED + 1))
+                  echo "::endgroup::"
+                  continue
+                fi
+
                 if [ "$WS_DIR" = "ts" ]; then
                   node tools/scripts/repo-policy-check.mjs --fix 2>/dev/null || true
                 fi

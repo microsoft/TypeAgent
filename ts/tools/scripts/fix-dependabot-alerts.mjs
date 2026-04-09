@@ -9,7 +9,7 @@
  * Run with --help to see available options and exit codes.
  */
 
-import { spawnSync, execFile } from "node:child_process";
+import { spawnSync, execFile, execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve, dirname } from "node:path";
@@ -17,8 +17,26 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import chalk from "chalk";
 import semver from "semver";
 
-// Use cwd as ROOT so the script works from any workspace (ts/, docs/, etc.)
-const ROOT = resolve(process.cwd());
+// Derive ROOT from the git root + workspace prefix so running from a
+// subdirectory (e.g. ts/tools) still targets the correct workspace root.
+function detectWorkspaceRoot() {
+    try {
+        const gitRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+            encoding: "utf8",
+        }).trim().replace(/\\/g, "/");
+        const cwdNorm = process.cwd().replace(/\\/g, "/");
+        const rel = cwdNorm === gitRoot
+            ? ""
+            : cwdNorm.startsWith(gitRoot + "/")
+                ? cwdNorm.slice(gitRoot.length + 1)
+                : "";
+        const wsPrefix = rel ? rel.split("/")[0] : "";
+        return wsPrefix ? resolve(gitRoot, wsPrefix) : resolve(cwdNorm);
+    } catch {
+        return resolve(process.cwd());
+    }
+}
+const ROOT = detectWorkspaceRoot();
 
 const args = process.argv.slice(2);
 const KNOWN_FLAG_PREFIXES = [
@@ -2083,19 +2101,15 @@ function fetchAlerts() {
     alerts = alerts.filter((a) => a.dependency?.package?.ecosystem === "npm");
 
     // Filter to alerts belonging to the current workspace.
-    // Determine the top-level workspace prefix from cwd relative to the git root
-    // so that running from ts/ or ts/tools only processes ts/pnpm-lock.yaml alerts
-    // and running from docs/ only processes docs/pnpm-lock.yaml alerts.
+    // Derive wsPrefix from ROOT (which already points at the workspace root,
+    // even when the script is invoked from a subdirectory like ts/tools).
     let wsPrefix = "";
     try {
         const gitRoot = runCmd("git", ["rev-parse", "--show-toplevel"]).replace(/\\/g, "/");
-        const cwdNorm = process.cwd().replace(/\\/g, "/");
-        const relToGitRoot = cwdNorm === gitRoot
-            ? ""
-            : cwdNorm.startsWith(gitRoot + "/")
-                ? cwdNorm.slice(gitRoot.length + 1)
-                : "";
-        wsPrefix = relToGitRoot ? relToGitRoot.split("/")[0] : "";
+        const rootNorm = ROOT.replace(/\\/g, "/");
+        wsPrefix = rootNorm.startsWith(gitRoot + "/")
+            ? rootNorm.slice(gitRoot.length + 1).split("/")[0]
+            : "";
     } catch {
         verbose("  Could not determine git root; skipping workspace-specific alert filtering.");
     }
