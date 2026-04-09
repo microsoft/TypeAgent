@@ -15,8 +15,16 @@ const DEFAULT_OPTIONS: ScriptExecutionOptions = {
 
 // Globals that are explicitly shadowed with undefined in the Function scope,
 // preventing scripts from accessing them even if the AST validator is bypassed.
+// Reserved words cannot be used as parameter names in new Function().
+// They are already blocked by the TS compiler validation and strict mode.
+// Words that cannot be used as parameter names in new Function() with strict mode.
+// "import" is a keyword; "eval" is restricted in strict mode.
+const INVALID_PARAM_NAMES = new Set(["import", "eval"]);
+
 const BLOCKED_GLOBALS_OVERRIDE: Record<string, undefined> = Object.fromEntries(
-    [...BLOCKED_IDENTIFIERS].map((name) => [name, undefined]),
+    [...BLOCKED_IDENTIFIERS]
+        .filter((name) => !INVALID_PARAM_NAMES.has(name))
+        .map((name) => [name, undefined]),
 );
 
 export async function executeWebFlowScript(

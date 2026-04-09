@@ -191,7 +191,7 @@ export default class Interactive extends Command {
                 traceId: getTraceId(),
                 constructionProvider: getDefaultConstructionProvider(),
             });
-            bindDispatcher?.(dispatcher);
+            bindDispatcher(dispatcher);
 
             try {
                 if (args.input) {

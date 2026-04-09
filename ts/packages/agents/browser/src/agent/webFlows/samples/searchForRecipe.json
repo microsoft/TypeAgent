@@ -1,0 +1,23 @@
+{
+  "name": "searchForRecipe",
+  "description": "Search for a recipe on Instacart",
+  "version": 1,
+  "parameters": {
+    "keyword": {
+      "type": "string",
+      "required": true,
+      "description": "Recipe keyword to search for (e.g. 'chicken parmesan')"
+    }
+  },
+  "script": "async function execute(browser: WebFlowBrowserAPI, params: FlowParams): Promise<WebFlowResult> {\n    await browser.navigateTo('https://www.instacart.com/');\n    await browser.awaitPageLoad();\n\n    const searchInput = await browser.extractComponent<{ cssSelector: string; submitButtonCssSelector: string }>({\n        typeName: 'SearchInput',\n        schema: '{ cssSelector: string; submitButtonCssSelector: string; }'\n    });\n    if (!searchInput || !searchInput.cssSelector) {\n        throw new Error('Could not find search input');\n    }\n    await browser.clearAndType(searchInput.cssSelector, 'recipes: ' + params.keyword);\n    if (searchInput.submitButtonCssSelector) {\n        await browser.clickAndWait(searchInput.submitButtonCssSelector);\n    } else {\n        await browser.pressKey('Enter');\n        await browser.awaitPageLoad();\n    }\n\n    const recipe = await browser.extractComponent<{ name: string; subtitle: string; detailsLinkSelector: string }>({\n        typeName: 'RecipeInfo',\n        schema: '{ name: string; subtitle: string; detailsLinkSelector: string; }'\n    }, params.keyword);\n    if (!recipe || !recipe.detailsLinkSelector) {\n        return { success: false, error: 'No recipes found for: ' + params.keyword };\n    }\n    await browser.clickAndWait(recipe.detailsLinkSelector);\n    return { success: true, message: 'Found recipe: ' + recipe.name, data: { name: recipe.name, subtitle: recipe.subtitle } };\n}",
+  "grammarPatterns": [
+    "search for (a)? $(keyword:wildcard) recipe",
+    "find (a)? recipe for $(keyword:wildcard)",
+    "look up $(keyword:wildcard) recipe (on instacart)?"
+  ],
+  "scope": {
+    "type": "site",
+    "domains": ["instacart.com"]
+  },
+  "source": { "type": "manual", "timestamp": "2026-04-03T00:00:00.000Z" }
+}

@@ -85,7 +85,6 @@ async function main() {
         agents: { actions: true, commands: true },
         execution: { history: false },
         collectCommandResult: true,
-        portBase: 9400,
         persistDir,
         storageProvider: getFsStorageProvider(),
     });

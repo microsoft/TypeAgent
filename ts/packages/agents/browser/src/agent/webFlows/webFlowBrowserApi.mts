@@ -228,7 +228,7 @@ async function semanticPageQuery<T extends object>(
     const apiSettings = ai.azureApiSettingsFromEnv(
         ai.ModelType.Chat,
         undefined,
-        "GPT_4_O",
+        "GPT_4_O_MINI",
     );
     const model = ai.createChatModel(apiSettings);
     const validator = createTypeScriptJsonValidator<T>(schema, typeName);

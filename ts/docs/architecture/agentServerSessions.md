@@ -1,9 +1,5 @@
 # AgentServer Sessions Architecture
 
-**Author:** George Ng
-**Status:** Review
-**Last Updated:** 2026-04-03
-
 ---
 
 ## Motivation
@@ -22,7 +18,7 @@ As we begin making a larger shift towards a client-server model with the agent s
 - **Rename** a session.
 - **Delete** a session and its persisted data.
 - Sessions are identified by a **GUID** and carry a human-readable **name** and **client count** so clients can make informed join decisions.
-- Clients specify an **optional session ID** at `joinSession()` time; omitting it resumes the most recently active session, or auto-creates a default session if none exist.
+- Clients specify an **optional session ID** at `joinSession()` time; omitting it connects to the default session, or auto-creates one if none exist. The server always resolves to `"default"` rather than the most recently active session because in a multi-client environment, "most recently active" is a server-wide concept — a CLI user spinning up independently should not be silently dropped into an active Shell session. Clients that want last-used behavior should remember their last session ID locally and pass it explicitly.
 - Session isolation is **client-enforced** for now — the server provides the signals, clients decide the policy.
 
 ## Non-Goals
@@ -91,8 +87,7 @@ A `sessions.json` file lives at `persistDir/server-sessions/sessions.json` and i
       "name": "workout playlist setup",
       "createdAt": "2026-04-01T10:00:00Z"
     }
-  ],
-  "lastActiveSessionId": "a1b2c3d4-..."
+  ]
 }
 ```
 
@@ -112,7 +107,7 @@ type DispatcherConnectOptions = {
   clientType?: "shell" | "extension";
 
   // Session management (new)
-  sessionId?: string; // Join a specific session by UUID. If omitted → resumes most recently active session.
+  sessionId?: string; // Join a specific session by UUID. If omitted → connects to the default session.
 };
 ```
 
@@ -193,12 +188,11 @@ Client calls joinSession({ sessionId?, clientType, filter })
   │   ├─ Yes → look up sessions.json
   │   │   ├─ Found → load SharedDispatcher for this session (lazy init if not in memory pool)
   │   │   └─ Not found → return error: "Session not found"
-  │   └─ No → resolve most recently active session
-  │       ├─ lastActiveSessionId set and valid → use it
+  │   └─ No → connect to the default session
+  │       ├─ Session named "default" exists → use it
   │       └─ No sessions exist → auto-create session named "default"
   │
   ├─ Register client in session's SharedDispatcher routing table
-  ├─ Update lastActiveSessionId in sessions.json
   └─ Return JoinSessionResult { connectionId, sessionId }
 ```
 
@@ -231,7 +225,7 @@ SessionInfo[]
 1. Close all active client dispatcher handles for the session.
 2. Shut down and evict the session's `SharedDispatcher` from the in-memory pool.
 3. Remove `persistDir/server-sessions/<sessionId>/` from disk (recursive delete, best-effort).
-4. Remove the entry from `sessions.json` and update `lastActiveSessionId` if needed.
+4. Remove the entry from `sessions.json`.
 
 > **Note:** Any connected client can call `deleteSession` on any session, including sessions they are not currently connected to. The calling client's session-namespaced channels are cleaned up immediately; other clients connected to the deleted session have their dispatcher handles closed when `SharedDispatcher.close()` is called. Server-side authorization is out of scope for v1 (see Open Questions).
 
@@ -241,21 +235,39 @@ SessionInfo[]
 
 ### CLI
 
-The CLI's `connect.ts` command gains optional flags:
+The CLI implements the full session management surface described in this document, with client-side session persistence.
 
-```
-typeagent connect [--session <id>]
-typeagent sessions create <name>
-typeagent sessions list [--name <substring>]
-typeagent sessions rename <id> <newName>
-typeagent sessions delete <id>
+#### `connect` — join a session
+
+```bash
+agent-cli connect                        # connect to the 'CLI' session (created if absent)
+agent-cli connect --resume               # resume the last used session
+agent-cli connect --session <id>         # connect to a specific session by ID
+agent-cli connect --port <port>          # connect to a server on a non-default port (default: 8999)
 ```
 
-- If `--session <id>` is given, `joinSession()` is called with `sessionId`.
-- If no session flag is given, `joinSession()` is called without `sessionId` → resumes most recently active session (or auto-creates `"default"`).
-- `sessions list` calls `listSessions()` and prints a formatted table.
-- `sessions list --name <substring>` filters by name substring.
-- `sessions delete <id>` calls `deleteSession(id)` after a confirmation prompt.
+By default (no flags), `connect` targets a session named `"CLI"`. It calls `listSessions("CLI")` and joins the first match, or calls `createSession("CLI")` if none exists.
+
+Pass `--resume` / `-r` to instead resume the last used session, whose ID is persisted client-side in `~/.typeagent/cli-state.json`. If that session is no longer found on the server, the user is prompted to join the `"CLI"` session (find-or-create). If the user declines, the stale ID is cleared and the command exits.
+
+Pass `--session` / `-s <id>` to connect to a specific session by UUID. This takes priority over `--resume` if both are provided; errors propagate as-is without the recovery prompt.
+
+On every successful connection the connected session ID is written to `~/.typeagent/cli-state.json` for use by future `--resume` invocations.
+
+#### `sessions` topic — session CRUD
+
+| Command                                    | RPC call                     |
+| ------------------------------------------ | ---------------------------- |
+| `agent-cli sessions create <name>`         | `createSession(name)`        |
+| `agent-cli sessions list [--name <sub>]`   | `listSessions(name?)`        |
+| `agent-cli sessions rename <id> <newName>` | `renameSession(id, newName)` |
+| `agent-cli sessions delete <id> [--yes]`   | `deleteSession(id)`          |
+
+`sessions create`, `list`, `rename`, and `delete` use `connectAgentServer()` directly (no `joinSession()`) — they are management operations that do not require joining a session.
+
+`sessions delete` prompts `Delete session <id> and all its data? (y/N)` before calling `deleteSession()`. Pass `--yes` / `-y` to skip the prompt.
+
+`sessions list` renders a fixed-width table with columns `SESSION ID`, `NAME`, `CLIENTS`, and `CREATED AT`. Pass `--name <substring>` to filter by name (case-insensitive).
 
 ### Shell
 
@@ -263,7 +275,7 @@ Session management only applies when the Shell is running in **connected mode** 
 
 When connected to the agentServer:
 
-- On startup, Shell calls `listSessions()` and presents a session picker (or auto-resumes the most recently active session).
+- On startup, Shell calls `listSessions()` and presents a session picker (or auto-connects to the default session).
 - A session management panel allows listing, switching, renaming, and deleting sessions.
 - When resuming a session, the Shell loads chat history from the server via `getDisplayHistory()` (which already exists on the `Dispatcher` interface and works per-session since each session has its own `DisplayLog` instance) rather than its local HTML file. How this history is rendered in the Shell UI is an open question — see Open Questions item 2.
 

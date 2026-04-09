@@ -1,0 +1,49 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html>
+  <head>
+    <title>Instacart - Grocery Delivery</title>
+  </head>
+  <body>
+    <header>
+      <nav>
+        <a href="/" class="home-link">Instacart</a>
+        <form class="search-form">
+          <input
+            type="search"
+            placeholder="Search products and recipes..."
+            class="search-input"
+          />
+          <button type="submit" class="search-submit">Search</button>
+        </form>
+        <a href="/store/lists" class="lists-link">Lists</a>
+        <a href="/cart" class="cart-link">Cart</a>
+      </nav>
+    </header>
+    <main>
+      <h1>Choose your store</h1>
+      <div class="store-grid">
+        <a href="/store/costco" class="store-card">
+          <h2>Costco</h2>
+          <p>Delivery by 3:00 PM</p>
+        </a>
+        <a href="/store/safeway" class="store-card">
+          <h2>Safeway</h2>
+          <p>Delivery by 2:00 PM</p>
+        </a>
+        <a href="/store/sprouts" class="store-card">
+          <h2>Sprouts</h2>
+          <p>Delivery by 4:00 PM</p>
+        </a>
+      </div>
+      <div class="buy-it-again-section">
+        <h2>Buy It Again</h2>
+        <a href="/store/costco/buy-it-again" class="buy-again-link"
+          >View all past items</a
+        >
+      </div>
+    </main>
+  </body>
+</html>

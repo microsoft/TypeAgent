@@ -140,6 +140,9 @@ export function createSessionContext<T = unknown>(
             }
             return localHostPort;
         },
+        setLocalHostPort(port: number) {
+            context.agents.setLocalHostPort(name, port);
+        },
         indexes(type: string): Promise<any[]> {
             return new Promise<IndexData[]>((resolve, reject) => {
                 const iidx: IndexData[] =

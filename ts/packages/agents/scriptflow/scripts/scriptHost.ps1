@@ -18,7 +18,7 @@ param(
 
     [string]$AllowedModulesJson = '[]',
 
-    [bool]$NetworkAccess = $false,
+    [string]$NetworkAccess = "false",
 
     [int]$TimeoutSeconds = 30
 )
@@ -28,8 +28,19 @@ $ErrorActionPreference = 'Stop'
 try {
     $allowedCmdlets = $AllowedCmdletsJson | ConvertFrom-Json
     $params = $ParametersJson | ConvertFrom-Json
-    $AllowedPaths = @($AllowedPathsJson | ConvertFrom-Json)
-    $AllowedModules = @($AllowedModulesJson | ConvertFrom-Json)
+    # Parse allowed paths - must handle array properly to avoid PowerShell array unwrapping issues
+    $parsedPaths = $AllowedPathsJson | ConvertFrom-Json
+    if ($parsedPaths -is [array]) {
+        $AllowedPaths = $parsedPaths
+    } else {
+        $AllowedPaths = @($parsedPaths)
+    }
+    $parsedModules = $AllowedModulesJson | ConvertFrom-Json
+    if ($parsedModules -is [array]) {
+        $AllowedModules = $parsedModules
+    } else {
+        $AllowedModules = @($parsedModules)
+    }
 
     # Expand environment variable references in allowed paths
     # (e.g. "$env:USERPROFILE" → "C:\Users\name")
@@ -72,8 +83,11 @@ try {
         }
     }
 
+    # Convert NetworkAccess string to boolean (handles "true"/"false"/"1"/"0"/"$true"/"$false")
+    $networkAccessBool = $NetworkAccess -match '^(true|1|\$true)$'
+
     # Network access enforcement
-    if (-not $NetworkAccess) {
+    if (-not $networkAccessBool) {
         # Define network-capable cmdlets that require networkAccess=true
         $NetworkCmdlets = @(
             'Invoke-WebRequest',

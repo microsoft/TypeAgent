@@ -49,5 +49,14 @@
     "jest.jestCommandLine": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "chat.tools.terminal.autoApprove": {
         "ForEach-Object": true
+    },
+    "files.watcherExclude": {
+        "**/node_modules/**": true,
+        "**/.git/objects/**": true,
+        "**/dist/**": true
+    },
+    "search.exclude": {
+        "**/node_modules": true,
+        "**/dist": true
     }
 }

@@ -1,0 +1,23 @@
+{
+  "name": "saveRecipe",
+  "description": "Save the currently viewed recipe to your Instacart collection",
+  "version": 1,
+  "parameters": {
+    "recipeName": {
+      "type": "string",
+      "required": true,
+      "description": "Name of the recipe to save"
+    }
+  },
+  "script": "async function execute(browser: WebFlowBrowserAPI, params: FlowParams): Promise<WebFlowResult> {\n    const hero = await browser.extractComponent<{ recipeName: string; saveButtonSelector: string }>({\n        typeName: 'RecipeHeroSection',\n        schema: '{ recipeName: string; summary: string; addAllIngredientsSelector: string; saveButtonSelector: string; ingredients: { name: string; price: string; }[]; }'\n    }, params.recipeName);\n    if (!hero || !hero.saveButtonSelector) {\n        throw new Error('Could not find recipe save button for: ' + params.recipeName);\n    }\n    await browser.click(hero.saveButtonSelector);\n    await browser.awaitPageInteraction();\n    return { success: true, message: 'Saved recipe: ' + hero.recipeName };\n}",
+  "grammarPatterns": [
+    "save (this)? $(recipeName:wildcard) recipe",
+    "bookmark (the)? $(recipeName:wildcard) recipe",
+    "save recipe $(recipeName:wildcard)"
+  ],
+  "scope": {
+    "type": "site",
+    "domains": ["instacart.com"]
+  },
+  "source": { "type": "manual", "timestamp": "2026-04-03T00:00:00.000Z" }
+}

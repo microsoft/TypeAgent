@@ -100,18 +100,52 @@ class TerminalLayout {
         }
     }
 
+    private inlineBuffer: string = "";
+
     /** Write content into the scroll region (appears above the prompt). */
     writeContent(text: string) {
         if (!this.active) {
             process.stdout.write(text);
             return;
         }
+        this.inlineBuffer = "";
         const height = process.stdout.rows || 24;
         const scrollBottom = height - this.promptRows;
-        // Save cursor, move to bottom of scroll region, write, restore
+        const promptStart = scrollBottom + 1;
+        // Move to bottom of scroll region, scroll the region up by one line
+        // with "\n", write the content, then reposition to the start of the
+        // fixed region so render() can finalise the exact cursor position.
         process.stdout.write(
-            "\x1b[s" + `\x1b[${scrollBottom};1H` + "\n" + text + "\x1b[u",
+            `\x1b[${scrollBottom};1H` + "\n" + text + `\x1b[${promptStart};1H`,
         );
+    }
+
+    /** Append inline (streaming) text. Accumulates tokens in a buffer without
+     *  writing to stdout. An empty-string flush signal (sent when streaming
+     *  ends) commits the full buffer as a single block via writeContent().
+     *  This avoids repeated in-place rewrites that produce duplicate output
+     *  on passive observer clients sharing the same scroll-region state. */
+    writeInline(text: string) {
+        if (!this.active) {
+            process.stdout.write(text);
+            return;
+        }
+        if (text === "") {
+            // End-of-stream flush signal — commit the accumulated buffer.
+            this.flushInline();
+        } else {
+            this.inlineBuffer += text;
+        }
+    }
+
+    /** Flush the inline buffer as a committed block line (called when the
+     *  next message is a non-inline block). */
+    flushInline() {
+        if (!this.active || this.inlineBuffer === "") {
+            return;
+        }
+        // writeContent() clears inlineBuffer as its first step.
+        this.writeContent(this.inlineBuffer);
     }
 
     /** Draw content in the fixed bottom region at a given row offset (0-based from prompt start). */
@@ -414,12 +448,12 @@ export function createEnhancedClientIO(
             // Scroll region is active — write content into the scroll region.
             // The prompt stays anchored at the bottom automatically.
             if (appendMode !== "inline") {
-                if (lastAppendMode === "inline") {
-                    terminalLayout.writeContent("");
-                }
+                // Any accumulated inline buffer is intentionally discarded here —
+                // writeContent() clears inlineBuffer before writing, so partial
+                // streaming tokens won't be re-emitted with the new block content.
                 terminalLayout.writeContent(displayText);
             } else {
-                terminalLayout.writeContent(displayText);
+                terminalLayout.writeInline(displayText);
             }
             activePromptRenderer.redraw();
         } else if (activePromptRenderer) {
@@ -1805,4 +1839,50 @@ function getNextInput(
  */
 export function getEnhancedConsolePrompt(_text: string): string {
     return `${getVerboseIndicator()}❯ `;
+}
+
+/**
+ * Replay display history entries from a previous (or concurrent) session onto
+ * the given clientIO so that the user sees the chat history when joining.
+ *
+ * User requests are printed as styled prompt lines; agent display entries are
+ * forwarded through setDisplay / appendDisplay exactly as live messages would
+ * be. Notifications and display-info entries are skipped — they are ephemeral.
+ */
+export async function replayDisplayHistory(
+    dispatcher: Dispatcher,
+    clientIO: ClientIO,
+): Promise<void> {
+    const entries = await dispatcher.getDisplayHistory();
+    if (entries.length === 0) {
+        return;
+    }
+
+    const width = process.stdout.columns || 80;
+    process.stdout.write(
+        chalk.dim(
+            "─── session history " + "─".repeat(Math.max(0, width - 20)),
+        ) + "\n",
+    );
+
+    for (const entry of entries) {
+        switch (entry.type) {
+            case "user-request":
+                process.stdout.write(
+                    chalk.cyanBright(`❯ `) + chalk.dim(entry.command) + "\n",
+                );
+                break;
+            case "set-display":
+                clientIO.setDisplay(entry.message);
+                break;
+            case "append-display":
+                clientIO.appendDisplay(entry.message, entry.mode);
+                break;
+            // notify and set-display-info are ephemeral — skip them
+        }
+    }
+
+    process.stdout.write(
+        chalk.dim("─── now " + "─".repeat(Math.max(0, width - 8))) + "\n",
+    );
 }

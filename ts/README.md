@@ -211,33 +211,55 @@ Other directories:
 
 ### Testing
 
-Run `npm run test` at the root.
+All commands run from the `ts/` directory using `pnpm`.
+
+```bash
+pnpm run test:local   # Unit tests (*.spec.ts) — no API keys required
+pnpm run test:live    # Integration tests (*.test.ts) — requires API keys in ts/.env
+pnpm run test         # Both local + live + shell tests
+```
+
+To run tests for a single package:
+
+```bash
+pnpm --filter <package-name> test
+# e.g., pnpm --filter action-grammar test
+```
+
+To run a single test file or test by name (run from the package directory):
+
+```bash
+pnpm run jest-esm --testPathPattern="merge.spec.js"
+pnpm run jest-esm --testNamePattern="your test name"
+```
+
+> **Note:** Tests run against compiled output in `dist/test/`. Run `pnpm run build` before running tests.
 
 #### Schema Changes
 
-If new translator or explainer, or any of the translator schema or explanation schema changes, the built-in construction cache and the test data needs to be regenerated and be evaluated for correctness.
+If a new translator or explainer is added, or if any translator/explainer schema changes, the built-in construction cache and test data need to be regenerated and evaluated for correctness.
 
-Test data are located in the [defaultAgentProvider](./packages/defaultAgentProvider)'s [test/data](./packages/defaultAgentProvider/test/data) directory. Each test data files are for specify translator and explainer.
+Test data are located in the [defaultAgentProvider](./packages/defaultAgentProvider)'s [test/data](./packages/defaultAgentProvider/test/data) directory. Each test data file corresponds to a specific translator and explainer.
 
 Use the `agent-cli data add` command to add new test cases.
 
-To regenerated you can run the following at the root or in the [cli](./packages/cli) directory:
+To regenerate, run the following from the root or in the [cli](./packages/cli) directory:
 
-- `npm run regen:builtin` - Regenerate builtin construction store.
-- `npm run regen` - Regenerate test data
+- `pnpm run regen:builtin` — Regenerate the builtin construction store.
+- `pnpm run regen` — Regenerate test data.
 
-To evaluate correctness for the test data:
+To evaluate correctness of the test data:
 
-- `agent-cli data diff <file>` can be used to open test data file diff in the vscode.
-- Look at the translation to check if its correct. (can be skipped if translator schema didn't change).
-- Run `npm run test` to make sure the generated test data can be round tripped (Run in the CI as well).
-- Check the stats in the regen before and after:
-  - `npm run regen -- -- --none` at the root will print out per file stats and total stats.
-  - Make sure that the number explanation failure per file and total stay roughly same (or improved).
-  - Make sure that the attempts (corrections) ratios stay roughly the same (or improve).
-  - Examine if the failures are because of LLM instability:
-    - Borderline failure: was there a lot of correction before and failed now.
-    - Run the explanation before and after `agent-cli explain --repeat 5 <RequestAction>` to repeat it 5 times and compare the stats.
+- `agent-cli data diff <file>` — Open a test data file diff in VS Code.
+- Review the translation for correctness (can be skipped if the translator schema didn't change).
+- Run `pnpm run test` to verify the generated test data round-trips correctly (also runs in CI).
+- Check the stats before and after regen:
+  - `pnpm run regen -- -- --none` prints per-file and total stats.
+  - Ensure explanation failure counts stay roughly the same or improve.
+  - Ensure attempt/correction ratios stay roughly the same or improve.
+  - Check whether failures are due to LLM instability:
+    - Borderline failure: was there significant correction before, and a failure now?
+    - Run `agent-cli explain --repeat 5 <RequestAction>` before and after to compare stats.
 
 ### Linting
 

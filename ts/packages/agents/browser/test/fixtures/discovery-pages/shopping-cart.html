@@ -1,0 +1,39 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html>
+  <head>
+    <title>Shopping Cart - Example Store</title>
+  </head>
+  <body>
+    <header>
+      <nav>
+        <a href="/">Home</a>
+        <a href="/cart" class="cart-link active">Cart (2)</a>
+      </nav>
+    </header>
+    <main>
+      <h1>Shopping Cart</h1>
+      <div class="cart-items">
+        <div class="cart-item" data-product-id="WP3000">
+          <span class="item-name">Widget Pro 3000</span>
+          <span class="item-price">$49.99</span>
+          <span class="item-qty">Qty: 1</span>
+          <button class="remove-btn">Remove</button>
+        </div>
+        <div class="cart-item" data-product-id="GZ100">
+          <span class="item-name">Gadget Z100</span>
+          <span class="item-price">$29.99</span>
+          <span class="item-qty">Qty: 2</span>
+          <button class="remove-btn">Remove</button>
+        </div>
+      </div>
+      <div class="cart-summary">
+        <span class="subtotal">Subtotal: $109.97</span>
+        <span class="total">Total: $119.47</span>
+        <button class="checkout-btn">Proceed to Checkout</button>
+      </div>
+    </main>
+  </body>
+</html>

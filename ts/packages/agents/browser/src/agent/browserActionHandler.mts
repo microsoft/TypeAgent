@@ -259,6 +259,7 @@ export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeBrowserContext,
         updateAgentContext: updateBrowserContext,
+        closeAgentContext: closeBrowserContext,
         executeAction: executeBrowserAction,
         resolveEntity,
         getDynamicDisplay: getDynamicDisplayImpl,
@@ -537,6 +538,23 @@ async function updateBrowserContext(
         if (context.agentContext.viewProcess) {
             context.agentContext.viewProcess.kill();
         }
+    }
+}
+
+async function closeBrowserContext(
+    context: SessionContext<BrowserActionContext>,
+) {
+    if (context.agentContext.agentWebSocketServer) {
+        context.agentContext.agentWebSocketServer.stop();
+        delete context.agentContext.agentWebSocketServer;
+    }
+    if (context.agentContext.browserProcess) {
+        context.agentContext.browserProcess.kill();
+        context.agentContext.browserProcess = undefined;
+    }
+    if (context.agentContext.viewProcess) {
+        context.agentContext.viewProcess.kill();
+        context.agentContext.viewProcess = undefined;
     }
 }
 
@@ -1966,8 +1984,10 @@ async function createViewServiceHost(
                     },
                 });
 
-                childProcess.on("message", function (message) {
-                    if (message === "Success") {
+                childProcess.on("message", function (message: any) {
+                    if (message?.type === "Success") {
+                        context.agentContext.localHostPort = message.port;
+                        context.setLocalHostPort(message.port);
                         resolve(childProcess);
                     } else if (message === "Failure") {
                         resolve(undefined);

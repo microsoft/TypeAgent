@@ -21,8 +21,8 @@
   ],
   "script": {
     "language": "powershell",
-    "body": "param([string]$Path = '.', [string]$Filter = '*')\nGet-ChildItem -Path $Path -Filter $Filter | Format-Table Name, Length, LastWriteTime -AutoSize",
-    "expectedOutputFormat": "table"
+    "body": "param([string]$Path = '.', [string]$Filter = '*')\nGet-ChildItem -Path $Path -Filter $Filter | ForEach-Object { \"{0,-50} {1,15:N0} bytes  {2}\" -f $_.Name, $_.Length, $_.LastWriteTime }",
+    "expectedOutputFormat": "text"
   },
   "grammarPatterns": [
     {
@@ -49,11 +49,16 @@
   "sandbox": {
     "allowedCmdlets": [
       "Get-ChildItem",
-      "Format-Table",
+      "ForEach-Object",
       "Select-Object",
       "Sort-Object"
     ],
-    "allowedPaths": ["$env:USERPROFILE", "$PWD", "$env:TEMP"],
+    "allowedPaths": [
+      "$env:USERPROFILE",
+      "$env:USERPROFILE\\Downloads",
+      "$PWD",
+      "$env:TEMP"
+    ],
     "allowedModules": ["Microsoft.PowerShell.Management"],
     "maxExecutionTime": 30,
     "networkAccess": false

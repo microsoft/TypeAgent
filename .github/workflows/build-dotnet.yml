@@ -57,6 +57,10 @@ jobs:
         working-directory: dotnet
         run: |
           msbuild.exe autoShell/AutoShell.sln /p:platform="Any CPU" /p:configuration="${{ matrix.configuration }}"
+      - name: Test AutoShell
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
+        working-directory: dotnet/autoShell.Tests
+        run: dotnet test --configuration ${{ matrix.configuration }}
       - name: Restore Packages (TypeAgent)
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
         working-directory: dotnet

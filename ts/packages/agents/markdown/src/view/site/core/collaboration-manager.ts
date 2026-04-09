@@ -288,8 +288,11 @@ export class CollaborationManager {
         });
 
         // Add connection event logging
-        provider.on("connection-open", () => {
-            console.log("[WEBSOCKET] Connection opened");
+        // Note: y-websocket@3 removed the 'connection-open' event; use 'status' event instead.
+        provider.on("status", (event: { status: string }) => {
+            if (event.status === "connected") {
+                console.log("[WEBSOCKET] Connection opened");
+            }
         });
 
         provider.on("connection-close", () => {

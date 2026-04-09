@@ -161,7 +161,43 @@ export async function createSharedDispatcher(
         ...options,
         clientIO,
     });
-    return {
+
+    // Intercept the three display methods on the shared clientIO so that all
+    // display traffic is mirrored into the DisplayLog for later replay.
+    // We patch context.clientIO (which IS the broadcast `clientIO` object above)
+    // rather than the local variable so any future reference through context also
+    // sees the patched version.
+    {
+        const log = context.displayLog;
+        const orig = context.clientIO;
+
+        const origSetUserRequest = orig.setUserRequest.bind(orig);
+        orig.setUserRequest = (requestId, ...args) => {
+            origSetUserRequest(requestId, ...args);
+            log.logUserRequest(requestId, args[0]);
+            log.saveQueued();
+        };
+
+        const origSetDisplay = orig.setDisplay.bind(orig);
+        orig.setDisplay = (message) => {
+            origSetDisplay(message);
+            log.logSetDisplay(message);
+            log.saveQueued();
+        };
+
+        const origAppendDisplay = orig.appendDisplay.bind(orig);
+        orig.appendDisplay = (message, mode, ...rest) => {
+            origAppendDisplay(message, mode, ...rest);
+            log.logAppendDisplay(message, mode);
+            log.saveQueued();
+        };
+    }
+
+    const dispatchers = new Map<string, Dispatcher>();
+    const shared: SharedDispatcher = {
+        get clientCount() {
+            return clients.size;
+        },
         join(
             clientIO: ClientIO,
             closeFn: () => void,
@@ -181,6 +217,7 @@ export async function createSharedDispatcher(
                 connectionId,
                 async () => {
                     clients.delete(connectionId);
+                    dispatchers.delete(connectionId);
                     unregisterClient(connectionId);
                     closeFn();
                     debugConnect(
@@ -188,13 +225,41 @@ export async function createSharedDispatcher(
                     );
                 },
             );
+            dispatchers.set(connectionId, dispatcher);
             debugConnect(
                 `Client connected: ${connectionId} (total clients: ${clients.size})`,
             );
             return dispatcher;
         },
+        async leave(connectionId: string) {
+            const dispatcher = dispatchers.get(connectionId);
+            if (dispatcher) {
+                await dispatcher.close();
+            }
+        },
+        async closeAllClients() {
+            const promises: Promise<void>[] = [];
+            for (const dispatcher of dispatchers.values()) {
+                promises.push(dispatcher.close());
+            }
+            await Promise.all(promises);
+        },
         async close() {
+            await this.closeAllClients();
             await closeCommandHandlerContext(context);
         },
     };
+    return shared;
 }
+
+export type SharedDispatcher = {
+    readonly clientCount: number;
+    join(
+        clientIO: ClientIO,
+        closeFn: () => void,
+        options?: DispatcherConnectOptions,
+    ): Dispatcher;
+    leave(connectionId: string): Promise<void>;
+    closeAllClients(): Promise<void>;
+    close(): Promise<void>;
+};

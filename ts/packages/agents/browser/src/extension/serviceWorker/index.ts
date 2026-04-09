@@ -29,6 +29,8 @@ const debugError = registerDebug("typeagent:browser:serviceWorker:error");
 
 const debugWebAgentProxy = registerDebug("typeagent:webAgent:proxy");
 
+let serviceWorkerHandlers: ReturnType<typeof createAllHandlers> | undefined;
+
 /**
  * Initializes the service worker
  */
@@ -51,9 +53,11 @@ export async function initialize(): Promise<void> {
     initializeContextMenu();
 
     // Set up RPC server for typed view communication
-    const { rpc } = createChromeRpcServer(createAllHandlers());
+    const allHandlers = createAllHandlers();
+    const { rpc } = createChromeRpcServer(allHandlers);
     setChatPanelRpc(rpc as any);
     setContextMenuRpcSend((rpc as any).send.bind(rpc));
+    serviceWorkerHandlers = allHandlers;
 
     // Set up event listeners
     setupEventListeners();
@@ -63,12 +67,42 @@ export async function initialize(): Promise<void> {
  * Sets up all event listeners
  */
 function setupEventListeners(): void {
-    // Handle simple content script messages (not RPC)
+    // Handle simple content script and view messages (not RPC)
     chrome.runtime.onMessage.addListener(
         (message: any, sender: chrome.runtime.MessageSender, sendResponse) => {
             if (message.type === "getTabId") {
                 sendResponse({
                     tabId: sender.tab?.id ? String(sender.tab.id) : null,
+                });
+                return false;
+            }
+
+            // Macro library messages — route to RPC handlers
+            if (
+                message.type === "getAllWebFlows" ||
+                message.type === "deleteWebFlow"
+            ) {
+                if (serviceWorkerHandlers) {
+                    const handlers = serviceWorkerHandlers;
+                    const handler = (handlers as any)[message.type];
+                    if (handler) {
+                        handler(message)
+                            .then((result: any) => sendResponse(result))
+                            .catch((err: any) =>
+                                sendResponse({
+                                    success: false,
+                                    error:
+                                        err instanceof Error
+                                            ? err.message
+                                            : String(err),
+                                }),
+                            );
+                        return true; // async sendResponse
+                    }
+                }
+                sendResponse({
+                    success: false,
+                    error: "Handler not available",
                 });
                 return false;
             }

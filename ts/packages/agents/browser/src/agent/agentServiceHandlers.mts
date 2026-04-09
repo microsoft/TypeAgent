@@ -116,6 +116,8 @@ export function createAgentInvokeHandlers(
             websiteHandler("getWebsiteStats", params),
 
         // Macros
+        autoDiscoverActions: (params: any) =>
+            discoveryHandler("autoDiscoverActions", params),
         detectPageActions: (params: any) =>
             discoveryHandler("detectPageActions", params),
         registerPageDynamicAgent: (params: any) =>

@@ -19,7 +19,7 @@ export type EnableBlueLightFilterScheduleAction = {
 
 // Adjusts the color temperature for Night Light
 export type AdjustColorTemperatureAction = {
-    actionName: "adjustColorTemperature";
+    actionName: "AdjustColorTemperature";
     parameters: {
         filterEffect?: "reduce" | "increase";
     };

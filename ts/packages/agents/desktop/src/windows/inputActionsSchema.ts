@@ -31,7 +31,7 @@ export type MouseWheelScrollLinesAction = {
 
 // Sets the primary mouse button
 export type SetPrimaryMouseButtonAction = {
-    actionName: "setPrimaryMouseButton";
+    actionName: "SetPrimaryMouseButton";
     parameters: {
         primaryButton: "left" | "right";
     };
@@ -55,7 +55,7 @@ export type AdjustMousePointerSizeAction = {
 
 // Customizes mouse pointer color
 export type MousePointerCustomizationAction = {
-    actionName: "mousePointerCustomization";
+    actionName: "MousePointerCustomization";
     parameters: {
         color: string;
         style?: string;

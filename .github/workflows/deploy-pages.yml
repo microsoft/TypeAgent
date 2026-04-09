@@ -7,17 +7,16 @@ on:
   push:
     branches:
       - main
-      - siteTestCode
 
     # Only run when docs-related files change
     paths:
       - 'docs/**'
-  
+
   # Allow manual deployment from the Actions tab
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   id-token: write
   pages: write
 
@@ -30,56 +29,30 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: docs 
-    
+        working-directory: docs
+
     permissions:
-      contents: write
+      contents: read
       id-token: write
       pages: write
 
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
-
-      - name: Get User Permission
-        id: checkAccess
-        uses: actions-cool/check-user-permission@v2
-        with:
-          require: write
-          username: ${{ github.triggering_actor }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Check User Permission
-        if: steps.checkAccess.outputs.require-result == 'false'
-        run: |
-          echo "${{ github.triggering_actor }} does not have permissions on this repo."
-          echo "Current permission level is ${{ steps.checkAccess.outputs.user-permission }}"
-          echo "Job originally triggered by ${{ github.actor }}"
-          exit 1
-
       - name: Checkout Repository 🛎️
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
+        uses: actions/checkout@v4
 
-      - name: Check Repository Structure
-        run: |
-          echo "Repository root contents:"
-          ls -la
-        working-directory: .
-        
       - name: Setup Node.js ⚙️
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: 18.x
+          node-version: 22
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v4
         with:
-          version: 8
-          run_install: false
+          package_json_file: docs/package.json
 
       - name: Get pnpm store directory
         id: pnpm-cache
@@ -88,12 +61,12 @@ jobs:
           echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
 
       - name: Setup pnpm cache
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-pnpm-docs-${{ hashFiles('docs/pnpm-lock.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+            ${{ runner.os }}-pnpm-docs-
 
       - name: Install Dependencies 📦
         run: pnpm install
@@ -112,7 +85,9 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-           name: github-pages
-           path: docs/_site
-      - name: Deploy to GitHub Pages from artifacts
+          name: github-pages
+          path: docs/_site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4

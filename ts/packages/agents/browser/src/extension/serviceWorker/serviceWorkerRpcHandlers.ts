@@ -387,12 +387,21 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                         : [],
                 });
                 (globalThis as any).__lastRecording = undefined;
-                // The agent returns { displayText, data: { webFlowName } }
+
+                // The discovery handler returns result.data directly.
+                // Check if generation/save actually succeeded.
+                if (result?.success === false) {
+                    return {
+                        success: false,
+                        error:
+                            result?.error ||
+                            "Failed to generate action from recording",
+                    };
+                }
+
                 const savedName =
-                    result?.data?.webFlowName ||
                     result?.webFlowName ||
                     result?.flowName ||
-                    result?.displayText?.match(/Created action:\s*(.+)/)?.[1] ||
                     params.actionName;
                 return {
                     success: true,
@@ -439,6 +448,26 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                 success: false,
                 error: "Page not eligible for indexing",
             };
+        },
+
+        async autoDiscoverActions(params: any) {
+            try {
+                const result = await forward("autoDiscoverActions", {
+                    url: params.url,
+                    domain: params.domain,
+                    mode: params.mode || "scope",
+                });
+                return {
+                    success: true,
+                    flowCount: result?.flowCount ?? 0,
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                };
+            }
         },
 
         async indexExtractedKnowledge(params: any) {

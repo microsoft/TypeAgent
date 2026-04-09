@@ -288,8 +288,18 @@ export class SchemaDiscoveryAgent<T extends object> {
             {
                 type: "text",
                 text: `
-        You are given a list of known user actions. Examine the page layout and content, then determine which of
-        these actions can actually be performed on THIS page. Only include actions that the page supports.
+        You are given a list of known user actions for this website. Determine which actions are relevant
+        by examining the page and considering the action descriptions.
+
+        Include an action if EITHER:
+        1. It can be performed directly on this page (e.g., there is a matching button, form, or element), OR
+        2. Its description indicates it can navigate or search to reach the right context (e.g., "Search for
+           a product and add it to cart" is relevant on any page that has a search input, even if no product
+           is currently shown).
+
+        Exclude an action only if it is clearly unrelated to this website's purpose (e.g., restaurant
+        reservation actions on an e-commerce site).
+
         If none of the known actions apply, return an empty actions array.
         Return a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
 

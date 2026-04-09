@@ -122,6 +122,7 @@ export async function generateWebFlowFromTrace(
                 .filter((e) => e.severity === "error")
                 .map((e) => e.message);
             debug("Generated script failed validation:", errors);
+            debug("Failed script:\n%s", parsed.script);
 
             // Retry with validation feedback
             const retryPrompt = buildRetryPrompt(prompt, parsed.script, errors);
@@ -140,6 +141,11 @@ export async function generateWebFlowFromTrace(
                 if (retryValidation.valid) {
                     return retryParsed;
                 }
+                const retryErrors = retryValidation.errors
+                    .filter((e) => e.severity === "error")
+                    .map((e) => e.message);
+                debug("Retry script also failed validation:", retryErrors);
+                debug("Retry script:\n%s", retryParsed.script);
             }
             debug("Retry also failed validation");
             return null;
