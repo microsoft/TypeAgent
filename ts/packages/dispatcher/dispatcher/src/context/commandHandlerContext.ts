@@ -133,6 +133,7 @@ export type CommandHandlerContext = {
     session: Session;
 
     readonly persistDir: string | undefined;
+    readonly instanceDir: string | undefined; // global instance root for cross-session agent storage (config, auth tokens, user preferences)
     readonly cacheDir: string | undefined;
     readonly embeddingCacheDir: string | undefined;
     readonly storageProvider: StorageProvider | undefined;
@@ -252,6 +253,7 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     // Core options
     appAgentProviders?: AppAgentProvider[];
     persistDir?: string | undefined; // the directory to save state.
+    instanceDir?: string | undefined; // global instance directory for cross-session agent storage (config, auth tokens, user preferences). When omitted, falls back to persistDir.
     persistSession?: boolean; // default to false,
     storageProvider?: StorageProvider | undefined;
 
@@ -519,19 +521,20 @@ export async function initializeCommandHandlerContext(
 
     const persistSession = options?.persistSession ?? false;
     const persistDir = options?.persistDir;
+    const instanceDir = options?.instanceDir; // global instance root; falls back to persistDir when absent
     const storageProvider = options?.storageProvider;
-    if (persistDir === undefined) {
-        if (persistSession) {
-            throw new Error(
-                "Persist session requires persistDir to be set in options.",
-            );
-        }
-    } else {
-        if (storageProvider === undefined) {
-            throw new Error(
-                "persistDir requires storageProvider to be set in options.",
-            );
-        }
+    if (persistSession && persistDir === undefined) {
+        throw new Error(
+            "Persist session requires persistDir to be set in options.",
+        );
+    }
+    if (
+        (persistDir !== undefined || instanceDir !== undefined) &&
+        storageProvider === undefined
+    ) {
+        throw new Error(
+            "persistDir and instanceDir require storageProvider to be set in options.",
+        );
     }
 
     const instanceDirLock = persistDir
@@ -578,6 +581,7 @@ export async function initializeCommandHandlerContext(
             agentInstaller: options?.agentInstaller,
             session,
             persistDir,
+            instanceDir,
             cacheDir,
             embeddingCacheDir,
             storageProvider,
