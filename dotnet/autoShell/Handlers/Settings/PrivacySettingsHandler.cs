@@ -32,10 +32,8 @@ internal class PrivacySettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JObject parameters)
     {
-
-
         string subKey = key switch
         {
             "ManageCameraAccess" => "webcam",
@@ -44,13 +42,15 @@ internal class PrivacySettingsHandler : ICommandHandler
             _ => null,
         };
 
-        if (subKey != null)
+        if (subKey == null)
         {
-            SetAccessSetting(parameters, subKey);
+            return CommandResult.Fail($"Unknown privacy command: {key}");
         }
+
+        return SetAccessSetting(parameters, subKey, key);
     }
 
-    private void SetAccessSetting(JObject parameters, string capability)
+    private CommandResult SetAccessSetting(JObject parameters, string capability, string commandName)
     {
         string setting = parameters.Value<string>("accessSetting") ?? "Allow";
         string regValue = setting.Equals("deny", StringComparison.OrdinalIgnoreCase) ? "Deny" : "Allow";
@@ -60,5 +60,7 @@ internal class PrivacySettingsHandler : ICommandHandler
             "Value",
             regValue,
             RegistryValueKind.String);
+
+        return CommandResult.Ok($"{capability} access set to {regValue}");
     }
 }

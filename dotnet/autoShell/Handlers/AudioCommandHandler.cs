@@ -29,7 +29,7 @@ internal class AudioCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JObject parameters)
     {
         switch (key)
         {
@@ -37,25 +37,29 @@ internal class AudioCommandHandler : ICommandHandler
             {
                 bool mute = parameters.Value<bool?>("on") ?? false;
                 _audio.SetMute(mute);
-                break;
+                return CommandResult.Ok($"Audio {(mute ? "muted" : "unmuted")}");
             }
             case "RestoreVolume":
                 _audio.SetVolume((int)_savedVolumePct);
-                break;
+                return CommandResult.Ok($"Volume restored to {(int)_savedVolumePct}%");
             case "Volume":
             {
                 int pct = parameters.Value<int?>("targetVolume") ?? -1;
-                if (pct >= 0)
+                if (pct < 0)
                 {
-                    int currentVolume = _audio.GetVolume();
-                    if (currentVolume > 0)
-                    {
-                        _savedVolumePct = currentVolume;
-                    }
-                    _audio.SetVolume(pct);
+                    return CommandResult.Fail("Invalid volume: targetVolume required");
                 }
-                break;
+
+                int currentVolume = _audio.GetVolume();
+                if (currentVolume > 0)
+                {
+                    _savedVolumePct = currentVolume;
+                }
+                _audio.SetVolume(pct);
+                return CommandResult.Ok($"Volume set to {pct}%");
             }
+            default:
+                return CommandResult.Fail($"Unknown audio command: {key}");
         }
     }
 }

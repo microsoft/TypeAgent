@@ -33,29 +33,29 @@ internal class PersonalizationSettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JObject parameters)
     {
         switch (key)
         {
             case "ApplyColorToTitleBar":
-                HandleApplyColorToTitleBar(parameters);
-                break;
+                return HandleApplyColorToTitleBar(parameters);
 
             case "EnableTransparency":
-                HandleEnableTransparency(parameters);
-                break;
+                return HandleEnableTransparency(parameters);
 
             case "HighContrastTheme":
                 _process.StartShellExecute("ms-settings:easeofaccess-highcontrast");
-                break;
+                return CommandResult.Ok("Opened high contrast settings");
 
             case "SystemThemeMode":
-                HandleSystemThemeMode(parameters);
-                break;
+                return HandleSystemThemeMode(parameters);
+
+            default:
+                return CommandResult.Fail($"Unknown personalization command: {key}");
         }
     }
 
-    private void HandleApplyColorToTitleBar(JObject parameters)
+    private CommandResult HandleApplyColorToTitleBar(JObject parameters)
     {
         bool enable = parameters.Value<bool?>("enableColor") ?? true;
         _registry.SetValue(
@@ -63,9 +63,10 @@ internal class PersonalizationSettingsHandler : ICommandHandler
             "ColorPrevalence",
             enable ? 1 : 0,
             RegistryValueKind.DWord);
+        return CommandResult.Ok($"Title bar color {(enable ? "enabled" : "disabled")}");
     }
 
-    private void HandleEnableTransparency(JObject parameters)
+    private CommandResult HandleEnableTransparency(JObject parameters)
     {
         bool enable = parameters.Value<bool?>("enable") ?? true;
         _registry.SetValue(
@@ -73,9 +74,10 @@ internal class PersonalizationSettingsHandler : ICommandHandler
             "EnableTransparency",
             enable ? 1 : 0,
             RegistryValueKind.DWord);
+        return CommandResult.Ok($"Transparency {(enable ? "enabled" : "disabled")}");
     }
 
-    private void HandleSystemThemeMode(JObject parameters)
+    private CommandResult HandleSystemThemeMode(JObject parameters)
     {
         string mode = parameters.Value<string>("mode") ?? "dark";
         int value = mode.Equals("light", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
@@ -86,5 +88,6 @@ internal class PersonalizationSettingsHandler : ICommandHandler
         // Set system theme — taskbar, Start menu, etc.
         _registry.SetValue(PersonalizePath, "SystemUsesLightTheme", value, RegistryValueKind.DWord);
         _registry.BroadcastSettingChange("ImmersiveColorSet");
+        return CommandResult.Ok($"System theme set to {mode}");
     }
 }

@@ -21,5 +21,6 @@ internal interface ICommandHandler
     /// </summary>
     /// <param name="key">The command key (action name).</param>
     /// <param name="parameters">The action parameters as a JObject.</param>
-    void Handle(string key, JObject parameters);
+    /// <returns>A <see cref="CommandResult"/> describing the outcome.</returns>
+    CommandResult Handle(string key, JObject parameters);
 }

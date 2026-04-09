@@ -36,34 +36,36 @@ internal class SystemSettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JObject parameters)
     {
         switch (key)
         {
             case "AutomaticDSTAdjustment":
-                HandleAutomaticDSTAdjustment(parameters);
-                break;
+                return HandleAutomaticDSTAdjustment(parameters);
 
             case "AutomaticTimeSettingAction":
                 _process.StartShellExecute("ms-settings:dateandtime");
-                break;
+                return CommandResult.Ok("Opened date and time settings");
 
             case "EnableGameMode":
                 _process.StartShellExecute("ms-settings:gaming-gamemode");
-                break;
+                return CommandResult.Ok("Opened Game Mode settings");
 
             case "EnableQuietHours":
                 _process.StartShellExecute("ms-settings:quiethours");
-                break;
+                return CommandResult.Ok("Opened Focus Assist settings");
 
             case "MinimizeWindowsOnMonitorDisconnectAction":
             case "RememberWindowLocations":
                 _process.StartShellExecute("ms-settings:display");
-                break;
+                return CommandResult.Ok("Opened display settings");
+
+            default:
+                return CommandResult.Fail($"Unknown system settings command: {key}");
         }
     }
 
-    private void HandleAutomaticDSTAdjustment(JObject parameters)
+    private CommandResult HandleAutomaticDSTAdjustment(JObject parameters)
     {
 
         bool enable = parameters.Value<bool?>("enable") ?? true;
@@ -75,5 +77,6 @@ internal class SystemSettingsHandler : ICommandHandler
             Microsoft.Win32.RegistryValueKind.DWord);
 
         _logger.Debug($"Automatic DST adjustment {(enable ? "enabled" : "disabled")}");
+        return CommandResult.Ok($"Automatic DST adjustment {(enable ? "enabled" : "disabled")}");
     }
 }

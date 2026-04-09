@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using autoShell.Logging;
 using autoShell.Services;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers;
@@ -38,7 +37,7 @@ internal class AppCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JObject parameters)
     {
         string name = parameters.Value<string>("name");
 
@@ -46,15 +45,18 @@ internal class AppCommandHandler : ICommandHandler
         {
             case "CloseProgram":
                 CloseApplication(name);
-                break;
+                return CommandResult.Ok($"Closed {name}");
 
             case "LaunchProgram":
                 OpenApplication(name);
-                break;
+                return CommandResult.Ok($"Launched {name}");
 
             case "ListAppNames":
-                Console.WriteLine(JsonConvert.SerializeObject(_appRegistry.GetAllAppNames()));
-                break;
+                var appNames = _appRegistry.GetAllAppNames();
+                return CommandResult.Ok("Listed app names", JToken.FromObject(appNames));
+
+            default:
+                return CommandResult.Fail($"Unknown app command: {key}");
         }
     }
 

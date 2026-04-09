@@ -58,7 +58,7 @@ async function ensureAutomationProcess(agentContext: DesktopActionContext) {
         debugData(`Process data: ${data.toString()}`);
     });
 
-    child.stderr?.on("error", (data) => {
+    child.stderr?.on("data", (data) => {
         debugError(`Process error: ${data.toString()}`);
     });
 
@@ -448,21 +448,28 @@ async function fetchInstalledApps(desktopProcess: child_process.ChildProcess) {
         const dataCallBack = (data: any) => {
             allOutput += data.toString();
             try {
-                const programs = JSON.parse(allOutput);
+                const response = JSON.parse(allOutput);
                 desktopProcess.stdout?.off("data", dataCallBack);
-                desktopProcess.stderr?.off("error", errorCallback);
-                resolve(programs);
+                desktopProcess.stderr?.off("data", errorCallback);
+                // autoShell now wraps results in CommandResult: { success, message, data }
+                if (response.success && response.data) {
+                    resolve(response.data);
+                } else {
+                    reject(
+                        response.message ?? "Failed to fetch installed apps",
+                    );
+                }
             } catch {}
         };
 
         const errorCallback = (data: any) => {
             desktopProcess.stdout?.off("data", dataCallBack);
-            desktopProcess.stderr?.off("error", errorCallback);
+            desktopProcess.stderr?.off("data", errorCallback);
             reject(data.toString());
         };
 
         desktopProcess.stdout?.on("data", dataCallBack);
-        desktopProcess.stderr?.on("error", errorCallback);
+        desktopProcess.stderr?.on("data", errorCallback);
 
         desktopProcess.stdin?.write(JSON.stringify(message) + "\r\n");
     });
@@ -555,17 +562,20 @@ async function mapInputToAppName(
 ): Promise<string> {
     const programNameIndex = agentContext.programNameIndex;
     if (programNameIndex) {
-        let matchedNames = await mapInputToAppNameFromIndex(
+        let matchedName = await mapInputToAppNameFromIndex(
             input,
             programNameIndex,
             agentContext.backupProgramNameTable,
         );
-        if (matchedNames === undefined && (await finishRefresh(agentContext))) {
-            matchedNames = await mapInputToAppNameFromIndex(
+        if (matchedName === undefined && (await finishRefresh(agentContext))) {
+            matchedName = await mapInputToAppNameFromIndex(
                 input,
                 programNameIndex,
                 agentContext.backupProgramNameTable,
             );
+        }
+        if (matchedName !== undefined) {
+            return matchedName;
         }
     }
     return input;

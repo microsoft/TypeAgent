@@ -19,26 +19,29 @@ public class CommandDispatcherTests
     }
 
     /// <summary>
-    /// Verifies that dispatching a JSON object with a "quit" actionName returns true.
+    /// Verifies that dispatching a JSON object with a "quit" actionName returns null.
     /// </summary>
     [Fact]
-    public void Dispatch_QuitKey_ReturnsTrue()
+    public void Dispatch_QuitKey_ReturnsQuitResult()
     {
         var json = JObject.Parse("""{"actionName":"quit","parameters":{}}""");
-        bool result = _dispatcher.Dispatch(json);
-        Assert.True(result);
+        CommandResult result = _dispatcher.Dispatch(json);
+        Assert.NotNull(result);
+        Assert.True(result.Success);
+        Assert.True(result.IsQuit);
     }
 
     /// <summary>
-    /// Verifies that dispatching a non-quit command returns false.
+    /// Verifies that dispatching a non-quit command returns a successful CommandResult.
     /// </summary>
     [Fact]
-    public void Dispatch_NonQuitKey_ReturnsFalse()
+    public void Dispatch_NonQuitKey_ReturnsSuccessResult()
     {
         _dispatcher.Register(new StubHandler("TestCmd"));
         var json = JObject.Parse("""{"actionName":"TestCmd","parameters":{}}""");
-        bool result = _dispatcher.Dispatch(json);
-        Assert.False(result);
+        CommandResult result = _dispatcher.Dispatch(json);
+        Assert.NotNull(result);
+        Assert.True(result.Success);
     }
 
     /// <summary>
@@ -60,24 +63,27 @@ public class CommandDispatcherTests
     }
 
     /// <summary>
-    /// Verifies that dispatching an unrecognized command does not throw an exception.
+    /// Verifies that dispatching an unrecognized command returns a failure result.
     /// </summary>
     [Fact]
-    public void Dispatch_UnknownCommand_DoesNotThrow()
+    public void Dispatch_UnknownCommand_ReturnsFailure()
     {
         var json = JObject.Parse("""{"actionName":"UnknownCmd","parameters":{}}""");
-        var ex = Record.Exception(() => _dispatcher.Dispatch(json));
-        Assert.Null(ex);
+        CommandResult result = _dispatcher.Dispatch(json);
+        Assert.NotNull(result);
+        Assert.False(result.Success);
+        Assert.Contains("Unknown action", result.Message);
     }
 
     /// <summary>
-    /// Verifies that dispatching an empty JSON object returns false.
+    /// Verifies that dispatching an empty JSON object returns a failure result.
     /// </summary>
     [Fact]
-    public void Dispatch_EmptyObject_ReturnsFalse()
+    public void Dispatch_EmptyObject_ReturnsFailure()
     {
-        bool result = _dispatcher.Dispatch([]);
-        Assert.False(result);
+        CommandResult result = _dispatcher.Dispatch([]);
+        Assert.NotNull(result);
+        Assert.False(result.Success);
     }
 
     /// <summary>
@@ -95,17 +101,19 @@ public class CommandDispatcherTests
     }
 
     /// <summary>
-    /// Verifies that an exception thrown by a handler does not propagate to the caller.
+    /// Verifies that an exception thrown by a handler returns a failure result.
     /// </summary>
     [Fact]
-    public void Dispatch_HandlerException_DoesNotBubbleUp()
+    public void Dispatch_HandlerException_ReturnsFailure()
     {
         var handler = new ThrowingHandler("Boom");
         _dispatcher.Register(handler);
 
         var json = JObject.Parse("""{"actionName":"Boom","parameters":{}}""");
-        var ex = Record.Exception(() => _dispatcher.Dispatch(json));
-        Assert.Null(ex);
+        CommandResult result = _dispatcher.Dispatch(json);
+        Assert.NotNull(result);
+        Assert.False(result.Success);
+        Assert.Contains("Boom", result.Message);
     }
 
     /// <summary>
@@ -124,6 +132,16 @@ public class CommandDispatcherTests
     }
 
     /// <summary>
+    /// Verifies that registering duplicate command names throws.
+    /// </summary>
+    [Fact]
+    public void Register_DuplicateCommand_Throws()
+    {
+        _dispatcher.Register(new StubHandler("Dup"));
+        Assert.Throws<InvalidOperationException>(() => _dispatcher.Register(new StubHandler("Dup")));
+    }
+
+    /// <summary>
     /// Stub handler that records the last key and parameters it received.
     /// </summary>
     private class StubHandler : ICommandHandler
@@ -137,10 +155,11 @@ public class CommandDispatcherTests
             SupportedCommands = commands;
         }
 
-        public void Handle(string key, JObject parameters)
+        public CommandResult Handle(string key, JObject parameters)
         {
             LastKey = key;
             LastParameters = parameters;
+            return CommandResult.Ok($"Handled {key}");
         }
     }
 
@@ -156,7 +175,7 @@ public class CommandDispatcherTests
             SupportedCommands = commands;
         }
 
-        public void Handle(string key, JObject parameters)
+        public CommandResult Handle(string key, JObject parameters)
         {
             throw new InvalidOperationException("Test exception");
         }

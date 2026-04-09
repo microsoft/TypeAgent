@@ -33,33 +33,31 @@ internal class AccessibilitySettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JObject parameters)
     {
         switch (key)
         {
             case "EnableFilterKeysAction":
-                HandleFilterKeys(parameters);
-                break;
+                return HandleFilterKeys(parameters, "Filter Keys");
 
             case "EnableMagnifier":
-                HandleToggleProcess(parameters, "magnify.exe", "Magnify");
-                break;
+                return HandleToggleProcess(parameters, "magnify.exe", "Magnify", "Magnifier");
 
             case "EnableNarratorAction":
-                HandleToggleProcess(parameters, "narrator.exe", "Narrator");
-                break;
+                return HandleToggleProcess(parameters, "narrator.exe", "Narrator", "Narrator");
 
             case "EnableStickyKeys":
-                HandleStickyKeys(parameters);
-                break;
+                return HandleStickyKeys(parameters, "Sticky Keys");
 
             case "MonoAudioToggle":
-                HandleMonoAudio(parameters);
-                break;
+                return HandleMonoAudio(parameters, "Mono audio");
+
+            default:
+                return CommandResult.Fail($"Unknown accessibility command: {key}");
         }
     }
 
-    private void HandleFilterKeys(JObject parameters)
+    private CommandResult HandleFilterKeys(JObject parameters, string displayName)
     {
         bool enable = parameters.Value<bool?>("enable") ?? true;
         _registry.SetValue(
@@ -67,9 +65,10 @@ internal class AccessibilitySettingsHandler : ICommandHandler
             "Flags",
             enable ? "2" : "126",
             RegistryValueKind.String);
+        return CommandResult.Ok($"{displayName} {(enable ? "enabled" : "disabled")}");
     }
 
-    private void HandleStickyKeys(JObject parameters)
+    private CommandResult HandleStickyKeys(JObject parameters, string displayName)
     {
         bool enable = parameters.Value<bool?>("enable") ?? true;
         _registry.SetValue(
@@ -77,9 +76,10 @@ internal class AccessibilitySettingsHandler : ICommandHandler
             "Flags",
             enable ? "510" : "506",
             RegistryValueKind.String);
+        return CommandResult.Ok($"{displayName} {(enable ? "enabled" : "disabled")}");
     }
 
-    private void HandleMonoAudio(JObject parameters)
+    private CommandResult HandleMonoAudio(JObject parameters, string displayName)
     {
         bool enable = parameters.Value<bool?>("enable") ?? true;
         _registry.SetValue(
@@ -87,9 +87,10 @@ internal class AccessibilitySettingsHandler : ICommandHandler
             "AccessibilityMonoMixState",
             enable ? 1 : 0,
             RegistryValueKind.DWord);
+        return CommandResult.Ok($"{displayName} {(enable ? "enabled" : "disabled")}");
     }
 
-    private void HandleToggleProcess(JObject parameters, string exeName, string processName)
+    private CommandResult HandleToggleProcess(JObject parameters, string exeName, string processName, string displayName)
     {
         bool enable = parameters.Value<bool?>("enable") ?? true;
 
@@ -104,5 +105,7 @@ internal class AccessibilitySettingsHandler : ICommandHandler
                 p.Kill();
             }
         }
+
+        return CommandResult.Ok($"{displayName} {(enable ? "enabled" : "disabled")}");
     }
 }

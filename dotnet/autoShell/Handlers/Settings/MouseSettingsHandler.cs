@@ -50,43 +50,41 @@ internal class MouseSettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JObject parameters)
     {
         switch (key)
         {
             case "AdjustMousePointerSize":
             case "MousePointerCustomization":
                 _process.StartShellExecute("ms-settings:easeofaccess-mouse");
-                break;
+                return CommandResult.Ok("Opened mouse pointer settings");
 
             case "CursorTrail":
-                HandleMouseCursorTrail(parameters);
-                break;
+                return HandleMouseCursorTrail(parameters);
 
             case "EnableTouchPad":
             case "TouchpadCursorSpeed":
                 _process.StartShellExecute("ms-settings:devices-touchpad");
-                break;
+                return CommandResult.Ok("Opened touchpad settings");
 
             case "EnhancePointerPrecision":
-                HandleEnhancePointerPrecision(parameters);
-                break;
+                return HandleEnhancePointerPrecision(parameters);
 
             case "MouseCursorSpeed":
-                HandleMouseCursorSpeed(parameters);
-                break;
+                return HandleMouseCursorSpeed(parameters);
 
             case "MouseWheelScrollLines":
-                HandleMouseWheelScrollLines(parameters);
-                break;
+                return HandleMouseWheelScrollLines(parameters);
 
             case "SetPrimaryMouseButton":
-                HandleSetPrimaryMouseButton(parameters);
-                break;
+                return HandleSetPrimaryMouseButton(parameters);
+
+            default:
+                return CommandResult.Fail($"Unknown mouse command: {key}");
         }
     }
 
-    private void HandleEnhancePointerPrecision(JObject parameters)
+    private CommandResult HandleEnhancePointerPrecision(JObject parameters)
     {
         bool enable = parameters.Value<bool?>("enable") ?? true;
         int[] mouseParams = new int[3];
@@ -94,21 +92,23 @@ internal class MouseSettingsHandler : ICommandHandler
         // Set acceleration (third parameter): 1 = enhanced precision on, 0 = off
         mouseParams[2] = enable ? 1 : 0;
         _systemParams.SetParameter(SPI_SETMOUSE, 0, mouseParams, SPIF_UPDATEINIFILE_SENDCHANGE);
+        return CommandResult.Ok($"Enhanced pointer precision {(enable ? "enabled" : "disabled")}");
     }
 
-    private void HandleMouseCursorSpeed(JObject parameters)
+    private CommandResult HandleMouseCursorSpeed(JObject parameters)
     {
         // Speed range: 1-20 (default 10)
         int speed = parameters.Value<int?>("speedLevel") ?? 10;
         speed = Math.Clamp(speed, 1, 20);
         _systemParams.SetParameter(SPI_SETMOUSESPEED, 0, (IntPtr)speed, SPIF_UPDATEINIFILE_SENDCHANGE);
+        return CommandResult.Ok($"Mouse cursor speed set to {speed}");
     }
 
     /// <summary>
     /// Enables or disables the mouse cursor trail and sets its length.
     /// SPI_SETMOUSETRAILS: 0 = off, 2-12 = trail length
     /// </summary>
-    private void HandleMouseCursorTrail(JObject parameters)
+    private CommandResult HandleMouseCursorTrail(JObject parameters)
     {
         var enable = parameters.Value<bool?>("enable") ?? true;
         var length = parameters.Value<int?>("length") ?? 7;
@@ -122,19 +122,22 @@ internal class MouseSettingsHandler : ICommandHandler
         _logger.Debug(enable
             ? $"Cursor trail enabled with length {length}"
             : "Cursor trail disabled");
+        return CommandResult.Ok($"Cursor trail {(enable ? $"enabled (length {length})" : "disabled")}");
     }
 
-    private void HandleMouseWheelScrollLines(JObject parameters)
+    private CommandResult HandleMouseWheelScrollLines(JObject parameters)
     {
         int lines = parameters.Value<int?>("scrollLines") ?? 3;
         lines = Math.Clamp(lines, 1, 100);
         _systemParams.SetParameter(SPI_SETWHEELSCROLLLINES, lines, IntPtr.Zero, SPIF_UPDATEINIFILE_SENDCHANGE);
+        return CommandResult.Ok($"Mouse wheel scroll lines set to {lines}");
     }
 
-    private void HandleSetPrimaryMouseButton(JObject parameters)
+    private CommandResult HandleSetPrimaryMouseButton(JObject parameters)
     {
         string button = parameters.Value<string>("primaryButton") ?? "left";
         bool leftPrimary = button.Equals("left", StringComparison.OrdinalIgnoreCase);
         _systemParams.SwapMouseButton(!leftPrimary);
+        return CommandResult.Ok($"Primary mouse button set to {button}");
     }
 }

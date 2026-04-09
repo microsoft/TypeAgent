@@ -42,38 +42,37 @@ internal class DisplaySettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JObject parameters)
     {
         switch (key)
         {
             case "AdjustColorTemperature":
                 _process.StartShellExecute("ms-settings:nightlight");
-                break;
+                return CommandResult.Ok("Opened Night Light settings");
 
             case "AdjustScreenBrightness":
-                HandleAdjustScreenBrightness(parameters);
-                break;
+                return HandleAdjustScreenBrightness(parameters);
 
             case "AdjustScreenOrientation":
             case "DisplayResolutionAndAspectRatio":
                 _process.StartShellExecute("ms-settings:display");
-                break;
+                return CommandResult.Ok("Opened display settings");
 
             case "DisplayScaling":
-                HandleDisplayScaling(parameters);
-                break;
+                return HandleDisplayScaling(parameters);
 
             case "EnableBlueLightFilterSchedule":
-                HandleBlueLightFilter(parameters);
-                break;
+                return HandleBlueLightFilter(parameters);
 
             case "RotationLock":
-                HandleRotationLock(parameters);
-                break;
+                return HandleRotationLock(parameters);
+
+            default:
+                return CommandResult.Fail($"Unknown display settings command: {key}");
         }
     }
 
-    private void HandleAdjustScreenBrightness(JObject parameters)
+    private CommandResult HandleAdjustScreenBrightness(JObject parameters)
     {
         string level = parameters.Value<string>("brightnessLevel");
         bool increase = level == "increase";
@@ -85,9 +84,10 @@ internal class DisplaySettingsHandler : ICommandHandler
 
         _brightness.SetBrightness(newBrightness);
         _logger.Debug($"Brightness adjusted to: {newBrightness}%");
+        return CommandResult.Ok($"Brightness adjusted to {newBrightness}%");
     }
 
-    private void HandleDisplayScaling(JObject parameters)
+    private CommandResult HandleDisplayScaling(JObject parameters)
     {
         string sizeStr = parameters.Value<string>("sizeOverride");
 
@@ -106,10 +106,13 @@ internal class DisplaySettingsHandler : ICommandHandler
             // DPI scaling requires opening settings
             _process.StartShellExecute("ms-settings:display");
             _logger.Debug($"Display scaling target: {percentage}%");
+            return CommandResult.Ok($"Display scaling set to {percentage}%");
         }
+
+        return CommandResult.Fail("Invalid display scaling value");
     }
 
-    private void HandleBlueLightFilter(JObject parameters)
+    private CommandResult HandleBlueLightFilter(JObject parameters)
     {
         bool disabled = parameters.Value<bool?>("nightLightScheduleDisabled") ?? false;
         byte[] data = disabled
@@ -121,9 +124,10 @@ internal class DisplaySettingsHandler : ICommandHandler
             "Data",
             data,
             RegistryValueKind.Binary);
+        return CommandResult.Ok($"Night Light schedule {(disabled ? "disabled" : "enabled")}");
     }
 
-    private void HandleRotationLock(JObject parameters)
+    private CommandResult HandleRotationLock(JObject parameters)
     {
         bool enable = parameters.Value<bool?>("enable") ?? true;
         _registry.SetValue(
@@ -131,5 +135,6 @@ internal class DisplaySettingsHandler : ICommandHandler
             "RotationLockPreference",
             enable ? 1 : 0,
             RegistryValueKind.DWord);
+        return CommandResult.Ok($"Rotation lock {(enable ? "enabled" : "disabled")}");
     }
 }

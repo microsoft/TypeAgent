@@ -29,17 +29,20 @@ internal class SystemCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JObject parameters)
     {
         switch (key)
         {
             case "Debug":
                 _debugger.Launch();
-                break;
+                return CommandResult.Ok("Debugger launched");
 
             case "ToggleNotifications":
                 _process.StartShellExecute("ms-actioncenter:");
-                break;
+                return CommandResult.Ok("Toggled Action Center");
+
+            default:
+                return CommandResult.Fail($"Unknown system command: {key}");
         }
     }
 }

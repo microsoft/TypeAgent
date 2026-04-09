@@ -40,7 +40,7 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JObject parameters)
     {
         switch (key)
         {
@@ -49,55 +49,60 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
                 JToken names = parameters["names"];
                 string namesJson = names?.ToString() ?? "[\"desktop 1\"]";
                 _virtualDesktop.CreateDesktops(namesJson);
-                break;
+                return CommandResult.Ok("Created new desktop(s)");
             }
 
             case "MoveWindowToDesktop":
             {
                 string process = parameters.Value<string>("name");
                 string desktop = parameters.Value<string>("desktopId");
-                if (!string.IsNullOrEmpty(process) && !string.IsNullOrEmpty(desktop))
+                if (string.IsNullOrEmpty(process) || string.IsNullOrEmpty(desktop))
                 {
-                    string resolvedName = _appRegistry.ResolveProcessName(process);
-                    IntPtr hWnd = _window.FindProcessWindowHandle(resolvedName);
-                    if (hWnd != IntPtr.Zero)
-                    {
-                        _virtualDesktop.MoveWindowToDesktop(hWnd, desktop);
-                    }
+                    return CommandResult.Fail("MoveWindowToDesktop requires name and desktopId");
                 }
-                break;
+
+                string resolvedName = _appRegistry.ResolveProcessName(process);
+                IntPtr hWnd = _window.FindProcessWindowHandle(resolvedName);
+                if (hWnd == IntPtr.Zero)
+                {
+                    return CommandResult.Fail($"Could not find window for '{process}'");
+                }
+
+                _virtualDesktop.MoveWindowToDesktop(hWnd, desktop);
+                return CommandResult.Ok($"Moved {process} to desktop {desktop}");
             }
 
             case "NextDesktop":
                 _virtualDesktop.NextDesktop();
-                break;
+                return CommandResult.Ok("Switched to next desktop");
 
             case "PinWindow":
             {
                 string name = parameters.Value<string>("name");
                 string pinProcess = _appRegistry.ResolveProcessName(name);
                 IntPtr pinHWnd = _window.FindProcessWindowHandle(pinProcess);
-                if (pinHWnd != IntPtr.Zero)
+                if (pinHWnd == IntPtr.Zero)
                 {
-                    _virtualDesktop.PinWindow(pinHWnd);
+                    return CommandResult.Fail($"Could not find window for '{name}'");
                 }
-                else
-                {
-                    _logger.Warning($"The window handle for '{name}' could not be found");
-                }
-                break;
+
+                _virtualDesktop.PinWindow(pinHWnd);
+                return CommandResult.Ok($"Pinned '{name}' to all desktops");
             }
 
             case "PreviousDesktop":
                 _virtualDesktop.PreviousDesktop();
-                break;
+                return CommandResult.Ok("Switched to previous desktop");
 
             case "SwitchDesktop":
             {
                 string desktopId = parameters.Value<string>("desktopId");
                 _virtualDesktop.SwitchDesktop(desktopId);
-                break;
+                return CommandResult.Ok($"Switched to desktop {desktopId}");
             }
+
+            default:
+                return CommandResult.Fail($"Unknown virtual desktop command: {key}");
         }
     }
 }

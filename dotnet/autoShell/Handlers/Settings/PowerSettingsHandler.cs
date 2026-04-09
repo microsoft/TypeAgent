@@ -32,22 +32,24 @@ internal class PowerSettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JObject parameters)
     {
         switch (key)
         {
             case "BatterySaverActivationLevel":
-                HandleBatterySaverThreshold(parameters);
-                break;
+                return HandleBatterySaverThreshold(parameters);
 
             case "SetPowerModeOnBattery":
             case "SetPowerModePluggedIn":
                 _process.StartShellExecute("ms-settings:powersleep");
-                break;
+                return CommandResult.Ok("Opened power settings");
+
+            default:
+                return CommandResult.Fail($"Unknown power command: {key}");
         }
     }
 
-    private void HandleBatterySaverThreshold(JObject parameters)
+    private CommandResult HandleBatterySaverThreshold(JObject parameters)
     {
         int threshold = parameters.Value<int?>("thresholdValue") ?? 20;
         threshold = Math.Clamp(threshold, 0, 100);
@@ -56,5 +58,6 @@ internal class PowerSettingsHandler : ICommandHandler
             "ActivationThreshold",
             threshold,
             RegistryValueKind.DWord);
+        return CommandResult.Ok($"Battery saver threshold set to {threshold}%");
     }
 }

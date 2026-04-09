@@ -44,34 +44,22 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JObject parameters)
     {
-        switch (key)
+        CommandResult result = key switch
         {
-            case "AutoHideTaskbar":
-                HandleAutoHideTaskbar(parameters);
-                break;
-            case "DisplaySecondsInSystrayClock":
-                SetToggle(parameters, "enable", "ShowSecondsInSystemClock");
-                break;
-            case "DisplayTaskbarOnAllMonitors":
-                SetToggle(parameters, "enable", "MMTaskbarEnabled");
-                break;
-            case "ShowBadgesOnTaskbar":
-                SetToggle(parameters, "enableBadging", "TaskbarBadges");
-                break;
-            case "TaskbarAlignment":
-                HandleTaskbarAlignment(parameters);
-                break;
-            case "TaskViewVisibility":
-                SetToggle(parameters, "visibility", "ShowTaskViewButton");
-                break;
-            case "ToggleWidgetsButtonVisibility":
-                SetToggle(parameters, "visibility", "TaskbarDa", trueValue: "show");
-                break;
-        }
+            "AutoHideTaskbar" => HandleAutoHideTaskbar(parameters),
+            "DisplaySecondsInSystrayClock" => SetToggle(parameters, "enable", "ShowSecondsInSystemClock", "Seconds in system clock"),
+            "DisplayTaskbarOnAllMonitors" => SetToggle(parameters, "enable", "MMTaskbarEnabled", "Taskbar on all monitors"),
+            "ShowBadgesOnTaskbar" => SetToggle(parameters, "enableBadging", "TaskbarBadges", "Taskbar badges"),
+            "TaskbarAlignment" => HandleTaskbarAlignment(parameters),
+            "TaskViewVisibility" => SetToggle(parameters, "visibility", "ShowTaskViewButton", "Task View button"),
+            "ToggleWidgetsButtonVisibility" => SetToggle(parameters, "visibility", "TaskbarDa", "Widgets button", trueValue: "show"),
+            _ => CommandResult.Fail($"Unknown taskbar command: {key}"),
+        };
 
         NotifySettingsChange();
+        return result;
     }
 
     private static void NotifySettingsChange()
@@ -86,7 +74,7 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
         }
     }
 
-    private void HandleAutoHideTaskbar(JObject parameters)
+    private CommandResult HandleAutoHideTaskbar(JObject parameters)
     {
         bool hide = parameters.Value<bool>("hideWhenNotUsing");
 
@@ -105,14 +93,17 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
 
             _registry.SetValue(StuckRects3, "Settings", settings, RegistryValueKind.Binary);
         }
+
+        return CommandResult.Ok($"Taskbar auto-hide {(hide ? "enabled" : "disabled")}");
     }
 
-    private void HandleTaskbarAlignment(JObject parameters)
+    private CommandResult HandleTaskbarAlignment(JObject parameters)
     {
         string alignment = parameters.Value<string>("alignment") ?? "center";
         // 0 = left, 1 = center
         bool useCenter = alignment.Equals("center", StringComparison.OrdinalIgnoreCase);
         _registry.SetValue(ExplorerAdvanced, "TaskbarAl", useCenter ? 1 : 0, RegistryValueKind.DWord);
+        return CommandResult.Ok($"Taskbar aligned to {alignment}");
     }
 
     /// <summary>
@@ -120,7 +111,7 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
     /// For bool JSON values, true=1 false=0.
     /// For string JSON values, compares against <paramref name="trueValue"/>.
     /// </summary>
-    private void SetToggle(JObject parameters, string jsonProperty, string registryValue, string trueValue = null)
+    private CommandResult SetToggle(JObject parameters, string jsonProperty, string registryValue, string settingName, string trueValue = null)
     {
         int regValue;
         if (trueValue != null)
@@ -134,5 +125,6 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
         }
 
         _registry.SetValue(ExplorerAdvanced, registryValue, regValue, RegistryValueKind.DWord);
+        return CommandResult.Ok($"{settingName} {(regValue == 1 ? "enabled" : "disabled")}");
     }
 }

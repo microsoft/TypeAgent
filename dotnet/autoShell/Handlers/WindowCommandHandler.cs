@@ -31,7 +31,7 @@ internal class WindowCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JObject parameters)
     {
         switch (key)
         {
@@ -40,7 +40,7 @@ internal class WindowCommandHandler : ICommandHandler
                 string name = parameters.Value<string>("name");
                 string maxProcess = _appRegistry.ResolveProcessName(name);
                 _window.MaximizeWindow(maxProcess);
-                break;
+                return CommandResult.Ok($"Maximized {name}");
             }
 
             case "Minimize":
@@ -48,7 +48,7 @@ internal class WindowCommandHandler : ICommandHandler
                 string name = parameters.Value<string>("name");
                 string minProcess = _appRegistry.ResolveProcessName(name);
                 _window.MinimizeWindow(minProcess);
-                break;
+                return CommandResult.Ok($"Minimized {name}");
             }
 
             case "SwitchTo":
@@ -57,7 +57,7 @@ internal class WindowCommandHandler : ICommandHandler
                 string switchProcess = _appRegistry.ResolveProcessName(name);
                 string path = _appRegistry.GetExecutablePath(name);
                 _window.RaiseWindow(switchProcess, path);
-                break;
+                return CommandResult.Ok($"Switched to {name}");
             }
 
             case "Tile":
@@ -70,9 +70,13 @@ internal class WindowCommandHandler : ICommandHandler
                     string processName1 = _appRegistry.ResolveProcessName(leftName);
                     string processName2 = _appRegistry.ResolveProcessName(rightName);
                     _window.TileWindows(processName1, processName2);
+                    return CommandResult.Ok($"Tiled {leftName} and {rightName}");
                 }
-                break;
+                return CommandResult.Fail("Tile requires both leftWindow and rightWindow");
             }
+
+            default:
+                return CommandResult.Fail($"Unknown window command: {key}");
         }
     }
 }

@@ -73,13 +73,15 @@ internal class AutoShell
             JArray commands = JArray.Parse(cmdLine);
             foreach (JObject jo in commands.Children<JObject>())
             {
-                ExecLine(jo);
+                var result = ExecLine(jo);
+                Console.WriteLine(JsonConvert.SerializeObject(result));
             }
         }
         catch (JsonReaderException)
         {
             // Not an array — treat as a single JSON object
-            ExecLine(JObject.Parse(cmdLine));
+            var result = ExecLine(JObject.Parse(cmdLine));
+            Console.WriteLine(JsonConvert.SerializeObject(result));
         }
     }
 
@@ -90,8 +92,7 @@ internal class AutoShell
     /// </summary>
     private static void RunInteractive()
     {
-        bool quit = false;
-        while (!quit)
+        while (true)
         {
             try
             {
@@ -105,7 +106,16 @@ internal class AutoShell
 
                 // Each line is a JSON object with one or more command keys
                 JObject root = JObject.Parse(line);
-                quit = ExecLine(root);
+                CommandResult result = ExecLine(root);
+
+                // Pass through the request id if present
+                result.Id = root.Value<int?>("id");
+                Console.WriteLine(JsonConvert.SerializeObject(result));
+
+                if (result.IsQuit)
+                {
+                    break;
+                }
             }
             catch (Exception ex)
             {
@@ -146,7 +156,6 @@ internal class AutoShell
     /// <summary>
     /// Dispatches a parsed JSON command object to the appropriate handler.
     /// </summary>
-    /// <returns><c>true</c> if the application should exit (quit command received).</returns>
-    private static bool ExecLine(JObject root)
+    private static CommandResult ExecLine(JObject root)
         => s_dispatcher.Dispatch(root);
 }

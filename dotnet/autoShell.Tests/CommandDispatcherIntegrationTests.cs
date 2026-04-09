@@ -156,14 +156,16 @@ public class CommandDispatcherIntegrationTests
     }
 
     /// <summary>
-    /// Verifies that quit stops processing and returns true.
+    /// Verifies that quit stops processing and returns null.
     /// </summary>
     [Fact]
-    public void Dispatch_Quit_ReturnsTrue()
+    public void Dispatch_Quit_ReturnsQuitResult()
     {
-        bool result = _dispatcher.Dispatch(JObject.Parse("""{"actionName":"quit","parameters":{}}"""));
+        CommandResult result = _dispatcher.Dispatch(JObject.Parse("""{"actionName":"quit","parameters":{}}"""));
 
-        Assert.True(result);
+        Assert.NotNull(result);
+        Assert.True(result.Success);
+        Assert.True(result.IsQuit);
     }
 
     private void Dispatch(string json)

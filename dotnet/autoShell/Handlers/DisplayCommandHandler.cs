@@ -32,20 +32,21 @@ internal class DisplayCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JObject parameters)
     {
         switch (key)
         {
             case "ListResolutions":
                 try
                 {
-                    Console.WriteLine(_display.ListResolutions());
+                    string resolutions = _display.ListResolutions();
+                    return CommandResult.Ok("Listed resolutions", JToken.Parse(resolutions));
                 }
                 catch (Exception ex)
                 {
                     _logger.Error(ex);
+                    return CommandResult.Fail($"Failed to list resolutions: {ex.Message}");
                 }
-                break;
 
             case "SetScreenResolution":
                 try
@@ -54,19 +55,19 @@ internal class DisplayCommandHandler : ICommandHandler
                     uint height = parameters.Value<uint>("height");
                     if (width == 0 || height == 0)
                     {
-                        break;
+                        return CommandResult.Fail("Invalid resolution: width and height required");
                     }
 
                     uint? refreshRate = parameters.Value<uint?>("refreshRate");
 
                     string result = _display.SetResolution(width, height, refreshRate);
-                    Console.WriteLine(result);
+                    return CommandResult.Ok($"Screen resolution set to {width}x{height}", JToken.Parse(result));
                 }
                 catch (Exception ex)
                 {
                     _logger.Error(ex);
+                    return CommandResult.Fail($"Failed to set resolution: {ex.Message}");
                 }
-                break;
 
             case "SetTextSize":
                 try
@@ -74,16 +75,20 @@ internal class DisplayCommandHandler : ICommandHandler
                     int textSizePct = parameters.Value<int?>("size") ?? -1;
                     if (textSizePct < 0)
                     {
-                        break;
+                        return CommandResult.Fail("Invalid text size: size required");
                     }
 
                     _display.SetTextSize(textSizePct);
+                    return CommandResult.Ok($"Text size set to {textSizePct}%");
                 }
                 catch (Exception ex)
                 {
                     _logger.Error(ex);
+                    return CommandResult.Fail($"Failed to set text size: {ex.Message}");
                 }
-                break;
+
+            default:
+                return CommandResult.Fail($"Unknown display command: {key}");
         }
     }
 }

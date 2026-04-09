@@ -89,6 +89,7 @@ internal class CommandDispatcher
 
     /// <summary>
     /// Registers one or more command handlers with the dispatcher.
+    /// Throws if a command name is already registered.
     /// </summary>
     public void Register(params ICommandHandler[] handlers)
     {
@@ -96,7 +97,12 @@ internal class CommandDispatcher
         {
             foreach (string command in handler.SupportedCommands)
             {
-                _handlers[command] = handler;
+                if (!_handlers.TryAdd(command, handler))
+                {
+                    throw new InvalidOperationException(
+                        $"Command '{command}' is already registered by {_handlers[command].GetType().Name}. " +
+                        $"Cannot register again from {handler.GetType().Name}.");
+                }
             }
         }
     }
@@ -105,19 +111,21 @@ internal class CommandDispatcher
     /// Dispatches a command in the format <c>{"actionName":"Volume","parameters":{"targetVolume":50}}</c>
     /// to the appropriate handler.
     /// </summary>
-    /// <returns>True if a "quit" command was encountered; otherwise false.</returns>
-    public bool Dispatch(JObject root)
+    /// <returns>
+    /// A <see cref="CommandResult"/> for the executed command. Check <see cref="CommandResult.IsQuit"/>
+    /// to determine if the caller should exit the interactive loop.
+    /// </returns>
+    public CommandResult Dispatch(JObject root)
     {
         string actionName = root.Value<string>("actionName");
         if (string.IsNullOrEmpty(actionName))
         {
-            _logger.Debug("Missing actionName in command JSON");
-            return false;
+            return CommandResult.Fail("Missing actionName in command JSON");
         }
 
         if (string.Equals(actionName, "quit", StringComparison.OrdinalIgnoreCase))
         {
-            return true;
+            return CommandResult.Quit();
         }
 
         JObject parameters = root["parameters"] as JObject ?? new JObject();
@@ -126,18 +134,17 @@ internal class CommandDispatcher
         {
             if (_handlers.TryGetValue(actionName, out ICommandHandler handler))
             {
-                handler.Handle(actionName, parameters);
+                return handler.Handle(actionName, parameters);
             }
             else
             {
-                _logger.Debug("Unknown action: " + actionName);
+                return CommandResult.Fail($"Unknown action: {actionName}");
             }
         }
         catch (Exception ex)
         {
             _logger.Error(ex);
+            return CommandResult.Fail($"Error executing {actionName}: {ex.Message}");
         }
-
-        return false;
     }
 }

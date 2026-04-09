@@ -38,20 +38,17 @@ internal partial class FileExplorerSettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JObject parameters)
     {
-        switch (key)
+        CommandResult result = key switch
         {
-            case "ShowFileExtensions":
-                HandleShowFileExtensions(parameters);
-                break;
-
-            case "ShowHiddenAndSystemFiles":
-                HandleShowHiddenAndSystemFiles(parameters);
-                break;
-        }
+            "ShowFileExtensions" => HandleShowFileExtensions(parameters),
+            "ShowHiddenAndSystemFiles" => HandleShowHiddenAndSystemFiles(parameters),
+            _ => CommandResult.Fail($"Unknown file explorer command: {key}"),
+        };
 
         NotifySettingsChange();
+        return result;
     }
 
     private static void NotifySettingsChange()
@@ -66,19 +63,21 @@ internal partial class FileExplorerSettingsHandler : ICommandHandler
         }
     }
 
-    private void HandleShowFileExtensions(JObject parameters)
+    private CommandResult HandleShowFileExtensions(JObject parameters)
     {
         bool enable = parameters.Value<bool?>("enable") ?? true;
         // Inverted: enable showing extensions = HideFileExt 0
         _registry.SetValue(ExplorerAdvanced, "HideFileExt", enable ? 0 : 1, RegistryValueKind.DWord);
+        return CommandResult.Ok($"File extensions {(enable ? "shown" : "hidden")}");
     }
 
-    private void HandleShowHiddenAndSystemFiles(JObject parameters)
+    private CommandResult HandleShowHiddenAndSystemFiles(JObject parameters)
     {
         bool enable = parameters.Value<bool?>("enable") ?? true;
         // 1 = show hidden files, 2 = don't show hidden files
         _registry.SetValue(ExplorerAdvanced, "Hidden", enable ? 1 : 2, RegistryValueKind.DWord);
         // Show protected operating system files
         _registry.SetValue(ExplorerAdvanced, "ShowSuperHidden", enable ? 1 : 0, RegistryValueKind.DWord);
+        return CommandResult.Ok($"Hidden files {(enable ? "shown" : "hidden")}");
     }
 }

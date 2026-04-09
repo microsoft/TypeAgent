@@ -39,44 +39,47 @@ internal class NetworkCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JObject parameters)
     {
         switch (key)
         {
             case "BluetoothToggle":
                 bool enableBt = parameters.Value<bool?>("enableBluetooth") ?? true;
                 _network.ToggleBluetooth(enableBt);
-                break;
+                return CommandResult.Ok($"Bluetooth {(enableBt ? "enabled" : "disabled")}");
 
             case "EnableMeteredConnections":
                 _process.StartShellExecute("ms-settings:network-status");
-                break;
+                return CommandResult.Ok("Opened metered connections settings");
 
             case "EnableWifi":
                 bool enableWifi = parameters.Value<bool?>("enable") ?? true;
                 _network.EnableWifi(enableWifi);
-                break;
+                return CommandResult.Ok($"WiFi {(enableWifi ? "enabled" : "disabled")}");
 
             case "ConnectWifi":
                 string ssid = parameters.Value<string>("ssid");
                 string password = parameters["password"] is not null ? parameters.Value<string>("password") : "";
                 _network.ConnectToWifi(ssid, password);
-                break;
+                return CommandResult.Ok($"Connecting to WiFi network '{ssid}'");
 
             case "DisconnectWifi":
                 _network.DisconnectFromWifi();
-                break;
+                return CommandResult.Ok("Disconnected from WiFi");
 
             case "ListWifiNetworks":
-                Console.WriteLine(_network.ListWifiNetworks());
-                break;
+                string networks = _network.ListWifiNetworks();
+                return CommandResult.Ok("Listed WiFi networks", JToken.Parse(networks));
 
             case "ToggleAirplaneMode":
             {
                 bool airplaneMode = parameters.Value<bool?>("enable") ?? false;
                 _network.SetAirplaneMode(airplaneMode);
-                break;
+                return CommandResult.Ok($"Airplane mode {(airplaneMode ? "enabled" : "disabled")}");
             }
+
+            default:
+                return CommandResult.Fail($"Unknown network command: {key}");
         }
     }
 }

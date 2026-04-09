@@ -8,7 +8,6 @@ using System.Runtime.InteropServices;
 using autoShell.Services;
 using autoShell.Services.Interop;
 using Microsoft.Win32;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers;
@@ -65,32 +64,39 @@ internal partial class ThemeCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public void Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JObject parameters)
     {
         switch (key)
         {
             case "ApplyTheme":
-                ApplyTheme(parameters.Value<string>("filePath"));
-                break;
-
+            {
+                string themeName = parameters.Value<string>("filePath");
+                bool success = ApplyTheme(themeName);
+                return success
+                    ? CommandResult.Ok($"Applied theme '{themeName}'")
+                    : CommandResult.Fail($"Failed to apply theme '{themeName}'");
+            }
+             
             case "ListThemes":
                 var themes = GetInstalledThemes();
-                Console.WriteLine(JsonConvert.SerializeObject(themes));
-                break;
+                return CommandResult.Ok("Listed themes", JToken.FromObject(themes));
 
             case "SetThemeMode":
             {
                 string mode = parameters.Value<string>("mode");
                 HandleSetThemeMode(mode);
-                break;
+                return CommandResult.Ok($"Theme mode set to '{mode}'");
             }
 
             case "SetWallpaper":
             {
                 string filePath = parameters.Value<string>("filePath");
                 _systemParams.SetParameter(SPI_SETDESKWALLPAPER, 0, filePath, SPIF_UPDATEINIFILE_SENDCHANGE);
-                break;
+                return CommandResult.Ok($"Wallpaper set to '{filePath}'");
             }
+
+            default:
+                return CommandResult.Fail($"Unknown theme command: {key}");
         }
     }
 
