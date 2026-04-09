@@ -11,7 +11,8 @@ export type CreateDiagramAction = {
     parameters: {
         // the original request from the user
         originalRequest: string;
-        // the source content to convert into a diagram (text, markdown, Visio XML, etc.)
+        // the source content to convert into a diagram — either raw text/markdown/XML,
+        // or a file path (absolute or relative) whose contents will be read automatically
         sourceContent: string;
         // the type of the source content
         sourceType:
