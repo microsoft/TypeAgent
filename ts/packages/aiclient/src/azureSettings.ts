@@ -188,7 +188,7 @@ function azureVideoApiSettingsFromEnv(
         modelType: ModelType.Image,
         apiKey: getEnvSetting(
             env,
-            EnvVars.AZURE_OPENAI_API_KEY_SORA,
+            EnvVars.AZURE_OPENAI_API_KEY_SORA_2,
             endpointName,
             "identity",
         ),

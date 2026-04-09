@@ -472,6 +472,18 @@
                 "value": "<REPLACE WITH YOUR SORA API KEY>"
               }
             },
+            "secrets_sora_2_key": {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2024-12-01-preview",
+              "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-API-KEY-SORA-2')]",
+              "dependsOn": ["vault"],
+              "properties": {
+                "attributes": {
+                  "enabled": true
+                },
+                "value": "<REPLACE WITH YOUR SORA-2 API KEY>"
+              }
+            },
             "secrets_sora_2_endpoint": {
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
