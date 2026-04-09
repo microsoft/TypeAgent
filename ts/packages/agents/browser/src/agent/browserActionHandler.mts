@@ -28,7 +28,10 @@ import {
     displaySuccess,
     getMessage,
 } from "@typeagent/agent-sdk/helpers/display";
-import { BrowserClient } from "./agentWebSocketServer.mjs";
+import {
+    AgentWebSocketServer,
+    BrowserClient,
+} from "./agentWebSocketServer.mjs";
 import { extractPageComponent } from "./componentExtractor.mjs";
 import { extractCrosswordSchema } from "./crosswordSchemaExtractor.mjs";
 import { createTabTitleIndex } from "./tabTitleIndex.mjs";
@@ -134,6 +137,9 @@ const debugClientRouting = registerDebug("typeagent:browser:client-routing");
 // Module-level reference to WebFlowStore for getDynamicGrammar/getDynamicSchema callbacks
 let _webFlowStore: any | undefined;
 let _webFlowStoreInitializing: Promise<void> | undefined;
+
+// Module-level singleton — one WebSocket server per agent process, shared across all session contexts.
+const _agentWebSocketServer = new AgentWebSocketServer(8081);
 
 // Track retry counts for dynamic display requests
 const dynamicDisplayRetryCounters = new Map<string, number>();
@@ -309,6 +315,7 @@ async function initializeBrowserContext(
             clientBrowserControl === undefined ? "extension" : "electron",
         index: undefined,
         localHostPort,
+        agentWebSocketServer: _agentWebSocketServer,
         resolverSettings: {
             searchResolver: true,
             keywordResolver: true,
@@ -384,82 +391,82 @@ async function updateBrowserContext(
         }
 
         if (!context.agentContext.agentWebSocketServer) {
-            const { AgentWebSocketServer } = await import(
-                "./agentWebSocketServer.mjs"
+            throw new Error(
+                "AgentWebSocketServer not initialized in browser context.",
             );
-            context.agentContext.agentWebSocketServer =
-                new AgentWebSocketServer(8081);
-
-            // Register agentRpc invoke handlers for channel-multiplexed messages
-            context.agentContext.agentWebSocketServer.setAgentInvokeHandlers(
-                createAgentInvokeHandlers(context),
-            );
-
-            context.agentContext.agentWebSocketServer.getPreferredClientType =
-                () => {
-                    return context.agentContext.preferredClientType;
-                };
-
-            context.agentContext.agentWebSocketServer.onClientConnected = (
-                client: BrowserClient,
-            ) => {
-                // Recreate externalBrowserControl when a new extension client connects
-                if (client.type === "extension") {
-                    debug(
-                        `Extension client connected: ${client.id}, recreating externalBrowserControl`,
-                    );
-
-                    // Dispose old RPC instance to prevent handler chaining
-                    if (context.agentContext.externalBrowserControl) {
-                        context.agentContext.externalBrowserControl.dispose();
-                    }
-
-                    context.agentContext.externalBrowserControl =
-                        createExternalBrowserClient(
-                            context.agentContext.agentWebSocketServer!,
-                        );
-                }
-            };
-
-            context.agentContext.agentWebSocketServer.onClientDisconnected = (
-                client: BrowserClient,
-            ) => {
-                // Log disconnection for debugging
-                if (client.type === "extension") {
-                    debug(`Extension client disconnected: ${client.id}`);
-                }
-            };
-
-            context.agentContext.agentWebSocketServer.onWebAgentMessage =
-                async (client: BrowserClient, data: any) => {
-                    // Check for built-in RPC requests (crossword, commerce, etc.)
-                    if (
-                        data.method === "webAgent/message" &&
-                        isBuiltInWebAgentRpcRequest(data.params)
-                    ) {
-                        const { id, method, params } = data.params;
-                        const result = await handleWebAgentRpc(
-                            method,
-                            params,
-                            context,
-                            client.id,
-                        );
-
-                        const response: BuiltInWebAgentRpcResponse = {
-                            source: "dispatcher",
-                            method: "webAgent/message",
-                            type: "builtInRpcResponse",
-                            id,
-                            ...result,
-                        };
-
-                        client.socket.send(JSON.stringify(response));
-                        return;
-                    }
-
-                    await processWebAgentMessage(data, context);
-                };
         }
+
+        // Register agentRpc invoke handlers for channel-multiplexed messages
+        context.agentContext.agentWebSocketServer.setAgentInvokeHandlers(
+            createAgentInvokeHandlers(context),
+        );
+
+        context.agentContext.agentWebSocketServer.getPreferredClientType =
+            () => {
+                return context.agentContext.preferredClientType;
+            };
+
+        context.agentContext.agentWebSocketServer.onClientConnected = (
+            client: BrowserClient,
+        ) => {
+            // Recreate externalBrowserControl when a new extension client connects
+            if (client.type === "extension") {
+                debug(
+                    `Extension client connected: ${client.id}, recreating externalBrowserControl`,
+                );
+
+                // Dispose old RPC instance to prevent handler chaining
+                if (context.agentContext.externalBrowserControl) {
+                    context.agentContext.externalBrowserControl.dispose();
+                }
+
+                context.agentContext.externalBrowserControl =
+                    createExternalBrowserClient(
+                        context.agentContext.agentWebSocketServer!,
+                    );
+            }
+        };
+
+        context.agentContext.agentWebSocketServer.onClientDisconnected = (
+            client: BrowserClient,
+        ) => {
+            // Log disconnection for debugging
+            if (client.type === "extension") {
+                debug(`Extension client disconnected: ${client.id}`);
+            }
+        };
+
+        context.agentContext.agentWebSocketServer.onWebAgentMessage = async (
+            client: BrowserClient,
+            data: any,
+        ) => {
+            // Check for built-in RPC requests (crossword, commerce, etc.)
+            if (
+                data.method === "webAgent/message" &&
+                isBuiltInWebAgentRpcRequest(data.params)
+            ) {
+                const { id, method, params } = data.params;
+                const result = await handleWebAgentRpc(
+                    method,
+                    params,
+                    context,
+                    client.id,
+                );
+
+                const response: BuiltInWebAgentRpcResponse = {
+                    source: "dispatcher",
+                    method: "webAgent/message",
+                    type: "builtInRpcResponse",
+                    id,
+                    ...result,
+                };
+
+                client.socket.send(JSON.stringify(response));
+                return;
+            }
+
+            await processWebAgentMessage(data, context);
+        };
 
         // Initialize external browser control using the AgentWebSocketServer
         if (
@@ -525,11 +532,6 @@ async function updateBrowserContext(
             }
         }
     } else {
-        if (context.agentContext.agentWebSocketServer) {
-            context.agentContext.agentWebSocketServer.stop();
-            delete context.agentContext.agentWebSocketServer;
-        }
-
         // shut down service
         if (context.agentContext.browserProcess) {
             context.agentContext.browserProcess.kill();
