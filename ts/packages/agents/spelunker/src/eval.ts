@@ -31,7 +31,8 @@ try {
     CONFIG = JSON.parse(
         fs.readFileSync(CONFIG_FILE, "utf-8"),
     ) as ConfigRecord;
-} catch {
+} catch (error) {
+    console_log(`[eval-config.json not found or invalid, using default config: ${error}]`);
     CONFIG = {
         evalFolder: "evals/eval-2",
         questionId: 2,

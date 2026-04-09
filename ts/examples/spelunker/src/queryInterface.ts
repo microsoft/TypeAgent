@@ -916,7 +916,7 @@ async function findRecentAnswers(
     for (let i = 0; i < recentAnswers.length; i++) {
         totalSize += JSON.stringify(recentAnswers[i]).length;
         if (totalSize > maxTotalSize) {
-            cutoff = i + 1;
+            cutoff = i;
             break;
         }
     }
