@@ -223,8 +223,16 @@ export class ChatView {
                 this.chatInput.textarea,
                 this.getDispatcher(),
                 this.partialCompletionInline,
+                () => this.toggleCompletionMode(),
             );
         }
+    }
+
+    private toggleCompletionMode() {
+        const newInline = !this.partialCompletionInline;
+        this.partialCompletionInline = newInline;
+        this.partialCompletion?.switchMode(newInline);
+        this._settingsView?.setInlineCompletions(newInline);
     }
 
     public enablePartialInput(enabled: boolean, inline: boolean) {

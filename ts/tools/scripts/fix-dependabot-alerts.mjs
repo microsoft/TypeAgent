@@ -2956,7 +2956,8 @@ async function main() {
     // Ensure node_modules matches the lockfile — pnpm why reads from the
     // installed virtual store, not the lockfile itself.
     if (!SKIP_INSTALL) {
-        if (!JSON_OUTPUT) console.log("Running pnpm install --frozen-lockfile …");
+        if (!JSON_OUTPUT)
+            console.log("Running pnpm install --frozen-lockfile …");
         runCmd("pnpm", ["install", "--frozen-lockfile"]);
     }
 
