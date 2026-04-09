@@ -57,6 +57,7 @@ async function importPythonFiles(
     chunkyIndex: ChunkyIndex,
     io: iapp.InteractiveIo | undefined,
     verbose = false,
+    concurrency = 8,
 ): Promise<void> {
     // Canonicalize filenames.
     let filenames = files.map((file) =>
@@ -125,7 +126,7 @@ async function importPythonFiles(
 
     const tt0 = Date.now();
     const documentedFiles: FileDocumentation[] = [];
-    const concurrency = 8; // TODO: Make this a function argument
+
     let nChunks = 0;
     await asyncArray.forEachAsync(
         chunkedFiles,
@@ -299,7 +300,4 @@ async function exponentialBackoff<T extends any[], R>(
     }
 }
 
-// Apply URL escaping to key. NOTE: Currently unused. TODO: Therefore remove.
-export function sanitizeKey(key: string): string {
-    return encodeURIComponent(key).replace(/%20/g, "+"); // Encode spaces as plus, others as %xx.
-}
+
