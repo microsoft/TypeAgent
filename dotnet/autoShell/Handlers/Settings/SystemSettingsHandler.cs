@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 using System.Collections.Generic;
+using System.Text.Json;
 using autoShell.Logging;
 using autoShell.Services;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers.Settings;
 
@@ -36,7 +36,7 @@ internal class SystemSettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JsonElement parameters)
     {
         switch (key)
         {
@@ -65,10 +65,10 @@ internal class SystemSettingsHandler : ICommandHandler
         }
     }
 
-    private CommandResult HandleAutomaticDSTAdjustment(JObject parameters)
+    private CommandResult HandleAutomaticDSTAdjustment(JsonElement parameters)
     {
 
-        bool enable = parameters.Value<bool?>("enable") ?? true;
+        bool enable = parameters.GetBoolOrDefault("enable", true);
 
         _registry.SetValueLocalMachine(
             @"SYSTEM\CurrentControlSet\Control\TimeZoneInformation",

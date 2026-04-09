@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Collections.Generic;
-using Newtonsoft.Json.Linq;
+using System.Text.Json;
 
 namespace autoShell.Handlers;
 
@@ -20,7 +20,7 @@ internal interface ICommandHandler
     /// Handles the command identified by <paramref name="key"/>.
     /// </summary>
     /// <param name="key">The command key (action name).</param>
-    /// <param name="parameters">The action parameters as a JObject.</param>
+    /// <param name="parameters">The action parameters as a read-only JsonElement.</param>
     /// <returns>A <see cref="CommandResult"/> describing the outcome.</returns>
-    CommandResult Handle(string key, JObject parameters);
+    CommandResult Handle(string key, JsonElement parameters);
 }

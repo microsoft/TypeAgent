@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 using System.Collections.Generic;
+using System.Text.Json;
 using autoShell.Services;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers;
 
@@ -31,13 +31,13 @@ internal class WindowCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JsonElement parameters)
     {
         switch (key)
         {
             case "Maximize":
             {
-                string name = parameters.Value<string>("name");
+                string name = parameters.GetStringOrDefault("name");
                 string maxProcess = _appRegistry.ResolveProcessName(name);
                 _window.MaximizeWindow(maxProcess);
                 return CommandResult.Ok($"Maximized {name}");
@@ -45,7 +45,7 @@ internal class WindowCommandHandler : ICommandHandler
 
             case "Minimize":
             {
-                string name = parameters.Value<string>("name");
+                string name = parameters.GetStringOrDefault("name");
                 string minProcess = _appRegistry.ResolveProcessName(name);
                 _window.MinimizeWindow(minProcess);
                 return CommandResult.Ok($"Minimized {name}");
@@ -53,7 +53,7 @@ internal class WindowCommandHandler : ICommandHandler
 
             case "SwitchTo":
             {
-                string name = parameters.Value<string>("name");
+                string name = parameters.GetStringOrDefault("name");
                 string switchProcess = _appRegistry.ResolveProcessName(name);
                 string path = _appRegistry.GetExecutablePath(name);
                 _window.RaiseWindow(switchProcess, path);
@@ -62,8 +62,8 @@ internal class WindowCommandHandler : ICommandHandler
 
             case "Tile":
             {
-                string leftName = parameters.Value<string>("leftWindow");
-                string rightName = parameters.Value<string>("rightWindow");
+                string leftName = parameters.GetStringOrDefault("leftWindow");
+                string rightName = parameters.GetStringOrDefault("rightWindow");
 
                 if (leftName != null && rightName != null)
                 {

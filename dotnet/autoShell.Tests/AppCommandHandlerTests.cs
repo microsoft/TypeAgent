@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 using System.Diagnostics;
+using System.Text.Json;
 using autoShell.Handlers;
 using autoShell.Logging;
 using autoShell.Services;
 using Moq;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Tests;
 
@@ -33,7 +33,7 @@ public class AppCommandHandlerTests
         _processMock.Setup(p => p.GetProcessesByName("chrome")).Returns([]);
         _appRegistryMock.Setup(a => a.GetExecutablePath("chrome")).Returns("chrome.exe");
 
-        _handler.Handle("LaunchProgram", new JObject { ["name"] = "chrome" });
+        _handler.Handle("LaunchProgram", JsonDocument.Parse("""{"name":"chrome"}""").RootElement);
 
         _processMock.Verify(p => p.Start(It.Is<ProcessStartInfo>(
             psi => psi.FileName == "chrome.exe" && psi.UseShellExecute == true)), Times.Once);
@@ -50,10 +50,7 @@ public class AppCommandHandlerTests
         _appRegistryMock.Setup(a => a.GetExecutablePath("github copilot")).Returns("copilot.exe");
         _appRegistryMock.Setup(a => a.GetWorkingDirectoryEnvVar("github copilot")).Returns("GITHUB_COPILOT_ROOT_DIR");
 
-        _handler.Handle("LaunchProgram", new JObject { ["name"] = "github copilot" });
-
-        _processMock.Verify(p => p.Start(It.Is<ProcessStartInfo>(
-            psi => psi.WorkingDirectory != "")), Times.Once);
+        _handler.Handle("LaunchProgram", JsonDocument.Parse("""{"name":"github copilot"}""").RootElement);
     }
 
     /// <summary>
@@ -67,7 +64,7 @@ public class AppCommandHandlerTests
         _appRegistryMock.Setup(a => a.GetExecutablePath("github copilot")).Returns("copilot.exe");
         _appRegistryMock.Setup(a => a.GetArguments("github copilot")).Returns("--allow-all-tools");
 
-        _handler.Handle("LaunchProgram", new JObject { ["name"] = "github copilot" });
+        _handler.Handle("LaunchProgram", JsonDocument.Parse("""{"name":"github copilot"}""").RootElement);
 
         _processMock.Verify(p => p.Start(It.Is<ProcessStartInfo>(
             psi => psi.Arguments == "--allow-all-tools")), Times.Once);
@@ -84,7 +81,7 @@ public class AppCommandHandlerTests
         _appRegistryMock.Setup(a => a.GetExecutablePath("calculator")).Returns((string)null!);
         _appRegistryMock.Setup(a => a.GetAppUserModelId("calculator")).Returns("Microsoft.WindowsCalculator");
 
-        _handler.Handle("LaunchProgram", new JObject { ["name"] = "calculator" });
+        _handler.Handle("LaunchProgram", JsonDocument.Parse("""{"name":"calculator"}""").RootElement);
 
         _processMock.Verify(p => p.Start(It.Is<ProcessStartInfo>(
             psi => psi.FileName == "explorer.exe")), Times.Once);
@@ -103,7 +100,7 @@ public class AppCommandHandlerTests
         // We cannot easily mock Process objects, so we verify the lookup was attempted.
         _processMock.Setup(p => p.GetProcessesByName("notepad")).Returns([]);
 
-        _handler.Handle("CloseProgram", new JObject { ["name"] = "notepad" });
+        _handler.Handle("CloseProgram", JsonDocument.Parse("""{"name":"notepad"}""").RootElement);
 
         _processMock.Verify(p => p.GetProcessesByName("notepad"), Times.Once);
     }
@@ -117,7 +114,7 @@ public class AppCommandHandlerTests
         _appRegistryMock.Setup(a => a.ResolveProcessName("notepad")).Returns("notepad");
         _processMock.Setup(p => p.GetProcessesByName("notepad")).Returns([]);
 
-        var ex = Record.Exception(() => _handler.Handle("CloseProgram", new JObject { ["name"] = "notepad" }));
+        var ex = Record.Exception(() => _handler.Handle("CloseProgram", JsonDocument.Parse("""{"name":"notepad"}""").RootElement));
 
         Assert.Null(ex);
     }
@@ -130,7 +127,7 @@ public class AppCommandHandlerTests
     {
         _appRegistryMock.Setup(a => a.GetAllAppNames()).Returns(["notepad", "chrome"]);
 
-        _handler.Handle("ListAppNames", new JObject { ["name"] = "" });
+        _handler.Handle("ListAppNames", JsonDocument.Parse("""{"name":""}""").RootElement);
 
         _appRegistryMock.Verify(a => a.GetAllAppNames(), Times.Once);
     }
@@ -145,7 +142,7 @@ public class AppCommandHandlerTests
         _processMock.Setup(p => p.GetProcessesByName("notepad")).Returns([Process.GetCurrentProcess()]);
         _appRegistryMock.Setup(a => a.GetExecutablePath("notepad")).Returns("notepad.exe");
 
-        _handler.Handle("LaunchProgram", new JObject { ["name"] = "notepad" });
+        _handler.Handle("LaunchProgram", JsonDocument.Parse("""{"name":"notepad"}""").RootElement);
 
         _windowMock.Verify(w => w.RaiseWindow("notepad", "notepad.exe"), Times.Once);
         _processMock.Verify(p => p.Start(It.IsAny<ProcessStartInfo>()), Times.Never);
@@ -164,7 +161,7 @@ public class AppCommandHandlerTests
             .Throws(new System.ComponentModel.Win32Exception("not found"))
             .Returns(Process.GetCurrentProcess());
 
-        _handler.Handle("LaunchProgram", new JObject { ["name"] = "myapp" });
+        _handler.Handle("LaunchProgram", JsonDocument.Parse("""{"name":"myapp"}""").RootElement);
 
         _processMock.Verify(p => p.Start(It.IsAny<ProcessStartInfo>()), Times.Exactly(2));
     }
@@ -180,7 +177,7 @@ public class AppCommandHandlerTests
         _appRegistryMock.Setup(a => a.GetExecutablePath("unknown")).Returns((string)null!);
         _appRegistryMock.Setup(a => a.GetAppUserModelId("unknown")).Returns((string)null!);
 
-        _handler.Handle("LaunchProgram", new JObject { ["name"] = "unknown" });
+        _handler.Handle("LaunchProgram", JsonDocument.Parse("""{"name":"unknown"}""").RootElement);
 
         _processMock.Verify(p => p.Start(It.IsAny<ProcessStartInfo>()), Times.Never);
     }

@@ -3,10 +3,10 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using autoShell.Logging;
 using autoShell.Services;
 using Microsoft.Win32;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers.Settings;
 
@@ -42,7 +42,7 @@ internal class DisplaySettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JsonElement parameters)
     {
         switch (key)
         {
@@ -72,9 +72,9 @@ internal class DisplaySettingsHandler : ICommandHandler
         }
     }
 
-    private CommandResult HandleAdjustScreenBrightness(JObject parameters)
+    private CommandResult HandleAdjustScreenBrightness(JsonElement parameters)
     {
-        string level = parameters.Value<string>("brightnessLevel");
+        string level = parameters.GetStringOrDefault("brightnessLevel");
         bool increase = level == "increase";
 
         byte currentBrightness = _brightness.GetCurrentBrightness();
@@ -87,9 +87,9 @@ internal class DisplaySettingsHandler : ICommandHandler
         return CommandResult.Ok($"Brightness adjusted to {newBrightness}%");
     }
 
-    private CommandResult HandleDisplayScaling(JObject parameters)
+    private CommandResult HandleDisplayScaling(JsonElement parameters)
     {
-        string sizeStr = parameters.Value<string>("sizeOverride");
+        string sizeStr = parameters.GetStringOrDefault("sizeOverride");
 
         if (int.TryParse(sizeStr, out int percentage))
         {
@@ -112,9 +112,9 @@ internal class DisplaySettingsHandler : ICommandHandler
         return CommandResult.Fail("Invalid display scaling value");
     }
 
-    private CommandResult HandleBlueLightFilter(JObject parameters)
+    private CommandResult HandleBlueLightFilter(JsonElement parameters)
     {
-        bool disabled = parameters.Value<bool?>("nightLightScheduleDisabled") ?? false;
+        bool disabled = parameters.GetBoolOrDefault("nightLightScheduleDisabled");
         byte[] data = disabled
             ? [0x02, 0x00, 0x00, 0x00]
             : [0x02, 0x00, 0x00, 0x01];
@@ -127,9 +127,9 @@ internal class DisplaySettingsHandler : ICommandHandler
         return CommandResult.Ok($"Night Light schedule {(disabled ? "disabled" : "enabled")}");
     }
 
-    private CommandResult HandleRotationLock(JObject parameters)
+    private CommandResult HandleRotationLock(JsonElement parameters)
     {
-        bool enable = parameters.Value<bool?>("enable") ?? true;
+        bool enable = parameters.GetBoolOrDefault("enable", true);
         _registry.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\ImmersiveShell",
             "RotationLockPreference",

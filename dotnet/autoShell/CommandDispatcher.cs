@@ -3,11 +3,11 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using autoShell.Handlers;
 using autoShell.Handlers.Settings;
 using autoShell.Logging;
 using autoShell.Services;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell;
 
@@ -115,9 +115,11 @@ internal class CommandDispatcher
     /// A <see cref="CommandResult"/> for the executed command. Check <see cref="CommandResult.IsQuit"/>
     /// to determine if the caller should exit the interactive loop.
     /// </returns>
-    public CommandResult Dispatch(JObject root)
+    public CommandResult Dispatch(JsonElement root)
     {
-        string actionName = root.Value<string>("actionName");
+        string actionName = root.TryGetProperty("actionName", out JsonElement actionNameElement)
+            ? actionNameElement.GetString()
+            : null;
         if (string.IsNullOrEmpty(actionName))
         {
             return CommandResult.Fail("Missing actionName in command JSON");
@@ -128,18 +130,15 @@ internal class CommandDispatcher
             return CommandResult.Quit();
         }
 
-        JObject parameters = root["parameters"] as JObject ?? new JObject();
+        JsonElement parameters = root.TryGetProperty("parameters", out JsonElement p)
+            ? p
+            : default;
 
         try
         {
-            if (_handlers.TryGetValue(actionName, out ICommandHandler handler))
-            {
-                return handler.Handle(actionName, parameters);
-            }
-            else
-            {
-                return CommandResult.Fail($"Unknown action: {actionName}");
-            }
+            return _handlers.TryGetValue(actionName, out ICommandHandler handler)
+                ? handler.Handle(actionName, parameters)
+                : CommandResult.Fail($"Unknown action: {actionName}");
         }
         catch (Exception ex)
         {

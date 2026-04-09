@@ -1,11 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.Json;
 using autoShell.Handlers;
 using autoShell.Services;
 using Microsoft.Win32;
 using Moq;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Tests;
 
@@ -28,7 +28,7 @@ public class ThemeCommandHandlerTests
     [Fact]
     public void SetWallpaper_CallsSetParameter()
     {
-        _handler.Handle("SetWallpaper", new JObject { ["filePath"] = @"C:\wallpaper.jpg" });
+        _handler.Handle("SetWallpaper", JsonDocument.Parse("""{"filePath":"C:\\wallpaper.jpg"}""").RootElement);
 
         _systemParamsMock.Verify(s => s.SetParameter(
             0x0014, 0, @"C:\wallpaper.jpg", 3), Times.Once);
@@ -40,7 +40,7 @@ public class ThemeCommandHandlerTests
     [Fact]
     public void SetThemeMode_Dark_WritesRegistryValues()
     {
-        _handler.Handle("SetThemeMode", new JObject { ["mode"] = "dark" });
+        _handler.Handle("SetThemeMode", JsonDocument.Parse("""{"mode":"dark"}""").RootElement);
 
         const string Path = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
         _registryMock.Verify(r => r.SetValue(Path, "AppsUseLightTheme", 0, RegistryValueKind.DWord), Times.Once);
@@ -53,7 +53,7 @@ public class ThemeCommandHandlerTests
     [Fact]
     public void SetThemeMode_Light_WritesRegistryValues()
     {
-        _handler.Handle("SetThemeMode", new JObject { ["mode"] = "light" });
+        _handler.Handle("SetThemeMode", JsonDocument.Parse("""{"mode":"light"}""").RootElement);
 
         const string Path = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
         _registryMock.Verify(r => r.SetValue(Path, "AppsUseLightTheme", 1, RegistryValueKind.DWord), Times.Once);
@@ -66,7 +66,7 @@ public class ThemeCommandHandlerTests
     [Fact]
     public void ApplyTheme_UnknownTheme_DoesNotCallProcess()
     {
-        _handler.Handle("ApplyTheme", new JObject { ["filePath"] = "nonexistent_theme_xyz_12345" });
+        _handler.Handle("ApplyTheme", JsonDocument.Parse("""{"filePath":"nonexistent_theme_xyz_12345"}""").RootElement);
 
         _processMock.Verify(p => p.StartShellExecute(It.IsAny<string>()), Times.Never);
     }
@@ -77,7 +77,7 @@ public class ThemeCommandHandlerTests
     [Fact]
     public void ListThemes_ReturnsWithoutError()
     {
-        var ex = Record.Exception(() => _handler.Handle("ListThemes", new JObject()));
+        var ex = Record.Exception(() => _handler.Handle("ListThemes", JsonDocument.Parse("{}").RootElement));
 
         Assert.Null(ex);
     }
@@ -92,7 +92,7 @@ public class ThemeCommandHandlerTests
         // Current mode is light (1), so toggle should set dark (0)
         _registryMock.Setup(r => r.GetValue(Path, "AppsUseLightTheme", null)).Returns(1);
 
-        _handler.Handle("SetThemeMode", new JObject { ["mode"] = "toggle" });
+        _handler.Handle("SetThemeMode", JsonDocument.Parse("""{"mode":"toggle"}""").RootElement);
 
         _registryMock.Verify(r => r.GetValue(Path, "AppsUseLightTheme", null), Times.Once);
         _registryMock.Verify(r => r.SetValue(Path, "AppsUseLightTheme", 0, RegistryValueKind.DWord), Times.Once);
@@ -105,7 +105,7 @@ public class ThemeCommandHandlerTests
     [Fact]
     public void SetThemeMode_BoolTrue_SetsLightMode()
     {
-        _handler.Handle("SetThemeMode", new JObject { ["mode"] = "true" });
+        _handler.Handle("SetThemeMode", JsonDocument.Parse("""{"mode":"true"}""").RootElement);
 
         const string Path = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
         _registryMock.Verify(r => r.SetValue(Path, "AppsUseLightTheme", 1, RegistryValueKind.DWord), Times.Once);
@@ -117,7 +117,7 @@ public class ThemeCommandHandlerTests
     [Fact]
     public void SetThemeMode_BoolFalse_SetsDarkMode()
     {
-        _handler.Handle("SetThemeMode", new JObject { ["mode"] = "false" });
+        _handler.Handle("SetThemeMode", JsonDocument.Parse("""{"mode":"false"}""").RootElement);
 
         const string Path = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
         _registryMock.Verify(r => r.SetValue(Path, "AppsUseLightTheme", 0, RegistryValueKind.DWord), Times.Once);
@@ -129,7 +129,7 @@ public class ThemeCommandHandlerTests
     [Fact]
     public void SetThemeMode_InvalidValue_DoesNothing()
     {
-        _handler.Handle("SetThemeMode", new JObject { ["mode"] = "invalidvalue" });
+        _handler.Handle("SetThemeMode", JsonDocument.Parse("""{"mode":"invalidvalue"}""").RootElement);
 
         _registryMock.Verify(r => r.SetValue(
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<object>(), It.IsAny<RegistryValueKind>()), Times.Never);
@@ -142,7 +142,7 @@ public class ThemeCommandHandlerTests
     public void ApplyTheme_Previous_RevertsToPreviousTheme()
     {
         // Applying "previous" with no previous theme should not call StartShellExecute
-        _handler.Handle("ApplyTheme", new JObject { ["filePath"] = "previous" });
+        _handler.Handle("ApplyTheme", JsonDocument.Parse("""{"filePath":"previous"}""").RootElement);
 
         _processMock.Verify(p => p.StartShellExecute(It.IsAny<string>()), Times.Never);
     }

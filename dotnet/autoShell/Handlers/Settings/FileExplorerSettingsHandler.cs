@@ -4,10 +4,10 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using autoShell.Services;
 using autoShell.Services.Interop;
 using Microsoft.Win32;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers.Settings;
 
@@ -38,7 +38,7 @@ internal partial class FileExplorerSettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JsonElement parameters)
     {
         CommandResult result = key switch
         {
@@ -63,17 +63,17 @@ internal partial class FileExplorerSettingsHandler : ICommandHandler
         }
     }
 
-    private CommandResult HandleShowFileExtensions(JObject parameters)
+    private CommandResult HandleShowFileExtensions(JsonElement parameters)
     {
-        bool enable = parameters.Value<bool?>("enable") ?? true;
+        bool enable = parameters.GetBoolOrDefault("enable", true);
         // Inverted: enable showing extensions = HideFileExt 0
         _registry.SetValue(ExplorerAdvanced, "HideFileExt", enable ? 0 : 1, RegistryValueKind.DWord);
         return CommandResult.Ok($"File extensions {(enable ? "shown" : "hidden")}");
     }
 
-    private CommandResult HandleShowHiddenAndSystemFiles(JObject parameters)
+    private CommandResult HandleShowHiddenAndSystemFiles(JsonElement parameters)
     {
-        bool enable = parameters.Value<bool?>("enable") ?? true;
+        bool enable = parameters.GetBoolOrDefault("enable", true);
         // 1 = show hidden files, 2 = don't show hidden files
         _registry.SetValue(ExplorerAdvanced, "Hidden", enable ? 1 : 2, RegistryValueKind.DWord);
         // Show protected operating system files

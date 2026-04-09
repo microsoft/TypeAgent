@@ -5,10 +5,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using autoShell.Services;
 using autoShell.Services.Interop;
 using Microsoft.Win32;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers;
 
@@ -64,33 +64,33 @@ internal partial class ThemeCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JsonElement parameters)
     {
         switch (key)
         {
             case "ApplyTheme":
             {
-                string themeName = parameters.Value<string>("filePath");
+                string themeName = parameters.GetStringOrDefault("filePath");
                 bool success = ApplyTheme(themeName);
                 return success
                     ? CommandResult.Ok($"Applied theme '{themeName}'")
                     : CommandResult.Fail($"Failed to apply theme '{themeName}'");
             }
-             
+
             case "ListThemes":
                 var themes = GetInstalledThemes();
-                return CommandResult.Ok("Listed themes", JToken.FromObject(themes));
+                return CommandResult.Ok("Listed themes", JsonSerializer.SerializeToElement(themes));
 
             case "SetThemeMode":
             {
-                string mode = parameters.Value<string>("mode");
+                string mode = parameters.GetStringOrDefault("mode");
                 HandleSetThemeMode(mode);
                 return CommandResult.Ok($"Theme mode set to '{mode}'");
             }
 
             case "SetWallpaper":
             {
-                string filePath = parameters.Value<string>("filePath");
+                string filePath = parameters.GetStringOrDefault("filePath");
                 _systemParams.SetParameter(SPI_SETDESKWALLPAPER, 0, filePath, SPIF_UPDATEINIFILE_SENDCHANGE);
                 return CommandResult.Ok($"Wallpaper set to '{filePath}'");
             }
@@ -257,7 +257,10 @@ internal partial class ThemeCommandHandler : ICommandHandler
     /// </summary>
     private void HandleSetThemeMode(string value)
     {
-        if (string.IsNullOrEmpty(value)) return;
+        if (string.IsNullOrEmpty(value))
+        {
+            return;
+        }
 
         if (value.Equals("toggle", StringComparison.OrdinalIgnoreCase))
         {

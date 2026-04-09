@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace autoShell;
 
@@ -12,17 +12,19 @@ namespace autoShell;
 /// </summary>
 internal class CommandResult
 {
-    [JsonProperty("id", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonPropertyName("id")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string Id { get; set; }
 
-    [JsonProperty("success")]
+    [JsonPropertyName("success")]
     public bool Success { get; init; }
 
-    [JsonProperty("message")]
+    [JsonPropertyName("message")]
     public string Message { get; init; }
 
-    [JsonProperty("data", NullValueHandling = NullValueHandling.Ignore)]
-    public JToken Data { get; init; }
+    [JsonPropertyName("data")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public JsonElement? Data { get; init; }
 
     /// <summary>
     /// When true, the caller should exit the interactive loop after sending this result.
@@ -40,7 +42,7 @@ internal class CommandResult
     /// <summary>
     /// Creates a successful result with a message and associated data.
     /// </summary>
-    public static CommandResult Ok(string message, JToken data) =>
+    public static CommandResult Ok(string message, JsonElement data) =>
         new() { Success = true, Message = message, Data = data };
 
     /// <summary>

@@ -3,9 +3,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using autoShell.Logging;
 using autoShell.Services;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers;
 
@@ -32,7 +32,7 @@ internal class DisplayCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JsonElement parameters)
     {
         switch (key)
         {
@@ -40,7 +40,7 @@ internal class DisplayCommandHandler : ICommandHandler
                 try
                 {
                     string resolutions = _display.ListResolutions();
-                    return CommandResult.Ok("Listed resolutions", JToken.Parse(resolutions));
+                    return CommandResult.Ok("Listed resolutions", JsonDocument.Parse(resolutions).RootElement.Clone());
                 }
                 catch (Exception ex)
                 {
@@ -51,17 +51,17 @@ internal class DisplayCommandHandler : ICommandHandler
             case "SetScreenResolution":
                 try
                 {
-                    uint width = parameters.Value<uint>("width");
-                    uint height = parameters.Value<uint>("height");
-                    if (width == 0 || height == 0)
+                    int? width = parameters.GetNullableInt("width");
+                    int? height = parameters.GetNullableInt("height");
+                    if ((width ?? 0) == 0 || (height ?? 0) == 0)
                     {
                         return CommandResult.Fail("Invalid resolution: width and height required");
                     }
 
-                    uint? refreshRate = parameters.Value<uint?>("refreshRate");
+                    uint? refreshRate = (uint?)parameters.GetNullableInt("refreshRate");
 
-                    string result = _display.SetResolution(width, height, refreshRate);
-                    return CommandResult.Ok($"Screen resolution set to {width}x{height}", JToken.Parse(result));
+                    string result = _display.SetResolution((uint)width.Value, (uint)height.Value, refreshRate);
+                    return CommandResult.Ok($"Screen resolution set to {width}x{height}", JsonDocument.Parse(result).RootElement.Clone());
                 }
                 catch (Exception ex)
                 {
@@ -72,7 +72,7 @@ internal class DisplayCommandHandler : ICommandHandler
             case "SetTextSize":
                 try
                 {
-                    int textSizePct = parameters.Value<int?>("size") ?? -1;
+                    int textSizePct = parameters.GetNullableInt("size") ?? -1;
                     if (textSizePct < 0)
                     {
                         return CommandResult.Fail("Invalid text size: size required");

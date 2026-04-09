@@ -4,10 +4,10 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using autoShell.Services;
 using autoShell.Services.Interop;
 using Microsoft.Win32;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers.Settings;
 
@@ -44,7 +44,7 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JsonElement parameters)
     {
         CommandResult result = key switch
         {
@@ -74,9 +74,9 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
         }
     }
 
-    private CommandResult HandleAutoHideTaskbar(JObject parameters)
+    private CommandResult HandleAutoHideTaskbar(JsonElement parameters)
     {
-        bool hide = parameters.Value<bool>("hideWhenNotUsing");
+        bool hide = parameters.GetBoolOrDefault("hideWhenNotUsing");
 
         // Auto-hide uses a binary blob in a different registry path
         if (_registry.GetValue(StuckRects3, "Settings", null) is byte[] settings && settings.Length >= 9)
@@ -97,9 +97,9 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
         return CommandResult.Ok($"Taskbar auto-hide {(hide ? "enabled" : "disabled")}");
     }
 
-    private CommandResult HandleTaskbarAlignment(JObject parameters)
+    private CommandResult HandleTaskbarAlignment(JsonElement parameters)
     {
-        string alignment = parameters.Value<string>("alignment") ?? "center";
+        string alignment = parameters.GetStringOrDefault("alignment", "center");
         // 0 = left, 1 = center
         bool useCenter = alignment.Equals("center", StringComparison.OrdinalIgnoreCase);
         _registry.SetValue(ExplorerAdvanced, "TaskbarAl", useCenter ? 1 : 0, RegistryValueKind.DWord);
@@ -111,17 +111,17 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
     /// For bool JSON values, true=1 false=0.
     /// For string JSON values, compares against <paramref name="trueValue"/>.
     /// </summary>
-    private CommandResult SetToggle(JObject parameters, string jsonProperty, string registryValue, string settingName, string trueValue = null)
+    private CommandResult SetToggle(JsonElement parameters, string jsonProperty, string registryValue, string settingName, string trueValue = null)
     {
         int regValue;
         if (trueValue != null)
         {
-            string val = parameters.Value<string>(jsonProperty) ?? "";
+            string val = parameters.GetStringOrDefault(jsonProperty, "");
             regValue = val.Equals(trueValue, StringComparison.OrdinalIgnoreCase) ? 1 : 0;
         }
         else
         {
-            regValue = (parameters.Value<bool?>(jsonProperty) ?? true) ? 1 : 0;
+            regValue = parameters.GetBoolOrDefault(jsonProperty, true) ? 1 : 0;
         }
 
         _registry.SetValue(ExplorerAdvanced, registryValue, regValue, RegistryValueKind.DWord);

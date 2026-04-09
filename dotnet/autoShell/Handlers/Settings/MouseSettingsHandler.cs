@@ -3,9 +3,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using autoShell.Logging;
 using autoShell.Services;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers.Settings;
 
@@ -50,7 +50,7 @@ internal class MouseSettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JsonElement parameters)
     {
         switch (key)
         {
@@ -84,9 +84,9 @@ internal class MouseSettingsHandler : ICommandHandler
         }
     }
 
-    private CommandResult HandleEnhancePointerPrecision(JObject parameters)
+    private CommandResult HandleEnhancePointerPrecision(JsonElement parameters)
     {
-        bool enable = parameters.Value<bool?>("enable") ?? true;
+        bool enable = parameters.GetBoolOrDefault("enable", true);
         int[] mouseParams = new int[3];
         _systemParams.GetParameter(SPI_GETMOUSE, 0, mouseParams, 0);
         // Set acceleration (third parameter): 1 = enhanced precision on, 0 = off
@@ -95,10 +95,10 @@ internal class MouseSettingsHandler : ICommandHandler
         return CommandResult.Ok($"Enhanced pointer precision {(enable ? "enabled" : "disabled")}");
     }
 
-    private CommandResult HandleMouseCursorSpeed(JObject parameters)
+    private CommandResult HandleMouseCursorSpeed(JsonElement parameters)
     {
         // Speed range: 1-20 (default 10)
-        int speed = parameters.Value<int?>("speedLevel") ?? 10;
+        int speed = parameters.GetNullableInt("speedLevel") ?? 10;
         speed = Math.Clamp(speed, 1, 20);
         _systemParams.SetParameter(SPI_SETMOUSESPEED, 0, (IntPtr)speed, SPIF_UPDATEINIFILE_SENDCHANGE);
         return CommandResult.Ok($"Mouse cursor speed set to {speed}");
@@ -108,10 +108,10 @@ internal class MouseSettingsHandler : ICommandHandler
     /// Enables or disables the mouse cursor trail and sets its length.
     /// SPI_SETMOUSETRAILS: 0 = off, 2-12 = trail length
     /// </summary>
-    private CommandResult HandleMouseCursorTrail(JObject parameters)
+    private CommandResult HandleMouseCursorTrail(JsonElement parameters)
     {
-        var enable = parameters.Value<bool?>("enable") ?? true;
-        var length = parameters.Value<int?>("length") ?? 7;
+        var enable = parameters.GetBoolOrDefault("enable", true);
+        var length = parameters.GetNullableInt("length") ?? 7;
 
         // Clamp trail length to valid range
         length = Math.Max(2, Math.Min(12, length));
@@ -125,17 +125,17 @@ internal class MouseSettingsHandler : ICommandHandler
         return CommandResult.Ok($"Cursor trail {(enable ? $"enabled (length {length})" : "disabled")}");
     }
 
-    private CommandResult HandleMouseWheelScrollLines(JObject parameters)
+    private CommandResult HandleMouseWheelScrollLines(JsonElement parameters)
     {
-        int lines = parameters.Value<int?>("scrollLines") ?? 3;
+        int lines = parameters.GetNullableInt("scrollLines") ?? 3;
         lines = Math.Clamp(lines, 1, 100);
         _systemParams.SetParameter(SPI_SETWHEELSCROLLLINES, lines, IntPtr.Zero, SPIF_UPDATEINIFILE_SENDCHANGE);
         return CommandResult.Ok($"Mouse wheel scroll lines set to {lines}");
     }
 
-    private CommandResult HandleSetPrimaryMouseButton(JObject parameters)
+    private CommandResult HandleSetPrimaryMouseButton(JsonElement parameters)
     {
-        string button = parameters.Value<string>("primaryButton") ?? "left";
+        string button = parameters.GetStringOrDefault("primaryButton", "left");
         bool leftPrimary = button.Equals("left", StringComparison.OrdinalIgnoreCase);
         _systemParams.SwapMouseButton(!leftPrimary);
         return CommandResult.Ok($"Primary mouse button set to {button}");

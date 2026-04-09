@@ -2,9 +2,9 @@
 // Licensed under the MIT License.
 
 using System.Collections.Generic;
+using System.Text.Json;
 using autoShell.Services;
 using Microsoft.Win32;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers.Settings;
 
@@ -33,33 +33,22 @@ internal class AccessibilitySettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JsonElement parameters)
     {
-        switch (key)
+        return key switch
         {
-            case "EnableFilterKeysAction":
-                return HandleFilterKeys(parameters, "Filter Keys");
-
-            case "EnableMagnifier":
-                return HandleToggleProcess(parameters, "magnify.exe", "Magnify", "Magnifier");
-
-            case "EnableNarratorAction":
-                return HandleToggleProcess(parameters, "narrator.exe", "Narrator", "Narrator");
-
-            case "EnableStickyKeys":
-                return HandleStickyKeys(parameters, "Sticky Keys");
-
-            case "MonoAudioToggle":
-                return HandleMonoAudio(parameters, "Mono audio");
-
-            default:
-                return CommandResult.Fail($"Unknown accessibility command: {key}");
-        }
+            "EnableFilterKeysAction" => HandleFilterKeys(parameters, "Filter Keys"),
+            "EnableMagnifier" => HandleToggleProcess(parameters, "magnify.exe", "Magnify", "Magnifier"),
+            "EnableNarratorAction" => HandleToggleProcess(parameters, "narrator.exe", "Narrator", "Narrator"),
+            "EnableStickyKeys" => HandleStickyKeys(parameters, "Sticky Keys"),
+            "MonoAudioToggle" => HandleMonoAudio(parameters, "Mono audio"),
+            _ => CommandResult.Fail($"Unknown accessibility command: {key}"),
+        };
     }
 
-    private CommandResult HandleFilterKeys(JObject parameters, string displayName)
+    private CommandResult HandleFilterKeys(JsonElement parameters, string displayName)
     {
-        bool enable = parameters.Value<bool?>("enable") ?? true;
+        bool enable = parameters.GetBoolOrDefault("enable", true);
         _registry.SetValue(
             @"Control Panel\Accessibility\Keyboard Response",
             "Flags",
@@ -68,9 +57,9 @@ internal class AccessibilitySettingsHandler : ICommandHandler
         return CommandResult.Ok($"{displayName} {(enable ? "enabled" : "disabled")}");
     }
 
-    private CommandResult HandleStickyKeys(JObject parameters, string displayName)
+    private CommandResult HandleStickyKeys(JsonElement parameters, string displayName)
     {
-        bool enable = parameters.Value<bool?>("enable") ?? true;
+        bool enable = parameters.GetBoolOrDefault("enable", true);
         _registry.SetValue(
             @"Control Panel\Accessibility\StickyKeys",
             "Flags",
@@ -79,9 +68,9 @@ internal class AccessibilitySettingsHandler : ICommandHandler
         return CommandResult.Ok($"{displayName} {(enable ? "enabled" : "disabled")}");
     }
 
-    private CommandResult HandleMonoAudio(JObject parameters, string displayName)
+    private CommandResult HandleMonoAudio(JsonElement parameters, string displayName)
     {
-        bool enable = parameters.Value<bool?>("enable") ?? true;
+        bool enable = parameters.GetBoolOrDefault("enable", true);
         _registry.SetValue(
             @"Software\Microsoft\Multimedia\Audio",
             "AccessibilityMonoMixState",
@@ -90,9 +79,9 @@ internal class AccessibilitySettingsHandler : ICommandHandler
         return CommandResult.Ok($"{displayName} {(enable ? "enabled" : "disabled")}");
     }
 
-    private CommandResult HandleToggleProcess(JObject parameters, string exeName, string processName, string displayName)
+    private CommandResult HandleToggleProcess(JsonElement parameters, string exeName, string processName, string displayName)
     {
-        bool enable = parameters.Value<bool?>("enable") ?? true;
+        bool enable = parameters.GetBoolOrDefault("enable", true);
 
         if (enable)
         {

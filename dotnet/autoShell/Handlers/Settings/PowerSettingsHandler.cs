@@ -3,9 +3,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using autoShell.Services;
 using Microsoft.Win32;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers.Settings;
 
@@ -32,7 +32,7 @@ internal class PowerSettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JsonElement parameters)
     {
         switch (key)
         {
@@ -49,9 +49,9 @@ internal class PowerSettingsHandler : ICommandHandler
         }
     }
 
-    private CommandResult HandleBatterySaverThreshold(JObject parameters)
+    private CommandResult HandleBatterySaverThreshold(JsonElement parameters)
     {
-        int threshold = parameters.Value<int?>("thresholdValue") ?? 20;
+        int threshold = parameters.GetNullableInt("thresholdValue") ?? 20;
         threshold = Math.Clamp(threshold, 0, 100);
         _registry.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\Power\BatterySaver",

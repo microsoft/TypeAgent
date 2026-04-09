@@ -2,8 +2,8 @@
 // Licensed under the MIT License.
 
 using System.Collections.Generic;
+using System.Text.Json;
 using autoShell.Services;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers;
 
@@ -29,13 +29,13 @@ internal class AudioCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JsonElement parameters)
     {
         switch (key)
         {
             case "Mute":
             {
-                bool mute = parameters.Value<bool?>("on") ?? false;
+                bool mute = parameters.GetBoolOrDefault("on");
                 _audio.SetMute(mute);
                 return CommandResult.Ok($"Audio {(mute ? "muted" : "unmuted")}");
             }
@@ -44,7 +44,7 @@ internal class AudioCommandHandler : ICommandHandler
                 return CommandResult.Ok($"Volume restored to {(int)_savedVolumePct}%");
             case "Volume":
             {
-                int pct = parameters.Value<int?>("targetVolume") ?? -1;
+                int pct = parameters.GetIntOrDefault("targetVolume", -1);
                 if (pct < 0)
                 {
                     return CommandResult.Fail("Invalid volume: targetVolume required");

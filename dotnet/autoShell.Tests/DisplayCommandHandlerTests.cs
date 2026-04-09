@@ -1,11 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.Json;
 using autoShell.Handlers;
 using autoShell.Logging;
 using autoShell.Services;
 using Moq;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Tests;
 
@@ -29,7 +29,7 @@ public class DisplayCommandHandlerTests
     {
         _displayMock.Setup(d => d.ListResolutions()).Returns("[{\"Width\":1920}]");
 
-        _handler.Handle("ListResolutions", new JObject());
+        _handler.Handle("ListResolutions", JsonDocument.Parse("{}").RootElement);
 
         _displayMock.Verify(d => d.ListResolutions(), Times.Once);
     }
@@ -44,7 +44,7 @@ public class DisplayCommandHandlerTests
     {
         _displayMock.Setup(d => d.SetResolution(1920, 1080, null)).Returns("ok");
 
-        _handler.Handle("SetScreenResolution", new JObject { ["width"] = 1920u, ["height"] = 1080u });
+        _handler.Handle("SetScreenResolution", JsonDocument.Parse("""{"width":1920,"height":1080}""").RootElement);
 
         _displayMock.Verify(d => d.SetResolution(1920, 1080, null), Times.Once);
     }
@@ -57,7 +57,7 @@ public class DisplayCommandHandlerTests
     {
         _displayMock.Setup(d => d.SetResolution(1920, 1080, (uint)60)).Returns("ok");
 
-        _handler.Handle("SetScreenResolution", new JObject { ["width"] = 1920u, ["height"] = 1080u, ["refreshRate"] = 60u });
+        _handler.Handle("SetScreenResolution", JsonDocument.Parse("""{"width":1920,"height":1080,"refreshRate":60}""").RootElement);
 
         _displayMock.Verify(d => d.SetResolution(1920, 1080, (uint)60), Times.Once);
     }
@@ -70,7 +70,7 @@ public class DisplayCommandHandlerTests
     {
         _displayMock.Setup(d => d.SetResolution(2560, 1440, null)).Returns("ok");
 
-        _handler.Handle("SetScreenResolution", new JObject { ["width"] = 2560u, ["height"] = 1440u });
+        _handler.Handle("SetScreenResolution", JsonDocument.Parse("""{"width":2560,"height":1440}""").RootElement);
 
         _displayMock.Verify(d => d.SetResolution(2560, 1440, null), Times.Once);
     }
@@ -81,7 +81,7 @@ public class DisplayCommandHandlerTests
     [Fact]
     public void SetScreenResolution_ZeroDimensions_DoesNotCallService()
     {
-        _handler.Handle("SetScreenResolution", new JObject { ["width"] = 0u, ["height"] = 0u });
+        _handler.Handle("SetScreenResolution", JsonDocument.Parse("""{"width":0,"height":0}""").RootElement);
 
         _displayMock.Verify(d => d.SetResolution(It.IsAny<uint>(), It.IsAny<uint>(), It.IsAny<uint?>()), Times.Never);
     }
@@ -92,7 +92,7 @@ public class DisplayCommandHandlerTests
     [Fact]
     public void SetScreenResolution_MissingDimensions_DoesNotCallService()
     {
-        _handler.Handle("SetScreenResolution", new JObject());
+        _handler.Handle("SetScreenResolution", JsonDocument.Parse("{}").RootElement);
 
         _displayMock.Verify(d => d.SetResolution(It.IsAny<uint>(), It.IsAny<uint>(), It.IsAny<uint?>()), Times.Never);
     }
@@ -103,7 +103,7 @@ public class DisplayCommandHandlerTests
     [Fact]
     public void SetScreenResolution_WidthOnly_DoesNotCallService()
     {
-        _handler.Handle("SetScreenResolution", new JObject { ["width"] = 1920u });
+        _handler.Handle("SetScreenResolution", JsonDocument.Parse("""{"width":1920}""").RootElement);
 
         _displayMock.Verify(d => d.SetResolution(It.IsAny<uint>(), It.IsAny<uint>(), It.IsAny<uint?>()), Times.Never);
     }
@@ -114,7 +114,7 @@ public class DisplayCommandHandlerTests
     [Fact]
     public void SetScreenResolution_HeightOnly_DoesNotCallService()
     {
-        _handler.Handle("SetScreenResolution", new JObject { ["height"] = 1080u });
+        _handler.Handle("SetScreenResolution", JsonDocument.Parse("""{"height":1080}""").RootElement);
 
         _displayMock.Verify(d => d.SetResolution(It.IsAny<uint>(), It.IsAny<uint>(), It.IsAny<uint?>()), Times.Never);
     }
@@ -127,7 +127,7 @@ public class DisplayCommandHandlerTests
     [Fact]
     public void SetTextSize_ValidPercent_CallsService()
     {
-        _handler.Handle("SetTextSize", new JObject { ["size"] = 150 });
+        _handler.Handle("SetTextSize", JsonDocument.Parse("""{"size":150}""").RootElement);
 
         _displayMock.Verify(d => d.SetTextSize(150), Times.Once);
     }
@@ -138,7 +138,7 @@ public class DisplayCommandHandlerTests
     [Fact]
     public void SetTextSize_InvalidInput_DoesNotCallService()
     {
-        _handler.Handle("SetTextSize", new JObject { ["size"] = "abc" });
+        _handler.Handle("SetTextSize", JsonDocument.Parse("""{"size":"abc"}""").RootElement);
 
         _displayMock.Verify(d => d.SetTextSize(It.IsAny<int>()), Times.Never);
     }
@@ -151,7 +151,7 @@ public class DisplayCommandHandlerTests
     [Fact]
     public void Handle_UnknownKey_DoesNothing()
     {
-        _handler.Handle("UnknownDisplayCmd", new JObject());
+        _handler.Handle("UnknownDisplayCmd", JsonDocument.Parse("{}").RootElement);
 
         _displayMock.VerifyNoOtherCalls();
     }
@@ -164,7 +164,7 @@ public class DisplayCommandHandlerTests
     {
         _displayMock.Setup(d => d.SetResolution(2560, 1440, (uint)144)).Returns("ok");
 
-        _handler.Handle("SetScreenResolution", new JObject { ["width"] = 2560u, ["height"] = 1440u, ["refreshRate"] = 144u });
+        _handler.Handle("SetScreenResolution", JsonDocument.Parse("""{"width":2560,"height":1440,"refreshRate":144}""").RootElement);
 
         _displayMock.Verify(d => d.SetResolution(2560, 1440, (uint)144), Times.Once);
     }

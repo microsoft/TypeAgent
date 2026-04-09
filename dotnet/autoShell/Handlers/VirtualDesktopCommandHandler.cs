@@ -3,9 +3,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using autoShell.Logging;
 using autoShell.Services;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers;
 
@@ -40,22 +40,23 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JsonElement parameters)
     {
         switch (key)
         {
             case "CreateDesktop":
             {
-                JToken names = parameters["names"];
-                string namesJson = names?.ToString() ?? "[\"desktop 1\"]";
+                string namesJson = parameters.TryGetProperty("names", out JsonElement names)
+                    ? names.GetRawText()
+                    : "[\"desktop 1\"]";
                 _virtualDesktop.CreateDesktops(namesJson);
                 return CommandResult.Ok("Created new desktop(s)");
             }
 
             case "MoveWindowToDesktop":
             {
-                string process = parameters.Value<string>("name");
-                string desktop = parameters.Value<string>("desktopId");
+                string process = parameters.GetStringOrDefault("name");
+                string desktop = parameters.GetStringOrDefault("desktopId");
                 if (string.IsNullOrEmpty(process) || string.IsNullOrEmpty(desktop))
                 {
                     return CommandResult.Fail("MoveWindowToDesktop requires name and desktopId");
@@ -78,7 +79,7 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
 
             case "PinWindow":
             {
-                string name = parameters.Value<string>("name");
+                string name = parameters.GetStringOrDefault("name");
                 string pinProcess = _appRegistry.ResolveProcessName(name);
                 IntPtr pinHWnd = _window.FindProcessWindowHandle(pinProcess);
                 if (pinHWnd == IntPtr.Zero)
@@ -96,7 +97,7 @@ internal class VirtualDesktopCommandHandler : ICommandHandler
 
             case "SwitchDesktop":
             {
-                string desktopId = parameters.Value<string>("desktopId");
+                string desktopId = parameters.GetStringOrDefault("desktopId");
                 _virtualDesktop.SwitchDesktop(desktopId);
                 return CommandResult.Ok($"Switched to desktop {desktopId}");
             }

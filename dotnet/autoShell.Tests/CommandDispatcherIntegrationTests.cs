@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.Json;
 using autoShell.Logging;
 using autoShell.Services;
 using Moq;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Tests;
 
@@ -161,7 +161,7 @@ public class CommandDispatcherIntegrationTests
     [Fact]
     public void Dispatch_Quit_ReturnsQuitResult()
     {
-        CommandResult result = _dispatcher.Dispatch(JObject.Parse("""{"actionName":"quit","parameters":{}}"""));
+        CommandResult result = _dispatcher.Dispatch(JsonDocument.Parse("""{"actionName":"quit","parameters":{}}""").RootElement);
 
         Assert.NotNull(result);
         Assert.True(result.Success);
@@ -170,6 +170,6 @@ public class CommandDispatcherIntegrationTests
 
     private void Dispatch(string json)
     {
-        _dispatcher.Dispatch(JObject.Parse(json));
+        _dispatcher.Dispatch(JsonDocument.Parse(json).RootElement);
     }
 }

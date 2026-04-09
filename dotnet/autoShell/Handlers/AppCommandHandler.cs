@@ -4,9 +4,9 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Text.Json;
 using autoShell.Logging;
 using autoShell.Services;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers;
 
@@ -37,9 +37,9 @@ internal class AppCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JsonElement parameters)
     {
-        string name = parameters.Value<string>("name");
+        string name = parameters.GetStringOrDefault("name");
 
         switch (key)
         {
@@ -53,7 +53,7 @@ internal class AppCommandHandler : ICommandHandler
 
             case "ListAppNames":
                 var appNames = _appRegistry.GetAllAppNames();
-                return CommandResult.Ok("Listed app names", JToken.FromObject(appNames));
+                return CommandResult.Ok("Listed app names", JsonSerializer.SerializeToElement(appNames));
 
             default:
                 return CommandResult.Fail($"Unknown app command: {key}");

@@ -1,11 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using autoShell.Logging;
 using autoShell.Services;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers;
 
@@ -39,12 +38,12 @@ internal class NetworkCommandHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JsonElement parameters)
     {
         switch (key)
         {
             case "BluetoothToggle":
-                bool enableBt = parameters.Value<bool?>("enableBluetooth") ?? true;
+                bool enableBt = parameters.GetBoolOrDefault("enableBluetooth", true);
                 _network.ToggleBluetooth(enableBt);
                 return CommandResult.Ok($"Bluetooth {(enableBt ? "enabled" : "disabled")}");
 
@@ -53,13 +52,13 @@ internal class NetworkCommandHandler : ICommandHandler
                 return CommandResult.Ok("Opened metered connections settings");
 
             case "EnableWifi":
-                bool enableWifi = parameters.Value<bool?>("enable") ?? true;
+                bool enableWifi = parameters.GetBoolOrDefault("enable", true);
                 _network.EnableWifi(enableWifi);
                 return CommandResult.Ok($"WiFi {(enableWifi ? "enabled" : "disabled")}");
 
             case "ConnectWifi":
-                string ssid = parameters.Value<string>("ssid");
-                string password = parameters["password"] is not null ? parameters.Value<string>("password") : "";
+                string ssid = parameters.GetStringOrDefault("ssid");
+                string password = parameters.GetStringOrDefault("password", "");
                 _network.ConnectToWifi(ssid, password);
                 return CommandResult.Ok($"Connecting to WiFi network '{ssid}'");
 
@@ -69,11 +68,11 @@ internal class NetworkCommandHandler : ICommandHandler
 
             case "ListWifiNetworks":
                 string networks = _network.ListWifiNetworks();
-                return CommandResult.Ok("Listed WiFi networks", JToken.Parse(networks));
+                return CommandResult.Ok("Listed WiFi networks", JsonDocument.Parse(networks).RootElement.Clone());
 
             case "ToggleAirplaneMode":
             {
-                bool airplaneMode = parameters.Value<bool?>("enable") ?? false;
+                bool airplaneMode = parameters.GetBoolOrDefault("enable");
                 _network.SetAirplaneMode(airplaneMode);
                 return CommandResult.Ok($"Airplane mode {(airplaneMode ? "enabled" : "disabled")}");
             }

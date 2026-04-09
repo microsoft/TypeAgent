@@ -28,7 +28,7 @@ AutoShell is part of the [TypeAgent](https://github.com/microsoft/TypeAgent) pro
 - Windows 10/11
 - .NET 8
 - [Microsoft.WindowsAPICodePack.Shell](https://www.nuget.org/packages/Microsoft.WindowsAPICodePack.Shell) NuGet package
-- [Newtonsoft.Json](https://www.nuget.org/packages/Newtonsoft.Json) NuGet package
+- [System.Text.Json](https://learn.microsoft.com/en-us/dotnet/api/system.text.json) (built-in)
 
 ## Building
 

@@ -3,9 +3,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using autoShell.Services;
 using Microsoft.Win32;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers.Settings;
 
@@ -33,7 +33,7 @@ internal class PersonalizationSettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JsonElement parameters)
     {
         switch (key)
         {
@@ -55,9 +55,9 @@ internal class PersonalizationSettingsHandler : ICommandHandler
         }
     }
 
-    private CommandResult HandleApplyColorToTitleBar(JObject parameters)
+    private CommandResult HandleApplyColorToTitleBar(JsonElement parameters)
     {
-        bool enable = parameters.Value<bool?>("enableColor") ?? true;
+        bool enable = parameters.GetBoolOrDefault("enableColor", true);
         _registry.SetValue(
             @"Software\Microsoft\Windows\DWM",
             "ColorPrevalence",
@@ -66,9 +66,9 @@ internal class PersonalizationSettingsHandler : ICommandHandler
         return CommandResult.Ok($"Title bar color {(enable ? "enabled" : "disabled")}");
     }
 
-    private CommandResult HandleEnableTransparency(JObject parameters)
+    private CommandResult HandleEnableTransparency(JsonElement parameters)
     {
-        bool enable = parameters.Value<bool?>("enable") ?? true;
+        bool enable = parameters.GetBoolOrDefault("enable", true);
         _registry.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
             "EnableTransparency",
@@ -77,9 +77,9 @@ internal class PersonalizationSettingsHandler : ICommandHandler
         return CommandResult.Ok($"Transparency {(enable ? "enabled" : "disabled")}");
     }
 
-    private CommandResult HandleSystemThemeMode(JObject parameters)
+    private CommandResult HandleSystemThemeMode(JsonElement parameters)
     {
-        string mode = parameters.Value<string>("mode") ?? "dark";
+        string mode = parameters.GetStringOrDefault("mode", "dark");
         int value = mode.Equals("light", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
 
         const string PersonalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";

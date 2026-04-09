@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.Json;
 using autoShell.Handlers;
 using autoShell.Logging;
 using Moq;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Tests;
 
@@ -18,13 +18,15 @@ public class CommandDispatcherTests
         _dispatcher = new CommandDispatcher(_loggerMock.Object);
     }
 
+    private static JsonElement Parse(string json) => JsonDocument.Parse(json).RootElement;
+
     /// <summary>
     /// Verifies that dispatching a JSON object with a "quit" actionName returns null.
     /// </summary>
     [Fact]
     public void Dispatch_QuitKey_ReturnsQuitResult()
     {
-        var json = JObject.Parse("""{"actionName":"quit","parameters":{}}""");
+        var json = Parse("""{"actionName":"quit","parameters":{}}""");
         CommandResult result = _dispatcher.Dispatch(json);
         Assert.NotNull(result);
         Assert.True(result.Success);
@@ -38,7 +40,7 @@ public class CommandDispatcherTests
     public void Dispatch_NonQuitKey_ReturnsSuccessResult()
     {
         _dispatcher.Register(new StubHandler("TestCmd"));
-        var json = JObject.Parse("""{"actionName":"TestCmd","parameters":{}}""");
+        var json = Parse("""{"actionName":"TestCmd","parameters":{}}""");
         CommandResult result = _dispatcher.Dispatch(json);
         Assert.NotNull(result);
         Assert.True(result.Success);
@@ -53,11 +55,11 @@ public class CommandDispatcherTests
         var handler = new StubHandler("Alpha", "Beta");
         _dispatcher.Register(handler);
 
-        _dispatcher.Dispatch(JObject.Parse("""{"actionName":"Alpha","parameters":{}}"""));
+        _dispatcher.Dispatch(Parse("""{"actionName":"Alpha","parameters":{}}"""));
         Assert.Equal("Alpha", handler.LastKey);
         Assert.NotNull(handler.LastParameters);
 
-        _dispatcher.Dispatch(JObject.Parse("""{"actionName":"Beta","parameters":{}}"""));
+        _dispatcher.Dispatch(Parse("""{"actionName":"Beta","parameters":{}}"""));
         Assert.Equal("Beta", handler.LastKey);
         Assert.NotNull(handler.LastParameters);
     }
@@ -68,7 +70,7 @@ public class CommandDispatcherTests
     [Fact]
     public void Dispatch_UnknownCommand_ReturnsFailure()
     {
-        var json = JObject.Parse("""{"actionName":"UnknownCmd","parameters":{}}""");
+        var json = Parse("""{"actionName":"UnknownCmd","parameters":{}}""");
         CommandResult result = _dispatcher.Dispatch(json);
         Assert.NotNull(result);
         Assert.False(result.Success);
@@ -81,7 +83,7 @@ public class CommandDispatcherTests
     [Fact]
     public void Dispatch_EmptyObject_ReturnsFailure()
     {
-        CommandResult result = _dispatcher.Dispatch([]);
+        CommandResult result = _dispatcher.Dispatch(Parse("{}"));
         Assert.NotNull(result);
         Assert.False(result.Success);
     }
@@ -95,7 +97,7 @@ public class CommandDispatcherTests
         var handler = new StubHandler("After");
         _dispatcher.Register(handler);
 
-        _dispatcher.Dispatch(JObject.Parse("""{"actionName":"quit","parameters":{}}"""));
+        _dispatcher.Dispatch(Parse("""{"actionName":"quit","parameters":{}}"""));
 
         Assert.Null(handler.LastKey);
     }
@@ -109,7 +111,7 @@ public class CommandDispatcherTests
         var handler = new ThrowingHandler("Boom");
         _dispatcher.Register(handler);
 
-        var json = JObject.Parse("""{"actionName":"Boom","parameters":{}}""");
+        var json = Parse("""{"actionName":"Boom","parameters":{}}""");
         CommandResult result = _dispatcher.Dispatch(json);
         Assert.NotNull(result);
         Assert.False(result.Success);
@@ -126,8 +128,8 @@ public class CommandDispatcherTests
         var normal = new StubHandler("Ok");
         _dispatcher.Register(throwing, normal);
 
-        _dispatcher.Dispatch(JObject.Parse("""{"actionName":"Boom","parameters":{}}"""));
-        _dispatcher.Dispatch(JObject.Parse("""{"actionName":"Ok","parameters":{}}"""));
+        _dispatcher.Dispatch(Parse("""{"actionName":"Boom","parameters":{}}"""));
+        _dispatcher.Dispatch(Parse("""{"actionName":"Ok","parameters":{}}"""));
         Assert.Equal("Ok", normal.LastKey);
     }
 
@@ -148,14 +150,14 @@ public class CommandDispatcherTests
     {
         public IEnumerable<string> SupportedCommands { get; }
         public string? LastKey { get; private set; }
-        public JObject? LastParameters { get; private set; }
+        public JsonElement? LastParameters { get; private set; }
 
         public StubHandler(params string[] commands)
         {
             SupportedCommands = commands;
         }
 
-        public CommandResult Handle(string key, JObject parameters)
+        public CommandResult Handle(string key, JsonElement parameters)
         {
             LastKey = key;
             LastParameters = parameters;
@@ -175,7 +177,7 @@ public class CommandDispatcherTests
             SupportedCommands = commands;
         }
 
-        public CommandResult Handle(string key, JObject parameters)
+        public CommandResult Handle(string key, JsonElement parameters)
         {
             throw new InvalidOperationException("Test exception");
         }

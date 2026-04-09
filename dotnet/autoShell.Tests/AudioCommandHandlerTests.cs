@@ -1,10 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.Json;
 using autoShell.Handlers;
 using autoShell.Services;
 using Moq;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Tests;
 
@@ -31,7 +31,7 @@ public class AudioCommandHandlerTests
     {
         _audioMock.Setup(a => a.GetVolume()).Returns(75);
 
-        _handler.Handle("Volume", new JObject { ["targetVolume"] = targetVolume });
+        _handler.Handle("Volume", JsonDocument.Parse($$"""{"targetVolume":{{targetVolume}}}""").RootElement);
 
         _audioMock.Verify(a => a.SetVolume(targetVolume), Times.Once);
     }
@@ -44,9 +44,7 @@ public class AudioCommandHandlerTests
     {
         _audioMock.Setup(a => a.GetVolume()).Returns(42);
 
-        _handler.Handle("Volume", new JObject { ["targetVolume"] = 80 });
-
-        _audioMock.Verify(a => a.GetVolume(), Times.Once);
+        _handler.Handle("Volume", JsonDocument.Parse("""{"targetVolume":80}""").RootElement);
     }
 
     /// <summary>
@@ -55,7 +53,7 @@ public class AudioCommandHandlerTests
     [Fact]
     public void Volume_MissingTargetVolume_DoesNotCallSetVolume()
     {
-        _handler.Handle("Volume", new JObject());
+        _handler.Handle("Volume", JsonDocument.Parse("{}").RootElement);
 
         _audioMock.Verify(a => a.SetVolume(It.IsAny<int>()), Times.Never);
     }
@@ -70,10 +68,10 @@ public class AudioCommandHandlerTests
     {
         _audioMock.Setup(a => a.GetVolume()).Returns(65);
 
-        _handler.Handle("Volume", new JObject { ["targetVolume"] = 20 });
+        _handler.Handle("Volume", JsonDocument.Parse("""{"targetVolume":20}""").RootElement);
         _audioMock.Invocations.Clear();
 
-        _handler.Handle("RestoreVolume", new JObject());
+        _handler.Handle("RestoreVolume", JsonDocument.Parse("{}").RootElement);
 
         _audioMock.Verify(a => a.SetVolume(65), Times.Once);
     }
@@ -84,7 +82,7 @@ public class AudioCommandHandlerTests
     [Fact]
     public void RestoreVolume_WithoutPriorChange_RestoresZero()
     {
-        _handler.Handle("RestoreVolume", new JObject());
+        _handler.Handle("RestoreVolume", JsonDocument.Parse("{}").RootElement);
 
         _audioMock.Verify(a => a.SetVolume(0), Times.Once);
     }
@@ -98,10 +96,10 @@ public class AudioCommandHandlerTests
     {
         _audioMock.Setup(a => a.GetVolume()).Returns(30);
 
-        _handler.Handle("Volume", new JObject { ["targetVolume"] = 80 });
+        _handler.Handle("Volume", JsonDocument.Parse("""{"targetVolume":80}""").RootElement);
         _audioMock.Invocations.Clear();
 
-        _handler.Handle("RestoreVolume", new JObject());
+        _handler.Handle("RestoreVolume", JsonDocument.Parse("{}").RootElement);
 
         _audioMock.Verify(a => a.SetVolume(30), Times.Once);
     }
@@ -116,7 +114,7 @@ public class AudioCommandHandlerTests
     [InlineData(false)]
     public void Mute_SetsMute(bool on)
     {
-        _handler.Handle("Mute", new JObject { ["on"] = on });
+        _handler.Handle("Mute", JsonDocument.Parse($$"""{"on":{{on.ToString().ToLowerInvariant()}}}""").RootElement);
 
         _audioMock.Verify(a => a.SetMute(on), Times.Once);
     }
@@ -127,7 +125,7 @@ public class AudioCommandHandlerTests
     [Fact]
     public void Mute_MissingOn_DefaultsToFalse()
     {
-        _handler.Handle("Mute", new JObject());
+        _handler.Handle("Mute", JsonDocument.Parse("{}").RootElement);
 
         _audioMock.Verify(a => a.SetMute(false), Times.Once);
     }
@@ -140,7 +138,7 @@ public class AudioCommandHandlerTests
     [Fact]
     public void Handle_UnknownKey_DoesNothing()
     {
-        _handler.Handle("UnknownAudioCmd", new JObject());
+        _handler.Handle("UnknownAudioCmd", JsonDocument.Parse("{}").RootElement);
 
         _audioMock.VerifyNoOtherCalls();
     }

@@ -4,10 +4,9 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using autoShell.Logging;
 using autoShell.Services.Interop;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell;
 
@@ -67,21 +66,21 @@ internal class AutoShell
         string rawCmdLine = Marshal.PtrToStringUni(GetCommandLineW());
         string cmdLine = StripExecutableName(rawCmdLine);
 
-        try
+        using var doc = JsonDocument.Parse(cmdLine);
+        var root = doc.RootElement;
+
+        if (root.ValueKind == JsonValueKind.Array)
         {
-            // Try parsing as a JSON array of commands
-            JArray commands = JArray.Parse(cmdLine);
-            foreach (JObject jo in commands.Children<JObject>())
+            foreach (var element in root.EnumerateArray())
             {
-                var result = ExecLine(jo);
-                Console.WriteLine(JsonConvert.SerializeObject(result));
+                var result = ExecLine(element);
+                Console.WriteLine(JsonSerializer.Serialize(result));
             }
         }
-        catch (JsonReaderException)
+        else
         {
-            // Not an array — treat as a single JSON object
-            var result = ExecLine(JObject.Parse(cmdLine));
-            Console.WriteLine(JsonConvert.SerializeObject(result));
+            var result = ExecLine(root);
+            Console.WriteLine(JsonSerializer.Serialize(result));
         }
     }
 
@@ -105,12 +104,16 @@ internal class AutoShell
                 }
 
                 // Each line is a JSON object with one or more command keys
-                JObject root = JObject.Parse(line);
+                using var doc = JsonDocument.Parse(line);
+                var root = doc.RootElement;
                 CommandResult result = ExecLine(root);
 
                 // Pass through the request id if present
-                result.Id = root.Value<string>("id");
-                Console.WriteLine(JsonConvert.SerializeObject(result));
+                if (root.TryGetProperty("id", out JsonElement idElement))
+                {
+                    result.Id = idElement.ToString();
+                }
+                Console.WriteLine(JsonSerializer.Serialize(result));
 
                 if (result.IsQuit)
                 {
@@ -156,6 +159,6 @@ internal class AutoShell
     /// <summary>
     /// Dispatches a parsed JSON command object to the appropriate handler.
     /// </summary>
-    private static CommandResult ExecLine(JObject root)
+    private static CommandResult ExecLine(JsonElement root)
         => s_dispatcher.Dispatch(root);
 }

@@ -3,9 +3,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using autoShell.Services;
 using Microsoft.Win32;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers.Settings;
 
@@ -32,7 +32,7 @@ internal class PrivacySettingsHandler : ICommandHandler
     ];
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JObject parameters)
+    public CommandResult Handle(string key, JsonElement parameters)
     {
         string subKey = key switch
         {
@@ -42,17 +42,12 @@ internal class PrivacySettingsHandler : ICommandHandler
             _ => null,
         };
 
-        if (subKey == null)
-        {
-            return CommandResult.Fail($"Unknown privacy command: {key}");
-        }
-
-        return SetAccessSetting(parameters, subKey, key);
+        return subKey == null ? CommandResult.Fail($"Unknown privacy command: {key}") : SetAccessSetting(parameters, subKey, key);
     }
 
-    private CommandResult SetAccessSetting(JObject parameters, string capability, string commandName)
+    private CommandResult SetAccessSetting(JsonElement parameters, string capability, string commandName)
     {
-        string setting = parameters.Value<string>("accessSetting") ?? "Allow";
+        string setting = parameters.GetStringOrDefault("accessSetting", "Allow");
         string regValue = setting.Equals("deny", StringComparison.OrdinalIgnoreCase) ? "Deny" : "Allow";
 
         _registry.SetValue(

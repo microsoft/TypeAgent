@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Newtonsoft.Json.Linq;
+using System.Text.Json;
 
 namespace autoShell.Tests;
 
@@ -38,8 +38,8 @@ public sealed class EndToEndTests : IDisposable
         string? response = await _process.ReadLineAsync();
 
         Assert.NotNull(response);
-        var array = JArray.Parse(response);
-        Assert.NotEmpty(array);
+        var array = JsonDocument.Parse(response).RootElement;
+        Assert.True(array.GetArrayLength() > 0);
     }
 
     /// <summary>
@@ -54,8 +54,8 @@ public sealed class EndToEndTests : IDisposable
         string? response = await _process.ReadLineAsync(10000);
 
         Assert.NotNull(response);
-        var array = JArray.Parse(response);
-        Assert.NotEmpty(array);
+        var array = JsonDocument.Parse(response).RootElement;
+        Assert.True(array.GetArrayLength() > 0);
     }
 
     /// <summary>
@@ -72,12 +72,10 @@ public sealed class EndToEndTests : IDisposable
 
         Assert.NotNull(response1);
         Assert.NotNull(response2);
-        JArray.Parse(response1);
-        JArray.Parse(response2);
+        _ = JsonDocument.Parse(response1);
+        _ = JsonDocument.Parse(response2);
     }
 
-    /// <summary>
-    /// Verifies that ListResolutions returns a valid JSON string via stdout.
     /// </summary>
     [Fact]
     public async Task ListResolutions_ReturnsResponse()
@@ -140,8 +138,8 @@ public sealed class EndToEndTests : IDisposable
 
         Assert.NotNull(response1);
         Assert.NotNull(response2);
-        JArray.Parse(response1);
-        JArray.Parse(response2);
+        _ = JsonDocument.Parse(response1);
+        _ = JsonDocument.Parse(response2);
     }
 
     /// <summary>
@@ -153,7 +151,7 @@ public sealed class EndToEndTests : IDisposable
         _process.SendCommand("""{"actionName":"ListAppNames","parameters":{}}""");
         string? response1 = await _process.ReadLineAsync();
         Assert.NotNull(response1);
-        JArray.Parse(response1);
+        _ = JsonDocument.Parse(response1);
 
         _process.SendCommand("""{"actionName":"quit","parameters":{}}""");
         _process.WaitForExit(10000);
@@ -248,7 +246,7 @@ public sealed class EndToEndTests : IDisposable
 
         Assert.Equal(0, exitCode);
         Assert.NotEmpty(output);
-        JArray.Parse(output.Trim());
+        _ = JsonDocument.Parse(output.Trim());
     }
 
     /// <summary>
