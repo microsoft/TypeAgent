@@ -1,7 +1,7 @@
-# AgentServer Sessions Architecture 
+# AgentServer Sessions Architecture
 
 **Author:** George Ng
-**Status:** Review 
+**Status:** Review
 **Last Updated:** 2026-04-03
 
 ---
@@ -57,8 +57,8 @@ The `join()` call today accepts only:
 
 ```typescript
 type DispatcherConnectOptions = {
-    filter?: boolean;
-    clientType?: "shell" | "extension";
+  filter?: boolean;
+  clientType?: "shell" | "extension";
 };
 ```
 
@@ -72,12 +72,12 @@ There is no way for a client to specify which session to use, or to perform sess
 
 Each session is identified by:
 
-| Field | Type | Description |
-|---|---|---|
-| `sessionId` | `string` (UUIDv4) | Stable, globally unique identifier |
-| `name` | `string` | Human-readable label (1–256 chars), set by the caller at `createSession()` time. Not enforced unique. |
-| `createdAt` | `string` (ISO 8601) | When the session was first created |
-| `clientCount` | `number` | Number of clients currently connected to this session (runtime-derived; `0` if the session is not loaded in memory). **Never persisted** — see Section 2. |
+| Field         | Type                | Description                                                                                                                                               |
+| ------------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `sessionId`   | `string` (UUIDv4)   | Stable, globally unique identifier                                                                                                                        |
+| `name`        | `string`            | Human-readable label (1–256 chars), set by the caller at `createSession()` time. Not enforced unique.                                                     |
+| `createdAt`   | `string` (ISO 8601) | When the session was first created                                                                                                                        |
+| `clientCount` | `number`            | Number of clients currently connected to this session (runtime-derived; `0` if the session is not loaded in memory). **Never persisted** — see Section 2. |
 
 ### 2. Session Metadata
 
@@ -108,11 +108,11 @@ Each session's full data (chat history, conversation memory, display log) is sto
 
 ```typescript
 type DispatcherConnectOptions = {
-    filter?: boolean;
-    clientType?: "shell" | "extension";
+  filter?: boolean;
+  clientType?: "shell" | "extension";
 
-    // Session management (new)
-    sessionId?: string;   // Join a specific session by UUID. If omitted → resumes most recently active session.
+  // Session management (new)
+  sessionId?: string; // Join a specific session by UUID. If omitted → resumes most recently active session.
 };
 ```
 
@@ -122,15 +122,17 @@ The existing `join` RPC is replaced by `joinSession`. A `leaveSession` call is a
 
 ```typescript
 type AgentServerInvokeFunctions = {
-    // Replaces the old `join`
-    joinSession: (options?: DispatcherConnectOptions) => Promise<JoinSessionResult>;
-    leaveSession: (sessionId: string) => Promise<void>;
+  // Replaces the old `join`
+  joinSession: (
+    options?: DispatcherConnectOptions,
+  ) => Promise<JoinSessionResult>;
+  leaveSession: (sessionId: string) => Promise<void>;
 
-    // Session CRUD
-    createSession: (name: string) => Promise<SessionInfo>;
-    listSessions: (name?: string) => Promise<SessionInfo[]>;
-    renameSession: (sessionId: string, newName: string) => Promise<void>;
-    deleteSession: (sessionId: string) => Promise<void>;
+  // Session CRUD
+  createSession: (name: string) => Promise<SessionInfo>;
+  listSessions: (name?: string) => Promise<SessionInfo[]>;
+  renameSession: (sessionId: string, newName: string) => Promise<void>;
+  deleteSession: (sessionId: string) => Promise<void>;
 };
 ```
 
@@ -138,8 +140,8 @@ type AgentServerInvokeFunctions = {
 
 ```typescript
 type JoinSessionResult = {
-    connectionId: string;
-    sessionId: string;   // The session that was joined or auto-created
+  connectionId: string;
+  sessionId: string; // The session that was joined or auto-created
 };
 ```
 
@@ -149,10 +151,10 @@ type JoinSessionResult = {
 
 ```typescript
 type SessionInfo = {
-    sessionId: string;
-    name: string;
-    clientCount: number;
-    createdAt: string;
+  sessionId: string;
+  name: string;
+  clientCount: number;
+  createdAt: string;
 };
 ```
 
