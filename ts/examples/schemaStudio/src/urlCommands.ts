@@ -156,6 +156,10 @@ function normalizeUrl(rawUrl: string): string {
     }
 }
 
+// Maximum subdomain level difference allowed when matching site to resolved URL
+// (handles www.example.com ↔ example.com and similar single-level redirects)
+const MAX_SUBDOMAIN_DIFFERENCE = 1;
+
 // Returns true when `resolved` looks like a redirect of `site`:
 // same origin (hostname + optional single subdomain), but with an
 // extended path or added query parameters.
@@ -179,7 +183,7 @@ function isRedirectUrl(
 
         // Hosts must be within one subdomain level of each other (handles both
         // www.example.com ↔ example.com and other single-level subdomain redirects)
-        if (Math.abs(resolvedParts.length - siteParts.length) > 1) {
+        if (Math.abs(resolvedParts.length - siteParts.length) > MAX_SUBDOMAIN_DIFFERENCE) {
             return false;
         }
 

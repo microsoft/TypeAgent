@@ -45,9 +45,9 @@ async function main(): Promise<void> {
     const { values, positionals } = parseArgs({
         args: process.argv.slice(2),
         options: {
-            verbose: { type: "boolean", short: "v", default: false },
+            verbose: { type: "boolean", short: "v" },
             files: { type: "string" },
-            help: { type: "boolean", short: "h", default: false },
+            help: { type: "boolean", short: "h" },
         },
         allowPositionals: true,
     });
