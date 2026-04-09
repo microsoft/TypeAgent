@@ -177,7 +177,8 @@ function isRedirectUrl(
         const resolvedParts = resolvedHost.split(".").reverse();
         const siteParts = siteHost.split(".").reverse();
 
-        // Hosts must be within one subdomain level of each other
+        // Hosts must be within one subdomain level of each other (handles both
+        // www.example.com ↔ example.com and other single-level subdomain redirects)
         if (Math.abs(resolvedParts.length - siteParts.length) > 1) {
             return false;
         }
