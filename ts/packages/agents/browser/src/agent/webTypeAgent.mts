@@ -161,6 +161,8 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
         return undefined;
     }
 
+    const sessionId = context.agentContext.sessionId;
+
     const channelProvider = createChannelProviderAdapter(
         "webAgent:server",
         (message) => {
@@ -170,7 +172,7 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
                 );
                 return;
             }
-            const client = agentServer.getActiveClient();
+            const client = agentServer.getActiveClient(sessionId);
             if (client) {
                 client.socket.send(
                     JSON.stringify({
@@ -190,7 +192,7 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
             );
             return;
         }
-        const client = agentServer.getActiveClient();
+        const client = agentServer.getActiveClient(sessionId);
         if (client) {
             client.socket.send(
                 JSON.stringify({

@@ -23,6 +23,7 @@ const debugClientRouting = registerDebug("typeagent:browser:client-routing");
 
 export interface BrowserClient {
     id: string;
+    sessionId: string;
     type: "extension" | "electron";
     socket: WebSocket;
     connectedAt: Date;
@@ -32,15 +33,19 @@ export interface BrowserClient {
     browserControlRpc?: any;
 }
 
+interface SessionHandlers {
+    agentInvokeHandlers?: BrowserAgentInvokeFunctions;
+    getPreferredClientType?: () => "extension" | "electron" | undefined;
+    onClientConnected?: (client: BrowserClient) => void;
+    onClientDisconnected?: (client: BrowserClient) => void;
+    onWebAgentMessage?: (client: BrowserClient, data: any) => void;
+    activeClientId: string | null;
+}
+
 export class AgentWebSocketServer {
     private server: WebSocketServer;
     private clients = new Map<string, BrowserClient>();
-    private activeClientId: string | null = null;
-    public onWebAgentMessage?: (client: BrowserClient, data: any) => void;
-    public getPreferredClientType?: () => "extension" | "electron" | undefined;
-    public onClientConnected?: (client: BrowserClient) => void;
-    public onClientDisconnected?: (client: BrowserClient) => void;
-    private agentInvokeHandlers?: BrowserAgentInvokeFunctions;
+    private sessionHandlers = new Map<string, SessionHandlers>();
 
     constructor(port: number = 8081) {
         this.server = new WebSocketServer({ port });
@@ -49,11 +54,72 @@ export class AgentWebSocketServer {
     }
 
     /**
-     * Set the invoke handlers for the agent service RPC.
-     * These handlers will be registered for each new client connection.
+     * Register per-session handlers. Call during updateAgentContext(enable=true).
+     * Preserves the session's existing activeClientId if already registered.
+     * Also wires up agentRpc for any clients that connected before registration.
      */
-    public setAgentInvokeHandlers(handlers: BrowserAgentInvokeFunctions): void {
-        this.agentInvokeHandlers = handlers;
+    public registerSession(
+        sessionId: string,
+        handlers: Omit<SessionHandlers, "activeClientId">,
+    ): void {
+        const existing = this.sessionHandlers.get(sessionId);
+        this.sessionHandlers.set(sessionId, {
+            ...handlers,
+            activeClientId: existing?.activeClientId ?? null,
+        });
+
+        // Wire up agentRpc for clients that connected before session registration
+        if (handlers.agentInvokeHandlers) {
+            for (const client of this.clients.values()) {
+                if (
+                    client.sessionId === sessionId &&
+                    !client.agentRpc &&
+                    client.channelProvider
+                ) {
+                    const agentServiceChannel =
+                        client.channelProvider.createChannel("agentService");
+                    client.agentRpc = createRpc<
+                        {},
+                        BrowserAgentCallFunctions,
+                        BrowserAgentInvokeFunctions
+                    >(
+                        `agent:service:${client.id}`,
+                        agentServiceChannel,
+                        handlers.agentInvokeHandlers,
+                    );
+                    debug(
+                        `Late-wired agentRpc for pre-registered client: ${client.id}`,
+                    );
+                }
+            }
+        }
+
+        debug(`Session registered: ${sessionId}`);
+    }
+
+    /**
+     * Unregister a session. Call during closeAgentContext.
+     * Closes and removes all clients belonging to this session.
+     * Does NOT stop the server — it is process-level and shared across sessions.
+     */
+    public unregisterSession(sessionId: string): void {
+        // Delete handlers first so the async 'close' events that fire after
+        // socket.close() find no session and skip their cleanup logic.
+        this.sessionHandlers.delete(sessionId);
+        for (const [clientId, client] of this.clients) {
+            if (client.sessionId === sessionId) {
+                if (client.channelProvider) {
+                    client.channelProvider.notifyDisconnected();
+                }
+                client.socket.close();
+                this.clients.delete(clientId);
+            }
+        }
+        debug(`Session unregistered: ${sessionId}`);
+    }
+
+    public hasRegisteredSessions(): boolean {
+        return this.sessionHandlers.size > 0;
     }
 
     private setupHandlers(): void {
@@ -69,9 +135,10 @@ export class AgentWebSocketServer {
     private handleNewConnection(ws: WebSocket, req: IncomingMessage): void {
         const params = new URLSearchParams(req.url?.split("?")[1]);
         const clientId = params.get("clientId");
+        const sessionId = params.get("sessionId");
 
-        if (!clientId) {
-            ws.send(JSON.stringify({ error: "Missing clientId" }));
+        if (!clientId || !sessionId) {
+            ws.send(JSON.stringify({ error: "Missing clientId or sessionId" }));
             ws.close();
             return;
         }
@@ -86,6 +153,8 @@ export class AgentWebSocketServer {
             this.clients.delete(clientId);
         }
 
+        const session = this.sessionHandlers.get(sessionId);
+
         // Create channel provider for this client connection
         const clientChannelProvider = createChannelProviderAdapter(
             `agent:${clientId}`,
@@ -98,7 +167,7 @@ export class AgentWebSocketServer {
 
         // Set up agentService RPC channel for this client
         let clientAgentRpc: any | undefined;
-        if (this.agentInvokeHandlers) {
+        if (session?.agentInvokeHandlers) {
             const agentServiceChannel =
                 clientChannelProvider.createChannel("agentService");
             clientAgentRpc = createRpc<
@@ -108,7 +177,7 @@ export class AgentWebSocketServer {
             >(
                 `agent:service:${clientId}`,
                 agentServiceChannel,
-                this.agentInvokeHandlers,
+                session.agentInvokeHandlers,
             );
         }
 
@@ -122,6 +191,7 @@ export class AgentWebSocketServer {
 
         const client: BrowserClient = {
             id: clientId,
+            sessionId,
             type: clientId === "inlineBrowser" ? "electron" : "extension",
             socket: ws,
             connectedAt: new Date(),
@@ -132,22 +202,26 @@ export class AgentWebSocketServer {
         };
 
         this.clients.set(clientId, client);
-        debug(`Client connected: ${clientId} (${client.type})`);
+        debug(
+            `Client connected: ${clientId} (${client.type}, session: ${sessionId})`,
+        );
 
-        // Always re-evaluate active client when a new client connects
-        // This ensures preferred client type takes precedence when it connects
-        this.selectActiveClient(this.getPreferredClientType?.());
+        // Re-evaluate active client for this session when a new client connects
+        this.selectActiveClientForSession(
+            sessionId,
+            session?.getPreferredClientType?.(),
+        );
 
         ws.send(
             JSON.stringify({
                 type: "welcome",
                 clientId: clientId,
-                isActive: this.activeClientId === clientId,
+                isActive: session?.activeClientId === clientId,
             }),
         );
 
-        if (this.onClientConnected) {
-            this.onClientConnected(client);
+        if (session?.onClientConnected) {
+            session.onClientConnected(client);
         }
 
         ws.on("message", (message: string) => {
@@ -175,16 +249,18 @@ export class AgentWebSocketServer {
             }
 
             // Web agent messages (forwarded from content scripts)
-            if (data.source === "webAgent" && this.onWebAgentMessage) {
-                this.onWebAgentMessage(client, data);
+            const s = this.sessionHandlers.get(client.sessionId);
+            if (data.source === "webAgent" && s?.onWebAgentMessage) {
+                s.onWebAgentMessage(client, data);
             }
         });
 
         ws.on("close", () => {
             debug(`Client disconnected: ${clientId}`);
 
-            if (this.onClientDisconnected) {
-                this.onClientDisconnected(client);
+            const s = this.sessionHandlers.get(client.sessionId);
+            if (s?.onClientDisconnected) {
+                s.onClientDisconnected(client);
             }
 
             if (client.channelProvider) {
@@ -193,8 +269,8 @@ export class AgentWebSocketServer {
 
             this.clients.delete(clientId);
 
-            if (this.activeClientId === clientId) {
-                this.selectNewActiveClient();
+            if (s && s.activeClientId === clientId) {
+                this.selectNewActiveClientForSession(client.sessionId);
             }
         });
 
@@ -203,53 +279,78 @@ export class AgentWebSocketServer {
         });
     }
 
-    public selectActiveClient(
+    public selectActiveClientForSession(
+        sessionId: string,
         preferredClientType?: "extension" | "electron",
     ): void {
+        const session = this.sessionHandlers.get(sessionId);
+        if (!session) return;
+
+        const sessionClients = this.getSessionClients(sessionId);
+
         if (preferredClientType) {
-            // If preferred type is set, ONLY allow that type to become active
-            for (const [id, client] of this.clients) {
+            for (const [id, client] of sessionClients) {
                 if (client.type === preferredClientType) {
-                    this.setActiveClient(id);
+                    this.setActiveClient(sessionId, id);
                     return;
                 }
             }
-            // Preferred type not found - don't set any active client, wait for it
             debug(
-                `Preferred client type '${preferredClientType}' not available yet, waiting...`,
+                `Preferred client type '${preferredClientType}' not available yet for session '${sessionId}', waiting...`,
             );
             return;
         }
 
-        // No preferred type - use default priority: electron > extension > any
-        for (const [id, client] of this.clients) {
+        // No preferred type — use default priority: electron > extension > any
+        for (const [id, client] of sessionClients) {
             if (client.type === "electron") {
-                this.setActiveClient(id);
+                this.setActiveClient(sessionId, id);
                 return;
             }
         }
 
-        const firstClient = this.clients.keys().next();
-        this.activeClientId = firstClient.done ? null : firstClient.value;
-
-        if (this.activeClientId) {
-            debug(`Auto-selected new active client: ${this.activeClientId}`);
+        const firstClient = sessionClients.keys().next();
+        if (!firstClient.done) {
+            this.setActiveClient(sessionId, firstClient.value);
+        } else {
+            session.activeClientId = null;
         }
     }
 
-    private selectNewActiveClient(): void {
-        this.selectActiveClient(this.getPreferredClientType?.());
+    private selectNewActiveClientForSession(sessionId: string): void {
+        const session = this.sessionHandlers.get(sessionId);
+        if (!session) return;
+        this.selectActiveClientForSession(
+            sessionId,
+            session.getPreferredClientType?.(),
+        );
+    }
+
+    private getSessionClients(sessionId: string): Map<string, BrowserClient> {
+        const result = new Map<string, BrowserClient>();
+        for (const [id, client] of this.clients) {
+            if (client.sessionId === sessionId) {
+                result.set(id, client);
+            }
+        }
+        return result;
     }
 
     public getActiveClient(
+        sessionId: string,
         fallbackType?: "extension" | "electron",
     ): BrowserClient | null {
-        const activeClient = this.activeClientId
-            ? this.clients.get(this.activeClientId) || null
+        const session = this.sessionHandlers.get(sessionId);
+        if (!session) return null;
+
+        const activeClient = session.activeClientId
+            ? this.clients.get(session.activeClientId) || null
             : null;
 
         if (!activeClient) {
-            debugClientRouting(`getActiveClient: No active client found`);
+            debugClientRouting(
+                `getActiveClient: No active client found for session '${sessionId}'`,
+            );
         }
 
         if (
@@ -261,9 +362,9 @@ export class AgentWebSocketServer {
 
         if (fallbackType) {
             debugClientRouting(
-                `getActiveClient: Active client doesn't match fallbackType='${fallbackType}', searching for matching client`,
+                `getActiveClient: Active client doesn't match fallbackType='${fallbackType}' for session '${sessionId}', searching...`,
             );
-            for (const [_, client] of this.clients) {
+            for (const [_, client] of this.getSessionClients(sessionId)) {
                 if (client.type === fallbackType) {
                     debugClientRouting(
                         `getActiveClient: Found matching client type='${client.type}', id='${client.id}'`,
@@ -272,7 +373,7 @@ export class AgentWebSocketServer {
                 }
             }
             debugClientRouting(
-                `getActiveClient: No client found with fallbackType='${fallbackType}'`,
+                `getActiveClient: No client found with fallbackType='${fallbackType}' for session '${sessionId}'`,
             );
         }
         return activeClient;
@@ -286,28 +387,28 @@ export class AgentWebSocketServer {
         return Array.from(this.clients.values());
     }
 
-    public setActiveClient(clientId: string): boolean {
-        if (this.clients.has(clientId)) {
-            this.activeClientId = clientId;
+    public setActiveClient(sessionId: string, clientId: string): boolean {
+        const session = this.sessionHandlers.get(sessionId);
+        if (!session || !this.clients.has(clientId)) return false;
 
-            for (const [id, client] of this.clients) {
-                client.socket.send(
-                    JSON.stringify({
-                        type: "active-status-changed",
-                        isActive: id === clientId,
-                    }),
-                );
-            }
+        session.activeClientId = clientId;
 
-            debug(`Active client set to: ${clientId}`);
-            return true;
+        // Notify only clients belonging to this session
+        for (const [id, client] of this.getSessionClients(sessionId)) {
+            client.socket.send(
+                JSON.stringify({
+                    type: "active-status-changed",
+                    isActive: id === clientId,
+                }),
+            );
         }
-        return false;
+
+        debug(`Active client for session '${sessionId}' set to: ${clientId}`);
+        return true;
     }
 
     /**
-     * Send a fire-and-forget event to a client via agentRpc.
-     * This replaces the legacy pattern of sending raw JSON messages for progress events.
+     * Send a fire-and-forget event to a specific client via agentRpc.
      */
     public sendEventToClient<K extends keyof BrowserAgentCallFunctions>(
         clientId: string,
@@ -323,13 +424,14 @@ export class AgentWebSocketServer {
     }
 
     /**
-     * Send a fire-and-forget event to the active client via agentRpc.
+     * Send a fire-and-forget event to the active client for a session via agentRpc.
      */
     public sendEventToActiveClient<K extends keyof BrowserAgentCallFunctions>(
+        sessionId: string,
         event: K,
         ...args: Parameters<BrowserAgentCallFunctions[K]>
     ): boolean {
-        const client = this.getActiveClient();
+        const client = this.getActiveClient(sessionId);
         if (client?.agentRpc) {
             (client.agentRpc.send as any)(event, ...args);
             return true;

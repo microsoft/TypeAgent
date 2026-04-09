@@ -309,6 +309,7 @@ async function initializeBrowserContext(
     }
 
     return {
+        sessionId: clientBrowserControl ? "default" : crypto.randomUUID(),
         clientBrowserControl,
         useExternalBrowserControl: clientBrowserControl === undefined,
         preferredClientType:
@@ -396,77 +397,56 @@ async function updateBrowserContext(
             );
         }
 
-        // Register agentRpc invoke handlers for channel-multiplexed messages
-        context.agentContext.agentWebSocketServer.setAgentInvokeHandlers(
-            createAgentInvokeHandlers(context),
-        );
-
-        context.agentContext.agentWebSocketServer.getPreferredClientType =
-            () => {
-                return context.agentContext.preferredClientType;
-            };
-
-        context.agentContext.agentWebSocketServer.onClientConnected = (
-            client: BrowserClient,
-        ) => {
-            // Recreate externalBrowserControl when a new extension client connects
-            if (client.type === "extension") {
-                debug(
-                    `Extension client connected: ${client.id}, recreating externalBrowserControl`,
-                );
-
-                // Dispose old RPC instance to prevent handler chaining
-                if (context.agentContext.externalBrowserControl) {
-                    context.agentContext.externalBrowserControl.dispose();
-                }
-
-                context.agentContext.externalBrowserControl =
-                    createExternalBrowserClient(
-                        context.agentContext.agentWebSocketServer!,
+        const sessionId = context.agentContext.sessionId;
+        context.agentContext.agentWebSocketServer.registerSession(sessionId, {
+            agentInvokeHandlers: createAgentInvokeHandlers(context),
+            getPreferredClientType: () =>
+                context.agentContext.preferredClientType,
+            onClientConnected: (client: BrowserClient) => {
+                if (client.type === "extension") {
+                    debug(
+                        `Extension client connected: ${client.id}, recreating externalBrowserControl`,
                     );
-            }
-        };
-
-        context.agentContext.agentWebSocketServer.onClientDisconnected = (
-            client: BrowserClient,
-        ) => {
-            // Log disconnection for debugging
-            if (client.type === "extension") {
-                debug(`Extension client disconnected: ${client.id}`);
-            }
-        };
-
-        context.agentContext.agentWebSocketServer.onWebAgentMessage = async (
-            client: BrowserClient,
-            data: any,
-        ) => {
-            // Check for built-in RPC requests (crossword, commerce, etc.)
-            if (
-                data.method === "webAgent/message" &&
-                isBuiltInWebAgentRpcRequest(data.params)
-            ) {
-                const { id, method, params } = data.params;
-                const result = await handleWebAgentRpc(
-                    method,
-                    params,
-                    context,
-                    client.id,
-                );
-
-                const response: BuiltInWebAgentRpcResponse = {
-                    source: "dispatcher",
-                    method: "webAgent/message",
-                    type: "builtInRpcResponse",
-                    id,
-                    ...result,
-                };
-
-                client.socket.send(JSON.stringify(response));
-                return;
-            }
-
-            await processWebAgentMessage(data, context);
-        };
+                    if (context.agentContext.externalBrowserControl) {
+                        context.agentContext.externalBrowserControl.dispose();
+                    }
+                    context.agentContext.externalBrowserControl =
+                        createExternalBrowserClient(
+                            context.agentContext.agentWebSocketServer!,
+                            sessionId,
+                        );
+                }
+            },
+            onClientDisconnected: (client: BrowserClient) => {
+                if (client.type === "extension") {
+                    debug(`Extension client disconnected: ${client.id}`);
+                }
+            },
+            onWebAgentMessage: async (client: BrowserClient, data: any) => {
+                if (
+                    data.method === "webAgent/message" &&
+                    isBuiltInWebAgentRpcRequest(data.params)
+                ) {
+                    const { id, method, params } = data.params;
+                    const result = await handleWebAgentRpc(
+                        method,
+                        params,
+                        context,
+                        client.id,
+                    );
+                    const response: BuiltInWebAgentRpcResponse = {
+                        source: "dispatcher",
+                        method: "webAgent/message",
+                        type: "builtInRpcResponse",
+                        id,
+                        ...result,
+                    };
+                    client.socket.send(JSON.stringify(response));
+                    return;
+                }
+                await processWebAgentMessage(data, context);
+            },
+        });
 
         // Initialize external browser control using the AgentWebSocketServer
         if (
@@ -476,6 +456,7 @@ async function updateBrowserContext(
             context.agentContext.externalBrowserControl =
                 createExternalBrowserClient(
                     context.agentContext.agentWebSocketServer,
+                    sessionId,
                 );
         }
 
@@ -547,8 +528,9 @@ async function closeBrowserContext(
     context: SessionContext<BrowserActionContext>,
 ) {
     if (context.agentContext.agentWebSocketServer) {
-        context.agentContext.agentWebSocketServer.stop();
-        delete context.agentContext.agentWebSocketServer;
+        context.agentContext.agentWebSocketServer.unregisterSession(
+            context.agentContext.sessionId,
+        );
     }
     if (context.agentContext.browserProcess) {
         context.agentContext.browserProcess.kill();
@@ -765,7 +747,7 @@ export function sendWebFlowRefreshToClient(
     const wsServer = context.agentContext.agentWebSocketServer;
     if (!wsServer) return;
 
-    const client = wsServer.getActiveClient();
+    const client = wsServer.getActiveClient(context.agentContext.sessionId);
     if (!client) return;
 
     const message: WebFlowRefreshMessage = {
@@ -2627,11 +2609,12 @@ export const handlers: CommandHandlerTable = {
 
                         // Re-select active client based on new preference
                         if (agentContext.agentWebSocketServer) {
-                            agentContext.agentWebSocketServer.selectActiveClient(
+                            agentContext.agentWebSocketServer.selectActiveClientForSession(
+                                agentContext.sessionId,
                                 "extension",
                             );
                             debugClientRouting(
-                                "[@browser external on] Called selectActiveClient('extension')",
+                                "[@browser external on] Called selectActiveClientForSession('extension')",
                             );
                         }
 
@@ -2672,11 +2655,12 @@ export const handlers: CommandHandlerTable = {
 
                         // Re-select active client based on new preference
                         if (agentContext.agentWebSocketServer) {
-                            agentContext.agentWebSocketServer.selectActiveClient(
+                            agentContext.agentWebSocketServer.selectActiveClientForSession(
+                                agentContext.sessionId,
                                 "electron",
                             );
                             debugClientRouting(
-                                "[@browser external off] Called selectActiveClient('electron')",
+                                "[@browser external off] Called selectActiveClientForSession('electron')",
                             );
                         }
 
