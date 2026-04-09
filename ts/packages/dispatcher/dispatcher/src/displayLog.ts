@@ -7,6 +7,7 @@ import type {
     SetDisplayInfoEntry,
     IAgentMessage,
     RequestId,
+    PendingInteractionRequest,
 } from "@typeagent/dispatcher-types";
 
 import fs from "node:fs";
@@ -193,6 +194,59 @@ export class DisplayLog {
         this.entries.length = 0;
         this.nextSeq = 0;
         this.dirty = true;
+    }
+
+    /**
+     * Append a pending-interaction entry.
+     * @returns the assigned sequence number
+     */
+    logPendingInteraction(interaction: PendingInteractionRequest): number {
+        const seq = this.nextSeq++;
+        const entry: any = {
+            type: "pending-interaction",
+            seq,
+            timestamp: Date.now(),
+            interactionId: interaction.interactionId,
+            interactionType: interaction.type,
+            source: interaction.source,
+        };
+        if (interaction.requestId !== undefined) {
+            entry.requestId = interaction.requestId;
+        }
+        if (interaction.type === "askYesNo") {
+            entry.message = interaction.message;
+            if (interaction.defaultValue !== undefined) {
+                entry.defaultValue = interaction.defaultValue;
+            }
+        } else if (interaction.type === "popupQuestion") {
+            entry.message = interaction.message;
+            entry.choices = interaction.choices;
+            if (interaction.defaultId !== undefined) {
+                entry.defaultId = interaction.defaultId;
+            }
+        } else if (interaction.type === "proposeAction") {
+            entry.actionTemplates = interaction.actionTemplates;
+        }
+        this.entries.push(entry);
+        this.dirty = true;
+        return seq;
+    }
+
+    /**
+     * Append an interaction-resolved entry.
+     * @returns the assigned sequence number
+     */
+    logInteractionResolved(interactionId: string, response: unknown): number {
+        const seq = this.nextSeq++;
+        this.entries.push({
+            type: "interaction-resolved",
+            seq,
+            timestamp: Date.now(),
+            interactionId,
+            response,
+        });
+        this.dirty = true;
+        return seq;
     }
 
     /**

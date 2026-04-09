@@ -53,6 +53,9 @@ export function createDispatcherRpcServer(
         getDisplayHistory: async (...args) => {
             return dispatcher.getDisplayHistory(...args);
         },
+        respondToInteraction: async (...args) => {
+            return dispatcher.respondToInteraction(...args);
+        },
     };
 
     createRpc(

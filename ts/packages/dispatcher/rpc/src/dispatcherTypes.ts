@@ -13,6 +13,7 @@ import type {
     DisplayLogEntry,
     DispatcherStatus,
     ProcessCommandOptions,
+    PendingInteractionResponse,
 } from "@typeagent/dispatcher-types";
 import type { CompletionDirection } from "@typeagent/agent-sdk";
 
@@ -61,6 +62,8 @@ export type DispatcherInvokeFunctions = {
     ): Promise<CommandResult | undefined>;
 
     getDisplayHistory(afterSeq?: number): Promise<DisplayLogEntry[]>;
+
+    respondToInteraction(response: PendingInteractionResponse): Promise<void>;
 };
 
 export type DispatcherCallFunctions = {

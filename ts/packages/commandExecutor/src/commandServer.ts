@@ -278,6 +278,8 @@ function createMcpClientIO(
             logger.log(`ClientIO: closeLocalView(port=${port})`);
         },
         requestChoice(): void {},
+        requestInteraction(): void {},
+        interactionResolved(): void {},
         takeAction(_requestId: RequestId, action: string, data: unknown): void {
             logger.log(
                 `ClientIO: takeAction(action=${action}) - ${JSON.stringify(data)}`,

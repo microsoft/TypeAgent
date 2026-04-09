@@ -55,6 +55,9 @@ export function createDispatcherRpcClient(
         getDisplayHistory(...args) {
             return rpc.invoke("getDisplayHistory", ...args);
         },
+        async respondToInteraction(...args) {
+            return rpc.invoke("respondToInteraction", ...args);
+        },
         cancelCommand(...args) {
             return rpc.send("cancelCommand", ...args);
         },

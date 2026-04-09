@@ -337,6 +337,12 @@ function registerClient(
         closeLocalView: async () => {
             throw new Error("Main process should have handled closeLocalView");
         },
+        requestInteraction: () => {
+            // Shell does not yet support deferred interactions
+        },
+        interactionResolved: () => {
+            // Shell does not yet support deferred interactions
+        },
         takeAction: (_, action, data) => {
             // Android object gets injected on Android devices, otherwise unavailable
             try {

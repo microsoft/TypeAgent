@@ -1187,6 +1187,9 @@ importers:
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
+      '@typeagent/dispatcher-types':
+        specifier: workspace:*
+        version: link:../../dispatcher/types
     devDependencies:
       prettier:
         specifier: ^3.5.3
@@ -1215,6 +1218,9 @@ importers:
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
+      '@typeagent/dispatcher-types':
+        specifier: workspace:*
+        version: link:../../dispatcher/types
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../dispatcher/dispatcher

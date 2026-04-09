@@ -858,6 +858,13 @@ export function createEnhancedClientIO(
                 }
             })();
         },
+        // Async deferred pattern stubs (used by server, no-op in CLI)
+        requestInteraction(): void {
+            // CLI does not support deferred interactions
+        },
+        interactionResolved(): void {
+            // CLI does not support deferred interactions
+        },
         takeAction(requestId: RequestId, action: string, data: unknown): void {
             if (action === "open-folder") {
                 import("open").then(({ default: open }) =>

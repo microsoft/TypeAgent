@@ -139,6 +139,8 @@ async function main() {
                             connectionId: result.connectionId,
                             sessionId,
                             name: result.name,
+                            pendingInteractions:
+                                result.pendingInteractions ?? [],
                         };
                     } catch (e) {
                         channelProvider.deleteChannel(

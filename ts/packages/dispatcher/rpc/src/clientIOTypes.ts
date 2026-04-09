@@ -6,6 +6,7 @@ import type {
     IAgentMessage,
     RequestId,
     TemplateEditConfig,
+    PendingInteractionRequest,
 } from "@typeagent/dispatcher-types";
 
 export type ClientIOInvokeFunctions = {
@@ -72,6 +73,9 @@ export type ClientIOCallFunctions = {
         choices: string[],
         source: string,
     ): void;
+
+    requestInteraction(interaction: PendingInteractionRequest): void;
+    interactionResolved(interactionId: string, response: unknown): void;
 
     takeAction(requestId: RequestId, action: string, data: unknown): void;
 };
