@@ -87,146 +87,114 @@ function resolveOutputPath(
     return path.join(getDefaultOutputDir(), filename);
 }
 
-function buildSystemPrompt(sourceType: string): string {
-    return `You are an expert diagram generator. Your task is to convert the provided content into a valid Excalidraw JSON diagram.
+function buildMermaidSystemPrompt(sourceType: string): string {
+    return `You are an expert at reading documents and extracting their structure as a complete Mermaid flowchart.
+
+Your ONLY output is a valid Mermaid flowchart — no explanations, no markdown fences, just the raw Mermaid syntax starting with "flowchart TD" or "flowchart LR".
+
+RULES:
+- Capture EVERY node, relationship, and label present in the source — do not simplify or omit anything
+- Use quoted labels on nodes and edges so spaces and special characters are safe: A["My Label"]
+- Use --> for directed edges, -- label --> for labelled edges
+- Use subgraph ... end to represent groups or layers
+- Prefer top-down (TD) layout unless the content is clearly horizontal
+
+SOURCE CONTENT TYPE: ${sourceType}
+- If "markdown": headings become top-level nodes, bullet points become child nodes, nested bullets become sub-children
+- If "text": identify all named concepts and their relationships; model causality/dependency as directed edges
+- If "visio-xml": faithfully reproduce the shapes and connectors from the XML
+- If "mermaid": output it unchanged (it is already Mermaid)
+- If "architecture": represent every component, layer, and data-flow arrow`;
+}
+
+function buildExcalidrawSystemPrompt(): string {
+    return `You are a mechanical converter from Mermaid flowchart syntax to Excalidraw JSON.
+You receive a complete Mermaid flowchart and must produce a valid Excalidraw JSON file that faithfully represents every node and edge. Do not omit anything.
 
 OUTPUT FORMAT:
-You MUST output ONLY valid JSON in Excalidraw format. Do NOT include any markdown code fences, explanations, or text outside the JSON.
+Output ONLY valid JSON — no markdown fences, no explanation.
 
-The JSON must have this top-level structure:
+Top-level structure:
 {
   "type": "excalidraw",
   "version": 2,
   "source": "typeagent-excalidraw",
   "elements": [...],
-  "appState": {
-    "gridSize": null,
-    "viewBackgroundColor": "#ffffff"
-  },
+  "appState": { "gridSize": null, "viewBackgroundColor": "#ffffff" },
   "files": {}
 }
 
-ELEMENT TYPES you can use:
-1. "rectangle" - for boxes/containers/nodes
-2. "ellipse" - for circular/oval nodes
-3. "diamond" - for decision points
-4. "text" - for labels (can be standalone or bound to shapes)
-5. "arrow" - for connections/relationships between elements
-6. "line" - for non-directional connections
+ELEMENT TYPES:
+- "rectangle" — regular nodes
+- "diamond" — decision/condition nodes (Mermaid {braces})
+- "ellipse" — terminal/start/end nodes (Mermaid stadium or circle)
+- "text" — bound label for a shape (containerId set) or standalone text
+- "arrow" — directed edge
 
-ELEMENT STRUCTURE (required fields for each element):
+ELEMENT STRUCTURE (every field required):
 {
-  "id": "<unique-string-id>",
-  "type": "<element-type>",
-  "x": <number>,
-  "y": <number>,
-  "width": <number>,
-  "height": <number>,
+  "id": "<unique-string>",
+  "type": "<type>",
+  "x": <number>, "y": <number>, "width": <number>, "height": <number>,
   "angle": 0,
   "strokeColor": "#1e1e1e",
   "backgroundColor": "<color>",
-  "fillStyle": "solid",
-  "strokeWidth": 2,
-  "strokeStyle": "solid",
-  "roughness": 1,
-  "opacity": 100,
-  "seed": <random-integer>,
-  "version": 1,
-  "versionNonce": <random-integer>,
-  "isDeleted": false,
-  "boundElements": null,
-  "updated": 1,
-  "link": null,
-  "locked": false,
-  "groupIds": [],
-  "frameId": null,
+  "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
+  "roughness": 1, "opacity": 100,
+  "seed": <random-int>, "version": 1, "versionNonce": <random-int>,
+  "isDeleted": false, "boundElements": [], "updated": 1,
+  "link": null, "locked": false, "groupIds": [], "frameId": null,
   "roundness": { "type": 3 }
 }
 
-For TEXT elements, also include:
-  "text": "<the text>",
-  "fontSize": 20,
-  "fontFamily": 1,
-  "textAlign": "center",
-  "verticalAlign": "middle",
-  "baseline": 18,
-  "containerId": null (or the id of the shape it's bound to)
+TEXT elements also need:
+  "text": "<label>", "fontSize": 20, "fontFamily": 1,
+  "textAlign": "center", "verticalAlign": "middle", "baseline": 18,
+  "containerId": "<shape-id> or null"
+
+ARROW elements also need:
+  "points": [[0,0],[dx,dy]],
+  "startBinding": { "elementId": "<id>", "focus": 0, "gap": 8 },
+  "endBinding":   { "elementId": "<id>", "focus": 0, "gap": 8 },
+  "startArrowhead": null, "endArrowhead": "arrow"
 
 SIZING SHAPES TO FIT TEXT:
-- Estimate text width: each character is approximately 12px wide at fontSize 20, with a minimum of 100px
-- Estimate text height: each line of text is approximately 28px tall at fontSize 20
-- For multi-line text, count the lines and multiply
-- Add padding of at least 24px on each horizontal side and 16px on each vertical side
-- So for text "Hello World" (11 chars × 12px = 132px), the shape width should be at least 132 + 48 = 180px
-- For shapes with longer text, increase width proportionally; never let text overflow its container
-- Minimum shape dimensions: width 120px, height 60px
+- Estimate ~12px per character at fontSize 20
+- Add 48px horizontal padding (24px each side) and 32px vertical padding (16px each side)
+- Minimum size: 120 × 60px
+- Example: "Hello World" (11 chars) → width = max(11×12+48, 120) = 180, height = 60
 
-For ARROW elements, also include:
-  "points": [[0, 0], [<dx>, <dy>]],
-  "startBinding": { "elementId": "<source-id>", "focus": 0, "gap": 8 },
-  "endBinding": { "elementId": "<target-id>", "focus": 0, "gap": 8 },
-  "startArrowhead": null,
-  "endArrowhead": "arrow"
+BOUND TEXT GEOMETRY — CRITICAL:
+- Every shape with a label needs a paired text element
+- The text element's x, y, width, height must EXACTLY match the container shape
+- Set "containerId" on the text to the shape's id
+- Add {"id": "<text-id>", "type": "text"} to the shape's "boundElements"
 
-ARROW BINDING RULES (critical — broken arrows ruin the diagram):
-- Every arrow MUST have both "startBinding" and "endBinding" set (never null unless intentionally floating)
-- "startBinding.elementId" must match the "id" of an existing shape element in the diagram
-- "endBinding.elementId" must match the "id" of an existing shape element in the diagram
-- On each shape that an arrow connects to, add the arrow's id to the shape's "boundElements" array:
-  "boundElements": [{"id": "<text-id>", "type": "text"}, {"id": "<arrow-id>", "type": "arrow"}]
-- Arrow endpoints must land on the EDGE of their connected shapes, NOT at the center:
-  - Compute the centre of the source shape (sx = x + w/2, sy = y + h/2) and the centre of the target shape (tx = x + w/2, ty = y + h/2)
-  - The start point of the arrow is where the ray from source centre toward target centre exits the source rectangle
-  - The end point of the arrow is where that same ray enters the target rectangle
-  - Set the arrow's "x","y" to the start edge point
-  - Set points[0] to [0, 0] and points[1] to [endX - startX, endY - startY]
-- Always verify that every elementId in startBinding/endBinding refers to a real shape id in the elements array
+ARROW GEOMETRY — CRITICAL:
+- Endpoints must land on the EDGE of shapes, not the center
+- For an arrow from shape A to shape B:
+  - Compute centre of A: (A.x + A.w/2, A.y + A.h/2), centre of B similarly
+  - Start point = where the ray from A-centre toward B-centre exits A's rectangle
+  - End point   = where that ray enters B's rectangle
+  - Arrow x,y = start point; points = [[0,0],[endX-startX, endY-startY]]
+- Add the arrow id to boundElements of both A and B: {"id":"<arrow-id>","type":"arrow"}
+- Both startBinding.elementId and endBinding.elementId must be real ids in the elements array
 
-To bind text to a shape:
-- On the shape element, set "boundElements": [{"id": "<text-id>", "type": "text"}]
-- On the text element, set "containerId": "<shape-id>"
-- The text element's x, y, width, and height MUST exactly match the container shape:
-  - "x": same as container x
-  - "y": same as container y
-  - "width": same as container width
-  - "height": same as container height
-  Excalidraw requires these to match for correct initial placement — do NOT use offsets or center-point coordinates
+LAYOUT:
+- Top-down or left-to-right flow matching the Mermaid layout direction
+- Large concept nodes at least 150px apart edge-to-edge
+- Account for shape width+height when placing nodes — no overlaps
+- Use subgraph boundaries as visual grouping (add a lightly-filled rectangle behind the group)
+- Colors:
+  "#a5d8ff" primary components · "#b2f2bb" data/storage · "#ffd8a8" external services
+  "#d0bfff" processing/logic · "#ffc9c9" errors/alerts · "#fff3bf" notes/annotations
 
-ARROW LABEL TEXT:
-- If an arrow needs a label, create a text element with "containerId": "<arrow-id>" and add {"id": "<label-id>", "type": "text"} to the arrow's "boundElements"
-- Size the label text element to fit its content using the same character-width estimate above
-
-LAYOUT GUIDELINES:
-- For "large concept" elements (primary nodes, major components, top-level headings): place them at least 96px (roughly 1 inch at 96 DPI) apart edge-to-edge, preferably 150–200px
-- For smaller sub-elements or annotations: at least 60px apart edge-to-edge
-- Use a left-to-right or top-to-bottom flow layout
-- Avoid overlapping elements; account for element width and height when computing positions, not just (x, y) origins
-- Group related items visually
-- Use colors to distinguish different categories:
-  - "#a5d8ff" (light blue) for primary components
-  - "#b2f2bb" (light green) for data/storage
-  - "#ffd8a8" (light orange) for external services
-  - "#d0bfff" (light purple) for processing/logic
-  - "#ffc9c9" (light red) for errors/alerts
-  - "#fff3bf" (light yellow) for notes/annotations
-
-SOURCE CONTENT TYPE: ${sourceType}
-- If "markdown": Parse headings as major nodes, bullet points as sub-nodes, and create hierarchy
-- If "text": Identify key concepts, entities, and relationships to create a concept diagram
-- If "visio-xml": Parse the XML structure to recreate the diagram layout with shapes and connectors
-- If "mermaid": Parse Mermaid syntax (flowchart, sequence, etc.) and convert to Excalidraw elements
-- If "architecture": Create an architecture diagram with components, layers, and data flow arrows
-
-SELF-REVIEW CHECKLIST (apply before outputting):
-1. Every shape with a label has a bound text element (boundElements contains the text id, text has containerId set)
-2. Every arrow has both startBinding and endBinding referencing real element ids in the elements array
-3. Every shape connected by an arrow lists that arrow id in its boundElements array
-4. No two elements overlap (check x, y, width, height for all pairs)
-5. All text fits within its container shape (shape width/height is large enough per the sizing rules above)
-6. Arrow labels (if any) have containerId pointing to the arrow id
-7. No dangling element ids — every id referenced anywhere exists as an element in the array
-
-Generate a clean, well-organized diagram that visually represents the content. If anything in the source content is ambiguous (e.g. unclear direction of a relationship, unclear grouping), ask the user for clarification rather than guessing.`;
+SELF-REVIEW before outputting:
+1. Every node in the Mermaid has a corresponding shape + bound text element
+2. Every edge in the Mermaid has a corresponding arrow with valid startBinding and endBinding
+3. No two shapes overlap
+4. All text fits its container (check width)
+5. Every id referenced in a binding or containerId exists in the elements array`;
 }
 
 /**
@@ -457,8 +425,6 @@ async function handleCreateDiagram(
     });
 
     try {
-        const chatModel = openai.createJsonChatModel();
-
         // If sourceContent looks like a file path and that file exists, read it
         let resolvedContent = sourceContent;
         const trimmed = sourceContent.trim();
@@ -479,23 +445,53 @@ async function handleCreateDiagram(
             }
         }
 
-        const systemPrompt = buildSystemPrompt(sourceType);
-        const userPrompt = `Convert the following ${sourceType} content into an Excalidraw diagram:\n\n${resolvedContent}`;
+        // --- Pass 1: extract full structure as Mermaid (cheap tokens, complete content) ---
+        context.actionIO.setDisplay({
+            type: "html",
+            content: `<div class="generating">Step 1/2: Extracting diagram structure...</div>`,
+        });
 
-        const response = await chatModel.complete([
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
+        const mermaidModel = openai.createChatModel();
+        const mermaidResponse = await mermaidModel.complete([
+            {
+                role: "system",
+                content: buildMermaidSystemPrompt(sourceType),
+            },
+            {
+                role: "user",
+                content: `Convert the following ${sourceType} content into a complete Mermaid flowchart:\n\n${resolvedContent}`,
+            },
+        ]);
+
+        if (!mermaidResponse.success) {
+            return createActionResultFromError(
+                `Failed to extract diagram structure: ${mermaidResponse.message}`,
+            );
+        }
+
+        const mermaidDiagram = mermaidResponse.data.trim();
+
+        // --- Pass 2: convert Mermaid → Excalidraw JSON (mechanical translation) ---
+        context.actionIO.setDisplay({
+            type: "html",
+            content: `<div class="generating">Step 2/2: Generating Excalidraw diagram...</div>`,
+        });
+
+        const excalidrawModel = openai.createJsonChatModel();
+        const response = await excalidrawModel.complete([
+            { role: "system", content: buildExcalidrawSystemPrompt() },
+            {
+                role: "user",
+                content: `Convert this Mermaid flowchart to Excalidraw JSON:\n\n${mermaidDiagram}`,
+            },
         ]);
 
         // Clear loading display
-        context.actionIO.setDisplay({
-            type: "html",
-            content: "",
-        });
+        context.actionIO.setDisplay({ type: "html", content: "" });
 
         if (!response.success) {
             return createActionResultFromError(
-                `Failed to generate diagram: ${response.message}`,
+                `Failed to generate Excalidraw JSON: ${response.message}`,
             );
         }
 
