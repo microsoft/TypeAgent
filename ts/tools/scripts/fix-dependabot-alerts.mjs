@@ -9,17 +9,34 @@
  * Run with --help to see available options and exit codes.
  */
 
-import { spawnSync, execFile } from "node:child_process";
+import { spawnSync, execFile, execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 import { AsyncLocalStorage } from "node:async_hooks";
 import chalk from "chalk";
 import semver from "semver";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, "../..");
+// Derive ROOT from the git root + workspace prefix so running from a
+// subdirectory (e.g. ts/tools) still targets the correct workspace root.
+function detectWorkspaceRoot() {
+    try {
+        const gitRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+            encoding: "utf8",
+        }).trim().replace(/\\/g, "/");
+        const cwdNorm = process.cwd().replace(/\\/g, "/");
+        const rel = cwdNorm === gitRoot
+            ? ""
+            : cwdNorm.startsWith(gitRoot + "/")
+                ? cwdNorm.slice(gitRoot.length + 1)
+                : "";
+        const wsPrefix = rel ? rel.split("/")[0] : "";
+        return wsPrefix ? resolve(gitRoot, wsPrefix) : resolve(cwdNorm);
+    } catch {
+        return resolve(process.cwd());
+    }
+}
+const ROOT = detectWorkspaceRoot();
 
 const args = process.argv.slice(2);
 const KNOWN_FLAG_PREFIXES = [
@@ -2082,6 +2099,30 @@ function fetchAlerts() {
 
     // Only npm ecosystem alerts
     alerts = alerts.filter((a) => a.dependency?.package?.ecosystem === "npm");
+
+    // Filter to alerts belonging to the current workspace.
+    // Derive wsPrefix from ROOT (which already points at the workspace root,
+    // even when the script is invoked from a subdirectory like ts/tools).
+    let wsPrefix = "";
+    try {
+        const gitRoot = runCmd("git", ["rev-parse", "--show-toplevel"]).replace(/\\/g, "/");
+        const rootNorm = ROOT.replace(/\\/g, "/");
+        wsPrefix = rootNorm.startsWith(gitRoot + "/")
+            ? rootNorm.slice(gitRoot.length + 1).split("/")[0]
+            : "";
+    } catch {
+        verbose("  Could not determine git root; skipping workspace-specific alert filtering.");
+    }
+    if (wsPrefix) {
+        const before = alerts.length;
+        alerts = alerts.filter((a) => {
+            const manifest = a.dependency?.manifest_path ?? "";
+            return manifest.startsWith(wsPrefix + "/") || manifest === wsPrefix;
+        });
+        if (alerts.length < before) {
+            verbose(`  Filtered to ${alerts.length}/${before} alerts matching workspace "${wsPrefix}/"`);
+        }
+    }
 
     if (alerts.length === 0) {
         log("  No open npm Dependabot alerts found. 🎉");
