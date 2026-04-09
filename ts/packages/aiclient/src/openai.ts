@@ -106,8 +106,8 @@ export enum EnvVars {
     AZURE_OPENAI_API_KEY_EMBEDDING = "AZURE_OPENAI_API_KEY_EMBEDDING",
     AZURE_OPENAI_ENDPOINT_EMBEDDING = "AZURE_OPENAI_ENDPOINT_EMBEDDING",
 
-    AZURE_OPENAI_API_KEY_DALLE = "AZURE_OPENAI_API_KEY_DALLE",
-    AZURE_OPENAI_ENDPOINT_DALLE = "AZURE_OPENAI_ENDPOINT_DALLE",
+    AZURE_OPENAI_API_KEY_IMAGE = "AZURE_OPENAI_API_KEY_IMAGE",
+    AZURE_OPENAI_ENDPOINT_IMAGE = "AZURE_OPENAI_ENDPOINT_IMAGE",
     AZURE_OPENAI_API_KEY_SORA = "AZURE_OPENAI_API_KEY_SORA",
     AZURE_OPENAI_ENDPOINT_SORA = "AZURE_OPENAI_ENDPOINT_SORA",
 
@@ -357,8 +357,9 @@ type ImageCompletion = {
 type ImageData = {
     content_filter_results: FilterResult | FilterError;
     prompt_filter_results: FilterResult | FilterError;
-    revised_prompt: string;
-    url: string;
+    revised_prompt?: string;
+    url?: string;
+    b64_json?: string;
 };
 
 // Statistics returned by the OAI api
@@ -902,7 +903,7 @@ export function createEmbeddingModel(
 }
 
 /**
- * Create a client for the OpenAI image/DallE service
+ * Create a client for the OpenAI gpt-image-1 service
  * @param apiSettings: settings to use to create the client
  */
 export function createImageModel(apiSettings?: ApiSettings): ImageModel {
@@ -936,6 +937,7 @@ export function createImageModel(apiSettings?: ApiSettings): ImageModel {
             prompt,
             n: imageCount,
             size: `${width}x${height}`,
+            output_format: "b64_json",
         };
 
         const result = await callJsonApi(
@@ -955,9 +957,12 @@ export function createImageModel(apiSettings?: ApiSettings): ImageModel {
 
         data.data.map((i) => {
             verifyContentSafety(i);
+            const imageUrl = i.b64_json
+                ? `data:image/png;base64,${i.b64_json}`
+                : (i.url ?? "");
             retValue.images.push({
-                revised_prompt: i.revised_prompt,
-                image_url: i.url,
+                revised_prompt: i.revised_prompt ?? prompt,
+                image_url: imageUrl,
             });
         });
 

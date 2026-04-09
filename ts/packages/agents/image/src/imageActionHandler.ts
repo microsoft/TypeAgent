@@ -103,13 +103,26 @@ async function handlePhotoAction(
                 // save the generated image in the session store and add the image to the knowledge store
                 const id = randomUUID();
                 const fileName = `../generated_images/${id.toString()}.png`;
-                if (
-                    await downloadImage(
+                let saved = false;
+                if (urls[0].startsWith("data:")) {
+                    // gpt-image-1 returns base64-encoded image data
+                    const base64Data = urls[0].substring(
+                        urls[0].indexOf(",") + 1,
+                    );
+                    const buffer = Buffer.from(base64Data, "base64");
+                    photoContext.sessionContext.sessionStorage?.write(
+                        fileName,
+                        buffer,
+                    );
+                    saved = true;
+                } else {
+                    saved = await downloadImage(
                         urls[0],
                         fileName,
                         photoContext.sessionContext.sessionStorage!,
-                    )
-                ) {
+                    );
+                }
+                if (saved) {
                     // add the generated image to the entities
                     result.entities.push({
                         name: fileName.substring(3),

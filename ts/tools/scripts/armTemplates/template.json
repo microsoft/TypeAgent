@@ -261,10 +261,10 @@
                 "raiPolicyName": "Microsoft.DefaultV2"
               }
             },
-            "openai_dalle": {
+            "openai_image": {
               "type": "Microsoft.CognitiveServices/accounts/deployments",
               "apiVersion": "2024-10-01",
-              "name": "[concat(parameters('openai_name'), '/dall-e-3')]",
+              "name": "[concat(parameters('openai_name'), '/gpt-image-1')]",
               "dependsOn": ["openai", "openai_ada_002"],
               "sku": {
                 "name": "Standard",
@@ -273,8 +273,8 @@
               "properties": {
                 "model": {
                   "format": "OpenAI",
-                  "name": "dall-e-3",
-                  "version": "3.0"
+                  "name": "gpt-image-1",
+                  "version": "2025-04-15"
                 },
                 "versionUpgradeOption": "OnceCurrentVersionExpired",
                 "currentCapacity": 1,
@@ -285,7 +285,7 @@
               "type": "Microsoft.CognitiveServices/accounts/deployments",
               "apiVersion": "2024-10-01",
               "name": "[concat(parameters('openai_name'), '/gpt-35-turbo-16k')]",
-              "dependsOn": ["openai", "openai_ada_002", "openai_dalle"],
+              "dependsOn": ["openai", "openai_ada_002", "openai_image"],
               "sku": {
                 "name": "Standard",
                 "capacity": 120
@@ -308,7 +308,7 @@
               "dependsOn": [
                 "openai",
                 "openai_ada_002",
-                "openai_dalle",
+                "openai_image",
                 "openai_gpt35"
               ],
               "sku": {
@@ -333,7 +333,7 @@
               "dependsOn": [
                 "openai",
                 "openai_ada_002",
-                "openai_dalle",
+                "openai_image",
                 "openai_gpt35",
                 "openai_gpt4o"
               ],
@@ -424,16 +424,16 @@
                 "value": "[concat(variables('openaiEndpoint'),'/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview')]"
               }
             },
-            "secrets_dalle_endpoint": {
+            "secrets_image_endpoint": {
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
-              "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-ENDPOINT-DALLE')]",
+              "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-ENDPOINT-IMAGE')]",
               "dependsOn": ["vault"],
               "properties": {
                 "attributes": {
                   "enabled": true
                 },
-                "value": "[concat(variables('openaiEndpoint'),'/openai/deployments/dall-e-3/images/generations?api-version=2024-02-01')]"
+                "value": "[concat(variables('openaiEndpoint'),'/openai/deployments/gpt-image-1/images/generations?api-version=2025-04-01-preview')]"
               }
             },
             "secrets_embedding_endpoint": {

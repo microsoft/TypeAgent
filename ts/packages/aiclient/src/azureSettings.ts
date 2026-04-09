@@ -162,13 +162,13 @@ function azureImageApiSettingsFromEnv(
         modelType: ModelType.Image,
         apiKey: getEnvSetting(
             env,
-            EnvVars.AZURE_OPENAI_API_KEY_DALLE,
+            EnvVars.AZURE_OPENAI_API_KEY_IMAGE,
             endpointName,
             "identity",
         ),
         endpoint: getEnvSetting(
             env,
-            EnvVars.AZURE_OPENAI_ENDPOINT_DALLE,
+            EnvVars.AZURE_OPENAI_ENDPOINT_IMAGE,
             endpointName,
         ),
     };
