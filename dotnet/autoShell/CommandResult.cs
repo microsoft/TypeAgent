@@ -13,7 +13,7 @@ namespace autoShell;
 internal class CommandResult
 {
     [JsonProperty("id", NullValueHandling = NullValueHandling.Ignore)]
-    public int? Id { get; set; }
+    public string Id { get; set; }
 
     [JsonProperty("success")]
     public bool Success { get; init; }

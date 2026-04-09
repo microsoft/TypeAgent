@@ -25,6 +25,21 @@ export type DesktopActionContext = {
     abortRefresh: AbortController | undefined;
 };
 
+interface CommandResult {
+    id?: string;
+    success: boolean;
+    message: string;
+    data?: unknown;
+}
+
+// Pending request map for correlating stdin writes with stdout responses
+const pendingRequests = new Map<
+    string,
+    { resolve: (result: CommandResult) => void; reject: (err: Error) => void }
+>();
+// Buffer for incomplete lines from stdout
+let stdoutBuffer = "";
+
 const autoShellPath = new URL(
     "../../../../../dotnet/autoShell/bin/Debug/autoShell.exe",
     import.meta.url,
@@ -51,11 +66,38 @@ async function ensureAutomationProcess(agentContext: DesktopActionContext) {
     child.on("exit", (code) => {
         debug(`Child exited with code ${code}`);
         agentContext.desktopProcess = undefined;
+        // Reject any pending requests
+        for (const [id, pending] of pendingRequests) {
+            pending.reject(new Error(`autoShell exited with code ${code}`));
+            pendingRequests.delete(id);
+        }
+        stdoutBuffer = "";
     });
 
-    // For tracing
+    // Route stdout lines to pending requests by id
     child.stdout?.on("data", (data) => {
-        debugData(`Process data: ${data.toString()}`);
+        stdoutBuffer += data.toString();
+        let newlineIndex: number;
+        while ((newlineIndex = stdoutBuffer.indexOf("\n")) !== -1) {
+            const line = stdoutBuffer.substring(0, newlineIndex).trim();
+            stdoutBuffer = stdoutBuffer.substring(newlineIndex + 1);
+            if (!line) continue;
+
+            try {
+                const response: CommandResult = JSON.parse(line);
+                debugData(`Response: ${line}`);
+
+                if (response.id !== undefined && pendingRequests.has(response.id)) {
+                    const pending = pendingRequests.get(response.id)!;
+                    pendingRequests.delete(response.id);
+                    pending.resolve(response);
+                } else {
+                    debug(`Unmatched response (id=${response.id}): ${line}`);
+                }
+            } catch {
+                debug(`Non-JSON stdout: ${line}`);
+            }
+        }
     });
 
     child.stderr?.on("data", (data) => {
@@ -66,13 +108,42 @@ async function ensureAutomationProcess(agentContext: DesktopActionContext) {
     return child;
 }
 
+const SEND_ACTION_TIMEOUT_MS = 30000;
+
+async function sendAction(
+    desktopProcess: child_process.ChildProcess,
+    action: object,
+): Promise<CommandResult> {
+    const id = randomUUID();
+    const payload = JSON.stringify({ ...action, id });
+
+    return new Promise<CommandResult>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            pendingRequests.delete(id);
+            reject(new Error(`sendAction timed out after ${SEND_ACTION_TIMEOUT_MS}ms for: ${payload}`));
+        }, SEND_ACTION_TIMEOUT_MS);
+
+        pendingRequests.set(id, {
+            resolve: (result) => {
+                clearTimeout(timeout);
+                resolve(result);
+            },
+            reject: (err) => {
+                clearTimeout(timeout);
+                reject(err);
+            },
+        });
+
+        desktopProcess.stdin?.write(payload + "\n");
+    });
+}
+
 export async function runDesktopActions(
     action: AllDesktopActions,
     agentContext: DesktopActionContext,
     sessionStorage: Storage,
     schemaName?: string, // Schema name for disambiguation (e.g., "desktop-display", "desktop-taskbar")
 ) {
-    let confirmationMessage = "OK";
     const actionName = action.actionName;
 
     // Log schema name for debugging duplicate action resolution
@@ -80,8 +151,7 @@ export async function runDesktopActions(
         debug(`Executing action '${actionName}' from schema '${schemaName}'`);
     }
 
-    // Preprocess actions that need TS-side work (mutate parameters in-place)
-    // and generate user-facing confirmation messages.
+    // Preprocess actions that need TS-side work before sending to autoShell
     switch (actionName) {
         case "SetWallpaper": {
             let file = action.parameters.filePath;
@@ -111,9 +181,7 @@ export async function runDesktopActions(
                 ) {
                     file = file.substring(3);
                 } else {
-                    confirmationMessage =
-                        "Failed to download the requested image.";
-                    break;
+                    return { success: false, message: "Failed to download the requested image." };
                 }
             }
 
@@ -145,55 +213,23 @@ export async function runDesktopActions(
                     }
                 }
             } else {
-                confirmationMessage = "Unknown wallpaper location.";
-                break;
+                return { success: false, message: "Unknown wallpaper location." };
             }
-
-            confirmationMessage =
-                "Set wallpaper to " + action.parameters.filePath;
             break;
         }
-        case "LaunchProgram": {
+        case "LaunchProgram":
+        case "CloseProgram":
+        case "Maximize":
+        case "Minimize":
+        case "SwitchTo":
+        case "PinWindow":
+        case "MoveWindowToDesktop":
             action.parameters.name = await mapInputToAppName(
                 action.parameters.name,
                 agentContext,
             );
-            confirmationMessage = "Launched " + action.parameters.name;
             break;
-        }
-        case "CloseProgram": {
-            action.parameters.name = await mapInputToAppName(
-                action.parameters.name,
-                agentContext,
-            );
-            confirmationMessage = "Closed " + action.parameters.name;
-            break;
-        }
-        case "Maximize": {
-            action.parameters.name = await mapInputToAppName(
-                action.parameters.name,
-                agentContext,
-            );
-            confirmationMessage = "Maximized " + action.parameters.name;
-            break;
-        }
-        case "Minimize": {
-            action.parameters.name = await mapInputToAppName(
-                action.parameters.name,
-                agentContext,
-            );
-            confirmationMessage = "Minimized " + action.parameters.name;
-            break;
-        }
-        case "SwitchTo": {
-            action.parameters.name = await mapInputToAppName(
-                action.parameters.name,
-                agentContext,
-            );
-            confirmationMessage = "Switched to " + action.parameters.name;
-            break;
-        }
-        case "Tile": {
+        case "Tile":
             action.parameters.leftWindow = await mapInputToAppName(
                 action.parameters.leftWindow,
                 agentContext,
@@ -202,282 +238,44 @@ export async function runDesktopActions(
                 action.parameters.rightWindow,
                 agentContext,
             );
-            confirmationMessage = `Tiled ${action.parameters.leftWindow} on the left and ${action.parameters.rightWindow} on the right`;
             break;
-        }
-        case "MoveWindowToDesktop": {
-            action.parameters.name = await mapInputToAppName(
-                action.parameters.name,
-                agentContext,
-            );
-            confirmationMessage = `Moving ${action.parameters.name} to desktop ${action.parameters.desktopId}`;
-            break;
-        }
         case "CursorTrail": {
             const minTrail = 2;
             const maxTrail = 12;
             let trailLength = action.parameters.length;
-            let trailNote = "";
             if (trailLength !== undefined) {
                 if (trailLength < minTrail || trailLength > maxTrail) {
-                    const requested = trailLength;
                     trailLength = Math.max(
                         minTrail,
                         Math.min(maxTrail, trailLength),
                     );
-                    trailNote = ` (requested ${requested}, adjusted to ${trailLength} — valid range is ${minTrail}–${maxTrail})`;
                     action.parameters.length = trailLength;
                 }
             }
-            confirmationMessage = action.parameters.enable
-                ? `Cursor trail enabled${trailNote || (trailLength ? ` with length ${trailLength}` : "")}`
-                : `Cursor trail disabled`;
             break;
         }
-        case "Volume":
-            confirmationMessage = `Volume set to ${action.parameters.targetVolume}%`;
-            break;
-        case "Mute":
-            confirmationMessage = `${action.parameters.on ? "Muted" : "Unmuted"}`;
-            break;
-        case "RestoreVolume":
-            confirmationMessage = `Volume restored`;
-            break;
-        case "SetThemeMode":
-            confirmationMessage = `Changed theme to '${action.parameters.mode}'`;
-            break;
-        case "ConnectWifi":
-            confirmationMessage = `Connecting to WiFi network '${action.parameters.ssid}'`;
-            break;
-        case "DisconnectWifi":
-            confirmationMessage = `Disconnecting from current WiFi network`;
-            break;
-        case "ToggleAirplaneMode":
-            confirmationMessage = `Turning airplane mode ${action.parameters.enable ? "on" : "off"}`;
-            break;
-        case "CreateDesktop":
-            confirmationMessage = `Creating new desktop`;
-            break;
-        case "PinWindow":
-            confirmationMessage = `Pinning '${action.parameters.name}' to all desktops`;
-            break;
-        case "SwitchDesktop":
-            confirmationMessage = `Switching to desktop ${action.parameters.desktopId}`;
-            break;
-        case "NextDesktop":
-            confirmationMessage = `Switching to next desktop`;
-            break;
-        case "PreviousDesktop":
-            confirmationMessage = `Switching to previous desktop`;
-            break;
-        case "ToggleNotifications":
-            confirmationMessage = `Toggling Action Center ${action.parameters.enable ? "on" : "off"}`;
-            break;
-        case "Debug":
-            confirmationMessage = `Debug action executed`;
-            break;
-        case "SetTextSize":
-            confirmationMessage = `Set text size to ${action.parameters.size}%`;
-            break;
-        case "SetScreenResolution":
-            confirmationMessage = `Set screen resolution to ${action.parameters.width}x${action.parameters.height}`;
-            break;
-        case "BluetoothToggle":
-            confirmationMessage = `Bluetooth ${action.parameters.enableBluetooth !== false ? "enabled" : "disabled"}`;
-            break;
-        case "EnableWifi":
-            confirmationMessage = `WiFi ${action.parameters.enable ? "enabled" : "disabled"}`;
-            break;
-        case "EnableMeteredConnections":
-            confirmationMessage = `Metered connections ${action.parameters.enable ? "enabled" : "disabled"}`;
-            break;
-        case "AdjustScreenBrightness":
-            confirmationMessage = `Screen brightness ${action.parameters.brightnessLevel}d`;
-            break;
-        case "EnableBlueLightFilterSchedule":
-            confirmationMessage = `Night Light schedule ${action.parameters.nightLightScheduleDisabled ? "disabled" : "enabled"}`;
-            break;
-        case "AdjustColorTemperature":
-            confirmationMessage = `Color temperature adjusted`;
-            break;
-        case "DisplayScaling":
-            confirmationMessage = `Display scaling set to ${action.parameters.sizeOverride}%`;
-            break;
-        case "AdjustScreenOrientation":
-            confirmationMessage = `Screen orientation set to ${action.parameters.orientation}`;
-            break;
-        case "RotationLock":
-            confirmationMessage = `Rotation lock ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        case "EnableTransparency":
-            confirmationMessage = `Transparency effects ${action.parameters.enable ? "enabled" : "disabled"}`;
-            break;
-        case "ApplyColorToTitleBar":
-            confirmationMessage = `Title bar color ${action.parameters.enableColor ? "enabled" : "disabled"}`;
-            break;
-        case "HighContrastTheme":
-            confirmationMessage = `Opening high contrast theme settings`;
-            break;
-        case "AutoHideTaskbar":
-            confirmationMessage = `Taskbar auto-hide ${action.parameters.hideWhenNotUsing ? "enabled" : "disabled"}`;
-            break;
-        case "TaskbarAlignment":
-            confirmationMessage = `Taskbar aligned to ${action.parameters.alignment}`;
-            break;
-        case "TaskViewVisibility":
-            confirmationMessage = `Task View button ${action.parameters.visibility ? "shown" : "hidden"}`;
-            break;
-        case "ToggleWidgetsButtonVisibility":
-            confirmationMessage = `Widgets button ${action.parameters.visibility}`;
-            break;
-        case "ShowBadgesOnTaskbar":
-            confirmationMessage = `Taskbar badges ${action.parameters.enableBadging !== false ? "enabled" : "disabled"}`;
-            break;
-        case "DisplayTaskbarOnAllMonitors":
-            confirmationMessage = `Taskbar on all monitors ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        case "DisplaySecondsInSystrayClock":
-            confirmationMessage = `Seconds in clock ${action.parameters.enable !== false ? "shown" : "hidden"}`;
-            break;
-        case "MouseCursorSpeed":
-            confirmationMessage = `Mouse cursor speed set to ${action.parameters.speedLevel}`;
-            break;
-        case "MouseWheelScrollLines":
-            confirmationMessage = `Mouse wheel scroll lines set to ${action.parameters.scrollLines}`;
-            break;
-        case "SetPrimaryMouseButton":
-            confirmationMessage = `Primary mouse button set to ${action.parameters.primaryButton}`;
-            break;
-        case "EnhancePointerPrecision":
-            confirmationMessage = `Enhanced pointer precision ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        case "AdjustMousePointerSize":
-            confirmationMessage = `Mouse pointer size adjusted`;
-            break;
-        case "MousePointerCustomization":
-            confirmationMessage = `Mouse pointer customized`;
-            break;
-        case "EnableTouchPad":
-            confirmationMessage = `Touchpad ${action.parameters.enable ? "enabled" : "disabled"}`;
-            break;
-        case "TouchpadCursorSpeed":
-            confirmationMessage = `Touchpad cursor speed adjusted`;
-            break;
-        case "ManageMicrophoneAccess":
-            confirmationMessage = `Microphone access set to ${action.parameters.accessSetting}`;
-            break;
-        case "ManageCameraAccess":
-            confirmationMessage = `Camera access set to ${action.parameters.accessSetting ?? "allow"}`;
-            break;
-        case "ManageLocationAccess":
-            confirmationMessage = `Location access set to ${action.parameters.accessSetting ?? "allow"}`;
-            break;
-        case "BatterySaverActivationLevel":
-            confirmationMessage = `Battery saver threshold set to ${action.parameters.thresholdValue}%`;
-            break;
-        case "SetPowerModePluggedIn":
-            confirmationMessage = `Power mode when plugged in set to ${action.parameters.powerMode}`;
-            break;
-        case "SetPowerModeOnBattery":
-            confirmationMessage = `Power mode on battery adjusted`;
-            break;
-        case "EnableGameMode":
-            confirmationMessage = `Opening Game Mode settings`;
-            break;
-        case "EnableNarratorAction":
-            confirmationMessage = `Narrator ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        case "EnableMagnifier":
-            confirmationMessage = `Magnifier ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        case "EnableStickyKeys":
-            confirmationMessage = `Sticky Keys ${action.parameters.enable ? "enabled" : "disabled"}`;
-            break;
-        case "EnableFilterKeysAction":
-            confirmationMessage = `Filter Keys ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        case "MonoAudioToggle":
-            confirmationMessage = `Mono audio ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        case "ShowFileExtensions":
-            confirmationMessage = `File extensions ${action.parameters.enable !== false ? "shown" : "hidden"}`;
-            break;
-        case "ShowHiddenAndSystemFiles":
-            confirmationMessage = `Hidden files ${action.parameters.enable !== false ? "shown" : "hidden"}`;
-            break;
-        case "AutomaticTimeSettingAction":
-            confirmationMessage = `Automatic time sync ${action.parameters.enableAutoTimeSync ? "enabled" : "disabled"}`;
-            break;
-        case "AutomaticDSTAdjustment":
-            confirmationMessage = `Automatic DST adjustment ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        case "EnableQuietHours":
-            confirmationMessage = `Focus Assist settings opened`;
-            break;
-        case "RememberWindowLocations":
-            confirmationMessage = `Remember window locations ${action.parameters.enable ? "enabled" : "disabled"}`;
-            break;
-        case "MinimizeWindowsOnMonitorDisconnectAction":
-            confirmationMessage = `Minimize windows on disconnect ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        default:
-            throw new Error(`Unknown action: ${actionName}`);
     }
 
-    // Send the original action JSON directly to autoShell
+    // Send to autoShell and return its response
     const desktopProcess = await ensureAutomationProcess(agentContext);
-    desktopProcess.stdin?.write(JSON.stringify(action) + "\r\n");
-
-    return confirmationMessage;
+    return sendAction(desktopProcess, action);
 }
 
 async function fetchInstalledApps(desktopProcess: child_process.ChildProcess) {
-    let timeoutHandle: NodeJS.Timeout;
-
-    const timeoutPromise = new Promise<undefined>((_resolve, reject) => {
-        timeoutHandle = setTimeout(() => {
-            debugError("Timeout while fetching installed apps");
-            reject(undefined);
-        }, 60000);
-    });
-
-    const appsPromise = new Promise<string[] | undefined>((resolve, reject) => {
-        let message = { actionName: "ListAppNames", parameters: {} };
-
-        let allOutput = "";
-        const dataCallBack = (data: any) => {
-            allOutput += data.toString();
-            try {
-                const response = JSON.parse(allOutput);
-                desktopProcess.stdout?.off("data", dataCallBack);
-                desktopProcess.stderr?.off("data", errorCallback);
-                // autoShell now wraps results in CommandResult: { success, message, data }
-                if (response.success && response.data) {
-                    resolve(response.data);
-                } else {
-                    reject(
-                        response.message ?? "Failed to fetch installed apps",
-                    );
-                }
-            } catch {}
-        };
-
-        const errorCallback = (data: any) => {
-            desktopProcess.stdout?.off("data", dataCallBack);
-            desktopProcess.stderr?.off("data", errorCallback);
-            reject(data.toString());
-        };
-
-        desktopProcess.stdout?.on("data", dataCallBack);
-        desktopProcess.stderr?.on("data", errorCallback);
-
-        desktopProcess.stdin?.write(JSON.stringify(message) + "\r\n");
-    });
-
-    return Promise.race([appsPromise, timeoutPromise]).then((result) => {
-        clearTimeout(timeoutHandle);
-        return result;
-    });
+    try {
+        const result = await sendAction(desktopProcess, {
+            actionName: "ListAppNames",
+            parameters: {},
+        });
+        if (result.success && Array.isArray(result.data)) {
+            return result.data as string[];
+        }
+        debugError(`Failed to fetch installed apps: ${result.message}`);
+        return undefined;
+    } catch (e: any) {
+        debugError(`Error fetching installed apps: ${e.message}`);
+        return undefined;
+    }
 }
 
 async function finishRefresh(agentContext: DesktopActionContext) {

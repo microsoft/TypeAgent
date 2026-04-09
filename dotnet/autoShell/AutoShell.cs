@@ -109,7 +109,7 @@ internal class AutoShell
                 CommandResult result = ExecLine(root);
 
                 // Pass through the request id if present
-                result.Id = root.Value<int?>("id");
+                result.Id = root.Value<string>("id");
                 Console.WriteLine(JsonConvert.SerializeObject(result));
 
                 if (result.IsQuit)
