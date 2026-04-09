@@ -18,7 +18,6 @@ import {
 import {
     getFlagMultiple,
     getFlagType,
-    mergeSeparatorMode,
     resolveFlag,
 } from "@typeagent/agent-sdk/helpers/command";
 import { parseParams, ParseParamsResult } from "./parameters.js";
@@ -77,14 +76,19 @@ function detectPendingFlag(
     };
 }
 
-// True when text[0..index) ends with whitespace — i.e., the user
-// has typed trailing whitespace after the last token.  Trailing
-// whitespace acts as a commit signal: the token before it is
-// considered committed and the whitespace itself is consumed, so
-// startIndex should include it and separatorMode should be
-// "optional" (no additional separator needed).
-function hasWhitespaceBefore(text: string, index: number): boolean {
-    return index > 0 && /\s/.test(text[index - 1]);
+// Returns the separatorMode implied by the position in the input.
+// When the position is 0 (beginning of input) or preceded by
+// whitespace, the separator is already satisfied → "optionalSpace".
+// Otherwise returns undefined — callers treat undefined as "separator
+// not yet present" and leave the group's own separatorMode intact
+// (which defaults to "space" per the CompletionGroup contract).
+function inferSeparatorMode(
+    text: string,
+    index: number,
+): "optionalSpace" | undefined {
+    return index === 0 || /\s/.test(text[index - 1])
+        ? "optionalSpace"
+        : undefined;
 }
 
 // True if surrounded by quotes at both ends (matching single or double quotes).
@@ -192,7 +196,7 @@ type ParameterCompletionResult = CommandCompletionResult;
 //                       ["true","false"] completions for this flag.
 //   separatorMode    — when set, the caller should use this as the
 //                       base separator mode (before merging with
-//                       agent-reported modes).  "optional" when
+//                       agent-reported modes).  "optionalSpace" when
 //                       trailing whitespace was consumed by startIndex.
 type CompletionTarget = {
     completionNames: string[];
@@ -225,9 +229,7 @@ function resolveCompletionTarget(
             isPartialValue: false,
             includeFlags: true,
             booleanFlagName,
-            separatorMode: hasWhitespaceBefore(input, remainderIndex)
-                ? "optional"
-                : undefined,
+            separatorMode: inferSeparatorMode(input, remainderIndex),
             directionSensitive: false,
         };
     }
@@ -258,9 +260,7 @@ function resolveCompletionTarget(
                 isPartialValue: true,
                 includeFlags: false,
                 booleanFlagName: undefined,
-                separatorMode: hasWhitespaceBefore(input, startIndex)
-                    ? "optional"
-                    : undefined,
+                separatorMode: inferSeparatorMode(input, startIndex),
                 directionSensitive: false,
             };
         }
@@ -276,11 +276,11 @@ function resolveCompletionTarget(
     // Trailing whitespace commits the flag — direction no longer matters.
     // When the user typed "--level " (with whitespace), they've moved on;
     // fall through to 2b for value completions regardless of direction.
-    const trailingWhitespace = hasWhitespaceBefore(input, remainderIndex);
+    const trailingSepMode = inferSeparatorMode(input, remainderIndex);
     if (
         pendingFlag !== undefined &&
         direction === "backward" &&
-        !trailingWhitespace
+        trailingSepMode === undefined
     ) {
         const flagToken = tokens[tokens.length - 1];
         const flagTokenStart = remainderIndex - flagToken.length;
@@ -290,9 +290,7 @@ function resolveCompletionTarget(
             isPartialValue: false,
             includeFlags: true,
             booleanFlagName,
-            separatorMode: hasWhitespaceBefore(input, flagTokenStart)
-                ? "optional"
-                : undefined,
+            separatorMode: inferSeparatorMode(input, flagTokenStart),
             directionSensitive: true,
         };
     }
@@ -300,7 +298,7 @@ function resolveCompletionTarget(
     // ── Spec case 2b: last token committed, complete next ───────
     // startIndex is the raw position — includes any trailing
     // whitespace that the user typed.  When trailing whitespace is
-    // present, separatorMode becomes "optional" because the
+    // present, separatorMode becomes "optionalSpace" because the
     // whitespace is already consumed.
     if (pendingFlag !== undefined) {
         // Flag awaiting a value — either the user moved forward or
@@ -311,8 +309,8 @@ function resolveCompletionTarget(
             isPartialValue: false,
             includeFlags: false,
             booleanFlagName: undefined,
-            separatorMode: trailingWhitespace ? "optional" : undefined,
-            directionSensitive: !trailingWhitespace,
+            separatorMode: trailingSepMode,
+            directionSensitive: trailingSepMode === undefined,
         };
     }
     return {
@@ -321,7 +319,7 @@ function resolveCompletionTarget(
         isPartialValue: false,
         includeFlags: true,
         booleanFlagName,
-        separatorMode: trailingWhitespace ? "optional" : undefined,
+        separatorMode: trailingSepMode,
         directionSensitive: false,
     };
 }
@@ -358,7 +356,7 @@ function resolveCompletionTarget(
 //       at the *end* of the consumed input (including any trailing
 //       whitespace) and offer completions for the next parameters.
 //       When trailing whitespace is present, separatorMode is
-//       "optional" because the whitespace is already consumed.
+//       "optionalSpace" because the whitespace is already consumed.
 //
 // ── Exceptions to case 2a ────────────────────────────────────────────────
 //
@@ -415,6 +413,7 @@ async function getCommandParameterCompletion(
         completions.push({
             name: target.booleanFlagName,
             completions: ["true", "false"],
+            separatorMode: target.separatorMode,
         });
     }
     if (target.includeFlags && descriptor.parameters.flags !== undefined) {
@@ -427,6 +426,7 @@ async function getCommandParameterCompletion(
             completions.push({
                 name: "Command Flags",
                 completions: flagCompletions,
+                separatorMode: target.separatorMode,
             });
         }
     }
@@ -438,7 +438,6 @@ async function getCommandParameterCompletion(
     // full list of names to complete.
     let agentInvoked = false;
     let agentClosedSet: boolean | undefined;
-    let separatorMode: SeparatorMode | undefined = target.separatorMode;
     let directionSensitive = false;
     let afterWildcard: AfterWildcard = "none";
 
@@ -468,9 +467,25 @@ async function getCommandParameterCompletion(
         if (groupPrefixLength !== undefined && groupPrefixLength !== 0) {
             startIndex = target.startIndex + groupPrefixLength;
             completions.length = 0; // grammar overrides built-in completions
-            // The agent advanced the prefix — it is authoritative for
-            // the separator at this position.
-            separatorMode = agentResult.separatorMode;
+        } else {
+            // Override separatorMode if matchedPrefixLength is undefined or zero.
+            // Intentionally mutates the agent's group objects in-place — the
+            // groups are single-use results from the agent callback and are
+            // not retained by the agent.
+            for (const group of agentResult.groups) {
+                if (
+                    group.separatorMode === "autoSpacePunctuation" ||
+                    group.separatorMode === "spacePunctuation" ||
+                    group.separatorMode === "optionalSpacePunctuation"
+                ) {
+                    group.separatorMode =
+                        target.separatorMode === "optionalSpace"
+                            ? "optionalSpacePunctuation"
+                            : "spacePunctuation";
+                } else {
+                    group.separatorMode = target.separatorMode;
+                }
+            }
         }
         completions.push(...agentResult.groups);
         agentInvoked = true;
@@ -489,7 +504,6 @@ async function getCommandParameterCompletion(
     return {
         completions,
         startIndex,
-        separatorMode,
         closedSet: computeClosedSet(
             agentInvoked,
             agentClosedSet,
@@ -513,13 +527,11 @@ async function completeDescriptor(
 ): Promise<{
     completions: CompletionGroup[];
     startIndex: number | undefined;
-    separatorMode: SeparatorMode | undefined;
     closedSet: boolean;
     directionSensitive: boolean;
     afterWildcard: AfterWildcard;
 }> {
     const completions: CompletionGroup[] = [];
-    let separatorMode: SeparatorMode | undefined;
 
     const parameterCompletions = await getCommandParameterCompletion(
         descriptor,
@@ -547,15 +559,14 @@ async function completeDescriptor(
         completions.push({
             name: "Subcommands",
             completions: Object.keys(table!.commands),
+            separatorMode: "optionalSpace",
         });
-        separatorMode = mergeSeparatorMode(separatorMode, "space");
     }
 
     if (parameterCompletions === undefined) {
         return {
             completions,
             startIndex: undefined,
-            separatorMode,
             closedSet: true,
             directionSensitive: false,
             afterWildcard: "none",
@@ -566,10 +577,6 @@ async function completeDescriptor(
     return {
         completions,
         startIndex: parameterCompletions.startIndex,
-        separatorMode: mergeSeparatorMode(
-            separatorMode,
-            parameterCompletions.separatorMode,
-        ),
         closedSet: parameterCompletions.closedSet,
         directionSensitive: parameterCompletions.directionSensitive,
         afterWildcard: parameterCompletions.afterWildcard,
@@ -628,12 +635,9 @@ async function completeDescriptor(
 //                (b) flag names from the descriptor's ParameterDefinitions,
 //                (c) agent-provided groups via the agent's
 //                    getCommandCompletion callback.
-//
-//   separatorMode
-//                Describes what kind of separator is required between
-//                the matched prefix and the completion text.
-//                Merged: most restrictive mode from any source wins.
-//                When omitted, consumers default to "space".
+//                Each CompletionGroup carries its own separatorMode
+//                describing what separator is required before that
+//                group's completions.
 //
 //   closedSet   true when the returned completions form a *closed set*
 //                of valid continuations after the prefix.  When true
@@ -666,18 +670,7 @@ export async function getCommandCompletion(
         );
         let startIndex = commandConsumedLength;
 
-        // Collect completions and track separatorMode across all sources.
-        // When trailing whitespace was consumed *and* nothing follows
-        // (suffix is empty), separatorMode starts at "optional" — the
-        // space is already part of the anchor so no additional separator
-        // is needed.  When a suffix exists (e.g. "--off"), the space
-        // before it is structural, not trailing.
         const completions: CompletionGroup[] = [];
-        let separatorMode: SeparatorMode | undefined =
-            result.suffix.length === 0 &&
-            hasWhitespaceBefore(input, commandConsumedLength)
-                ? "optional"
-                : undefined;
         let closedSet = true;
         // Track whether direction influenced the result.  When false,
         // the caller can skip re-fetching on direction change.
@@ -717,8 +710,8 @@ export async function getCommandCompletion(
             completions.push({
                 name: "Subcommands",
                 completions: Object.keys(table!.commands),
+                separatorMode: "optionalSpace",
             });
-            separatorMode = mergeSeparatorMode(separatorMode, "none");
             directionSensitive = true;
             // closedSet stays true: subcommand names are exhaustive.
         } else if (descriptor !== undefined) {
@@ -734,10 +727,6 @@ export async function getCommandCompletion(
             if (desc.startIndex !== undefined) {
                 startIndex = desc.startIndex;
             }
-            separatorMode = mergeSeparatorMode(
-                separatorMode,
-                desc.separatorMode,
-            );
             closedSet = desc.closedSet;
             // Direction-sensitive if the command level is (would have
             // taken the reconsideringCommand branch with opposite
@@ -762,14 +751,12 @@ export async function getCommandCompletion(
             completions.push({
                 name: "Subcommands",
                 completions: Object.keys(table.commands),
-            });
-            separatorMode = mergeSeparatorMode(
-                separatorMode,
-                result.parsedAppAgentName !== undefined ||
+                separatorMode:
+                    result.parsedAppAgentName !== undefined ||
                     result.commands.length > 0
-                    ? "space"
-                    : "optional",
-            );
+                        ? "space"
+                        : "optionalSpace",
+            });
         } else {
             // Both table and descriptor are undefined — the agent
             // returned no commands at all.  Nothing to add;
@@ -790,8 +777,8 @@ export async function getCommandCompletion(
                 completions: context.agents
                     .getAppAgentNames()
                     .filter((name) => context.agents.isCommandEnabled(name)),
+                separatorMode: "optionalSpace",
             });
-            separatorMode = mergeSeparatorMode(separatorMode, "optional");
         }
 
         if (startIndex === 0) {
@@ -799,15 +786,12 @@ export async function getCommandCompletion(
             completions.push({
                 name: "Command Prefixes",
                 completions: ["@"],
+                separatorMode: "optionalSpace",
             });
-
-            // The first token doesn't require separator before it
-            separatorMode = "optional";
         }
         const completionResult: CommandCompletionResult = {
             startIndex,
             completions,
-            separatorMode,
             closedSet,
             directionSensitive,
             afterWildcard,
@@ -822,7 +806,6 @@ export async function getCommandCompletion(
         return {
             startIndex: 0,
             completions: [],
-            separatorMode: undefined,
             closedSet: false,
             directionSensitive: false,
             afterWildcard: "none",

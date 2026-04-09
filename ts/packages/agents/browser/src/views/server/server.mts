@@ -34,7 +34,7 @@ async function main() {
     await server.start();
 
     // Process lifecycle management
-    process.send?.("Success");
+    process.send?.({ type: "Success", port: server.port });
 
     process.on("message", (message: any) => {
         debug("Received message:", message);

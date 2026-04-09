@@ -238,8 +238,9 @@ async function getAgentCache(
  * - persistSession: whether to save and restore session state across runs.
  *
  * Agent port assignments - for agents that host their own http server:
- * - portBase: The base port to use for the agents. Default is 9001.   Agents will be assigned ports starting from this value.
  * - allowSharedLocalView: The list of agent names that can get the ports of all other agent's port. Default is undefined.
+ *   Ports are assigned dynamically by the OS (listen on port 0) to avoid conflicts when multiple sessions start concurrently.
+ *   Each agent's view server reports its bound port back to the dispatcher via IPC, which stores it via setLocalHostPort().
  *
  * Logging options:
  * - metrics: whether to enable collection of timing metrics. Default is false.
@@ -261,7 +262,6 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
 
     // Agent port assignments
     allowSharedLocalView?: string[]; // agents that can access any shared local views, default to undefined
-    portBase?: number; // default to 9001
 
     // Indexing service discovery
     indexingServiceRegistry?: IndexingServiceRegistry; // registry for indexing service discovery
@@ -567,10 +567,8 @@ export async function initializeCommandHandlerContext(
         if (embeddingCacheDir) {
             ensureDirectory(embeddingCacheDir);
         }
-        const portBase = options?.portBase ?? 9001;
         const agents = new AppAgentManager(
             cacheDir,
-            portBase,
             options?.allowSharedLocalView,
             options?.agentInitOptions,
         );

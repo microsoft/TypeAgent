@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
-import { describeForEachCompletion } from "./testUtils.js";
+import { describeForEachCompletion, expectMetadata } from "./testUtils.js";
 
 describeForEachCompletion(
     "Grammar Completion - all alternatives after longest match",
@@ -24,54 +24,44 @@ describeForEachCompletion(
 
             it("without partial text: all alternatives are offered", () => {
                 const result = matchGrammarCompletion(grammar, "play rock");
-                expect(result.completions.sort()).toEqual([
-                    "hard",
-                    "loud",
-                    "music",
-                ]);
-                expect(result.matchedPrefixLength).toBe(9);
+                expectMetadata(result, {
+                    completions: ["hard", "loud", "music"],
+                    matchedPrefixLength: 9,
+                });
             });
 
             it("with trailing space: all alternatives are still offered", () => {
                 const result = matchGrammarCompletion(grammar, "play rock ");
-                expect(result.completions.sort()).toEqual([
-                    "hard",
-                    "loud",
-                    "music",
-                ]);
+                expectMetadata(result, {
+                    completions: ["hard", "loud", "music"],
+                });
             });
 
             it("partial text 'm': all alternatives still reported", () => {
                 const result = matchGrammarCompletion(grammar, "play rock m");
                 // All three are reported; caller filters by "m".
-                expect(result.completions.sort()).toEqual([
-                    "hard",
-                    "loud",
-                    "music",
-                ]);
-                expect(result.matchedPrefixLength).toBe(9);
+                expectMetadata(result, {
+                    completions: ["hard", "loud", "music"],
+                    matchedPrefixLength: 9,
+                });
             });
 
             it("partial text 'h': all alternatives still reported", () => {
                 const result = matchGrammarCompletion(grammar, "play rock h");
-                expect(result.completions.sort()).toEqual([
-                    "hard",
-                    "loud",
-                    "music",
-                ]);
-                expect(result.matchedPrefixLength).toBe(9);
+                expectMetadata(result, {
+                    completions: ["hard", "loud", "music"],
+                    matchedPrefixLength: 9,
+                });
             });
 
             it("non-matching text 'x': all alternatives still reported", () => {
                 const result = matchGrammarCompletion(grammar, "play rock x");
                 // All alternatives are reported even though "x" doesn't
                 // prefix-match any of them; the caller filters.
-                expect(result.completions.sort()).toEqual([
-                    "hard",
-                    "loud",
-                    "music",
-                ]);
-                expect(result.matchedPrefixLength).toBe(9);
+                expectMetadata(result, {
+                    completions: ["hard", "loud", "music"],
+                    matchedPrefixLength: 9,
+                });
             });
         });
 
@@ -83,34 +73,25 @@ describeForEachCompletion(
 
             it("all directions offered without partial text", () => {
                 const result = matchGrammarCompletion(grammar, "go");
-                expect(result.completions.sort()).toEqual([
-                    "east",
-                    "north",
-                    "south",
-                    "west",
-                ]);
+                expectMetadata(result, {
+                    completions: ["east", "north", "south", "west"],
+                });
             });
 
             it("'n' trailing: all directions still offered", () => {
                 const result = matchGrammarCompletion(grammar, "go n");
-                expect(result.completions.sort()).toEqual([
-                    "east",
-                    "north",
-                    "south",
-                    "west",
-                ]);
-                expect(result.matchedPrefixLength).toBe(2);
+                expectMetadata(result, {
+                    completions: ["east", "north", "south", "west"],
+                    matchedPrefixLength: 2,
+                });
             });
 
             it("'z' trailing: all directions still offered", () => {
                 const result = matchGrammarCompletion(grammar, "go z");
-                expect(result.completions.sort()).toEqual([
-                    "east",
-                    "north",
-                    "south",
-                    "west",
-                ]);
-                expect(result.matchedPrefixLength).toBe(2);
+                expectMetadata(result, {
+                    completions: ["east", "north", "south", "west"],
+                    matchedPrefixLength: 2,
+                });
             });
         });
 
@@ -126,22 +107,18 @@ describeForEachCompletion(
 
             it("'open f': all alternatives offered", () => {
                 const result = matchGrammarCompletion(grammar, "open f");
-                expect(result.completions.sort()).toEqual([
-                    "file",
-                    "finder",
-                    "folder",
-                ]);
+                expectMetadata(result, {
+                    completions: ["file", "finder", "folder"],
+                });
             });
 
             it("'open fi': all alternatives still offered", () => {
                 const result = matchGrammarCompletion(grammar, "open fi");
                 // "folder" is now correctly reported alongside file/finder.
-                expect(result.completions.sort()).toEqual([
-                    "file",
-                    "finder",
-                    "folder",
-                ]);
-                expect(result.matchedPrefixLength).toBe(4);
+                expectMetadata(result, {
+                    completions: ["file", "finder", "folder"],
+                    matchedPrefixLength: 4,
+                });
             });
         });
 
@@ -158,13 +135,17 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "xyz");
                 // Nothing consumed; the first string part is offered
                 // unconditionally.  The caller filters by trailing text.
-                expect(result.completions).toEqual(["play"]);
-                expect(result.matchedPrefixLength).toBe(0);
+                expectMetadata(result, {
+                    completions: ["play"],
+                    matchedPrefixLength: 0,
+                });
             });
 
             it("partial prefix at start still works", () => {
                 const result = matchGrammarCompletion(grammar, "pl");
-                expect(result.completions).toContain("play");
+                expectMetadata(result, {
+                    completions: ["play"],
+                });
             });
         });
 
@@ -188,24 +169,22 @@ describeForEachCompletion(
                     // Last consumed char: "y" (Latin), first completion char: "m" (Latin)
                     // → separator needed.
                     const result = matchGrammarCompletion(grammar, "play x");
-                    expect(result.completions.sort()).toEqual([
-                        "midi",
-                        "music",
-                    ]);
-                    expect(result.matchedPrefixLength).toBe(4);
-                    expect(result.separatorMode).toBe("spacePunctuation");
+                    expectMetadata(result, {
+                        completions: ["midi", "music"],
+                        matchedPrefixLength: 4,
+                        separatorMode: "autoSpacePunctuation",
+                    });
                 });
 
                 it("reports separatorMode with partial-match trailing text", () => {
                     // "play mu" → consumed "play" (4 chars), trailing "mu".
                     // Same boundary: "y" → "m" → separator needed.
                     const result = matchGrammarCompletion(grammar, "play mu");
-                    expect(result.completions.sort()).toEqual([
-                        "midi",
-                        "music",
-                    ]);
-                    expect(result.matchedPrefixLength).toBe(4);
-                    expect(result.separatorMode).toBe("spacePunctuation");
+                    expectMetadata(result, {
+                        completions: ["midi", "music"],
+                        matchedPrefixLength: 4,
+                        separatorMode: "autoSpacePunctuation",
+                    });
                 });
             });
 
@@ -223,9 +202,11 @@ describeForEachCompletion(
                     // Last consumed char: "生" (CJK), first completion: "音" (CJK)
                     // → separator optional in auto mode.
                     const result = matchGrammarCompletion(grammar, "再生x");
-                    expect(result.completions.sort()).toEqual(["映画", "音楽"]);
-                    expect(result.matchedPrefixLength).toBe(2);
-                    expect(result.separatorMode).toBe("optional");
+                    expectMetadata(result, {
+                        completions: ["映画", "音楽"],
+                        matchedPrefixLength: 2,
+                        separatorMode: "autoSpacePunctuation",
+                    });
                 });
             });
 
@@ -240,9 +221,11 @@ describeForEachCompletion(
                     // "xyz" → consumed 0 chars, offers "play" at prefixLength=0.
                     // No last consumed char → no separator check.
                     const result = matchGrammarCompletion(grammar, "xyz");
-                    expect(result.completions).toEqual(["play"]);
-                    expect(result.matchedPrefixLength).toBe(0);
-                    expect(result.separatorMode).toBe("optional");
+                    expectMetadata(result, {
+                        completions: ["play"],
+                        matchedPrefixLength: 0,
+                        separatorMode: "autoSpacePunctuation",
+                    });
                 });
             });
 
@@ -256,9 +239,11 @@ describeForEachCompletion(
 
                 it("reports separatorMode for spacing=required with trailing text", () => {
                     const result = matchGrammarCompletion(grammar, "play x");
-                    expect(result.completions).toEqual(["music"]);
-                    expect(result.matchedPrefixLength).toBe(4);
-                    expect(result.separatorMode).toBe("spacePunctuation");
+                    expectMetadata(result, {
+                        completions: ["music"],
+                        matchedPrefixLength: 4,
+                        separatorMode: "spacePunctuation",
+                    });
                 });
             });
 
@@ -270,11 +255,13 @@ describeForEachCompletion(
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
 
-                it("reports optional separatorMode for spacing=optional", () => {
+                it("reports optionalSpacePunctuation separatorMode for spacing=optional", () => {
                     const result = matchGrammarCompletion(grammar, "play x");
-                    expect(result.completions).toEqual(["music"]);
-                    expect(result.matchedPrefixLength).toBe(4);
-                    expect(result.separatorMode).toBe("optional");
+                    expectMetadata(result, {
+                        completions: ["music"],
+                        matchedPrefixLength: 4,
+                        separatorMode: "optionalSpacePunctuation",
+                    });
                 });
             });
 
@@ -290,9 +277,11 @@ describeForEachCompletion(
                     // Last consumed: "y" (Latin), completion: "音" (CJK)
                     // → different scripts, separator optional in auto mode.
                     const result = matchGrammarCompletion(grammar, "play x");
-                    expect(result.completions).toEqual(["音楽"]);
-                    expect(result.matchedPrefixLength).toBe(4);
-                    expect(result.separatorMode).toBe("optional");
+                    expectMetadata(result, {
+                        completions: ["音楽"],
+                        matchedPrefixLength: 4,
+                        separatorMode: "autoSpacePunctuation",
+                    });
                 });
             });
         });

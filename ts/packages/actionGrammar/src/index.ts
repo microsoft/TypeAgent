@@ -24,14 +24,18 @@ export type {
 export { writeGrammarRules } from "./grammarRuleWriter.js";
 
 export { matchGrammar, GrammarMatchResult } from "./grammarMatcher.js";
+export { needsSeparatorInAutoMode } from "./grammarMatcher.js";
 
 export {
     matchGrammarCompletion,
     GrammarCompletionResult,
-    isRequiringSepMode,
-    hasTrailingSeparator,
+    spacingModeToSeparatorMode,
 } from "./grammarCompletion.js";
-export type { AfterWildcard } from "./grammarCompletion.js";
+export type {
+    AfterWildcard,
+    GrammarCompletionGroup,
+    GrammarCompletionProperty,
+} from "./grammarCompletion.js";
 
 // Entity system
 export type { EntityValidator, EntityConverter } from "./entityRegistry.js";

@@ -18,10 +18,14 @@ import {
 // Separator mode for completion results.  Structurally identical to
 // SeparatorMode from @typeagent/agent-sdk (command.ts); independently
 // defined here so actionGrammar does not depend on agentSdk.  Keep
-// both definitions in sync.  The grammar matcher only produces
-// "spacePunctuation", "optional", and "none" — never "space"
-// (which is strictly command/flag-level).
-export type SeparatorMode = "space" | "spacePunctuation" | "optional" | "none";
+// both definitions in sync.
+export type SeparatorMode =
+    | "space"
+    | "spacePunctuation"
+    | "optionalSpacePunctuation"
+    | "optionalSpace"
+    | "none"
+    | "autoSpacePunctuation";
 
 const debugMatchRaw = registerDebug("typeagent:grammar:match");
 
@@ -89,54 +93,6 @@ export function requiresSeparator(
         case undefined: // auto
             return needsSeparatorInAutoMode(a, b);
     }
-}
-
-// Convert a per-candidate (needsSep, spacingMode) pair into a
-// SeparatorMode value.  When needsSep is true (separator required),
-// the grammar always uses spacePunctuation separators.
-// When needsSep is false: "none" spacingMode → "none", otherwise
-// → "optional" (covers auto mode/CJK/mixed and explicit "optional").
-export function candidateSeparatorMode(
-    needsSep: boolean,
-    spacingMode: CompiledSpacingMode,
-): SeparatorMode {
-    if (needsSep) {
-        return "spacePunctuation";
-    }
-    if (spacingMode === "none") {
-        return "none";
-    }
-    return "optional";
-}
-
-// Merge a new candidate's separator mode into the running aggregate.
-// The mode requiring the strongest separator wins (i.e. the mode that
-// demands the most from the user): space > spacePunctuation > optional > none.
-export function mergeSeparatorMode(
-    current: SeparatorMode | undefined,
-    needsSep: boolean,
-    spacingMode: CompiledSpacingMode,
-): SeparatorMode {
-    const candidateMode = candidateSeparatorMode(needsSep, spacingMode);
-    if (current === undefined) {
-        return candidateMode;
-    }
-    // "space" requires strict whitespace — strongest requirement.
-    if (current === "space" || candidateMode === "space") {
-        return "space";
-    }
-    // "spacePunctuation" requires a separator — next strongest.
-    if (
-        current === "spacePunctuation" ||
-        candidateMode === "spacePunctuation"
-    ) {
-        return "spacePunctuation";
-    }
-    // "optional" is a stronger requirement than "none".
-    if (current === "optional" || candidateMode === "optional") {
-        return "optional";
-    }
-    return "none";
 }
 
 export function isBoundarySatisfied(

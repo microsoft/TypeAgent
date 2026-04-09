@@ -23,10 +23,11 @@
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
     "test": "npm run test:local",
+    "test:live": "pnpm run jest-esm --testPathPattern=\".*[.]test[.]js\"",
     "test:local": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
     "test:local:debug": "node --inspect-brk --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --testPathPattern=\".*\\.spec\\.js\"",
     "test:offline": "npm run test:local -- --testNamePattern=\"\\.offline\"",
-    "test:online": "npm run test:local -- --testNamePattern=\"\\.online\"",
+    "test:online": "npm run test:live -- --testNamePattern=\"\\.online\"",
     "tsc": "tsc -b"
   },
   "dependencies": {

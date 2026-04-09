@@ -41,7 +41,6 @@ function grammarCompletion(token: string): CompletionGroups {
                 },
             ],
             matchedPrefixLength: quoteOffset + 5,
-            separatorMode: "space",
         };
     }
     if (text.startsWith("東京")) {
@@ -54,10 +53,10 @@ function grammarCompletion(token: string): CompletionGroups {
                 {
                     name: "Grammar",
                     completions: ["タワー", "駅"],
+                    separatorMode: "optionalSpace",
                 },
             ],
             matchedPrefixLength: quoteOffset + 2,
-            separatorMode: "optional",
         };
     }
     // No prefix matched — offer initial completions.
@@ -69,7 +68,6 @@ function grammarCompletion(token: string): CompletionGroups {
             },
         ],
         ...(token.length > 0 ? { matchedPrefixLength: 0 } : {}),
-        separatorMode: "space",
     };
 }
 
@@ -364,10 +362,10 @@ const handlers = {
                         {
                             name: "Keywords",
                             completions: ["by", "from"],
+                            separatorMode: "spacePunctuation",
                         },
                     ],
                     matchedPrefixLength: 5,
-                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -512,6 +510,177 @@ const throwAgent: AppAgent = {
     ...getCommandInterface(throwHandlers),
 };
 
+// ---------------------------------------------------------------------------
+// automode agent — returns groups with autoSpacePunctuation /
+// spacePunctuation / none and matchedPrefixLength=0.  Exercises the
+// separator override logic in getCommandParameterCompletion when the
+// agent has NOT advanced the prefix.
+// ---------------------------------------------------------------------------
+const automodeHandlers = {
+    description: "Agent returning autoSpacePunctuation groups",
+    defaultSubCommand: "auto",
+    commands: {
+        auto: {
+            description: "Returns autoSpacePunctuation with mpl=0",
+            parameters: {
+                args: {
+                    entity: {
+                        description: "An entity",
+                    },
+                },
+            },
+            run: async () => {},
+            getCompletion: async (
+                _context: unknown,
+                _params: unknown,
+                names: string[],
+            ): Promise<CompletionGroups> => {
+                if (!names.includes("entity")) {
+                    return { groups: [] };
+                }
+                return {
+                    groups: [
+                        {
+                            name: "AutoEntities",
+                            completions: ["タワー", "駅"],
+                            separatorMode: "autoSpacePunctuation",
+                        },
+                    ],
+                    matchedPrefixLength: 0,
+                };
+            },
+        },
+        spacepunct: {
+            description: "Returns spacePunctuation with mpl=0",
+            parameters: {
+                args: {
+                    entity: {
+                        description: "An entity",
+                    },
+                },
+            },
+            run: async () => {},
+            getCompletion: async (
+                _context: unknown,
+                _params: unknown,
+                names: string[],
+            ): Promise<CompletionGroups> => {
+                if (!names.includes("entity")) {
+                    return { groups: [] };
+                }
+                return {
+                    groups: [
+                        {
+                            name: "SpacePunctEntities",
+                            completions: ["alpha", "beta"],
+                            separatorMode: "spacePunctuation",
+                        },
+                    ],
+                    matchedPrefixLength: 0,
+                };
+            },
+        },
+        optpunct: {
+            description: "Returns optionalSpacePunctuation with mpl=0",
+            parameters: {
+                args: {
+                    entity: {
+                        description: "An entity",
+                    },
+                },
+            },
+            run: async () => {},
+            getCompletion: async (
+                _context: unknown,
+                _params: unknown,
+                names: string[],
+            ): Promise<CompletionGroups> => {
+                if (!names.includes("entity")) {
+                    return { groups: [] };
+                }
+                return {
+                    groups: [
+                        {
+                            name: "OptPunctEntities",
+                            completions: ["gamma", "delta"],
+                            separatorMode: "optionalSpacePunctuation",
+                        },
+                    ],
+                    matchedPrefixLength: 0,
+                };
+            },
+        },
+        nonemode: {
+            description: "Returns none separatorMode with mpl=0",
+            parameters: {
+                args: {
+                    entity: {
+                        description: "An entity",
+                    },
+                },
+            },
+            run: async () => {},
+            getCompletion: async (
+                _context: unknown,
+                _params: unknown,
+                names: string[],
+            ): Promise<CompletionGroups> => {
+                if (!names.includes("entity")) {
+                    return { groups: [] };
+                }
+                return {
+                    groups: [
+                        {
+                            name: "NoneEntities",
+                            completions: ["epsilon", "zeta"],
+                            separatorMode: "none",
+                        },
+                    ],
+                    matchedPrefixLength: 0,
+                };
+            },
+        },
+        nompl: {
+            description: "Returns groups with no matchedPrefixLength",
+            parameters: {
+                args: {
+                    entity: {
+                        description: "An entity",
+                    },
+                },
+            },
+            run: async () => {},
+            getCompletion: async (
+                _context: unknown,
+                _params: unknown,
+                names: string[],
+            ): Promise<CompletionGroups> => {
+                if (!names.includes("entity")) {
+                    return { groups: [] };
+                }
+                return {
+                    groups: [
+                        {
+                            name: "NoMplEntities",
+                            completions: ["eta", "theta"],
+                            separatorMode: "autoSpacePunctuation",
+                        },
+                    ],
+                };
+            },
+        },
+    },
+} as const;
+
+const automodeConfig: AppAgentManifest = {
+    emojiChar: "🔀",
+    description: "Automode completion test",
+};
+
+const automodeAgent: AppAgent = {
+    ...getCommandInterface(automodeHandlers),
+};
+
 const testCompletionAgentProviderMulti: AppAgentProvider = {
     getAppAgentNames: () => [
         "comptest",
@@ -519,6 +688,7 @@ const testCompletionAgentProviderMulti: AppAgentProvider = {
         "nocmdtest",
         "numstrtest",
         "throwtest",
+        "automodetest",
     ],
     getAppAgentManifest: async (name: string) => {
         if (name === "comptest") return config;
@@ -526,6 +696,7 @@ const testCompletionAgentProviderMulti: AppAgentProvider = {
         if (name === "nocmdtest") return noCommandsConfig;
         if (name === "numstrtest") return numstrConfig;
         if (name === "throwtest") return throwConfig;
+        if (name === "automodetest") return automodeConfig;
         throw new Error(`Unknown: ${name}`);
     },
     loadAppAgent: async (name: string) => {
@@ -534,6 +705,7 @@ const testCompletionAgentProviderMulti: AppAgentProvider = {
         if (name === "nocmdtest") return noCommandsAgent;
         if (name === "numstrtest") return numstrAgent;
         if (name === "throwtest") return throwAgent;
+        if (name === "automodetest") return automodeAgent;
         throw new Error(`Unknown: ${name}`);
     },
     unloadAppAgent: async (name: string) => {
@@ -544,6 +716,7 @@ const testCompletionAgentProviderMulti: AppAgentProvider = {
                 "nocmdtest",
                 "numstrtest",
                 "throwtest",
+                "automodetest",
             ].includes(name)
         )
             throw new Error(`Unknown: ${name}`);
@@ -802,9 +975,9 @@ describe("Command Completion - startIndex", () => {
             );
             expect(result).toBeDefined();
             // "run" is the default subcommand, so subcommand alternatives
-            // are included and the group has separatorMode: "space".
-            // Subcommand completions at the boundary retain "space".
-            expect(result!.separatorMode).toBe("space");
+            // are included.  Per-group separatorMode is "optionalSpace"
+            // because the trailing whitespace is already consumed.
+            expect(result!.completions[0].separatorMode).toBe("optionalSpace");
             // startIndex includes trailing whitespace.
             expect(result!.startIndex).toBe(10);
         });
@@ -816,8 +989,10 @@ describe("Command Completion - startIndex", () => {
                 context,
             );
             expect(result).toBeDefined();
-            expect(result!.separatorMode).toBe("space");
-            // No trailing whitespace to trim — startIndex stays at end
+            // Subcommand group gets "optionalSpace" — no explicit
+            // subcommand was typed, alternatives offered at the agent
+            // boundary.
+            expect(result!.completions[0].separatorMode).toBe("optionalSpace");
             expect(result!.startIndex).toBe(9);
             // Default subcommand has agent completions → not exhaustive.
             expect(result!.closedSet).toBe(false);
@@ -827,34 +1002,31 @@ describe("Command Completion - startIndex", () => {
             const result = await getCommandCompletion("@", "forward", context);
             expect(result).toBeDefined();
             // Top-level completions (agent names, system subcommands)
-            // follow '@' — space is accepted but not required.
-            expect(result!.separatorMode).toBe("optional");
-            // Agent names are offered when no agent was recognized,
-            // independent of which branch (descriptor/table/neither)
-            // produced the subcommand completions.
-            const agentGroup = result!.completions.find(
+            // follow '@' — agent names use optionalSpace since the '@'
+            // marker doesn't require whitespace before the name.
+            const agentNamesGroup = result!.completions.find(
                 (g) => g.name === "Agent Names",
             );
-            expect(agentGroup).toBeDefined();
-            expect(agentGroup!.completions).toContain("comptest");
+            expect(agentNamesGroup).toBeDefined();
+            expect(agentNamesGroup!.separatorMode).toBe("optionalSpace");
+            expect(agentNamesGroup!.completions).toContain("comptest");
             // Subcommand + agent name sets are finite → exhaustive.
             expect(result!.closedSet).toBe(true);
         });
 
-        it("does not set separatorMode for parameter completions only", async () => {
+        it("returns optionalSpace separatorMode for parameter completions after space", async () => {
             const result = await getCommandCompletion(
                 "@comptest run bu",
                 "forward",
                 context,
             );
             expect(result).toBeDefined();
-            // Partial parameter token — only parameter completions returned,
-            // no subcommand group.  separatorMode set to "optional"
-            // due to trailing space advancement.
-            expect(result!.separatorMode).toBe("optional");
+            // Partial parameter token — the space before "bu" was already
+            // consumed, so the group's separatorMode is "optionalSpace".
+            expect(result!.completions[0].separatorMode).toBe("optionalSpace");
         });
 
-        it("returns no separatorMode for partial unmatched token consumed as param", async () => {
+        it("returns optionalSpace separatorMode for partial unmatched token consumed as param", async () => {
             const result = await getCommandCompletion(
                 "@comptest ne",
                 "forward",
@@ -862,15 +1034,14 @@ describe("Command Completion - startIndex", () => {
             );
             expect(result).toBeDefined();
             // "ne" is fully consumed as the "task" arg by parameter
-            // parsing.  No trailing space.  startIndex = 10
-            // (after "@comptest "), which is ≤ commandConsumedLength
-            // (10), so sibling subcommands are included with
-            // separatorMode="space".
-            expect(result!.separatorMode).toBe("space");
+            // parsing.  startIndex = 10 (after "@comptest "), which is ≤
+            // commandConsumedLength (10), so sibling subcommands are
+            // included with per-group separatorMode.
             const subcommands = result!.completions.find(
                 (g) => g.name === "Subcommands",
             );
             expect(subcommands).toBeDefined();
+            expect(subcommands!.separatorMode).toBe("optionalSpace");
             expect(result!.startIndex).toBe(10);
         });
     });
@@ -1879,6 +2050,190 @@ describe("Command Completion - startIndex", () => {
             );
             expect(result).toBeDefined();
             expect(result.afterWildcard).toBe("none");
+        });
+    });
+
+    // ── Gap 1: separatorMode override logic when matchedPrefixLength=0 ──
+
+    describe("separatorMode override when agent has not advanced prefix (mpl=0)", () => {
+        // When the agent returns matchedPrefixLength=0 (or undefined),
+        // the dispatcher overrides per-group separatorMode based on
+        // target.separatorMode (which reflects trailing whitespace).
+        // Groups with autoSpacePunctuation / spacePunctuation /
+        // optionalSpacePunctuation are resolved to either
+        // "optionalSpacePunctuation" (if target has "optionalSpace")
+        // or "spacePunctuation" (otherwise).  Other modes get the
+        // target's separatorMode directly.
+
+        it("autoSpacePunctuation with trailing space → optionalSpacePunctuation", async () => {
+            // "@automodetest auto " — trailing space makes target.separatorMode = "optionalSpace"
+            const result = await getCommandCompletion(
+                "@automodetest auto ",
+                "forward",
+                context,
+            );
+            const group = result.completions.find(
+                (g) => g.name === "AutoEntities",
+            );
+            expect(group).toBeDefined();
+            expect(group!.separatorMode).toBe("optionalSpacePunctuation");
+        });
+
+        it("autoSpacePunctuation without trailing space → spacePunctuation", async () => {
+            // "@automodetest auto" — no trailing space, target.separatorMode = undefined
+            const result = await getCommandCompletion(
+                "@automodetest auto",
+                "forward",
+                context,
+            );
+            // Agent returns mpl=0 and autoSpacePunctuation.
+            // target.separatorMode is undefined (no trailing whitespace
+            // after the implicit-default-subcommand boundary at pos 13).
+            // Override: auto/spacePunct/optPunct without optionalSpace → "spacePunctuation".
+            const group = result.completions.find(
+                (g) => g.name === "AutoEntities",
+            );
+            expect(group).toBeDefined();
+            expect(group!.separatorMode).toBe("spacePunctuation");
+        });
+
+        it("spacePunctuation with trailing space → optionalSpacePunctuation", async () => {
+            const result = await getCommandCompletion(
+                "@automodetest spacepunct ",
+                "forward",
+                context,
+            );
+            const group = result.completions.find(
+                (g) => g.name === "SpacePunctEntities",
+            );
+            expect(group).toBeDefined();
+            expect(group!.separatorMode).toBe("optionalSpacePunctuation");
+        });
+
+        it("spacePunctuation without trailing space → spacePunctuation", async () => {
+            const result = await getCommandCompletion(
+                "@automodetest spacepunct",
+                "forward",
+                context,
+            );
+            const group = result.completions.find(
+                (g) => g.name === "SpacePunctEntities",
+            );
+            expect(group).toBeDefined();
+            expect(group!.separatorMode).toBe("spacePunctuation");
+        });
+
+        it("optionalSpacePunctuation with trailing space → optionalSpacePunctuation", async () => {
+            const result = await getCommandCompletion(
+                "@automodetest optpunct ",
+                "forward",
+                context,
+            );
+            const group = result.completions.find(
+                (g) => g.name === "OptPunctEntities",
+            );
+            expect(group).toBeDefined();
+            expect(group!.separatorMode).toBe("optionalSpacePunctuation");
+        });
+
+        it("optionalSpacePunctuation without trailing space → spacePunctuation", async () => {
+            const result = await getCommandCompletion(
+                "@automodetest optpunct",
+                "forward",
+                context,
+            );
+            const group = result.completions.find(
+                (g) => g.name === "OptPunctEntities",
+            );
+            expect(group).toBeDefined();
+            expect(group!.separatorMode).toBe("spacePunctuation");
+        });
+
+        it("none mode with trailing space → overridden to optionalSpace", async () => {
+            const result = await getCommandCompletion(
+                "@automodetest nonemode ",
+                "forward",
+                context,
+            );
+            const group = result.completions.find(
+                (g) => g.name === "NoneEntities",
+            );
+            expect(group).toBeDefined();
+            // "none" is not auto/spacePunct/optPunct so takes target.separatorMode directly.
+            expect(group!.separatorMode).toBe("optionalSpace");
+        });
+
+        it("none mode without trailing space → overridden to target (undefined)", async () => {
+            const result = await getCommandCompletion(
+                "@automodetest nonemode",
+                "forward",
+                context,
+            );
+            const group = result.completions.find(
+                (g) => g.name === "NoneEntities",
+            );
+            expect(group).toBeDefined();
+            // target.separatorMode is undefined (default "space")
+            expect(group!.separatorMode).toBeUndefined();
+        });
+
+        it("undefined matchedPrefixLength triggers override path", async () => {
+            const result = await getCommandCompletion(
+                "@automodetest nompl ",
+                "forward",
+                context,
+            );
+            // nompl handler returns no matchedPrefixLength at all.
+            // Override branch fires (groupPrefixLength undefined).
+            const group = result.completions.find(
+                (g) => g.name === "NoMplEntities",
+            );
+            expect(group).toBeDefined();
+            expect(group!.separatorMode).toBe("optionalSpacePunctuation");
+        });
+    });
+
+    // ── Gap 2: inferSeparatorMode at position 0 ──────────────────────────
+
+    describe("inferSeparatorMode at position 0 (empty parameter input)", () => {
+        it("returns optionalSpace for resolved agent with no parameter text", async () => {
+            // "@automodetest " — default subcommand "auto" resolved,
+            // no parameter text typed.  inferSeparatorMode(input, 14)
+            // sees trailing space → optionalSpace.
+            const result = await getCommandCompletion(
+                "@automodetest ",
+                "forward",
+                context,
+            );
+            // Agent returns autoSpacePunctuation, trailing space makes
+            // target.separatorMode = "optionalSpace", auto → optionalSpacePunctuation.
+            const group = result.completions.find(
+                (g) => g.name === "AutoEntities",
+            );
+            expect(group).toBeDefined();
+            expect(group!.separatorMode).toBe("optionalSpacePunctuation");
+        });
+
+        it("empty input (@) returns optionalSpace for agent names", async () => {
+            // Position 0 in "@" → inferSeparatorMode returns "optionalSpace"
+            // at the command level.
+            const result = await getCommandCompletion("@", "forward", context);
+            const agentNamesGroup = result.completions.find(
+                (g) => g.name === "Agent Names",
+            );
+            expect(agentNamesGroup).toBeDefined();
+            expect(agentNamesGroup!.separatorMode).toBe("optionalSpace");
+        });
+
+        it("completely empty input returns optionalSpace", async () => {
+            const result = await getCommandCompletion("", "forward", context);
+            // System completions at position 0.
+            expect(result).toBeDefined();
+            for (const group of result.completions) {
+                // All groups at position 0 should have optionalSpace
+                // since inferSeparatorMode(text, 0) returns "optionalSpace".
+                expect(group.separatorMode).toBe("optionalSpace");
+            }
         });
     });
 });

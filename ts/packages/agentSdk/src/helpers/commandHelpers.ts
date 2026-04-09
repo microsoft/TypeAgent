@@ -9,27 +9,8 @@ import {
     CommandDescriptorTable,
     CompletionDirection,
     CompletionGroups,
-    SeparatorMode,
 } from "../command.js";
 
-// Merge two SeparatorMode values — the mode requiring the strongest
-// separator wins (i.e. the mode that demands the most from the user).
-// Priority: "space" > "spacePunctuation" > "optional" > "none" > undefined.
-// Architecture: docs/architecture/completion.md — §3 Agent SDK
-export function mergeSeparatorMode(
-    a: SeparatorMode | undefined,
-    b: SeparatorMode | undefined,
-): SeparatorMode | undefined {
-    if (a === undefined) return b;
-    if (b === undefined) return a;
-    const order: Record<SeparatorMode, number> = {
-        space: 3,
-        spacePunctuation: 2,
-        optional: 1,
-        none: 0,
-    };
-    return order[a] >= order[b] ? a : b;
-}
 import {
     ParameterDefinitions,
     ParsedCommandParams,

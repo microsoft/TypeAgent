@@ -65,7 +65,11 @@ describe("PartialCompletionSession — getCompletionPrefix", () => {
         session.update("play", getPos);
         await Promise.resolve();
 
-        // Separator + typed text: prefix should be "mu" (space stripped)
+        // Advance state by calling update with the separator-bearing input.
+        // This triggers progressive consumption (space consumed, L1 loaded).
+        session.update("play mu", getPos);
+
+        // After consumption: menuAnchorIndex past the space, prefix = "mu".
         expect(session.getCompletionPrefix("play mu")).toBe("mu");
     });
 
@@ -189,20 +193,19 @@ describe("PartialCompletionSession — @command routing", () => {
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
 
-        // User types "@config" → completions loaded, menu deferred (no separator yet)
+        // User types "@config" → completions loaded, deferred (no separator yet)
         session.update("@config", getPos);
         await Promise.resolve();
 
-        expect(menu.setChoices).toHaveBeenCalledWith(
-            expect.arrayContaining([
-                expect.objectContaining({ selectedText: "clear" }),
-            ]),
-        );
+        // Items pre-loaded at lowest non-empty level (L1) but hidden
+        // until separator is consumed.
+        expect(menu.isActive()).toBe(false);
         expect(menu.updatePrefix).not.toHaveBeenCalled();
 
-        // User types space → separator present, menu appears
+        // User types space → separator present, consumption advances to L1.
         session.update("@config ", getPos);
 
+        expect(menu.isActive()).toBe(true);
         expect(menu.updatePrefix).toHaveBeenCalledWith("", anyPosition);
         // No re-fetch — same session handles both states
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);

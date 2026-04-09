@@ -102,6 +102,7 @@ describe("PartialCompletionSession — result processing", () => {
             name: "test",
             completions: ["zebra", "apple", "mango"],
             sorted: false,
+            separatorMode: "none",
         };
         const result: CommandCompletionResult = {
             startIndex: 0,
@@ -109,7 +110,6 @@ describe("PartialCompletionSession — result processing", () => {
             closedSet: false,
             directionSensitive: false,
             afterWildcard: "none",
-            separatorMode: "none",
         };
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -150,6 +150,7 @@ describe("PartialCompletionSession — result processing", () => {
             completions: ["player", "calendar"],
             emojiChar: "\uD83C\uDFB5",
             sorted: true,
+            separatorMode: "none",
         };
         const result: CommandCompletionResult = {
             startIndex: 0,
@@ -157,7 +158,6 @@ describe("PartialCompletionSession — result processing", () => {
             closedSet: false,
             directionSensitive: false,
             afterWildcard: "none",
-            separatorMode: "none",
         };
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -185,6 +185,7 @@ describe("PartialCompletionSession — result processing", () => {
             name: "plain",
             completions: ["alpha"],
             sorted: true,
+            separatorMode: "none",
         };
         const result: CommandCompletionResult = {
             startIndex: 0,
@@ -192,7 +193,6 @@ describe("PartialCompletionSession — result processing", () => {
             closedSet: false,
             directionSensitive: false,
             afterWildcard: "none",
-            separatorMode: "none",
         };
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);
@@ -202,7 +202,7 @@ describe("PartialCompletionSession — result processing", () => {
 
         const calls = menu.setChoices.mock.calls;
         const items = calls[calls.length - 1][0] as Record<string, unknown>[];
-        expect(items[0]).not.toHaveProperty("emojiChar");
+        expect(items[0].emojiChar).toBeUndefined();
     });
 
     test("sorted group preserves order while unsorted group is alphabetized", async () => {
@@ -211,11 +211,13 @@ describe("PartialCompletionSession — result processing", () => {
             name: "grammar",
             completions: ["zebra", "apple"],
             sorted: true,
+            separatorMode: "none",
         };
         const unsortedGroup: CompletionGroup = {
             name: "entities",
             completions: ["cherry", "banana"],
             sorted: false,
+            separatorMode: "none",
         };
         const result: CommandCompletionResult = {
             startIndex: 0,
@@ -223,7 +225,6 @@ describe("PartialCompletionSession — result processing", () => {
             closedSet: false,
             directionSensitive: false,
             afterWildcard: "none",
-            separatorMode: "none",
         };
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);

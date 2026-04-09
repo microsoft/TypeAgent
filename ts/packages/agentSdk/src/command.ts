@@ -76,12 +76,35 @@ export type CommandDescriptors =
 //   "spacePunctuation" — whitespace or Unicode punctuation ([\s\p{P}])
 //                        required.  Used by the grammar matcher for
 //                        Latin-script completions.
-//   "optional"         — separator accepted but not required; menu shown
-//                        immediately.  Used for CJK / mixed-script
-//                        grammar completions.
+//   "optionalSpacePunctuation" — separator accepted but not required;
+//                        when present, both whitespace and Unicode
+//                        punctuation are valid separators.  Produced by
+//                        the grammar matcher for [spacing=optional]
+//                        annotated rules, and as the resolved form of
+//                        "autoSpacePunctuation" when no separator is
+//                        needed between the adjacent characters.
+//   "optionalSpace"         — separator accepted but not required; when
+//                        present, only whitespace is treated as a
+//                        separator.  Used at the command/flag level
+//                        when trailing whitespace was already consumed
+//                        into startIndex (no additional separator
+//                        needed), and for subcommand/agent-name
+//                        completions.
 //   "none"             — no separator at all; menu shown immediately.
 //                        Used for [spacing=none] grammars.
-export type SeparatorMode = "space" | "spacePunctuation" | "optional" | "none";
+//   "autoSpacePunctuation" — per-item mode determined by the consumer.
+//                        The consumer inspects the character pair
+//                        (last input char, first completion char)
+//                        and resolves each item to either
+//                        "spacePunctuation" or "optionalSpacePunctuation".
+//                        Used for grammar auto-spacing mode.
+export type SeparatorMode =
+    | "space"
+    | "spacePunctuation"
+    | "optionalSpacePunctuation"
+    | "optionalSpace"
+    | "none"
+    | "autoSpacePunctuation";
 
 // Indicates the user's editing direction, provided by the host.
 //   "forward"  — the user is moving ahead (appending characters,
@@ -104,6 +127,7 @@ export type AfterWildcard = "none" | "some" | "all";
 export type CompletionGroup = {
     name: string; // The group name for the completion
     completions: string[]; // The list of completions in the group
+    separatorMode?: SeparatorMode | undefined; // What separator is required before this group's completions. Default is "space".
     needQuotes?: boolean; // If true, the completion should be quoted if it has spaces.
     emojiChar?: string | undefined; // Optional icon for the completion category
     sorted?: boolean; // If true, the completions are already sorted. Default is false, and the completions sorted alphabetically.
@@ -119,10 +143,6 @@ export type CompletionGroups = {
     // completions at this offset; clients need not split on spaces
     // (which fails for CJK and other non-space-delimited scripts).
     matchedPrefixLength?: number | undefined;
-    // What kind of separator is required between the matched prefix and
-    // the completion text.  When omitted, defaults to "space" (whitespace
-    // required before completions are shown).  See SeparatorMode.
-    separatorMode?: SeparatorMode | undefined;
     // True when the completions form a closed set — if the user types
     // something not in the list, no further completions can exist
     // beyond it.  When true and the user types something that doesn't
