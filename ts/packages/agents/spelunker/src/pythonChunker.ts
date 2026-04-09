@@ -16,7 +16,7 @@ const __dirname = path.dirname(__filename);
 
 const execFilePromise = promisify(execFile);
 
-function isChunkedFileOrErrorItemArray(
+export function isChunkedFileOrErrorItemArray(
     value: unknown,
 ): value is (ChunkedFile | ChunkerErrorItem)[] {
     if (!Array.isArray(value)) return false;

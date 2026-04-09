@@ -46,7 +46,7 @@ export interface ErrorItem {
     output?: string;
 }
 
-function isChunkedFileOrErrorItemArray(
+export function isChunkedFileOrErrorItemArray(
     value: unknown,
 ): value is (ChunkedFile | ErrorItem)[] {
     if (!Array.isArray(value)) return false;
