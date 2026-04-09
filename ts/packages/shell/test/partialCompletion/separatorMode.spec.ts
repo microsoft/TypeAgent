@@ -9,6 +9,7 @@ import {
     getPos,
     anyPosition,
     makeMultiGroupResult,
+    lastSetChoicesItems,
 } from "./helpers.js";
 
 // ── separatorMode: "space" ────────────────────────────────────────────────────
@@ -432,7 +433,7 @@ describe("PartialCompletionSession — separatorMode edge cases", () => {
     });
 });
 
-// ── SepLevel: widen / narrow / skip-ahead ──────────────────────────────────
+// ── SepLevel: consume / narrow / skip-ahead ───────────────────────────────
 
 describe("PartialCompletionSession — SepLevel transitions", () => {
     // Two groups at different levels:
@@ -449,7 +450,7 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         );
     }
 
-    test("D1 WIDEN: space group exhausted, punctuation widens to level 2", async () => {
+    test("D1 CONSUME: space group exhausted, punctuation advances to level 2", async () => {
         const menu = makeMenu();
         // Level 1 has both (space and spacePunctuation visible at lv1).
         // Level 2 has only "beta" (spacePunctuation).
@@ -467,24 +468,22 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         await Promise.resolve();
 
         // menuSepLevel = 1 via lowestLevelWithItems.
-        // rawPrefix="" → sepLevel=0, B2 BEFORE-MENU (hide).
+        // Deferred — separator not yet consumed, hidden.
         expect(menu.isActive()).toBe(false);
 
-        // Type space: sepLevel=1, menuSepLevel=1. Trie has alpha+beta.
+        // Type space: D1 consumes separator, items already loaded at L1.
         session.update("play ", getPos);
         expect(menu.isActive()).toBe(true);
 
-        // No extra setChoices between B2→show — the existing trie at level 1
+        // No extra setChoices — the existing trie at level 1
         // already had the right items loaded by startNewSession.
         // (startNewSession calls loadLevel once; the space update just
         // runs updatePrefix on the already-loaded trie.)
 
-        // Type "play.": anchor "play", rawPrefix=".", sepLevel=2.
-        // Trie is at level 1 (alpha+beta). prefix at level 1 = trimStart(".") = ".".
-        // "." doesn't match "alpha" or "beta". Menu not active (C3 fails).
-        // D1: sepLevel(2) > menuSepLevel(1) → widen to level 2.
+        // Type "play.": anchor "play", rawPrefix=".".
+        // D1 consumes "." → charLevel=2 > menuSepLevel=1 → advance to L2.
         // Level 2: only "beta" (spacePunctuation). Trie reloaded.
-        // Stripped prefix at level 2: strip "." → "". Matches "beta".
+        // rawPrefix after consumption = "". Matches "beta".
         menu.setChoices.mockClear();
         session.update("play.", getPos);
         // Progressive consumption: may go through multiple levels.
@@ -510,9 +509,8 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         // menuSepLevel=0, trie has "alpha" (optionalSpace at level 0).
         expect(menu.isActive()).toBe(true);
 
-        // Type space: sepLevel=1, menuSepLevel=0.
-        // D1: sepLevel(1) > menuSepLevel(0) → widen to level 1.
-        // Level 1: "alpha" + "beta". Trie reloaded, prefix="" → shows both.
+        // Type space: D1 consumes " " → charLevel=1 > menuSepLevel=0
+        // → advance to L1. Trie reloaded with "alpha" + "beta".
         session.update("play ", getPos);
         expect(menu.isActive()).toBe(true);
 
@@ -538,7 +536,7 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
-    test("B2 BEFORE-MENU: skip-ahead hides menu until separator typed", async () => {
+    test("DEFERRED-SEP: skip-ahead hides menu until separator typed", async () => {
         const menu = makeMenu();
         // Only "space" mode items — nothing at level 0.
         const result = makeMultiGroupResult(
@@ -552,10 +550,10 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         await Promise.resolve();
 
         // lowestLevelWithItems → 1. menuSepLevel=1.
-        // rawPrefix="" → sepLevel=0 < menuSepLevel=1 → B2 BEFORE-MENU.
+        // Deferred — separator not yet consumed, hidden.
         expect(menu.isActive()).toBe(false);
 
-        // Same input again — still B2.
+        // Same input again — still deferred.
         session.update("play", getPos);
         expect(menu.isActive()).toBe(false);
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
@@ -590,7 +588,7 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
-    test("widen then narrow round-trip preserves correct items", async () => {
+    test("consume then narrow round-trip preserves correct items", async () => {
         const menu = makeMenu();
         const result = makeTwoLevelResult();
         const dispatcher = makeDispatcher(result);
@@ -602,7 +600,7 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         // Level 0: "alpha". Level 1: "alpha"+"beta".
         expect(menu.isActive()).toBe(true); // "alpha" at level 0
 
-        // Widen: type space → level 1.
+        // Consume: type space → level 1.
         session.update("play ", getPos);
         expect(menu.isActive()).toBe(true);
 
@@ -610,10 +608,10 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         session.update("play", getPos);
         expect(menu.isActive()).toBe(true);
 
-        // Widen again: type space → level 1.
+        // Consume again: type space → level 1.
         menu.setChoices.mockClear();
         session.update("play ", getPos);
-        // Exactly one setChoices for the widen reload.
+        // Exactly one setChoices for the consume reload.
         expect(menu.setChoices).toHaveBeenCalledTimes(1);
         expect(menu.setChoices).toHaveBeenCalledWith(
             expect.arrayContaining([
@@ -727,12 +725,10 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         );
 
         // Level 1 (space): "none" mode is NOT visible at level 1.
-        // Trie at level 0 has "epsilon", stripped prefix at level 0 = " ".
-        // " " doesn't match "epsilon" → C3 fails.
-        // D1: sepLevel(1) > menuSepLevel(0) → widen to level 1.
+        // D1 consumes " " → charLevel=1 > menuSepLevel=0 → advance to L1.
         // Level 1: no items for "none" mode. Empty trie.
         // D4: accept (closedSet=true).
-        // Widen loaded empty trie at level 1 — exactly 1 setChoices.
+        // Consume loaded empty trie at level 1 — exactly 1 setChoices.
         menu.setChoices.mockClear();
         session.update("play ", getPos);
         expect(menu.isActive()).toBe(false);
@@ -763,9 +759,7 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         await Promise.resolve();
 
         // L0: only "instant".
-        const l0Items = menu.setChoices.mock.calls[
-            menu.setChoices.mock.calls.length - 1
-        ][0].map((i: any) => i.selectedText);
+        const l0Items = lastSetChoicesItems(menu);
         expect(l0Items).toContain("instant");
         expect(l0Items).not.toContain("word");
         expect(l0Items).not.toContain("punct");
@@ -774,9 +768,7 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         // Type space → L1: "word" + "punct" (not "instant").
         session.update("play ", getPos);
         expect(menu.isActive()).toBe(true);
-        const l1Items = menu.setChoices.mock.calls[
-            menu.setChoices.mock.calls.length - 1
-        ][0].map((i: any) => i.selectedText);
+        const l1Items = lastSetChoicesItems(menu);
         expect(l1Items).toContain("word");
         expect(l1Items).toContain("punct");
         expect(l1Items).not.toContain("instant");
@@ -784,9 +776,7 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         // Type punctuation → L2: only "punct" (not "word", not "instant").
         session.update("play .", getPos);
         expect(menu.isActive()).toBe(true);
-        const l2Items = menu.setChoices.mock.calls[
-            menu.setChoices.mock.calls.length - 1
-        ][0].map((i: any) => i.selectedText);
+        const l2Items = lastSetChoicesItems(menu);
         expect(l2Items).toContain("punct");
         expect(l2Items).not.toContain("word");
         expect(l2Items).not.toContain("instant");
@@ -795,9 +785,7 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         menu.setChoices.mockClear();
         session.update("play ", getPos);
         expect(menu.isActive()).toBe(true);
-        const backL1Items = menu.setChoices.mock.calls[
-            menu.setChoices.mock.calls.length - 1
-        ][0].map((i: any) => i.selectedText);
+        const backL1Items = lastSetChoicesItems(menu);
         expect(backL1Items).toContain("word");
         expect(backL1Items).toContain("punct");
         expect(backL1Items).not.toContain("instant");
@@ -806,9 +794,7 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         menu.setChoices.mockClear();
         session.update("play", getPos);
         expect(menu.isActive()).toBe(true);
-        const backL0Items = menu.setChoices.mock.calls[
-            menu.setChoices.mock.calls.length - 1
-        ][0].map((i: any) => i.selectedText);
+        const backL0Items = lastSetChoicesItems(menu);
         expect(backL0Items).toContain("instant");
         expect(backL0Items).not.toContain("word");
         expect(backL0Items).not.toContain("punct");
@@ -864,9 +850,7 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         menu.setChoices.mockClear();
         session.update("play ", getPos);
         expect(menu.isActive()).toBe(true);
-        const backL1Items = menu.setChoices.mock.calls[
-            menu.setChoices.mock.calls.length - 1
-        ][0].map((i: any) => i.selectedText);
+        const backL1Items = lastSetChoicesItems(menu);
         // L1 has all three items (" instant" + "word" + "punct").
         expect(backL1Items).toContain(" instant");
         expect(backL1Items).toContain("word");
@@ -877,9 +861,7 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         menu.setChoices.mockClear();
         session.update("play", getPos);
         expect(menu.isActive()).toBe(true);
-        const backL0Items = menu.setChoices.mock.calls[
-            menu.setChoices.mock.calls.length - 1
-        ][0].map((i: any) => i.selectedText);
+        const backL0Items = lastSetChoicesItems(menu);
         // L0 has only " instant" (optionalSpacePunctuation).
         expect(backL0Items).toContain(" instant");
         expect(backL0Items).not.toContain("word");
@@ -1077,7 +1059,7 @@ describe("PartialCompletionSession — autoSpacePunctuation", () => {
         menu.setChoices.mockClear();
         session.update("word ", getPos);
         expect(menu.isActive()).toBe(true);
-        // Widen loaded both items at level 1.
+        // D1 consumes " " → advance to L1, both items loaded.
         expect(menu.setChoices).toHaveBeenCalledTimes(1);
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
@@ -1140,20 +1122,16 @@ describe("PartialCompletionSession — multi-group partitioning", () => {
                 expect.objectContaining({ selectedText: "entity1" }),
             ]),
         );
-        const lastCall =
-            menu.setChoices.mock.calls[menu.setChoices.mock.calls.length - 1];
-        const items = lastCall[0];
-        expect(items.every((i: any) => i.selectedText !== "cmd1")).toBe(true);
+        const items = lastSetChoicesItems(menu);
+        expect(items.every((i) => i !== "cmd1")).toBe(true);
 
         // "play " — level 1: both "space" and "optionalSpacePunctuation" visible.
         menu.setChoices.mockClear();
         session.update("play ", getPos);
         expect(menu.isActive()).toBe(true);
-        // Widen → new trie with all level-1 items.
+        // D1 consumes " " → new trie with all level-1 items.
         expect(menu.setChoices).toHaveBeenCalledTimes(1);
-        const level1Items = menu.setChoices.mock.calls[0][0].map(
-            (i: any) => i.selectedText,
-        );
+        const level1Items = lastSetChoicesItems(menu);
         expect(level1Items).toContain("cmd1");
         expect(level1Items).toContain("cmd2");
         expect(level1Items).toContain("entity1");
@@ -1181,18 +1159,14 @@ describe("PartialCompletionSession — multi-group partitioning", () => {
         // Level 1 (space): both visible after consumption.
         session.update("play ", getPos);
         expect(menu.isActive()).toBe(true);
-        const level1Items = menu.setChoices.mock.calls[
-            menu.setChoices.mock.calls.length - 1
-        ][0].map((i: any) => i.selectedText);
+        const level1Items = lastSetChoicesItems(menu);
         expect(level1Items).toContain("flag");
         expect(level1Items).toContain("entity");
 
         // Level 2 (punctuation): only spacePunctuation.
         session.update("play.", getPos);
         expect(menu.isActive()).toBe(true);
-        const level2Items = menu.setChoices.mock.calls[
-            menu.setChoices.mock.calls.length - 1
-        ][0].map((i: any) => i.selectedText);
+        const level2Items = lastSetChoicesItems(menu);
         expect(level2Items).toContain("entity");
         expect(level2Items.includes("flag")).toBe(false);
 
@@ -1216,12 +1190,9 @@ describe("PartialCompletionSession — multi-group partitioning", () => {
 
         // Only "only" (optionalSpace) at level 0.
         expect(menu.isActive()).toBe(true);
-        const items =
-            menu.setChoices.mock.calls[
-                menu.setChoices.mock.calls.length - 1
-            ][0];
+        const items = lastSetChoicesItems(menu);
         expect(items).toHaveLength(1);
-        expect(items[0].selectedText).toBe("only");
+        expect(items[0]).toBe("only");
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
@@ -1243,9 +1214,7 @@ describe("PartialCompletionSession — multi-group partitioning", () => {
         session.update("play", getPos);
         await Promise.resolve();
         expect(menu.isActive()).toBe(true);
-        const level0Items = menu.setChoices.mock.calls[
-            menu.setChoices.mock.calls.length - 1
-        ][0].map((i: any) => i.selectedText);
+        const level0Items = lastSetChoicesItems(menu);
         expect(level0Items).toContain("instant");
         expect(level0Items).not.toContain("word");
         expect(level0Items).not.toContain("punct");
@@ -1253,9 +1222,7 @@ describe("PartialCompletionSession — multi-group partitioning", () => {
         // Level 1: "space" + "spacePunctuation" visible, NOT "none".
         session.update("play ", getPos);
         expect(menu.isActive()).toBe(true);
-        const level1Items = menu.setChoices.mock.calls[
-            menu.setChoices.mock.calls.length - 1
-        ][0].map((i: any) => i.selectedText);
+        const level1Items = lastSetChoicesItems(menu);
         expect(level1Items).toContain("word");
         expect(level1Items).toContain("punct");
         expect(level1Items).not.toContain("instant");
@@ -1263,9 +1230,7 @@ describe("PartialCompletionSession — multi-group partitioning", () => {
         // Level 2: only "spacePunctuation" visible.
         session.update("play.", getPos);
         expect(menu.isActive()).toBe(true);
-        const level2Items = menu.setChoices.mock.calls[
-            menu.setChoices.mock.calls.length - 1
-        ][0].map((i: any) => i.selectedText);
+        const level2Items = lastSetChoicesItems(menu);
         expect(level2Items).toContain("punct");
         expect(level2Items).not.toContain("word");
         expect(level2Items).not.toContain("instant");
@@ -1552,12 +1517,54 @@ describe("PartialCompletionSession — D-cascade consumption", () => {
         session.update("play", getPos);
         expect(menu.isActive()).toBe(true);
         // L0 items restored.
-        const lastItems = menu.setChoices.mock.calls[
-            menu.setChoices.mock.calls.length - 1
-        ][0].map((i: any) => i.selectedText);
+        const lastItems = lastSetChoicesItems(menu);
         expect(lastItems).toContain("instant");
         expect(lastItems).not.toContain("punct");
 
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
+    });
+
+    test("space after punctuation at L2 is still consumed", async () => {
+        // Bug scenario: at L2 (punctuation consumed), a space (charLevel=1)
+        // should be consumed as additional separator, not break the loop.
+        // "play. beta" should match "beta" — the ". " is all separator text.
+        const menu = makeMenu();
+        const result = makeMultiGroupResult(
+            [
+                {
+                    completions: ["beta"],
+                    separatorMode: "spacePunctuation",
+                },
+            ],
+            4,
+        );
+        const dispatcher = makeDispatcher(result);
+        const session = new PartialCompletionSession(menu, dispatcher);
+
+        session.update("play", getPos);
+        await Promise.resolve();
+
+        // Consume "." → L2, items visible.
+        session.update("play.", getPos);
+        expect(menu.isActive()).toBe(true);
+
+        // Type space after punctuation — should still be consumed at L2.
+        session.update("play. ", getPos);
+        expect(menu.isActive()).toBe(true);
+        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
+            "",
+            expect.anything(),
+        );
+
+        // "play. b" — space consumed, "b" narrows to "beta".
+        session.update("play. b", getPos);
+        expect(menu.isActive()).toBe(true);
+        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
+            "b",
+            expect.anything(),
+        );
+
+        // No re-fetch through any of this.
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 });

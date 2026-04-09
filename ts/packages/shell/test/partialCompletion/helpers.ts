@@ -121,3 +121,12 @@ export function makeMultiGroupResult(
         ...opts,
     };
 }
+
+// Returns the selectedText values from the last setChoices call on a
+// TestSearchMenu mock.  Avoids repeating the verbose mock.calls pattern.
+export function lastSetChoicesItems(menu: TestSearchMenu): string[] {
+    const calls = menu.setChoices.mock.calls;
+    return calls[calls.length - 1][0].map(
+        (i: { selectedText: string }) => i.selectedText,
+    );
+}

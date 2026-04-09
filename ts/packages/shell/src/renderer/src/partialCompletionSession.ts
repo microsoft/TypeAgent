@@ -82,8 +82,8 @@ function computeNoMatchPolicy(
 //   - Completion result fields (per-group separatorMode, etc.) are stored as-is
 //     from the backend response and never mutated.
 //   - Per-group separatorMode determines which groups belong to each SepLevel.
-//     Non-cumulative: each level has its own set of items.  Widening replaces
-//     the trie rather than appending.
+//     Non-cumulative: each level has its own set of items.  Loading a new
+//     level replaces the trie rather than appending.
 //   - reuseSession() follows a decision table: A (session validity),
 //     B (narrowing / level shift), C (trie matching), D (progressive consumption).
 //     See the method comment for the full table.
@@ -113,8 +113,11 @@ export class PartialCompletionSession {
     // menuAnchorIndex is the "consumed separator".
     private menuAnchorIndex: number = 0;
     // The text that was consumed as separator between anchor.length and
-    // menuAnchorIndex.  Used to detect when the consumed region has been
-    // overwritten (e.g. user replaced space with punctuation).
+    // menuAnchorIndex.  Stored as the actual string (not just a length)
+    // to detect when the consumed region has been overwritten with
+    // different separator characters at the same position (e.g. user
+    // replaced " ." with "  " — same length but different text,
+    // requiring a level re-derivation via B1 NARROW).
     private consumedSep: string = "";
     // Computed from the backend's closedSet + afterWildcard fields.
     // Controls what happens when the local trie has no matches.
@@ -137,7 +140,7 @@ export class PartialCompletionSession {
     ) {}
 
     // Load the trie with items for the given level and set menuSepLevel.
-    // Shared by reuseSession (narrow/widen), startNewSession (initial load),
+    // Shared by reuseSession (narrow/consume), startNewSession (initial load),
     // and explicitHide (level change on dismiss).
     private loadLevel(level: SepLevel): void {
         this.menuSepLevel = level;
@@ -186,7 +189,8 @@ export class PartialCompletionSession {
     // in rawPrefix.  Updates menuAnchorIndex, consumedSep, and loads the
     // target level.  Returns the new SepLevel, or undefined when no level
     // has items at all.
-    // Shared by B1 NARROW (backspace) and explicitHide (Escape).
+    // Shared by B1 NARROW (backspace or separator text change) and
+    // explicitHide (Escape).
     private shiftToSepLevel(rawPrefix: string): SepLevel | undefined {
         const sepLevel = computeSepLevel(rawPrefix);
         const newLevel = targetLevel(this.levelCounts, sepLevel);
@@ -303,6 +307,7 @@ export class PartialCompletionSession {
         if (input.length < this.menuAnchorIndex) {
             return undefined;
         }
+        // Deferred — separator not yet consumed; no valid prefix.
         if (this.menuSepLevel > 0 && this.consumedSep === "") {
             return undefined;
         }
@@ -320,8 +325,15 @@ export class PartialCompletionSession {
     //   A3  DIVERGED   !input.startsWith(anchor)                   → re-fetch
     //   A4  DIR-SENS   backward + dirSensitive + input===anchor    → re-fetch
     //
-    // B. Narrowing — user backspaced past consumed separator?
-    //   B1  NARROW     input.length < menuAnchorIndex              → shift to level
+    // B. Narrowing — consumed separator region invalidated?
+    //   B1  NARROW     input.length < menuAnchorIndex OR           → shift to level
+    //                  consumedSep text mismatch
+    //
+    // Pre-loop guards (between B and C):
+    //   DEFERRED-EMPTY  no items at current level + rawPrefix=""   → hide+keep
+    //   DEFERRED-SEP    menuSepLevel>0, consumedSep="", rawPrefix="" → hide+keep
+    //   DEFERRED-SLIDE  menuSepLevel>0, consumedSep="", non-sep char, slide → slide
+    //   DEFERRED-REFETCH menuSepLevel>0, consumedSep="", non-sep char       → re-fetch
     //
     // C. Trie matching — does the menu have results?
     //   C1  UNIQUE     uniquelySatisfied                           → re-fetch
@@ -329,7 +341,7 @@ export class PartialCompletionSession {
     //   C3  ACTIVE     menu.isActive()                             → reuse
     //
     // D. Progressive consumption — consume leading separator, retry
-    //   D1  CONSUME    leading char is separator ≥ menuSepLevel    → consume, → C
+    //   D1  CONSUME    leading char is separator                   → consume, → C
     //   D2  SLIDE      noMatchPolicy=slide                         → slide anchor
     //   D3  REFETCH    noMatchPolicy=refetch                       → re-fetch
     //   D4  ACCEPT     noMatchPolicy=accept                        → reuse (quiet)
@@ -424,6 +436,7 @@ export class PartialCompletionSession {
         // ── C + D: trie matching with progressive consumption ─────
         return this.matchOrConsume(input, rawPrefix, getPosition);
     }
+
     // ── A. Session validity ─────────────────────────────────────────
     // Returns the anchor when the session is active and valid for
     // the given input, or `undefined` when a re-fetch is needed.
@@ -498,13 +511,16 @@ export class PartialCompletionSession {
 
             // ── D. Progressive consumption ───────────────────────────
 
-            // [D1] CONSUME — leading char is a separator at or above the
-            // current level.  Consume it and retry.
+            // [D1] CONSUME — leading char is a separator character.
+            // Consume it and advance the level if the char is higher.
+            // Any separator char is consumable regardless of the current
+            // level — e.g. a space after punctuation at L2 is still
+            // separator text, not the start of a trie prefix.
             // Guard: menuAnchorIndex strictly increases each iteration,
             // bounded by input.length, so the loop terminates.
             if (rawPrefix.length === 0) break;
             const charLevel = separatorCharLevel(rawPrefix[0]);
-            if (charLevel === undefined || charLevel < this.menuSepLevel) break;
+            if (charLevel === undefined) break;
 
             this.consumedSep += rawPrefix[0];
             this.menuAnchorIndex += 1;
@@ -645,7 +661,7 @@ export class PartialCompletionSession {
 //
 // Level 0 (none):      No separator consumed.
 // Level 1 (space):     Whitespace consumed.
-// Level 2 (spacePunc): Whitespace + punctuation consumed.
+// Level 2 (spacePunctuation): Whitespace + punctuation consumed.
 
 // SeparatorMode after "autoSpacePunctuation" has been resolved per-item
 // and undefined has been defaulted to "space".  Partitions always use
@@ -661,8 +677,8 @@ type ResolvedSeparatorMode = Exclude<SeparatorMode, "autoSpacePunctuation">;
 //   "space"                      —    ✓    —
 //   "spacePunctuation"           —    ✓    ✓
 //
-// Each level has its own set of items.  Widening replaces the trie
-// (not appends).
+// Each level has its own set of items.  Loading a new level replaces
+// the trie (not appends).
 
 type SepLevel = 0 | 1 | 2;
 
@@ -678,16 +694,18 @@ function separatorCharLevel(ch: string): SepLevel | undefined {
     return undefined;
 }
 
+const leadingSepRe = /^[\s\p{P}]+/u;
+
 // Returns the length of the leading separator run in rawPrefix.
 function leadingSeparatorLength(rawPrefix: string): number {
-    const m = rawPrefix.match(/^[\s\p{P}]+/u);
+    const m = rawPrefix.match(leadingSepRe);
     return m !== null ? m[0].length : 0;
 }
 
 function computeSepLevel(rawPrefix: string): SepLevel {
     if (rawPrefix === "") return 0;
     // Check the leading separator portion for whitespace and punctuation.
-    const leadingSep = rawPrefix.match(/^[\s\p{P}]+/u);
+    const leadingSep = rawPrefix.match(leadingSepRe);
     if (leadingSep === null) return 0;
     const sep = leadingSep[0];
     if (punctRe.test(sep)) return 2;
