@@ -59,10 +59,6 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml
 
-      - name: Install ts dependencies
-        working-directory: ts
-        run: pnpm install --frozen-lockfile --strict-peer-dependencies
-
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v1
@@ -123,17 +119,15 @@ jobs:
             echo "=========================================="
             cd "$GITHUB_WORKSPACE/$WS_DIR"
 
-            # Install dependencies if not already installed (ts was installed earlier)
-            if [ "$WS_DIR" != "ts" ] && [ -f package.json ]; then
-              echo "::group::Installing $WS_DIR dependencies"
-              corepack enable
-              if ! pnpm install --frozen-lockfile 2>&1; then
-                echo "::warning::Dependency install failed for $WS_DIR — skipping (analysis would be unreliable)"
-                echo "::endgroup::"
-                continue
-              fi
+            # Install dependencies for this workspace
+            echo "::group::Installing $WS_DIR dependencies"
+            corepack enable
+            if ! pnpm install --frozen-lockfile 2>&1; then
+              echo "::warning::Dependency install failed for $WS_DIR — skipping (analysis would be unreliable)"
               echo "::endgroup::"
+              continue
             fi
+            echo "::endgroup::"
 
             # ── Step 1: Discover fixable packages ───────────────────
             echo "::group::Analysing $WS_DIR alerts"
