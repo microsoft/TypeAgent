@@ -63,14 +63,14 @@ export class PartialCompletion {
         private readonly container: HTMLDivElement,
         private readonly input: ExpandableTextArea,
         dispatcher: Dispatcher,
-        private readonly inline: boolean = true,
+        inline: boolean = true,
         onToggleMode?: () => void,
     ) {
         this.searchMenu = new SearchMenu(
             (item) => {
                 this.handleSelect(item);
             },
-            this.inline,
+            inline,
             this.input.getTextEntry(),
             onToggleMode,
         );

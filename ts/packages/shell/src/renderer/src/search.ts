@@ -42,8 +42,8 @@ export class SearchMenu extends SearchMenuBase {
         return this.inline
             ? new InlineSearchMenuUI(this.onCompletion, this.textEntry!)
             : isElectron()
-              ? new RemoteSearchMenuUI(this.onCompletion, 15)
-              : new LocalSearchMenuUI(this.onCompletion, 15);
+              ? new RemoteSearchMenuUI(this.onCompletion)
+              : new LocalSearchMenuUI(this.onCompletion);
     }
 
     public switchMode(newInline: boolean): void {
@@ -100,7 +100,7 @@ export class SearchMenu extends SearchMenuBase {
         this.lastPrefix = undefined;
         this.lastItems = undefined;
         this.toggle?.hide();
-        this.searchMenuUI!.close();
+        this.searchMenuUI?.close();
         this.searchMenuUI = undefined;
     }
 

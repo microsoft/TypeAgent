@@ -47,6 +47,8 @@ export class CompletionToggle {
 
     private applyDirection() {
         this.element.className = `completion-toggle completion-toggle-${this.direction}`;
+        // ▲ expand: the completion menu opens *above* the input, so "expand up".
+        // ▼ collapse: shrink back to inline ghost text.
         this.element.textContent =
             this.direction === "expand" ? "\u25B2" : "\u25BC";
     }
