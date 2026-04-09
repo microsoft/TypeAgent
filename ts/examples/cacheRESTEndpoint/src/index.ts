@@ -14,6 +14,7 @@ import { NodeType, SchemaParser } from "@typeagent/action-schema";
 
 type SchemaEntry = {
     name: string;
+    camelCaseName: string;
     value: string;
     id?: string;
 };
@@ -54,10 +55,7 @@ app.get("/", async (req: Request, res: Response) => {
                 // add the id of the schema (if it exists) to the action
                 construction.match.actions.forEach((a) => {
                     const schema = schemas.find(
-                        (s) =>
-                            s.name.charAt(0).toLowerCase() +
-                                s.name.slice(1) ===
-                            a.action.actionName,
+                        (s) => s.camelCaseName === a.action.actionName,
                     );
                     if (schema) {
                         (a.action as any).id = schema.id;
@@ -116,10 +114,19 @@ function getActionSchema(filePath: string): SchemaEntry[] {
             }
         }
         const idChild = node!.children.find((c) => c.symbol.name === "id");
-        const idValue = idChild
-            ? idChild.symbol.value.replaceAll('"', "").trim()
+        const rawId = idChild?.symbol.value ?? "";
+        const idValue = rawId
+            ? JSON.parse(rawId.trim())
             : undefined;
-        result.push({ name: node?.symbol.name!, value: schemaText, id: idValue });
+        const interfaceName = node?.symbol.name!;
+        const camelCaseName =
+            interfaceName.charAt(0).toLowerCase() + interfaceName.slice(1);
+        result.push({
+            name: interfaceName,
+            camelCaseName,
+            value: schemaText,
+            id: idValue,
+        });
     }
     return result;
 }

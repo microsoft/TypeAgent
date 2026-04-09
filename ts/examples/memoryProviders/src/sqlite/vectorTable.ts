@@ -70,8 +70,8 @@ export function createVectorTable<TKeyId extends ValueType = string>(
     }
 
     function put(value: Embedding, id?: TKeyId | undefined): Promise<TKeyId> {
-        const buffer = Buffer.from(value.buffer);
         if (id === undefined) {
+            const buffer = Buffer.from(value.buffer);
             if (keyType === "INTEGER") {
                 const result = sql_add_auto.run(buffer);
                 return Promise.resolve(Number(result.lastInsertRowid) as TKeyId);
@@ -80,6 +80,7 @@ export function createVectorTable<TKeyId extends ValueType = string>(
             sql_add.run(newId, buffer);
             return Promise.resolve(newId);
         }
+        const buffer = Buffer.from(value.buffer);
         sql_add.run(id, buffer);
         return Promise.resolve(id);
     }
