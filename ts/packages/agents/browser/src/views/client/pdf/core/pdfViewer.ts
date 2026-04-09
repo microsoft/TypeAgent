@@ -255,7 +255,7 @@ export class PDFViewerCore {
             const page = await this.pdfDocument.getPage(pageNum);
             const textContent = await page.getTextContent();
             const pageText = textContent.items
-                .map((item: any) => item.str)
+                .map((item: { str: string }) => item.str)
                 .join(" ")
                 .toLowerCase();
 
