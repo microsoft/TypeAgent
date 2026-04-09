@@ -13,6 +13,7 @@ import {
     createSharedDispatcher,
     SharedDispatcher,
 } from "./sharedDispatcher.js";
+import { lockInstanceDir } from "agent-dispatcher/internal";
 
 import registerDebug from "debug";
 const debugSession = registerDebug("agent-server:session");
@@ -76,6 +77,11 @@ export async function createSessionManager(
 ): Promise<SessionManager> {
     const sessionsDir = path.join(baseDir, SESSIONS_DIR);
     await fs.promises.mkdir(sessionsDir, { recursive: true });
+
+    // Lock the shared instance directory for the lifetime of this process.
+    // Each per-session dispatcher locks its own persistDir; this lock covers
+    // the instanceDir (= baseDir) that backs instanceStorage across all sessions.
+    const unlockInstanceDir = await lockInstanceDir(baseDir);
 
     const sessions = new Map<string, SessionRecord>();
 
@@ -430,6 +436,7 @@ export async function createSessionManager(
             }
             await Promise.all(promises);
             await saveMetadata();
+            await unlockInstanceDir();
             debugSession("SessionManager closed");
         },
     };

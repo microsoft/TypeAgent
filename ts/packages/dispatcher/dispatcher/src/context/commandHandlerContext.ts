@@ -523,18 +523,18 @@ export async function initializeCommandHandlerContext(
     const persistDir = options?.persistDir;
     const instanceDir = options?.instanceDir; // global instance root; falls back to persistDir when absent
     const storageProvider = options?.storageProvider;
-    if (persistDir === undefined) {
-        if (persistSession) {
-            throw new Error(
-                "Persist session requires persistDir to be set in options.",
-            );
-        }
-    } else {
-        if (storageProvider === undefined) {
-            throw new Error(
-                "persistDir requires storageProvider to be set in options.",
-            );
-        }
+    if (persistSession && persistDir === undefined) {
+        throw new Error(
+            "Persist session requires persistDir to be set in options.",
+        );
+    }
+    if (
+        (persistDir !== undefined || instanceDir !== undefined) &&
+        storageProvider === undefined
+    ) {
+        throw new Error(
+            "persistDir and instanceDir require storageProvider to be set in options.",
+        );
     }
 
     const instanceDirLock = persistDir

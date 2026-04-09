@@ -45,14 +45,20 @@ However, this is **transparent to clients**: there is no protocol-level API to l
 
 The dispatcher exposes two storage scopes to agents via `SessionContext`:
 
-- **`instanceStorage`** — scoped to `persistDir` (the instance root). Intended for configuration and data that should **survive across dispatcher sessions** (e.g. agent auth tokens, user preferences, learned config). Agents write here and expect to read it back regardless of which session the user is in.
+- **`instanceStorage`** — scoped to `instanceDir` when present, falling back to `persistDir` when `instanceDir` is absent (standalone Shell, CLI, tests). Intended for configuration and data that should **survive across dispatcher sessions** (e.g. agent auth tokens, user preferences, learned config). Agents write here and expect to read it back regardless of which session the user is in.
 - **`sessionStorage`** — scoped to `persistDir/sessions/<sessionId>/`. Intended for ephemeral, session-local data (e.g. caches, in-progress state) that is discarded when the user creates a new session.
 
 In `sessionContext.ts`, the mapping is explicit:
 
 ```typescript
 const storage = storageProvider.getStorage(name, sessionDirPath); // sessionStorage
-const instanceStorage = storageProvider.getStorage(name, context.persistDir); // instanceStorage
+const instanceStorage =
+  (context.instanceDir ?? context.persistDir)
+    ? storageProvider!.getStorage(
+        name,
+        context.instanceDir ?? context.persistDir!,
+      )
+    : undefined; // instanceStorage
 ```
 
 This contract — `instanceStorage` survives, `sessionStorage` is ephemeral — holds today in both the standalone Shell and the CLI.

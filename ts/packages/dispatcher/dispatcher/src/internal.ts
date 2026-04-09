@@ -7,6 +7,7 @@ export {
     closeCommandHandlerContext,
     initializeCommandHandlerContext,
 } from "./context/commandHandlerContext.js";
+export { lockInstanceDir } from "./utils/fsUtils.js";
 export { DisplayLog } from "./displayLog.js";
 export type { DisplayLogEntry } from "./displayLog.js";
 
