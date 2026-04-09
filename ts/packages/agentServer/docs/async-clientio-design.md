@@ -552,30 +552,23 @@ If the original client disconnects and a new client connects:
 
 **Recommended approach**: Use a configurable **grace period** (e.g., 30 seconds) before canceling orphaned interactions. If a new client joins within the grace period, pending interactions are automatically replayed to it.
 
-### Timeout and Default Value Handling
+### Timeout and Cancellation Handling
 
-For `askYesNo`, the existing `defaultValue` parameter provides a natural fallback:
+All three interaction types reject with an error on timeout or client disconnect. This treats a missing response as a cancelled operation uniformly across all types — there is no silent fallback to a default value.
 
 ```typescript
-// In PendingInteractionManager, on timeout:
+// In PendingInteractionManager, on timeout or disconnect:
 cancel(interactionId: string, error: Error): boolean {
     const entry = this.pending.get(interactionId);
     if (!entry) return false;
     this.pending.delete(interactionId);
     clearTimeout(entry.timeoutTimer);
-
-    // For askYesNo, resolve with default instead of rejecting
-    if (entry.type === "askYesNo") {
-        entry.resolve(entry.defaultValue ?? false);
-        return true;
-    }
-    // For proposeAction and popupQuestion, reject
     entry.reject(error);
     return true;
 }
 ```
 
-This matches the existing behavior of `askYesNoWithContext()` which returns `defaultValue` in batch mode.
+Callers handle the rejection according to their existing cancellation logic — for example, `askYesNoWithContext` callers either throw `"Aborted!"` or display a "Cancelled!" warning and return. Note that `askYesNoWithContext()` uses `defaultValue` only in **batch mode** (no user interaction at all), which is unaffected by this change.
 
 ### Batch Mode Compatibility
 
@@ -604,10 +597,7 @@ This remains unchanged. The async redesign only affects the non-batch path.
 The new `requestInteraction` call function and `respondToInteraction` invoke function are **additive** --- they don't change existing messages. However, we need to handle clients that don't support the new protocol:
 
 1. **Legacy detection**: If a client does not register a handler for `requestInteraction`, the RPC `send()` call will silently be ignored (fire-and-forget semantics).
-2. **Fallback behavior**: If no client responds within a configurable timeout, the `PendingInteractionManager` can:
-   - For `askYesNo`: resolve with `defaultValue`
-   - For `proposeAction`: resolve with `undefined` (skip confirmation, proceed with proposed action)
-   - For `popupQuestion`: reject with an error (preserving current behavior)
+2. **Fallback behavior**: If no client responds within a configurable timeout, the `PendingInteractionManager` rejects all pending interactions with an error. Callers treat this as a cancelled operation — `askYesNoWithContext` callers either throw `"Aborted!"` or display a cancellation warning, `proposeAction` callers abort the confirmation flow, and `popupQuestion` callers propagate the error.
 3. **Gradual migration**: The old blocking invoke functions (`ClientIOInvokeFunctions.askYesNo` etc.) remain in the type definitions for standalone (non-server) use. Only the `SharedDispatcher` implementation changes.
 
 ### Standalone Dispatcher (CLI, Electron Shell)
@@ -615,113 +605,6 @@ The new `requestInteraction` call function and `respondToInteraction` invoke fun
 The standalone dispatcher (used by CLI and Electron shell) can continue using the direct blocking pattern. The `ClientIO` interface is unchanged --- only the server-side routing implementation in `SharedDispatcher` changes.
 
 The `nullClientIO` in `context/interactiveIO.ts` remains as-is for testing.
-
----
-
-## Implementation Plan
-
-### Phase 1: Foundation Types and Infrastructure
-
-**Files to create:**
-
-- `packages/dispatcher/types/src/pendingInteraction.ts` --- New types: `PendingInteractionType`, `PendingInteractionRequest`, `PendingInteractionResponse`
-
-**Files to modify:**
-
-- `packages/dispatcher/types/src/displayLogEntry.ts` --- Add `PendingInteractionEntry` and `InteractionResolvedEntry` to the union
-- `packages/dispatcher/types/src/index.ts` --- Re-export new types
-
-**Estimated effort**: Small
-
-### Phase 2: PendingInteractionManager
-
-**Files to create:**
-
-- `packages/dispatcher/dispatcher/src/context/pendingInteractionManager.ts` --- The `PendingInteractionManager` class with create/resolve/cancel/cancelByConnection/getPending methods
-
-**Files to modify:**
-
-- `packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts` --- Add `pendingInteractions: PendingInteractionManager` to `CommandHandlerContext`, initialize in `initializeCommandHandlerContext()`
-
-**Estimated effort**: Medium
-
-### Phase 3: DisplayLog Extension
-
-**Files to modify:**
-
-- `packages/dispatcher/dispatcher/src/displayLog.ts` --- Add `logPendingInteraction()` and `logInteractionResolved()` methods
-
-**Estimated effort**: Small
-
-### Phase 4: ClientIO Protocol Extension
-
-**Files to modify:**
-
-- `packages/dispatcher/types/src/clientIO.ts` --- Add `requestInteraction()` and `interactionResolved()` to `ClientIO`
-- `packages/dispatcher/rpc/src/clientIOTypes.ts` --- Add `requestInteraction` and `interactionResolved` to `ClientIOCallFunctions`
-- `packages/dispatcher/rpc/src/clientIOClient.ts` --- Wire new call functions
-- `packages/dispatcher/rpc/src/clientIOServer.ts` --- Wire new call function handlers
-- `packages/dispatcher/dispatcher/src/context/interactiveIO.ts` --- Add `requestInteraction` and `interactionResolved` to `nullClientIO`
-
-**Estimated effort**: Medium
-
-### Phase 5: Dispatcher API Extension
-
-**Files to modify:**
-
-- `packages/dispatcher/dispatcher/src/dispatcher.ts` --- Add `respondToInteraction()` to the Dispatcher interface and implementation (parallel to `respondToChoice`)
-- `packages/dispatcher/rpc/src/dispatcherTypes.ts` --- Add `respondToInteraction` to RPC invoke functions
-- `packages/dispatcher/rpc/src/dispatcherClient.ts` --- Wire `respondToInteraction` in RPC client
-- `packages/dispatcher/rpc/src/dispatcherServer.ts` --- Wire `respondToInteraction` in RPC server
-
-**Estimated effort**: Medium
-
-### Phase 6: SharedDispatcher Conversion
-
-**Files to modify:**
-
-- `packages/agentServer/server/src/sharedDispatcher.ts` --- Convert `askYesNo`, `proposeAction`, and `popupQuestion` from blocking callback to async deferred pattern. Add `PendingInteractionManager` instance. Handle client disconnect cleanup. Wire `respondToInteraction` routing.
-
-**Estimated effort**: Large (this is the core change)
-
-### Phase 7: Session Join Replay
-
-**Files to modify:**
-
-- `packages/agentServer/protocol/src/protocol.ts` --- Add `pendingInteractions` field to `JoinSessionResult`
-- `packages/agentServer/server/src/sessionManager.ts` --- Include pending interactions in join result
-- `packages/agentServer/server/src/server.ts` --- Pass pending interactions through join flow
-
-**Estimated effort**: Small
-
-### Phase 8: Client-Side Support
-
-**Files to modify:**
-
-- `packages/shell/` --- Update Electron shell to handle `requestInteraction` notifications and call `respondToInteraction`
-- `packages/cli/` --- Update CLI to handle `requestInteraction` (console prompt, then call `respondToInteraction`)
-- `packages/dispatcher/dispatcher/src/helpers/console.ts` --- Add `requestInteraction` handler (similar to existing `requestChoice` handler at line 268)
-
-**Estimated effort**: Medium per client
-
-### Phase 9: Testing and Cleanup
-
-- Add unit tests for `PendingInteractionManager` (timeout, cancel, resolve, cancelByConnection)
-- Add integration tests for the full round-trip in server mode
-- Verify standalone CLI/shell continue to work with blocking pattern
-- Verify `popupQuestion` now works in server mode
-- Remove any legacy workarounds for `popupQuestion` disabled state
-
----
-
-## Migration Path for Existing Callers
-
-No existing callers of `askYesNo`, `proposeAction`, or `popupQuestion` need to change. The `ClientIO` interface method signatures remain the same --- they still return `Promise<boolean>`, `Promise<unknown>`, and `Promise<number>` respectively. The change is entirely in how the `SharedDispatcher` fulfills those Promises.
-
-The only callers that need updates are the **client-side UI implementations** that currently handle `askYesNo`/`proposeAction` as RPC invoke responses. These must instead:
-
-1. Handle the new `requestInteraction` notification
-2. Call `dispatcher.respondToInteraction()` with the user's answer
 
 ---
 
@@ -735,9 +618,9 @@ The only callers that need updates are the **client-side UI implementations** th
 
 2. **What timeout is appropriate for pending interactions?**
 
-   - `askYesNo` with a default value: 60 seconds, then resolve with default.
+   - `askYesNo`: 60 seconds, then reject (caller treats as cancellation).
    - `proposeAction`: No timeout (developer interaction, may take a while).
-   - `popupQuestion`: Configurable per-agent, default 120 seconds.
+   - `popupQuestion`: Configurable per-agent, default 120 seconds, then reject.
 
 3. **Should the `requestChoice`/`respondToChoice` mechanism be unified with this new system?**
 
