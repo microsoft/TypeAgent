@@ -65,7 +65,11 @@ describe("PartialCompletionSession — getCompletionPrefix", () => {
         session.update("play", getPos);
         await Promise.resolve();
 
-        // Separator + typed text: prefix should be "mu" (space stripped)
+        // Advance state by calling update with the separator-bearing input.
+        // This triggers progressive consumption (space consumed, L1 loaded).
+        session.update("play mu", getPos);
+
+        // After consumption: menuAnchorIndex past the space, prefix = "mu".
         expect(session.getCompletionPrefix("play mu")).toBe("mu");
     });
 
@@ -193,22 +197,14 @@ describe("PartialCompletionSession — @command routing", () => {
         session.update("@config", getPos);
         await Promise.resolve();
 
-        // No items are immediately visible (all require a space separator),
-        // so the trie is preloaded with all items but the menu stays hidden.
-        expect(menu.setChoices).toHaveBeenLastCalledWith(
-            expect.arrayContaining([
-                expect.objectContaining({ selectedText: "clear" }),
-            ]),
-        );
+        // Items pre-loaded at lowest non-empty level (L1) but hidden
+        // until separator is consumed.
         expect(menu.isActive()).toBe(false);
         expect(menu.updatePrefix).not.toHaveBeenCalled();
 
-        // User types space → separator present, items become visible.
-        // The trie was already preloaded so no redundant setChoices call.
-        menu.setChoices.mockClear();
+        // User types space → separator present, consumption advances to L1.
         session.update("@config ", getPos);
 
-        expect(menu.setChoices).not.toHaveBeenCalled();
         expect(menu.isActive()).toBe(true);
         expect(menu.updatePrefix).toHaveBeenCalledWith("", anyPosition);
         // No re-fetch — same session handles both states
