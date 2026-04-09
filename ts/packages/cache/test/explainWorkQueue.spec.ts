@@ -68,7 +68,7 @@ describe("ExplainWorkQueue.checkExplainableValues", () => {
         ).rejects.toThrow(/not found in the request/i);
     });
 
-    test("does not throw for number parameter even when value is not present in request (TODO:42 - check number too)", async () => {
+    test("does not validate number parameters against request (TODO:42)", async () => {
         // Number value 2024 is not in "play recent songs", but currently numbers are not validated
         // TODO:42: After the fix, this should throw (number should also be checked)
         const requestAction = makeRequestAction("play recent songs", {
