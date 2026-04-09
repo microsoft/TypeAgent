@@ -396,6 +396,13 @@ async function updateBrowserContext(
             );
         }
 
+        // TBD: Bug - AgentWebSocketServer is a process-wide singleton but the invoke handlers,
+        // connection callbacks, and message callbacks below are all bound to the current session
+        // context. When multiple sessions are active, each call to updateBrowserContext() overwrites
+        // these handlers with the latest session's context, causing traffic from other sessions to
+        // be routed to the wrong session context. Fixing this properly requires AgentWebSocketServer
+        // to support per-session handler registration (e.g., a map keyed by session/client identity).
+
         // Register agentRpc invoke handlers for channel-multiplexed messages
         context.agentContext.agentWebSocketServer.setAgentInvokeHandlers(
             createAgentInvokeHandlers(context),
