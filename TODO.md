@@ -168,10 +168,7 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/azure-ai-foundry/src/urlResolverCache.ts` | 121 | make async | Low | High | Local | Fix | No |
 | `ts/packages/azure-ai-foundry/src/websiteAliasExtraction.ts` | 65 | IMPLEMENT | High | Low | Component | Fix | Yes |
 | `ts/packages/azure-ai-foundry/src/websiteAliasExtraction.ts` | 121 | handle multi-modal content | High | Medium | Component | Fix | No |
-| `ts/packages/azure-ai-foundry/src/wikipedia.ts` | 102 | localization (e.g. en, de, fr, etc.) | Low | High | Local | Fix | No |
-| `ts/packages/azure-ai-foundry/src/wikipedia.ts` | 125 | localization (e.g. en, de, fr, etc.) | Low | High | Local | Fix | No |
 | `ts/packages/cache/src/cache/cache.ts` | 599 | Move this in the construction store | Medium | Medium | Component | Fix | Yes |
-| `ts/packages/cache/src/cache/explainWorkQueue.ts` | 42 | check number too. | Low | High | Local | Fix | No |
 | `ts/packages/cache/src/constructions/constructionCache.ts` | 420 | GC match sets | Medium | Medium | Component | Fix | No |
 | `ts/packages/cache/src/constructions/constructionValue.ts` | 140 | Don't support multiple subphrase wildcard match for now. | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/cache/src/constructions/constructionValue.ts` | 156 | Only deal with exact match for now | Medium | Medium | Component | Fix | Yes |
@@ -236,12 +233,10 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/dispatcher/dispatcher/src/translation/translateRequest.ts` | 644 | What to do with attachments with multiple actions? | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/translation/translateRequest.ts` | 661 | What to do with attachments with multiple actions? | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/translation/unknownSwitcher.ts` | 142 | this should be adjusted based on model used. | Low | High | Local | Fix | Yes |
-| `ts/packages/dispatcher/dispatcher/src/translation/unknownSwitcher.ts` | 186 | we can parallelize this | Medium | High | Local | Fix | No |
 | `ts/packages/dispatcher/dispatcher/src/utils/test/explanationTestData.ts` | 49 | Test data only support a single schema name for now. | Medium | Medium | Component | Fix | No |
 | `ts/packages/dispatcher/types/src/clientIO.ts` | 92 | turn these in to dispatcher events | Medium | Medium | Cross-cutting | Fix | Yes |
 | `ts/packages/dispatcher/types/src/clientIO.ts` | 121 | Formalize the API | High | Medium | Cross-cutting | Fix | Yes |
 | `ts/packages/knowPro/src/collections.ts` | 94 | make this 2 methods: addExact and addRelated | Low | High | Component | Fix | No |
-| `ts/packages/knowPro/src/collections.ts` | 260 | this should be minHitCount > 1 | Low | High | Local | Fix | No |
 | `ts/packages/knowPro/src/conversationIndex.ts` | 269 | update: pass in TextLocation instead of messageOrdinal + chunkOrdinal | Medium | Medium | Component | Fix | No |
 | `ts/packages/knowPro/src/conversationIndex.ts` | 409 | Should rename this to TermToSemanticRefIndex | Low | High | Component | Fix | No |
 | `ts/packages/knowPro/src/index.ts` | 23 | mergeConcreteEntitiesEx avoids forcing the data to be lower case. | Medium | Medium | Component | Fix | Yes |
@@ -252,11 +247,9 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/knowPro/src/searchLang.ts` | 907 | move hardcoded to a user configurable table | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/knowPro/src/serialization.ts` | 225 | Remove this temporary backward compat. All future files should have proper headers | Low | High | Local | Fix | No |
 | `ts/packages/knowProTest/src/searchTest.ts` | 46 | convert this to use runBatch from common.ts | Low | High | Local | Fix | No |
-| `ts/packages/knowledgeProcessor/src/conversation/actions.ts` | 223 | parallelize | Medium | High | Local | Fix | No |
 | `ts/packages/knowledgeProcessor/src/conversation/answerContext.ts` | 101 | split entities, topics, actions | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/conversation/conversation.ts` | 407 | Migrate to file system storage provider | High | Medium | Cross-cutting | Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/conversation/conversation.ts` | 411 | what about topics at other levels? | Medium | Low | Component | No Fix | Yes |
-| `ts/packages/knowledgeProcessor/src/conversation/entities.ts` | 273 | parallelize | Medium | High | Local | Fix | No |
 | `ts/packages/knowledgeProcessor/src/conversation/topics.ts` | 638 | use aliases here for better matching | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/conversation/topics.ts` | 683 | combine this and the one below | Low | High | Local | Fix | No |
 | `ts/packages/knowledgeProcessor/src/images/image.ts` | 147 | add actions for all extracted entities being photographed/contained by image | Medium | Medium | Component | Fix | Yes |

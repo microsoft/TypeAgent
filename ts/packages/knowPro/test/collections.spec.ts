@@ -169,7 +169,7 @@ function makeMessagesTextRanges(
     return ranges;
 }
 
-// Tests for MatchAccumulator - covers TODO:94 (addExact/addRelated split) and TODO:260 (minHitCount > 1)
+// Tests for MatchAccumulator
 describe("MatchAccumulator", () => {
     test("add exact match creates entry with hitCount 1", () => {
         const acc = new MatchAccumulator<string>();
@@ -252,9 +252,7 @@ describe("MatchAccumulator", () => {
         acc.add("a", 1.0, true);
         acc.add("b", 0.5, true);
         acc.add("c", 0.3, false);
-        // TODO:260 - this should be minHitCount > 1 (optimization: minHitCount=1 is a no-op since all matches have hitCount >= 1)
-        // Whether condition is `> 0` (current) or `> 1` (intended), the result is the same
-        // because all matches have hitCount >= 1 by design
+        // minHitCount=1 is a no-op since all matches have hitCount >= 1 by design
         const results = acc.getWithHitCount(1);
         expect(results).toHaveLength(3);
     });
@@ -264,7 +262,6 @@ describe("MatchAccumulator", () => {
         acc.add("a", 1.0, true);
         acc.add("a", 0.5, true); // hitCount becomes 2
         acc.add("b", 0.8, true); // hitCount stays at 1
-        // TODO:260 - after fix to use `> 1`, minHitCount=2 should still behave correctly
         const results = acc.getWithHitCount(2);
         expect(results).toHaveLength(1);
         expect(results[0].value).toBe("a");

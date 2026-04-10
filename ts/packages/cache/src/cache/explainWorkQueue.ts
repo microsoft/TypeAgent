@@ -39,7 +39,6 @@ function checkExplainableValues(
         do {
             const [parameterName, value] = pending.pop()!;
 
-            // TODO: check number too.
             if (typeof value === "string") {
                 if (
                     noReferences &&
@@ -62,6 +61,29 @@ function checkExplainableValues(
 
                     if (paramSpec === "literal") {
                         // It's ok if the parameter type are all literals.
+                        continue;
+                    }
+
+                    throw new Error(
+                        `Action parameter value '${value}' not found in the request`,
+                    );
+                }
+                continue;
+            }
+            if (typeof value === "number") {
+                if (
+                    valueInRequest &&
+                    !normalizedRequest.includes(
+                        normalizeParamString(String(value)),
+                    )
+                ) {
+                    const paramSpec = getParamSpec(
+                        action,
+                        parameterName,
+                        schemaInfoProvider,
+                    );
+
+                    if (paramSpec === "literal") {
                         continue;
                     }
 
