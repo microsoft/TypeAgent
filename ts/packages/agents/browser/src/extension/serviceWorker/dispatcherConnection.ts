@@ -159,6 +159,9 @@ function createChatPanelClientIO(): ClientIO {
         interactionResolved() {
             // Not supported in extension
         },
+        interactionCancelled() {
+            // Not supported in extension
+        },
         takeAction(requestId, action, data) {
             rpcSend?.("dispatcherTakeAction", { requestId, action, data });
         },

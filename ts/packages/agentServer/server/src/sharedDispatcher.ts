@@ -47,11 +47,21 @@ export async function createSharedDispatcher(
     const clients = new Map<string, ClientRecord>();
     const pendingInteractions = new PendingInteractionManager();
 
+    // Timeouts for pending interactions. All currently set to 10 minutes but
+    // kept separate so they can be tuned independently.
+    const INTERACTION_TIMEOUT_MS = {
+        askYesNo: 10 * 60 * 1000,
+        proposeAction: 10 * 60 * 1000,
+        popupQuestion: 10 * 60 * 1000,
+    };
+
+    // Returns the number of clients the message was sent to.
     const broadcast = (
         name: string,
         requestId: RequestId | undefined,
         fn: (clientIO: ClientIO) => void,
-    ) => {
+    ): number => {
+        let count = 0;
         for (const [connectionId, clientRecord] of clients) {
             if (
                 clientRecord.filter &&
@@ -61,6 +71,7 @@ export async function createSharedDispatcher(
             }
             try {
                 fn(clientRecord.clientIO);
+                count++;
             } catch (error) {
                 // Ignore errors in server mode.
                 debugClientIOError(
@@ -68,6 +79,7 @@ export async function createSharedDispatcher(
                 );
             }
         }
+        return count;
     };
 
     const callback = <T>(
@@ -159,13 +171,17 @@ export async function createSharedDispatcher(
             context.displayLog.saveQueued();
 
             // Broadcast to all connected clients
-            broadcast("requestInteraction", requestId, (cio) =>
+            const notified = broadcast("requestInteraction", requestId, (cio) =>
                 cio.requestInteraction(request),
             );
+            if (notified === 0) {
+                return defaultValue ?? false;
+            }
 
             return pendingInteractions.create<boolean>(
                 request,
                 requestId.connectionId,
+                INTERACTION_TIMEOUT_MS.askYesNo,
             );
         },
 
@@ -188,13 +204,19 @@ export async function createSharedDispatcher(
             context.displayLog.logPendingInteraction(request);
             context.displayLog.saveQueued();
 
-            broadcast("requestInteraction", requestId, (cio) =>
+            const notified = broadcast("requestInteraction", requestId, (cio) =>
                 cio.requestInteraction(request),
             );
+            if (notified === 0) {
+                throw new Error(
+                    "No connected clients available for proposeAction",
+                );
+            }
 
             return pendingInteractions.create<unknown>(
                 request,
                 requestId.connectionId,
+                INTERACTION_TIMEOUT_MS.proposeAction,
             );
         },
 
@@ -221,13 +243,19 @@ export async function createSharedDispatcher(
             context.displayLog.saveQueued();
 
             // popupQuestion has no requestId, so broadcast to all
-            broadcast("requestInteraction", undefined, (cio) =>
+            const notified = broadcast("requestInteraction", undefined, (cio) =>
                 cio.requestInteraction(request),
             );
+            if (notified === 0) {
+                throw new Error(
+                    "No connected clients available for popupQuestion",
+                );
+            }
 
             return pendingInteractions.create<number>(
                 request,
                 undefined, // no specific connection
+                INTERACTION_TIMEOUT_MS.popupQuestion,
             );
         },
 
@@ -259,6 +287,11 @@ export async function createSharedDispatcher(
         interactionResolved: (interactionId, response) => {
             broadcast("interactionResolved", undefined, (cio) =>
                 cio.interactionResolved(interactionId, response),
+            );
+        },
+        interactionCancelled: (interactionId) => {
+            broadcast("interactionCancelled", undefined, (cio) =>
+                cio.interactionCancelled(interactionId),
             );
         },
         takeAction: (requestId, ...args) =>
@@ -333,10 +366,22 @@ export async function createSharedDispatcher(
                     unregisterClient(connectionId);
 
                     // Cancel any pending interactions for this connection
-                    pendingInteractions.cancelByConnection(
+                    // and notify all remaining clients so they can dismiss stale prompts.
+                    const cancelled = pendingInteractions.cancelByConnection(
                         connectionId,
                         new Error("Client disconnected"),
                     );
+                    for (const interactionId of cancelled) {
+                        broadcast("interactionCancelled", undefined, (cio) =>
+                            cio.interactionCancelled(interactionId),
+                        );
+                        context.displayLog.logInteractionCancelled(
+                            interactionId,
+                        );
+                    }
+                    if (cancelled.length > 0) {
+                        context.displayLog.saveQueued();
+                    }
 
                     closeFn();
                     debugConnect(

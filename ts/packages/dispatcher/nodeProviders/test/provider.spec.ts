@@ -46,6 +46,7 @@ function createTestClientIO(data: IAgentMessage[]): ClientIO {
         requestChoice: () => {},
         requestInteraction: () => {},
         interactionResolved: () => {},
+        interactionCancelled: () => {},
         takeAction: (requestId: RequestId, action: string) => {
             throw new Error(`Action ${action} not supported`);
         },

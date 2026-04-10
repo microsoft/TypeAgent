@@ -250,6 +250,22 @@ export class DisplayLog {
     }
 
     /**
+     * Append an interaction-cancelled entry.
+     * @returns the assigned sequence number
+     */
+    logInteractionCancelled(interactionId: string): number {
+        const seq = this.nextSeq++;
+        this.entries.push({
+            type: "interaction-cancelled",
+            seq,
+            timestamp: Date.now(),
+            interactionId,
+        });
+        this.dirty = true;
+        return seq;
+    }
+
+    /**
      * Schedule a save at the end of the current event-loop tick.
      * Multiple calls within the same tick are coalesced into one write.
      */

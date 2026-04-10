@@ -122,6 +122,7 @@ export interface ClientIO {
     // Non-blocking interaction requests (async deferred pattern)
     requestInteraction(interaction: PendingInteractionRequest): void;
     interactionResolved(interactionId: string, response: unknown): void;
+    interactionCancelled(interactionId: string): void;
 
     // Host specific (TODO: Formalize the API)
     takeAction(requestId: RequestId, action: string, data: unknown): void;

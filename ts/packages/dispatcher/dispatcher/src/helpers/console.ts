@@ -323,6 +323,9 @@ function createConsoleClientIO(
         interactionResolved(): void {
             // Console does not support deferred interactions
         },
+        interactionCancelled(): void {
+            // Console does not support deferred interactions
+        },
         // Host specific (TODO: Formalize the API)
         takeAction(requestId: RequestId, action: string, data: unknown): void {
             if (action === "open-folder") {

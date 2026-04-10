@@ -119,13 +119,17 @@ export class PendingInteractionManager {
     /**
      * Cancel all pending interactions for a specific connectionId.
      * Called when a client disconnects.
+     * Returns the interactionIds that were cancelled.
      */
-    cancelByConnection(connectionId: string, error: Error): void {
+    cancelByConnection(connectionId: string, error: Error): string[] {
+        const cancelled: string[] = [];
         for (const [interactionId, entry] of this.pending) {
             if (entry.connectionId === connectionId) {
                 this.cancel(interactionId, error);
+                cancelled.push(interactionId);
             }
         }
+        return cancelled;
     }
 
     /**

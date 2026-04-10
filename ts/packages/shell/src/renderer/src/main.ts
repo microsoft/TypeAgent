@@ -343,6 +343,9 @@ function registerClient(
         interactionResolved: () => {
             // Shell does not yet support deferred interactions
         },
+        interactionCancelled: () => {
+            // Shell does not yet support deferred interactions
+        },
         takeAction: (_, action, data) => {
             // Android object gets injected on Android devices, otherwise unavailable
             try {

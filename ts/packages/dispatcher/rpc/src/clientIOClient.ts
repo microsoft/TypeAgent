@@ -68,6 +68,9 @@ export function createClientIORpcClient(channel: RpcChannel): ClientIO {
         interactionResolved(...args): void {
             return rpc.send("interactionResolved", ...args);
         },
+        interactionCancelled(...args): void {
+            return rpc.send("interactionCancelled", ...args);
+        },
         takeAction(...args): void {
             return rpc.send("takeAction", ...args);
         },

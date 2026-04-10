@@ -46,6 +46,8 @@ export function createClientIORpcServer(
         requestChoice: (...args) => clientIO.requestChoice(...args),
         requestInteraction: (...args) => clientIO.requestInteraction(...args),
         interactionResolved: (...args) => clientIO.interactionResolved(...args),
+        interactionCancelled: (...args) =>
+            clientIO.interactionCancelled(...args),
         takeAction: (...args) => clientIO.takeAction(...args),
     };
     createRpc(

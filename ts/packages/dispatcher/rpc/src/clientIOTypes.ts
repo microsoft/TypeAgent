@@ -76,6 +76,7 @@ export type ClientIOCallFunctions = {
 
     requestInteraction(interaction: PendingInteractionRequest): void;
     interactionResolved(interactionId: string, response: unknown): void;
+    interactionCancelled(interactionId: string): void;
 
     takeAction(requestId: RequestId, action: string, data: unknown): void;
 };
