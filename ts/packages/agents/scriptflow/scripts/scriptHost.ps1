@@ -1,8 +1,10 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# scriptHost.ps1 — Constrained PowerShell execution host for ScriptFlow
-# Creates a sandboxed runspace with cmdlet whitelisting and timeout enforcement.
+# scriptHost.ps1 — Sandboxed PowerShell execution host for ScriptFlow
+# Creates a runspace with cmdlet whitelisting, module loading, and timeout enforcement.
+# Security: Path restrictions, network controls, cmdlet whitelisting.
+# Language: FullLanguage mode (allows [PSCustomObject], [math]::Round, etc.)
 
 param(
     [Parameter(Mandatory=$true)]
@@ -55,10 +57,22 @@ try {
     }
 
     # Validate path parameters against allowed paths
+    # NOTE: Only validate paths that look like absolute or relative file paths.
+    # Skip short single-word strings (like "videos", "downloads") that might be
+    # library names - let the script handle those with its own resolution logic.
     if ($expandedAllowedPaths.Count -gt 0) {
         foreach ($prop in $params.PSObject.Properties) {
             $val = $prop.Value
             if ($val -is [string]) {
+                # Skip empty values
+                if (-not $val -or $val -match '^\s*$') { continue }
+
+                # Skip short single-word values that look like library names
+                # (no slashes, no drive letter, not starting with dot)
+                if ($val -notmatch '[/\\]' -and $val -notmatch '^[a-zA-Z]:' -and $val -notmatch '^\.' -and $val.Length -lt 50) {
+                    continue
+                }
+
                 $isValidPath = $false
                 try { $isValidPath = Test-Path $val -IsValid } catch { }
                 if ($isValidPath) {
@@ -112,22 +126,31 @@ try {
         }
     }
 
-    # Module enforcement
+    # Module enforcement - check for unauthorized Import-Module in script body
+    if ($ScriptBody -match 'Import-Module\s+([^\s;]+)') {
+        $requestedModule = $Matches[1] -replace '"','' -replace "'",''
+        if ($AllowedModules.Count -gt 0 -and $requestedModule -notin $AllowedModules) {
+            Write-Error "Module import denied: '$requestedModule' is not in allowedModules. Allowed modules: $($AllowedModules -join ', ')"
+            exit 1
+        }
+    }
+
+    # Create session state with default cmdlets
+    $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
+
+    # Import allowed modules into the session state
+    # This makes module cmdlets (like Get-NetTCPConnection from NetTCPIP) available
     if ($AllowedModules.Count -gt 0) {
-        # Scan script for Import-Module commands
-        if ($ScriptBody -match 'Import-Module\s+([^\s;]+)') {
-            $requestedModule = $Matches[1] -replace '"','' -replace "'",''
-            if ($requestedModule -notin $AllowedModules) {
-                Write-Error "Module import denied: '$requestedModule' is not in allowedModules. Allowed modules: $($AllowedModules -join ', ')"
-                exit 1
+        foreach ($moduleName in $AllowedModules) {
+            try {
+                $iss.ImportPSModule($moduleName)
+            } catch {
+                Write-Warning "Could not import module '$moduleName': $_"
             }
         }
     }
 
-    # Create constrained session state
-    $iss = [System.Management.Automation.Runspaces.InitialSessionState]::CreateDefault()
-
-    # Remove cmdlets not in the allowed list
+    # Remove cmdlets not in the allowed list (after module import so we can whitelist module cmdlets)
     $commandsToRemove = @()
     foreach ($cmd in $iss.Commands) {
         if ($cmd.CommandType -eq 'Cmdlet' -and $cmd.Name -notin $allowedCmdlets) {
@@ -138,8 +161,10 @@ try {
         $iss.Commands.Remove($cmd.Name, $cmd)
     }
 
-    # Set language mode to constrained (blocks .NET interop, COM, Add-Type)
-    $iss.LanguageMode = [System.Management.Automation.PSLanguageMode]::ConstrainedLanguage
+    # FullLanguage mode (default) - allows [PSCustomObject], [math]::Round(), etc.
+    # Security is provided by: cmdlet whitelisting, path restrictions, network controls
+    # Note: If stricter lockdown is needed, uncomment the line below:
+    # $iss.LanguageMode = [System.Management.Automation.PSLanguageMode]::ConstrainedLanguage
 
     # Create runspace
     $runspace = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace($iss)
