@@ -166,17 +166,19 @@ export async function createSharedDispatcher(
                 `askYesNo created: ${interactionId} message="${message}"`,
             );
 
-            // Log the pending interaction
-            context.displayLog.logPendingInteraction(request);
-            context.displayLog.saveQueued();
-
             // Broadcast to all connected clients
             const notified = broadcast("requestInteraction", requestId, (cio) =>
                 cio.requestInteraction(request),
             );
             if (notified === 0) {
+                // No clients to handle it — resolve immediately without logging
+                // a pending entry (which would have no corresponding resolution).
                 return defaultValue ?? false;
             }
+
+            // Log only after we know at least one client was notified
+            context.displayLog.logPendingInteraction(request);
+            context.displayLog.saveQueued();
 
             return pendingInteractions.create<boolean>(
                 request,
@@ -200,10 +202,6 @@ export async function createSharedDispatcher(
                 `proposeAction created: ${interactionId} source="${source}"`,
             );
 
-            // Log the pending interaction
-            context.displayLog.logPendingInteraction(request);
-            context.displayLog.saveQueued();
-
             const notified = broadcast("requestInteraction", requestId, (cio) =>
                 cio.requestInteraction(request),
             );
@@ -212,6 +210,10 @@ export async function createSharedDispatcher(
                     "No connected clients available for proposeAction",
                 );
             }
+
+            // Log only after we know at least one client was notified
+            context.displayLog.logPendingInteraction(request);
+            context.displayLog.saveQueued();
 
             return pendingInteractions.create<unknown>(
                 request,
@@ -238,10 +240,6 @@ export async function createSharedDispatcher(
                 `popupQuestion created: ${interactionId} message="${message}"`,
             );
 
-            // Log the pending interaction
-            context.displayLog.logPendingInteraction(request);
-            context.displayLog.saveQueued();
-
             // popupQuestion has no requestId, so broadcast to all
             const notified = broadcast("requestInteraction", undefined, (cio) =>
                 cio.requestInteraction(request),
@@ -251,6 +249,10 @@ export async function createSharedDispatcher(
                     "No connected clients available for popupQuestion",
                 );
             }
+
+            // Log only after we know at least one client was notified
+            context.displayLog.logPendingInteraction(request);
+            context.displayLog.saveQueued();
 
             return pendingInteractions.create<number>(
                 request,
@@ -433,8 +435,23 @@ export async function createSharedDispatcher(
                 context.displayLog.saveQueued();
             }
         },
-        getPendingInteractions(): PendingInteractionRequest[] {
-            return pendingInteractions.getPending();
+        getPendingInteractions(
+            connectionId: string,
+            filter: boolean,
+        ): PendingInteractionRequest[] {
+            return pendingInteractions.getPending().filter((r) => {
+                const targetConnection = r.requestId?.connectionId;
+                if (filter) {
+                    // Filtered client: only interactions routed to this connection
+                    return targetConnection === connectionId;
+                }
+                // Unfiltered client: interactions broadcast to all, plus those
+                // routed specifically to this connection
+                return (
+                    targetConnection === undefined ||
+                    targetConnection === connectionId
+                );
+            });
         },
         async leave(connectionId: string) {
             const dispatcher = dispatchers.get(connectionId);
@@ -470,7 +487,10 @@ export type SharedDispatcher = {
         options?: DispatcherConnectOptions,
     ): Dispatcher;
     respondToInteraction(response: PendingInteractionResponse): void;
-    getPendingInteractions(): PendingInteractionRequest[];
+    getPendingInteractions(
+        connectionId: string,
+        filter: boolean,
+    ): PendingInteractionRequest[];
     leave(connectionId: string): Promise<void>;
     closeAllClients(): Promise<void>;
     close(): Promise<void>;

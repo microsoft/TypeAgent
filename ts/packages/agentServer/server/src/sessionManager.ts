@@ -347,7 +347,10 @@ export async function createSessionManager(
                 dispatcher,
                 connectionId: dispatcher.connectionId!,
                 name: record.name,
-                pendingInteractions: sharedDispatcher.getPendingInteractions(),
+                pendingInteractions: sharedDispatcher.getPendingInteractions(
+                    dispatcher.connectionId!,
+                    options?.filter ?? false,
+                ),
             };
         },
 

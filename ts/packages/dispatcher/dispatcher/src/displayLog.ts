@@ -4,6 +4,7 @@
 import type {
     AppendDisplayEntry,
     DisplayLogEntry,
+    PendingInteractionEntry,
     SetDisplayInfoEntry,
     IAgentMessage,
     RequestId,
@@ -202,10 +203,10 @@ export class DisplayLog {
      */
     logPendingInteraction(interaction: PendingInteractionRequest): number {
         const seq = this.nextSeq++;
-        const entry: any = {
+        const entry: PendingInteractionEntry = {
             type: "pending-interaction",
             seq,
-            timestamp: Date.now(),
+            timestamp: interaction.timestamp,
             interactionId: interaction.interactionId,
             interactionType: interaction.type,
             source: interaction.source,
