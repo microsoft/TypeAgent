@@ -58,6 +58,9 @@ export function createDispatcherRpcClient(
         async respondToInteraction(...args) {
             return rpc.invoke("respondToInteraction", ...args);
         },
+        async cancelInteraction(...args) {
+            return rpc.invoke("cancelInteraction", ...args);
+        },
         cancelCommand(...args) {
             return rpc.send("cancelCommand", ...args);
         },

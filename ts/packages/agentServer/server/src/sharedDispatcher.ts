@@ -167,22 +167,19 @@ export async function createSharedDispatcher(
             );
 
             // Broadcast to all connected clients
-            const notified = broadcast("requestInteraction", requestId, (cio) =>
+            broadcast("requestInteraction", requestId, (cio) =>
                 cio.requestInteraction(request),
             );
-            if (notified === 0) {
-                // No clients to handle it — resolve immediately without logging
-                // a pending entry (which would have no corresponding resolution).
-                return defaultValue ?? false;
-            }
 
-            // Log only after we know at least one client was notified
+            // Always log and queue the interaction so that a client which is
+            // currently disconnected (or reconnects later) can still respond
+            // within the timeout window. Pass undefined as connectionId so that
+            // cancelByConnection() on a disconnect does not auto-cancel it.
             context.displayLog.logPendingInteraction(request);
             context.displayLog.saveQueued();
 
             return pendingInteractions.create<boolean>(
                 request,
-                requestId.connectionId,
                 INTERACTION_TIMEOUT_MS.askYesNo,
             );
         },
@@ -202,22 +199,18 @@ export async function createSharedDispatcher(
                 `proposeAction created: ${interactionId} source="${source}"`,
             );
 
-            const notified = broadcast("requestInteraction", requestId, (cio) =>
+            broadcast("requestInteraction", requestId, (cio) =>
                 cio.requestInteraction(request),
             );
-            if (notified === 0) {
-                throw new Error(
-                    "No connected clients available for proposeAction",
-                );
-            }
 
-            // Log only after we know at least one client was notified
+            // Always queue so a reconnecting client can still respond within
+            // the timeout window. Pass undefined as connectionId so that a
+            // disconnect does not auto-cancel the interaction.
             context.displayLog.logPendingInteraction(request);
             context.displayLog.saveQueued();
 
             return pendingInteractions.create<unknown>(
                 request,
-                requestId.connectionId,
                 INTERACTION_TIMEOUT_MS.proposeAction,
             );
         },
@@ -256,7 +249,6 @@ export async function createSharedDispatcher(
 
             return pendingInteractions.create<number>(
                 request,
-                undefined, // no specific connection
                 INTERACTION_TIMEOUT_MS.popupQuestion,
             );
         },
@@ -367,24 +359,6 @@ export async function createSharedDispatcher(
                     dispatchers.delete(connectionId);
                     unregisterClient(connectionId);
 
-                    // Cancel any pending interactions for this connection
-                    // and notify all remaining clients so they can dismiss stale prompts.
-                    const cancelled = pendingInteractions.cancelByConnection(
-                        connectionId,
-                        new Error("Client disconnected"),
-                    );
-                    for (const interactionId of cancelled) {
-                        broadcast("interactionCancelled", undefined, (cio) =>
-                            cio.interactionCancelled(interactionId),
-                        );
-                        context.displayLog.logInteractionCancelled(
-                            interactionId,
-                        );
-                    }
-                    if (cancelled.length > 0) {
-                        context.displayLog.saveQueued();
-                    }
-
                     closeFn();
                     debugConnect(
                         `Client disconnected: ${connectionId} (total clients: ${clients.size})`,
@@ -402,6 +376,12 @@ export async function createSharedDispatcher(
                 response: PendingInteractionResponse,
             ): Promise<void> => {
                 shared.respondToInteraction(response);
+            };
+
+            (dispatcher as any).cancelInteraction = async (
+                interactionId: string,
+            ): Promise<void> => {
+                shared.cancelInteraction(interactionId);
             };
 
             return dispatcher;
@@ -432,6 +412,24 @@ export async function createSharedDispatcher(
                     response.interactionId,
                     response.value,
                 );
+                context.displayLog.saveQueued();
+            }
+        },
+        cancelInteraction(interactionId: string): void {
+            debugInteraction(`cancelInteraction: ${interactionId}`);
+            const cancelled = pendingInteractions.cancel(
+                interactionId,
+                new Error("Cancelled by client"),
+            );
+            if (!cancelled) {
+                debugInteraction(
+                    `cancelInteraction: interaction ${interactionId} not found (may have expired or been resolved already)`,
+                );
+            } else {
+                broadcast("interactionCancelled", undefined, (cio) =>
+                    cio.interactionCancelled(interactionId),
+                );
+                context.displayLog.logInteractionCancelled(interactionId);
                 context.displayLog.saveQueued();
             }
         },
@@ -487,6 +485,7 @@ export type SharedDispatcher = {
         options?: DispatcherConnectOptions,
     ): Dispatcher;
     respondToInteraction(response: PendingInteractionResponse): void;
+    cancelInteraction(interactionId: string): void;
     getPendingInteractions(
         connectionId: string,
         filter: boolean,

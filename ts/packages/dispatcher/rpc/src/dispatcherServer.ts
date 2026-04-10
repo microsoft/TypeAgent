@@ -56,6 +56,9 @@ export function createDispatcherRpcServer(
         respondToInteraction: async (...args) => {
             return dispatcher.respondToInteraction(...args);
         },
+        cancelInteraction: async (...args) => {
+            return dispatcher.cancelInteraction(...args);
+        },
     };
 
     createRpc(

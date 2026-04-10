@@ -20,10 +20,9 @@ The `ClientIO` interface signatures are unchanged — callers receive a `Promise
 Agent code → askYesNoWithContext() → context.clientIO.askYesNo()
   → SharedDispatcher:
      1. Broadcast requestInteraction (fire-and-forget) to eligible clients
-     2. If notified === 0: return defaultValue / throw (no log entry)
-     3. Log pending-interaction to DisplayLog
-     4. Store deferred Promise in PendingInteractionManager
-     5. Return the Promise — server suspends here
+     2. Log pending-interaction to DisplayLog
+     3. Store deferred Promise in PendingInteractionManager
+     4. Return the Promise — server suspends here
   → Client shows UI, user responds
   → Client calls dispatcher.respondToInteraction(interactionId, value)
   → PendingInteractionManager.resolve() fulfills the Promise
@@ -34,9 +33,9 @@ Agent code → askYesNoWithContext() → context.clientIO.askYesNo()
 
 `popupQuestion` is identical except it broadcasts to all clients (it has no `requestId`). `proposeAction` follows the same pattern as `askYesNo` but throws instead of returning a default when no clients are connected.
 
-### Key invariant: log after broadcast
+### Key invariant: always log
 
-`logPendingInteraction` is called only after `broadcast()` confirms at least one client was notified. This prevents orphaned `pending-interaction` entries in the log for interactions that were never actionable.
+`logPendingInteraction` is called unconditionally — even when no clients are currently connected. This ensures that a client which reconnects within the timeout window can see the pending interaction in the `DisplayLog` and respond to it.
 
 ### Routing
 
@@ -51,10 +50,9 @@ The `broadcast()` helper respects each client's `filter` setting:
 
 `PendingInteractionManager` (`dispatcher/src/context/pendingInteractionManager.ts`) stores in-flight interactions:
 
-- `create(request, connectionId, timeoutMs)` — stores the deferred Promise, sets an optional timeout
+- `create(request, timeoutMs)` — stores the deferred Promise, sets an optional timeout
 - `resolve(interactionId, value)` — fulfills the Promise; returns false if not found
 - `cancel(interactionId, error)` — for `askYesNo`: resolves with `defaultValue` if provided, otherwise rejects; for `proposeAction` and `popupQuestion`: always rejects
-- `cancelByConnection(connectionId, error)` — cancels all interactions for a disconnecting client
 - `getPending()` — returns all in-flight `PendingInteractionRequest` objects
 
 ### Timeouts
@@ -63,12 +61,12 @@ All three types use a 10-minute timeout, kept as separate constants so they can 
 
 ### Client Disconnect
 
-When a client disconnects, `cancelByConnection()` is called immediately. Each cancelled interaction triggers:
+Disconnecting a client does **not** automatically cancel pending interactions. Interactions remain pending until they time out or a client explicitly calls `cancelInteraction`. This allows a reconnecting client to respond to the same interaction within the timeout window.
 
-1. `interactionCancelled` broadcast to remaining clients (so they can dismiss stale UI)
-2. A `interaction-cancelled` entry in the `DisplayLog`
+Clients that want to cancel an interaction (e.g., on user dismissal) call `dispatcher.cancelInteraction(interactionId)`, which triggers:
 
-There is no reconnect grace period — cancellation is immediate.
+1. `interactionCancelled` broadcast to all clients (so they can dismiss stale UI)
+2. An `interaction-cancelled` entry in the `DisplayLog`
 
 ### DisplayLog Integration
 
@@ -96,10 +94,11 @@ interactionResolved(interactionId: string, response: unknown): void;
 interactionCancelled(interactionId: string): void;
 ```
 
-### New `Dispatcher` method (client → server)
+### New `Dispatcher` methods (client → server)
 
 ```typescript
 respondToInteraction(response: PendingInteractionResponse): Promise<void>;
+cancelInteraction(interactionId: string): Promise<void>;
 ```
 
 ### Types (`@typeagent/dispatcher-types`)
@@ -156,7 +155,7 @@ The shell and CLI `requestInteraction`/`interactionResolved`/`interactionCancell
 
    Architecturally similar but semantically distinct — `requestChoice` is agent-initiated via `ActionResult`, not system-initiated. Leave separate for now; revisit in a future iteration.
 
-4. **Grace period on disconnect** — resolved: immediate cancellation. A reconnect grace period is not implemented; if added later, pending interactions could be replayed to a reconnecting client.
+4. **Grace period on disconnect** — disconnecting a client does not auto-cancel pending interactions. Interactions remain pending until they time out or a client explicitly calls `cancelInteraction`. Reconnecting clients see pending interactions in `JoinSessionResult.pendingInteractions` and can respond or cancel them.
 
 ---
 
@@ -180,16 +179,23 @@ Client              SharedDispatcher          PendingInteractionMgr     DisplayL
   |                       |   (Promise resolves, command continues)          |
 ```
 
-### askYesNo: Client Disconnect
+### askYesNo: Client Disconnect (interaction survives)
 
 ```
 Client              SharedDispatcher          PendingInteractionMgr
   |                       |                           |
   |<-- requestInteraction-|                           |
+  |                       |--- logPendingInteraction->|
+  |                       |--- create(request) ------->
   |                       |                           |
   X  (client disconnects) |                           |
-  |                       |--- cancelByConnection --->|
-  |                       |   (resolves with defaultValue or rejects)
+  |                       |   (interaction stays pending until timeout)
+  |                       |                           |
+  | (same or new client reconnects and calls cancelInteraction)
+  |-- cancelInteraction(id) -->                       |
+  |                       |--- cancel(id, error) ---->|
+  |                       |<-- interactionCancelled --|
+  |<-- interactionCancelled broadcast                 |
 ```
 
 ### popupQuestion: Multi-Client Broadcast
