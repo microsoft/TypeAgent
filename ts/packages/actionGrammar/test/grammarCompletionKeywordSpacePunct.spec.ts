@@ -1173,8 +1173,7 @@ describeForEachCompletion(
 
         describe("completion: wildcard after keyword ending with punctuation", () => {
             const g = `
-                import { Name };
-                <Start> = hello, $(x:Name) -> { actionName: "test", parameters: { x } };
+                <Start> = hello, $(x) -> { actionName: "test", parameters: { x } };
             `;
             const grammar = loadGrammarRules("test.grammar", g);
 
@@ -1715,8 +1714,7 @@ describeForEachCompletion(
 
         describe("punctuation-only keyword before wildcard", () => {
             const g = `
-                import { Name };
-                <Start> = ... $(x:Name) -> { actionName: "test", parameters: { x } };
+                <Start> = ... $(x) -> { actionName: "test", parameters: { x } };
             `;
             const grammar = loadGrammarRules("test.grammar", g);
 

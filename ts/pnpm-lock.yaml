@@ -2468,9 +2468,15 @@ importers:
       '@types/better-sqlite3':
         specifier: 7.6.13
         version: 7.6.13
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3

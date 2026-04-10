@@ -318,9 +318,7 @@ describeForEachCompletion(
         });
 
         describe("completion after number variable", () => {
-            const g = [
-                `<Start> = set volume $(n:number) percent -> { volume: n };`,
-            ].join("\n");
+            const g = `<Start> = set volume $(n:number) percent -> { volume: n };`;
             const grammar = loadGrammarRules("test.grammar", g);
 
             it("completes 'percent' after number matched", () => {
@@ -455,9 +453,7 @@ describeForEachCompletion(
         describe("wildcard between string parts - longest match", () => {
             // Grammar: verb WILDCARD terminator
             // Completion should offer terminator only after wildcard captures text.
-            const g = [
-                `<Start> = play $(name) by $(artist) -> { name, artist };`,
-            ].join("\n");
+            const g = `<Start> = play $(name) by $(artist) -> { name, artist };`;
             const grammar = loadGrammarRules("test.grammar", g);
 
             it("offers wildcard property after 'play'", () => {
@@ -763,10 +759,7 @@ describeForEachCompletion(
             // Entity wildcards should produce property completions, not string
             // completions, and matchedPrefixLength should indicate where the
             // entity value begins.
-            const g = [
-                `import { SongName };`,
-                `<Start> = play $(song:SongName) next -> { song };`,
-            ].join("\n");
+            const g = `<Start> = play $(song) next -> { song };`;
             const grammar = loadGrammarRules("test.grammar", g);
 
             it("entity wildcard produces property completion", () => {
@@ -850,8 +843,7 @@ describeForEachCompletion(
 
                 it("entity rule first, string rule second", () => {
                     const g = [
-                        `import { SongName };`,
-                        `<Start> = play $(song:SongName) -> { action: "search", song };`,
+                        `<Start> = play $(song) -> { action: "search", song };`,
                         `<Start> = play shuffle -> { action: "shuffle" };`,
                     ].join("\n");
                     const grammar = loadGrammarRules("test.grammar", g);
@@ -874,9 +866,8 @@ describeForEachCompletion(
 
                 it("string rule first, entity rule second", () => {
                     const g = [
-                        `import { SongName };`,
                         `<Start> = play shuffle -> { action: "shuffle" };`,
-                        `<Start> = play $(song:SongName) -> { action: "search", song };`,
+                        `<Start> = play $(song) -> { action: "search", song };`,
                     ].join("\n");
                     const grammar = loadGrammarRules("test.grammar", g);
                     const result = matchGrammarCompletion(grammar, "play");
@@ -899,8 +890,7 @@ describeForEachCompletion(
 
             describe("competing rules - longer match resets closedSet", () => {
                 const g = [
-                    `import { SongName };`,
-                    `<Start> = $(a:<A>) $(song:SongName) -> { a, song };`,
+                    `<Start> = $(a:<A>) $(song) -> { a, song };`,
                     `<Start> = $(a:<A>) $(b:<B>) finish -> { a, b };`,
                     `<A> = alpha -> "a";`,
                     `<B> = bravo -> "b";`,
@@ -931,9 +921,7 @@ describeForEachCompletion(
         });
 
         describe("afterWildcard flag — ambiguous wildcard boundary", () => {
-            const g = [
-                `<Start> = play $(name) by $(artist) -> { name, artist };`,
-            ].join("\n");
+            const g = `<Start> = play $(name) by $(artist) -> { name, artist };`;
             const grammar = loadGrammarRules("test.grammar", g);
 
             describe("forward: wildcard finalized at end-of-input", () => {
@@ -1152,9 +1140,7 @@ describeForEachCompletion(
         });
 
         describe("partial keyword after wildcard — 'play Never b'", () => {
-            const g = [
-                `<Start> = play $(name) by $(artist) -> { name, artist };`,
-            ].join("\n");
+            const g = `<Start> = play $(name) by $(artist) -> { name, artist };`;
             const grammar = loadGrammarRules("test.grammar", g);
 
             it("forward: offers 'by' with afterWildcard=\"all\"", () => {
@@ -1224,9 +1210,7 @@ describeForEachCompletion(
         });
 
         describe("partial keyword after wildcard — spacing=none", () => {
-            const g = [
-                `<Start> [spacing=none] = play $(name) playedby $(artist) -> { name, artist };`,
-            ].join("\n");
+            const g = `<Start> [spacing=none] = play $(name) playedby $(artist) -> { name, artist };`;
             const grammar = loadGrammarRules("test.grammar", g);
 
             it("backward: partial keyword prefix in none mode", () => {

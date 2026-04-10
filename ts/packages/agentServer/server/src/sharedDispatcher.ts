@@ -204,8 +204,7 @@ export async function createSharedDispatcher(
             );
 
             // Always queue so a reconnecting client can still respond within
-            // the timeout window. Pass undefined as connectionId so that a
-            // disconnect does not auto-cancel the interaction.
+            // the timeout window.
             context.displayLog.logPendingInteraction(request);
             context.displayLog.saveQueued();
 

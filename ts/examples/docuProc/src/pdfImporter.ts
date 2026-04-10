@@ -340,8 +340,3 @@ export async function exponentialBackoff<T extends any[], R>(
         }
     }
 }
-
-// Apply URL escaping to key. NOTE: Currently unused. TODO: Therefore remove.
-export function sanitizeKey(key: string): string {
-    return encodeURIComponent(key).replace(/%20/g, "+"); // Encode spaces as plus, others as %xx.
-}

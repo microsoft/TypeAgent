@@ -20,13 +20,13 @@ import { PlayerActions } from "./playerSchema.ts";
          | skip <TrackTerm>   ->  { actionName: "next" };
 <PlayCommand> = <PlayTrackNumberCommand> | <PlaySpecificTrack>;
 <PlayTrackNumberCommand> =
-    play (the)? $(n:Ordinal) (<Item>)? -> {
+    play (the)? $(n:<Ordinal>) (<Item>)? -> {
         actionName: "playFromCurrentTrackList",
         parameters: {
             trackNumber: n
         }
     }
-| play track $(n:Cardinal) -> {
+| play track $(n:<Cardinal>) -> {
         actionName: "playFromCurrentTrackList",
         parameters: {
             trackNumber: n

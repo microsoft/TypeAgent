@@ -16,6 +16,33 @@ const __dirname = path.dirname(__filename);
 
 const execFilePromise = promisify(execFile);
 
+export function isChunkedFileOrErrorItemArray(
+    value: unknown,
+): value is (ChunkedFile | ChunkerErrorItem)[] {
+    if (!Array.isArray(value)) return false;
+    for (const item of value) {
+        if (typeof item !== "object" || item === null) return false;
+        if ("error" in item) {
+            if (typeof (item as ChunkerErrorItem).error !== "string")
+                return false;
+        } else {
+            const f = item as ChunkedFile;
+            if (typeof f.fileName !== "string" || !Array.isArray(f.chunks))
+                return false;
+            for (const chunk of f.chunks) {
+                if (
+                    typeof chunk.chunkId !== "string" ||
+                    typeof chunk.treeName !== "string" ||
+                    !Array.isArray(chunk.blobs) ||
+                    !Array.isArray(chunk.children)
+                )
+                    return false;
+            }
+        }
+    }
+    return true;
+}
+
 export async function chunkifyPythonFiles(
     filenames: string[],
 ): Promise<(ChunkedFile | ChunkerErrorItem)[]> {
@@ -47,8 +74,11 @@ export async function chunkifyPythonFiles(
         return [{ error: "No output from chunker script" }];
     }
 
-    const results: (ChunkedFile | ChunkerErrorItem)[] = JSON.parse(output);
-    // TODO: validate that JSON matches our schema.
+    const parsed: unknown = JSON.parse(output);
+    if (!isChunkedFileOrErrorItemArray(parsed)) {
+        return [{ error: "Chunker output does not match expected schema" }];
+    }
+    const results: (ChunkedFile | ChunkerErrorItem)[] = parsed;
 
     // Ensure all chunks have a filename.
     for (const result of results) {
