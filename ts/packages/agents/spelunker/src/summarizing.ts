@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as sqlite from "better-sqlite3";
-
 import { createLimiter } from "@typeagent/common-utils";
 
 import { Chunk, ChunkId } from "./chunkSchema.js";
@@ -158,24 +156,6 @@ export function prepareChunks(chunks: Chunk[]): string {
         }
     }
     return output.join("");
-}
-
-function prepareSummaries(db: sqlite.Database): string {
-    const selectAllSummaries = db.prepare(`SELECT * FROM Summaries`);
-    const summaryRows: any[] = selectAllSummaries.all();
-    if (summaryRows.length > 100) {
-        console_log(`  [Over 100 summary rows, skipping summaries in prompt]`);
-        return "";
-    }
-    const lines: string[] = [];
-    for (const summaryRow of summaryRows) {
-        const commentStyle =
-            languageCommentMap[summaryRow.language] ?? { start: "#", end: "" };
-        lines.push("");
-        lines.push(`${commentStyle.start} ${summaryRow.summary}${commentStyle.end ? ` ${commentStyle.end}` : ""}`);
-        lines.push(summaryRow.signature);
-    }
-    return lines.join("\n");
 }
 
 const languageCommentMap: { [key: string]: { start: string; end: string } } = {
