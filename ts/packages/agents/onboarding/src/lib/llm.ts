@@ -18,11 +18,15 @@ export function getPhraseGenModel(): ChatModel {
 }
 
 export function getSchemaGenModel(): ChatModel {
-    return openai.createChatModelDefault("onboarding:schemagen");
+    return openai.createChatModel(undefined, undefined, undefined, [
+        "onboarding:schemagen",
+    ]);
 }
 
 export function getGrammarGenModel(): ChatModel {
-    return openai.createChatModelDefault("onboarding:grammargen");
+    return openai.createChatModel(undefined, undefined, undefined, [
+        "onboarding:grammargen",
+    ]);
 }
 
 export function getTestingModel(): ChatModel {

@@ -19,6 +19,10 @@ import {
     readArtifactJson,
 } from "../lib/workspace.js";
 import { getDiscoveryModel } from "../lib/llm.js";
+import { execFile } from "child_process";
+import { promisify } from "util";
+
+const execFileAsync = promisify(execFile);
 
 // Represents a single discovered API action
 export type DiscoveredAction = {
@@ -67,6 +71,13 @@ export async function executeDiscoveryAction(
             return handleParseOpenApiSpec(
                 action.parameters.integrationName,
                 action.parameters.specSource,
+            );
+
+        case "crawlCliHelp":
+            return handleCrawlCliHelp(
+                action.parameters.integrationName,
+                action.parameters.command,
+                action.parameters.maxDepth,
             );
 
         case "listDiscoveredActions":
@@ -465,6 +476,190 @@ async function handleParseOpenApiSpec(
                     (a) =>
                         `- **${a.name}** (\`${a.method} ${a.path}\`): ${a.description}`,
                 )
+                .join("\n") +
+            (actions.length > 20
+                ? `\n\n_...and ${actions.length - 20} more_`
+                : "") +
+            `\n\nReview with \`listDiscoveredActions\`, then \`approveApiSurface\` to proceed.`,
+    );
+}
+
+// ── CLI Help Crawler ──────────────────────────────────────────────────────
+
+async function runHelp(
+    command: string,
+    args: string[],
+): Promise<string | undefined> {
+    // Try --help first, fall back to -h
+    for (const flag of ["--help", "-h"]) {
+        try {
+            const { stdout, stderr } = await execFileAsync(command, [...args, flag], {
+                timeout: 15_000,
+                windowsHide: true,
+            });
+            const output = (stdout || stderr).trim();
+            if (output.length > 0) return output;
+        } catch (err: any) {
+            // Many CLIs print help to stderr and exit non-zero; capture that
+            const output = ((err.stdout ?? "") + (err.stderr ?? "")).trim();
+            if (output.length > 0) return output;
+        }
+    }
+    return undefined;
+}
+
+// Parse subcommand names from help text heuristically
+function parseSubcommands(helpText: string): string[] {
+    const subcommands: string[] = [];
+
+    // Common patterns:
+    //   "Available Commands:" / "Commands:" / "COMMANDS:" section
+    //   Each line starts with optional whitespace then a command name
+    const sectionRe =
+        /(?:available\s+)?(?:commands|subcommands):\s*\n((?:[ \t]+\S.*\n?)+)/gi;
+    let match: RegExpExecArray | null;
+    while ((match = sectionRe.exec(helpText)) !== null) {
+        const block = match[1];
+        for (const line of block.split("\n")) {
+            const m = line.match(/^\s{2,}(\S+)/);
+            if (m && !m[1].startsWith("-") && !m[1].startsWith("[")) {
+                subcommands.push(m[1]);
+            }
+        }
+    }
+
+    return [...new Set(subcommands)];
+}
+
+async function crawlCliRecursive(
+    command: string,
+    args: string[],
+    depth: number,
+    maxDepth: number | undefined,
+): Promise<{ command: string; helpText: string }[]> {
+    if (maxDepth !== undefined && depth > maxDepth) return [];
+
+    const helpText = await runHelp(command, args);
+    if (!helpText) return [];
+
+    const results: { command: string; helpText: string }[] = [
+        { command: [command, ...args].join(" "), helpText },
+    ];
+
+    const subcommands = parseSubcommands(helpText);
+    for (const sub of subcommands) {
+        const childResults = await crawlCliRecursive(
+            command,
+            [...args, sub],
+            depth + 1,
+            maxDepth,
+        );
+        results.push(...childResults);
+    }
+
+    return results;
+}
+
+async function handleCrawlCliHelp(
+    integrationName: string,
+    command: string,
+    maxDepth?: number,
+): Promise<ActionResult> {
+    const state = await loadState(integrationName);
+    if (!state) {
+        return {
+            error: `Integration "${integrationName}" not found. Run startOnboarding first.`,
+        };
+    }
+
+    await updatePhase(integrationName, "discovery", { status: "in-progress" });
+
+    // Crawl the CLI help recursively
+    const helpEntries = await crawlCliRecursive(command, [], 0, maxDepth);
+    if (helpEntries.length === 0) {
+        return {
+            error: `Could not retrieve help output from "${command}". Ensure the command is installed and accessible.`,
+        };
+    }
+
+    // Combine all help text for LLM extraction
+    const combinedHelp = helpEntries
+        .map((e) => `### ${e.command}\n\n${e.helpText}`)
+        .join("\n\n---\n\n");
+
+    const model = getDiscoveryModel();
+
+    const prompt = [
+        {
+            role: "system" as const,
+            content:
+                "You are a CLI documentation analyzer. Extract a list of CLI actions/commands from the provided help output. " +
+                "For each action, identify: name (camelCase derived from the command path, e.g. 'gh repo create' becomes 'repoCreate'), " +
+                "description, the full command path as the 'path' field, and parameters (flags/arguments with their types). " +
+                "Only include leaf commands (commands that perform an action, not command groups). " +
+                "Return a JSON array of actions.",
+        },
+        {
+            role: "user" as const,
+            content:
+                `Extract all CLI actions from this help output for the "${integrationName}" integration.\n\n` +
+                `Base command: ${command}\n` +
+                `Total subcommands crawled: ${helpEntries.length}\n\n` +
+                `Help output (truncated to 12000 chars):\n${combinedHelp.slice(0, 12000)}`,
+        },
+    ];
+
+    const result = await model.complete(prompt);
+    if (!result.success) {
+        return { error: `LLM extraction failed: ${result.message}` };
+    }
+
+    let actions: DiscoveredAction[] = [];
+    try {
+        const jsonMatch = result.data.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+            actions = JSON.parse(jsonMatch[0]);
+        }
+    } catch {
+        return { error: "Failed to parse LLM response as JSON action list." };
+    }
+
+    const source = `cli:${command}`;
+    actions = actions.map((a) => ({ ...a, method: "CLI", sourceUrl: source }));
+
+    // Merge with any existing discovered actions
+    const existing = await readArtifactJson<ApiSurface>(
+        integrationName,
+        "discovery",
+        "api-surface.json",
+    );
+    const merged: ApiSurface = {
+        integrationName,
+        discoveredAt: new Date().toISOString(),
+        source,
+        actions: [
+            ...(existing?.actions ?? []).filter(
+                (a) => !actions.find((n) => n.name === a.name),
+            ),
+            ...actions,
+        ],
+    };
+
+    await writeArtifactJson(
+        integrationName,
+        "discovery",
+        "api-surface.json",
+        merged,
+    );
+
+    return createActionResultFromMarkdownDisplay(
+        `## CLI discovery complete: ${integrationName}\n\n` +
+            `**Command:** \`${command}\`\n` +
+            `**Subcommands crawled:** ${helpEntries.length}\n` +
+            `**Actions found:** ${actions.length}\n\n` +
+            actions
+                .slice(0, 20)
+                .map((a) => `- **${a.name}** (\`${a.path}\`): ${a.description}`)
                 .join("\n") +
             (actions.length > 20
                 ? `\n\n_...and ${actions.length - 20} more_`

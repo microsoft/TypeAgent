@@ -70,6 +70,7 @@ async function executeAction(
     // Discovery phase
     if (
         actionName === "crawlDocUrl" ||
+        actionName === "crawlCliHelp" ||
         actionName === "parseOpenApiSpec" ||
         actionName === "listDiscoveredActions" ||
         actionName === "approveApiSurface"
@@ -180,7 +181,7 @@ async function executeOnboardingAction(
             return createActionResultFromMarkdownDisplay(
                 `## Onboarding started: ${integrationName}\n\n` +
                     `**Next step:** Phase 1 — Discovery\n\n` +
-                    `Use \`crawlDocUrl\` or \`parseOpenApiSpec\` to enumerate the API surface.\n\n` +
+                    `Use \`crawlDocUrl\`, \`crawlCliHelp\`, or \`parseOpenApiSpec\` to enumerate the API surface.\n\n` +
                     `Workspace: \`~/.typeagent/onboarding/${integrationName}/\``,
             );
         }
@@ -257,7 +258,7 @@ async function executeOnboardingAction(
 function phaseNextStepHint(phase: string): string {
     const hints: Record<string, string> = {
         discovery:
-            "Use `crawlDocUrl` or `parseOpenApiSpec` to enumerate the API surface.",
+            "Use `crawlDocUrl`, `crawlCliHelp`, or `parseOpenApiSpec` to enumerate the API surface.",
         phraseGen:
             "Use `generatePhrases` to create natural language samples for each action.",
         schemaGen:
