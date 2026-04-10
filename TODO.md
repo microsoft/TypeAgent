@@ -131,7 +131,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/agents/player/src/search.ts` | 253 | Might want to use fuzzy matching here. | Medium | Medium | Component | Fix | No |
 | `ts/packages/agents/player/src/search.ts` | 561 | cache this. | Low | High | Component | Fix | No |
 | `ts/packages/agents/player/src/trackFilter.ts` | 326 | year ranges | Medium | High | Local | Fix | No |
-| `ts/packages/agents/player/src/userData.ts` | 301 | return names of playlists, sorted by timestamp | Low | High | Local | Fix | No |
 | `ts/packages/agents/settings/src/settingsCommandHandler.ts` | 53 | apply this setting to the local system. '${action.parameters.originalRequest} | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/agents/spelunker/src/chunker.py` | 61 | dotted names | Medium | Medium | Local | Fix | No |
 | `ts/packages/agents/spelunker/src/embeddings.ts` | 37 | Fix this | Medium | Medium | Local | Fix | Yes |
