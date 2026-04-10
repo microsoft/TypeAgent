@@ -30,7 +30,9 @@ export function getGrammarGenModel(): ChatModel {
 }
 
 export function getTestingModel(): ChatModel {
-    return openai.createChatModelDefault("onboarding:testing");
+    return openai.createChatModel(undefined, undefined, undefined, [
+        "onboarding:testing",
+    ]);
 }
 
 export function getPackagingModel(): ChatModel {
