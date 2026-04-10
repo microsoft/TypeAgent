@@ -257,8 +257,8 @@ export class MatchAccumulator<T = any> {
     private matchesWithMinHitCount(
         minHitCount: number | undefined,
     ): IterableIterator<Match<T>> {
-        // TODO: this should be minHitCount > 1
-        return minHitCount !== undefined && minHitCount > 0
+        // Skip filtering when minHitCount is 0 or 1 — all matches have hitCount >= 1 by design
+        return minHitCount !== undefined && minHitCount > 1
             ? this.getMatches((m) => m.hitCount >= minHitCount)
             : this.matches.values();
     }
