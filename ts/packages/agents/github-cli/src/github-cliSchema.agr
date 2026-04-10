@@ -107,7 +107,22 @@
   | how many stars does $(repo:wildcard) have -> {
     actionName: "repoView",
     parameters: {
-        repo
+        repo,
+        field: "stars"
+    }
+}
+  | how many forks does $(repo:wildcard) have -> {
+    actionName: "repoView",
+    parameters: {
+        repo,
+        field: "forks"
+    }
+}
+  | what language is $(repo:wildcard) written in -> {
+    actionName: "repoView",
+    parameters: {
+        repo,
+        field: "language"
     }
 }
   | tell me about repository $(repo:wildcard) -> {

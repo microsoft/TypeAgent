@@ -393,6 +393,42 @@ function buildArgs(
     }
 }
 
+function formatValue(v: unknown): string {
+    if (v === null || v === undefined) return "—";
+    if (typeof v === "object") {
+        if (Array.isArray(v)) return v.map(formatValue).join(", ") || "—";
+        const obj = v as Record<string, unknown>;
+        if ("name" in obj) return String(obj.name);
+        if ("login" in obj) return String(obj.login);
+        if ("totalCount" in obj) return String(obj.totalCount);
+        return JSON.stringify(v);
+    }
+    return String(v);
+}
+
+// Return a focused, natural-language answer for a specific repo field.
+function distillRepoField(
+    field: string,
+    data: Record<string, unknown>,
+    repo: string,
+): string | undefined {
+    const label = repo || formatValue(data.owner) + "/" + data.name;
+    switch (field) {
+        case "stars":
+            return `⭐ **${label}** has **${data.stargazerCount?.toLocaleString?.() ?? data.stargazerCount}** stars.`;
+        case "forks":
+            return `🍴 **${label}** has **${data.forkCount?.toLocaleString?.() ?? data.forkCount}** forks.`;
+        case "language":
+            return `💻 **${label}** is primarily written in **${formatValue(data.primaryLanguage)}**.`;
+        case "watchers":
+            return `👀 **${label}** has **${formatValue(data.watchers)}** watchers.`;
+        case "description":
+            return `📋 **${label}**: ${data.description}`;
+        default:
+            return undefined;
+    }
+}
+
 async function executeAction(
     action: TypeAgentAction<GithubCliActions>,
     context: ActionContext<unknown>,
@@ -403,6 +439,8 @@ async function executeAction(
             `Unknown action: ${action.actionName}`,
         );
     }
+
+    const p = action.parameters as Record<string, unknown>;
 
     try {
         const output = await runGh(args);
@@ -416,19 +454,19 @@ async function executeAction(
         if (args.includes("--json")) {
             try {
                 const data = JSON.parse(output);
-                const formatValue = (v: unknown): string => {
-                    if (v === null || v === undefined) return "—";
-                    if (typeof v === "object") {
-                        if (Array.isArray(v)) return v.map(formatValue).join(", ") || "—";
-                        const obj = v as Record<string, unknown>;
-                        // Common gh patterns: {name: "..."}, {login: "..."}
-                        if ("name" in obj) return String(obj.name);
-                        if ("login" in obj) return String(obj.login);
-                        if ("totalCount" in obj) return String(obj.totalCount);
-                        return JSON.stringify(v);
+
+                // If a specific field was requested, return a focused answer
+                if (p.field) {
+                    const answer = distillRepoField(
+                        String(p.field),
+                        data,
+                        String(p.repo ?? data.name ?? ""),
+                    );
+                    if (answer) {
+                        return createActionResultFromMarkdownDisplay(answer);
                     }
-                    return String(v);
-                };
+                }
+
                 const lines = Object.entries(data)
                     .map(([k, v]) => `- **${k}**: ${formatValue(v)}`)
                     .join("\n");
