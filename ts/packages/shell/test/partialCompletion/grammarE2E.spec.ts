@@ -770,8 +770,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
         const crossRuleGrammar = loadGrammarRules(
             "crossrule.grammar",
             [
-                `import { SongName, ArtistName };`,
-                `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
+                `<Start> = play $(song) by $(artist) -> { actionName: "playBy", parameters: { song, artist } };`,
                 `<Start> = play beautiful music -> "playBeautifulMusic";`,
             ].join("\n"),
         );
