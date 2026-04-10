@@ -1167,7 +1167,7 @@ describe("Grammar Imports with File Loading", () => {
             expect(errors[0]).toContain("already imported from");
         });
 
-        it("should silently skip source-less import of non-built-in name", () => {
+        it("should error on source-less import of non-built-in name", () => {
             const errors: string[] = [];
             const warnings: string[] = [];
             const grammarFiles: Record<string, string> = {
@@ -1176,8 +1176,6 @@ describe("Grammar Imports with File Loading", () => {
                     <Start> = $(x:UnknownEntity) -> x;
                 `,
             };
-            // No error from importGrammarRule (silently skipped),
-            // but the name is still registered as an imported type
             loadGrammarRulesNoThrow(
                 "main.agr",
                 getTestFileLoader(grammarFiles),
@@ -1185,7 +1183,9 @@ describe("Grammar Imports with File Loading", () => {
                 warnings,
             );
 
-            expect(errors).toEqual([]);
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("UnknownEntity");
+            expect(errors[0]).toContain("not exported");
         });
 
         it("should error when .agr import conflicts with earlier source-less import", () => {

@@ -285,19 +285,29 @@ function createCompileContext(
             if (importStmt.source === undefined) {
                 if (importStmt.names !== "*") {
                     const builtInCtx = getBuiltInGrammarContext(grammarFileMap);
+                    const builtInExportedNamesLowerCase = new Set(
+                        Array.from(builtInCtx.exportedNames).map(
+                            (n) => n[0].toLowerCase() + n.slice(1),
+                        ),
+                    );
+
                     for (const { name } of importStmt.names) {
-                        importGrammarRule(
-                            context,
-                            builtInCtx,
-                            name,
-                            importStmt,
-                            ruleDefMap,
-                            importedRuleMap,
-                        );
-                        // Always register the name as an imported type so it
+                        // Legacy: lower case names are used to refer to registered entities
+                        if (!builtInExportedNamesLowerCase.has(name)) {
+                            importGrammarRule(
+                                context,
+                                builtInCtx,
+                                name,
+                                importStmt,
+                                ruleDefMap,
+                                importedRuleMap,
+                            );
+                        }
+                        // Legacy: Always register the name as an imported type so it
                         // appears in grammar.entities for runtime entity
                         // registry compatibility.
                         importedTypeNames.set(name, importStmt.pos);
+
                         // Don't warn not used as type.
                         usedImportedTypes.add(name);
                     }
