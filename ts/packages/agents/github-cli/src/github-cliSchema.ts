@@ -60,7 +60,8 @@ export type GithubCliActions =
   | SecretCreateAction
   | SshKeyAddAction
   | StatusPrintAction
-  | VariableCreateAction;
+  | VariableCreateAction
+  | DependabotAlertsAction;
 
 export type AuthLoginAction = {
   actionName: "authLogin";
@@ -605,5 +606,17 @@ export type VariableCreateAction = {
     name?: string;
     
     value?: string;
+  };
+};
+
+export type DependabotAlertsAction = {
+  actionName: "dependabotAlerts";
+  parameters: {
+    // owner/repo
+    repo?: string;
+    // Filter by severity: critical, high, medium, low
+    severity?: string;
+    // Filter by state: open, dismissed, fixed
+    state?: string;
   };
 };

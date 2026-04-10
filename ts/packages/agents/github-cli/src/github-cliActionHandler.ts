@@ -427,6 +427,18 @@ function buildArgs(
             if (p.value) args.push("--body", String(p.value));
             return args;
         }
+        case "dependabotAlerts": {
+            // gh api /repos/{owner}/{repo}/dependabot/alerts
+            let repo = p.repo ? String(p.repo) : "";
+            if (!repo) return undefined;
+            let endpoint = `/repos/${repo}/dependabot/alerts`;
+            const params: string[] = [];
+            if (p.severity) params.push(`severity=${String(p.severity)}`);
+            if (p.state) params.push(`state=${String(p.state)}`);
+            else params.push("state=open");
+            if (params.length) endpoint += `?${params.join("&")}`;
+            return ["api", endpoint];
+        }
         default:
             return undefined;
     }
@@ -468,13 +480,11 @@ function distillRepoField(
     }
 }
 
-// Format gh status output with bold section headers as markdown
+// Format gh status output — parse the │-table into clean markdown sections
 function formatStatusOutput(raw: string): string {
-    // gh status uses a table format with │ separators and section headers
-    // Convert to readable markdown with bold headers
     const lines = raw.split("\n");
-    const result: string[] = [];
-    const sectionHeaders = new Set([
+
+    const knownHeaders = new Set([
         "Assigned Issues",
         "Assigned Pull Requests",
         "Review Requests",
@@ -482,24 +492,74 @@ function formatStatusOutput(raw: string): string {
         "Repository Activity",
     ]);
 
+    // gh status uses a two-column layout with │ separator, then a single-column section.
+    const sections: Record<string, string[]> = {};
+    let currentLeft = "";
+    let currentRight = "";
+
     for (const line of lines) {
-        // Check if line contains a section header
-        let replaced = false;
-        for (const header of sectionHeaders) {
-            if (line.includes(header)) {
-                // Split on │ to handle multi-column header rows
-                const parts = line.split("│").map((p) => p.trim()).filter(Boolean);
-                const boldParts = parts.map((p) =>
-                    sectionHeaders.has(p) ? `**${p}**` : p,
-                );
-                result.push(boldParts.join(" │ "));
-                replaced = true;
-                break;
+        if (!line.trim()) continue;
+
+        if (line.includes("│")) {
+            const [left, right] = line.split("│").map((s) => s.trim());
+
+            if (left && knownHeaders.has(left)) currentLeft = left;
+            if (right && knownHeaders.has(right)) currentRight = right;
+
+            const leftIsHeader = left ? knownHeaders.has(left) : false;
+            const rightIsHeader = right ? knownHeaders.has(right) : false;
+
+            if (left && !leftIsHeader) {
+                if (!currentLeft) currentLeft = "Activity";
+                if (!sections[currentLeft]) sections[currentLeft] = [];
+                sections[currentLeft].push(left);
+            }
+            if (right && !rightIsHeader) {
+                if (!currentRight) currentRight = "Activity";
+                if (!sections[currentRight]) sections[currentRight] = [];
+                sections[currentRight].push(right);
+            }
+        } else {
+            const trimmed = line.trim();
+            if (trimmed && knownHeaders.has(trimmed)) {
+                currentLeft = trimmed;
+                currentRight = "";
+            } else if (trimmed) {
+                if (!currentLeft) currentLeft = "Activity";
+                if (!sections[currentLeft]) sections[currentLeft] = [];
+                sections[currentLeft].push(trimmed);
             }
         }
-        if (!replaced) {
-            result.push(line);
+    }
+
+    // Render as clean markdown
+    const result: string[] = [];
+    for (const [header, items] of Object.entries(sections)) {
+        if (!header) continue;
+        result.push(`**${header}**`);
+        if (items.length === 0 || (items.length === 1 && items[0].includes("Nothing here"))) {
+            result.push("  *Nothing here* 🎉\n");
+            continue;
         }
+        for (const item of items) {
+            // Parse "owner/repo#123  description..." into a clickable link
+            const match = item.match(/^(\S+\/\S+)#(\d+)\s+(.*)/);
+            if (match) {
+                const [, repo, num, desc] = match;
+                const activity = desc.match(/^(comment on|new PR|new issue)\s*(.*)/);
+                if (activity) {
+                    const [, verb, rest] = activity;
+                    const preview = rest.length > 80 ? rest.slice(0, 80) + "…" : rest;
+                    result.push(`  - [${repo}#${num}](https://github.com/${repo}/issues/${num}) — *${verb}* ${preview}`);
+                } else {
+                    const preview = desc.length > 80 ? desc.slice(0, 80) + "…" : desc;
+                    result.push(`  - [${repo}#${num}](https://github.com/${repo}/issues/${num}) ${preview}`);
+                }
+            } else {
+                result.push(`  - ${item}`);
+            }
+        }
+        result.push("");
     }
     return result.join("\n");
 }
@@ -709,13 +769,44 @@ async function executeAction(
             }
         }
 
-        // Format JSON arrays (e.g., API contributor responses)
+        // Format JSON arrays (e.g., API contributor responses, dependabot alerts)
         if (output.startsWith("[")) {
             try {
                 const arr = JSON.parse(output) as Record<string, unknown>[];
+
+                // Empty array — friendly message for dependabot/list actions
+                if (arr.length === 0) {
+                    if (action.actionName === "dependabotAlerts") {
+                        return createActionResultFromMarkdownDisplay(
+                            "✅ **No matching Dependabot alerts found!**",
+                        );
+                    }
+                    return createActionResultFromTextDisplay("No results found.");
+                }
+
+                // Dependabot alerts
+                if (arr.length > 0 && "security_advisory" in arr[0]) {
+                    const rows = arr.map((a) => {
+                        const adv = a.security_advisory as Record<string, unknown>;
+                        const sev = String(adv.severity ?? "unknown").toUpperCase();
+                        const pkg = a.dependency
+                            ? (a.dependency as Record<string, unknown>).package
+                                ? ((a.dependency as Record<string, unknown>).package as Record<string, unknown>).name
+                                : "unknown"
+                            : "unknown";
+                        const sevEmoji = sev === "CRITICAL" ? "🔴" : sev === "HIGH" ? "🟠" : sev === "MEDIUM" ? "🟡" : "🟢";
+                        return `- ${sevEmoji} **${sev}** — \`${pkg}\` — [${adv.summary}](${a.html_url})`;
+                    }).join("\n");
+                    const header = `🔒 **${arr.length} Dependabot alert${arr.length === 1 ? "" : "s"}**`;
+                    return createActionResultFromMarkdownDisplay(
+                        `${header}\n\n${rows}`,
+                    );
+                }
+
+                // Contributors
                 if (arr.length > 0 && "login" in arr[0]) {
                     const rows = arr
-                        .map((u, i) => `${i + 1}. **${u.login}** — ${u.contributions} contributions`)
+                        .map((u, i) => `${i + 1}. [**${u.login}**](https://github.com/${u.login}) — ${u.contributions} contributions`)
                         .join("\n");
                     const header = arr.length === 1
                         ? "Top contributor"

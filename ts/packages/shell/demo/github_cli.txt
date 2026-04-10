@@ -34,21 +34,31 @@ show top 10 contributors to microsoft/TypeAgent
 # See what's in flight
 list open PRs in microsoft/TypeAgent
 
-# Drill into a specific PR
-show PR 2183 in microsoft/TypeAgent
+# Just the most recent ones
+get latest 5 PRs in microsoft/TypeAgent
 
-# Check PRs in another repo
-list open pull requests in microsoft/garnet
+# Drill into a specific PR
+show PR 2180 in microsoft/TypeAgent
 
 # -------------------------------------
 # Issue management
 # -------------------------------------
 
-# Browse issues across repos
-show open issues in microsoft/garnet
+# Get the latest issues
+get latest 5 issues in microsoft/TypeAgent
 
 # Drill into a specific issue
 show issue 2170 in microsoft/TypeAgent
+
+# -------------------------------------
+# Security
+# -------------------------------------
+
+# Check for vulnerabilities
+show dependabot alerts in microsoft/TypeAgent
+
+# Filter by severity
+show high severity dependabot alerts in microsoft/TypeAgent
 
 # -------------------------------------
 # Write actions
