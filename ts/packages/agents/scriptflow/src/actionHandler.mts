@@ -22,6 +22,7 @@ import {
 import type { ParsedCommandParams } from "@typeagent/agent-sdk";
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { join, dirname, isAbsolute, resolve, extname } from "path";
+import { homedir } from "os";
 import { ScriptAnalyzer } from "./analysis/scriptAnalyzer.mjs";
 import { fileURLToPath } from "url";
 import { ScriptFlowStore } from "./store/scriptFlowStore.mjs";
@@ -97,6 +98,8 @@ async function executeFlowScript(
             maxExecutionTime: flow.sandbox.maxExecutionTime,
             networkAccess: flow.sandbox.networkAccess,
         },
+        // Use user's home directory as working directory for consistent path resolution
+        workingDirectory: homedir(),
     };
 
     const result = await executeScript(request);
