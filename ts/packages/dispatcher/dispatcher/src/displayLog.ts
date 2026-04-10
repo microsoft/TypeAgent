@@ -238,12 +238,18 @@ export class DisplayLog {
      */
     logInteractionResolved(interactionId: string, response: unknown): number {
         const seq = this.nextSeq++;
+        let safeResponse: unknown;
+        try {
+            safeResponse = JSON.parse(JSON.stringify(response));
+        } catch {
+            safeResponse = String(response);
+        }
         this.entries.push({
             type: "interaction-resolved",
             seq,
             timestamp: Date.now(),
             interactionId,
-            response,
+            response: safeResponse,
         });
         this.dirty = true;
         return seq;

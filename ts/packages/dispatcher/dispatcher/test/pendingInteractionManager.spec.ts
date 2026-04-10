@@ -125,7 +125,7 @@ describe("PendingInteractionManager", () => {
 
         // ---------------------------------------------------------------
         // 5. cancel: all three types behave correctly
-        //    - askYesNo resolves with defaultValue (or false)
+        //    - askYesNo resolves with defaultValue if explicitly set, rejects otherwise
         //    - proposeAction rejects
         //    - popupQuestion rejects
         // ---------------------------------------------------------------
@@ -142,7 +142,7 @@ describe("PendingInteractionManager", () => {
             await expect(promise).resolves.toBe(true);
         });
 
-        it("askYesNo cancel resolves with false when no defaultValue is set", async () => {
+        it("askYesNo cancel rejects with the error when no defaultValue is set", async () => {
             const request = makeAskYesNoRequest({
                 interactionId: "yn-no-default",
             });
@@ -150,7 +150,7 @@ describe("PendingInteractionManager", () => {
 
             manager.cancel("yn-no-default", new Error("disconnected"));
 
-            await expect(promise).resolves.toBe(false);
+            await expect(promise).rejects.toThrow("disconnected");
         });
 
         it("proposeAction cancel rejects with the error", async () => {

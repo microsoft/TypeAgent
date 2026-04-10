@@ -94,8 +94,8 @@ export class PendingInteractionManager {
 
     /**
      * Reject/cancel a pending interaction (e.g., client disconnected, timeout).
-     * For askYesNo, resolves with the default value instead of rejecting.
-     * Returns true if the interaction was found and cancelled.
+     * For askYesNo with an explicit defaultValue, resolves with that value;
+     * otherwise rejects. Returns true if the interaction was found and cancelled.
      */
     cancel(interactionId: string, error: Error): boolean {
         const entry = this.pending.get(interactionId);
@@ -105,9 +105,14 @@ export class PendingInteractionManager {
             clearTimeout(entry.timeoutTimer);
         }
 
-        // For askYesNo, resolve with default instead of rejecting
+        // For askYesNo, resolve with default if one was explicitly provided;
+        // otherwise reject — no declared safe fallback exists.
         if (entry.type === "askYesNo") {
-            entry.resolve(entry.defaultValue ?? false);
+            if (entry.defaultValue !== undefined) {
+                entry.resolve(entry.defaultValue);
+            } else {
+                entry.reject(error);
+            }
             return true;
         }
 

@@ -338,7 +338,17 @@ function registerClient(
             throw new Error("Main process should have handled closeLocalView");
         },
         requestInteraction: () => {
-            // Shell does not yet support deferred interactions
+            // TODO: Implement deferred interaction support for agent-server connect mode.
+            // When the shell connects to a SharedDispatcher, requestInteraction is pushed
+            // from the server. Without handling it, the server-side promise hangs for the
+            // full 10-minute timeout before resolving with the default value (askYesNo) or
+            // rejecting (proposeAction/popupQuestion).
+            //
+            // The fix (Option A): on requestInteraction, dispatch into the existing
+            // chatView.askYesNo / chatView.proposeAction / dialog.showMessageBox UI (all
+            // already implemented for direct mode), await the result, then call
+            // dispatcher.respondToInteraction({ interactionId, type, value }). Hold a
+            // Map<interactionId, cancelFn> and dismiss open prompts on interactionCancelled.
         },
         interactionResolved: () => {
             // Shell does not yet support deferred interactions
