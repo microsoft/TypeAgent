@@ -1,0 +1,125 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+<AuthLogin> = log me into GitHub -> {
+    actionName: "authLogin",
+    parameters: {}
+}
+  | authenticate my GitHub account with hostname $(hostname:word) -> {
+    actionName: "authLogin",
+    parameters: {
+        hostname
+    }
+};
+
+<AuthLogout> = log me out of GitHub -> {
+    actionName: "authLogout",
+    parameters: {}
+}
+  | sign me out of GitHub -> {
+    actionName: "authLogout",
+    parameters: {}
+};
+
+<AuthStatus> = show my GitHub auth status -> {
+    actionName: "authStatus",
+    parameters: {}
+}
+  | check my GitHub authentication -> {
+    actionName: "authStatus",
+    parameters: {}
+};
+
+<IssueCreate> = create an issue titled $(title:wildcard) -> {
+    actionName: "issueCreate",
+    parameters: {
+        title
+    }
+}
+  | open a new issue called $(title:wildcard) -> {
+    actionName: "issueCreate",
+    parameters: {
+        title
+    }
+};
+
+<IssueClose> = close issue number $(number:number) -> {
+    actionName: "issueClose",
+    parameters: {
+        number
+    }
+};
+
+<IssueReopen> = reopen issue number $(number:number) -> {
+    actionName: "issueReopen",
+    parameters: {
+        number
+    }
+};
+
+<PrCreate> = create a pull request titled $(title:wildcard) -> {
+    actionName: "prCreate",
+    parameters: {
+        title
+    }
+};
+
+<PrClose> = close pull request number $(number:number) -> {
+    actionName: "prClose",
+    parameters: {
+        number
+    }
+};
+
+<PrMerge> = merge pull request number $(number:number) -> {
+    actionName: "prMerge",
+    parameters: {
+        number
+    }
+};
+
+<RepoCreate> = create a new repository named $(name:wildcard) -> {
+    actionName: "repoCreate",
+    parameters: {
+        name
+    }
+};
+
+<RepoClone> = clone repository $(repo:wildcard) -> {
+    actionName: "repoClone",
+    parameters: {
+        repo
+    }
+};
+
+<SearchRepos> = search repositories for $(query:wildcard) -> {
+    actionName: "searchRepos",
+    parameters: {
+        query
+    }
+};
+
+<StatusPrint> = show my GitHub status -> {
+    actionName: "statusPrint",
+    parameters: {}
+}
+  | print my GitHub notifications -> {
+    actionName: "statusPrint",
+    parameters: {}
+};
+
+import { GithubCliActions } from "./github-cliSchema.ts";
+
+<Start> : GithubCliActions = <AuthLogin>
+  | <AuthLogout>
+  | <AuthStatus>
+  | <IssueCreate>
+  | <IssueClose>
+  | <IssueReopen>
+  | <PrCreate>
+  | <PrClose>
+  | <PrMerge>
+  | <RepoCreate>
+  | <RepoClone>
+  | <SearchRepos>
+  | <StatusPrint>;

@@ -192,7 +192,7 @@ async function handleRunTests(
         | Awaited<ReturnType<typeof createTestDispatcher>>
         | undefined;
     try {
-        dispatcherSession = await createTestDispatcher();
+        dispatcherSession = await createTestDispatcher(integrationName);
     } catch (err: any) {
         return {
             error:
@@ -549,7 +549,7 @@ function getExternalAppAgentProviders(instanceDir: string) {
     ];
 }
 
-async function createTestDispatcher() {
+async function createTestDispatcher(integrationName: string) {
     const instanceDir = getInstanceDir();
     const appAgentProviders = getExternalAppAgentProviders(instanceDir);
     const buffer: string[] = [];
@@ -557,7 +557,7 @@ async function createTestDispatcher() {
 
     const dispatcher = await createDispatcher("onboarding-test-runner", {
         appAgentProviders,
-        agents: { commands: ["dispatcher"] },
+        agents: { commands: ["dispatcher", integrationName] },
         explainer: { enabled: false },
         cache: { enabled: false },
         collectCommandResult: true,
