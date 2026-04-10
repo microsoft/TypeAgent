@@ -171,10 +171,14 @@ export async function createSharedDispatcher(
                 cio.requestInteraction(request),
             );
 
-            // Always log and queue the interaction so that a client which is
-            // currently disconnected (or reconnects later) can still respond
-            // within the timeout window. Pass undefined as connectionId so that
-            // cancelByConnection() on a disconnect does not auto-cancel it.
+            // Log unconditionally so the interaction survives in the DisplayLog
+            // and is included in JoinSessionResult.pendingInteractions on the
+            // next join. Cancellation is explicit-only (cancelInteraction or
+            // timeout) — there is no auto-cancel on disconnect.
+            // Note: a reconnecting client will receive a new connectionId, so
+            // requestId.connectionId will no longer match and the interaction
+            // will be filtered out of getPendingInteractions until a stable
+            // client identity is introduced (see TODO in join()).
             context.displayLog.logPendingInteraction(request);
             context.displayLog.saveQueued();
 
@@ -199,14 +203,17 @@ export async function createSharedDispatcher(
                 `proposeAction created: ${interactionId} source="${source}"`,
             );
 
+            // Log and queue unconditionally — same reasoning as askYesNo: the
+            // interaction must be in the DisplayLog and PendingInteractionManager
+            // before any broadcast so that a joining client sees it in
+            // JoinSessionResult.pendingInteractions even if no client is
+            // currently connected.
+            context.displayLog.logPendingInteraction(request);
+            context.displayLog.saveQueued();
+
             broadcast("requestInteraction", requestId, (cio) =>
                 cio.requestInteraction(request),
             );
-
-            // Always queue so a reconnecting client can still respond within
-            // the timeout window.
-            context.displayLog.logPendingInteraction(request);
-            context.displayLog.saveQueued();
 
             return pendingInteractions.create<unknown>(
                 request,
@@ -232,19 +239,18 @@ export async function createSharedDispatcher(
                 `popupQuestion created: ${interactionId} message="${message}"`,
             );
 
-            // popupQuestion has no requestId, so broadcast to all
-            const notified = broadcast("requestInteraction", undefined, (cio) =>
-                cio.requestInteraction(request),
-            );
-            if (notified === 0) {
-                throw new Error(
-                    "No connected clients available for popupQuestion",
-                );
-            }
-
-            // Log only after we know at least one client was notified
+            // Log and queue unconditionally — same reasoning as askYesNo: the
+            // interaction must be in the DisplayLog and PendingInteractionManager
+            // before any broadcast so that a joining client sees it in
+            // JoinSessionResult.pendingInteractions even if no client is
+            // currently connected.
             context.displayLog.logPendingInteraction(request);
             context.displayLog.saveQueued();
+
+            // popupQuestion has no requestId, so broadcast to all
+            broadcast("requestInteraction", undefined, (cio) =>
+                cio.requestInteraction(request),
+            );
 
             return pendingInteractions.create<number>(
                 request,
@@ -341,6 +347,14 @@ export async function createSharedDispatcher(
             closeFn: () => void,
             options?: DispatcherConnectOptions,
         ): Dispatcher {
+            // TODO: Support a stable clientId in DispatcherConnectOptions so that a
+            // reconnecting client can reclaim its old connectionId (or have pending
+            // interactions retargeted to its new one).  Currently connectionId is
+            // ephemeral: each join() mints a fresh value, so askYesNo/proposeAction
+            // interactions created before a disconnect are permanently unroutable to
+            // the reconnected client because requestId.connectionId no longer matches
+            // and getPendingInteractions() filters them out.  See
+            // docs/async-clientio-design.md §Open Questions for the full design note.
             const connectionId = (nextConnectionId++).toString();
             clients.set(connectionId, {
                 clientIO,

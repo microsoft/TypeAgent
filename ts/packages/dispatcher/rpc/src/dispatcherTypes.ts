@@ -64,9 +64,9 @@ export type DispatcherInvokeFunctions = {
     getDisplayHistory(afterSeq?: number): Promise<DisplayLogEntry[]>;
 
     respondToInteraction(response: PendingInteractionResponse): Promise<void>;
-    cancelInteraction(interactionId: string): Promise<void>;
 };
 
 export type DispatcherCallFunctions = {
     cancelCommand(requestId: string): void;
+    cancelInteraction(interactionId: string): void;
 };

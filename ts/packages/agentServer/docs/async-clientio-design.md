@@ -35,7 +35,7 @@ Agent code → askYesNoWithContext() → context.clientIO.askYesNo()
 
 ### Key invariant: always log
 
-`logPendingInteraction` is called unconditionally — even when no clients are currently connected. This ensures that a client which reconnects within the timeout window can see the pending interaction in the `DisplayLog` and respond to it.
+`logPendingInteraction` is called unconditionally for all three interaction types — even when no clients are currently connected. This ensures that a client which reconnects within the timeout window can see the pending interaction in `JoinSessionResult.pendingInteractions` and respond to it. The log and `PendingInteractionManager` entry are created before the broadcast so the interaction is visible to any client joining concurrently.
 
 ### Routing
 
@@ -62,6 +62,8 @@ All three types use a 10-minute timeout, kept as separate constants so they can 
 ### Client Disconnect
 
 Disconnecting a client does **not** automatically cancel pending interactions. Interactions remain pending until they time out or a client explicitly calls `cancelInteraction`. This allows a reconnecting client to respond to the same interaction within the timeout window.
+
+All three interaction types log unconditionally and survive in the pending map if no client is connected, so a later-joining client will see them in `JoinSessionResult.pendingInteractions`. However, with the current ephemeral `connectionId` design, a reconnecting client's new `connectionId` will not match `requestId.connectionId` for `askYesNo`/`proposeAction` interactions and they will be filtered out — see Open Question 5.
 
 Clients that want to cancel an interaction (e.g., on user dismissal) call `dispatcher.cancelInteraction(interactionId)`, which triggers:
 
@@ -156,6 +158,15 @@ The shell and CLI `requestInteraction`/`interactionResolved`/`interactionCancell
    Architecturally similar but semantically distinct — `requestChoice` is agent-initiated via `ActionResult`, not system-initiated. Leave separate for now; revisit in a future iteration.
 
 4. **Grace period on disconnect** — disconnecting a client does not auto-cancel pending interactions. Interactions remain pending until they time out or a client explicitly calls `cancelInteraction`. Reconnecting clients see pending interactions in `JoinSessionResult.pendingInteractions` and can respond or cancel them.
+
+5. **Stable client identity for reconnect routing** — `askYesNo`/`proposeAction` interactions capture `requestId.connectionId` at creation time, but `connectionId` is ephemeral: each `join()` call mints a new value. A reconnecting client therefore gets a new `connectionId` that never matches the stored one, so `getPendingInteractions()` filters those interactions out and they become permanently unresolvable until timeout.
+
+   Two candidate fixes:
+
+   - **Stable `clientId` in `DispatcherConnectOptions`** _(preferred)_: the client generates a persistent UUID once and passes it on every `join()`. On reconnect, `SharedDispatcher` looks up the previous `connectionId` for that `clientId` and calls `PendingInteractionManager.retargetConnection(oldId, newId)` to rewrite `requestId.connectionId` on all matching pending interactions. This restores correct routing for both `broadcast`-based interactions and `callback`-based ones (`requestChoice`, `takeAction`).
+   - **Clear `connectionId` on disconnect**: strip `requestId.connectionId` from pending interactions when their originating client disconnects, demoting them to "broadcast to all unfiltered clients". Simpler, but breaks isolation in multi-client sessions and does not help `filter: true` clients.
+
+   Tracked in `sharedDispatcher.ts` `join()` with a `// TODO` comment.
 
 ---
 
