@@ -74,7 +74,9 @@ export function createVectorTable<TKeyId extends ValueType = string>(
             const buffer = Buffer.from(value.buffer);
             if (keyType === "INTEGER") {
                 const result = sql_add_auto.run(buffer);
-                return Promise.resolve(Number(result.lastInsertRowid) as TKeyId);
+                return Promise.resolve(
+                    Number(result.lastInsertRowid) as TKeyId,
+                );
             }
             const newId = randomUUID() as TKeyId;
             sql_add.run(newId, buffer);

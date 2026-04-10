@@ -284,15 +284,11 @@ describe("sqlite.textTable", () => {
             await table.putMultiple(blocks);
 
             // No values returns nothing
-            const emptyHits = [
-                ...table.getExactHits([]),
-            ];
+            const emptyHits = [...table.getExactHits([])];
             expect(emptyHits).toHaveLength(0);
 
             // Single value — hits should include all source ids for that value
-            const hitsOne = [
-                ...table.getExactHits([blocks[0].value]),
-            ];
+            const hitsOne = [...table.getExactHits([blocks[0].value])];
             const hitItems0 = hitsOne.map((h) => h.item);
             for (const sourceId of blocks[0].sourceIds!) {
                 expect(hitItems0).toContain(sourceId);
@@ -311,9 +307,7 @@ describe("sqlite.textTable", () => {
             expect(sharedHit).toBeDefined();
             expect(singleHit).toBeDefined();
             // shared sourceId appears in both → score 2; exclusive → score 1
-            expect(sharedHit!.score).toBeGreaterThanOrEqual(
-                singleHit!.score,
-            );
+            expect(sharedHit!.score).toBeGreaterThanOrEqual(singleHit!.score);
         },
         testTimeout,
     );

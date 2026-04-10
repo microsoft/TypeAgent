@@ -183,7 +183,10 @@ function isRedirectUrl(
 
         // Hosts must be within one subdomain level of each other (handles both
         // www.example.com ↔ example.com and other single-level subdomain redirects)
-        if (Math.abs(resolvedParts.length - siteParts.length) > MAX_SUBDOMAIN_DIFFERENCE) {
+        if (
+            Math.abs(resolvedParts.length - siteParts.length) >
+            MAX_SUBDOMAIN_DIFFERENCE
+        ) {
             return false;
         }
 

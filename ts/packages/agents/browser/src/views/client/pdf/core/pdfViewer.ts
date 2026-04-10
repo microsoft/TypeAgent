@@ -286,9 +286,7 @@ export class PDFViewerCore {
         if (this.searchResults.length === 0) return;
         this.currentSearchIndex =
             (this.currentSearchIndex + 1) % this.searchResults.length;
-        await this.renderPage(
-            this.searchResults[this.currentSearchIndex].page,
-        );
+        await this.renderPage(this.searchResults[this.currentSearchIndex].page);
     }
 
     /**
@@ -299,9 +297,7 @@ export class PDFViewerCore {
         this.currentSearchIndex =
             (this.currentSearchIndex - 1 + this.searchResults.length) %
             this.searchResults.length;
-        await this.renderPage(
-            this.searchResults[this.currentSearchIndex].page,
-        );
+        await this.renderPage(this.searchResults[this.currentSearchIndex].page);
     }
 
     /**
@@ -323,10 +319,9 @@ export class PDFViewerCore {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download =
-            this.documentUrl
-                ? this.documentUrl.split("/").pop() || "document.pdf"
-                : "document.pdf";
+        a.download = this.documentUrl
+            ? this.documentUrl.split("/").pop() || "document.pdf"
+            : "document.pdf";
         a.click();
         URL.revokeObjectURL(url);
     }

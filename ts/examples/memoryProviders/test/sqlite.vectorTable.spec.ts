@@ -91,10 +91,7 @@ describe("sqlite.vectorTable", () => {
                 "auto_id_integer",
                 "INTEGER",
             );
-            const embeddings = generateRandomTestEmbeddings(
-                embeddingLength,
-                3,
-            );
+            const embeddings = generateRandomTestEmbeddings(embeddingLength, 3);
 
             const id1 = await index.put(embeddings[0]);
             const id2 = await index.put(embeddings[1]);
@@ -132,10 +129,7 @@ describe("sqlite.vectorTable", () => {
                 "auto_id_string",
                 "TEXT",
             );
-            const embeddings = generateRandomTestEmbeddings(
-                embeddingLength,
-                2,
-            );
+            const embeddings = generateRandomTestEmbeddings(embeddingLength, 2);
 
             const id1 = await index.put(embeddings[0]);
             const id2 = await index.put(embeddings[1]);

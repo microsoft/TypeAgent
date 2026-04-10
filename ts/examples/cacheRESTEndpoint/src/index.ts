@@ -115,9 +115,7 @@ function getActionSchema(filePath: string): SchemaEntry[] {
         }
         const idChild = node!.children.find((c) => c.symbol.name === "id");
         const rawId = idChild?.symbol.value ?? "";
-        const idValue = rawId
-            ? JSON.parse(rawId.trim())
-            : undefined;
+        const idValue = rawId ? JSON.parse(rawId.trim()) : undefined;
         const interfaceName = node?.symbol.name!;
         const camelCaseName =
             interfaceName.charAt(0).toLowerCase() + interfaceName.slice(1);

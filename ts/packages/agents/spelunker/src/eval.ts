@@ -28,11 +28,11 @@ type ConfigRecord = Record<string, any>;
 const CONFIG_FILE = path.join(path.dirname(__dirname), "eval-config.json");
 let CONFIG: ConfigRecord;
 try {
-    CONFIG = JSON.parse(
-        fs.readFileSync(CONFIG_FILE, "utf-8"),
-    ) as ConfigRecord;
+    CONFIG = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8")) as ConfigRecord;
 } catch (error) {
-    console_log(`[eval-config.json not found or invalid, using default config: ${(error as Error).message ?? error}]`);
+    console_log(
+        `[eval-config.json not found or invalid, using default config: ${(error as Error).message ?? error}]`,
+    );
     CONFIG = {
         evalFolder: "evals/eval-2",
         questionId: 2,

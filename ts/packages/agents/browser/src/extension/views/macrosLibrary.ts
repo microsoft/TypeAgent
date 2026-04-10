@@ -696,9 +696,7 @@ class MacroIndexApp {
             .querySelector("#editMacroSaveBtn")!
             .addEventListener("click", () => {
                 macro.name = (
-                    document.getElementById(
-                        "editMacroName",
-                    ) as HTMLInputElement
+                    document.getElementById("editMacroName") as HTMLInputElement
                 ).value.trim();
                 macro.description = (
                     document.getElementById(

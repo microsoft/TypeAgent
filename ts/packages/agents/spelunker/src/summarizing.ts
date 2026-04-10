@@ -93,9 +93,9 @@ async function summarizeChunkSlice(
                 let blobLines: string = blobRow.lines;
                 // Assume it doesn't start with a blank line /(^\s*\r?\n)*/
                 const indent = blobLines?.match(/^(\s*)\S/)?.[1] ?? ""; // Whitespace followed by non-whitespace
-                const commentStyle =
-                    languageCommentMap[summary.language ?? "python"] ??
-                    { start: "#", end: "" };
+                const commentStyle = languageCommentMap[
+                    summary.language ?? "python"
+                ] ?? { start: "#", end: "" };
                 blobLines =
                     `${indent}${commentStyle.start} ${summary.summary}\n` +
                     `${indent}${summary.signature} ...\n`;
