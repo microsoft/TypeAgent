@@ -151,15 +151,28 @@ function getBuiltInGrammarContext(
     );
 }
 
+// Cached set of built-in exported rule names, lazily initialised.
+// Used to decide whether a source-less import name (e.g. `import { Ordinal }`)
+// refers to a built-in grammar rule or a legacy entity type.
+let builtInExportedNamesCache: Set<string> | undefined;
+
+function getBuiltInExportedNames(
+    grammarFileMap: Map<string, CompileContext>,
+): Set<string> {
+    if (builtInExportedNamesCache === undefined) {
+        builtInExportedNamesCache =
+            getBuiltInGrammarContext(grammarFileMap).exportedNames;
+    }
+    return builtInExportedNamesCache;
+}
+
 /**
  * Import a single grammar rule from an import context.
  * Validates that the rule is exported and doesn't conflict with local
  * definitions, then adds it to importedRuleMap.
  *
  * For wildcard imports (import *), non-exported rules are silently skipped.
- * For source-less imports (no from clause), non-exported names are silently
- * skipped — they are entity type names handled by the caller.
- * For named imports from a sourced file, non-exported rules produce an error.
+ * For named imports (sourced or source-less), non-exported rules produce an error.
  */
 function importGrammarRule(
     context: CompileContext,
@@ -170,12 +183,12 @@ function importGrammarRule(
     importedRuleMap: Map<string, CompileContext>,
 ): void {
     if (!importContext.exportedNames.has(ruleName)) {
-        // Error only for named imports from a sourced file.
         // Wildcard imports silently skip non-exported rules.
-        // Source-less imports silently skip — those are entity type names.
+        // Named imports (sourced or source-less) produce an error.
         if (importStmt.names !== "*") {
+            const source = importStmt.source ?? "built-in entities";
             context.errors.push({
-                message: `Rule '<${ruleName}>' is not exported from '${importStmt.source ?? "<built-in>"}'.`,
+                message: `Rule '<${ruleName}>' is not exported from '${source}'.`,
                 definition: ruleName,
                 pos: importStmt.pos,
             });
@@ -285,15 +298,22 @@ function createCompileContext(
             if (importStmt.source === undefined) {
                 if (importStmt.names !== "*") {
                     const builtInCtx = getBuiltInGrammarContext(grammarFileMap);
-                    const builtInExportedNamesLowerCase = new Set(
-                        Array.from(builtInCtx.exportedNames).map(
-                            (n) => n[0].toLowerCase() + n.slice(1),
-                        ),
-                    );
+                    const builtInExported =
+                        getBuiltInExportedNames(grammarFileMap);
 
                     for (const { name } of importStmt.names) {
-                        // Legacy: lower case names are used to refer to registered entities
-                        if (!builtInExportedNamesLowerCase.has(name)) {
+                        // If the name matches a built-in exported rule,
+                        // import it as a grammar rule (same as .agr imports).
+                        // If it's a camelCase alias (e.g., "ordinal" for
+                        // "Ordinal"), treat as a legacy entity type only.
+                        // All other names produce an error via
+                        // importGrammarRule (not exported from built-in).
+                        const isLegacyCamelCase =
+                            !builtInExported.has(name) &&
+                            builtInExported.has(
+                                name[0].toUpperCase() + name.slice(1),
+                            );
+                        if (!isLegacyCamelCase) {
                             importGrammarRule(
                                 context,
                                 builtInCtx,

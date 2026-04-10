@@ -1227,6 +1227,10 @@ describe("Comment preservation round-trips (structural positions)", () => {
         roundTrip(`<Rule> = hello | [spacing=none] world;\n`);
     });
 
+    it("per-alternate [spacing=auto] round-trips", () => {
+        roundTrip(`<Rule> = hello | [spacing=auto] world;\n`);
+    });
+
     it("block comment before per-alternate [spacing=...] is preserved", () => {
         roundTrip(`<Rule> = hello | /* before */ [spacing=none] world;\n`);
     });

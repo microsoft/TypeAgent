@@ -248,7 +248,10 @@ export <CalendarTimeRange> =
         start: { hours: h1 === 12 ? 0 : h1, minutes: 0 },
         end:   { hours: h2 === 12 ? 0 : h2, minutes: 0 }
     }
-    // Single time — range with no end (delegate to CalendarTime)
+    // Single time — range with no end (delegate to CalendarTime).
+    // Note: this catch-all means any CalendarTime also matches as a
+    // CalendarTimeRange. Action handlers should check for a missing
+    // "end" field to distinguish a point-in-time from a true range.
   | $(t:<CalendarTime>) -> { start: t }
 ;
 
@@ -270,19 +273,13 @@ export <CalendarDayRange> =
   | this month  -> "this month"
   | past month  -> "past month"
   | last month  -> "last month"
-    // "last/past N days/weeks/months"
-  | last $(n:number) days   -> `last ${n} days`
-  | past $(n:number) days   -> `past ${n} days`
-  | last $(n:number) day    -> `last ${n} day`
-  | past $(n:number) day    -> `past ${n} day`
-  | last $(n:number) weeks  -> `last ${n} weeks`
-  | past $(n:number) weeks  -> `past ${n} weeks`
-  | last $(n:number) week   -> `last ${n} week`
-  | past $(n:number) week   -> `past ${n} week`
-  | last $(n:number) months -> `last ${n} months`
-  | past $(n:number) months -> `past ${n} months`
-  | last $(n:number) month  -> `last ${n} month`
-  | past $(n:number) month  -> `past ${n} month`
+    // "last/past N days/weeks/months" (singular and plural via optional "s")
+  | last $(n:number) (day | days)    -> `last ${n} days`
+  | past $(n:number) (day | days)    -> `past ${n} days`
+  | last $(n:number) (week | weeks)  -> `last ${n} weeks`
+  | past $(n:number) (week | weeks)  -> `past ${n} weeks`
+  | last $(n:number) (month | months) -> `last ${n} months`
+  | past $(n:number) (month | months) -> `past ${n} months`
     // 4-digit year (matched as bare number)
   | $(y:number) -> `${y}`
 ;

@@ -1538,13 +1538,16 @@ describe("Real Grammar Value Parity", () => {
         const astRequests = [
             "pause",
             "resume",
-            // TODO: NFA/DFA doesn't support value expressions for ordinal
-            // "play the first track",
-            // "play the third track",
             "shuffle on",
             "shuffle off",
             "next",
             "previous",
+        ];
+
+        // TODO: NFA/DFA doesn't support value expressions for ordinal
+        const skippedAstRequests = [
+            "play the first track",
+            "play the third track",
         ];
 
         it.each(requests)("DFA value matches NFA for '%s'", (req) => {
@@ -1558,6 +1561,15 @@ describe("Real Grammar Value Parity", () => {
             const { grammar, nfa, dfa } = loaded;
             assertASTMatchParity(grammar, nfa, dfa, req);
         });
+
+        it.skip.each(skippedAstRequests)(
+            "AST value matches NFA for '%s' (ordinal value expressions)",
+            (req) => {
+                if (!loaded) return;
+                const { grammar, nfa, dfa } = loaded;
+                assertASTMatchParity(grammar, nfa, dfa, req);
+            },
+        );
     });
 
     // ── Desktop grammar ───────────────────────────────────────────────────

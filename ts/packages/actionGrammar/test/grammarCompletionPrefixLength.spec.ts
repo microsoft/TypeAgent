@@ -1126,9 +1126,7 @@ describeForEachCompletion(
             });
 
             describe("varNumber part backward", () => {
-                const g = [
-                    `<Start> = play $(count) songs -> { actionName: "play", parameters: { count } };`,
-                ].join("\n");
+                const g = `<Start> = play $(count) songs -> { actionName: "play", parameters: { count } };`;
                 const grammar = loadGrammarRules("test.grammar", g);
 
                 it("backward on 'play 5 songs' backs up to number slot", () => {
@@ -1310,9 +1308,7 @@ describeForEachCompletion(
             });
 
             describe("spacing=required", () => {
-                const g = [
-                    `<Start> [spacing=required] = play music now -> true;`,
-                ].join("\n");
+                const g = `<Start> [spacing=required] = play music now -> true;`;
                 const grammar = loadGrammarRules("test.grammar", g);
 
                 it("trailing space — backward on 'play music ' acts like forward", () => {
@@ -1353,9 +1349,7 @@ describeForEachCompletion(
             });
 
             describe("spacing=optional", () => {
-                const g = [
-                    `<Start> [spacing=optional] = play music now -> true;`,
-                ].join("\n");
+                const g = `<Start> [spacing=optional] = play music now -> true;`;
                 const grammar = loadGrammarRules("test.grammar", g);
 
                 it("trailing space — backward on 'play music ' acts like forward", () => {
@@ -1398,9 +1392,7 @@ describeForEachCompletion(
             describe("spacing=none", () => {
                 // In none mode, whitespace and punctuation are literal
                 // content, not separators — backward should always work.
-                const g = [`<Start> [spacing=none] = play music -> true;`].join(
-                    "\n",
-                );
+                const g = `<Start> [spacing=none] = play music -> true;`;
                 const grammar = loadGrammarRules("test.grammar", g);
 
                 it("trailing space — backward on 'play ' still backs up", () => {
@@ -1482,9 +1474,7 @@ describeForEachCompletion(
             });
 
             describe("auto spacing with CJK", () => {
-                const g = [
-                    `<Start> [spacing=auto] = 再生 音楽 停止 -> true;`,
-                ].join("\n");
+                const g = `<Start> [spacing=auto] = 再生 音楽 停止 -> true;`;
                 const grammar = loadGrammarRules("test.grammar", g);
 
                 it("trailing space — backward on CJK '再生 音楽 ' acts like forward", () => {

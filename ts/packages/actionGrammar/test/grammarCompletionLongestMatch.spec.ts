@@ -318,9 +318,7 @@ describeForEachCompletion(
         });
 
         describe("completion after number variable", () => {
-            const g = [
-                `<Start> = set volume $(n:number) percent -> { volume: n };`,
-            ].join("\n");
+            const g = `<Start> = set volume $(n:number) percent -> { volume: n };`;
             const grammar = loadGrammarRules("test.grammar", g);
 
             it("completes 'percent' after number matched", () => {
@@ -455,9 +453,7 @@ describeForEachCompletion(
         describe("wildcard between string parts - longest match", () => {
             // Grammar: verb WILDCARD terminator
             // Completion should offer terminator only after wildcard captures text.
-            const g = [
-                `<Start> = play $(name) by $(artist) -> { name, artist };`,
-            ].join("\n");
+            const g = `<Start> = play $(name) by $(artist) -> { name, artist };`;
             const grammar = loadGrammarRules("test.grammar", g);
 
             it("offers wildcard property after 'play'", () => {
@@ -925,9 +921,7 @@ describeForEachCompletion(
         });
 
         describe("afterWildcard flag — ambiguous wildcard boundary", () => {
-            const g = [
-                `<Start> = play $(name) by $(artist) -> { name, artist };`,
-            ].join("\n");
+            const g = `<Start> = play $(name) by $(artist) -> { name, artist };`;
             const grammar = loadGrammarRules("test.grammar", g);
 
             describe("forward: wildcard finalized at end-of-input", () => {
@@ -1146,9 +1140,7 @@ describeForEachCompletion(
         });
 
         describe("partial keyword after wildcard — 'play Never b'", () => {
-            const g = [
-                `<Start> = play $(name) by $(artist) -> { name, artist };`,
-            ].join("\n");
+            const g = `<Start> = play $(name) by $(artist) -> { name, artist };`;
             const grammar = loadGrammarRules("test.grammar", g);
 
             it("forward: offers 'by' with afterWildcard=\"all\"", () => {
@@ -1218,9 +1210,7 @@ describeForEachCompletion(
         });
 
         describe("partial keyword after wildcard — spacing=none", () => {
-            const g = [
-                `<Start> [spacing=none] = play $(name) playedby $(artist) -> { name, artist };`,
-            ].join("\n");
+            const g = `<Start> [spacing=none] = play $(name) playedby $(artist) -> { name, artist };`;
             const grammar = loadGrammarRules("test.grammar", g);
 
             it("backward: partial keyword prefix in none mode", () => {
