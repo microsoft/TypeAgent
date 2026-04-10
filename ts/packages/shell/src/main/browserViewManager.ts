@@ -196,8 +196,20 @@ export class BrowserViewManager {
                 // only show the error if it's for the page the user was asking
                 // it's possible some other resource failed to load (image, script, etc.)
                 if (validatedURL === options.url) {
+                    const safeUrl = options.url
+                        .replace(/&/g, "&amp;")
+                        .replace(/</g, "&lt;")
+                        .replace(/>/g, "&gt;")
+                        .replace(/"/g, "&quot;")
+                        .replace(/'/g, "&#39;");
+                    const safeDesc = errorDesc
+                        .replace(/&/g, "&amp;")
+                        .replace(/</g, "&lt;")
+                        .replace(/>/g, "&gt;")
+                        .replace(/"/g, "&quot;")
+                        .replace(/'/g, "&#39;");
                     webContentsView.webContents.executeJavaScript(
-                        `document.body.innerHTML = "There was an error loading '${options.url}'.<br />Error Details: <br />${errorCode} - ${errorDesc}"`,
+                        `document.body.innerHTML = "There was an error loading '${safeUrl}'.<br />Error Details: <br />${errorCode} - ${safeDesc}"`,
                     );
                 }
             },
@@ -261,9 +273,21 @@ export class BrowserViewManager {
                             `Error loading URL ${webContentsView.webContents.getURL()} in tab ${tabId}:`,
                             err,
                         );
-
+                        const safeUrl = webContentsView.webContents
+                            .getURL()
+                            .replace(/&/g, "&amp;")
+                            .replace(/</g, "&lt;")
+                            .replace(/>/g, "&gt;")
+                            .replace(/"/g, "&quot;")
+                            .replace(/'/g, "&#39;");
+                        const safeErr = String(err)
+                            .replace(/&/g, "&amp;")
+                            .replace(/</g, "&lt;")
+                            .replace(/>/g, "&gt;")
+                            .replace(/"/g, "&quot;")
+                            .replace(/'/g, "&#39;");
                         webContentsView.webContents.executeJavaScript(
-                            `document.body.innerHTML = "There was an error loading '${webContentsView.webContents.getURL()}'.<br />: ${err}"`,
+                            `document.body.innerHTML = "There was an error loading '${safeUrl}'.<br />: ${safeErr}"`,
                         );
                     });
             } else {
@@ -274,8 +298,21 @@ export class BrowserViewManager {
                             `Error loading URL ${webContentsView.webContents.getURL()} in tab ${tabId}:`,
                             err,
                         );
+                        const safeUrl = webContentsView.webContents
+                            .getURL()
+                            .replace(/&/g, "&amp;")
+                            .replace(/</g, "&lt;")
+                            .replace(/>/g, "&gt;")
+                            .replace(/"/g, "&quot;")
+                            .replace(/'/g, "&#39;");
+                        const safeErr = String(err)
+                            .replace(/&/g, "&amp;")
+                            .replace(/</g, "&lt;")
+                            .replace(/>/g, "&gt;")
+                            .replace(/"/g, "&quot;")
+                            .replace(/'/g, "&#39;");
                         webContentsView.webContents.executeJavaScript(
-                            `document.body.innerHTML = "There was an error loading '${webContentsView.webContents.getURL()}'.<br />: ${err}"`,
+                            `document.body.innerHTML = "There was an error loading '${safeUrl}'.<br />: ${safeErr}"`,
                         );
                     });
             }
