@@ -1442,6 +1442,24 @@ describe("Grammar Rule Parser", () => {
                 testParamGrammarRules("test.agr", `<A> = /* never closed`),
             ).toThrow("Unterminated");
         });
+
+        it("throws on invalid per-alternate spacing value", () => {
+            expect(() =>
+                testParamGrammarRules(
+                    "test.agr",
+                    `<Rule> = hello | [spacing=never] world;`,
+                ),
+            ).toThrow("Invalid value");
+        });
+
+        it("throws on unknown per-alternate annotation key", () => {
+            expect(() =>
+                testParamGrammarRules(
+                    "test.agr",
+                    `<Rule> = hello | [unknown=auto] world;`,
+                ),
+            ).toThrow("Unknown rule annotation");
+        });
     });
 
     describe("Value Type Annotation", () => {

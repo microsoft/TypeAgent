@@ -173,9 +173,9 @@ function importGrammarRule(
         // Error only for named imports from a sourced file.
         // Wildcard imports silently skip non-exported rules.
         // Source-less imports silently skip — those are entity type names.
-        if (importStmt.names !== "*" && importStmt.source !== undefined) {
+        if (importStmt.names !== "*") {
             context.errors.push({
-                message: `Rule '<${ruleName}>' is not exported from '${importStmt.source}'.`,
+                message: `Rule '<${ruleName}>' is not exported from '${importStmt.source ?? "<built-in>"}'.`,
                 definition: ruleName,
                 pos: importStmt.pos,
             });

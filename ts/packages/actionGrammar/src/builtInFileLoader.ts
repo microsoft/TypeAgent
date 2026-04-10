@@ -9,13 +9,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Resolve the .agr source file once at module load time.
-const builtInEntitiesSourcePath = path.resolve(
-    __dirname,
-    // When running from dist/, go back up to src/
-    __filename.includes("dist")
-        ? "../src/builtInEntities.agr"
-        : "./builtInEntities.agr",
-);
+// Check __dirname first (running from src/); fall back for dist/.
+const builtInEntitiesSourcePath = (() => {
+    const local = path.resolve(__dirname, "./builtInEntities.agr");
+    if (fs.existsSync(local)) return local;
+    return path.resolve(__dirname, "../src/builtInEntities.agr");
+})();
 
 let builtInEntitiesContent: string | undefined;
 
@@ -25,10 +24,19 @@ let builtInEntitiesContent: string | undefined;
  */
 export function getBuiltInEntitiesGrammarContent(): string {
     if (builtInEntitiesContent === undefined) {
-        builtInEntitiesContent = fs.readFileSync(
-            builtInEntitiesSourcePath,
-            "utf-8",
-        );
+        try {
+            builtInEntitiesContent = fs.readFileSync(
+                builtInEntitiesSourcePath,
+                "utf-8",
+            );
+        } catch (e: unknown) {
+            const code = (e as NodeJS.ErrnoException).code;
+            throw new Error(
+                `Failed to load built-in entity grammar from '${builtInEntitiesSourcePath}'` +
+                    (code ? ` (${code})` : "") +
+                    ". Ensure the package is built correctly.",
+            );
+        }
     }
     return builtInEntitiesContent;
 }
