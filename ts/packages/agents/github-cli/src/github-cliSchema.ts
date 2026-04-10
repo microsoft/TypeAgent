@@ -17,11 +17,15 @@ export type GithubCliActions =
   | IssueCreateAction
   | IssueCloseAction
   | IssueReopenAction
+  | IssueListAction
+  | IssueViewAction
   | OrgListAction
   | OrgViewAction
   | PrCreateAction
   | PrCloseAction
   | PrMergeAction
+  | PrListAction
+  | PrViewAction
   | ProjectCreateAction
   | ProjectDeleteAction
   | ProjectListAction
@@ -31,6 +35,7 @@ export type GithubCliActions =
   | RepoCreateAction
   | RepoCloneAction
   | RepoDeleteAction
+  | RepoViewAction
   | CacheListAction
   | CacheDeleteAction
   | RunViewAction
@@ -193,6 +198,32 @@ export type IssueReopenAction = {
   };
 };
 
+export type IssueListAction = {
+  actionName: "issueList";
+  parameters: {
+    
+    repo?: string;
+    
+    state?: string;
+    
+    label?: string;
+    
+    assignee?: string;
+    
+    limit?: number;
+  };
+};
+
+export type IssueViewAction = {
+  actionName: "issueView";
+  parameters: {
+    
+    number?: number;
+    
+    repo?: string;
+  };
+};
+
 export type OrgListAction = {
   actionName: "orgList";
   parameters: {};
@@ -235,6 +266,32 @@ export type PrMergeAction = {
     number?: number;
     
     mergeMethod?: string;
+  };
+};
+
+export type PrListAction = {
+  actionName: "prList";
+  parameters: {
+    
+    repo?: string;
+    
+    state?: string;
+    
+    label?: string;
+    
+    assignee?: string;
+    
+    limit?: number;
+  };
+};
+
+export type PrViewAction = {
+  actionName: "prView";
+  parameters: {
+    
+    number?: number;
+    
+    repo?: string;
   };
 };
 
@@ -452,6 +509,14 @@ export type PreviewExecuteAction = {
 
 export type RulesetViewAction = {
   actionName: "rulesetView";
+  parameters: {
+    
+    repo?: string;
+  };
+};
+
+export type RepoViewAction = {
+  actionName: "repoView";
   parameters: {
     
     repo?: string;

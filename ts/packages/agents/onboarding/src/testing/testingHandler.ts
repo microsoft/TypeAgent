@@ -558,14 +558,19 @@ async function createTestDispatcher(integrationName: string) {
     const buffer: string[] = [];
     const clientIO = createCapturingClientIO(buffer);
 
+    // Use a temp directory for the test dispatcher so it starts with a
+    // fresh cache on every run — stale wildcard entries from prior runs
+    // can override newly-added grammar rules.
+    const tmpDir = path.join(instanceDir, "onboarding-test-tmp");
+
     const dispatcher = await createDispatcher("onboarding-test-runner", {
         appAgentProviders,
-        agents: { commands: ["dispatcher", integrationName] },
+        agents: { schemas: [integrationName], actions: [integrationName], commands: ["dispatcher", integrationName] },
         explainer: { enabled: false },
         // Cache must be enabled for grammar matching to work.
         cache: { enabled: true },
         collectCommandResult: true,
-        persistDir: instanceDir,
+        persistDir: tmpDir,
         storageProvider: getFsStorageProvider(),
         clientIO,
         dblogging: false,
@@ -597,6 +602,23 @@ async function runSingleTest(
     }
 
     if (result?.lastError) {
+        // If an action was dispatched, check the action name first — the test
+        // validates phrase→action routing, not execution of the stub handler.
+        const actualActionName = result?.actions?.[0]?.actionName;
+        if (actualActionName !== undefined) {
+            const passed = actualActionName === tc.expectedActionName;
+            return {
+                phrase: tc.phrase,
+                expectedActionName: tc.expectedActionName,
+                actualActionName,
+                passed,
+                ...(passed
+                    ? undefined
+                    : {
+                          error: `Expected "${tc.expectedActionName}", got "${actualActionName}"`,
+                      }),
+            };
+        }
         return {
             phrase: tc.phrase,
             expectedActionName: tc.expectedActionName,

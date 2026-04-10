@@ -92,10 +92,179 @@
     }
 };
 
+<RepoView> = show repository $(repo:wildcard) -> {
+    actionName: "repoView",
+    parameters: {
+        repo
+    }
+}
+  | view repo $(repo:wildcard) -> {
+    actionName: "repoView",
+    parameters: {
+        repo
+    }
+}
+  | how many stars does $(repo:wildcard) have -> {
+    actionName: "repoView",
+    parameters: {
+        repo
+    }
+}
+  | tell me about repository $(repo:wildcard) -> {
+    actionName: "repoView",
+    parameters: {
+        repo
+    }
+}
+  | info about $(repo:wildcard) -> {
+    actionName: "repoView",
+    parameters: {
+        repo
+    }
+}
+  | details for repository $(repo:wildcard) -> {
+    actionName: "repoView",
+    parameters: {
+        repo
+    }
+};
+
+<ApiRequest> = call the GitHub API endpoint $(endpoint:wildcard) -> {
+    actionName: "apiRequest",
+    parameters: {
+        endpoint
+    }
+}
+  | list contributors to $(endpoint:wildcard) -> {
+    actionName: "apiRequest",
+    parameters: {
+        endpoint
+    }
+}
+  | top contributors to $(endpoint:wildcard) -> {
+    actionName: "apiRequest",
+    parameters: {
+        endpoint
+    }
+};
+
 <SearchRepos> = search repositories for $(query:wildcard) -> {
     actionName: "searchRepos",
     parameters: {
         query
+    }
+};
+
+<IssueList> = list issues -> {
+    actionName: "issueList",
+    parameters: {}
+}
+  | list issues in $(repo:wildcard) -> {
+    actionName: "issueList",
+    parameters: {
+        repo
+    }
+}
+  | show open issues -> {
+    actionName: "issueList",
+    parameters: {
+        state: "open"
+    }
+}
+  | show open issues in $(repo:wildcard) -> {
+    actionName: "issueList",
+    parameters: {
+        repo,
+        state: "open"
+    }
+}
+  | show closed issues in $(repo:wildcard) -> {
+    actionName: "issueList",
+    parameters: {
+        repo,
+        state: "closed"
+    }
+};
+
+<IssueView> = show issue $(number:number) -> {
+    actionName: "issueView",
+    parameters: {
+        number
+    }
+}
+  | view issue $(number:number) in $(repo:wildcard) -> {
+    actionName: "issueView",
+    parameters: {
+        number,
+        repo
+    }
+};
+
+<PrList> = list pull requests -> {
+    actionName: "prList",
+    parameters: {}
+}
+  | list pull requests in $(repo:wildcard) -> {
+    actionName: "prList",
+    parameters: {
+        repo
+    }
+}
+  | show open pull requests -> {
+    actionName: "prList",
+    parameters: {
+        state: "open"
+    }
+}
+  | show open pull requests in $(repo:wildcard) -> {
+    actionName: "prList",
+    parameters: {
+        repo,
+        state: "open"
+    }
+}
+  | list open PRs in $(repo:wildcard) -> {
+    actionName: "prList",
+    parameters: {
+        repo,
+        state: "open"
+    }
+}
+  | how many open PRs are in $(repo:wildcard) -> {
+    actionName: "prList",
+    parameters: {
+        repo,
+        state: "open"
+    }
+}
+  | show PRs -> {
+    actionName: "prList",
+    parameters: {}
+}
+  | list PRs in $(repo:wildcard) -> {
+    actionName: "prList",
+    parameters: {
+        repo
+    }
+};
+
+<PrView> = show pull request $(number:number) -> {
+    actionName: "prView",
+    parameters: {
+        number
+    }
+}
+  | view PR $(number:number) -> {
+    actionName: "prView",
+    parameters: {
+        number
+    }
+}
+  | view pull request $(number:number) in $(repo:wildcard) -> {
+    actionName: "prView",
+    parameters: {
+        number,
+        repo
     }
 };
 
@@ -105,6 +274,142 @@
 }
   | print my GitHub notifications -> {
     actionName: "statusPrint",
+    parameters: {}
+}
+  | status of issues and pull requests -> {
+    actionName: "statusPrint",
+    parameters: {}
+}
+  | current status of issues and pull requests -> {
+    actionName: "statusPrint",
+    parameters: {}
+}
+  | status of my notifications -> {
+    actionName: "statusPrint",
+    parameters: {}
+}
+  | status of my notifications and PRs -> {
+    actionName: "statusPrint",
+    parameters: {}
+}
+  | summary of issues and pull requests -> {
+    actionName: "statusPrint",
+    parameters: {}
+}
+  | summary of relevant issues and pull requests -> {
+    actionName: "statusPrint",
+    parameters: {}
+}
+  | updates on my repositories -> {
+    actionName: "statusPrint",
+    parameters: {}
+}
+  | latest updates on my repositories -> {
+    actionName: "statusPrint",
+    parameters: {}
+}
+  | information on recent issues and notifications -> {
+    actionName: "statusPrint",
+    parameters: {}
+};
+
+<RunView> = view workflow run $(id:word) -> {
+    actionName: "runView",
+    parameters: {
+        id
+    }
+}
+  | details for workflow run $(id:word) -> {
+    actionName: "runView",
+    parameters: {
+        id
+    }
+}
+  | details for the workflow run with ID $(id:word) -> {
+    actionName: "runView",
+    parameters: {
+        id
+    }
+}
+  | details of the workflow run with ID $(id:word) -> {
+    actionName: "runView",
+    parameters: {
+        id
+    }
+}
+  | workflow run with ID $(id:word) -> {
+    actionName: "runView",
+    parameters: {
+        id
+    }
+}
+  | workflow run details for ID $(id:word) -> {
+    actionName: "runView",
+    parameters: {
+        id
+    }
+}
+  | workflow run details for $(id:word) -> {
+    actionName: "runView",
+    parameters: {
+        id
+    }
+}
+  | workflow run identified by $(id:word) -> {
+    actionName: "runView",
+    parameters: {
+        id
+    }
+}
+  | details for the workflow run with the ID $(id:word) -> {
+    actionName: "runView",
+    parameters: {
+        id
+    }
+};
+
+<WorkflowView> = show me workflow $(id:word) -> {
+    actionName: "workflowView",
+    parameters: {
+        id
+    }
+}
+  | view the workflow definition for $(id:word) -> {
+    actionName: "workflowView",
+    parameters: {
+        id
+    }
+}
+  | workflow details for $(id:word) -> {
+    actionName: "workflowView",
+    parameters: {
+        id
+    }
+};
+
+<ConfigSet> = set the GitHub CLI configuration for $(name:word) to $(value:word) -> {
+    actionName: "configSet",
+    parameters: {
+        name,
+        value
+    }
+}
+  | update the gh config with $(name:word) and $(value:word) -> {
+    actionName: "configSet",
+    parameters: {
+        name,
+        value
+    }
+};
+
+<SshKeyAdd> = add this SSH key $(key:wildcard) -> {
+    actionName: "sshKeyAdd",
+    parameters: {
+        key
+    }
+}
+  | add an SSH key for me -> {
+    actionName: "sshKeyAdd",
     parameters: {}
 };
 
@@ -116,10 +421,20 @@ import { GithubCliActions } from "./github-cliSchema.ts";
   | <IssueCreate>
   | <IssueClose>
   | <IssueReopen>
+  | <IssueList>
+  | <IssueView>
   | <PrCreate>
   | <PrClose>
   | <PrMerge>
+  | <PrList>
+  | <PrView>
   | <RepoCreate>
   | <RepoClone>
+  | <RepoView>
   | <SearchRepos>
-  | <StatusPrint>;
+  | <StatusPrint>
+  | <RunView>
+  | <WorkflowView>
+  | <ConfigSet>
+  | <SshKeyAdd>
+  | <ApiRequest>;
