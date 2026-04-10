@@ -1,0 +1,65 @@
+# ====== Init =======
+@config action -* github-cli
+@config schema -* github-cli
+
+# =============================================
+# GitHub CLI Agent Demo
+# Natural language → real gh CLI execution
+# =============================================
+
+# -------------------------------------
+# Start with your personal GitHub status
+# -------------------------------------
+
+# What's happening across my repos?
+show my GitHub status
+
+# -------------------------------------
+# Explore a repository
+# -------------------------------------
+
+# Get an overview of a project
+how many stars does microsoft/TypeAgent have
+
+# What issues are being tracked?
+show open issues in microsoft/TypeAgent
+
+# Who built this thing?
+list contributors to microsoft/TypeAgent
+
+# -------------------------------------
+# Pull request workflows
+# -------------------------------------
+
+# See what's in flight
+list open PRs in microsoft/TypeAgent
+
+# Check PRs in another repo
+list open pull requests in microsoft/garnet
+
+# -------------------------------------
+# Issue management
+# -------------------------------------
+
+# Browse issues across repos
+show open issues in microsoft/garnet
+
+# Drill into a specific issue
+show issue 2170 in microsoft/TypeAgent
+
+# -------------------------------------
+# Repository discovery
+# -------------------------------------
+
+# Find interesting projects
+search repositories for TypeScript agent framework
+
+# Check out an org
+show repository microsoft/TypeAgent
+
+# -------------------------------------
+# Authentication & config
+# -------------------------------------
+
+# Verify we're logged in
+check my GitHub authentication
