@@ -127,6 +127,39 @@ export type AssistantSelection = {
     action: string;
 };
 
+type TranslatorPartition = {
+    names: string[];
+    translator: { translate: (request: string) => Promise<Result<AssistantSelection>> };
+};
+
+/**
+ * Run all translator partitions in parallel and return the first non-"unknown"
+ * result in partition order, or "unknown" if all partitions return "unknown".
+ */
+export async function selectFromPartitions(
+    partitions: TranslatorPartition[],
+    request: string,
+): Promise<Result<AssistantSelection>> {
+    partitions.forEach(({ names }) =>
+        debugSwitchSearch(`Switch: searching ${names.join(", ")}`),
+    );
+    const results = await Promise.all(
+        partitions.map(({ translator }) => translator.translate(request)),
+    );
+    for (const result of results) {
+        if (!result.success) {
+            return result;
+        }
+        if (result.data.assistant !== "unknown") {
+            return result;
+        }
+    }
+    return success({
+        assistant: "unknown",
+        action: "unknown",
+    });
+}
+
 // GPT-4 has 8192 token window, with an estimated 4 chars per token, so use only 3 times to leave room for output.
 const assistantSelectionLimit = 8192 * 3;
 
@@ -179,24 +212,7 @@ export function loadAssistantSelectionJsonTranslator(
     });
 
     return {
-        translate: async (
-            request: string,
-        ): Promise<Result<AssistantSelection>> => {
-            for (const { names, translator } of translators) {
-                // TODO: we can parallelize this
-                debugSwitchSearch(`Switch: searching ${names.join(", ")}`);
-                const result = await translator.translate(request);
-                if (!result.success) {
-                    return result;
-                }
-                if (result.data.assistant !== "unknown") {
-                    return result;
-                }
-            }
-            return success({
-                assistant: "unknown",
-                action: "unknown",
-            });
-        },
+        translate: (request: string) =>
+            selectFromPartitions(translators, request),
     };
 }
