@@ -12,16 +12,22 @@ show my GitHub status
 how many stars does microsoft/TypeAgent have
 
 # Who are the top contributors?
-list contributors to microsoft/TypeAgent
+show top 10 contributors to microsoft/TypeAgent
 
 # What PRs are open?
 list open PRs in microsoft/TypeAgent
+
+# Drill into a PR
+show PR 2183 in microsoft/TypeAgent
 
 # What issues need attention?
 show open issues in microsoft/TypeAgent
 
 # Drill into a specific issue
 show issue 2170 in microsoft/TypeAgent
+
+# Star a repo
+star microsoft/TypeAgent
 
 # Find repos
 search repositories for TypeScript agent framework

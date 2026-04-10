@@ -26,6 +26,7 @@ export type GithubCliActions =
   | PrMergeAction
   | PrListAction
   | PrViewAction
+  | PrCheckoutAction
   | ProjectCreateAction
   | ProjectDeleteAction
   | ProjectListAction
@@ -36,6 +37,8 @@ export type GithubCliActions =
   | RepoCloneAction
   | RepoDeleteAction
   | RepoViewAction
+  | RepoForkAction
+  | StarRepoAction
   | CacheListAction
   | CacheDeleteAction
   | RunViewAction
@@ -171,6 +174,8 @@ export type GistListAction = {
 export type IssueCreateAction = {
   actionName: "issueCreate";
   parameters: {
+    // owner/repo
+    repo?: string;
     
     title?: string;
     
@@ -248,6 +253,8 @@ export type PrCreateAction = {
     base?: string;
     
     head?: string;
+    
+    draft?: boolean;
   };
 };
 
@@ -292,6 +299,16 @@ export type PrViewAction = {
     number?: number;
     
     repo?: string;
+  };
+};
+
+export type PrCheckoutAction = {
+  actionName: "prCheckout";
+  parameters: {
+    
+    number?: number;
+    
+    branch?: string;
   };
 };
 
@@ -340,7 +357,10 @@ export type ReleaseDeleteAction = {
 
 export type ReleaseListAction = {
   actionName: "releaseList";
-  parameters: {};
+  parameters: {
+    
+    repo?: string;
+  };
 };
 
 export type RepoCreateAction = {
@@ -524,6 +544,26 @@ export type RepoViewAction = {
     repo?: string;
     
     field?: string;
+  };
+};
+
+export type RepoForkAction = {
+  actionName: "repoFork";
+  parameters: {
+    
+    repo?: string;
+    
+    name?: string;
+  };
+};
+
+export type StarRepoAction = {
+  actionName: "starRepo";
+  parameters: {
+    
+    repo?: string;
+    
+    unstar?: boolean;
   };
 };
 

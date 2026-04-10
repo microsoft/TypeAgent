@@ -41,9 +41,39 @@
     parameters: {
         title
     }
+}
+  | open new issue $(title:wildcard) -> {
+    actionName: "issueCreate",
+    parameters: {
+        title
+    }
+}
+  | file an issue about $(title:wildcard) -> {
+    actionName: "issueCreate",
+    parameters: {
+        title
+    }
+}
+  | report a bug about $(title:wildcard) -> {
+    actionName: "issueCreate",
+    parameters: {
+        title
+    }
+}
+  | create issue $(title:wildcard) -> {
+    actionName: "issueCreate",
+    parameters: {
+        title
+    }
 };
 
 <IssueClose> = close issue number $(number:number) -> {
+    actionName: "issueClose",
+    parameters: {
+        number
+    }
+}
+  | close issue $(number:number) -> {
     actionName: "issueClose",
     parameters: {
         number
@@ -55,12 +85,52 @@
     parameters: {
         number
     }
+}
+  | reopen issue $(number:number) -> {
+    actionName: "issueReopen",
+    parameters: {
+        number
+    }
 };
 
 <PrCreate> = create a pull request titled $(title:wildcard) -> {
     actionName: "prCreate",
     parameters: {
         title
+    }
+}
+  | open a PR titled $(title:wildcard) -> {
+    actionName: "prCreate",
+    parameters: {
+        title
+    }
+}
+  | open a draft PR titled $(title:wildcard) -> {
+    actionName: "prCreate",
+    parameters: {
+        title,
+        draft: true
+    }
+}
+  | create a draft pull request titled $(title:wildcard) -> {
+    actionName: "prCreate",
+    parameters: {
+        title,
+        draft: true
+    }
+}
+  | open a draft PR for branch $(head:word) -> {
+    actionName: "prCreate",
+    parameters: {
+        head,
+        draft: true
+    }
+}
+  | create a PR from $(head:word) to $(base:word) -> {
+    actionName: "prCreate",
+    parameters: {
+        head,
+        base
     }
 };
 
@@ -69,9 +139,21 @@
     parameters: {
         number
     }
+}
+  | close PR $(number:number) -> {
+    actionName: "prClose",
+    parameters: {
+        number
+    }
 };
 
 <PrMerge> = merge pull request number $(number:number) -> {
+    actionName: "prMerge",
+    parameters: {
+        number
+    }
+}
+  | merge PR $(number:number) -> {
     actionName: "prMerge",
     parameters: {
         number
@@ -435,6 +517,72 @@
     parameters: {}
 };
 
+<PrCheckout> = checkout PR $(number:number) -> {
+    actionName: "prCheckout",
+    parameters: {
+        number
+    }
+}
+  | checkout pull request $(number:number) -> {
+    actionName: "prCheckout",
+    parameters: {
+        number
+    }
+};
+
+<RepoFork> = fork $(repo:wildcard) -> {
+    actionName: "repoFork",
+    parameters: {
+        repo
+    }
+}
+  | fork repository $(repo:wildcard) -> {
+    actionName: "repoFork",
+    parameters: {
+        repo
+    }
+};
+
+<StarRepo> = star $(repo:wildcard) -> {
+    actionName: "starRepo",
+    parameters: {
+        repo
+    }
+}
+  | star repository $(repo:wildcard) -> {
+    actionName: "starRepo",
+    parameters: {
+        repo
+    }
+}
+  | unstar $(repo:wildcard) -> {
+    actionName: "starRepo",
+    parameters: {
+        repo,
+        unstar: true
+    }
+};
+
+<GistList> = list my gists -> {
+    actionName: "gistList",
+    parameters: {}
+}
+  | show my gists -> {
+    actionName: "gistList",
+    parameters: {}
+};
+
+<ReleaseList> = list releases in $(repo:wildcard) -> {
+    actionName: "releaseList",
+    parameters: {
+        repo
+    }
+}
+  | show releases -> {
+    actionName: "releaseList",
+    parameters: {}
+};
+
 import { GithubCliActions } from "./github-cliSchema.ts";
 
 <Start> : GithubCliActions = <AuthLogin>
@@ -450,13 +598,18 @@ import { GithubCliActions } from "./github-cliSchema.ts";
   | <PrMerge>
   | <PrList>
   | <PrView>
+  | <PrCheckout>
   | <RepoCreate>
   | <RepoClone>
   | <RepoView>
+  | <RepoFork>
+  | <StarRepo>
   | <SearchRepos>
   | <StatusPrint>
   | <RunView>
   | <WorkflowView>
   | <ConfigSet>
   | <SshKeyAdd>
+  | <GistList>
+  | <ReleaseList>
   | <ApiRequest>;

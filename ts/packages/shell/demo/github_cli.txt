@@ -25,7 +25,7 @@ how many stars does microsoft/TypeAgent have
 show open issues in microsoft/TypeAgent
 
 # Who built this thing?
-list contributors to microsoft/TypeAgent
+show top 10 contributors to microsoft/TypeAgent
 
 # -------------------------------------
 # Pull request workflows
@@ -33,6 +33,9 @@ list contributors to microsoft/TypeAgent
 
 # See what's in flight
 list open PRs in microsoft/TypeAgent
+
+# Drill into a specific PR
+show PR 2183 in microsoft/TypeAgent
 
 # Check PRs in another repo
 list open pull requests in microsoft/garnet
@@ -48,13 +51,23 @@ show open issues in microsoft/garnet
 show issue 2170 in microsoft/TypeAgent
 
 # -------------------------------------
+# Write actions
+# -------------------------------------
+
+# Star a repo you like
+star microsoft/TypeAgent
+
+# Unstar it
+unstar microsoft/TypeAgent
+
+# -------------------------------------
 # Repository discovery
 # -------------------------------------
 
 # Find interesting projects
 search repositories for TypeScript agent framework
 
-# Check out an org
+# Full repo overview
 show repository microsoft/TypeAgent
 
 # -------------------------------------

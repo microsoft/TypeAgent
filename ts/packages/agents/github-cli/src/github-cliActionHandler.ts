@@ -128,8 +128,9 @@ function buildArgs(
         // ── Issue ──
         case "issueCreate": {
             const args = ["issue", "create"];
+            if (p.repo) args.push("--repo", String(p.repo));
             if (p.title) args.push("--title", String(p.title));
-            if (p.body) args.push("--body", String(p.body));
+            args.push("--body", p.body ? String(p.body) : "");
             if (p.assignee) args.push("--assignee", String(p.assignee));
             if (p.label) args.push("--label", String(p.label));
             return args;
@@ -137,11 +138,13 @@ function buildArgs(
         case "issueClose": {
             const args = ["issue", "close"];
             if (p.number) args.push(String(p.number));
+            if (p.repo) args.push("--repo", String(p.repo));
             return args;
         }
         case "issueReopen": {
             const args = ["issue", "reopen"];
             if (p.number) args.push(String(p.number));
+            if (p.repo) args.push("--repo", String(p.repo));
             return args;
         }
         case "issueList": {
@@ -175,9 +178,10 @@ function buildArgs(
         case "prCreate": {
             const args = ["pr", "create"];
             if (p.title) args.push("--title", String(p.title));
-            if (p.body) args.push("--body", String(p.body));
+            args.push("--body", p.body ? String(p.body) : "");
             if (p.base) args.push("--base", String(p.base));
             if (p.head) args.push("--head", String(p.head));
+            if (p.draft) args.push("--draft");
             return args;
         }
         case "prClose": {
@@ -206,6 +210,13 @@ function buildArgs(
             const args = ["pr", "view"];
             if (p.number) args.push(String(p.number));
             if (p.repo) args.push("--repo", String(p.repo));
+            args.push("--json", "number,title,state,body,author,labels,url,createdAt,headRefName,baseRefName,isDraft,additions,deletions,changedFiles");
+            return args;
+        }
+        case "prCheckout": {
+            const args = ["pr", "checkout"];
+            if (p.number) args.push(String(p.number));
+            if (p.branch) args.push("--branch", String(p.branch));
             return args;
         }
 
@@ -237,8 +248,11 @@ function buildArgs(
             if (p.id) args.push(String(p.id));
             return args;
         }
-        case "releaseList":
-            return ["release", "list"];
+        case "releaseList": {
+            const args = ["release", "list"];
+            if (p.repo) args.push("--repo", String(p.repo));
+            return args;
+        }
 
         // ── Repo ──
         case "repoCreate": {
@@ -267,6 +281,23 @@ function buildArgs(
             const args = ["repo", "view"];
             if (p.repo) args.push(String(p.repo));
             args.push("--json", "name,owner,description,stargazerCount,forkCount,watchers,defaultBranchRef,createdAt,updatedAt,url,primaryLanguage,visibility");
+            return args;
+        }
+        case "repoFork": {
+            const args = ["repo", "fork"];
+            if (p.repo) args.push(String(p.repo));
+            if (p.name) args.push("--fork-name", String(p.name));
+            args.push("--clone=false");
+            return args;
+        }
+        case "starRepo": {
+            if (p.unstar) {
+                const args = ["api", "-X", "DELETE"];
+                if (p.repo) args.push(`/user/starred/${String(p.repo)}`);
+                return args;
+            }
+            const args = ["api", "-X", "PUT"];
+            if (p.repo) args.push(`/user/starred/${String(p.repo)}`);
             return args;
         }
 
@@ -502,6 +533,31 @@ function formatIssueView(data: Record<string, unknown>): string {
     return header + bodySection;
 }
 
+// Format a single PR view from JSON into rich markdown
+function formatPrView(data: Record<string, unknown>): string {
+    const author = data.author ? formatValue(data.author) : "unknown";
+    const labels = Array.isArray(data.labels)
+        ? (data.labels as Record<string, unknown>[]).map((l) => `\`${l.name}\``).join(" ")
+        : "";
+    const status = data.isDraft ? "DRAFT" : String(data.state);
+    const body = data.body ? String(data.body).slice(0, 1000) : "";
+    const bodySection = body
+        ? `\n\n---\n\n${body}${String(data.body).length > 1000 ? "\n\n*…truncated*" : ""}`
+        : "";
+
+    let header = `### [#${data.number} ${data.title}](${data.url})\n\n`;
+    header += `**State:** ${status}`;
+    header += ` · **Author:** ${author}`;
+    if (data.headRefName) header += ` · **Branch:** \`${data.headRefName}\` → \`${data.baseRefName}\``;
+    if (labels) header += ` · **Labels:** ${labels}`;
+    if (data.additions !== undefined) {
+        header += `\n**Changes:** +${data.additions} −${data.deletions} across ${data.changedFiles} files`;
+    }
+    header += ` · **Created:** ${String(data.createdAt).slice(0, 10)}`;
+
+    return header + bodySection;
+}
+
 function formatListResults(
     items: Record<string, unknown>[],
     actionName: string,
@@ -546,6 +602,33 @@ function formatListResults(
     return undefined;
 }
 
+// Friendly success messages for mutation actions that return no output
+function getMutationSuccessMessage(
+    action: TypeAgentAction<GithubCliActions>,
+): string | undefined {
+    const p = action.parameters as Record<string, unknown>;
+    switch (action.actionName) {
+        case "starRepo":
+            return p.unstar
+                ? `⭐ Unstarred **${p.repo}**.`
+                : `⭐ Starred **${p.repo}**!`;
+        case "repoFork":
+            return `🍴 Forked **${p.repo}** to your account!`;
+        case "prCheckout":
+            return `✅ Checked out PR **#${p.number}** locally.`;
+        case "issueClose":
+            return `✅ Closed issue **#${p.number}**.`;
+        case "issueReopen":
+            return `✅ Reopened issue **#${p.number}**.`;
+        case "prClose":
+            return `✅ Closed PR **#${p.number}**.`;
+        case "prMerge":
+            return `✅ Merged PR **#${p.number}**!`;
+        default:
+            return undefined;
+    }
+}
+
 async function executeAction(
     action: TypeAgentAction<GithubCliActions>,
     context: ActionContext<unknown>,
@@ -562,6 +645,11 @@ async function executeAction(
     try {
         const output = await runGh(args);
         if (!output) {
+            // Friendly success messages for write/mutation actions
+            const msg = getMutationSuccessMessage(action);
+            if (msg) {
+                return createActionResultFromMarkdownDisplay(msg);
+            }
             return createActionResultFromTextDisplay(
                 `\`gh ${args.join(" ")}\` completed with no output.`,
             );
@@ -599,6 +687,13 @@ async function executeAction(
                 if (action.actionName === "issueView" && "number" in data) {
                     return createActionResultFromMarkdownDisplay(
                         formatIssueView(data),
+                    );
+                }
+
+                // Single PR view — rich formatted output
+                if (action.actionName === "prView" && "number" in data) {
+                    return createActionResultFromMarkdownDisplay(
+                        formatPrView(data),
                     );
                 }
 
