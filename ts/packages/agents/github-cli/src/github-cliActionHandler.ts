@@ -151,6 +151,7 @@ function buildArgs(
             if (p.label) args.push("--label", String(p.label));
             if (p.assignee) args.push("--assignee", String(p.assignee));
             if (p.limit) args.push("--limit", String(p.limit));
+            args.push("--json", "number,title,state,url,createdAt,labels");
             return args;
         }
         case "issueView": {
@@ -197,6 +198,7 @@ function buildArgs(
             if (p.label) args.push("--label", String(p.label));
             if (p.assignee) args.push("--assignee", String(p.assignee));
             if (p.limit) args.push("--limit", String(p.limit));
+            args.push("--json", "number,title,state,url,createdAt,headRefName,isDraft");
             return args;
         }
         case "prView": {
@@ -367,6 +369,7 @@ function buildArgs(
         case "searchRepos": {
             const args = ["search", "repos"];
             if (p.query) args.push(String(p.query));
+            args.push("--json", "fullName,description,stargazersCount,url,updatedAt");
             return args;
         }
         case "secretCreate": {
@@ -429,6 +432,50 @@ function distillRepoField(
     }
 }
 
+function formatListResults(
+    items: Record<string, unknown>[],
+    actionName: string,
+): string | undefined {
+    if (items.length === 0) return "No results found.";
+
+    // Issues
+    if (actionName === "issueList" && "number" in items[0]) {
+        return items
+            .map((i) => {
+                const labels = Array.isArray(i.labels)
+                    ? (i.labels as Record<string, unknown>[]).map((l) => l.name).join(", ")
+                    : "";
+                const labelStr = labels ? ` \`${labels}\`` : "";
+                return `- [#${i.number} ${i.title}](${i.url}) — ${i.state}${labelStr}`;
+            })
+            .join("\n");
+    }
+
+    // Pull requests
+    if (actionName === "prList" && "number" in items[0]) {
+        return items
+            .map((pr) => {
+                const status = pr.isDraft ? "DRAFT" : String(pr.state);
+                const branch = pr.headRefName ? ` \`${pr.headRefName}\`` : "";
+                return `- [#${pr.number} ${pr.title}](${pr.url}) — ${status}${branch}`;
+            })
+            .join("\n");
+    }
+
+    // Search repos
+    if (actionName === "searchRepos" && "fullName" in items[0]) {
+        return items
+            .map((r) => {
+                const stars = (r.stargazersCount || r.stargazerCount) ? ` ⭐ ${r.stargazersCount ?? r.stargazerCount}` : "";
+                const desc = r.description ? ` — ${r.description}` : "";
+                return `- [${r.fullName}](${r.url})${stars}${desc}`;
+            })
+            .join("\n");
+    }
+
+    return undefined;
+}
+
 async function executeAction(
     action: TypeAgentAction<GithubCliActions>,
     context: ActionContext<unknown>,
@@ -454,6 +501,7 @@ async function executeAction(
         if (args.includes("--json")) {
             try {
                 const data = JSON.parse(output);
+                const cmdLabel = `\`gh ${args.slice(0, args.indexOf("--json")).join(" ")}\``;
 
                 // If a specific field was requested, return a focused answer
                 if (p.field) {
@@ -467,11 +515,22 @@ async function executeAction(
                     }
                 }
 
+                // Array results: issues, PRs, search repos
+                if (Array.isArray(data)) {
+                    const rows = formatListResults(data, action.actionName);
+                    if (rows) {
+                        return createActionResultFromMarkdownDisplay(
+                            `**${cmdLabel}** — ${data.length} result${data.length === 1 ? "" : "s"}\n\n${rows}`,
+                        );
+                    }
+                }
+
+                // Single object (e.g., repo view)
                 const lines = Object.entries(data)
                     .map(([k, v]) => `- **${k}**: ${formatValue(v)}`)
                     .join("\n");
                 return createActionResultFromMarkdownDisplay(
-                    `**\`gh ${args.slice(0, args.indexOf("--json")).join(" ")}\`**\n\n${lines}`,
+                    `**${cmdLabel}**\n\n${lines}`,
                 );
             } catch {
                 // Fall through to raw output
