@@ -162,14 +162,15 @@ function azureImageApiSettingsFromEnv(
         modelType: ModelType.Image,
         apiKey: getEnvSetting(
             env,
-            EnvVars.AZURE_OPENAI_GPT_IMAGE_1_5_KEY,
+            EnvVars.AZURE_OPENAI_API_KEY_GPT_IMAGE_1_5,
             endpointName,
-            "identity",
+            env[EnvVars.AZURE_OPENAI_API_KEY_DALLE] ?? "identity",
         ),
         endpoint: getEnvSetting(
             env,
-            EnvVars.AZURE_OPENAI_GPT_IMAGE_1_5_ENDPOINT,
+            EnvVars.AZURE_OPENAI_ENDPOINT_GPT_IMAGE_1_5,
             endpointName,
+            env[EnvVars.AZURE_OPENAI_ENDPOINT_DALLE],
         ),
     };
 }
@@ -194,7 +195,7 @@ function azureVideoApiSettingsFromEnv(
         ),
         endpoint: getEnvSetting(
             env,
-            EnvVars.AZURE_OPENAI_API_ENDPOINT_SORA_2,
+            EnvVars.AZURE_OPENAI_ENDPOINT_SORA_2,
             endpointName,
         ),
     };

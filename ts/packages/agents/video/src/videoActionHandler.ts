@@ -175,7 +175,7 @@ function createVideoPlaceHolder(
 
             if (status === "completed") {
                 console.log("✅ Video generation succeeded.");
-                const video_url = '${videoJob.endpoint.origin}/openai/v1/videos/${videoJob.id}/content?variant=video&authorization=' + encodeURIComponent("${videoJob.headers?.Authorization}");
+                const video_url = '${videoJob.endpoint.origin}/openai/v1/videos/${videoJob.id}/content?variant=video';
                 const videoResponse = await fetch(video_url, { headers: ${JSON.stringify(videoJob.headers)} });
                 if (videoResponse.ok) {
                     container.innerText = '';

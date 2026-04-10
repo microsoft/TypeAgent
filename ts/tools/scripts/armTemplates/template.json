@@ -424,10 +424,10 @@
                 "value": "[concat(variables('openaiEndpoint'),'/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview')]"
               }
             },
-            "secrets_image_endpoint": {
+            "secrets_gpt_image_1_5_endpoint": {
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
-              "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-ENDPOINT-IMAGE')]",
+              "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-ENDPOINT-GPT-IMAGE-1-5')]",
               "dependsOn": ["vault"],
               "properties": {
                 "attributes": {
@@ -439,25 +439,13 @@
             "secrets_gpt_image_1_5_key": {
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
-              "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-GPT-IMAGE-1-5-KEY')]",
+              "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-API-KEY-GPT-IMAGE-1-5')]",
               "dependsOn": ["vault"],
               "properties": {
                 "attributes": {
                   "enabled": true
                 },
                 "value": "<REPLACE WITH YOUR GPT-IMAGE-1.5 API KEY>"
-              }
-            },
-            "secrets_gpt_image_1_5_endpoint": {
-              "type": "Microsoft.KeyVault/vaults/secrets",
-              "apiVersion": "2024-12-01-preview",
-              "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-GPT-IMAGE-1-5-ENDPOINT')]",
-              "dependsOn": ["vault"],
-              "properties": {
-                "attributes": {
-                  "enabled": true
-                },
-                "value": "[concat(variables('openaiEndpoint'),'/openai/deployments/gpt-image-1.5/images/generations?api-version=2025-04-01-preview')]"
               }
             },
             "secrets_sora_key": {
@@ -487,13 +475,13 @@
             "secrets_sora_2_endpoint": {
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
-              "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-API-ENDPOINT-SORA-2')]",
+              "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-ENDPOINT-SORA-2')]",
               "dependsOn": ["vault"],
               "properties": {
                 "attributes": {
                   "enabled": true
                 },
-                "value": "<REPLACE WITH YOUR SORA-2 ENDPOINT URL>"
+                "value": "<REPLACE WITH YOUR SORA-2 ENDPOINT>"
               }
             },
             "secrets_gpt_5_4_pro_key": {

@@ -106,16 +106,13 @@ export enum EnvVars {
     AZURE_OPENAI_API_KEY_EMBEDDING = "AZURE_OPENAI_API_KEY_EMBEDDING",
     AZURE_OPENAI_ENDPOINT_EMBEDDING = "AZURE_OPENAI_ENDPOINT_EMBEDDING",
 
-    AZURE_OPENAI_API_KEY_IMAGE = "AZURE_OPENAI_API_KEY_IMAGE",
-    AZURE_OPENAI_ENDPOINT_IMAGE = "AZURE_OPENAI_ENDPOINT_IMAGE",
-    AZURE_OPENAI_GPT_IMAGE_1_5_KEY = "AZURE_OPENAI_GPT_IMAGE_1_5_KEY",
-    AZURE_OPENAI_GPT_IMAGE_1_5_ENDPOINT = "AZURE_OPENAI_GPT_IMAGE_1_5_ENDPOINT",
-    AZURE_OPENAI_API_KEY_SORA = "AZURE_OPENAI_API_KEY_SORA",
-    AZURE_OPENAI_ENDPOINT_SORA = "AZURE_OPENAI_ENDPOINT_SORA",
+    AZURE_OPENAI_API_KEY_GPT_IMAGE_1_5 = "AZURE_OPENAI_API_KEY_GPT_IMAGE_1_5",
+    AZURE_OPENAI_ENDPOINT_GPT_IMAGE_1_5 = "AZURE_OPENAI_ENDPOINT_GPT_IMAGE_1_5",
+    // Deprecated: use AZURE_OPENAI_API_KEY_GPT_IMAGE_1_5 / AZURE_OPENAI_ENDPOINT_GPT_IMAGE_1_5
+    AZURE_OPENAI_API_KEY_DALLE = "AZURE_OPENAI_API_KEY_DALLE",
+    AZURE_OPENAI_ENDPOINT_DALLE = "AZURE_OPENAI_ENDPOINT_DALLE",
     AZURE_OPENAI_API_KEY_SORA_2 = "AZURE_OPENAI_API_KEY_SORA_2",
-    AZURE_OPENAI_API_ENDPOINT_SORA_2 = "AZURE_OPENAI_API_ENDPOINT_SORA_2",
-    AZURE_OPENAI_API_KEY_GPT_5_4_PRO = "AZURE_OPENAI_API_KEY_GPT_5_4_PRO",
-    AZURE_OPENAI_API_ENDPOINT_GPT_5_4_PRO = "AZURE_OPENAI_API_ENDPOINT_GPT_5_4_PRO",
+    AZURE_OPENAI_ENDPOINT_SORA_2 = "AZURE_OPENAI_ENDPOINT_SORA_2",
 
     OLLAMA_ENDPOINT = "OLLAMA_ENDPOINT",
 
@@ -909,7 +906,7 @@ export function createEmbeddingModel(
 }
 
 /**
- * Create a client for the OpenAI gpt-image-1 service
+ * Create a client for the OpenAI gpt-image-1.5 service
  * @param apiSettings: settings to use to create the client
  */
 export function createImageModel(apiSettings?: ApiSettings): ImageModel {
@@ -943,7 +940,7 @@ export function createImageModel(apiSettings?: ApiSettings): ImageModel {
             prompt,
             n: imageCount,
             size: `${width}x${height}`,
-            output_format: "b64_json",
+            output_format: "png",
         };
 
         const result = await callJsonApi(
@@ -963,12 +960,12 @@ export function createImageModel(apiSettings?: ApiSettings): ImageModel {
 
         data.data.map((i) => {
             verifyContentSafety(i);
-            const imageUrl = i.b64_json
+            const image_url = i.b64_json
                 ? `data:image/png;base64,${i.b64_json}`
                 : (i.url ?? "");
             retValue.images.push({
                 revised_prompt: i.revised_prompt ?? prompt,
-                image_url: imageUrl,
+                image_url,
             });
         });
 
@@ -1052,11 +1049,8 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
         const params: VideoGenerationJob = {
             ...defaultParams,
             prompt,
-            //n_variants: numVariants,
             seconds: durationInSeconds,
-            //height: height,
-            //width: width,
-            size: "1280x720",
+            size: `${width}x${height}` as NonNullable<VideoGenerationJob["size"]>,
             model: "sora-2",
         };
 
