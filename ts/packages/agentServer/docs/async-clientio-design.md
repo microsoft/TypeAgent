@@ -2,7 +2,7 @@
 
 ## Status
 
-**Draft** | April 2026
+**Draft** | April 2026 | Questions 1, 2, 4 resolved; Question 3 open
 
 ## Summary
 
@@ -614,24 +614,25 @@ The `nullClientIO` in `context/interactiveIO.ts` remains as-is for testing.
 
    - Broadcast is simpler; first responder wins. But it may confuse users if multiple people see the same dialog.
    - Routing to the client whose agent triggered the question is more precise but requires adding a `requestId` or `connectionId` to the `popupQuestion` signature.
-   - **Recommendation**: Broadcast, with a "first responder wins" resolution. Notify other clients that the interaction was resolved.
+   - **Decision**: Broadcast, with a "first responder wins" resolution. The first client to call `respondToInteraction` resolves the Promise; all other clients receive an `interactionResolved` notification and dismiss their UI. Verify this matches the current implementation; update if not.
 
 2. **What timeout is appropriate for pending interactions?**
 
-   - `askYesNo`: 60 seconds, then reject (caller treats as cancellation).
-   - `proposeAction`: No timeout (developer interaction, may take a while).
-   - `popupQuestion`: Configurable per-agent, default 120 seconds, then reject.
+   - **Decision**:
+     - `askYesNo`: 60 seconds, then reject (caller treats as cancellation).
+     - `proposeAction`: 5 minutes (300 seconds), then reject.
+     - `popupQuestion`: 60 seconds, then reject.
 
 3. **Should the `requestChoice`/`respondToChoice` mechanism be unified with this new system?**
 
    - They are architecturally very similar. Unification would reduce code duplication.
    - However, `requestChoice` is part of the `ActionResult` return path and has different semantics (agent-initiated, not system-initiated).
-   - **Recommendation**: Keep them separate for now; consider unification in a future iteration.
+   - **Open**: Leave separate for now; revisit unification in a future iteration.
 
 4. **Grace period vs. immediate cancellation on client disconnect?**
    - Immediate cancellation is simpler but loses the interaction if the client reconnects quickly.
-   - A grace period (e.g., 30s) allows seamless reconnection.
-   - **Recommendation**: Configurable grace period, default 30 seconds.
+   - A grace period allows seamless reconnection.
+   - **Decision**: Configurable grace period, default 30 seconds. If a client reconnects within the grace period, pending interactions are replayed to the new connection. After the grace period expires with no reconnect, all orphaned interactions are cancelled.
 
 ---
 
@@ -655,7 +656,7 @@ Client              SharedDispatcher          PendingInteractionMgr     DisplayL
   |                       |   (Promise resolves, command continues)          |
 ```
 
-### askYesNo: Client Disconnect + Timeout
+### askYesNo: Client Disconnect + Grace Period Expiry
 
 ```
 Client              SharedDispatcher          PendingInteractionMgr
@@ -667,8 +668,8 @@ Client              SharedDispatcher          PendingInteractionMgr
   |                       |   (grace period starts)   |
   |                       |                           |
   |                       |   (30s grace period expires, no reconnect)
-  |                       |--- cancel(id, timeout) -->|
-  |                       |   (Promise resolves with defaultValue)
+  |                       |--- cancel(id, error) ---->|
+  |                       |   (Promise rejects, caller handles as cancellation)
 ```
 
 ### popupQuestion: Multi-Client Broadcast
