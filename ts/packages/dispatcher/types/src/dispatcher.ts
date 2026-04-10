@@ -246,9 +246,13 @@ export interface Dispatcher {
      * Explicitly cancel a pending interaction by the client.
      * Cancellations by client are explicit; disconnects do not auto-cancel.
      *
+     * This is a fire-and-forget operation — the server silently ignores
+     * unknown interactionIds and broadcasts `interactionCancelled` to all
+     * clients regardless of whether the interaction was found.
+     *
      * @param interactionId the interactionId of the pending interaction to cancel
      */
-    cancelInteraction(interactionId: string): Promise<void>;
+    cancelInteraction(interactionId: string): void;
 
     /**
      * Cancel an in-flight command. If the command identified by requestId is

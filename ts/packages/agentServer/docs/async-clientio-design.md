@@ -99,8 +99,8 @@ interactionCancelled(interactionId: string): void;
 ### New `Dispatcher` methods (client → server)
 
 ```typescript
-respondToInteraction(response: PendingInteractionResponse): Promise<void>;
-cancelInteraction(interactionId: string): Promise<void>;
+respondToInteraction(response: PendingInteractionResponse): Promise<void>; // invoke (awaited)
+cancelInteraction(interactionId: string): void;                            // send (fire-and-forget)
 ```
 
 ### Types (`@typeagent/dispatcher-types`)

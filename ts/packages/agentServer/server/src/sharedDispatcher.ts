@@ -391,9 +391,9 @@ export async function createSharedDispatcher(
                 shared.respondToInteraction(response);
             };
 
-            (dispatcher as any).cancelInteraction = async (
+            (dispatcher as any).cancelInteraction = (
                 interactionId: string,
-            ): Promise<void> => {
+            ): void => {
                 shared.cancelInteraction(interactionId);
             };
 
