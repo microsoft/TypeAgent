@@ -39,7 +39,6 @@ function makeRequestAction(
     return RequestAction.create(request, executableAction);
 }
 
-// Tests for checkExplainableValues - covers TODO:42 ("check number too")
 describe("ExplainWorkQueue.checkExplainableValues", () => {
     const options: ExplanationOptions = {
         valueInRequest: true,
@@ -68,8 +67,8 @@ describe("ExplainWorkQueue.checkExplainableValues", () => {
         ).rejects.toThrow(/not found in the request/i);
     });
 
-    test("validates number parameters against request", async () => {
-        // Number value 2024 is not in "play recent songs", so it should throw
+    test("throws when number parameter value is NOT present in request", async () => {
+        // 2024 is not mentioned in "play recent songs"
         const requestAction = makeRequestAction("play recent songs", {
             year: 2024,
         });
@@ -79,7 +78,7 @@ describe("ExplainWorkQueue.checkExplainableValues", () => {
         ).rejects.toThrow(/not found in the request/i);
     });
 
-    test("does not throw when number parameter is in request", async () => {
+    test("does not throw when number parameter value IS present in request", async () => {
         const requestAction = makeRequestAction("play songs from 2024", {
             year: 2024,
         });

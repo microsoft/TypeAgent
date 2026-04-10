@@ -73,7 +73,9 @@ function checkExplainableValues(
             if (typeof value === "number") {
                 if (
                     valueInRequest &&
-                    !normalizedRequest.includes(String(value))
+                    !normalizedRequest.includes(
+                        normalizeParamString(String(value)),
+                    )
                 ) {
                     const paramSpec = getParamSpec(
                         action,
