@@ -354,7 +354,11 @@ async function pushSecrets() {
 
 async function pullSecretsFromVault(keyVaultClient, vaultName, shared, dotEnv) {
     const keys = shared ? sharedKeys : privateKeys;
-    const { results: secrets, failures } = await getSecrets(keyVaultClient, vaultName, shared);
+    const { results: secrets, failures } = await getSecrets(
+        keyVaultClient,
+        vaultName,
+        shared,
+    );
     if (secrets.length === 0) {
         console.log(
             chalk.yellow(
@@ -396,7 +400,10 @@ async function pullSecrets() {
           )
         : undefined;
 
-    if (sharedResult.updated === undefined && privateResult?.updated === undefined) {
+    if (
+        sharedResult.updated === undefined &&
+        privateResult?.updated === undefined
+    ) {
         throw new Error("No secrets found in key vaults.");
     }
 

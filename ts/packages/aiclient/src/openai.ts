@@ -1050,7 +1050,9 @@ export function createVideoModel(apiSettings?: ApiSettings): VideoModel {
             ...defaultParams,
             prompt,
             seconds: durationInSeconds,
-            size: `${width}x${height}` as NonNullable<VideoGenerationJob["size"]>,
+            size: `${width}x${height}` as NonNullable<
+                VideoGenerationJob["size"]
+            >,
             model: "sora-2",
         };
 
