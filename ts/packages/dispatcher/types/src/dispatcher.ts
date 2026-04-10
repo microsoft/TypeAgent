@@ -11,6 +11,7 @@ import {
     AfterWildcard,
 } from "@typeagent/agent-sdk";
 import type { DisplayLogEntry } from "./displayLogEntry.js";
+import type { PendingInteractionResponse } from "./pendingInteraction.js";
 
 /**
  * Identifies a command request across the dispatcher and all connected clients.
@@ -232,6 +233,14 @@ export interface Dispatcher {
      * @param afterSeq if provided, return only entries with seq > afterSeq
      */
     getDisplayHistory(afterSeq?: number): Promise<DisplayLogEntry[]>;
+
+    /**
+     * Respond to a pending interaction (async deferred pattern).
+     * Resolves the deferred promise associated with the given interactionId.
+     *
+     * @param response the client's response containing the interactionId and value
+     */
+    respondToInteraction(response: PendingInteractionResponse): Promise<void>;
 
     /**
      * Cancel an in-flight command. If the command identified by requestId is

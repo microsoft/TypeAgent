@@ -8,6 +8,7 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { RequestId, RequestMetrics } from "./dispatcher.js";
+import type { PendingInteractionRequest } from "./pendingInteraction.js";
 
 export type TemplateData = {
     schema: TemplateSchema;
@@ -117,6 +118,11 @@ export interface ClientIO {
         choices: string[],
         source: string,
     ): void;
+
+    // Non-blocking interaction requests (async deferred pattern)
+    requestInteraction(interaction: PendingInteractionRequest): void;
+    interactionResolved(interactionId: string, response: unknown): void;
+    interactionCancelled(interactionId: string): void;
 
     // Host specific (TODO: Formalize the API)
     takeAction(requestId: RequestId, action: string, data: unknown): void;

@@ -841,6 +841,81 @@ describe("Grammar Imports with File Loading", () => {
             );
         });
 
+        it("should error when same rule name is imported from different files", () => {
+            const errors: string[] = [];
+            const grammarFiles: Record<string, string> = {
+                "main.agr": `
+                    import { Shared } from "./fileA.agr";
+                    import { Shared } from "./fileB.agr";
+                    <Start> = <Shared>;
+                `,
+                "fileA.agr": `
+                    export <Shared> = a value -> "a";
+                `,
+                "fileB.agr": `
+                    export <Shared> = b value -> "b";
+                `,
+            };
+
+            loadGrammarRulesNoThrow(
+                "main.agr",
+                getTestFileLoader(grammarFiles),
+                errors,
+            );
+
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("already imported from");
+        });
+
+        it("should allow importing same rule name from same file twice", () => {
+            const errors: string[] = [];
+            const grammarFiles: Record<string, string> = {
+                "main.agr": `
+                    import { Shared } from "./fileA.agr";
+                    import { Shared } from "./fileA.agr";
+                    <Start> = <Shared>;
+                `,
+                "fileA.agr": `
+                    export <Shared> = a value -> "a";
+                `,
+            };
+
+            const grammar = loadGrammarRulesNoThrow(
+                "main.agr",
+                getTestFileLoader(grammarFiles),
+                errors,
+            );
+
+            expect(errors).toEqual([]);
+            expect(grammar).toBeDefined();
+        });
+
+        it("should error when wildcard import conflicts with named import from different file", () => {
+            const errors: string[] = [];
+            const grammarFiles: Record<string, string> = {
+                "main.agr": `
+                    import { Shared } from "./fileA.agr";
+                    import * from "./fileB.agr";
+                    <Start> = <Shared>;
+                `,
+                "fileA.agr": `
+                    export <Shared> = a value -> "a";
+                `,
+                "fileB.agr": `
+                    export <Shared> = b value -> "b";
+                `,
+            };
+
+            loadGrammarRulesNoThrow(
+                "main.agr",
+                getTestFileLoader(grammarFiles),
+                errors,
+            );
+
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("already imported from");
+        });
+
         it("should support three-way circular import (A→B→C→A)", () => {
             const errors: string[] = [];
             const grammarFiles: Record<string, string> = {
@@ -1043,6 +1118,280 @@ describe("Grammar Imports with File Loading", () => {
             expect(errors.length).toBeGreaterThan(0);
             expect(errors[0]).toContain("Rule1");
             expect(errors[0]).toContain("not exported");
+        });
+    });
+
+    describe("importGrammarRule error paths", () => {
+        it("should error when source-less import conflicts with local definition", () => {
+            const errors: string[] = [];
+            const grammarFiles: Record<string, string> = {
+                "main.agr": `
+                    import { Ordinal };
+                    <Start> = <Ordinal>;
+                    <Ordinal> = first -> 1;
+                `,
+            };
+            loadGrammarRulesNoThrow(
+                "main.agr",
+                getTestFileLoader(grammarFiles),
+                errors,
+            );
+
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("Ordinal");
+            expect(errors[0]).toContain(
+                "cannot be imported because it is already defined",
+            );
+        });
+
+        it("should error when source-less import conflicts with .agr import from different file", () => {
+            const errors: string[] = [];
+            const grammarFiles: Record<string, string> = {
+                "custom.agr": `
+                    export <Ordinal> = custom ordinal -> 1;
+                `,
+                "main.agr": `
+                    import { Ordinal } from "./custom.agr";
+                    import { Ordinal };
+                    <Start> = <Ordinal>;
+                `,
+            };
+            loadGrammarRulesNoThrow(
+                "main.agr",
+                getTestFileLoader(grammarFiles),
+                errors,
+            );
+
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("Ordinal");
+            expect(errors[0]).toContain("already imported from");
+        });
+
+        it("should error on source-less import of non-built-in name", () => {
+            const errors: string[] = [];
+            const warnings: string[] = [];
+            const grammarFiles: Record<string, string> = {
+                "main.agr": `
+                    import { UnknownEntity };
+                    <Start> = $(x:UnknownEntity) -> x;
+                `,
+            };
+            loadGrammarRulesNoThrow(
+                "main.agr",
+                getTestFileLoader(grammarFiles),
+                errors,
+                warnings,
+            );
+
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("UnknownEntity");
+            expect(errors[0]).toContain("not exported");
+        });
+
+        it("should error when .agr import conflicts with earlier source-less import", () => {
+            const errors: string[] = [];
+            const grammarFiles: Record<string, string> = {
+                "custom.agr": `
+                    export <Ordinal> = custom ordinal -> 1;
+                `,
+                "main.agr": `
+                    import { Ordinal };
+                    import { Ordinal } from "./custom.agr";
+                    <Start> = <Ordinal>;
+                `,
+            };
+            loadGrammarRulesNoThrow(
+                "main.agr",
+                getTestFileLoader(grammarFiles),
+                errors,
+            );
+
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("Ordinal");
+            expect(errors[0]).toContain("already imported from");
+        });
+
+        it("should error when multiple named imports from different files have overlapping names", () => {
+            const errors: string[] = [];
+            const grammarFiles: Record<string, string> = {
+                "fileA.agr": `
+                    export <Foo> = a -> "a";
+                    export <Bar> = b -> "b";
+                `,
+                "fileB.agr": `
+                    export <Bar> = c -> "c";
+                    export <Baz> = d -> "d";
+                `,
+                "main.agr": `
+                    import { Foo, Bar } from "./fileA.agr";
+                    import { Bar, Baz } from "./fileB.agr";
+                    <Start> = <Foo> | <Bar> | <Baz>;
+                `,
+            };
+            loadGrammarRulesNoThrow(
+                "main.agr",
+                getTestFileLoader(grammarFiles),
+                errors,
+            );
+
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain("Bar");
+            expect(errors[0]).toContain("already imported from");
+        });
+
+        it("should error when wildcard import conflicts with local definition", () => {
+            const errors: string[] = [];
+            const grammarFiles: Record<string, string> = {
+                "lib.agr": `
+                    export <Action> = lib action -> "lib";
+                `,
+                "main.agr": `
+                    import * from "./lib.agr";
+                    <Start> = <Action>;
+                    <Action> = local action -> "local";
+                `,
+            };
+            loadGrammarRulesNoThrow(
+                "main.agr",
+                getTestFileLoader(grammarFiles),
+                errors,
+            );
+
+            expect(errors.length).toBeGreaterThan(0);
+            expect(errors[0]).toContain("Action");
+            expect(errors[0]).toContain(
+                "cannot be imported because it is already defined",
+            );
+        });
+
+        it("should report correct source file in already-imported error message", () => {
+            const errors: string[] = [];
+            const grammarFiles: Record<string, string> = {
+                "first.agr": `
+                    export <Common> = first -> "first";
+                `,
+                "second.agr": `
+                    export <Common> = second -> "second";
+                `,
+                "main.agr": `
+                    import { Common } from "./first.agr";
+                    import { Common } from "./second.agr";
+                    <Start> = <Common>;
+                `,
+            };
+            loadGrammarRulesNoThrow(
+                "main.agr",
+                getTestFileLoader(grammarFiles),
+                errors,
+            );
+
+            expect(errors.length).toBe(1);
+            expect(errors[0]).toContain("already imported from");
+            expect(errors[0]).toContain("first.agr");
+        });
+
+        it("should warn when imported rule is never used", () => {
+            const errors: string[] = [];
+            const warnings: string[] = [];
+            const grammarFiles: Record<string, string> = {
+                "lib.agr": `
+                    export <Used> = used -> "used";
+                    export <Unused> = unused -> "unused";
+                `,
+                "main.agr": `
+                    import { Used, Unused } from "./lib.agr";
+                    <Start> = <Used>;
+                `,
+            };
+            loadGrammarRulesNoThrow(
+                "main.agr",
+                getTestFileLoader(grammarFiles),
+                errors,
+                warnings,
+            );
+
+            expect(errors).toEqual([]);
+            expect(warnings.length).toBe(1);
+            expect(warnings[0]).toContain("Unused");
+            expect(warnings[0]).toContain("declared but never used");
+        });
+
+        it("should not warn when all imported rules are used", () => {
+            const errors: string[] = [];
+            const warnings: string[] = [];
+            const grammarFiles: Record<string, string> = {
+                "lib.agr": `
+                    export <Foo> = foo -> "foo";
+                    export <Bar> = bar -> "bar";
+                `,
+                "main.agr": `
+                    import { Foo, Bar } from "./lib.agr";
+                    <Start> = <Foo> | <Bar>;
+                `,
+            };
+            loadGrammarRulesNoThrow(
+                "main.agr",
+                getTestFileLoader(grammarFiles),
+                errors,
+                warnings,
+            );
+
+            expect(errors).toEqual([]);
+            expect(warnings).toEqual([]);
+        });
+
+        it("should warn when wildcard-imported rules are unused", () => {
+            const errors: string[] = [];
+            const warnings: string[] = [];
+            const grammarFiles: Record<string, string> = {
+                "lib.agr": `
+                    export <Used> = used -> "used";
+                    export <Unused> = unused -> "unused";
+                `,
+                "main.agr": `
+                    import * from "./lib.agr";
+                    <Start> = <Used>;
+                `,
+            };
+            loadGrammarRulesNoThrow(
+                "main.agr",
+                getTestFileLoader(grammarFiles),
+                errors,
+                warnings,
+            );
+
+            expect(errors).toEqual([]);
+            expect(warnings.length).toBe(1);
+            expect(warnings[0]).toContain("Unused");
+            expect(warnings[0]).toContain("declared but never used");
+        });
+
+        it("should warn when source-less imported rule is unused", () => {
+            const errors: string[] = [];
+            const warnings: string[] = [];
+            const grammarFiles: Record<string, string> = {
+                "main.agr": `
+                    import { Ordinal, Cardinal };
+                    <Start> = $(x:<Ordinal>) -> x;
+                `,
+            };
+            loadGrammarRulesNoThrow(
+                "main.agr",
+                getTestFileLoader(grammarFiles),
+                errors,
+                warnings,
+            );
+
+            expect(errors).toEqual([]);
+            // Cardinal is unused as a rule (but still registered as entity type,
+            // which produces its own "imported type never used" warning)
+            const ruleWarning = warnings.find(
+                (w) =>
+                    w.includes("Cardinal") &&
+                    w.includes("Imported rule") &&
+                    w.includes("declared but never used"),
+            );
+            expect(ruleWarning).toBeDefined();
         });
     });
 });

@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { randomUUID } from "node:crypto";
 import {
     DispatcherConnectOptions,
     registerClientType,
@@ -12,15 +13,21 @@ import {
     ClientIO,
     RequestId,
 } from "agent-dispatcher";
+import type {
+    PendingInteractionRequest,
+    PendingInteractionResponse,
+} from "@typeagent/dispatcher-types";
 import {
     closeCommandHandlerContext,
     initializeCommandHandlerContext,
     createDispatcherFromContext,
 } from "agent-dispatcher/internal";
+import { PendingInteractionManager } from "agent-dispatcher/internal";
 
 import registerDebug from "debug";
 const debugConnect = registerDebug("agent-server:connect");
 const debugClientIOError = registerDebug("agent-server:clientIO:error");
+const debugInteraction = registerDebug("agent-server:interaction");
 
 type ClientRecord = {
     clientIO: ClientIO;
@@ -38,11 +45,23 @@ export async function createSharedDispatcher(
     }
     let nextConnectionId = 0;
     const clients = new Map<string, ClientRecord>();
+    const pendingInteractions = new PendingInteractionManager();
+
+    // Timeouts for pending interactions. All currently set to 10 minutes but
+    // kept separate so they can be tuned independently.
+    const INTERACTION_TIMEOUT_MS = {
+        askYesNo: 10 * 60 * 1000,
+        proposeAction: 10 * 60 * 1000,
+        popupQuestion: 10 * 60 * 1000,
+    };
+
+    // Returns the number of clients the message was sent to.
     const broadcast = (
         name: string,
         requestId: RequestId | undefined,
         fn: (clientIO: ClientIO) => void,
-    ) => {
+    ): number => {
+        let count = 0;
         for (const [connectionId, clientRecord] of clients) {
             if (
                 clientRecord.filter &&
@@ -52,6 +71,7 @@ export async function createSharedDispatcher(
             }
             try {
                 fn(clientRecord.clientIO);
+                count++;
             } catch (error) {
                 // Ignore errors in server mode.
                 debugClientIOError(
@@ -59,6 +79,7 @@ export async function createSharedDispatcher(
                 );
             }
         }
+        return count;
     };
 
     const callback = <T>(
@@ -121,18 +142,125 @@ export async function createSharedDispatcher(
                 clientIO.setDynamicDisplay(requestId, ...args),
             );
         },
-        askYesNo: async (requestId, ...args) =>
-            callback(requestId, (clientIO) =>
-                clientIO.askYesNo(requestId, ...args),
-            ),
-        proposeAction: async (requestId, ...args) =>
-            callback(requestId, (clientIO) =>
-                clientIO.proposeAction(requestId, ...args),
-            ),
 
-        popupQuestion: async () => {
-            throw new Error("Not supported in server mode");
+        // ===== Async deferred pattern for blocking interactions =====
+        // Instead of blocking via callback(), we create a deferred promise
+        // and broadcast the request to all clients. The first client to
+        // respond via respondToInteraction resolves the promise.
+
+        askYesNo: async (requestId, message, defaultValue?) => {
+            const interactionId = randomUUID();
+            const request: PendingInteractionRequest = {
+                interactionId,
+                type: "askYesNo",
+                requestId,
+                source: requestId.connectionId ?? "unknown",
+                timestamp: Date.now(),
+                message,
+            };
+            if (defaultValue !== undefined) {
+                request.defaultValue = defaultValue;
+            }
+
+            debugInteraction(
+                `askYesNo created: ${interactionId} message="${message}"`,
+            );
+
+            // Broadcast to all connected clients
+            const notified = broadcast("requestInteraction", requestId, (cio) =>
+                cio.requestInteraction(request),
+            );
+            if (notified === 0) {
+                // No clients to handle it — resolve immediately without logging
+                // a pending entry (which would have no corresponding resolution).
+                return defaultValue ?? false;
+            }
+
+            // Log only after we know at least one client was notified
+            context.displayLog.logPendingInteraction(request);
+            context.displayLog.saveQueued();
+
+            return pendingInteractions.create<boolean>(
+                request,
+                requestId.connectionId,
+                INTERACTION_TIMEOUT_MS.askYesNo,
+            );
         },
+
+        proposeAction: async (requestId, actionTemplates, source) => {
+            const interactionId = randomUUID();
+            const request: PendingInteractionRequest = {
+                interactionId,
+                type: "proposeAction",
+                requestId,
+                source,
+                timestamp: Date.now(),
+                actionTemplates,
+            };
+
+            debugInteraction(
+                `proposeAction created: ${interactionId} source="${source}"`,
+            );
+
+            const notified = broadcast("requestInteraction", requestId, (cio) =>
+                cio.requestInteraction(request),
+            );
+            if (notified === 0) {
+                throw new Error(
+                    "No connected clients available for proposeAction",
+                );
+            }
+
+            // Log only after we know at least one client was notified
+            context.displayLog.logPendingInteraction(request);
+            context.displayLog.saveQueued();
+
+            return pendingInteractions.create<unknown>(
+                request,
+                requestId.connectionId,
+                INTERACTION_TIMEOUT_MS.proposeAction,
+            );
+        },
+
+        popupQuestion: async (message, choices, defaultId, source) => {
+            const interactionId = randomUUID();
+            const request: PendingInteractionRequest = {
+                interactionId,
+                type: "popupQuestion",
+                source,
+                timestamp: Date.now(),
+                message,
+                choices,
+            };
+            if (defaultId !== undefined) {
+                request.defaultId = defaultId;
+            }
+
+            debugInteraction(
+                `popupQuestion created: ${interactionId} message="${message}"`,
+            );
+
+            // popupQuestion has no requestId, so broadcast to all
+            const notified = broadcast("requestInteraction", undefined, (cio) =>
+                cio.requestInteraction(request),
+            );
+            if (notified === 0) {
+                throw new Error(
+                    "No connected clients available for popupQuestion",
+                );
+            }
+
+            // Log only after we know at least one client was notified
+            context.displayLog.logPendingInteraction(request);
+            context.displayLog.saveQueued();
+
+            return pendingInteractions.create<number>(
+                request,
+                undefined, // no specific connection
+                INTERACTION_TIMEOUT_MS.popupQuestion,
+            );
+        },
+
         notify: (notificationId, ...args) => {
             broadcast(
                 "notify",
@@ -152,6 +280,22 @@ export async function createSharedDispatcher(
             callback(requestId, (clientIO) =>
                 clientIO.requestChoice(requestId, ...args),
             ),
+        requestInteraction: (interaction) => {
+            // Broadcast to all clients
+            broadcast("requestInteraction", interaction.requestId, (cio) =>
+                cio.requestInteraction(interaction),
+            );
+        },
+        interactionResolved: (interactionId, response) => {
+            broadcast("interactionResolved", undefined, (cio) =>
+                cio.interactionResolved(interactionId, response),
+            );
+        },
+        interactionCancelled: (interactionId) => {
+            broadcast("interactionCancelled", undefined, (cio) =>
+                cio.interactionCancelled(interactionId),
+            );
+        },
         takeAction: (requestId, ...args) =>
             callback(requestId, (clientIO) =>
                 clientIO.takeAction(requestId, ...args),
@@ -198,6 +342,9 @@ export async function createSharedDispatcher(
         get clientCount() {
             return clients.size;
         },
+        get pendingInteractions() {
+            return pendingInteractions;
+        },
         join(
             clientIO: ClientIO,
             closeFn: () => void,
@@ -219,6 +366,25 @@ export async function createSharedDispatcher(
                     clients.delete(connectionId);
                     dispatchers.delete(connectionId);
                     unregisterClient(connectionId);
+
+                    // Cancel any pending interactions for this connection
+                    // and notify all remaining clients so they can dismiss stale prompts.
+                    const cancelled = pendingInteractions.cancelByConnection(
+                        connectionId,
+                        new Error("Client disconnected"),
+                    );
+                    for (const interactionId of cancelled) {
+                        broadcast("interactionCancelled", undefined, (cio) =>
+                            cio.interactionCancelled(interactionId),
+                        );
+                        context.displayLog.logInteractionCancelled(
+                            interactionId,
+                        );
+                    }
+                    if (cancelled.length > 0) {
+                        context.displayLog.saveQueued();
+                    }
+
                     closeFn();
                     debugConnect(
                         `Client disconnected: ${connectionId} (total clients: ${clients.size})`,
@@ -229,7 +395,63 @@ export async function createSharedDispatcher(
             debugConnect(
                 `Client connected: ${connectionId} (total clients: ${clients.size})`,
             );
+
+            // Extend the per-connection dispatcher with respondToInteraction
+            // which delegates to the shared PendingInteractionManager
+            (dispatcher as any).respondToInteraction = async (
+                response: PendingInteractionResponse,
+            ): Promise<void> => {
+                shared.respondToInteraction(response);
+            };
+
             return dispatcher;
+        },
+        respondToInteraction(response: PendingInteractionResponse): void {
+            debugInteraction(
+                `respondToInteraction: ${response.interactionId} type=${response.type}`,
+            );
+            const resolved = pendingInteractions.resolve(
+                response.interactionId,
+                response.value,
+            );
+            if (!resolved) {
+                debugInteraction(
+                    `respondToInteraction: interaction ${response.interactionId} not found (may have expired or been resolved already)`,
+                );
+            } else {
+                // Notify all clients that this interaction was resolved
+                broadcast("interactionResolved", undefined, (cio) =>
+                    cio.interactionResolved(
+                        response.interactionId,
+                        response.value,
+                    ),
+                );
+
+                // Log the resolution
+                context.displayLog.logInteractionResolved(
+                    response.interactionId,
+                    response.value,
+                );
+                context.displayLog.saveQueued();
+            }
+        },
+        getPendingInteractions(
+            connectionId: string,
+            filter: boolean,
+        ): PendingInteractionRequest[] {
+            return pendingInteractions.getPending().filter((r) => {
+                const targetConnection = r.requestId?.connectionId;
+                if (filter) {
+                    // Filtered client: only interactions routed to this connection
+                    return targetConnection === connectionId;
+                }
+                // Unfiltered client: interactions broadcast to all, plus those
+                // routed specifically to this connection
+                return (
+                    targetConnection === undefined ||
+                    targetConnection === connectionId
+                );
+            });
         },
         async leave(connectionId: string) {
             const dispatcher = dispatchers.get(connectionId);
@@ -245,6 +467,10 @@ export async function createSharedDispatcher(
             await Promise.all(promises);
         },
         async close() {
+            // Cancel all pending interactions
+            pendingInteractions.cancelAll(
+                new Error("SharedDispatcher closing"),
+            );
             await this.closeAllClients();
             await closeCommandHandlerContext(context);
         },
@@ -254,11 +480,17 @@ export async function createSharedDispatcher(
 
 export type SharedDispatcher = {
     readonly clientCount: number;
+    readonly pendingInteractions: PendingInteractionManager;
     join(
         clientIO: ClientIO,
         closeFn: () => void,
         options?: DispatcherConnectOptions,
     ): Dispatcher;
+    respondToInteraction(response: PendingInteractionResponse): void;
+    getPendingInteractions(
+        connectionId: string,
+        filter: boolean,
+    ): PendingInteractionRequest[];
     leave(connectionId: string): Promise<void>;
     closeAllClients(): Promise<void>;
     close(): Promise<void>;

@@ -181,6 +181,11 @@ export default class Connect extends Command {
         );
         installDebugInterceptor();
 
+        // Clear screen and move cursor to top for a clean full-height start
+        if (process.stdout.isTTY) {
+            process.stdout.write("\x1b[2J\x1b[H");
+        }
+
         const persistedSessionId =
             flags.session ?? (flags.resume ? loadLastSessionId() : undefined);
         // Only intercept "Session not found" when using the client-side default

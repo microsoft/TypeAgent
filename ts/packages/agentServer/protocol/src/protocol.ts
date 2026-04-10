@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import type { PendingInteractionRequest } from "@typeagent/dispatcher-types";
+
 export type DispatcherConnectOptions = {
     filter?: boolean; // filter to message for own request. Default is false (no filtering)
     clientType?: "shell" | "extension"; // identifies the connecting client type
@@ -18,6 +20,11 @@ export type JoinSessionResult = {
     connectionId: string;
     sessionId: string;
     name: string;
+    /**
+     * Any pending interactions that are awaiting a client response.
+     * Sent on join so reconnecting clients can resume showing prompts.
+     */
+    pendingInteractions?: PendingInteractionRequest[];
 };
 
 export type AgentServerInvokeFunctions = {

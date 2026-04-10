@@ -34,6 +34,7 @@
     "@typeagent/agent-server-protocol": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
+    "@typeagent/dispatcher-types": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",

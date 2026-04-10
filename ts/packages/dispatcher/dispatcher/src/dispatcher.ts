@@ -18,7 +18,10 @@ import {
     Dispatcher,
     RequestId,
 } from "@typeagent/dispatcher-types";
-import type { DisplayLogEntry } from "@typeagent/dispatcher-types";
+import type {
+    DisplayLogEntry,
+    PendingInteractionResponse,
+} from "@typeagent/dispatcher-types";
 import { getDispatcherStatus, processCommand } from "./command/command.js";
 import { getCommandCompletion } from "./command/completion.js";
 import { getActionContext } from "./execute/actionContext.js";
@@ -349,6 +352,16 @@ export function createDispatcherFromContext(
                     return result;
                 }
             });
+        },
+        async respondToInteraction(
+            _response: PendingInteractionResponse,
+        ): Promise<void> {
+            // Base dispatcher does not manage pending interactions.
+            // The server's SharedDispatcher overrides this method on the
+            // per-connection dispatcher instance.
+            throw new Error(
+                "respondToInteraction is not supported on this dispatcher instance",
+            );
         },
     };
     return dispatcher;

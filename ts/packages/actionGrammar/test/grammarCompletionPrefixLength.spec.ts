@@ -541,10 +541,7 @@ describeForEachCompletion(
         describe("separatorMode - wildcard entity", () => {
             // Grammar where the completion is a wildcard entity (not a static string).
             // separatorMode describes the boundary at matchedPrefixLength.
-            const g = [
-                `import { TrackName };`,
-                `<Start> = play $(name:TrackName) -> { actionName: "play", parameters: { name } };`,
-            ].join("\n");
+            const g = `<Start> = play $(name) -> { actionName: "play", parameters: { name } };`;
             const grammar = loadGrammarRules("test.grammar", g);
 
             it("reports separatorMode for 'play' before wildcard", () => {
@@ -725,10 +722,7 @@ describeForEachCompletion(
             });
 
             describe("wildcard at end", () => {
-                const g = [
-                    `import { TrackName };`,
-                    `<Start> = play $(name:TrackName) -> { actionName: "play", parameters: { name } };`,
-                ].join("\n");
+                const g = `<Start> = play $(name) -> { actionName: "play", parameters: { name } };`;
                 const grammar = loadGrammarRules("test.grammar", g);
 
                 it("backward on exact match backs up to wildcard start with property", () => {
@@ -788,10 +782,7 @@ describeForEachCompletion(
             });
 
             describe("wildcard in middle", () => {
-                const g = [
-                    `import { TrackName };`,
-                    `<Start> = play $(name:TrackName) now -> { actionName: "play", parameters: { name } };`,
-                ].join("\n");
+                const g = `<Start> = play $(name) now -> { actionName: "play", parameters: { name } };`;
                 const grammar = loadGrammarRules("test.grammar", g);
 
                 it("backward on exact match backs up to last literal 'now'", () => {
@@ -838,10 +829,7 @@ describeForEachCompletion(
             });
 
             describe("wildcard followed by multiple literals", () => {
-                const g = [
-                    `import { TrackName };`,
-                    `<Start> = play $(name:TrackName) right now -> { actionName: "play", parameters: { name } };`,
-                ].join("\n");
+                const g = `<Start> = play $(name) right now -> { actionName: "play", parameters: { name } };`;
                 const grammar = loadGrammarRules("test.grammar", g);
 
                 it("backward backs up to last literal 'now', not to wildcard", () => {
@@ -887,11 +875,7 @@ describeForEachCompletion(
             });
 
             describe("wildcard is last matched part before unmatched literal", () => {
-                const g = [
-                    `import { TrackName };`,
-                    `import { ArtistName };`,
-                    `<Start> = play $(track:TrackName) by $(artist:ArtistName) -> { actionName: "play", parameters: { track, artist } };`,
-                ].join("\n");
+                const g = `<Start> = play $(track) by $(artist) -> { actionName: "play", parameters: { track, artist } };`;
                 const grammar = loadGrammarRules("test.grammar", g);
 
                 it("backward on 'play Nocturne' backs up to wildcard $(track)", () => {
@@ -956,10 +940,7 @@ describeForEachCompletion(
                 // This grammar produces afterWildcard="all" in the
                 // backward main loop: backward backs up to "now" which
                 // follows a captured wildcard (afterWildcard=true).
-                const g = [
-                    `import { TrackName };`,
-                    `<Start> = play $(track:TrackName) now -> { actionName: "play", parameters: { track } };`,
-                ].join("\n");
+                const g = `<Start> = play $(track) now -> { actionName: "play", parameters: { track } };`;
                 const grammar = loadGrammarRules("test.grammar", g);
 
                 it("backward backs up to 'now' with afterWildcard=\"all\"", () => {
@@ -1109,8 +1090,7 @@ describeForEachCompletion(
 
             describe("multi-rule with shared prefix and wildcard", () => {
                 const g = [
-                    `import { TrackName };`,
-                    `<Start> = play $(name:TrackName) -> { actionName: "play", parameters: { name } };`,
+                    `<Start> = play $(name) -> { actionName: "play", parameters: { name } };`,
                     `<Start> = play music -> "play_music";`,
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
@@ -1146,9 +1126,7 @@ describeForEachCompletion(
             });
 
             describe("varNumber part backward", () => {
-                const g = [
-                    `<Start> = play $(count) songs -> { actionName: "play", parameters: { count } };`,
-                ].join("\n");
+                const g = `<Start> = play $(count) songs -> { actionName: "play", parameters: { count } };`;
                 const grammar = loadGrammarRules("test.grammar", g);
 
                 it("backward on 'play 5 songs' backs up to number slot", () => {
@@ -1330,9 +1308,7 @@ describeForEachCompletion(
             });
 
             describe("spacing=required", () => {
-                const g = [
-                    `<Start> [spacing=required] = play music now -> true;`,
-                ].join("\n");
+                const g = `<Start> [spacing=required] = play music now -> true;`;
                 const grammar = loadGrammarRules("test.grammar", g);
 
                 it("trailing space — backward on 'play music ' acts like forward", () => {
@@ -1373,9 +1349,7 @@ describeForEachCompletion(
             });
 
             describe("spacing=optional", () => {
-                const g = [
-                    `<Start> [spacing=optional] = play music now -> true;`,
-                ].join("\n");
+                const g = `<Start> [spacing=optional] = play music now -> true;`;
                 const grammar = loadGrammarRules("test.grammar", g);
 
                 it("trailing space — backward on 'play music ' acts like forward", () => {
@@ -1418,9 +1392,7 @@ describeForEachCompletion(
             describe("spacing=none", () => {
                 // In none mode, whitespace and punctuation are literal
                 // content, not separators — backward should always work.
-                const g = [`<Start> [spacing=none] = play music -> true;`].join(
-                    "\n",
-                );
+                const g = `<Start> [spacing=none] = play music -> true;`;
                 const grammar = loadGrammarRules("test.grammar", g);
 
                 it("trailing space — backward on 'play ' still backs up", () => {
@@ -1502,9 +1474,7 @@ describeForEachCompletion(
             });
 
             describe("auto spacing with CJK", () => {
-                const g = [
-                    `<Start> [spacing=auto] = 再生 音楽 停止 -> true;`,
-                ].join("\n");
+                const g = `<Start> [spacing=auto] = 再生 音楽 停止 -> true;`;
                 const grammar = loadGrammarRules("test.grammar", g);
 
                 it("trailing space — backward on CJK '再生 音楽 ' acts like forward", () => {
@@ -2883,8 +2853,7 @@ describeForEachCompletion(
 
             describe("multi-rule with wildcard and literal", () => {
                 const g = [
-                    `import { TrackName };`,
-                    `<Start> = play $(name:TrackName) -> { actionName: "play", parameters: { name } };`,
+                    `<Start> = play $(name) -> { actionName: "play", parameters: { name } };`,
                     `<Start> = play music -> "play_music";`,
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
@@ -3004,9 +2973,7 @@ describeForEachCompletion(
 
             describe("wildcard rule + keyword rule, trailing space", () => {
                 const g = [
-                    `import { SongName };`,
-                    `import { ArtistName };`,
-                    `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
+                    `<Start> = play $(song) by $(artist) -> { actionName: "playBy", parameters: { song, artist } };`,
                     `<Start> = play beautiful music -> "play_beautiful_music";`,
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
@@ -3064,9 +3031,7 @@ describeForEachCompletion(
 
             describe("wildcard rule + keyword rule, no trailing space", () => {
                 const g = [
-                    `import { SongName };`,
-                    `import { ArtistName };`,
-                    `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
+                    `<Start> = play $(song) by $(artist) -> { actionName: "playBy", parameters: { song, artist } };`,
                     `<Start> = play something good -> "play_something_good";`,
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
@@ -3098,9 +3063,7 @@ describeForEachCompletion(
                 // candidates exist, the range candidates should still
                 // be processed.
                 const g = [
-                    `import { SongName };`,
-                    `import { ArtistName };`,
-                    `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
+                    `<Start> = play $(song) by $(artist) -> { actionName: "playBy", parameters: { song, artist } };`,
                     `<Start> = play nice by heart -> "play_nice_by_heart";`,
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
@@ -3150,11 +3113,10 @@ describeForEachCompletion(
                 // Rule B: Cat 3b at mpl=4 ("some" doesn't match "beautiful")
                 // Rule A: EOI candidate at anchor=15
                 // Gap "beautiful " (11 chars) has non-separator content → displace
-                const g = [
-                    `import { SongName, ArtistName };`,
-                    `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
-                    `<Start> = play some video -> "playSomeVideo";`,
-                ].join("\n");
+                const g = `
+                    <Start> = play $(song) by $(artist) -> { actionName: "playBy", parameters: { song, artist } };
+                    <Start> = play some video -> "playSomeVideo";
+                `;
                 const grammar = loadGrammarRules("test.grammar", g);
 
                 it("forward on 'play beautiful ' — displaces Cat 3b 'video'", () => {
@@ -3187,8 +3149,7 @@ describeForEachCompletion(
                 // Rule A: EOI candidate at anchor=15
                 // Gap " " (1 char space) is separator-only → merge
                 const g = [
-                    `import { SongName, ArtistName };`,
-                    `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
+                    `<Start> = play $(song) by $(artist) -> { actionName: "playBy", parameters: { song, artist } };`,
                     `<Start> = play beautiful music -> "playBeautifulMusic";`,
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
@@ -3233,11 +3194,10 @@ describeForEachCompletion(
 
             describe("Cat 2 merge — separator-only gap (trailing punctuation)", () => {
                 // Punctuation is also a separator character.
-                const g = [
-                    `import { SongName, ArtistName };`,
-                    `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
-                    `<Start> = play beautiful music -> "playBeautifulMusic";`,
-                ].join("\n");
+                const g = `
+                    <Start> = play $(song) by $(artist) -> { actionName: "playBy", parameters: { song, artist } };
+                    <Start> = play beautiful music -> "playBeautifulMusic";
+                `;
                 const grammar = loadGrammarRules("test.grammar", g);
 
                 it("forward on 'play beautiful,' — punctuation gap triggers merge", () => {
@@ -3264,11 +3224,10 @@ describeForEachCompletion(
             describe("Cat 3b displace — large content gap", () => {
                 // When Cat 3b candidates are far from the anchor,
                 // the gap contains real unmatched content → displace.
-                const g = [
-                    `import { SongName, ArtistName };`,
-                    `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
-                    `<Start> = play something entirely different -> "playDifferent";`,
-                ].join("\n");
+                const g = `
+                    <Start> = play $(song) by $(artist) -> { actionName: "playBy", parameters: { song, artist } };
+                    <Start> = play something entirely different -> "playDifferent";
+                `;
                 const grammar = loadGrammarRules("test.grammar", g);
 
                 it("forward on 'play beautiful song ' — 3b 'something' at mpl=4 displaced by 'by' at 20", () => {
@@ -3297,11 +3256,10 @@ describeForEachCompletion(
                 // When a Cat 1 exact-match candidate backs up to a
                 // wildcard property slot at a lower P, the EOI anchor
                 // from another rule displaces it (non-separator gap).
-                const g = [
-                    `import { SongName, ArtistName };`,
-                    `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
-                    `<Start> = play $(song:SongName) -> { actionName: "play", parameters: { song } };`,
-                ].join("\n");
+                const g = `
+                    <Start> = play $(song) by $(artist) -> { actionName: "playBy", parameters: { song, artist } };
+                    <Start> = play $(song) -> { actionName: "play", parameters: { song } };
+                `;
                 const grammar = loadGrammarRules("test.grammar", g);
 
                 it("forward on 'play hello ' — keyword 'by' and property completion coexist", () => {
@@ -3340,11 +3298,10 @@ describeForEachCompletion(
             // anchor forward (e.g. "play b" → "play book "), the stale
             // "beautiful" entry remained in the trie and reappeared at the
             // next word boundary.
-            const g = [
-                `import { SongName, ArtistName };`,
-                `<Start> = play $(song:SongName) by $(artist:ArtistName) -> { actionName: "playBy", parameters: { song, artist } };`,
-                `<Start> = play beautiful music -> "playBeautifulMusic";`,
-            ].join("\n");
+            const g = `
+                <Start> = play $(song) by $(artist) -> { actionName: "playBy", parameters: { song, artist } };
+                <Start> = play beautiful music -> "playBeautifulMusic";
+            `;
             const grammar = loadGrammarRules("test.grammar", g);
 
             it("forward on 'play b' — only wildcard rule at this mpl, afterWildcard=\"all\"", () => {
@@ -3422,8 +3379,7 @@ describeForEachCompletion(
 
             describe("wildcard followed by literal", () => {
                 const g = [
-                    `import { TrackName };`,
-                    `<Start> = play $(name:TrackName) right now -> { actionName: "play", parameters: { name } };`,
+                    `<Start> = play $(name) right now -> { actionName: "play", parameters: { name } };`,
                 ].join("\n");
                 const grammar = loadGrammarRules("test.grammar", g);
 
@@ -3477,10 +3433,7 @@ describeForEachCompletion(
             });
 
             describe("wildcard at end with exact match", () => {
-                const g = [
-                    `import { TrackName };`,
-                    `<Start> = play $(name:TrackName) -> { actionName: "play", parameters: { name } };`,
-                ].join("\n");
+                const g = `<Start> = play $(name) -> { actionName: "play", parameters: { name } };`;
                 const grammar = loadGrammarRules("test.grammar", g);
 
                 it("backward on 'play hello' backs up to wildcard property", () => {
@@ -3667,10 +3620,9 @@ describeForEachCompletion(
             // alternatives ("from", "track", "song") from contributing
             // completions at the same position.
             const g = [
-                `import { TrackName, ArtistName, AlbumName };`,
-                `<Start> = play $(trackName:<TrackPhrase>) by $(artist:ArtistName) -> { actionName: "playTrack", parameters: { trackName, artists: [artist] } };`,
-                `<Start> = play $(trackName:<TrackPhrase>) from (the)? album $(albumName:AlbumName) -> { actionName: "playTrack", parameters: { trackName, albumName } };`,
-                `<Start> = play $(trackName:<TrackPhrase>) by $(artist:ArtistName) from (the)? album $(albumName:AlbumName) -> { actionName: "playTrack", parameters: { trackName, artists: [artist], albumName } };`,
+                `<Start> = play $(trackName:<TrackPhrase>) by $(artist) -> { actionName: "playTrack", parameters: { trackName, artists: [artist] } };`,
+                `<Start> = play $(trackName:<TrackPhrase>) from (the)? album $(albumName) -> { actionName: "playTrack", parameters: { trackName, albumName } };`,
+                `<Start> = play $(trackName:<TrackPhrase>) by $(artist) from (the)? album $(albumName) -> { actionName: "playTrack", parameters: { trackName, artists: [artist], albumName } };`,
                 `<TrackPhrase> = $(trackName:<TrackName>) -> trackName;`,
                 `<TrackPhrase> = the <TrackTerm> $(trackName:<TrackName>) -> trackName;`,
                 `<TrackPhrase> = <TrackTerm> $(trackName:<TrackName>) -> trackName;`,
@@ -3738,13 +3690,13 @@ describeForEachCompletion(
             // Tests whether PlayTrackNumberCommand's (<Item>)?
             // alternatives also contribute at the backed-up position.
             const g = [
-                `import { Ordinal, Cardinal, TrackName, ArtistName, AlbumName };`,
+                `import { Ordinal, Cardinal };`,
                 // PlayTrackNumberCommand
                 `<Start> = play (the)? $(n:Ordinal) (<Item>)? -> { actionName: "playFromCurrentTrackList", parameters: { trackNumber: n } };`,
                 `<Item> = one | cut | <TrackTerm>;`,
                 // PlaySpecificTrack (simplified)
-                `<Start> = play $(trackName:<TrackPhrase>) by $(artist:ArtistName) -> { actionName: "playTrack", parameters: { trackName, artists: [artist] } };`,
-                `<Start> = play $(trackName:<TrackPhrase>) from (the)? album $(albumName:AlbumName) -> { actionName: "playTrack", parameters: { trackName, albumName } };`,
+                `<Start> = play $(trackName:<TrackPhrase>) by $(artist) -> { actionName: "playTrack", parameters: { trackName, artists: [artist] } };`,
+                `<Start> = play $(trackName:<TrackPhrase>) from (the)? album $(albumName) -> { actionName: "playTrack", parameters: { trackName, albumName } };`,
                 `<TrackPhrase> = $(trackName:<TrackName>) -> trackName;`,
                 `<TrackPhrase> = $(trackName:<TrackName>) <TrackTerm> -> trackName;`,
                 `<TrackTerm> = track | song;`,

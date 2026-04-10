@@ -330,9 +330,21 @@ export async function createTextIndex<
     }
 
     function getIds(texts: string[]): Promise<(TTextId | undefined)[]> {
-        // TODO: use IN clause
+        if (texts.length === 0) {
+            return Promise.resolve([]);
+        }
+        const inClause = sql_makeInClause(texts);
+        const rows = db
+            .prepare(
+                `SELECT stringId, value FROM ${textTable.tableName} WHERE value IN (${inClause})`,
+            )
+            .all() as StringTableRow[];
+        const idByText = new Map<string, number>();
+        for (const row of rows) {
+            idByText.set(row.value, row.stringId);
+        }
         return Promise.resolve(
-            texts.map((t) => serializer.serialize(textTable.getId(t))),
+            texts.map((t) => serializer.serialize(idByText.get(t))),
         );
     }
 
@@ -378,13 +390,25 @@ export async function createTextIndex<
         values: string[],
         join?: string,
     ): IterableIterator<ScoredItem<TSourceId>> {
-        // TODO: use a JOIN
-        const textIds = [...textTable.getIds(values)];
-        const hits = postingsTable.getHits(textIds, join);
-        if (hits) {
-            for (const hit of hits) {
-                yield hit;
-            }
+        if (values.length === 0) {
+            return;
+        }
+        const inClause = sql_makeInClause(values);
+        const innerJoin = `INNER JOIN ${textTable.tableName} ON keyId = stringId`;
+        const sql = join
+            ? `SELECT valueId AS item, count(*) AS score FROM ${postingsTable.tableName}
+               ${innerJoin}
+               ${join} AND ${textTable.tableName}.value IN (${inClause})
+               GROUP BY valueId
+               ORDER BY score DESC`
+            : `SELECT valueId AS item, count(*) AS score FROM ${postingsTable.tableName}
+               ${innerJoin}
+               WHERE ${textTable.tableName}.value IN (${inClause})
+               GROUP BY valueId
+               ORDER BY score DESC`;
+        const stmt = db.prepare(sql);
+        for (const row of stmt.iterate()) {
+            yield row as ScoredItem<TSourceId>;
         }
     }
 

@@ -1187,6 +1187,9 @@ importers:
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
+      '@typeagent/dispatcher-types':
+        specifier: workspace:*
+        version: link:../../dispatcher/types
     devDependencies:
       prettier:
         specifier: ^3.5.3
@@ -1215,6 +1218,9 @@ importers:
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../../dispatcher/rpc
+      '@typeagent/dispatcher-types':
+        specifier: workspace:*
+        version: link:../../dispatcher/types
       agent-dispatcher:
         specifier: workspace:*
         version: link:../../dispatcher/dispatcher
@@ -2462,9 +2468,15 @@ importers:
       '@types/better-sqlite3':
         specifier: 7.6.13
         version: 7.6.13
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -8600,8 +8612,8 @@ packages:
     resolution: {integrity: sha512-ipDqC8FrAl/76p2SSWKSI+H9tFwm7vYqXQrItCuiVPt26Km0jS+NzSsBWAaBusvSbQcfJG+JitdMm+wZAgTYqg==}
     hasBin: true
 
-  basic-ftp@5.2.0:
-    resolution: {integrity: sha512-VoMINM2rqJwJgfdHq6RiUudKt2BV+FY5ZFezP/ypmwayk68+NzzAQy4XXLlqsGD4MCzq3DrmNFD/uUmBJuGoXw==}
+  basic-ftp@5.2.1:
+    resolution: {integrity: sha512-0yaL8JdxTknKDILitVpfYfV2Ob6yb3udX/hK97M7I3jOeznBNxQPtVvTUtnhUkyHlxFWyr5Lvknmgzoc7jf+1Q==}
     engines: {node: '>=10.0.0'}
 
   batch@0.6.1:
@@ -20043,7 +20055,7 @@ snapshots:
 
   baseline-browser-mapping@2.9.19: {}
 
-  basic-ftp@5.2.0: {}
+  basic-ftp@5.2.1: {}
 
   batch@0.6.1: {}
 
@@ -22162,7 +22174,7 @@ snapshots:
 
   get-uri@6.0.4:
     dependencies:
-      basic-ftp: 5.2.0
+      basic-ftp: 5.2.1
       data-uri-to-buffer: 6.0.2
       debug: 4.4.3(supports-color@8.1.1)
     transitivePeerDependencies:

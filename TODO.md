@@ -64,34 +64,18 @@ This file collates all TODO comments found across the repository, organized by t
 
 | File | Line | TODO | Effort | Feasibility | Scope | Recommendation | Needs Human? |
 |------|------|------|--------|-------------|-------|----------------|--------------|
-| `ts/examples/cacheRESTEndpoint/src/index.ts` | 51 | actionName should match interface name | Low | High | Local | Fix | No |
-| `ts/examples/cacheRESTEndpoint/src/index.ts` | 56 | actually parse the schema instead of using regex | Medium | High | Local | Fix | No |
-| `ts/examples/chat/src/codeChat/commandTransformer.ts` | 59 | Validate that result.data is a valid NamedArgs? | Low | High | Local | Fix | No |
 | `ts/examples/chat/src/codeChat/commandTransformer.ts` | 170 | the same for args (currently not used by code chat) | Low | Medium | Local | No Fix | Yes |
-| `ts/examples/commandHistogram/src/main.ts` | 65 | move DB name to .env/config? | Low | High | Local | Fix | No |
-| `ts/examples/commandHistogram/src/main.ts` | 67 | move collection name to .env/config? | Low | High | Local | Fix | No |
 | `ts/examples/docuProc/src/pdfImporter.ts` | 210 | Try pre-computing embeddings in parallel to fill the embeddings cache (is that cache safe?) | Medium | Medium | Local | Fix | Yes |
-| `ts/examples/docuProc/src/pdfImporter.ts` | 344 | Therefore remove. | Low | High | Local | Fix | No |
 | `ts/examples/docuProc/src/pdfQNAInteractiveApp.ts` | 1024 | Allow for multiple concurrent sessions. | High | Medium | Component | No Fix | Yes |
 | `ts/examples/docuProc/src/pdfQNAInteractiveApp.ts` | 1031 | Cut off by total size, not count. | Low | High | Local | Fix | No |
 | `ts/examples/docuProc/src/pdfQNAInteractiveApp.ts` | 1151 | limit how much we write per blob too (if there are multiple). | Low | High | Local | Fix | No |
 | `ts/examples/docuProc/src/pdfQNAInteractiveApp.ts` | 1178 | Colorize code blocks. | Low | High | Local | Fix | No |
 | `ts/examples/memoryProviders/src/sqlite/keyValueTable.ts` | 195 | support | Medium | Medium | Component | Fix | Yes |
-| `ts/examples/memoryProviders/src/sqlite/textTable.ts` | 333 | use IN clause | Low | High | Local | Fix | No |
-| `ts/examples/memoryProviders/src/sqlite/textTable.ts` | 381 | use a JOIN | Low | High | Local | Fix | No |
 | `ts/examples/memoryProviders/src/sqlite/textTable.ts` | 511 | optimize by lowering into DB if possible | Medium | Medium | Local | Fix | Yes |
 | `ts/examples/memoryProviders/src/sqlite/textTable.ts` | 613 | Optimize | Medium | Medium | Local | Fix | Yes |
-| `ts/examples/memoryProviders/src/sqlite/vectorTable.ts` | 70 | ID generation | Low | High | Local | Fix | No |
 | `ts/examples/schemaStudio/src/schemaCommands.ts` | 94 | Generating settings command schemas... | Medium | Medium | Component | Fix | Yes |
-| `ts/examples/schemaStudio/src/urlCommands.ts` | 88 | handle redirects + default parameters, etc. | Medium | Medium | Local | Fix | No |
-| `ts/examples/spelunker/src/main.ts` | 44 | switch to whatever interactive-app uses to parse the command line? | Low | High | Local | Fix | No |
-| `ts/examples/spelunker/src/main.ts` | 77 | Use a proper command-line parser? | Low | High | Local | Fix | No |
-| `ts/examples/spelunker/src/pythonChunker.ts` | 81 | validate that JSON matches our schema. | Low | High | Local | Fix | No |
 | `ts/examples/spelunker/src/pythonImporter.ts` | 4 | Most of this is not Python specific; generalize to other languages. | High | Medium | Component | Fix | Yes |
-| `ts/examples/spelunker/src/pythonImporter.ts` | 71 | Make generic over languages | High | Medium | Component | Fix | No |
-| `ts/examples/spelunker/src/pythonImporter.ts` | 128 | Make this a function argument | Low | High | Local | Fix | No |
 | `ts/examples/spelunker/src/pythonImporter.ts` | 181 | Try pre-computing embeddings in parallel to fill the embeddings cache (is that cache safe?) | Medium | Medium | Local | Fix | Yes |
-| `ts/examples/spelunker/src/pythonImporter.ts` | 302 | Therefore remove. | Low | High | Local | Fix | No |
 | `ts/examples/spelunker/src/queryInterface.ts` | 905 | Allow for multiple concurrent sessions. | High | Medium | Component | Fix | No |
 | `ts/examples/spelunker/src/queryInterface.ts` | 912 | Cut off by total size, not count. | Low | High | Local | Fix | No |
 | `ts/examples/spelunker/src/queryInterface.ts` | 1035 | limit how much we write per blob too (if there are multiple). | Low | High | Local | Fix | No |
@@ -123,15 +107,8 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/agentSdk/src/agentInterface.ts` | 57 | enable non-stringify pas content. | Medium | Medium | Cross-cutting | Fix | Yes |
 | `ts/packages/agentSdk/src/agentInterface.ts` | 234 | only utf8 & base64 is supported for now. | Medium | Medium | Component | Fix | No |
 | `ts/packages/agentSdkWrapper/src/webtask/tracing/types.ts` | 138 | Phase 2: Extract key elements from HTML | High | Low | Component | No Fix | Yes |
-| `ts/packages/agents/browser/src/extension/serviceWorker/index.ts` | 347 | sniffing the RPC call arguments. Fix typing. | Low | High | Local | Fix | No |
-| `ts/packages/agents/browser/src/extension/views/entityGraphView.ts` | 1341 | limit this to "contains" relationships | Low | High | Local | Fix | No |
 | `ts/packages/agents/browser/src/extension/views/extensionServiceBase.ts` | 579 | remove "type" from this dictionary. That will remove the need to wrap these values in a "parameters" object | Medium | Medium | Component | Fix | No |
-| `ts/packages/agents/browser/src/extension/views/macrosLibrary.ts` | 650 | Implement macro editing | Medium | High | Component | Fix | No |
 | `ts/packages/agents/browser/src/extension/views/topicGraphView.ts` | 296 | Implement topic viewport neighborhood functionality | High | Medium | Component | Fix | Yes |
-| `ts/packages/agents/browser/src/views/client/pdf/core/pdfViewer.ts` | 245 | Implement text search functionality | Medium | High | Component | Fix | No |
-| `ts/packages/agents/browser/src/views/client/pdf/core/pdfViewer.ts` | 258 | Implement find next | Low | High | Local | Fix | No |
-| `ts/packages/agents/browser/src/views/client/pdf/core/pdfViewer.ts` | 266 | Implement find previous | Low | High | Local | Fix | No |
-| `ts/packages/agents/browser/src/views/client/pdf/core/pdfViewer.ts` | 282 | Implement download functionality | Medium | High | Component | Fix | No |
 | `ts/packages/agents/calendar/src/calendarActionHandlerV3.ts` | 1120 | Implement sophisticated date parsing | Medium | High | Local | Fix | No |
 | `ts/packages/agents/calendar/src/calendarActionHandlerV3.ts` | 1126 | Implement sophisticated time parsing | Medium | High | Local | Fix | No |
 | `ts/packages/agents/desktop/src/connector.ts` | 127 | add shared agent storage or known storage location (requires permissions, trusted agents, etc.) | High | Low | Cross-cutting | No Fix | Yes |
@@ -161,7 +138,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/agents/spelunker/src/embeddings.ts` | 47 | tune | Medium | Medium | Local | No Fix | Yes |
 | `ts/packages/agents/spelunker/src/embeddings.ts` | 186 | Fix this | Medium | Medium | Local | Fix | Yes |
 | `ts/packages/agents/spelunker/src/eval.ts` | 27 | Read this from a file that can be edited before each run | Low | High | Local | Fix | No |
-| `ts/packages/agents/spelunker/src/pythonChunker.ts` | 51 | validate that JSON matches our schema. | Low | High | Local | Fix | No |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 237 | tune | Medium | Medium | Local | No Fix | Yes |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 238 | tune | Medium | Medium | Local | Fix | Yes |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 268 | tune | Medium | Medium | Local | Fix | Yes |
@@ -174,8 +150,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 458 | Use appendDisplay (requires passing actionContext) | Low | Medium | Local | Fix | No |
 | `ts/packages/agents/spelunker/src/spelunkerActionHandler.ts` | 89 | What other standard functions could be handy here? | Medium | Low | Component | No Fix | Yes |
 | `ts/packages/agents/spelunker/src/summarizing.ts` | 42 | Prompt engineering | High | Medium | Local | Fix | Yes |
-| `ts/packages/agents/spelunker/src/summarizing.ts` | 160 | Remove export once we're using summaries again. | Low | High | Local | Fix | No |
-| `ts/packages/agents/spelunker/src/summarizing.ts` | 178 | Make the values two elements, comment start and comment end | Low | High | Local | Fix | No |
 | `ts/packages/agents/spelunker/src/typescriptChunker.ts` | 198 | Move to caller? | Low | High | Local | Fix | No |
 | `ts/packages/agents/video/src/videoActionHandler.ts` | 54 | dynamic duration | Medium | Medium | Local | Fix | Yes |
 | `ts/packages/agents/weather/src/weatherActionHandler.ts` | 227 | Add more sophisticated validation: | Medium | High | Local | Fix | No |

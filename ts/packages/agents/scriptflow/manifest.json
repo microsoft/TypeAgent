@@ -1,9 +1,9 @@
 {
   "emojiChar": "📜",
-  "description": "Reusable PowerShell scripts captured from reasoning traces",
+  "description": "System operations via reusable PowerShell scripts: list files, list processes, check disk space, check service status, search text in files, and other file system and system management tasks",
   "defaultEnabled": true,
   "schema": {
-    "description": "PowerShell script actions. Scripts are auto-captured from reasoning and compiled for reuse.",
+    "description": "PowerShell script actions that grow over time. Examples include file operations (list files, find large files), process management (list processes), system queries (disk space, services, ports), and text search. New scripts are automatically captured and added as reusable actions.",
     "schemaFile": "./src/schema/scriptActions.mts",
     "compiledSchemaFile": "agents/scriptflow/dist/scriptflowSchema.pas.json",
     "grammarFile": "./dist/scriptflowSchema.ag.json",

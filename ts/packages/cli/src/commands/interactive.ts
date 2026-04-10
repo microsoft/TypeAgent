@@ -169,6 +169,11 @@ export default class Interactive extends Command {
         );
         installDebugInterceptor();
 
+        // Clear screen and move cursor to top for a clean full-height start
+        if (process.stdout.isTTY) {
+            process.stdout.write("\x1b[2J\x1b[H");
+        }
+
         await withEnhancedConsoleClientIO(async (clientIO, bindDispatcher) => {
             const persistDir = !flags.memory ? instanceDir : undefined;
             const indexingServiceRegistry =

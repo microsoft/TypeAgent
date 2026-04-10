@@ -344,8 +344,16 @@ function setupEventListeners(): void {
                 );
                 // relay message from the browser agent message sent via content script to the browser agent via the websocket.
                 if (data.method === "webAgent/register") {
-                    // TODO: sniffing the RPC call arguments. Fix typing.
-                    const param = data.params.args[0];
+                    type WebAgentRegisterParam = {
+                        name: string;
+                        title?: string;
+                        url?: string;
+                        tabId?: number;
+                        frameId?: number;
+                    };
+                    const param = (
+                        data.params as { args: [WebAgentRegisterParam] }
+                    ).args[0];
                     agentNames.add(param.name);
                     // Fill in identification information
                     param.title = title;
