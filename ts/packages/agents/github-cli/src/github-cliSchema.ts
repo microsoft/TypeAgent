@@ -429,6 +429,8 @@ export type ApiRequestAction = {
     method?: string;
     
     endpoint?: string;
+    
+    limit?: number;
   };
 };
 

@@ -158,6 +158,7 @@ function buildArgs(
             const args = ["issue", "view"];
             if (p.number) args.push(String(p.number));
             if (p.repo) args.push("--repo", String(p.repo));
+            args.push("--json", "number,title,state,body,author,labels,assignees,comments,url,createdAt,closedAt");
             return args;
         }
 
@@ -311,6 +312,10 @@ function buildArgs(
                 if (!endpoint.startsWith("/") && endpoint.split("/").length === 2) {
                     endpoint = `/repos/${endpoint}/contributors`;
                 }
+                if (p.limit) {
+                    const sep = endpoint.includes("?") ? "&" : "?";
+                    endpoint += `${sep}per_page=${String(p.limit)}`;
+                }
                 args.push(endpoint);
             }
             if (p.method) args.push("--method", String(p.method));
@@ -432,6 +437,71 @@ function distillRepoField(
     }
 }
 
+// Format gh status output with bold section headers as markdown
+function formatStatusOutput(raw: string): string {
+    // gh status uses a table format with │ separators and section headers
+    // Convert to readable markdown with bold headers
+    const lines = raw.split("\n");
+    const result: string[] = [];
+    const sectionHeaders = new Set([
+        "Assigned Issues",
+        "Assigned Pull Requests",
+        "Review Requests",
+        "Mentions",
+        "Repository Activity",
+    ]);
+
+    for (const line of lines) {
+        // Check if line contains a section header
+        let replaced = false;
+        for (const header of sectionHeaders) {
+            if (line.includes(header)) {
+                // Split on │ to handle multi-column header rows
+                const parts = line.split("│").map((p) => p.trim()).filter(Boolean);
+                const boldParts = parts.map((p) =>
+                    sectionHeaders.has(p) ? `**${p}**` : p,
+                );
+                result.push(boldParts.join(" │ "));
+                replaced = true;
+                break;
+            }
+        }
+        if (!replaced) {
+            result.push(line);
+        }
+    }
+    return result.join("\n");
+}
+
+// Format a single issue view from JSON into rich markdown
+function formatIssueView(data: Record<string, unknown>): string {
+    const author = data.author
+        ? formatValue(data.author)
+        : "unknown";
+    const labels = Array.isArray(data.labels)
+        ? (data.labels as Record<string, unknown>[]).map((l) => `\`${l.name}\``).join(" ")
+        : "";
+    const assignees = Array.isArray(data.assignees)
+        ? (data.assignees as Record<string, unknown>[]).map((a) => formatValue(a)).join(", ")
+        : "";
+    const commentCount = Array.isArray(data.comments) ? data.comments.length : data.comments ?? 0;
+    const body = data.body ? String(data.body).slice(0, 1000) : "";
+    const bodySection = body
+        ? `\n\n---\n\n${body}${String(data.body).length > 1000 ? "\n\n*…truncated*" : ""}`
+        : "";
+
+    let header = `### [#${data.number} ${data.title}](${data.url})\n\n`;
+    header += `**State:** ${data.state}`;
+    header += ` · **Author:** ${author}`;
+    if (labels) header += ` · **Labels:** ${labels}`;
+    if (assignees) header += `\n**Assignees:** ${assignees}`;
+    header += ` · **Comments:** ${commentCount}`;
+    header += ` · **Created:** ${String(data.createdAt).slice(0, 10)}`;
+    if (data.closedAt) header += ` · **Closed:** ${String(data.closedAt).slice(0, 10)}`;
+
+    return header + bodySection;
+}
+
 function formatListResults(
     items: Record<string, unknown>[],
     actionName: string,
@@ -525,6 +595,13 @@ async function executeAction(
                     }
                 }
 
+                // Single issue view — rich formatted output
+                if (action.actionName === "issueView" && "number" in data) {
+                    return createActionResultFromMarkdownDisplay(
+                        formatIssueView(data),
+                    );
+                }
+
                 // Single object (e.g., repo view)
                 const lines = Object.entries(data)
                     .map(([k, v]) => `- **${k}**: ${formatValue(v)}`)
@@ -543,16 +620,26 @@ async function executeAction(
                 const arr = JSON.parse(output) as Record<string, unknown>[];
                 if (arr.length > 0 && "login" in arr[0]) {
                     const rows = arr
-                        .slice(0, 20)
                         .map((u, i) => `${i + 1}. **${u.login}** — ${u.contributions} contributions`)
                         .join("\n");
+                    const header = arr.length === 1
+                        ? "Top contributor"
+                        : `Top ${arr.length} contributors`;
                     return createActionResultFromMarkdownDisplay(
-                        `**\`gh ${args.join(" ")}\`**\n\n${rows}`,
+                        `**${header}**\n\n${rows}`,
                     );
                 }
             } catch {
                 // Fall through to raw output
             }
+        }
+
+        // Bold section headers in gh status output
+        if (action.actionName === "statusPrint") {
+            const formatted = formatStatusOutput(output);
+            return createActionResultFromMarkdownDisplay(
+                `**\`gh status\`**\n\n${formatted}`,
+            );
         }
 
         return createActionResultFromMarkdownDisplay(

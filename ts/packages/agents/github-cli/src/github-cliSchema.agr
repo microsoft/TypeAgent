@@ -161,6 +161,13 @@
     parameters: {
         endpoint
     }
+}
+  | top $(limit:number) contributors to $(endpoint:wildcard) -> {
+    actionName: "apiRequest",
+    parameters: {
+        endpoint,
+        limit
+    }
 };
 
 <SearchRepos> = search repositories for $(query:wildcard) -> {
