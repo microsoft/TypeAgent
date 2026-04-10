@@ -18,6 +18,7 @@ export type {
     GrammarParseResult,
     ImportStatement,
     RuleDefinition,
+    SpacingAnnotationComments,
 } from "./grammarRuleParser.js";
 
 // Writer / formatter

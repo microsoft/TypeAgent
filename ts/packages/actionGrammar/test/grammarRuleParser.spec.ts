@@ -1804,16 +1804,16 @@ describe("Grammar Rule Parser", () => {
             );
             const def = result.definitions[0];
             expect(def.spacingMode).toBe("required");
-            expect(def.annotationAfterBracketComments).toEqual([
+            expect(def.spacingAnnotationComments?.afterBracket).toEqual([
                 { style: "block", text: "a" },
             ]);
-            expect(def.annotationAfterKeyComments).toEqual([
+            expect(def.spacingAnnotationComments?.afterKey).toEqual([
                 { style: "block", text: "b" },
             ]);
-            expect(def.annotationAfterEqualsComments).toEqual([
+            expect(def.spacingAnnotationComments?.afterEquals).toEqual([
                 { style: "block", text: "c" },
             ]);
-            expect(def.annotationAfterValueComments).toEqual([
+            expect(def.spacingAnnotationComments?.afterValue).toEqual([
                 { style: "block", text: "d" },
             ]);
         });

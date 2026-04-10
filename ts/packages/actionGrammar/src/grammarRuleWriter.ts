@@ -744,16 +744,23 @@ function writeRuleDefinition(result: GrammarWriter, def: RuleDefinition) {
         result.write(" ");
     }
     writeBracketedName(result, def.definitionName);
-    writeInlineComments(result, def.beforeAnnotationComments, true);
     if (def.spacingMode !== undefined) {
+        writeInlineComments(
+            result,
+            def.spacingAnnotationComments?.beforeAnnotation,
+            true,
+        );
         result.write(" [");
-        writeInlineComments(result, def.annotationAfterBracketComments);
+        writeInlineComments(
+            result,
+            def.spacingAnnotationComments?.afterBracket,
+        );
         result.write("spacing");
-        writeInlineComments(result, def.annotationAfterKeyComments);
+        writeInlineComments(result, def.spacingAnnotationComments?.afterKey);
         result.write("=");
-        writeInlineComments(result, def.annotationAfterEqualsComments);
+        writeInlineComments(result, def.spacingAnnotationComments?.afterEquals);
         result.write(def.spacingMode);
-        writeInlineComments(result, def.annotationAfterValueComments);
+        writeInlineComments(result, def.spacingAnnotationComments?.afterValue);
         result.write("]");
     }
     if (def.valueType !== undefined) {
@@ -779,6 +786,29 @@ function writeRuleDefinition(result: GrammarWriter, def: RuleDefinition) {
 }
 
 function writeRule(result: GrammarWriter, rule: Rule, col: number) {
+    // Per-alternate spacing annotation: [spacing=mode]
+    if (rule.spacingMode !== undefined) {
+        writeInlineComments(
+            result,
+            rule.spacingAnnotationComments?.beforeAnnotation,
+            true,
+        );
+        result.write("[");
+        writeInlineComments(
+            result,
+            rule.spacingAnnotationComments?.afterBracket,
+        );
+        result.write("spacing");
+        writeInlineComments(result, rule.spacingAnnotationComments?.afterKey);
+        result.write("=");
+        writeInlineComments(
+            result,
+            rule.spacingAnnotationComments?.afterEquals,
+        );
+        result.write(rule.spacingMode);
+        writeInlineComments(result, rule.spacingAnnotationComments?.afterValue);
+        result.write("] ");
+    }
     if (rule.value === undefined) {
         writeExpression(result, rule.expressions, col);
         writeTrailingComments(result, rule.trailingComments, true);
