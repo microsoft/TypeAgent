@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text.Json;
 using autoShell.Handlers;
 using autoShell.Handlers.Settings;
@@ -23,6 +24,11 @@ internal class CommandDispatcher
     {
         _logger = logger;
     }
+
+    /// <summary>
+    /// Gets the names of all registered commands.
+    /// </summary>
+    public IEnumerable<string> RegisteredCommands => _handlers.Keys;
 
     /// <summary>
     /// Creates a <see cref="CommandDispatcher"/> with all production services and handlers registered.
@@ -83,6 +89,14 @@ internal class CommandDispatcher
             new SystemSettingsHandler(registry, process, logger),
             new SystemCommandHandler(process, debugger)
         );
+
+        var validator = new SchemaValidator(logger);
+        var schemaDir = Path.Combine(AppContext.BaseDirectory, SchemaValidator.DefaultSchemaRelativePath);
+        var schemaActions = validator.LoadActionNames(schemaDir);
+        if (schemaActions.Count > 0)
+        {
+            validator.ValidateWiring(schemaActions, dispatcher.RegisteredCommands);
+        }
 
         return dispatcher;
     }

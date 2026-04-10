@@ -45,6 +45,46 @@ const autoShellPath = new URL(
     import.meta.url,
 );
 
+// Load known action names from .pas.json schema files for runtime validation.
+// The compiled JS and .pas.json files both live in dist/.
+const knownActionNames = loadKnownActionNames();
+
+function loadKnownActionNames(): Set<string> {
+    const names = new Set<string>();
+    try {
+        const distDir = path.dirname(fileURLToPath(import.meta.url));
+        const schemaFiles = fs
+            .readdirSync(distDir)
+            .filter((f) => f.endsWith(".pas.json"));
+
+        for (const file of schemaFiles) {
+            try {
+                const content = JSON.parse(
+                    fs.readFileSync(path.join(distDir, file), "utf-8"),
+                );
+                if (content.types) {
+                    for (const typeDef of Object.values(content.types) as any[]) {
+                        const actionField =
+                            typeDef?.type?.fields?.actionName;
+                        const typeEnum = actionField?.type?.typeEnum;
+                        if (Array.isArray(typeEnum)) {
+                            for (const name of typeEnum) {
+                                names.add(name);
+                            }
+                        }
+                    }
+                }
+            } catch {
+                // Skip malformed schema files
+            }
+        }
+    } catch {
+        debug("Could not load .pas.json schema files for validation.");
+    }
+    debug(`Loaded ${names.size} known action names from schemas.`);
+    return names;
+}
+
 async function spawnAutomationProcess() {
     return new Promise<child_process.ChildProcess>((resolve, reject) => {
         const child = child_process.spawn(fileURLToPath(autoShellPath));
@@ -149,6 +189,14 @@ export async function runDesktopActions(
     // Log schema name for debugging duplicate action resolution
     if (schemaName) {
         debug(`Executing action '${actionName}' from schema '${schemaName}'`);
+    }
+
+    // Warn if an action name isn't in the known set (type system should prevent this,
+    // but guards against runtime mismatches or future schema drift)
+    if (!knownActionNames.has(actionName)) {
+        debugError(
+            `Unknown action '${actionName}' — not in known schema set. Forwarding to autoShell anyway.`,
+        );
     }
 
     // Preprocess actions that need TS-side work before sending to autoShell
