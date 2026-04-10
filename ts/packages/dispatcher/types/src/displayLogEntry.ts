@@ -76,6 +76,13 @@ export type InteractionResolvedEntry = {
     response: unknown;
 };
 
+export type InteractionCancelledEntry = {
+    type: "interaction-cancelled";
+    seq: number;
+    timestamp: number;
+    interactionId: string;
+};
+
 export type DisplayLogEntry =
     | SetDisplayEntry
     | AppendDisplayEntry
@@ -83,4 +90,5 @@ export type DisplayLogEntry =
     | NotifyEntry
     | UserRequestEntry
     | PendingInteractionEntry
-    | InteractionResolvedEntry;
+    | InteractionResolvedEntry
+    | InteractionCancelledEntry;
