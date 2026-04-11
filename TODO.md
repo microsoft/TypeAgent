@@ -256,7 +256,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/knowledgeProcessor/src/setOperations.ts` | 587 | Optimize. | Medium | Medium | Local | Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/setOperations.ts` | 606 | Optimize. | Medium | Medium | Local | Fix | No |
 | `ts/packages/knowledgeProcessor/src/storageProvider.ts` | 131 | implement this once conversation is cleaned up and message Index is also backed by storageProvider | High | Low | Cross-cutting | No Fix | Yes |
-| `ts/packages/knowledgeProcessor/src/temporal.ts` | 187 | cache the time range. | Low | High | Local | Fix | No |
 | `ts/packages/knowledgeProcessor/src/textIndex.ts` | 80 | rename to addUpdate | Low | High | Component | Fix | No |
 | `ts/packages/knowledgeProcessor/src/textIndex.ts` | 86 | rename to addUpdateMultiple | Low | High | Component | Fix | No |
 | `ts/packages/knowledgeProcessor/src/textIndex.ts` | 92 | rename to addUpdateSources | Low | High | Component | Fix | No |
