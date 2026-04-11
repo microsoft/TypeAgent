@@ -221,7 +221,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/dispatcher/dispatcher/src/utils/test/explanationTestData.ts` | 49 | Test data only support a single schema name for now. | Medium | Medium | Component | Fix | No |
 | `ts/packages/dispatcher/types/src/clientIO.ts` | 92 | turn these in to dispatcher events | Medium | Medium | Cross-cutting | Fix | Yes |
 | `ts/packages/dispatcher/types/src/clientIO.ts` | 121 | Formalize the API | High | Medium | Cross-cutting | Fix | Yes |
-| `ts/packages/knowPro/src/collections.ts` | 94 | make this 2 methods: addExact and addRelated | Low | High | Component | Fix | No |
 | `ts/packages/knowPro/src/conversationIndex.ts` | 269 | update: pass in TextLocation instead of messageOrdinal + chunkOrdinal | Medium | Medium | Component | Fix | No |
 | `ts/packages/knowPro/src/conversationIndex.ts` | 409 | Should rename this to TermToSemanticRefIndex | Low | High | Component | Fix | No |
 | `ts/packages/knowPro/src/index.ts` | 23 | mergeConcreteEntitiesEx avoids forcing the data to be lower case. | Medium | Medium | Component | Fix | Yes |
