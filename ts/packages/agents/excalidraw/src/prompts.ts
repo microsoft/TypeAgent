@@ -116,15 +116,16 @@ ELEMENT ID CONVENTION — CRITICAL:
 SIZING SHAPES:
 - Estimate ~10px per character width for labels
 - Add 48px horizontal padding, 32px vertical padding
-- Minimum shape size: 120 × 60 px
-- Example: "Hello World" (11 chars) → w = max(11*10+48, 120) = 158, h = 60
+- Minimum shape size: 140 × 70 px
+- Example: "Hello World" (11 chars) → w = max(11*10+48, 140) = 158, h = 70
+- Round all x, y, w, h values to multiples of 20
 
 LAYOUT RULES:
-- Top-down (TD): stack nodes vertically, 80px gap between rows
-- Left-to-right (LR): stack horizontally, 80px gap between columns
-- Within a group: arrange child nodes in a row (LR) or column (TD) with 40px gaps
+- Top-down (TD): stack nodes vertically, 100px gap between rows
+- Left-to-right (LR): stack horizontally, 100px gap between columns
+- Within a group: arrange child nodes in a row (LR) or column (TD) with 60px gaps
 - No overlaps between shapes at the same level
-- Group frame elements: use "frame" type, sized to contain all children + 40px padding on sides + 50px top padding (for label)
+- Group frame elements: use "frame" type, sized to contain all children + 60px padding on sides + 80px top padding (for label)
 - Group frames use the group's color, with style "dashed"
 - Position group frame BEFORE its children in the elements array
 

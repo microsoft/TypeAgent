@@ -164,6 +164,346 @@ function edgePoint(
 }
 
 // ---------------------------------------------------------------------------
+// normalizeLayout — pre-process MinimalDiagram for better layout quality
+// ---------------------------------------------------------------------------
+
+const GRID = 20;
+const GROUP_PAD_SIDE = 80;
+const GROUP_PAD_TOP = 100;
+const GROUP_PAD_BOTTOM = 80;
+const MAX_OVERLAP_ITERATIONS = 20;
+
+function snapToGrid(v: number, grid: number = GRID): number {
+    return Math.round(v / grid) * grid;
+}
+
+/**
+ * Pure function: takes a MinimalDiagram and returns a new MinimalDiagram with
+ * improved layout (minimum sizes, grid snapping, group padding, overlap
+ * resolution).  Arrow elements are passed through unchanged.
+ */
+export function normalizeLayout(minimal: MinimalDiagram): MinimalDiagram {
+    // Deep-clone so we don't mutate the original
+    const elements: MinimalElement[] = minimal.elements.map((el) => ({
+        ...el,
+    }));
+
+    // --- Step 0: Compute nesting depth for each element ----------------------
+    // depth(el) = how many group ancestors it has.
+    // Then for group frames: compute "child depth" = max depth of any descendant
+    // relative to the group itself. The size multiplier is 2^min(childDepth, 4).
+    // For each group frame, find the max depth among all its descendants
+    // relative to the frame itself (so direct children = depth 1, etc.)
+    function getMaxChildDepth(
+        groupId: string,
+        visited = new Set<string>(),
+    ): number {
+        if (visited.has(groupId)) return 0;
+        visited.add(groupId);
+        let max = 0;
+        for (const el of elements) {
+            if (el.group === groupId && el.type !== "arrow") {
+                const isChildGroup = el.id.startsWith("group-");
+                const childDepth = isChildGroup
+                    ? 1 + getMaxChildDepth(el.id, new Set(visited))
+                    : 1;
+                if (childDepth > max) max = childDepth;
+            }
+        }
+        return max;
+    }
+
+    // Pre-compute multiplier for each element
+    // Leaf nodes (not groups): multiplier = 1 (base size)
+    // Group frames: multiplier = 2^min(maxChildDepth, 4)
+    const BASE_W = 160;
+    const BASE_H = 80;
+    const MAX_DEPTH_EXP = 4;
+
+    // --- Step 1: Enforce minimum shape sizes based on nesting depth -----------
+    for (const el of elements) {
+        if (el.type === "arrow") continue;
+        const isGroup = el.type === "frame" || el.id.startsWith("group-");
+        const labelLen = el.label ? el.label.length : 0;
+        const labelW = labelLen * 10 + 48;
+
+        let minW: number;
+        let minH: number;
+
+        if (isGroup) {
+            const depth = Math.min(getMaxChildDepth(el.id), MAX_DEPTH_EXP);
+            const scale = Math.pow(2, depth); // 2, 4, 8, 16 for depths 1–4
+            minW = Math.max(scale * BASE_W, labelW + 80);
+            minH = Math.max(scale * BASE_H, 200);
+        } else {
+            minW = Math.max(BASE_W, labelW);
+            minH = BASE_H;
+        }
+
+        el.w = Math.max(el.w ?? 0, minW);
+        el.h = Math.max(el.h ?? 0, minH);
+    }
+
+    // --- Step 2: Snap to grid ------------------------------------------------
+    for (const el of elements) {
+        if (el.type === "arrow") continue;
+        el.x = snapToGrid(el.x);
+        el.y = snapToGrid(el.y);
+        el.w = snapToGrid(el.w!);
+        el.h = snapToGrid(el.h!);
+    }
+
+    // --- Step 3: Ensure group frames encompass their children ----------------
+    expandGroupFrames(elements);
+
+    // --- Step 4: Resolve shape-on-shape overlaps between siblings ------------
+    resolveOverlaps(elements);
+
+    // --- Step 5: Re-snap to grid after overlap resolution --------------------
+    for (const el of elements) {
+        if (el.type === "arrow") continue;
+        el.x = snapToGrid(el.x);
+        el.y = snapToGrid(el.y);
+        el.w = snapToGrid(el.w!);
+        el.h = snapToGrid(el.h!);
+    }
+
+    // --- Step 6: Re-expand group frames after children moved -----------------
+    expandGroupFrames(elements);
+
+    // --- Step 7: Final grid snap ---------------------------------------------
+    for (const el of elements) {
+        if (el.type === "arrow") continue;
+        el.x = snapToGrid(el.x);
+        el.y = snapToGrid(el.y);
+        el.w = snapToGrid(el.w!);
+        el.h = snapToGrid(el.h!);
+    }
+
+    return { elements };
+}
+
+/**
+ * For each group frame element, collect its direct children and:
+ *  1. Re-flow the children along the frame's dominant axis (LR if wider, TD if taller)
+ *     with MIN_SHAPE_GAP spacing between siblings.
+ *  2. If the re-flowed children don't fit, grow the frame by 50% and repeat (up to
+ *     MAX_EXPAND_ITERATIONS). After growing a frame, propagate the growth upward to
+ *     ancestor frames so the whole tree stays consistent.
+ *
+ * Frames are processed bottom-up (deepest nesting first) so inner expansions
+ * are fully resolved before outer frames are measured.
+ */
+const MAX_EXPAND_ITERATIONS = 8;
+const CHILD_MARGIN = 80; // minimum margin between sibling shapes
+
+function expandGroupFrames(elements: MinimalElement[]): void {
+    const byId = new Map<string, MinimalElement>(
+        elements.map((e) => [e.id, e]),
+    );
+
+    // Build parent map: element id → group frame id it belongs to
+    const parentOf = new Map<string, string>();
+    for (const el of elements) {
+        if (el.type === "arrow") continue;
+        if (el.group) parentOf.set(el.id, el.group);
+    }
+
+    // Compute depth of each group frame (deeper = more ancestors)
+    function frameDepth(id: string, visited = new Set<string>()): number {
+        if (visited.has(id)) return 0;
+        visited.add(id);
+        const parent = parentOf.get(id);
+        if (!parent) return 0;
+        return 1 + frameDepth(parent, visited);
+    }
+
+    // Collect all group frames and sort deepest-first so inner frames are
+    // processed before their ancestors
+    const frames = elements
+        .filter((el) => el.id.startsWith("group-"))
+        .sort((a, b) => frameDepth(b.id) - frameDepth(a.id));
+
+    for (const frame of frames) {
+        // Direct non-arrow children of this frame
+        const children = elements.filter(
+            (el) => el.group === frame.id && el.type !== "arrow",
+        );
+        if (children.length === 0) continue;
+
+        // Determine dominant layout axis from frame aspect ratio
+        const fw = frame.w ?? 320;
+        const fh = frame.h ?? 200;
+        const layoutLR = fw >= fh; // wider → left-right, taller → top-down
+
+        // Re-flow children along the dominant axis, starting inside the padding
+        let cursorX = frame.x + GROUP_PAD_SIDE;
+        let cursorY = frame.y + GROUP_PAD_TOP;
+        let rowMaxH = 0; // for LR wrapping (unused — single row/col for now)
+        let colMaxW = 0;
+
+        for (const child of children) {
+            const cw = child.w ?? 160;
+            const ch = child.h ?? 80;
+            child.x = cursorX;
+            child.y = cursorY;
+            if (layoutLR) {
+                cursorX += cw + CHILD_MARGIN;
+                rowMaxH = Math.max(rowMaxH, ch);
+            } else {
+                cursorY += ch + CHILD_MARGIN;
+                colMaxW = Math.max(colMaxW, cw);
+            }
+        }
+
+        // Measure required frame size from re-flowed children
+        for (let iter = 0; iter < MAX_EXPAND_ITERATIONS; iter++) {
+            let minX = Infinity,
+                minY = Infinity,
+                maxX = -Infinity,
+                maxY = -Infinity;
+            for (const child of children) {
+                minX = Math.min(minX, child.x);
+                minY = Math.min(minY, child.y);
+                maxX = Math.max(maxX, child.x + (child.w ?? 0));
+                maxY = Math.max(maxY, child.y + (child.h ?? 0));
+            }
+
+            const neededW = maxX - frame.x + GROUP_PAD_SIDE;
+            const neededH = maxY - frame.y + GROUP_PAD_BOTTOM;
+            const fits = neededW <= (frame.w ?? 0) && neededH <= (frame.h ?? 0);
+
+            if (fits) break;
+
+            // Grow frame by 50% in the dimension(s) that don't fit
+            if (neededW > (frame.w ?? 0)) frame.w = Math.ceil(neededW * 1.5);
+            if (neededH > (frame.h ?? 0)) frame.h = Math.ceil(neededH * 1.5);
+
+            // Snap and propagate size increase up to ancestor frames
+            frame.w = snapToGrid(frame.w!);
+            frame.h = snapToGrid(frame.h!);
+            propagateGrowthUp(frame, byId, parentOf);
+        }
+
+        // Final snap
+        frame.x = snapToGrid(frame.x);
+        frame.y = snapToGrid(frame.y);
+        frame.w = snapToGrid(frame.w!);
+        frame.h = snapToGrid(frame.h!);
+    }
+}
+
+/**
+ * When a frame grows, walk up its ancestor chain and ensure each ancestor
+ * is large enough to contain the grown child (expanding by 50% if needed).
+ */
+function propagateGrowthUp(
+    grownFrame: MinimalElement,
+    byId: Map<string, MinimalElement>,
+    parentOf: Map<string, string>,
+): void {
+    let childId = grownFrame.id;
+    for (let depth = 0; depth < 8; depth++) {
+        const parentId = parentOf.get(childId);
+        if (!parentId) break;
+        const parent = byId.get(parentId);
+        if (!parent) break;
+
+        const childRight = grownFrame.x + (grownFrame.w ?? 0) + GROUP_PAD_SIDE;
+        const childBottom =
+            grownFrame.y + (grownFrame.h ?? 0) + GROUP_PAD_BOTTOM;
+        const parentRight = parent.x + (parent.w ?? 0);
+        const parentBottom = parent.y + (parent.h ?? 0);
+
+        let grew = false;
+        if (childRight > parentRight) {
+            parent.w = snapToGrid(Math.ceil((childRight - parent.x) * 1.5));
+            grew = true;
+        }
+        if (childBottom > parentBottom) {
+            parent.h = snapToGrid(Math.ceil((childBottom - parent.y) * 1.5));
+            grew = true;
+        }
+        if (!grew) break;
+
+        // Use the parent as the "grown frame" for the next level up
+        grownFrame = parent;
+        childId = parentId;
+    }
+}
+
+/**
+ * AABB overlap check with a minimum gap.
+ */
+function overlaps(a: MinimalElement, b: MinimalElement, gap: number): boolean {
+    const ax2 = a.x + (a.w ?? 0) + gap;
+    const ay2 = a.y + (a.h ?? 0) + gap;
+    const bx2 = b.x + (b.w ?? 0);
+    const by2 = b.y + (b.h ?? 0);
+
+    return a.x < bx2 + gap && ax2 > b.x && a.y < by2 + gap && ay2 > b.y;
+}
+
+/**
+ * Resolve overlaps between sibling shapes.  Push direction follows the
+ * parent frame's dominant axis: LR if the frame is wider than tall, TD otherwise.
+ */
+function resolveOverlaps(elements: MinimalElement[]): void {
+    const byId = new Map<string, MinimalElement>(
+        elements.map((e) => [e.id, e]),
+    );
+
+    // Group non-arrow, non-frame shapes by parent group key
+    const siblings = new Map<string, MinimalElement[]>();
+    for (const el of elements) {
+        if (el.type === "arrow") continue;
+        if (el.id.startsWith("group-")) continue;
+        const key = el.group ?? "__root__";
+        if (!siblings.has(key)) siblings.set(key, []);
+        siblings.get(key)!.push(el);
+    }
+
+    for (const [groupKey, shapes] of siblings) {
+        // Determine dominant axis from parent frame aspect ratio
+        const parentFrame =
+            groupKey !== "__root__" ? byId.get(groupKey) : undefined;
+        const fw = parentFrame?.w ?? 0;
+        const fh = parentFrame?.h ?? 0;
+        const preferLR = fw > fh;
+
+        let iterations = 0;
+        let hasOverlap = true;
+        while (hasOverlap && iterations < MAX_OVERLAP_ITERATIONS) {
+            hasOverlap = false;
+            iterations++;
+            for (let i = 0; i < shapes.length; i++) {
+                for (let j = i + 1; j < shapes.length; j++) {
+                    if (!overlaps(shapes[i], shapes[j], CHILD_MARGIN)) continue;
+                    hasOverlap = true;
+
+                    const aBottom =
+                        shapes[i].y + (shapes[i].h ?? 0) + CHILD_MARGIN;
+                    const aRight =
+                        shapes[i].x + (shapes[i].w ?? 0) + CHILD_MARGIN;
+                    const vertPush = aBottom - shapes[j].y;
+                    const horizPush = aRight - shapes[j].x;
+
+                    if (preferLR && horizPush > 0) {
+                        shapes[j].x += horizPush;
+                    } else if (!preferLR && vertPush > 0) {
+                        shapes[j].y += vertPush;
+                    } else if (vertPush <= horizPush && vertPush > 0) {
+                        shapes[j].y += vertPush;
+                    } else if (horizPush > 0) {
+                        shapes[j].x += horizPush;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // expandToExcalidraw — convert MinimalDiagram → full Excalidraw document
 // ---------------------------------------------------------------------------
 
@@ -175,6 +515,9 @@ function edgePoint(
 export function expandToExcalidraw(
     minimal: MinimalDiagram,
 ): ExcalidrawDocument {
+    // Normalize layout before expanding
+    minimal = normalizeLayout(minimal);
+
     const elements: ExcalidrawElement[] = [];
     const elementMap = new Map<string, MinimalElement>();
 
@@ -269,13 +612,22 @@ export function expandToExcalidraw(
 
         // Generate paired text label element
         if (el.label) {
+            // For group frames: place a small label strip at top-left so the
+            // title sits in the top margin and doesn't appear to float mid-frame.
+            // For regular shapes: text fills the container and verticalAlign=middle
+            // centres it properly in Excalidraw's rendering model.
+            const textX = isGroupFrame ? el.x + 12 : el.x;
+            const textY = isGroupFrame ? el.y + 8 : el.y;
+            const textW = isGroupFrame ? Math.min(w - 24, 400) : w;
+            const textH = isGroupFrame ? 32 : h;
+
             const textElement: ExcalidrawElement = {
                 id: textId,
                 type: "text",
-                x: el.x,
-                y: el.y,
-                width: w,
-                height: h,
+                x: textX,
+                y: textY,
+                width: textW,
+                height: textH,
                 angle: 0,
                 strokeColor: "#1e1e1e",
                 backgroundColor: "transparent",
@@ -297,7 +649,7 @@ export function expandToExcalidraw(
                 locked: false,
                 roundness: null,
                 text: el.label,
-                fontSize: isGroupFrame ? 16 : 20,
+                fontSize: isGroupFrame ? 18 : 20,
                 fontFamily: 1,
                 textAlign: isGroupFrame ? "left" : "center",
                 verticalAlign: isGroupFrame ? "top" : "middle",
@@ -652,6 +1004,16 @@ async function handleCreateDiagram(
             "Step 1/3: Analyzing content and extracting diagram structure...",
         );
 
+        // Truncate very large source documents to avoid consuming too many input
+        // tokens and leaving too few for the DiagramPlan JSON output (model max: 4096).
+        // ~6000 chars ≈ ~1500 tokens, leaving ~2500 tokens for the plan JSON.
+        const MAX_SOURCE_CHARS = 6000;
+        const truncatedContent =
+            resolvedContent.length > MAX_SOURCE_CHARS
+                ? resolvedContent.substring(0, MAX_SOURCE_CHARS) +
+                  "\n\n[... content truncated for brevity — extract the main architectural components above ...]"
+                : resolvedContent;
+
         const planModel = openai.createJsonChatModel();
         const planResponse = await planModel.complete([
             {
@@ -660,7 +1022,7 @@ async function handleCreateDiagram(
             },
             {
                 role: "user",
-                content: `Analyze the following ${sourceType} content and produce a complete DiagramPlan JSON:\n\n${resolvedContent}`,
+                content: `Analyze the following ${sourceType} content and produce a complete DiagramPlan JSON:\n\n${truncatedContent}`,
             },
         ]);
 
@@ -672,10 +1034,11 @@ async function handleCreateDiagram(
 
         let plan: DiagramPlan;
         try {
-            plan = JSON.parse(stripMarkdownFences(planResponse.data));
-        } catch {
+            plan = parseJsonWithRecovery(planResponse.data) as DiagramPlan;
+        } catch (e) {
+            const preview = (planResponse.data ?? "").substring(0, 300);
             return createActionResultFromError(
-                "Failed to parse DiagramPlan from AI response. The model returned invalid JSON.",
+                `Failed to parse DiagramPlan from AI response. Parse error: ${e}. Response preview: ${preview}`,
             );
         }
 
@@ -1155,4 +1518,5 @@ export {
     recoverTruncatedJson as _recoverTruncatedJson,
     ELEMENT_DEFAULTS as _ELEMENT_DEFAULTS,
     expandToExcalidraw as _expandToExcalidraw,
+    normalizeLayout as _normalizeLayout,
 };
