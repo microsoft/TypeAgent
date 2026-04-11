@@ -7,6 +7,8 @@ import { queue, QueueObject } from "async";
 import { parseTranscript } from "./transcript.js";
 import registerDebug from "debug";
 import { error, Result, success } from "typechat";
+import fs from "node:fs";
+import path from "node:path";
 import {
     createMemorySettings,
     IndexFileSettings,
@@ -314,10 +316,14 @@ export class ConversationMemory
         try {
             const fileSaveSettings = this.settings.fileSaveSettings;
             if (fileSaveSettings) {
-                // TODO: Optionally, back up previous file and do a safe read write
-                await this.writeToFile(
+                await safeWriteConversationFile(
                     fileSaveSettings.dirPath,
                     fileSaveSettings.baseFileName,
+                    () =>
+                        this.writeToFile(
+                            fileSaveSettings.dirPath,
+                            fileSaveSettings.baseFileName,
+                        ),
                 );
             }
             return success(true);
@@ -464,6 +470,54 @@ function assignMessageRecipients(
                 }
             }
             msg.metadata.recipients = recipients;
+        }
+    }
+}
+
+/**
+ * Write conversation files safely: back up any existing files, run the
+ * write, then clean up the backups on success or restore them on failure.
+ */
+async function safeWriteConversationFile(
+    dirPath: string,
+    baseFileName: string,
+    writeFn: () => Promise<void>,
+): Promise<void> {
+    const suffixes = ["_data.json", "_embeddings.bin"];
+    const backups: { src: string; bak: string }[] = [];
+
+    // Rename existing files to .bak
+    for (const suffix of suffixes) {
+        const src = path.join(dirPath, baseFileName + suffix);
+        const bak = src + ".bak";
+        try {
+            await fs.promises.rename(src, bak);
+            backups.push({ src, bak });
+        } catch {
+            // File doesn't exist yet — no backup needed for this suffix.
+        }
+    }
+
+    try {
+        await writeFn();
+    } catch (err) {
+        // Restore backups if write failed.
+        for (const { src, bak } of backups) {
+            try {
+                await fs.promises.rename(bak, src);
+            } catch {
+                // Ignore restore errors; best-effort.
+            }
+        }
+        throw err;
+    }
+
+    // Remove backups on success.
+    for (const { bak } of backups) {
+        try {
+            await fs.promises.unlink(bak);
+        } catch {
+            // Ignore cleanup errors.
         }
     }
 }
