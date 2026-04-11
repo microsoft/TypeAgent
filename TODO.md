@@ -179,7 +179,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/cli/src/enhancedConsole.ts` | 655 | Not implemented | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/cli/src/enhancedConsole.ts` | 784 | Ignored | Low | High | Local | No Fix | Yes |
 | `ts/packages/defaultAgentProvider/test/construction.spec.ts` | 74 | once MatchPart allow matches ignoring diacritical marks | Medium | Medium | Component | Fix | No |
-| `ts/packages/defaultAgentProvider/test/construction.spec.ts` | 86 | Validating the lower case action | Low | High | Local | Fix | No |
 | `ts/packages/defaultAgentProvider/test/construction.spec.ts` | 88 | needs fix these | Low | Medium | Local | Fix | Yes |
 | `ts/packages/defaultAgentProvider/test/constructionCacheTestCommon.ts` | 240 | needs fix these | Low | Medium | Local | Fix | Yes |
 | `ts/packages/defaultAgentProvider/test/grammar.spec.ts` | 93 | once MatchPart allow matches ignoring diacritical marks | Medium | Medium | Component | Fix | No |
