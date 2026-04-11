@@ -168,16 +168,26 @@ export type CompiledValueNode =
 /**
  * Grammar Types - in memory
  */
+export type StringPartRegExpEntry = {
+    /** RegExp with global flag ("iug") for wildcard scanning */
+    global: RegExp;
+    /** RegExp with sticky flag ("iuy") for anchored matching */
+    sticky: RegExp;
+};
+
 export type StringPart = {
     type: "string";
     value: string[];
     optional?: undefined; // TODO: support optional string parts
     variable?: undefined;
 
-    /* TODO: cache the regexp?
-    regexp?: RegExp;
-    regexpWithPendingWildcards?: RegExp;
-    */
+    /**
+     * Cache of compiled RegExp objects, keyed by
+     * `"${spacingMode ?? 'auto'}:${leadingIsNone}"`.
+     * Populated lazily by the matcher to avoid recompiling the same
+     * regex pattern on every match attempt.
+     */
+    regexpCache?: Map<string, StringPartRegExpEntry>;
 };
 
 export type VarStringPart = {
