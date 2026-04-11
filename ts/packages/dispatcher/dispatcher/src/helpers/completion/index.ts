@@ -6,5 +6,16 @@
 // pulling in Node.js-only modules from the full barrel export.
 
 export { needsSeparatorInAutoMode } from "action-grammar/completion";
-export * from "./searchMenu.js";
-export * from "./session.js";
+export {
+    BaseTSTData,
+    TST,
+    SearchMenuPosition,
+    SearchMenuItem,
+    SearchMenuBase,
+    normalizeMatchText,
+} from "./searchMenu.js";
+export {
+    ISearchMenu,
+    ICompletionDispatcher,
+    PartialCompletionSession,
+} from "./session.js";

@@ -12,8 +12,8 @@ import {
 import { SearchMenuItem, SearchMenuPosition } from "./searchMenu.js";
 import registerDebug from "debug";
 
-const debug = registerDebug("typeagent:shell:partial");
-const debugError = registerDebug("typeagent:shell:partial:error");
+const debug = registerDebug("typeagent:completion:session");
+const debugError = registerDebug("typeagent:completion:session:error");
 
 export interface ISearchMenu {
     setChoices(choices: SearchMenuItem[]): void;

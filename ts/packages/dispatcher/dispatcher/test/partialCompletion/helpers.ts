@@ -8,9 +8,9 @@ import {
     PartialCompletionSession,
     SearchMenuBase,
     SearchMenuPosition,
-} from "agent-dispatcher/helpers/completion";
+} from "../../src/helpers/completion/index.js";
 import { CompletionGroup, SeparatorMode } from "@typeagent/agent-sdk";
-import { CommandCompletionResult } from "agent-dispatcher";
+import { CommandCompletionResult } from "@typeagent/dispatcher-types";
 
 export { PartialCompletionSession };
 export type { ICompletionDispatcher, ISearchMenu };

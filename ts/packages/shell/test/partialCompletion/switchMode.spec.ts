@@ -9,7 +9,7 @@ import {
     PartialCompletionSession,
 } from "./helpers.js";
 import type { SearchMenuPosition } from "./helpers.js";
-import { SearchMenuBase } from "../../src/renderer/src/searchMenuBase.js";
+import { SearchMenuBase } from "agent-dispatcher/helpers/completion";
 import type {
     SearchMenuItem,
     SearchMenuUIUpdateData,

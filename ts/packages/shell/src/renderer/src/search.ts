@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { isElectron } from "./main";
-import { SearchMenuBase } from "./searchMenuBase";
+import { SearchMenuBase } from "agent-dispatcher/helpers/completion";
 import { CompletionToggle } from "./searchMenuUI/completionToggle";
 import { InlineSearchMenuUI } from "./searchMenuUI/inlineSearchMenuUI";
 import { LocalSearchMenuUI } from "./searchMenuUI/localSearchMenuUI";

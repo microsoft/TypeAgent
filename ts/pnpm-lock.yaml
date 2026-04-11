@@ -3558,6 +3558,9 @@ importers:
         specifier: ^4.1.13
         version: 4.1.13
     devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12

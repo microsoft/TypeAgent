@@ -320,7 +320,7 @@ export type SearchMenuItem = {
     emojiChar?: string | undefined;
     sortIndex?: number;
     selectedText: string;
-    needQuotes?: boolean | undefined; // default is true, and will add quote to the selectedText if it has spaces.
+    needQuotes?: boolean | undefined; // When undefined, treated as true by consumers (add quotes if selectedText has spaces).
 };
 
 // ── Search menu base ──────────────────────────────────────────────────────────

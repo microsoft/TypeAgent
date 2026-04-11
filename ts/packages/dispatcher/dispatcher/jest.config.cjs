@@ -1,4 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-module.exports = require("../../../jest.config.js");
+const base = require("../../../jest.config.js");
+module.exports = {
+    ...base,
+    moduleNameMapper: {
+        ...base.moduleNameMapper,
+        "^../../src/(.*)$": "<rootDir>/dist/$1",
+    },
+};

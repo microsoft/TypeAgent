@@ -9,7 +9,7 @@ import {
     ICompletionDispatcher,
     ISearchMenu,
     PartialCompletionSession,
-} from "./partialCompletionSession";
+} from "agent-dispatcher/helpers/completion";
 
 import registerDebug from "debug";
 import { ExpandableTextArea } from "./chat/expandableTextArea";

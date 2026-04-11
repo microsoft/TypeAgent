@@ -32,7 +32,11 @@ export type ClientActions =
 
 // end duplicate type section
 
-export type { SearchMenuPosition, SearchMenuItem } from "agent-dispatcher/helpers/completion";
+import type {
+    SearchMenuPosition,
+    SearchMenuItem,
+} from "agent-dispatcher/helpers/completion";
+export type { SearchMenuPosition, SearchMenuItem };
 
 export type SearchMenuUIUpdateData = {
     position?: SearchMenuPosition;
