@@ -990,11 +990,7 @@ function matchStringPart(
         `Checking string expr "${part.value.join(" ")}" with${state.pendingWildcard ? "" : "out"} wildcard`,
     );
     const leadingIsNone = leadingSpacingMode(state) === "none";
-    const entry = getStringPartRegExp(
-        part,
-        state.spacingMode,
-        leadingIsNone,
-    );
+    const entry = getStringPartRegExp(part, state.spacingMode, leadingIsNone);
     return state.pendingWildcard !== undefined
         ? matchStringPartWithWildcard(
               entry.global,
@@ -1003,12 +999,7 @@ function matchStringPart(
               state,
               pending,
           )
-        : matchStringPartWithoutWildcard(
-              entry.sticky,
-              request,
-              part,
-              state,
-          );
+        : matchStringPartWithoutWildcard(entry.sticky, request, part, state);
 }
 
 const matchNumberPartWithWildcardRegExp =

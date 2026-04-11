@@ -25,10 +25,7 @@ import {
 const debugCompletion = registerDebug("typeagent:grammar:completion");
 
 // Pre-compiled regex for stripping leading separator characters.
-const leadingSeparatorRegExp = new RegExp(
-    `^[${separatorRegExpStr}]+`,
-    "u",
-);
+const leadingSeparatorRegExp = new RegExp(`^[${separatorRegExpStr}]+`, "u");
 
 // True when the substring text[from..to) contains only separator
 // characters (whitespace / punctuation).  Used to decide whether
