@@ -401,27 +401,30 @@ function isChildOfGroup(
     const group = plan.groups.find((g) => g.id === planGroupId);
     if (!group) return false;
 
+    const childNodeIds: string[] = group.childNodeIds ?? [];
+    const childGroupIds: string[] = group.childGroupIds ?? [];
+
     // Child node elements have id "shape-<planNodeId>"
     if (childElId.startsWith("shape-")) {
         const planNodeId = childElId.substring("shape-".length);
-        if (group.childNodeIds.includes(planNodeId)) return true;
+        if (childNodeIds.includes(planNodeId)) return true;
     }
 
     // Child group elements have id "group-<planGroupId>"
     if (childElId.startsWith("group-")) {
         const childPlanGroupId = childElId.substring("group-".length);
-        if (group.childGroupIds.includes(childPlanGroupId)) return true;
+        if (childGroupIds.includes(childPlanGroupId)) return true;
     }
 
     // Also check text labels of children (grouplabel-, text-)
     if (childElId.startsWith("text-")) {
         const planNodeId = childElId.substring("text-".length);
-        if (group.childNodeIds.includes(planNodeId)) return true;
+        if (childNodeIds.includes(planNodeId)) return true;
     }
     if (childElId.startsWith("grouplabel-")) {
         const childPlanGroupId = childElId.substring("grouplabel-".length);
         if (
-            group.childGroupIds.includes(childPlanGroupId) ||
+            childGroupIds.includes(childPlanGroupId) ||
             childPlanGroupId === planGroupId
         )
             return true;

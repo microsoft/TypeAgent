@@ -378,6 +378,11 @@ async function handleCreateDiagram(
         if (!plan.groups) plan.groups = [];
         if (!plan.layoutDirection) plan.layoutDirection = "TD";
         if (!plan.title) plan.title = diagramTitle ?? "Diagram";
+        // Normalize group fields — LLM sometimes omits arrays
+        for (const g of plan.groups) {
+            if (!g.childNodeIds) g.childNodeIds = [];
+            if (!g.childGroupIds) g.childGroupIds = [];
+        }
 
         // ---------------------------------------------------------------
         // Phase 2: Generate Excalidraw JSON from DiagramPlan
