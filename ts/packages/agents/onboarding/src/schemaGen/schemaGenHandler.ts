@@ -25,6 +25,35 @@ import { getSchemaGenModel } from "../lib/llm.js";
 import { ApiSurface } from "../discovery/discoveryHandler.js";
 import { PhraseSet } from "../phraseGen/phraseGenHandler.js";
 
+// Shared schema authoring guidelines injected into every schema gen/refine prompt.
+const SCHEMA_GUIDELINES = `
+COMMENT STRUCTURE RULES:
+1. Action-level block (above the action type declaration): use only for a short "what it does" description and example user/agent phrase pairs. No rules or constraints here.
+2. Property-level comments (inside the parameters object, above each property declaration): ALL guidance lives here, co-located with the property it constrains. Do NOT put constraints at the action level.
+3. No inline end-of-line comments on property declarations. All commentary goes in the line(s) above the property.
+
+PROPERTY COMMENT ORDERING (top = least important, bottom = most important — the LLM reads top-to-bottom, so put the critical constraint last, immediately before the property):
+// General description of what this parameter is.
+// Supplementary guidance / common aliases / optional tips.
+// NOTE: or IMPORTANT: The hard constraint the model must not violate.
+propertyName: type;
+
+CRITICAL CONSTRAINT FORMAT — embed a concrete WRONG/RIGHT example for any hard constraint; the WRONG case should be the exact failure mode you have observed:
+// The data range in A1 notation.
+// NOTE: Must be a literal cell range — do NOT use named ranges or structured references.
+//   WRONG: "SalesData[ActualSales]"  ← structured table reference, will fail
+//   WRONG: "ActualSales"             ← column name, will fail
+//   RIGHT: "C1:C7"                  ← literal A1 range
+dataRange: string;
+
+BEST PRACTICES:
+- Enum-like properties: always define the type as an explicit union of string literals instead of \`string\`. The comment above the property should name the underlying API enum it maps to and explain the default value and why.
+  Example:
+  // Label position relative to the data point. Maps to Office.js ChartDataLabelPosition enum.
+  // Default is "BestFit" — Office.js automatically chooses the best placement.
+  position?: "Top" | "Bottom" | "Center" | "InsideEnd" | "InsideBase" | "OutsideEnd" | "Left" | "Right" | "BestFit" | "Callout" | "None";
+`;
+
 export async function executeSchemaGenAction(
     action: TypeAgentAction<SchemaGenActions>,
     _context: ActionContext<unknown>,
@@ -92,13 +121,8 @@ async function handleRefineSchema(
             role: "system" as const,
             content:
                 "You are a TypeScript expert. Modify the given TypeAgent action schema according to the instructions. " +
-                "Preserve all copyright headers and existing structure. " +
-                "IMPORTANT: Use single-line `// comment` syntax for ALL comments. Do NOT use multi-line `/* */` or JSDoc `/** */` comments — the TypeAgent schema parser does not support them. " +
-                "Follow these best practices:\n" +
-                "- Enum-like properties: always define the type as an explicit union of string literals instead of `string`. " +
-                "The inline comment should name the underlying API enum it maps to and explain the default value and why. " +
-                "Example: `position?: \"Top\" | \"Bottom\" | \"Center\" | \"InsideEnd\" | \"InsideBase\" | \"OutsideEnd\" | \"Left\" | \"Right\" | \"BestFit\" | \"Callout\" | \"None\"; " +
-                "// Label position (Office.js ChartDataLabelPosition enum). Default is \"BestFit\" (automatic placement chosen by Office.js)`\n" +
+                "Preserve all copyright headers and existing structure.\n" +
+                SCHEMA_GUIDELINES +
                 "Respond in JSON format. Return a JSON object with a single `schema` key containing the updated TypeScript file content as a string.",
         },
         {
@@ -171,20 +195,14 @@ function buildSchemaPrompt(
             content:
                 "You are a TypeScript expert generating TypeAgent action schemas. " +
                 "TypeAgent action schemas are TypeScript union types where each member has an `actionName` discriminant and a `parameters` object. " +
-                "IMPORTANT: Use single-line `// comment` syntax for ALL comments. Do NOT use multi-line `/* */` or JSDoc `/** */` comments — the TypeAgent schema parser does not support them. " +
-                "Add `// comment` lines above each parameter explaining its purpose and valid values. " +
-                "Follow these conventions:\n" +
+                "Follow these file-level conventions:\n" +
                 "- Start the file with:\n  // Copyright (c) Microsoft Corporation.\n  // Licensed under the MIT License.\n" +
                 "- Export a top-level union type named `<IntegrationPascalCase>Actions`\n" +
                 "- Each action type is named `<ActionPascalCase>Action`\n" +
                 "- Use `actionName: \"camelCaseName\"` as a string literal type\n" +
                 "- Parameters use camelCase names\n" +
                 "- Optional parameters use `?: type` syntax\n" +
-                "Follow these best practices:\n" +
-                "- Enum-like properties: always define the type as an explicit union of string literals instead of `string`. " +
-                "The inline comment should name the underlying API enum it maps to and explain the default value and why. " +
-                "Example: `position?: \"Top\" | \"Bottom\" | \"Center\" | \"InsideEnd\" | \"InsideBase\" | \"OutsideEnd\" | \"Left\" | \"Right\" | \"BestFit\" | \"Callout\" | \"None\"; " +
-                "// Label position (Office.js ChartDataLabelPosition enum). Default is \"BestFit\" (automatic placement chosen by Office.js)`\n" +
+                SCHEMA_GUIDELINES +
                 "Respond in JSON format. Return a JSON object with a single `schema` key containing the TypeScript file content as a string.",
         },
         {
