@@ -20,9 +20,11 @@
     "asc": "asc -i ./src/excalidrawActionSchema.ts -o ./dist/excalidrawSchema.pas.json -t ExcalidrawAction",
     "build": "concurrently npm:tsc npm:asc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js --config jest.config.cjs",
+    "test": "pnpm run jest-esm --testPathPattern=\".*[.]spec[.]js\"",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
-    "tsc": "tsc -b"
+    "tsc": "tsc -b src test"
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
@@ -32,7 +34,9 @@
   },
   "devDependencies": {
     "@typeagent/action-schema-compiler": "workspace:*",
+    "@types/jest": "^29.5.7",
     "concurrently": "^9.1.2",
+    "jest": "^29.7.0",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"
