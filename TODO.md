@@ -215,7 +215,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/dispatcher/dispatcher/src/search/internet.ts` | 344 | other annotation types | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/search/internet.ts` | 373 | handle multi-modal content | High | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/search/search.ts` | 125 | how about entities? | Medium | Medium | Component | Fix | Yes |
-| `ts/packages/dispatcher/dispatcher/src/translation/actionSchemaFileCache.ts` | 66 | validate the json | Low | High | Local | Fix | No |
 | `ts/packages/dispatcher/dispatcher/src/translation/actionTemplate.ts` | 79 | smarter about type unions. | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/translation/actionTemplate.ts` | 82 | need to handle circular references (or error on circular references) | Medium | High | Component | Fix | No |
 | `ts/packages/dispatcher/dispatcher/src/translation/entityResolution.ts` | 139 | Should we use the index here? Probably need the translation to validate the index to match the name. | Medium | Medium | Component | Fix | Yes |
