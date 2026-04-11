@@ -247,8 +247,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/knowPro/src/query.ts` | 465 | Move non-index based code to test | Medium | Medium | Component | Fix | No |
 | `ts/packages/knowPro/src/searchLang.ts` | 907 | move hardcoded to a user configurable table | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/knowPro/src/serialization.ts` | 225 | Remove this temporary backward compat. All future files should have proper headers | Low | High | Local | Fix | No |
-| `ts/packages/knowProTest/src/searchTest.ts` | 46 | convert this to use runBatch from common.ts | Low | High | Local | Fix | No |
-| `ts/packages/knowledgeProcessor/src/conversation/actions.ts` | 223 | parallelize | Medium | High | Local | Fix | No |
 | `ts/packages/knowledgeProcessor/src/conversation/answerContext.ts` | 101 | split entities, topics, actions | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/conversation/conversation.ts` | 407 | Migrate to file system storage provider | High | Medium | Cross-cutting | Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/conversation/conversation.ts` | 411 | what about topics at other levels? | Medium | Low | Component | No Fix | Yes |
