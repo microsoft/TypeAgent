@@ -34,6 +34,7 @@ export async function chunkifyTypeScriptFiles(
     for (const fileName of fileNames) {
         // console_log(fileName);
         const sourceFile: ts.SourceFile = await tsCode.loadSourceFile(fileName);
+        const lineStarts = sourceFile.getLineStarts(); // computed once per file
 
         const baseName = path.basename(fileName);
         const extName = path.extname(fileName);
@@ -86,6 +87,7 @@ export async function chunkifyTypeScriptFiles(
                     const codeName = tsCode.getStatementName(childNode) ?? "";
                     const blobs = makeBlobs(
                         sourceFile,
+                        lineStarts,
                         childNode.getFullStart(),
                         childNode.getEnd(),
                     );
@@ -191,11 +193,11 @@ function signature(chunk: Chunk): string {
 
 function makeBlobs(
     sourceFile: ts.SourceFile,
+    lineStarts: readonly number[],
     startPos: number,
     endPos: number,
 ): Blob[] {
     const text = sourceFile.text;
-    const lineStarts = sourceFile.getLineStarts(); // TODO: Move to caller?
     let startLoc = sourceFile.getLineAndCharacterOfPosition(startPos);
     const endLoc = sourceFile.getLineAndCharacterOfPosition(endPos);
     if (startLoc.character) {

@@ -141,15 +141,11 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 238 | tune | Medium | Medium | Local | Fix | Yes |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 268 | tune | Medium | Medium | Local | Fix | Yes |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 287 | Prompt engineering | High | Medium | Local | Fix | Yes |
-| `ts/packages/agents/spelunker/src/searchCode.ts` | 358 | Break into multiple functions. | Low | High | Local | Fix | No |
-| `ts/packages/agents/spelunker/src/searchCode.ts` | 381 | Factor into simpler functions | Low | High | Local | Fix | No |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 409 | Make this insert part of the transaction for this file | Medium | Medium | Local | Fix | No |
-| `ts/packages/agents/spelunker/src/searchCode.ts` | 438 | Make this into its own function. | Low | High | Local | Fix | No |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 439 | Numbers may look weird when long files are split by pythonChunker. | Medium | Medium | Local | Fix | Yes |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 458 | Use appendDisplay (requires passing actionContext) | Low | Medium | Local | Fix | No |
 | `ts/packages/agents/spelunker/src/spelunkerActionHandler.ts` | 89 | What other standard functions could be handy here? | Medium | Low | Component | No Fix | Yes |
 | `ts/packages/agents/spelunker/src/summarizing.ts` | 42 | Prompt engineering | High | Medium | Local | Fix | Yes |
-| `ts/packages/agents/spelunker/src/typescriptChunker.ts` | 198 | Move to caller? | Low | High | Local | Fix | No |
 | `ts/packages/agents/video/src/videoActionHandler.ts` | 54 | dynamic duration | Medium | Medium | Local | Fix | Yes |
 | `ts/packages/agents/weather/src/weatherActionHandler.ts` | 227 | Add more sophisticated validation: | Medium | High | Local | Fix | No |
 | `ts/packages/aiclient/src/models.ts` | 176 | add support for videos | High | Medium | Component | Fix | Yes |
