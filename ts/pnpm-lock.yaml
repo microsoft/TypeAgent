@@ -1802,6 +1802,9 @@ importers:
         specifier: ^8.17.1
         version: 8.18.2
     devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
@@ -1820,6 +1823,9 @@ importers:
       '@types/find-config':
         specifier: 1.0.4
         version: 1.0.4
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
       '@types/ws':
         specifier: ^8.5.10
         version: 8.18.1
@@ -1832,6 +1838,9 @@ importers:
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
