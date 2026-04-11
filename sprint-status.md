@@ -4,7 +4,7 @@
 **Worktree:** `TypeAgent-excalidraw`
 **Started:** 2026-04-10
 
-## Current Phase: BUG FIX & HARDENING COMPLETE
+## Current Phase: TRUNCATION FIX COMPLETE
 - [x] Worktree created and isolated from main repo
 - [x] Deep exploration of current implementation complete
 - [x] Architecture design document written (`excalidraw_agent_design.md`)
@@ -14,8 +14,10 @@
 - [x] Add stripMarkdownFences for JSON parse robustness
 - [x] Improve error messages for parse failures
 - [x] Full end-to-end pipeline review — no further bugs found
+- [x] Fix JSON truncation for large diagrams (Option B: compact output + Option A: chunked generation)
+- [x] Add truncation recovery as last-ditch safety net
 - [x] TypeScript compilation clean — 0 errors
-- [x] All 24 tests passing
+- [x] All 54 tests passing (24 original + 30 new)
 
 ## Milestones
 
@@ -28,10 +30,23 @@
 | 5 | Testing & Validation | DONE | 24 unit tests covering validator, prompts, plan types |
 | 6 | Bug Fix: max_tokens | DONE | Removed hardcoded max_tokens (8000/16000) that exceeded model's 4096 limit |
 | 7 | Robustness Improvements | DONE | stripMarkdownFences, better error messages, full pipeline review |
+| 8 | Fix: JSON Truncation | DONE | Compact output (Option B) + Chunked generation (Option A) + Truncation recovery |
 
 ## What Changed
 
 ### Bug Fixes (2026-04-10)
+
+#### Fix 4: JSON truncation for large diagrams (CRITICAL)
+**Error:** `Unterminated string in JSON at position 12564` — LLM output truncated mid-response for diagrams with 16+ nodes, 7+ edges, 2+ groups.
+
+**Root cause:** Large diagrams produce Excalidraw JSON that exceeds the model's output token limit (~4096 tokens), causing the response to be truncated mid-JSON.
+
+**Fix (3-layer defense):**
+1. **Option B — Compact output:** Updated prompts to instruct LLM to omit default fields (angle, strokeColor, fillStyle, etc.). Added `injectDefaults()` to programmatically fill in missing defaults post-parse. Reduces output size by ~40%.
+2. **Option A — Chunked generation:** For large diagrams (>12 plan items), Phase 2 splits into 3 sequential LLM calls: groups -> nodes -> edges. Each chunk stays well within token limits. Added `shouldUseChunkedGeneration()`, `buildChunkedGroupsPrompt()`, `buildChunkedNodesPrompt()`, `buildChunkedEdgesPrompt()`.
+3. **Truncation recovery:** Added `recoverTruncatedJson()` as a last-ditch salvage mechanism — finds the last complete JSON object and closes unmatched brackets. Used by `parseJsonWithRecovery()` which wraps all JSON parsing.
+
+**New test coverage:** 30 new tests covering `injectDefaults`, `recoverTruncatedJson`, `shouldUseChunkedGeneration`, and all chunked prompt builders.
 
 #### Fix 1: max_tokens exceeds model limit (CRITICAL)
 **Error:** `fetch error: 400: Bad Request: max_tokens is too large: 8000. This model supports at most 4096 completion tokens`
@@ -113,7 +128,11 @@ PASS dist/test/diagramValidator.spec.js
     statistics tracking .................... 1 passed
   Prompt Builders .......................... 6 passed
   DiagramPlan structure .................... 3 passed
+  injectDefaults ........................... 8 passed
+  recoverTruncatedJson ..................... 6 passed
+  shouldUseChunkedGeneration ............... 5 passed
+  Chunked prompt builders .................. 11 passed
 
 Test Suites: 1 passed, 1 total
-Tests:       24 passed, 24 total
+Tests:       54 passed, 54 total
 ```

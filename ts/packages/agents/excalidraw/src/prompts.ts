@@ -85,24 +85,11 @@ SOURCE CONTENT TYPE: ${sourceType}
 // Phase 2: Excalidraw Generation Prompt
 // ---------------------------------------------------------------------------
 
-export function buildExcalidrawGenerationPrompt(): string {
-    return `You are a precise converter from a DiagramPlan JSON to Excalidraw JSON.
-You receive a DiagramPlan and must produce a valid Excalidraw document that faithfully represents every node, edge, and group. Do not omit anything.
-
-OUTPUT FORMAT:
-Output ONLY valid JSON — no markdown fences, no explanation.
-
-Top-level structure:
-{
-  "type": "excalidraw",
-  "version": 2,
-  "source": "typeagent-excalidraw",
-  "elements": [...],
-  "appState": { "gridSize": null, "viewBackgroundColor": "#ffffff" },
-  "files": {}
-}
-
-ELEMENT ID CONVENTION — CRITICAL:
+/**
+ * Core instructions shared by all generation prompts (single-shot and chunked).
+ */
+function coreExcalidrawInstructions(): string {
+    return `ELEMENT ID CONVENTION — CRITICAL:
 - For a plan node with id "n1", use Excalidraw element id "shape-n1" and its text label id "text-n1"
 - For a plan group with id "g1", use Excalidraw element id "group-g1" and its text label id "grouplabel-g1"
 - For a plan edge with id "e1", use Excalidraw element id "arrow-e1" and its text label id "arrowlabel-e1" (if the edge has a label)
@@ -115,32 +102,19 @@ ELEMENT TYPES:
 - "text" — bound label for a shape (containerId set) or standalone text
 - "arrow" — directed edge
 
-ELEMENT STRUCTURE (every field required):
-{
-  "id": "<id per convention above>",
-  "type": "<type>",
-  "x": <number>, "y": <number>, "width": <number>, "height": <number>,
-  "angle": 0,
-  "strokeColor": "#1e1e1e",
-  "backgroundColor": "<color from plan or default>",
-  "fillStyle": "solid", "strokeWidth": 2, "strokeStyle": "solid",
-  "roughness": 1, "opacity": 100,
-  "seed": <random-int>, "version": 1, "versionNonce": <random-int>,
-  "isDeleted": false, "boundElements": [], "updated": 1,
-  "link": null, "locked": false, "groupIds": [], "frameId": null,
-  "roundness": { "type": 3 }
-}
+COMPACT OUTPUT — CRITICAL (to avoid truncation):
+Omit all fields whose value equals their default. The system will inject defaults after parsing.
+Defaults (omit these fields if the value matches):
+  "angle": 0, "strokeColor": "#1e1e1e", "fillStyle": "solid",
+  "strokeWidth": 2, "strokeStyle": "solid", "roughness": 1, "opacity": 100,
+  "isDeleted": false, "locked": false, "link": null, "frameId": null,
+  "updated": 1, "seed": 1, "version": 1, "versionNonce": 0,
+  "roundness": null, "groupIds": []
 
-TEXT elements also need:
-  "text": "<label>", "fontSize": 20, "fontFamily": 1,
-  "textAlign": "center", "verticalAlign": "middle", "baseline": 18,
-  "containerId": "<shape-id> or null"
-
-ARROW elements also need:
-  "points": [[0,0],[dx,dy]],
-  "startBinding": { "elementId": "<id>", "focus": 0, "gap": 8 },
-  "endBinding":   { "elementId": "<id>", "focus": 0, "gap": 8 },
-  "startArrowhead": null, "endArrowhead": "arrow"
+REQUIRED fields per element (always include these):
+  "id", "type", "x", "y", "width", "height", "backgroundColor", "boundElements"
+For TEXT elements also include: "text", "fontSize", "fontFamily", "textAlign", "verticalAlign", "baseline", "containerId"
+For ARROW elements also include: "points", "startBinding", "endBinding", "startArrowhead", "endArrowhead"
 
 SIZING SHAPES TO FIT TEXT:
 - Estimate ~10px per character at fontSize 20
@@ -178,7 +152,27 @@ LAYOUT:
 - Left-to-right (LR): stack nodes horizontally, 80px gap between columns
 - Within a group: arrange child nodes in a row (LR) or column (TD)
 - Large concept nodes at least 100px apart edge-to-edge
-- No overlaps between any shapes at the same level
+- No overlaps between any shapes at the same level`;
+}
+
+export function buildExcalidrawGenerationPrompt(): string {
+    return `You are a precise converter from a DiagramPlan JSON to Excalidraw JSON.
+You receive a DiagramPlan and must produce a valid Excalidraw document that faithfully represents every node, edge, and group. Do not omit anything.
+
+OUTPUT FORMAT:
+Output ONLY valid JSON — no markdown fences, no explanation.
+
+Top-level structure:
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "typeagent-excalidraw",
+  "elements": [...],
+  "appState": { "gridSize": null, "viewBackgroundColor": "#ffffff" },
+  "files": {}
+}
+
+${coreExcalidrawInstructions()}
 
 SELF-REVIEW before outputting:
 1. Every node in the plan has a corresponding shape + bound text element (check id conventions)
@@ -188,6 +182,89 @@ SELF-REVIEW before outputting:
 5. No two non-text shapes overlap
 6. All text fits its container
 7. Every id referenced in any binding, containerId, or boundElements exists in the elements array`;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 — Chunked Generation Prompts (for large diagrams)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true if the plan is large enough to warrant chunked generation.
+ * Threshold: more than 12 total plan items (nodes + edges + groups), which
+ * typically produces JSON that risks exceeding model output limits.
+ */
+export function shouldUseChunkedGeneration(plan: {
+    nodes: unknown[];
+    edges: unknown[];
+    groups: unknown[];
+}): boolean {
+    const totalElements =
+        plan.nodes.length + plan.edges.length + plan.groups.length;
+    return totalElements > 12;
+}
+
+export function buildChunkedGroupsPrompt(): string {
+    return `You are a precise converter from a DiagramPlan JSON to Excalidraw elements.
+You will generate ONLY the group rectangles and their label text elements. Do NOT generate node shapes or arrows — those will be generated in a later step.
+
+OUTPUT FORMAT:
+Output ONLY a valid JSON array of Excalidraw elements — no markdown fences, no explanation.
+The output should be: [ { element1 }, { element2 }, ... ]
+
+${coreExcalidrawInstructions()}
+
+YOUR TASK: Generate ONLY:
+1. A background rectangle element for each group (id: "group-<groupId>")
+2. A text label element for each group (id: "grouplabel-<groupId>")
+
+Size each group rectangle large enough to contain its children (estimate positions for child nodes).
+Return an empty array [] if there are no groups.`;
+}
+
+export function buildChunkedNodesPrompt(existingElementIds: string[]): string {
+    const existingIdsStr =
+        existingElementIds.length > 0
+            ? `\nALREADY GENERATED ELEMENT IDS (reference these for containment):\n${existingElementIds.join(", ")}\n`
+            : "";
+
+    return `You are a precise converter from a DiagramPlan JSON to Excalidraw elements.
+You will generate ONLY the node shapes and their bound text label elements. Do NOT generate group rectangles or arrows — those are handled separately.
+
+OUTPUT FORMAT:
+Output ONLY a valid JSON array of Excalidraw elements — no markdown fences, no explanation.
+The output should be: [ { element1 }, { element2 }, ... ]
+${existingIdsStr}
+${coreExcalidrawInstructions()}
+
+YOUR TASK: Generate ONLY:
+1. A shape element for each plan node (id: "shape-<nodeId>", type per the node's shape field)
+2. A text label element for each plan node (id: "text-<nodeId>")
+
+Position nodes that belong to a group INSIDE that group's rectangle bounds.
+Include the text element's boundElements reference in each shape, but do NOT add arrow references yet — arrows will be generated later.`;
+}
+
+export function buildChunkedEdgesPrompt(existingElementIds: string[]): string {
+    return `You are a precise converter from a DiagramPlan JSON to Excalidraw elements.
+You will generate ONLY the arrow elements (and their optional label text elements). Do NOT generate shapes or group rectangles — those already exist.
+
+OUTPUT FORMAT:
+Output ONLY a valid JSON array of Excalidraw elements — no markdown fences, no explanation.
+The output should be: [ { element1 }, { element2 }, ... ]
+
+ALREADY GENERATED ELEMENT IDS (these exist — use them in bindings):
+${existingElementIds.join(", ")}
+
+${coreExcalidrawInstructions()}
+
+YOUR TASK: Generate ONLY:
+1. An arrow element for each plan edge (id: "arrow-<edgeId>")
+2. If the edge has a label, also a text label element (id: "arrowlabel-<edgeId>")
+
+For each arrow:
+- Set startBinding.elementId to "shape-<sourceNodeId>" (must exist in the list above)
+- Set endBinding.elementId to "shape-<targetNodeId>" (must exist in the list above)
+- Compute arrow geometry based on the positions of the connected shapes`;
 }
 
 // ---------------------------------------------------------------------------

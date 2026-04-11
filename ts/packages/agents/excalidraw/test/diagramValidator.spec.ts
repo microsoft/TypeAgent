@@ -13,7 +13,16 @@ import {
     buildPlanExtractionPrompt,
     buildExcalidrawGenerationPrompt,
     buildCorrectionPrompt,
+    shouldUseChunkedGeneration,
+    buildChunkedGroupsPrompt,
+    buildChunkedNodesPrompt,
+    buildChunkedEdgesPrompt,
 } from "../src/prompts.js";
+import {
+    _injectDefaults as injectDefaults,
+    _recoverTruncatedJson as recoverTruncatedJson,
+    _ELEMENT_DEFAULTS as ELEMENT_DEFAULTS,
+} from "../src/excalidrawActionHandler.js";
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -780,5 +789,332 @@ describe("DiagramPlan structure", () => {
             expect(nodeIds.has(edge.sourceNodeId)).toBe(true);
             expect(nodeIds.has(edge.targetNodeId)).toBe(true);
         }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// injectDefaults tests
+// ---------------------------------------------------------------------------
+
+describe("injectDefaults", () => {
+    test("fills in all missing default fields", () => {
+        const elements: Record<string, unknown>[] = [
+            {
+                id: "shape-n1",
+                type: "rectangle",
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 50,
+            },
+        ];
+        injectDefaults(elements);
+
+        const el = elements[0];
+        // Every key from ELEMENT_DEFAULTS should now be present
+        for (const key of Object.keys(ELEMENT_DEFAULTS)) {
+            expect(key in el).toBe(true);
+        }
+        expect(el.angle).toBe(0);
+        expect(el.strokeColor).toBe("#1e1e1e");
+        expect(el.fillStyle).toBe("solid");
+        expect(el.strokeWidth).toBe(2);
+        expect(el.roughness).toBe(1);
+        expect(el.opacity).toBe(100);
+        expect(el.isDeleted).toBe(false);
+        expect(el.locked).toBe(false);
+        expect(el.link).toBeNull();
+        expect(el.frameId).toBeNull();
+        expect(el.roundness).toBeNull();
+        expect(el.groupIds).toEqual([]);
+    });
+
+    test("preserves existing values and does not overwrite them", () => {
+        const elements: Record<string, unknown>[] = [
+            {
+                id: "shape-n1",
+                type: "rectangle",
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 50,
+                strokeColor: "#ff0000",
+                opacity: 50,
+                roughness: 0,
+            },
+        ];
+        injectDefaults(elements);
+
+        const el = elements[0];
+        expect(el.strokeColor).toBe("#ff0000");
+        expect(el.opacity).toBe(50);
+        expect(el.roughness).toBe(0);
+    });
+
+    test("sets boundElements to empty array when missing", () => {
+        const elements: Record<string, unknown>[] = [
+            {
+                id: "shape-n1",
+                type: "rectangle",
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 50,
+            },
+        ];
+        injectDefaults(elements);
+        expect(elements[0].boundElements).toEqual([]);
+    });
+
+    test("preserves existing boundElements array", () => {
+        const elements: Record<string, unknown>[] = [
+            {
+                id: "shape-n1",
+                type: "rectangle",
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 50,
+                boundElements: [{ id: "text-n1", type: "text" }],
+            },
+        ];
+        injectDefaults(elements);
+        expect(elements[0].boundElements).toEqual([
+            { id: "text-n1", type: "text" },
+        ]);
+    });
+
+    test("sets backgroundColor to 'transparent' when missing", () => {
+        const elements: Record<string, unknown>[] = [
+            {
+                id: "shape-n1",
+                type: "rectangle",
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 50,
+            },
+        ];
+        injectDefaults(elements);
+        expect(elements[0].backgroundColor).toBe("transparent");
+    });
+
+    test("preserves existing backgroundColor", () => {
+        const elements: Record<string, unknown>[] = [
+            {
+                id: "shape-n1",
+                type: "rectangle",
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 50,
+                backgroundColor: "#a5d8ff",
+            },
+        ];
+        injectDefaults(elements);
+        expect(elements[0].backgroundColor).toBe("#a5d8ff");
+    });
+
+    test("groupIds arrays are not shared between elements", () => {
+        const elements: Record<string, unknown>[] = [
+            { id: "a", type: "rectangle", x: 0, y: 0, width: 10, height: 10 },
+            { id: "b", type: "rectangle", x: 0, y: 0, width: 10, height: 10 },
+        ];
+        injectDefaults(elements);
+        // Mutating one element's groupIds should not affect the other
+        (elements[0].groupIds as unknown[]).push("g1");
+        expect(elements[1].groupIds).toEqual([]);
+    });
+
+    test("handles empty elements array", () => {
+        const elements: Record<string, unknown>[] = [];
+        injectDefaults(elements);
+        expect(elements).toHaveLength(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// recoverTruncatedJson tests
+// ---------------------------------------------------------------------------
+
+describe("recoverTruncatedJson", () => {
+    test("returns valid JSON unchanged", () => {
+        const valid = '{"elements":[{"id":"a"}]}';
+        expect(recoverTruncatedJson(valid)).toBe(valid);
+    });
+
+    test("recovers truncated object with open array", () => {
+        // Simulates: {"elements":[{"id":"a"},{"id":"b"  <-- truncated here
+        const truncated = '{"elements":[{"id":"a"},{"id":"b"}';
+        const recovered = recoverTruncatedJson(truncated);
+        const parsed = JSON.parse(recovered);
+        expect(parsed.elements).toHaveLength(2);
+        expect(parsed.elements[1].id).toBe("b");
+    });
+
+    test("recovers truncated bare array", () => {
+        const truncated = '[{"id":"a"},{"id":"b"}';
+        const recovered = recoverTruncatedJson(truncated);
+        const parsed = JSON.parse(recovered);
+        expect(parsed).toHaveLength(2);
+    });
+
+    test("recovers deeply nested truncation", () => {
+        // The inner object and array are complete, but outer array/object are not closed
+        const truncated =
+            '{"elements":[{"id":"a","boundElements":[{"id":"t1","type":"text"}]}';
+        const recovered = recoverTruncatedJson(truncated);
+        const parsed = JSON.parse(recovered);
+        expect(parsed.elements[0].id).toBe("a");
+        expect(parsed.elements[0].boundElements[0].id).toBe("t1");
+    });
+
+    test("returns original when recovery is not possible", () => {
+        const garbage = "this is not json at all";
+        expect(recoverTruncatedJson(garbage)).toBe(garbage);
+    });
+
+    test("handles truncation mid-string-value", () => {
+        // Truncated in the middle of a string value — last complete } is the first element
+        const truncated = '{"elements":[{"id":"a"},{"id":"trun';
+        const recovered = recoverTruncatedJson(truncated);
+        // Should recover up to the last complete }
+        const parsed = JSON.parse(recovered);
+        expect(parsed.elements).toHaveLength(1);
+        expect(parsed.elements[0].id).toBe("a");
+    });
+});
+
+// ---------------------------------------------------------------------------
+// shouldUseChunkedGeneration tests
+// ---------------------------------------------------------------------------
+
+describe("shouldUseChunkedGeneration", () => {
+    test("returns false for small diagrams (<=12 items)", () => {
+        const plan = {
+            nodes: [1, 2, 3, 4, 5],
+            edges: [1, 2, 3, 4, 5],
+            groups: [1, 2],
+        };
+        expect(shouldUseChunkedGeneration(plan as any)).toBe(false);
+    });
+
+    test("returns false at exactly 12 items", () => {
+        const plan = {
+            nodes: new Array(6),
+            edges: new Array(4),
+            groups: new Array(2),
+        };
+        expect(shouldUseChunkedGeneration(plan as any)).toBe(false);
+    });
+
+    test("returns true for large diagrams (>12 items)", () => {
+        const plan = {
+            nodes: new Array(10),
+            edges: new Array(3),
+            groups: new Array(0),
+        };
+        expect(shouldUseChunkedGeneration(plan as any)).toBe(true);
+    });
+
+    test("returns true for the bug-triggering case (16+7+2=25)", () => {
+        const plan = {
+            nodes: new Array(16),
+            edges: new Array(7),
+            groups: new Array(2),
+        };
+        expect(shouldUseChunkedGeneration(plan as any)).toBe(true);
+    });
+
+    test("returns false for empty plan", () => {
+        const plan = { nodes: [], edges: [], groups: [] };
+        expect(shouldUseChunkedGeneration(plan as any)).toBe(false);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Chunked prompt builder tests
+// ---------------------------------------------------------------------------
+
+describe("Chunked prompt builders", () => {
+    describe("buildChunkedGroupsPrompt", () => {
+        test("includes group rendering instructions", () => {
+            const prompt = buildChunkedGroupsPrompt();
+            expect(prompt).toContain("group-");
+            expect(prompt).toContain("grouplabel-");
+            expect(prompt).toContain("background rectangle");
+        });
+
+        test("instructs NOT to generate nodes or arrows", () => {
+            const prompt = buildChunkedGroupsPrompt();
+            expect(prompt).toContain("Do NOT generate node shapes or arrows");
+        });
+
+        test("includes compact output instructions", () => {
+            const prompt = buildChunkedGroupsPrompt();
+            expect(prompt).toContain("COMPACT OUTPUT");
+        });
+    });
+
+    describe("buildChunkedNodesPrompt", () => {
+        test("includes node generation instructions", () => {
+            const prompt = buildChunkedNodesPrompt([]);
+            expect(prompt).toContain("shape-");
+            expect(prompt).toContain("text-");
+        });
+
+        test("instructs NOT to generate groups or arrows", () => {
+            const prompt = buildChunkedNodesPrompt([]);
+            expect(prompt).toContain(
+                "Do NOT generate group rectangles or arrows",
+            );
+        });
+
+        test("includes existing element IDs when provided", () => {
+            const existingIds = [
+                "group-g1",
+                "grouplabel-g1",
+                "group-g2",
+                "grouplabel-g2",
+            ];
+            const prompt = buildChunkedNodesPrompt(existingIds);
+            expect(prompt).toContain("group-g1");
+            expect(prompt).toContain("grouplabel-g1");
+            expect(prompt).toContain("group-g2");
+        });
+
+        test("omits existing IDs section when empty", () => {
+            const prompt = buildChunkedNodesPrompt([]);
+            expect(prompt).not.toContain("ALREADY GENERATED ELEMENT IDS");
+        });
+    });
+
+    describe("buildChunkedEdgesPrompt", () => {
+        test("includes arrow generation instructions", () => {
+            const prompt = buildChunkedEdgesPrompt(["shape-n1", "shape-n2"]);
+            expect(prompt).toContain("arrow-");
+            expect(prompt).toContain("arrowlabel-");
+        });
+
+        test("instructs NOT to generate shapes or groups", () => {
+            const prompt = buildChunkedEdgesPrompt(["shape-n1"]);
+            expect(prompt).toContain(
+                "Do NOT generate shapes or group rectangles",
+            );
+        });
+
+        test("includes existing element IDs for binding", () => {
+            const existingIds = ["shape-n1", "shape-n2", "text-n1", "text-n2"];
+            const prompt = buildChunkedEdgesPrompt(existingIds);
+            expect(prompt).toContain("shape-n1");
+            expect(prompt).toContain("shape-n2");
+            expect(prompt).toContain("text-n1");
+        });
+
+        test("references startBinding and endBinding", () => {
+            const prompt = buildChunkedEdgesPrompt(["shape-n1"]);
+            expect(prompt).toContain("startBinding");
+            expect(prompt).toContain("endBinding");
+        });
     });
 });

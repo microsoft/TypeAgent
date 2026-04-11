@@ -24,6 +24,10 @@ import {
     buildPlanExtractionPrompt,
     buildExcalidrawGenerationPrompt,
     buildCorrectionPrompt,
+    shouldUseChunkedGeneration,
+    buildChunkedGroupsPrompt,
+    buildChunkedNodesPrompt,
+    buildChunkedEdgesPrompt,
 } from "./prompts.js";
 
 import fs from "node:fs";
@@ -308,6 +312,51 @@ function repairExcalidrawDiagram(doc: ExcalidrawDocument): string[] {
 }
 
 // ---------------------------------------------------------------------------
+// Chunked generation helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Makes a single LLM call to generate a chunk of Excalidraw elements.
+ * Returns a parsed array of element objects. Throws on failure.
+ */
+async function generateChunk(
+    systemPrompt: string,
+    userPrompt: string,
+): Promise<Record<string, unknown>[]> {
+    const model = openai.createJsonChatModel();
+    const response = await model.complete([
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+    ]);
+
+    if (!response.success) {
+        throw new Error(`Chunk generation failed: ${response.message}`);
+    }
+
+    let parsed: unknown;
+    try {
+        parsed = parseJsonWithRecovery(response.data);
+    } catch (parseErr) {
+        const snippet = response.data.slice(-200);
+        throw new Error(
+            `Chunk returned invalid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}\n\nLast 200 chars: ${snippet}`,
+        );
+    }
+
+    // The LLM may return an array directly or wrapped in an object
+    if (Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>[];
+    }
+    const obj = parsed as Record<string, unknown>;
+    if (Array.isArray(obj.elements)) {
+        return obj.elements as Record<string, unknown>[];
+    }
+    throw new Error(
+        "Chunk response is not an array and has no 'elements' array.",
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Main pipeline: handleCreateDiagram
 // ---------------------------------------------------------------------------
 
@@ -391,29 +440,104 @@ async function handleCreateDiagram(
             `Step 2/3: Generating Excalidraw diagram (${plan.nodes.length} nodes, ${plan.edges.length} edges, ${plan.groups.length} groups)...`,
         );
 
-        const excalidrawModel = openai.createJsonChatModel();
-        const genResponse = await excalidrawModel.complete([
-            { role: "system", content: buildExcalidrawGenerationPrompt() },
-            {
-                role: "user",
-                content: `Convert this DiagramPlan to a complete Excalidraw JSON document:\n\n${JSON.stringify(plan, null, 2)}`,
-            },
-        ]);
-
-        if (!genResponse.success) {
-            return createActionResultFromError(
-                `Failed to generate Excalidraw JSON: ${genResponse.message}`,
-            );
-        }
-
         let excalidrawData: ExcalidrawDocument;
-        try {
-            excalidrawData = JSON.parse(stripMarkdownFences(genResponse.data));
-        } catch (parseErr) {
-            const snippet = genResponse.data.slice(-200);
-            return createActionResultFromError(
-                `The AI returned invalid Excalidraw JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}\n\nLast 200 chars of response: ${snippet}`,
+        const useChunked = shouldUseChunkedGeneration(plan);
+
+        if (useChunked) {
+            // --- Chunked generation (Option A) for large diagrams ---
+            const allElements: Record<string, unknown>[] = [];
+            const planJson = JSON.stringify(plan, null, 2);
+
+            // Chunk 1: Groups
+            if (plan.groups.length > 0) {
+                setStatus(
+                    `Step 2/3: Generating groups (${plan.groups.length} groups)...`,
+                );
+                const groupElements = await generateChunk(
+                    buildChunkedGroupsPrompt(),
+                    `Generate group elements for this DiagramPlan:\n\n${planJson}`,
+                );
+                allElements.push(...groupElements);
+            }
+
+            // Chunk 2: Nodes
+            setStatus(
+                `Step 2/3: Generating nodes (${plan.nodes.length} nodes)...`,
             );
+            const existingIdsAfterGroups = allElements.map(
+                (e) => e.id as string,
+            );
+            const nodeElements = await generateChunk(
+                buildChunkedNodesPrompt(existingIdsAfterGroups),
+                `Generate node shape elements for this DiagramPlan:\n\n${planJson}`,
+            );
+            allElements.push(...nodeElements);
+
+            // Chunk 3: Edges
+            if (plan.edges.length > 0) {
+                setStatus(
+                    `Step 2/3: Generating edges (${plan.edges.length} edges)...`,
+                );
+                const existingIdsAfterNodes = allElements.map(
+                    (e) => e.id as string,
+                );
+                const edgeElements = await generateChunk(
+                    buildChunkedEdgesPrompt(existingIdsAfterNodes),
+                    `Generate arrow elements for this DiagramPlan:\n\n${planJson}`,
+                );
+                allElements.push(...edgeElements);
+            }
+
+            // Inject defaults and assemble document
+            injectDefaults(allElements);
+            excalidrawData = {
+                type: "excalidraw",
+                version: 2,
+                source: "typeagent-excalidraw",
+                elements: allElements as ExcalidrawElement[],
+                appState: {
+                    gridSize: null,
+                    viewBackgroundColor: "#ffffff",
+                },
+                files: {},
+            };
+        } else {
+            // --- Single-shot generation (small diagrams) ---
+            const excalidrawModel = openai.createJsonChatModel();
+            const genResponse = await excalidrawModel.complete([
+                {
+                    role: "system",
+                    content: buildExcalidrawGenerationPrompt(),
+                },
+                {
+                    role: "user",
+                    content: `Convert this DiagramPlan to a complete Excalidraw JSON document:\n\n${JSON.stringify(plan, null, 2)}`,
+                },
+            ]);
+
+            if (!genResponse.success) {
+                return createActionResultFromError(
+                    `Failed to generate Excalidraw JSON: ${genResponse.message}`,
+                );
+            }
+
+            try {
+                excalidrawData = parseJsonWithRecovery(
+                    genResponse.data,
+                ) as ExcalidrawDocument;
+            } catch (parseErr) {
+                const snippet = genResponse.data.slice(-200);
+                return createActionResultFromError(
+                    `The AI returned invalid Excalidraw JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}\n\nLast 200 chars of response: ${snippet}`,
+                );
+            }
+
+            // Inject defaults for any fields the LLM omitted
+            if (excalidrawData.elements) {
+                injectDefaults(
+                    excalidrawData.elements as Record<string, unknown>[],
+                );
+            }
         }
 
         ensureTopLevelFields(excalidrawData);
@@ -464,10 +588,15 @@ async function handleCreateDiagram(
             }
 
             try {
-                const corrected: ExcalidrawDocument = JSON.parse(
-                    stripMarkdownFences(correctionResponse.data),
-                );
+                const corrected: ExcalidrawDocument = parseJsonWithRecovery(
+                    correctionResponse.data,
+                ) as ExcalidrawDocument;
                 ensureTopLevelFields(corrected);
+                if (corrected.elements) {
+                    injectDefaults(
+                        corrected.elements as Record<string, unknown>[],
+                    );
+                }
                 excalidrawData = corrected;
             } catch {
                 // If corrected JSON is invalid, keep previous version
@@ -616,6 +745,150 @@ function stripMarkdownFences(raw: string): string {
     return match ? match[1].trim() : trimmed;
 }
 
+// ---------------------------------------------------------------------------
+// Default injection (Option B) — compact LLM output → full Excalidraw format
+// ---------------------------------------------------------------------------
+
+/** Default field values that the LLM is instructed to omit for compactness. */
+const ELEMENT_DEFAULTS: Record<string, unknown> = {
+    angle: 0,
+    strokeColor: "#1e1e1e",
+    fillStyle: "solid",
+    strokeWidth: 2,
+    strokeStyle: "solid",
+    roughness: 1,
+    opacity: 100,
+    isDeleted: false,
+    locked: false,
+    link: null,
+    frameId: null,
+    updated: 1,
+    seed: 1,
+    version: 1,
+    versionNonce: 0,
+    roundness: null,
+    groupIds: [],
+};
+
+/**
+ * Fills in any missing default fields on each element so the resulting
+ * document is fully valid Excalidraw JSON. This allows the LLM to produce
+ * compact output that omits fields matching their defaults.
+ */
+function injectDefaults(elements: Record<string, unknown>[]): void {
+    for (const el of elements) {
+        for (const [key, defaultValue] of Object.entries(ELEMENT_DEFAULTS)) {
+            if (!(key in el)) {
+                // Deep-clone arrays/objects so elements don't share references
+                el[key] = Array.isArray(defaultValue)
+                    ? [...defaultValue]
+                    : defaultValue;
+            }
+        }
+        // Ensure boundElements is at least an empty array
+        if (!("boundElements" in el) || el.boundElements === undefined) {
+            el.boundElements = [];
+        }
+        // Ensure backgroundColor has a value
+        if (!("backgroundColor" in el) || el.backgroundColor === undefined) {
+            el.backgroundColor = "transparent";
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Truncation recovery — last-ditch attempt to salvage truncated JSON
+// ---------------------------------------------------------------------------
+
+/**
+ * Attempts to recover a truncated JSON string by:
+ * 1. Finding the last complete object (closing `}`) before the truncation
+ * 2. Closing any open arrays `]` and the outer object `}`
+ *
+ * Works for both top-level `{ "elements": [...] }` format and bare `[...]` arrays.
+ * Returns the recovered string, or the original if recovery isn't applicable.
+ */
+function recoverTruncatedJson(raw: string): string {
+    const trimmed = raw.trim();
+
+    // If it already parses, nothing to do
+    try {
+        JSON.parse(trimmed);
+        return trimmed;
+    } catch {
+        // continue to recovery
+    }
+
+    // Strategy: find the last `}` that could end a complete element,
+    // then close out the array and/or outer object.
+    const lastCloseBrace = trimmed.lastIndexOf("}");
+    if (lastCloseBrace < 0) return raw;
+
+    const truncated = trimmed.substring(0, lastCloseBrace + 1);
+
+    // Determine what brackets need closing.
+    // Count unmatched `[` and `{` in the truncated string.
+    let openBraces = 0;
+    let openBrackets = 0;
+    let inString = false;
+    let escape = false;
+
+    for (const ch of truncated) {
+        if (escape) {
+            escape = false;
+            continue;
+        }
+        if (ch === "\\") {
+            escape = true;
+            continue;
+        }
+        if (ch === '"') {
+            inString = !inString;
+            continue;
+        }
+        if (inString) continue;
+        if (ch === "{") openBraces++;
+        else if (ch === "}") openBraces--;
+        else if (ch === "[") openBrackets++;
+        else if (ch === "]") openBrackets--;
+    }
+
+    // Build the closing suffix
+    let suffix = "";
+    for (let i = 0; i < openBrackets; i++) suffix += "]";
+    for (let i = 0; i < openBraces; i++) suffix += "}";
+
+    const recovered = truncated + suffix;
+
+    // Verify the recovered string is valid JSON
+    try {
+        JSON.parse(recovered);
+        return recovered;
+    } catch {
+        return raw; // Recovery didn't help — return original
+    }
+}
+
+/**
+ * Parse a JSON string with truncation recovery as a fallback.
+ * First tries a direct parse, then strips markdown fences, then attempts
+ * truncation recovery.
+ */
+function parseJsonWithRecovery(raw: string): unknown {
+    const stripped = stripMarkdownFences(raw);
+
+    // Try direct parse first
+    try {
+        return JSON.parse(stripped);
+    } catch {
+        // Fall through to recovery
+    }
+
+    // Try truncation recovery
+    const recovered = recoverTruncatedJson(stripped);
+    return JSON.parse(recovered); // Let this throw if it still fails
+}
+
 function ensureTopLevelFields(doc: ExcalidrawDocument): void {
     if (!doc.type) doc.type = "excalidraw";
     if (!doc.version) doc.version = 2;
@@ -652,3 +925,13 @@ interface ExcalidrawElement {
     height: number;
     [key: string]: unknown;
 }
+
+// ---------------------------------------------------------------------------
+// Exported utilities for unit testing
+// ---------------------------------------------------------------------------
+
+export {
+    injectDefaults as _injectDefaults,
+    recoverTruncatedJson as _recoverTruncatedJson,
+    ELEMENT_DEFAULTS as _ELEMENT_DEFAULTS,
+};
