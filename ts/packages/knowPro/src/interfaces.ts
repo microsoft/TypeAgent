@@ -666,28 +666,11 @@ export type SemanticRefSearchResult = {
     semanticRefMatches: ScoredSemanticRefOrdinal[];
 };
 
-//------------------------
-// Serialization formats
-// TODO: Move to dataFormats.ts
-//------------------------
-
-export interface IConversationData<TMessage = any> {
-    nameTag: string;
-    messages: TMessage[];
-    tags: string[];
-    semanticRefs: SemanticRef[];
-    semanticIndexData?: ITermToSemanticRefIndexData | undefined;
-}
-
-// persistent form of a term index
-export interface ITermToSemanticRefIndexData {
-    items: ITermToSemanticRefIndexItem[];
-}
-
-export interface ITermToSemanticRefIndexItem {
-    term: string;
-    semanticRefOrdinals: ScoredSemanticRefOrdinal[];
-}
+export {
+    IConversationData,
+    ITermToSemanticRefIndexData,
+    ITermToSemanticRefIndexItem,
+} from "./dataFormats.js";
 
 //------------------------
 // Indexing events and results
