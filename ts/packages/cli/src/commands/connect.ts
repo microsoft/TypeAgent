@@ -4,6 +4,10 @@
 import { Args, Command, Flags } from "@oclif/core";
 import { Dispatcher } from "agent-dispatcher";
 import {
+    toPartitions,
+    isModeAtLevel,
+} from "agent-dispatcher/helpers/completion";
+import {
     getEnhancedConsolePrompt,
     processCommandsEnhanced,
     replayDisplayHistory,
@@ -92,20 +96,29 @@ async function getCompletionsData(
             return null;
         }
 
+        // Use shared partition logic to properly resolve separatorMode
+        // (including autoSpacePunctuation per-item resolution).
+        const partitions = toPartitions(
+            result.completions,
+            line,
+            result.startIndex,
+        );
+
         const allCompletions: string[] = [];
-        for (const group of result.completions) {
-            for (const completion of group.completions) {
-                allCompletions.push(completion);
+        for (const p of partitions) {
+            for (const item of p.items) {
+                allCompletions.push(item.matchText);
             }
         }
 
         const filterStartIndex = result.startIndex;
         const prefix = line.substring(0, filterStartIndex);
 
-        const needsSep = result.completions.some(
-            (g) =>
-                g.separatorMode === "space" ||
-                g.separatorMode === "spacePunctuation",
+        // Use the shared isModeAtLevel to determine whether any partition
+        // requires a separator at level 1 (space) — this is more accurate
+        // than the previous heuristic that only checked raw group modes.
+        const needsSep = partitions.some(
+            (p) => isModeAtLevel(p.mode, 1) && !isModeAtLevel(p.mode, 0),
         );
         const separator = needsSep ? " " : "";
 

@@ -9,6 +9,10 @@ import {
 } from "agent-dispatcher/internal";
 import { getTraceId, getInstanceDir } from "agent-dispatcher/helpers/data";
 import {
+    toPartitions,
+    isModeAtLevel,
+} from "agent-dispatcher/helpers/completion";
+import {
     getDefaultAppAgentProviders,
     getDefaultConstructionProvider,
     getDefaultAppAgentInstaller,
@@ -68,24 +72,31 @@ async function getCompletionsData(
             return null;
         }
 
-        // Extract just the completion strings
+        // Use shared partition logic to properly resolve separatorMode
+        // (including autoSpacePunctuation per-item resolution).  Collect
+        // all completion strings from level-1 (space-separated) items
+        // first, falling back to level-0 when no level-1 items exist.
+        const partitions = toPartitions(
+            result.completions,
+            line,
+            result.startIndex,
+        );
+
         const allCompletions: string[] = [];
-        for (const group of result.completions) {
-            for (const completion of group.completions) {
-                allCompletions.push(completion);
+        for (const p of partitions) {
+            for (const item of p.items) {
+                allCompletions.push(item.matchText);
             }
         }
 
         const filterStartIndex = result.startIndex;
         const prefix = line.substring(0, filterStartIndex);
 
-        // When any group reports a separator-requiring mode between the
-        // typed prefix and the completion text, prepend a space so the
-        // readline display doesn't produce "playmusic" for "play" + "music".
-        const needsSep = result.completions.some(
-            (g) =>
-                g.separatorMode === "space" ||
-                g.separatorMode === "spacePunctuation",
+        // Use the shared isModeAtLevel to determine whether any partition
+        // requires a separator at level 1 (space) — this is more accurate
+        // than the previous heuristic that only checked raw group modes.
+        const needsSep = partitions.some(
+            (p) => isModeAtLevel(p.mode, 1) && !isModeAtLevel(p.mode, 0),
         );
         const separator = needsSep ? " " : "";
 
