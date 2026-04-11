@@ -254,7 +254,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/knowledgeProcessor/src/conversation/conversation.ts` | 411 | what about topics at other levels? | Medium | Low | Component | No Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/conversation/entities.ts` | 273 | parallelize | Medium | High | Local | Fix | No |
 | `ts/packages/knowledgeProcessor/src/conversation/topics.ts` | 638 | use aliases here for better matching | Medium | Medium | Component | Fix | Yes |
-| `ts/packages/knowledgeProcessor/src/conversation/topics.ts` | 683 | combine this and the one below | Low | High | Local | Fix | No |
 | `ts/packages/knowledgeProcessor/src/images/image.ts` | 147 | add actions for all extracted entities being photographed/contained by image | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/images/image.ts` | 195 | logged in user for now? | Low | Low | Local | No Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/setOperations.ts` | 587 | Optimize. | Medium | Medium | Local | Fix | Yes |

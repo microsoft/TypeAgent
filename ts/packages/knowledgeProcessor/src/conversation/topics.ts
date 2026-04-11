@@ -679,11 +679,12 @@ export async function createTopicIndexOnStorage<
                 results.topicIds = undefined;
             }
             if (results.topicIds) {
+                const idsToIntersect: (
+                    | TopicId[]
+                    | IterableIterator<TopicId>
+                )[] = [];
                 if (possibleIds && possibleIds.length > 0) {
-                    // TODO: combine this and the one below
-                    results.topicIds = [
-                        ...intersect(results.topicIds, possibleIds),
-                    ];
+                    idsToIntersect.push(possibleIds);
                 }
                 if (sourceName) {
                     const entityNames = await getNameIndex();
@@ -694,10 +695,16 @@ export async function createTopicIndexOnStorage<
                         options,
                     );
                     if (topicIdsWithSource) {
-                        results.topicIds = [
-                            ...intersect(results.topicIds, topicIdsWithSource),
-                        ];
+                        idsToIntersect.push(topicIdsWithSource);
                     }
+                }
+                if (idsToIntersect.length > 0) {
+                    results.topicIds = [
+                        ...intersectMultiple(
+                            results.topicIds,
+                            ...idsToIntersect,
+                        ),
+                    ];
                 }
             }
         }
