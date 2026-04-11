@@ -129,14 +129,12 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/agents/player/src/client.ts` | 702 | Might want to use fuzzy matching here. | Medium | Medium | Component | Fix | No |
 | `ts/packages/agents/player/src/client.ts` | 1318 | add filter validation to overall instance validation | Medium | Medium | Component | Fix | No |
 | `ts/packages/agents/player/src/search.ts` | 253 | Might want to use fuzzy matching here. | Medium | Medium | Component | Fix | No |
-| `ts/packages/agents/player/src/search.ts` | 561 | cache this. | Low | High | Component | Fix | No |
 | `ts/packages/agents/player/src/trackFilter.ts` | 326 | year ranges | Medium | High | Local | Fix | No |
 | `ts/packages/agents/settings/src/settingsCommandHandler.ts` | 53 | apply this setting to the local system. '${action.parameters.originalRequest} | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/agents/spelunker/src/chunker.py` | 61 | dotted names | Medium | Medium | Local | Fix | No |
 | `ts/packages/agents/spelunker/src/embeddings.ts` | 37 | Fix this | Medium | Medium | Local | Fix | Yes |
 | `ts/packages/agents/spelunker/src/embeddings.ts` | 47 | tune | Medium | Medium | Local | No Fix | Yes |
 | `ts/packages/agents/spelunker/src/embeddings.ts` | 186 | Fix this | Medium | Medium | Local | Fix | Yes |
-| `ts/packages/agents/spelunker/src/eval.ts` | 27 | Read this from a file that can be edited before each run | Low | High | Local | Fix | No |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 237 | tune | Medium | Medium | Local | No Fix | Yes |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 238 | tune | Medium | Medium | Local | Fix | Yes |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 268 | tune | Medium | Medium | Local | Fix | Yes |
