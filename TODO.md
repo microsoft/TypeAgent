@@ -181,9 +181,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/cache/src/explanation/v5/explanationV5.ts` | 282 | consider to improve this for cases where different actions have the same parameters schema. | Medium | Medium | Component | Fix | No |
 | `ts/packages/cache/src/explanation/v5/explanationV5.ts` | 645 | Don't use other synonyms or alternatives info for entities for now | Low | High | Local | No Fix | Yes |
 | `ts/packages/cache/src/explanation/v5/propertyExplainationV5.ts` | 114 | fuzzy match | Medium | Medium | Component | Fix | No |
-| `ts/packages/cache/src/explanation/validateExplanation.ts` | 91 | Is there a better typing | Low | High | Local | Fix | No |
-| `ts/packages/cache/src/explanation/validateExplanation.ts` | 184 | better typing | Low | High | Local | Fix | No |
-| `ts/packages/cache/src/explanation/validateExplanation.ts` | 209 | better typing | Low | High | Local | Fix | No |
 | `ts/packages/cache/src/utils/language.ts` | 396 | initial implementation. Can be over-broad and incomplete. | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/cli/src/enhancedConsole.ts` | 655 | Not implemented | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/cli/src/enhancedConsole.ts` | 784 | Ignored | Low | High | Local | No Fix | Yes |
