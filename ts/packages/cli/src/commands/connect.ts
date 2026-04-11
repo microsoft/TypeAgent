@@ -102,11 +102,12 @@ async function getCompletionsData(
         const filterStartIndex = result.startIndex;
         const prefix = line.substring(0, filterStartIndex);
 
-        const separator =
-            result.separatorMode === "space" ||
-            result.separatorMode === "spacePunctuation"
-                ? " "
-                : "";
+        const needsSep = result.completions.some(
+            (g) =>
+                g.separatorMode === "space" ||
+                g.separatorMode === "spacePunctuation",
+        );
+        const separator = needsSep ? " " : "";
 
         return {
             allCompletions,
@@ -179,6 +180,11 @@ export default class Connect extends Command {
             "../debugInterceptor.js"
         );
         installDebugInterceptor();
+
+        // Clear screen and move cursor to top for a clean full-height start
+        if (process.stdout.isTTY) {
+            process.stdout.write("\x1b[2J\x1b[H");
+        }
 
         const persistedSessionId =
             flags.session ?? (flags.resume ? loadLastSessionId() : undefined);

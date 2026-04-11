@@ -126,10 +126,8 @@ export class AppAgentManager implements ActionConfigProvider {
     private readyWaiters: Array<() => void> = [];
     private readonly actionSemanticMap?: ActionSchemaSemanticMap;
     private readonly actionSchemaFileCache: ActionSchemaFileCache;
-    private nextPortIndex = 0;
     public constructor(
         cacheDir: string | undefined,
-        private readonly portBase: number,
         private readonly allowSharedLocalView?: string[],
         private readonly agentInitOptions?: Record<string, unknown>,
     ) {
@@ -168,6 +166,12 @@ export class AppAgentManager implements ActionConfigProvider {
     public getLocalHostPort(appAgentName: string) {
         const record = this.getRecord(appAgentName);
         return record.port;
+    }
+
+    public setLocalHostPort(appAgentName: string, port: number) {
+        const record = this.getRecord(appAgentName);
+        record.port = port;
+        debug(`Port ${port} assigned to ${appAgentName}`);
     }
 
     public getSharedLocalHostPort(requester: string, target: string) {
@@ -507,12 +511,10 @@ export class AppAgentManager implements ActionConfigProvider {
             }
         }
 
-        const port = manifest.localView
-            ? this.portBase + this.nextPortIndex++
-            : undefined;
+        const port = manifest.localView ? 0 : undefined;
 
         if (port !== undefined) {
-            debug(`Port ${port} assigned to ${appAgentName}`);
+            debug(`Dynamic port (OS-assigned) reserved for ${appAgentName}`);
         }
 
         const record: AppAgentRecord = {

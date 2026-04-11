@@ -63,14 +63,16 @@ export class PartialCompletion {
         private readonly container: HTMLDivElement,
         private readonly input: ExpandableTextArea,
         dispatcher: Dispatcher,
-        private readonly inline: boolean = true,
+        inline: boolean = true,
+        onToggleMode?: () => void,
     ) {
         this.searchMenu = new SearchMenu(
             (item) => {
                 this.handleSelect(item);
             },
-            this.inline,
+            inline,
             this.input.getTextEntry(),
+            onToggleMode,
         );
 
         // Wrap SearchMenu to implement ISearchMenu (same shape, just typed).
@@ -136,6 +138,10 @@ export class PartialCompletion {
         this.session.hide();
     }
 
+    public switchMode(newInline: boolean) {
+        this.searchMenu.switchMode(newInline);
+    }
+
     public close() {
         this.closed = true;
         this.session.hide();
@@ -143,13 +149,15 @@ export class PartialCompletion {
     }
 
     private getCurrentInput() {
-        // Strip inline ghost text if present
+        // Strip inline completion area (ghost text + toggle) if present
         const textEntry = this.input.getTextEntry();
-        const ghost = textEntry.querySelector(".inline-ghost");
-        if (ghost) {
-            const ghostText = ghost.textContent ?? "";
+        const completionArea = textEntry.querySelector(
+            ".inline-completion-area",
+        );
+        if (completionArea) {
+            const areaText = completionArea.textContent ?? "";
             const raw = textEntry.textContent ?? "";
-            return raw.slice(0, raw.length - ghostText.length);
+            return raw.slice(0, raw.length - areaText.length);
         }
         return textEntry.textContent ?? "";
     }
@@ -184,26 +192,28 @@ export class PartialCompletion {
         }
 
         const textEntry = this.input.getTextEntry();
-        const ghost = textEntry.querySelector(".inline-ghost");
+        const completionArea = textEntry.querySelector(
+            ".inline-completion-area",
+        );
 
-        if (ghost) {
+        if (completionArea) {
             // With inline ghost text, "at end" means the cursor is right
-            // before the ghost span. setCursorBeforeGhost places the cursor
-            // using setStartBefore(ghost), so endContainer=textEntry and
-            // endOffset=ghost's child index.
+            // before the completion area wrapper. setCursorBeforeGhost
+            // places the cursor using setStartBefore(wrapper), so
+            // endContainer=textEntry and endOffset=wrapper's child index.
             if (r.endContainer === textEntry) {
-                const ghostIndex = Array.from(textEntry.childNodes).indexOf(
-                    ghost as ChildNode,
+                const areaIndex = Array.from(textEntry.childNodes).indexOf(
+                    completionArea as ChildNode,
                 );
-                if (r.endOffset === ghostIndex) {
+                if (r.endOffset === areaIndex) {
                     return true;
                 }
             }
             // Also handle: cursor at the end of a text node that is the
-            // immediate previous sibling of the ghost span.
+            // immediate previous sibling of the completion area wrapper.
             if (r.endContainer.nodeType === Node.TEXT_NODE) {
                 if (
-                    r.endContainer.nextSibling === ghost &&
+                    r.endContainer.nextSibling === completionArea &&
                     r.endOffset === (r.endContainer.textContent?.length ?? 0)
                 ) {
                     return true;

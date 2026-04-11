@@ -17,6 +17,9 @@ export function createDispatcherRpcServer(
         cancelCommand(...args) {
             dispatcher.cancelCommand(...args);
         },
+        cancelInteraction(...args) {
+            dispatcher.cancelInteraction(...args);
+        },
     };
 
     const dispatcherInvokeHandler: DispatcherInvokeFunctions = {
@@ -52,6 +55,9 @@ export function createDispatcherRpcServer(
         },
         getDisplayHistory: async (...args) => {
             return dispatcher.getDisplayHistory(...args);
+        },
+        respondToInteraction: async (...args) => {
+            return dispatcher.respondToInteraction(...args);
         },
     };
 

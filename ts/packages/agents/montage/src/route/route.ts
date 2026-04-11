@@ -239,11 +239,6 @@ function sendDataToClients(message: any) {
 }
 
 /**
- * Indicate to the host/parent process that we've started successfully
- */
-process.send?.("Success");
-
-/**
  * Processes messages received from the host/parent process
  */
 process.on("message", (message: any) => {
@@ -278,5 +273,18 @@ process.on("disconnect", () => {
 });
 
 // Start the server
-app.listen(port);
-debug(`Montage server started on port ${port}`);
+const server = app.listen(port, () => {
+    const boundPort = (server.address() as { port: number }).port;
+    debug(`Montage server started on port ${boundPort}`);
+    process.send?.({ success: true, port: boundPort });
+});
+server.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+        console.error(
+            `Port ${port} is already in use. Is another instance already running?`,
+        );
+    } else {
+        console.error(`Server error: ${err.message}`);
+    }
+    process.exitCode = 1;
+});

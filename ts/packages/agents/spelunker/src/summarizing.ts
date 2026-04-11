@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import * as sqlite from "better-sqlite3";
-
 import { createLimiter } from "@typeagent/common-utils";
 
 import { Chunk, ChunkId } from "./chunkSchema.js";
@@ -95,8 +93,11 @@ async function summarizeChunkSlice(
                 let blobLines: string = blobRow.lines;
                 // Assume it doesn't start with a blank line /(^\s*\r?\n)*/
                 const indent = blobLines?.match(/^(\s*)\S/)?.[1] ?? ""; // Whitespace followed by non-whitespace
+                const commentStyle = languageCommentMap[
+                    summary.language ?? "python"
+                ] ?? { start: "#", end: "" };
                 blobLines =
-                    `${indent}${languageCommentMap[summary.language ?? "python"]} ${summary.summary}\n` +
+                    `${indent}${commentStyle.start} ${summary.summary}\n` +
                     `${indent}${summary.signature} ...\n`;
                 // console_log(
                 //     `  [Replacing\n'''\n${blobRow.lines}'''\nwith\n'''\n${blobLines}\n''']`,
@@ -157,27 +158,7 @@ export function prepareChunks(chunks: Chunk[]): string {
     return output.join("");
 }
 
-// TODO: Remove export once we're using summaries again.
-export function prepareSummaries(db: sqlite.Database): string {
-    const selectAllSummaries = db.prepare(`SELECT * FROM Summaries`);
-    const summaryRows: any[] = selectAllSummaries.all();
-    if (summaryRows.length > 100) {
-        console_log(`  [Over 100 summary rows, skipping summaries in prompt]`);
-        return "";
-    }
-    const lines: string[] = [];
-    for (const summaryRow of summaryRows) {
-        const comment = languageCommentMap[summaryRow.language] ?? "#";
-        lines.push("");
-        lines.push(`${comment} ${summaryRow.summary}`);
-        lines.push(summaryRow.signature);
-    }
-    return lines.join("\n");
-}
-
-// TODO: Make the values two elements, comment start and comment end
-// (and then caller should ensure comment end doesn't occur in the comment text).
-const languageCommentMap: { [key: string]: string } = {
-    python: "#",
-    typescript: "//",
+const languageCommentMap: { [key: string]: { start: string; end: string } } = {
+    python: { start: "#", end: "" },
+    typescript: { start: "//", end: "" },
 };

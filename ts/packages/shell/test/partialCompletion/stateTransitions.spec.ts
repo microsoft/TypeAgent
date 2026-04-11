@@ -431,7 +431,7 @@ describe("PartialCompletionSession — afterWildcard anchor sliding", () => {
         const result = makeCompletionResult(["next"], 8, {
             closedSet: true,
             afterWildcard: "all",
-            separatorMode: "optional",
+            separatorMode: "optionalSpace",
         });
         const dispatcher = makeDispatcher(result);
         const session = new PartialCompletionSession(menu, dispatcher);

@@ -23,6 +23,7 @@ export class BaseServer {
     private sseManager: SSEManager;
     private features: Map<string, FeatureConfig> = new Map();
     private config: ServerConfig;
+    private boundPort: number | undefined;
 
     constructor(config: ServerConfig) {
         this.config = config;
@@ -142,18 +143,45 @@ export class BaseServer {
         return this.app;
     }
 
+    get port(): number {
+        if (this.boundPort === undefined) {
+            throw new Error("Server has not been started yet.");
+        }
+        return this.boundPort;
+    }
+
     /**
      * Start the server
      */
     start(): Promise<void> {
-        return new Promise((resolve) => {
-            this.app.listen(this.config.port, () => {
-                debug(`Server running at http://localhost:${this.config.port}`);
+        return new Promise((resolve, reject) => {
+            const server = this.app.listen(this.config.port, () => {
+                this.boundPort = (server.address() as { port: number }).port;
+                debug(`Server running at http://localhost:${this.boundPort}`);
                 debug(
                     `Registered features: ${Array.from(this.features.keys()).join(", ")}`,
                 );
+                server.removeListener("error", onStartupError);
+                server.on("error", (err: NodeJS.ErrnoException) => {
+                    console.error(
+                        `Server runtime error on port ${this.boundPort}:`,
+                        err,
+                    );
+                });
                 resolve();
             });
+            const onStartupError = (err: NodeJS.ErrnoException) => {
+                if (err.code === "EADDRINUSE") {
+                    reject(
+                        new Error(
+                            `Port ${this.config.port} is already in use. Is another instance already running?`,
+                        ),
+                    );
+                } else {
+                    reject(err);
+                }
+            };
+            server.on("error", onStartupError);
         });
     }
 }

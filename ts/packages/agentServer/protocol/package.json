@@ -26,7 +26,8 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@typeagent/dispatcher-rpc": "workspace:*"
+    "@typeagent/dispatcher-rpc": "workspace:*",
+    "@typeagent/dispatcher-types": "workspace:*"
   },
   "devDependencies": {
     "prettier": "^3.5.3",

@@ -39,10 +39,10 @@ export type SearchMenuPosition = {
 
 export type SearchMenuItem = {
     matchText: string;
-    emojiChar?: string;
+    emojiChar?: string | undefined;
     sortIndex?: number;
     selectedText: string;
-    needQuotes?: boolean; // default is true, and will add quote to the selectedText if it has spaces.
+    needQuotes?: boolean | undefined; // default is true, and will add quote to the selectedText if it has spaces.
 };
 
 export type SearchMenuUIUpdateData = {

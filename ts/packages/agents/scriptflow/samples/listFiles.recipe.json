@@ -1,14 +1,14 @@
 {
   "version": 1,
   "actionName": "listFiles",
-  "description": "List files in a directory with optional filtering",
+  "description": "List files in a directory with optional filtering. Supports library names like 'downloads', 'documents', 'pictures'.",
   "displayName": "List Files",
   "parameters": [
     {
       "name": "path",
-      "type": "path",
+      "type": "string",
       "required": false,
-      "description": "Directory to list",
+      "description": "Directory path or library name (downloads, documents, pictures, music, videos, desktop, temp)",
       "default": "."
     },
     {
@@ -21,29 +21,43 @@
   ],
   "script": {
     "language": "powershell",
-    "body": "param([string]$Path = '.', [string]$Filter = '*')\nGet-ChildItem -Path $Path -Filter $Filter | ForEach-Object { \"{0,-50} {1,15:N0} bytes  {2}\" -f $_.Name, $_.Length, $_.LastWriteTime }",
+    "body": "param([string]$Path = '.', [string]$Filter = '*')\n\n$resolvedPath = $Path\n\n# If path is empty or just whitespace, use current directory\nif (-not $Path -or $Path -match '^\\s*$') {\n    $resolvedPath = '.'\n}\n# Check if it looks like an actual path (drive letter, UNC, or relative with slashes)\nelseif ($Path -match '^[a-zA-Z]:' -or $Path -match '^\\\\' -or $Path -match '^\\.' -or $Path -match '[/\\\\]') {\n    $resolvedPath = $Path\n}\n# Otherwise, check for known library names\nelse {\n    $pathLower = $Path.ToLower().Trim()\n    switch -Wildcard ($pathLower) {\n        '*download*' { $resolvedPath = \"$env:USERPROFILE\\Downloads\" }\n        '*document*' { $resolvedPath = \"$env:USERPROFILE\\Documents\" }\n        '*picture*'  { $resolvedPath = \"$env:USERPROFILE\\Pictures\" }\n        '*photo*'    { $resolvedPath = \"$env:USERPROFILE\\Pictures\" }\n        '*music*'    { $resolvedPath = \"$env:USERPROFILE\\Music\" }\n        '*video*'    { $resolvedPath = \"$env:USERPROFILE\\Videos\" }\n        '*movie*'    { $resolvedPath = \"$env:USERPROFILE\\Videos\" }\n        '*desktop*'  { $resolvedPath = \"$env:USERPROFILE\\Desktop\" }\n        '*temp*'     { $resolvedPath = $env:TEMP }\n        '*home*'     { $resolvedPath = $env:USERPROFILE }\n        '*user*'     { $resolvedPath = $env:USERPROFILE }\n        default      { $resolvedPath = $Path }\n    }\n}\n\nif (-not (Test-Path $resolvedPath)) {\n    Write-Output \"Path not found: $resolvedPath\"\n    return\n}\n\nWrite-Output \"Listing: $resolvedPath\"\nWrite-Output ('-' * 80)\nGet-ChildItem -Path $resolvedPath -Filter $Filter | ForEach-Object { \"{0,-50} {1,15:N0} bytes  {2}\" -f $_.Name, $_.Length, $_.LastWriteTime }",
     "expectedOutputFormat": "text"
   },
   "grammarPatterns": [
     {
-      "pattern": "list (all)? (the)? files (in|at|under) $(path:wildcard)",
+      "pattern": "list (all)? (the)? files (in|at|under)? $(path:wildcard)?",
       "isAlias": false,
-      "examples": ["list files in downloads", "list all the files in src"]
+      "examples": [
+        "list files in downloads",
+        "list all the files in src",
+        "list files"
+      ]
     },
     {
-      "pattern": "ls $(path:wildcard)",
+      "pattern": "ls $(path:wildcard)?",
       "isAlias": true,
-      "examples": ["ls .", "ls downloads"]
+      "examples": ["ls", "ls .", "ls downloads"]
     },
     {
-      "pattern": "dir $(path:wildcard)",
+      "pattern": "dir $(path:wildcard)?",
       "isAlias": true,
-      "examples": ["dir .", "dir src"]
+      "examples": ["dir", "dir .", "dir src"]
     },
     {
-      "pattern": "show (me)? (the)? files (in|of) $(path:wildcard)",
+      "pattern": "show (me)? (the)? files (in|of)? $(path:wildcard)?",
       "isAlias": false,
-      "examples": ["show me the files in documents"]
+      "examples": ["show me the files in documents", "show files"]
+    },
+    {
+      "pattern": "list (my)? $(path:wildcard)",
+      "isAlias": false,
+      "examples": ["list my downloads", "list my pictures", "list my documents"]
+    },
+    {
+      "pattern": "what('s| is) in (my)? $(path:wildcard)",
+      "isAlias": false,
+      "examples": ["what's in my downloads", "what is in documents"]
     }
   ],
   "sandbox": {
@@ -51,11 +65,18 @@
       "Get-ChildItem",
       "ForEach-Object",
       "Select-Object",
-      "Sort-Object"
+      "Sort-Object",
+      "Test-Path",
+      "Write-Output"
     ],
     "allowedPaths": [
       "$env:USERPROFILE",
       "$env:USERPROFILE\\Downloads",
+      "$env:USERPROFILE\\Documents",
+      "$env:USERPROFILE\\Pictures",
+      "$env:USERPROFILE\\Music",
+      "$env:USERPROFILE\\Videos",
+      "$env:USERPROFILE\\Desktop",
       "$PWD",
       "$env:TEMP"
     ],

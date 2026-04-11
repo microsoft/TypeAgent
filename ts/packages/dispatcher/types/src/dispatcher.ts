@@ -6,12 +6,12 @@ import {
     CompletionGroup,
     DisplayType,
     DynamicDisplay,
-    SeparatorMode,
     TemplateSchema,
     TypeAgentAction,
     AfterWildcard,
 } from "@typeagent/agent-sdk";
 import type { DisplayLogEntry } from "./displayLogEntry.js";
+import type { PendingInteractionResponse } from "./pendingInteraction.js";
 
 /**
  * Identifies a command request across the dispatcher and all connected clients.
@@ -81,10 +81,6 @@ export type CommandCompletionResult = {
     // resolved; completions describe what can follow after that prefix.
     startIndex: number;
     completions: CompletionGroup[]; // completions available at the current position
-    // What kind of separator is required between the matched prefix and
-    // the completion text.  When omitted, defaults to "space".
-    // See SeparatorMode in @typeagent/agent-sdk.
-    separatorMode?: SeparatorMode | undefined;
     // True when the completions form a closed set — if the user types
     // something not in the list, no further completions can exist
     // beyond it.  When true and the user types something that doesn't
@@ -237,6 +233,26 @@ export interface Dispatcher {
      * @param afterSeq if provided, return only entries with seq > afterSeq
      */
     getDisplayHistory(afterSeq?: number): Promise<DisplayLogEntry[]>;
+
+    /**
+     * Respond to a pending interaction (async deferred pattern).
+     * Resolves the deferred promise associated with the given interactionId.
+     *
+     * @param response the client's response containing the interactionId and value
+     */
+    respondToInteraction(response: PendingInteractionResponse): Promise<void>;
+
+    /**
+     * Explicitly cancel a pending interaction by the client.
+     * Cancellations by client are explicit; disconnects do not auto-cancel.
+     *
+     * This is a fire-and-forget operation — the server silently ignores
+     * unknown interactionIds and broadcasts `interactionCancelled` to all
+     * clients regardless of whether the interaction was found.
+     *
+     * @param interactionId the interactionId of the pending interaction to cancel
+     */
+    cancelInteraction(interactionId: string): void;
 
     /**
      * Cancel an in-flight command. If the command identified by requestId is

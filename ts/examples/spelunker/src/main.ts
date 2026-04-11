@@ -8,6 +8,7 @@ import dotenv from "dotenv";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { parseArgs } from "util";
 
 // Local imports
 import { importAllFiles } from "./pythonImporter.js";
@@ -33,7 +34,7 @@ Loading modules:
     node dist/main.js -  # Load sample file (${path.relative(process.cwd(), sampleFile)})
 Interactive query loop:
     node dist/main.js    # Query previously loaded files (use @search --query 'your query')
-Verbose mode: add -v or --verbose before any of the above commands.
+Options: -v/--verbose, -h/--help
 You can also use 'pnpm start' instead of 'node dist/main.js'.
 Actual args: '${process.argv[0]}' '${process.argv[1]}'
 `;
@@ -41,24 +42,23 @@ Actual args: '${process.argv[0]}' '${process.argv[1]}'
 await main();
 
 async function main(): Promise<void> {
-    // TODO: switch to whatever interactive-app uses to parse the command line?
+    const { values, positionals } = parseArgs({
+        args: process.argv.slice(2),
+        options: {
+            verbose: { type: "boolean", short: "v" },
+            files: { type: "string" },
+            help: { type: "boolean", short: "h" },
+        },
+        allowPositionals: true,
+    });
 
-    const helpFlags = ["-h", "--help", "-?", "--?"];
-    const help = helpFlags.some((arg) => process.argv.includes(arg));
-    if (help) {
+    if (values.help) {
         console.log(usageMessage);
         return;
     }
 
-    const verboseFlags = ["-v", "--verbose"];
-    const verbose = verboseFlags.some((arg) => process.argv.includes(arg));
-    if (verbose) {
-        process.argv = process.argv.filter(
-            (arg) => arg !== "-v" && arg !== "--verbose",
-        );
-    }
-
-    const files = parseCommandLine();
+    const verbose = values.verbose ?? false;
+    const files = resolveFiles(positionals, values.files);
 
     const homeDir = process.platform === "darwin" ? process.env.HOME || "" : "";
     const databaseRootDir = path.join(homeDir, "/data/spelunker");
@@ -72,24 +72,16 @@ async function main(): Promise<void> {
     }
 }
 
-function parseCommandLine(): string[] {
-    let files: string[];
-    // TODO: Use a proper command-line parser?
-    if (process.argv.length > 2) {
-        files = process.argv.slice(2);
-        if (files.length === 1 && files[0] === "-") {
-            files = [sampleFile];
-        } else if (files.length === 2 && files[0] === "--files") {
-            // Read list of files from a file.
-            const fileList = files[1];
-            files = fs
-                .readFileSync(fileList, "utf-8")
-                .split("\n")
-                .map((line) => line.trim())
-                .filter((line) => line.length > 0 && line[0] !== "#");
-        }
-    } else {
-        files = [];
+function resolveFiles(positionals: string[], filesArg?: string): string[] {
+    if (positionals.length === 1 && positionals[0] === "-") {
+        return [sampleFile];
     }
-    return files;
+    if (filesArg) {
+        return fs
+            .readFileSync(filesArg, "utf-8")
+            .split("\n")
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0 && line[0] !== "#");
+    }
+    return positionals;
 }
