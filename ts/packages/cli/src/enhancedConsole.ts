@@ -1037,7 +1037,7 @@ function formatDisplayContent(content: string | DisplayContent): string {
  */
 async function questionWithCompletion(
     message: string,
-    getCompletions: ((input: string) => Promise<any>) | null,
+    getCompletions: ((input: string) => Promise<any>) | undefined,
     history: string[] = [],
     completionDispatcher?: ICompletionDispatcher,
 ): Promise<string> {
@@ -1209,10 +1209,11 @@ async function questionWithCompletion(
             prevInputRows = inputRows;
         };
 
-        // Fetch completions for current input (callback mode only)
+        // Fetch completions for current input (callback mode only).
+        // In session mode, completions are driven by session.update() + menu callbacks.
         const updateCompletions = async () => {
             if (!getCompletions) {
-                return; // No-op in session mode
+                return;
             }
             if (updatingCompletions) {
                 return; // Skip if already updating
@@ -1807,7 +1808,7 @@ export async function processCommandsEnhanced<T>(
                 // Dispatcher mode: session-based completions
                 request = await questionWithCompletion(
                     promptColor(prompt),
-                    null,
+                    undefined,
                     history,
                     completionSource,
                 );
