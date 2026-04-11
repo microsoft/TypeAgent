@@ -80,7 +80,7 @@ export function getBrowserControlForRequest(
             return agentContext.externalBrowserControl.control;
         }
 
-        if (clientType === "electron" && agentContext.clientBrowserControl) {
+        if (clientType === "shell" && agentContext.clientBrowserControl) {
             return agentContext.clientBrowserControl;
         }
     }

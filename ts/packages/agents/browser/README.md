@@ -74,10 +74,14 @@ When both client types are connected for the same session, the active client is 
 
 Each client connection is multiplexed into two logical channels using `@typeagent/agent-rpc`:
 
-- **`agentService`** — RPC from the client to invoke browser agent actions (e.g. `openWebPage`, `indexPage`).
-- **`browserControl`** — RPC from the agent to control the browser (e.g. `clickOn`, `captureScreenshot`, `getHtmlFragments`).
+- **`agentService`** — RPC from the client to invoke browser agent actions (e.g. `openWebPage`, `indexPage`). The RPC channel label is `agent:service:<sessionId>:<clientId>`.
+- **`browserControl`** — RPC from the agent to control the browser (e.g. `clickOn`, `captureScreenshot`, `getHtmlFragments`). The RPC channel label is `browser:control:<sessionId>:<clientId>`.
 
-Both channels share a single WebSocket connection per client.
+Both channels share a single WebSocket connection per client. The `sessionId` prefix in each channel label keeps them unique across concurrent sessions.
+
+#### Client storage model
+
+Internally, the server stores connected clients in a nested `Map<sessionId, Map<clientId, BrowserClient>>`. This means the same `clientId` (e.g. `inlineBrowser`, or a shared extension ID) can exist simultaneously in multiple sessions without collision. Duplicate-connection detection and forced-disconnect logic are scoped to `(sessionId, clientId)` pairs, so a reconnect in one session never affects clients in other sessions.
 
 ## Trademarks
 

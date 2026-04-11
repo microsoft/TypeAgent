@@ -44,7 +44,7 @@ interface SessionHandlers {
 
 export class AgentWebSocketServer {
     private server: WebSocketServer;
-    private clients = new Map<string, BrowserClient>();
+    private clients = new Map<string, Map<string, BrowserClient>>();
     private sessionHandlers = new Map<string, SessionHandlers>();
 
     constructor(port: number = 8081) {
@@ -56,7 +56,10 @@ export class AgentWebSocketServer {
     /**
      * Register per-session handlers. Call during updateAgentContext(enable=true).
      * Preserves the session's existing activeClientId if already registered.
-     * Also wires up agentRpc for any clients that connected before registration.
+     * For clients that connected before registration:
+     *   - Late-wires agentRpc if agentInvokeHandlers are now available.
+     *   - Selects an active client (was skipped at connect time since no session existed).
+     *   - Fires onClientConnected for each pre-connected client.
      */
     public registerSession(
         sessionId: string,
@@ -68,14 +71,12 @@ export class AgentWebSocketServer {
             activeClientId: existing?.activeClientId ?? null,
         });
 
+        const preConnected = this.getSessionClients(sessionId);
+
         // Wire up agentRpc for clients that connected before session registration
         if (handlers.agentInvokeHandlers) {
-            for (const client of this.clients.values()) {
-                if (
-                    client.sessionId === sessionId &&
-                    !client.agentRpc &&
-                    client.channelProvider
-                ) {
+            for (const client of preConnected.values()) {
+                if (!client.agentRpc && client.channelProvider) {
                     const agentServiceChannel =
                         client.channelProvider.createChannel("agentService");
                     client.agentRpc = createRpc<
@@ -83,13 +84,29 @@ export class AgentWebSocketServer {
                         BrowserAgentCallFunctions,
                         BrowserAgentInvokeFunctions
                     >(
-                        `agent:service:${client.id}`,
+                        `agent:service:${sessionId}:${client.id}`,
                         agentServiceChannel,
                         handlers.agentInvokeHandlers,
                     );
                     debug(
                         `Late-wired agentRpc for pre-registered client: ${client.id}`,
                     );
+                }
+            }
+        }
+
+        if (preConnected.size > 0) {
+            // activeClientId was never set for these clients (handleNewConnection
+            // bails on selectActiveClientForSession when no session is registered).
+            this.selectActiveClientForSession(
+                sessionId,
+                handlers.getPreferredClientType?.(),
+            );
+
+            // onClientConnected was also skipped at connect time.
+            if (handlers.onClientConnected) {
+                for (const client of preConnected.values()) {
+                    handlers.onClientConnected(client);
                 }
             }
         }
@@ -106,14 +123,15 @@ export class AgentWebSocketServer {
         // Delete handlers first so the async 'close' events that fire after
         // socket.close() find no session and skip their cleanup logic.
         this.sessionHandlers.delete(sessionId);
-        for (const [clientId, client] of this.clients) {
-            if (client.sessionId === sessionId) {
+        const sessionMap = this.clients.get(sessionId);
+        if (sessionMap) {
+            for (const client of sessionMap.values()) {
                 if (client.channelProvider) {
                     client.channelProvider.notifyDisconnected();
                 }
                 client.socket.close();
-                this.clients.delete(clientId);
             }
+            this.clients.delete(sessionId);
         }
         debug(`Session unregistered: ${sessionId}`);
     }
@@ -143,21 +161,25 @@ export class AgentWebSocketServer {
             return;
         }
 
-        const existing = this.clients.get(clientId);
+        const sessionMap =
+            this.clients.get(sessionId) ?? new Map<string, BrowserClient>();
+        const existing = sessionMap.get(clientId);
         if (existing) {
-            debug(`Closing duplicate connection for ${clientId}`);
+            debug(
+                `Closing duplicate connection for ${clientId} in session ${sessionId}`,
+            );
             if (existing.channelProvider) {
                 existing.channelProvider.notifyDisconnected();
             }
             existing.socket.close(1013, "duplicate");
-            this.clients.delete(clientId);
+            sessionMap.delete(clientId);
         }
 
         const session = this.sessionHandlers.get(sessionId);
 
         // Create channel provider for this client connection
         const clientChannelProvider = createChannelProviderAdapter(
-            `agent:${clientId}`,
+            `agent:${sessionId}:${clientId}`,
             (message: any) => {
                 if (ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify(message));
@@ -175,7 +197,7 @@ export class AgentWebSocketServer {
                 BrowserAgentCallFunctions,
                 BrowserAgentInvokeFunctions
             >(
-                `agent:service:${clientId}`,
+                `agent:service:${sessionId}:${clientId}`,
                 agentServiceChannel,
                 session.agentInvokeHandlers,
             );
@@ -187,7 +209,7 @@ export class AgentWebSocketServer {
         const clientBrowserControlRpc = createRpc<
             BrowserControlInvokeFunctions,
             BrowserControlCallFunctions
-        >(`browser:control:${clientId}`, browserControlChannel);
+        >(`browser:control:${sessionId}:${clientId}`, browserControlChannel);
 
         const client: BrowserClient = {
             id: clientId,
@@ -201,7 +223,8 @@ export class AgentWebSocketServer {
             browserControlRpc: clientBrowserControlRpc,
         };
 
-        this.clients.set(clientId, client);
+        sessionMap.set(clientId, client);
+        this.clients.set(sessionId, sessionMap);
         debug(
             `Client connected: ${clientId} (${client.type}, session: ${sessionId})`,
         );
@@ -267,7 +290,11 @@ export class AgentWebSocketServer {
                 client.channelProvider.notifyDisconnected();
             }
 
-            this.clients.delete(clientId);
+            const sm = this.clients.get(client.sessionId);
+            if (sm) {
+                sm.delete(clientId);
+                if (sm.size === 0) this.clients.delete(client.sessionId);
+            }
 
             if (s && s.activeClientId === clientId) {
                 this.selectNewActiveClientForSession(client.sessionId);
@@ -327,13 +354,7 @@ export class AgentWebSocketServer {
     }
 
     private getSessionClients(sessionId: string): Map<string, BrowserClient> {
-        const result = new Map<string, BrowserClient>();
-        for (const [id, client] of this.clients) {
-            if (client.sessionId === sessionId) {
-                result.set(id, client);
-            }
-        }
-        return result;
+        return this.clients.get(sessionId) ?? new Map();
     }
 
     public getActiveClient(
@@ -344,7 +365,7 @@ export class AgentWebSocketServer {
         if (!session) return null;
 
         const activeClient = session.activeClientId
-            ? this.clients.get(session.activeClientId) || null
+            ? this.clients.get(sessionId)?.get(session.activeClientId) || null
             : null;
 
         if (!activeClient) {
@@ -379,17 +400,25 @@ export class AgentWebSocketServer {
         return activeClient;
     }
 
-    public getClient(clientId: string): BrowserClient | null {
-        return this.clients.get(clientId) || null;
+    public getClient(
+        sessionId: string,
+        clientId: string,
+    ): BrowserClient | null {
+        return this.clients.get(sessionId)?.get(clientId) || null;
     }
 
     public listClients(): BrowserClient[] {
-        return Array.from(this.clients.values());
+        const result: BrowserClient[] = [];
+        for (const sessionMap of this.clients.values()) {
+            result.push(...sessionMap.values());
+        }
+        return result;
     }
 
     public setActiveClient(sessionId: string, clientId: string): boolean {
         const session = this.sessionHandlers.get(sessionId);
-        if (!session || !this.clients.has(clientId)) return false;
+        if (!session || !this.clients.get(sessionId)?.has(clientId))
+            return false;
 
         session.activeClientId = clientId;
 
@@ -411,11 +440,12 @@ export class AgentWebSocketServer {
      * Send a fire-and-forget event to a specific client via agentRpc.
      */
     public sendEventToClient<K extends keyof BrowserAgentCallFunctions>(
+        sessionId: string,
         clientId: string,
         event: K,
         ...args: Parameters<BrowserAgentCallFunctions[K]>
     ): boolean {
-        const client = this.clients.get(clientId);
+        const client = this.clients.get(sessionId)?.get(clientId);
         if (client?.agentRpc) {
             (client.agentRpc.send as any)(event, ...args);
             return true;
