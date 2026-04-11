@@ -35,6 +35,12 @@ show high severity dependabot alerts in microsoft/TypeAgent
 # Star a repo
 star microsoft/TypeAgent
 
+# Create an issue and close it
+create issue "Demo test - safe to ignore"
+
+# Close it (presenter: update number from the output above)
+close issue 2186
+
 # Full repo overview
 show repository microsoft/TypeAgent
 
