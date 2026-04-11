@@ -172,5 +172,7 @@ export function createSessionContext<T = unknown>(
     };
 
     (sessionContext as any).conversationManager = context.conversationManager;
+    // Expose CommandHandlerContext for agents that need to execute nested actions
+    (sessionContext as any)._systemContext = context;
     return sessionContext;
 }

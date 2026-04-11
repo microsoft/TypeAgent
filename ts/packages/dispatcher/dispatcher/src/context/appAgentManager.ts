@@ -1260,6 +1260,25 @@ export class AppAgentManager implements ActionConfigProvider {
         );
         await Promise.all(semanticMapP);
 
+        // Reload dynamic schemas and grammars if agent is active
+        if (record.appAgent && record.sessionContextP) {
+            const sessionContext = await record.sessionContextP;
+            for (const schemaName of record.actions) {
+                await this.loadDynamicSchema(
+                    schemaName,
+                    record.appAgent,
+                    sessionContext,
+                    context,
+                );
+                await this.loadDynamicGrammar(
+                    schemaName,
+                    record.appAgent,
+                    sessionContext,
+                    context,
+                );
+            }
+        }
+
         // Clear translator cache to force re-translation with new schema
         context.translatorCache.clear();
     }

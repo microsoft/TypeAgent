@@ -112,7 +112,13 @@ export async function executeAction(
     }
 
     const schemaName = action.schemaName;
-    const systemContext = context.sessionContext.agentContext;
+    // For nested action calls (e.g., from TaskFlow scripts), agentContext may be
+    // the agent's own context rather than CommandHandlerContext. In that case,
+    // use _systemContext which exposes the CommandHandlerContext.
+    const sessionCtx = context.sessionContext as any;
+    const systemContext: CommandHandlerContext =
+        sessionCtx._systemContext ?? sessionCtx.agentContext;
+
     const appAgentName = getAppAgentName(schemaName);
     const requestId = getRequestId(systemContext);
     const appAgent = systemContext.agents.getAppAgent(appAgentName);
@@ -239,7 +245,9 @@ async function canExecute(
     actions: ExecutableAction[],
     context: ActionContext<CommandHandlerContext>,
 ): Promise<boolean> {
-    const systemContext = context.sessionContext.agentContext;
+    const sessionCtx = context.sessionContext as any;
+    const systemContext: CommandHandlerContext =
+        sessionCtx._systemContext ?? sessionCtx.agentContext;
     const unknown: UnknownAction[] = [];
     const disabled = new Set<string>();
     for (const { action } of actions) {
@@ -315,7 +323,9 @@ export async function executeActions(
     entities: PromptEntity[] | undefined,
     context: ActionContext<CommandHandlerContext>,
 ): Promise<ActionResultError | undefined> {
-    const systemContext = context.sessionContext.agentContext;
+    const sessionCtx = context.sessionContext as any;
+    const systemContext: CommandHandlerContext =
+        sessionCtx._systemContext ?? sessionCtx.agentContext;
     const commandResult = getCommandResult(systemContext);
     if (commandResult !== undefined) {
         commandResult.actions = actions.map(({ action }) => action);

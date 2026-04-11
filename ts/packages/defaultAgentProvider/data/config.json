@@ -59,7 +59,8 @@
       "name": "weather-agent"
     },
     "taskflow": {
-      "name": "taskflow-typeagent"
+      "name": "taskflow-typeagent",
+      "execMode": "dispatcher"
     },
     "scriptflow": {
       "name": "scriptflow-typeagent"
