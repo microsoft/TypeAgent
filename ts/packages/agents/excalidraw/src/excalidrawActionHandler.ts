@@ -361,7 +361,7 @@ async function handleCreateDiagram(
 
         let plan: DiagramPlan;
         try {
-            plan = JSON.parse(planResponse.data);
+            plan = JSON.parse(stripMarkdownFences(planResponse.data));
         } catch {
             return createActionResultFromError(
                 "Failed to parse DiagramPlan from AI response. The model returned invalid JSON.",
@@ -403,10 +403,11 @@ async function handleCreateDiagram(
 
         let excalidrawData: ExcalidrawDocument;
         try {
-            excalidrawData = JSON.parse(genResponse.data);
-        } catch {
+            excalidrawData = JSON.parse(stripMarkdownFences(genResponse.data));
+        } catch (parseErr) {
+            const snippet = genResponse.data.slice(-200);
             return createActionResultFromError(
-                "The AI returned invalid Excalidraw JSON. Please try again.",
+                `The AI returned invalid Excalidraw JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}\n\nLast 200 chars of response: ${snippet}`,
             );
         }
 
@@ -459,7 +460,7 @@ async function handleCreateDiagram(
 
             try {
                 const corrected: ExcalidrawDocument = JSON.parse(
-                    correctionResponse.data,
+                    stripMarkdownFences(correctionResponse.data),
                 );
                 ensureTopLevelFields(corrected);
                 excalidrawData = corrected;
@@ -599,6 +600,16 @@ function handleExportDiagram(action: ExportDiagramAction): ActionResult {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Strips markdown code fences that some models emit even in json_object mode.
+ * Handles ```json ... ```, ``` ... ```, and leading/trailing whitespace.
+ */
+function stripMarkdownFences(raw: string): string {
+    const trimmed = raw.trim();
+    const match = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
+    return match ? match[1].trim() : trimmed;
+}
 
 function ensureTopLevelFields(doc: ExcalidrawDocument): void {
     if (!doc.type) doc.type = "excalidraw";
