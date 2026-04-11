@@ -10,7 +10,6 @@ import type {
 type PendingEntry = {
     type: PendingInteractionType;
     requestId?: RequestId;
-    connectionId?: string;
     resolve: (value: any) => void;
     reject: (error: Error) => void;
     timeoutTimer?: ReturnType<typeof setTimeout>;
@@ -33,7 +32,6 @@ export class PendingInteractionManager {
      */
     create<T>(
         request: PendingInteractionRequest,
-        connectionId: string | undefined,
         timeoutMs?: number,
     ): Promise<T> {
         return new Promise<T>((resolve, reject) => {
@@ -43,10 +41,6 @@ export class PendingInteractionManager {
                 reject,
                 request,
             };
-
-            if (connectionId !== undefined) {
-                entry.connectionId = connectionId;
-            }
 
             if (request.requestId !== undefined) {
                 entry.requestId = request.requestId;
@@ -119,22 +113,6 @@ export class PendingInteractionManager {
         // For proposeAction and popupQuestion, reject
         entry.reject(error);
         return true;
-    }
-
-    /**
-     * Cancel all pending interactions for a specific connectionId.
-     * Called when a client disconnects.
-     * Returns the interactionIds that were cancelled.
-     */
-    cancelByConnection(connectionId: string, error: Error): string[] {
-        const cancelled: string[] = [];
-        for (const [interactionId, entry] of this.pending) {
-            if (entry.connectionId === connectionId) {
-                this.cancel(interactionId, error);
-                cancelled.push(interactionId);
-            }
-        }
-        return cancelled;
     }
 
     /**

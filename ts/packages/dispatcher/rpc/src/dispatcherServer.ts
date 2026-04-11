@@ -17,6 +17,9 @@ export function createDispatcherRpcServer(
         cancelCommand(...args) {
             dispatcher.cancelCommand(...args);
         },
+        cancelInteraction(...args) {
+            dispatcher.cancelInteraction(...args);
+        },
     };
 
     const dispatcherInvokeHandler: DispatcherInvokeFunctions = {
