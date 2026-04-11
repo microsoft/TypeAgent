@@ -26,6 +26,9 @@ import type {
     IAgentMessage,
     TemplateEditConfig,
 } from "agent-dispatcher";
+import type { ICompletionDispatcher } from "agent-dispatcher/helpers/completion";
+import { PartialCompletionSession } from "agent-dispatcher/helpers/completion";
+import { CliSearchMenu } from "./cliSearchMenu.js";
 import chalk from "chalk";
 import fs from "fs";
 import path from "path";
@@ -39,6 +42,7 @@ import {
     isSlashCommand,
     handleSlashCommand,
     getVerboseIndicator,
+    getSlashCompletions,
 } from "./slashCommands.js";
 import {
     setSpinnerAccessor,
@@ -1033,8 +1037,9 @@ function formatDisplayContent(content: string | DisplayContent): string {
  */
 async function questionWithCompletion(
     message: string,
-    getCompletions: (input: string) => Promise<any>,
+    getCompletions: ((input: string) => Promise<any>) | null,
     history: string[] = [],
+    completionDispatcher?: ICompletionDispatcher,
 ): Promise<string> {
     return new Promise<string>((resolve) => {
         let input = "";
@@ -1047,6 +1052,9 @@ async function questionWithCompletion(
         let filterStartIndex = -1; // Where filtering begins
         let completionPrefix = ""; // Fixed prefix before completions
         let updatingCompletions = false;
+        // Session-mode state (used when completionDispatcher is provided)
+        let session: PartialCompletionSession | null = null;
+        let menu: CliSearchMenu | null = null;
         const stdin = process.stdin;
         const stdout = process.stdout;
 
@@ -1096,6 +1104,38 @@ async function questionWithCompletion(
         const EXTRA_ROWS = 3; // separator + bottom rule + hint
 
         const render = () => {
+            // Session mode: recompute completions from session/menu state each frame.
+            if (completionDispatcher) {
+                if (isSlashCommand(input)) {
+                    const completions = getSlashCompletions(input);
+                    filteredCompletions = completions;
+                    filterStartIndex = 0;
+                    completionPrefix = "";
+                } else if (session !== null && menu !== null) {
+                    const sessionItems = menu.getItems();
+                    const rawPrefix = session.getCompletionPrefix(input);
+                    if (sessionItems.length > 0 && rawPrefix !== undefined) {
+                        const anchorIndex = input.length - rawPrefix.length;
+                        filteredCompletions = sessionItems.map(
+                            (i) => i.selectedText,
+                        );
+                        filterStartIndex = anchorIndex;
+                        completionPrefix = input.substring(0, anchorIndex);
+                    } else {
+                        filteredCompletions = [];
+                        filterStartIndex = -1;
+                        completionPrefix = "";
+                    }
+                } else {
+                    filteredCompletions = [];
+                    filterStartIndex = -1;
+                    completionPrefix = "";
+                }
+                if (completionIndex >= filteredCompletions.length) {
+                    completionIndex = 0;
+                }
+            }
+
             const promptText = chalk.cyanBright(message);
             const width = process.stdout.columns || 80;
 
@@ -1169,8 +1209,11 @@ async function questionWithCompletion(
             prevInputRows = inputRows;
         };
 
-        // Fetch completions for current input
+        // Fetch completions for current input (callback mode only)
         const updateCompletions = async () => {
+            if (!getCompletions) {
+                return; // No-op in session mode
+            }
             if (updatingCompletions) {
                 return; // Skip if already updating
             }
@@ -1201,6 +1244,14 @@ async function questionWithCompletion(
         };
 
         // Activate the scroll region and draw initial prompt
+        // Initialize session-based completions after render is defined.
+        if (completionDispatcher) {
+            menu = new CliSearchMenu(() => {
+                completionIndex = 0;
+                render();
+            });
+            session = new PartialCompletionSession(menu, completionDispatcher);
+        }
         layout.setup(prevInputRows + EXTRA_ROWS);
         render();
 
@@ -1279,8 +1330,22 @@ async function questionWithCompletion(
             }
 
             if (data === "\x1b") {
-                if (filteredCompletions.length > 0) {
-                    // Esc with completions showing — clear completions
+                if (session !== null && menu !== null) {
+                    // Session mode: use explicitHide for smart level-shift / refetch
+                    if (filteredCompletions.length > 0) {
+                        session.explicitHide(
+                            input,
+                            () => ({ left: 0, bottom: 0 }),
+                            "forward",
+                        );
+                    } else {
+                        // Esc with no completions — clear input
+                        input = "";
+                        cursorPos = 0;
+                        historyIndex = history.length;
+                    }
+                } else if (filteredCompletions.length > 0) {
+                    // Callback mode: clear completions
                     allCompletions = [];
                     filteredCompletions = [];
                     filterStartIndex = -1;
@@ -1370,9 +1435,14 @@ async function questionWithCompletion(
                             : "") +
                         completion;
                     cursorPos = input.length; // Move cursor to end
-                    allCompletions = [];
-                    filteredCompletions = [];
-                    filterStartIndex = -1;
+                    if (session !== null) {
+                        // Session mode: reset so next render sees no completions
+                        session.resetToIdle();
+                    } else {
+                        allCompletions = [];
+                        filteredCompletions = [];
+                        filterStartIndex = -1;
+                    }
                     render();
                 }
             } else if (code === 127 || code === 8) {
@@ -1381,28 +1451,45 @@ async function questionWithCompletion(
                     input =
                         input.slice(0, cursorPos - 1) + input.slice(cursorPos);
                     cursorPos--;
-                    // Update completions state
-                    if (
-                        filterStartIndex < 0 ||
-                        input.length < filterStartIndex
-                    ) {
-                        filteredCompletions = [];
-                        allCompletions = [];
-                        filterStartIndex = -1;
+                    if (session !== null) {
+                        // Session mode: drive the session backward
+                        session.update(
+                            input,
+                            () => ({ left: 0, bottom: 0 }),
+                            "backward",
+                        );
+                        render();
                     } else {
-                        filterCompletions();
+                        // Callback mode: update completions state
+                        if (
+                            filterStartIndex < 0 ||
+                            input.length < filterStartIndex
+                        ) {
+                            filteredCompletions = [];
+                            allCompletions = [];
+                            filterStartIndex = -1;
+                        } else {
+                            filterCompletions();
+                        }
+                        // Just render - skip async updateCompletions to avoid double render/flash
+                        render();
                     }
-                    // Just render - skip async updateCompletions to avoid double render/flash
-                    render();
                 }
             } else if (code >= 32 && code < 127) {
                 // Printable ASCII character - insert at cursor position
                 input =
                     input.slice(0, cursorPos) + data + input.slice(cursorPos);
                 cursorPos++;
-                // If typing a space, always fetch new completions (new context)
-                if (data === " ") {
-                    // Clear completions and render immediately to prevent flashing
+                if (session !== null) {
+                    // Session mode: drive the session forward on every character
+                    session.update(
+                        input,
+                        () => ({ left: 0, bottom: 0 }),
+                        "forward",
+                    );
+                    render();
+                } else if (data === " ") {
+                    // Callback mode: typing a space always fetches new completions
                     filteredCompletions = [];
                     render();
                     await updateCompletions();
@@ -1666,7 +1753,9 @@ export async function processCommandsEnhanced<T>(
     processCommand: (request: string, context: T) => Promise<any>,
     context: T,
     inputs?: string[],
-    getCompletions?: (line: string, context: T) => Promise<any>,
+    completionSource?:
+        | ((line: string, context: T) => Promise<any>)
+        | ICompletionDispatcher,
     dispatcherForCancel?: Dispatcher,
 ) {
     const fs = await import("node:fs");
@@ -1681,7 +1770,7 @@ export async function processCommandsEnhanced<T>(
     // Only create readline when not using inline completions.
     // questionWithCompletion manages stdin directly; a readline attached
     // to the same stdin would consume events and break input.
-    const rl = getCompletions
+    const rl = completionSource
         ? undefined
         : createInterface({
               input: process.stdin,
@@ -1706,13 +1795,23 @@ export async function processCommandsEnhanced<T>(
                 ANSI.dim + "─".repeat(width) + ANSI.reset + "\n",
             );
             request = getNextInput(prompt, inputs, promptColor);
-        } else if (getCompletions) {
-            // Use inline completion system with scroll region anchored prompt
-            request = await questionWithCompletion(
-                promptColor(prompt),
-                (line: string) => getCompletions(line, context),
-                history,
-            );
+        } else if (completionSource) {
+            if (typeof completionSource === "function") {
+                // Callback mode: legacy path
+                request = await questionWithCompletion(
+                    promptColor(prompt),
+                    (line: string) => completionSource(line, context),
+                    history,
+                );
+            } else {
+                // Dispatcher mode: session-based completions
+                request = await questionWithCompletion(
+                    promptColor(prompt),
+                    null,
+                    history,
+                    completionSource,
+                );
+            }
         } else {
             process.stdout.write(
                 ANSI.dim + "─".repeat(width) + ANSI.reset + "\n",

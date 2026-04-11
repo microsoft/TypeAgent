@@ -21,7 +21,6 @@ import {
     processCommandsEnhanced,
     withEnhancedConsoleClientIO,
 } from "../enhancedConsole.js";
-import { isSlashCommand, getSlashCompletions } from "../slashCommands.js";
 import { getStatusSummary } from "agent-dispatcher/helpers/status";
 import { getFsStorageProvider } from "dispatcher-node-providers";
 
@@ -31,73 +30,6 @@ const defaultAppAgentProviders = getDefaultAppAgentProviders(instanceDir);
 const { schemaNames } = await getAllActionConfigProvider(
     defaultAppAgentProviders,
 );
-
-/**
- * Get completions for the current input line using dispatcher's command completion API
- */
-// Return completion data including where filtering starts
-type CompletionData = {
-    allCompletions: string[]; // All available completions (just the completion text)
-    filterStartIndex: number; // Where user typing should filter (after the space/trigger)
-    prefix: string; // Fixed prefix before completions
-};
-
-// Architecture: docs/architecture/completion.md — §CLI integration
-async function getCompletionsData(
-    line: string,
-    dispatcher: Dispatcher,
-): Promise<CompletionData | null> {
-    try {
-        // Handle slash command completions
-        if (isSlashCommand(line)) {
-            const completions = getSlashCompletions(line);
-            if (completions.length === 0) return null;
-            return {
-                allCompletions: completions,
-                filterStartIndex: 0,
-                prefix: "",
-            };
-        }
-        // Send the full input to the backend; the grammar matcher reports
-        // how much it consumed (matchedPrefixLength → startIndex) so the
-        // CLI need not split on spaces to find token boundaries.
-        // CLI tab-completion is always a forward action.
-        const direction = "forward" as const;
-        const result = await dispatcher.getCommandCompletion(line, direction);
-        if (result.completions.length === 0) {
-            return null;
-        }
-
-        // Extract just the completion strings
-        const allCompletions: string[] = [];
-        for (const group of result.completions) {
-            for (const completion of group.completions) {
-                allCompletions.push(completion);
-            }
-        }
-
-        const filterStartIndex = result.startIndex;
-        const prefix = line.substring(0, filterStartIndex);
-
-        // When any group reports a separator-requiring mode between the
-        // typed prefix and the completion text, prepend a space so the
-        // readline display doesn't produce "playmusic" for "play" + "music".
-        const needsSep = result.completions.some(
-            (g) =>
-                g.separatorMode === "space" ||
-                g.separatorMode === "spacePunctuation",
-        );
-        const separator = needsSep ? " " : "";
-
-        return {
-            allCompletions,
-            filterStartIndex,
-            prefix: prefix + separator,
-        };
-    } catch (e) {
-        return null;
-    }
-}
 
 export default class Interactive extends Command {
     static description = "Interactive mode";
@@ -217,7 +149,7 @@ export default class Interactive extends Command {
                         dispatcher.processCommand(command),
                     dispatcher,
                     undefined, // inputs
-                    (line: string) => getCompletionsData(line, dispatcher),
+                    dispatcher, // session-based completions
                     dispatcher,
                 );
             } finally {
