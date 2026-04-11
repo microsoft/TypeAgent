@@ -18,16 +18,12 @@ import {
     ExcalidrawAction,
     ExportDiagramAction,
 } from "./excalidrawActionSchema.js";
-import { DiagramPlan } from "./diagramPlan.js";
+import { DiagramPlan, MinimalDiagram, MinimalElement } from "./diagramPlan.js";
 import { validateDiagram, ValidationResult } from "./diagramValidator.js";
 import {
     buildPlanExtractionPrompt,
-    buildExcalidrawGenerationPrompt,
-    buildCorrectionPrompt,
-    shouldUseChunkedGeneration,
-    buildChunkedGroupsPrompt,
-    buildChunkedNodesPrompt,
-    buildChunkedEdgesPrompt,
+    buildMinimalDiagramPrompt,
+    buildMinimalCorrectionPrompt,
 } from "./prompts.js";
 
 import fs from "node:fs";
@@ -138,7 +134,7 @@ function resolveSourceContent(
 }
 
 // ---------------------------------------------------------------------------
-// Geometry helpers for arrow repair
+// Geometry helpers for arrow computation
 // ---------------------------------------------------------------------------
 
 /**
@@ -165,6 +161,317 @@ function edgePoint(
     const scale = Math.min(scaleX, scaleY);
 
     return [cx + dx * scale, cy + dy * scale];
+}
+
+// ---------------------------------------------------------------------------
+// expandToExcalidraw — convert MinimalDiagram → full Excalidraw document
+// ---------------------------------------------------------------------------
+
+/**
+ * Expands a MinimalDiagram (compact LLM output) into a full Excalidraw
+ * document with all required fields.  This is the key function that eliminates
+ * the need for the LLM to generate verbose Excalidraw JSON.
+ */
+export function expandToExcalidraw(
+    minimal: MinimalDiagram,
+): ExcalidrawDocument {
+    const elements: ExcalidrawElement[] = [];
+    const elementMap = new Map<string, MinimalElement>();
+
+    // Index minimal elements by id for arrow resolution
+    for (const el of minimal.elements) {
+        elementMap.set(el.id, el);
+    }
+
+    // Track which shape ids have which arrows bound to them
+    const boundArrows = new Map<string, Array<{ id: string; type: string }>>();
+
+    // First pass: identify arrow bindings so we can populate boundElements on shapes
+    for (const el of minimal.elements) {
+        if (el.type === "arrow") {
+            if (el.from) {
+                if (!boundArrows.has(el.from)) boundArrows.set(el.from, []);
+                boundArrows.get(el.from)!.push({ id: el.id, type: "arrow" });
+            }
+            if (el.to) {
+                if (!boundArrows.has(el.to)) boundArrows.set(el.to, []);
+                boundArrows.get(el.to)!.push({ id: el.id, type: "arrow" });
+            }
+        }
+    }
+
+    // Index counter for element ordering
+    let indexCounter = 0;
+    function nextIndex(): string {
+        const idx = indexCounter++;
+        // Generate lexicographic indices: a0, a1, ..., a9, aA, ..., aZ, b0, ...
+        return `a${idx}`;
+    }
+
+    // Second pass: expand each minimal element
+    for (const el of minimal.elements) {
+        if (el.type === "arrow") {
+            // Handle arrows separately after shapes
+            continue;
+        }
+
+        const w = el.w ?? 160;
+        const h = el.h ?? 60;
+        const excalidrawType = el.type === "frame" ? "rectangle" : el.type;
+
+        // Build boundElements: text label + any connected arrows
+        const bound: Array<{ id: string; type: string }> = [];
+        const textId = el.id.startsWith("group-")
+            ? `grouplabel-${el.id.substring("group-".length)}`
+            : `text-${el.id.substring("shape-".length)}`;
+        if (el.label) {
+            bound.push({ id: textId, type: "text" });
+        }
+        const arrows = boundArrows.get(el.id) ?? [];
+        bound.push(...arrows);
+
+        // Determine styling for group frames vs regular shapes
+        const isGroupFrame = el.type === "frame" || el.id.startsWith("group-");
+        const bgColor = el.color ?? (isGroupFrame ? "#f8f9fa" : "transparent");
+        const strokeStyleVal = el.style ?? (isGroupFrame ? "dashed" : "solid");
+        const strokeWidthVal = isGroupFrame ? 1 : 2;
+        const opacityVal = isGroupFrame ? 60 : 100;
+
+        const shapeElement: ExcalidrawElement = {
+            id: el.id,
+            type: excalidrawType,
+            x: el.x,
+            y: el.y,
+            width: w,
+            height: h,
+            angle: 0,
+            strokeColor: "#1e1e1e",
+            backgroundColor: bgColor,
+            fillStyle: "solid",
+            strokeWidth: strokeWidthVal,
+            strokeStyle: strokeStyleVal,
+            roughness: 1,
+            opacity: opacityVal,
+            groupIds: [],
+            frameId: null,
+            index: nextIndex(),
+            seed: Math.floor(Math.random() * 100000),
+            version: 1,
+            versionNonce: 0,
+            isDeleted: false,
+            boundElements: bound,
+            updated: Date.now(),
+            link: null,
+            locked: false,
+            roundness: excalidrawType === "rectangle" ? { type: 3 } : null,
+        };
+        elements.push(shapeElement);
+
+        // Generate paired text label element
+        if (el.label) {
+            const textElement: ExcalidrawElement = {
+                id: textId,
+                type: "text",
+                x: el.x,
+                y: el.y,
+                width: w,
+                height: h,
+                angle: 0,
+                strokeColor: "#1e1e1e",
+                backgroundColor: "transparent",
+                fillStyle: "solid",
+                strokeWidth: 2,
+                strokeStyle: "solid",
+                roughness: 1,
+                opacity: 100,
+                groupIds: [],
+                frameId: null,
+                index: nextIndex(),
+                seed: Math.floor(Math.random() * 100000),
+                version: 1,
+                versionNonce: 0,
+                isDeleted: false,
+                boundElements: null,
+                updated: Date.now(),
+                link: null,
+                locked: false,
+                roundness: null,
+                text: el.label,
+                fontSize: isGroupFrame ? 16 : 20,
+                fontFamily: 1,
+                textAlign: isGroupFrame ? "left" : "center",
+                verticalAlign: isGroupFrame ? "top" : "middle",
+                baseline: 0,
+                containerId: el.id,
+                originalText: el.label,
+                lineHeight: 1.25,
+            };
+            elements.push(textElement);
+        }
+    }
+
+    // Third pass: expand arrows
+    for (const el of minimal.elements) {
+        if (el.type !== "arrow") continue;
+
+        const fromEl = el.from ? elementMap.get(el.from) : undefined;
+        const toEl = el.to ? elementMap.get(el.to) : undefined;
+
+        // Compute arrow geometry from source/target positions
+        let ax = el.x;
+        let ay = el.y;
+        let points: number[][] = [
+            [0, 0],
+            [100, 0],
+        ]; // default fallback
+        let arrowWidth = 100;
+        let arrowHeight = 0;
+
+        if (fromEl && toEl) {
+            const fw = fromEl.w ?? 160;
+            const fh = fromEl.h ?? 60;
+            const tw = toEl.w ?? 160;
+            const th = toEl.h ?? 60;
+
+            const fromCx = fromEl.x + fw / 2;
+            const fromCy = fromEl.y + fh / 2;
+            const toCx = toEl.x + tw / 2;
+            const toCy = toEl.y + th / 2;
+
+            const [sx, sy] = edgePoint(fromEl.x, fromEl.y, fw, fh, toCx, toCy);
+            const [ex, ey] = edgePoint(toEl.x, toEl.y, tw, th, fromCx, fromCy);
+
+            ax = sx;
+            ay = sy;
+            points = [
+                [0, 0],
+                [ex - sx, ey - sy],
+            ];
+            arrowWidth = Math.abs(ex - sx);
+            arrowHeight = Math.abs(ey - sy);
+        }
+
+        // Build arrow bindings
+        const startBinding = el.from
+            ? {
+                  elementId: el.from,
+                  focus: 0,
+                  gap: 4,
+              }
+            : null;
+        const endBinding = el.to
+            ? {
+                  elementId: el.to,
+                  focus: 0,
+                  gap: 4,
+              }
+            : null;
+
+        // Build bound elements (arrow label text if any)
+        const arrowBound: Array<{ id: string; type: string }> | null = el.label
+            ? [
+                  {
+                      id: `arrowlabel-${el.id.substring("arrow-".length)}`,
+                      type: "text",
+                  },
+              ]
+            : null;
+
+        const arrowElement: ExcalidrawElement = {
+            id: el.id,
+            type: "arrow",
+            x: ax,
+            y: ay,
+            width: arrowWidth,
+            height: arrowHeight,
+            angle: 0,
+            strokeColor: "#1e1e1e",
+            backgroundColor: "transparent",
+            fillStyle: "solid",
+            strokeWidth: 2,
+            strokeStyle: el.style ?? "solid",
+            roughness: 1,
+            opacity: 100,
+            groupIds: [],
+            frameId: null,
+            index: nextIndex(),
+            seed: Math.floor(Math.random() * 100000),
+            version: 1,
+            versionNonce: 0,
+            isDeleted: false,
+            boundElements: arrowBound,
+            updated: Date.now(),
+            link: null,
+            locked: false,
+            roundness: null,
+            points,
+            startBinding,
+            endBinding,
+            startArrowhead: null,
+            endArrowhead: "arrow",
+            lastCommittedPoint: null,
+        };
+        elements.push(arrowElement);
+
+        // Generate arrow label text if the edge has a label
+        if (el.label) {
+            const labelId = `arrowlabel-${el.id.substring("arrow-".length)}`;
+            // Position label at midpoint of arrow
+            const midX = ax + points[1][0] / 2 - 30;
+            const midY = ay + points[1][1] / 2 - 10;
+
+            const arrowLabelElement: ExcalidrawElement = {
+                id: labelId,
+                type: "text",
+                x: midX,
+                y: midY,
+                width: 60,
+                height: 20,
+                angle: 0,
+                strokeColor: "#1e1e1e",
+                backgroundColor: "transparent",
+                fillStyle: "solid",
+                strokeWidth: 2,
+                strokeStyle: "solid",
+                roughness: 1,
+                opacity: 100,
+                groupIds: [],
+                frameId: null,
+                index: nextIndex(),
+                seed: Math.floor(Math.random() * 100000),
+                version: 1,
+                versionNonce: 0,
+                isDeleted: false,
+                boundElements: null,
+                updated: Date.now(),
+                link: null,
+                locked: false,
+                roundness: null,
+                text: el.label,
+                fontSize: 14,
+                fontFamily: 1,
+                textAlign: "center",
+                verticalAlign: "middle",
+                baseline: 0,
+                containerId: el.id,
+                originalText: el.label,
+                lineHeight: 1.25,
+            };
+            elements.push(arrowLabelElement);
+        }
+    }
+
+    return {
+        type: "excalidraw",
+        version: 2,
+        source: "typeagent-excalidraw",
+        elements,
+        appState: {
+            gridSize: null,
+            viewBackgroundColor: "#ffffff",
+        },
+        files: {},
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -312,51 +619,6 @@ function repairExcalidrawDiagram(doc: ExcalidrawDocument): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Chunked generation helper
-// ---------------------------------------------------------------------------
-
-/**
- * Makes a single LLM call to generate a chunk of Excalidraw elements.
- * Returns a parsed array of element objects. Throws on failure.
- */
-async function generateChunk(
-    systemPrompt: string,
-    userPrompt: string,
-): Promise<Record<string, unknown>[]> {
-    const model = openai.createJsonChatModel();
-    const response = await model.complete([
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-    ]);
-
-    if (!response.success) {
-        throw new Error(`Chunk generation failed: ${response.message}`);
-    }
-
-    let parsed: unknown;
-    try {
-        parsed = parseJsonWithRecovery(response.data);
-    } catch (parseErr) {
-        const snippet = response.data.slice(-200);
-        throw new Error(
-            `Chunk returned invalid JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}\n\nLast 200 chars: ${snippet}`,
-        );
-    }
-
-    // The LLM may return an array directly or wrapped in an object
-    if (Array.isArray(parsed)) {
-        return parsed as Record<string, unknown>[];
-    }
-    const obj = parsed as Record<string, unknown>;
-    if (Array.isArray(obj.elements)) {
-        return obj.elements as Record<string, unknown>[];
-    }
-    throw new Error(
-        "Chunk response is not an array and has no 'elements' array.",
-    );
-}
-
-// ---------------------------------------------------------------------------
 // Main pipeline: handleCreateDiagram
 // ---------------------------------------------------------------------------
 
@@ -434,111 +696,56 @@ async function handleCreateDiagram(
         }
 
         // ---------------------------------------------------------------
-        // Phase 2: Generate Excalidraw JSON from DiagramPlan
+        // Phase 2: Generate MinimalDiagram from DiagramPlan, then expand
         // ---------------------------------------------------------------
         setStatus(
-            `Step 2/3: Generating Excalidraw diagram (${plan.nodes.length} nodes, ${plan.edges.length} edges, ${plan.groups.length} groups)...`,
+            `Step 2/3: Generating diagram layout (${plan.nodes.length} nodes, ${plan.edges.length} edges, ${plan.groups.length} groups)...`,
         );
 
-        let excalidrawData: ExcalidrawDocument;
-        const useChunked = shouldUseChunkedGeneration(plan);
+        // Always use the minimal schema approach — it produces compact
+        // output that fits within any model's token limit.
+        const minimalModel = openai.createJsonChatModel();
+        const minimalResponse = await minimalModel.complete([
+            {
+                role: "system",
+                content: buildMinimalDiagramPrompt(),
+            },
+            {
+                role: "user",
+                content: `Convert this DiagramPlan to MinimalDiagram JSON:\n\n${JSON.stringify(plan, null, 2)}`,
+            },
+        ]);
 
-        if (useChunked) {
-            // --- Chunked generation (Option A) for large diagrams ---
-            const allElements: Record<string, unknown>[] = [];
-            const planJson = JSON.stringify(plan, null, 2);
-
-            // Chunk 1: Groups
-            if (plan.groups.length > 0) {
-                setStatus(
-                    `Step 2/3: Generating groups (${plan.groups.length} groups)...`,
-                );
-                const groupElements = await generateChunk(
-                    buildChunkedGroupsPrompt(),
-                    `Generate group elements for this DiagramPlan:\n\n${planJson}`,
-                );
-                allElements.push(...groupElements);
-            }
-
-            // Chunk 2: Nodes
-            setStatus(
-                `Step 2/3: Generating nodes (${plan.nodes.length} nodes)...`,
+        if (!minimalResponse.success) {
+            return createActionResultFromError(
+                `Failed to generate diagram layout: ${minimalResponse.message}`,
             );
-            const existingIdsAfterGroups = allElements.map(
-                (e) => e.id as string,
-            );
-            const nodeElements = await generateChunk(
-                buildChunkedNodesPrompt(existingIdsAfterGroups),
-                `Generate node shape elements for this DiagramPlan:\n\n${planJson}`,
-            );
-            allElements.push(...nodeElements);
-
-            // Chunk 3: Edges
-            if (plan.edges.length > 0) {
-                setStatus(
-                    `Step 2/3: Generating edges (${plan.edges.length} edges)...`,
-                );
-                const existingIdsAfterNodes = allElements.map(
-                    (e) => e.id as string,
-                );
-                const edgeElements = await generateChunk(
-                    buildChunkedEdgesPrompt(existingIdsAfterNodes),
-                    `Generate arrow elements for this DiagramPlan:\n\n${planJson}`,
-                );
-                allElements.push(...edgeElements);
-            }
-
-            // Inject defaults and assemble document
-            injectDefaults(allElements);
-            excalidrawData = {
-                type: "excalidraw",
-                version: 2,
-                source: "typeagent-excalidraw",
-                elements: allElements as ExcalidrawElement[],
-                appState: {
-                    gridSize: null,
-                    viewBackgroundColor: "#ffffff",
-                },
-                files: {},
-            };
-        } else {
-            // --- Single-shot generation (small diagrams) ---
-            const excalidrawModel = openai.createJsonChatModel();
-            const genResponse = await excalidrawModel.complete([
-                {
-                    role: "system",
-                    content: buildExcalidrawGenerationPrompt(),
-                },
-                {
-                    role: "user",
-                    content: `Convert this DiagramPlan to a complete Excalidraw JSON document:\n\n${JSON.stringify(plan, null, 2)}`,
-                },
-            ]);
-
-            if (!genResponse.success) {
-                return createActionResultFromError(
-                    `Failed to generate Excalidraw JSON: ${genResponse.message}`,
-                );
-            }
-
-            try {
-                excalidrawData = parseJsonWithRecovery(
-                    genResponse.data,
-                ) as ExcalidrawDocument;
-            } catch (parseErr) {
-                const snippet = genResponse.data.slice(-200);
-                return createActionResultFromError(
-                    `The AI returned invalid Excalidraw JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}\n\nLast 200 chars of response: ${snippet}`,
-                );
-            }
-
-            // Inject defaults for any fields the LLM omitted
-            if (excalidrawData.elements) {
-                injectDefaults(
-                    excalidrawData.elements as Record<string, unknown>[],
-                );
-            }
         }
+
+        let minimalDiagram: MinimalDiagram;
+        try {
+            minimalDiagram = parseJsonWithRecovery(
+                minimalResponse.data,
+            ) as MinimalDiagram;
+        } catch (parseErr) {
+            const snippet = minimalResponse.data.slice(-200);
+            return createActionResultFromError(
+                `The AI returned invalid MinimalDiagram JSON: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}\n\nLast 200 chars of response: ${snippet}`,
+            );
+        }
+
+        // Validate the minimal diagram has an elements array
+        if (
+            !minimalDiagram.elements ||
+            !Array.isArray(minimalDiagram.elements)
+        ) {
+            return createActionResultFromError(
+                "The AI returned a MinimalDiagram without an elements array.",
+            );
+        }
+
+        // Expand MinimalDiagram → full Excalidraw JSON (deterministic, no LLM)
+        let excalidrawData = expandToExcalidraw(minimalDiagram);
 
         ensureTopLevelFields(excalidrawData);
 
@@ -550,6 +757,9 @@ async function handleCreateDiagram(
             plan,
         );
         let iterationCount = 0;
+
+        // Keep track of the current minimal JSON for correction prompts
+        let currentMinimalJson = JSON.stringify(minimalDiagram);
 
         while (
             !validation.valid &&
@@ -563,9 +773,11 @@ async function handleCreateDiagram(
                 `Step 3/3: Correcting ${errorCount} issues (iteration ${iterationCount}/${MAX_CORRECTION_ITERATIONS})...`,
             );
 
+            // Ask the LLM to correct the MinimalDiagram (not full Excalidraw)
+            // This keeps the correction in the compact format too
             const correctionModel = openai.createJsonChatModel();
-            const correctionPrompt = buildCorrectionPrompt(
-                JSON.stringify(excalidrawData, null, 2),
+            const correctionPrompt = buildMinimalCorrectionPrompt(
+                currentMinimalJson,
                 validation.issues,
                 plan,
             );
@@ -574,7 +786,7 @@ async function handleCreateDiagram(
                 {
                     role: "system",
                     content:
-                        "You are an Excalidraw diagram repair agent. Fix the listed issues in the JSON and return the complete corrected Excalidraw JSON. Output ONLY valid JSON.",
+                        "You are a diagram layout repair agent. Fix the listed issues in the MinimalDiagram JSON and return the corrected version. Output ONLY valid JSON.",
                 },
                 {
                     role: "user",
@@ -588,16 +800,23 @@ async function handleCreateDiagram(
             }
 
             try {
-                const corrected: ExcalidrawDocument = parseJsonWithRecovery(
+                const correctedMinimal: MinimalDiagram = parseJsonWithRecovery(
                     correctionResponse.data,
-                ) as ExcalidrawDocument;
-                ensureTopLevelFields(corrected);
-                if (corrected.elements) {
-                    injectDefaults(
-                        corrected.elements as Record<string, unknown>[],
-                    );
+                ) as MinimalDiagram;
+
+                if (
+                    correctedMinimal.elements &&
+                    Array.isArray(correctedMinimal.elements)
+                ) {
+                    minimalDiagram = correctedMinimal;
+                    currentMinimalJson = JSON.stringify(correctedMinimal);
+
+                    // Re-expand to full Excalidraw
+                    excalidrawData = expandToExcalidraw(correctedMinimal);
+                    ensureTopLevelFields(excalidrawData);
+                } else {
+                    break;
                 }
-                excalidrawData = corrected;
             } catch {
                 // If corrected JSON is invalid, keep previous version
                 break;
@@ -747,6 +966,7 @@ function stripMarkdownFences(raw: string): string {
 
 // ---------------------------------------------------------------------------
 // Default injection (Option B) — compact LLM output → full Excalidraw format
+// (kept for backward compatibility with tests)
 // ---------------------------------------------------------------------------
 
 /** Default field values that the LLM is instructed to omit for compactness. */
@@ -934,4 +1154,5 @@ export {
     injectDefaults as _injectDefaults,
     recoverTruncatedJson as _recoverTruncatedJson,
     ELEMENT_DEFAULTS as _ELEMENT_DEFAULTS,
+    expandToExcalidraw as _expandToExcalidraw,
 };

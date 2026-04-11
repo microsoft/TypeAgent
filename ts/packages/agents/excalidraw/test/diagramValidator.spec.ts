@@ -3,12 +3,16 @@
 
 /**
  * Tests for the excalidraw agent's iterative generation pipeline.
- * These are unit tests that validate the validator, plan types, and prompt builders
- * WITHOUT requiring API keys or LLM calls.
+ * These are unit tests that validate the validator, plan types, prompt builders,
+ * and the expandToExcalidraw function WITHOUT requiring API keys or LLM calls.
  */
 
 import { validateDiagram } from "../src/diagramValidator.js";
-import { DiagramPlan } from "../src/diagramPlan.js";
+import {
+    DiagramPlan,
+    MinimalDiagram,
+    MinimalElement,
+} from "../src/diagramPlan.js";
 import {
     buildPlanExtractionPrompt,
     buildExcalidrawGenerationPrompt,
@@ -17,11 +21,14 @@ import {
     buildChunkedGroupsPrompt,
     buildChunkedNodesPrompt,
     buildChunkedEdgesPrompt,
+    buildMinimalDiagramPrompt,
+    buildMinimalCorrectionPrompt,
 } from "../src/prompts.js";
 import {
     _injectDefaults as injectDefaults,
     _recoverTruncatedJson as recoverTruncatedJson,
     _ELEMENT_DEFAULTS as ELEMENT_DEFAULTS,
+    _expandToExcalidraw as expandToExcalidraw,
 } from "../src/excalidrawActionHandler.js";
 
 // ---------------------------------------------------------------------------
@@ -98,6 +105,187 @@ function createNestedPlan(): DiagramPlan {
                 childNodeIds: ["n4", "n5"],
                 childGroupIds: [],
                 color: "#b2f2bb",
+            },
+        ],
+    };
+}
+
+/**
+ * Create a simple MinimalDiagram for the simple plan.
+ */
+function createSimpleMinimalDiagram(): MinimalDiagram {
+    return {
+        elements: [
+            {
+                id: "shape-n1",
+                type: "ellipse",
+                x: 100,
+                y: 50,
+                w: 120,
+                h: 60,
+                label: "Start",
+            },
+            {
+                id: "shape-n2",
+                type: "rectangle",
+                x: 100,
+                y: 190,
+                w: 160,
+                h: 60,
+                label: "Process",
+            },
+            {
+                id: "shape-n3",
+                type: "ellipse",
+                x: 100,
+                y: 330,
+                w: 120,
+                h: 60,
+                label: "End",
+            },
+            {
+                id: "arrow-e1",
+                type: "arrow",
+                x: 0,
+                y: 0,
+                from: "shape-n1",
+                to: "shape-n2",
+            },
+            {
+                id: "arrow-e2",
+                type: "arrow",
+                x: 0,
+                y: 0,
+                from: "shape-n2",
+                to: "shape-n3",
+            },
+        ],
+    };
+}
+
+/**
+ * Create a MinimalDiagram with groups for the nested plan.
+ */
+function createNestedMinimalDiagram(): MinimalDiagram {
+    return {
+        elements: [
+            {
+                id: "shape-n1",
+                type: "rectangle",
+                x: 0,
+                y: 100,
+                w: 120,
+                h: 60,
+                label: "Input",
+            },
+            {
+                id: "group-g1",
+                type: "frame",
+                x: 200,
+                y: 20,
+                w: 300,
+                h: 200,
+                label: "CI Stage",
+                color: "#a5d8ff",
+            },
+            {
+                id: "shape-n2",
+                type: "rectangle",
+                x: 220,
+                y: 70,
+                w: 120,
+                h: 60,
+                label: "Lint",
+                group: "g1",
+            },
+            {
+                id: "shape-n3",
+                type: "rectangle",
+                x: 360,
+                y: 70,
+                w: 120,
+                h: 60,
+                label: "Test",
+                group: "g1",
+            },
+            {
+                id: "group-g2",
+                type: "frame",
+                x: 550,
+                y: 20,
+                w: 300,
+                h: 200,
+                label: "CD Stage",
+                color: "#b2f2bb",
+            },
+            {
+                id: "shape-n4",
+                type: "rectangle",
+                x: 570,
+                y: 70,
+                w: 120,
+                h: 60,
+                label: "Build",
+                group: "g2",
+            },
+            {
+                id: "shape-n5",
+                type: "rectangle",
+                x: 710,
+                y: 70,
+                w: 120,
+                h: 60,
+                label: "Deploy",
+                group: "g2",
+            },
+            {
+                id: "shape-n6",
+                type: "rectangle",
+                x: 900,
+                y: 100,
+                w: 120,
+                h: 60,
+                label: "Output",
+            },
+            {
+                id: "arrow-e1",
+                type: "arrow",
+                x: 0,
+                y: 0,
+                from: "shape-n1",
+                to: "shape-n2",
+            },
+            {
+                id: "arrow-e2",
+                type: "arrow",
+                x: 0,
+                y: 0,
+                from: "shape-n2",
+                to: "shape-n3",
+            },
+            {
+                id: "arrow-e3",
+                type: "arrow",
+                x: 0,
+                y: 0,
+                from: "shape-n3",
+                to: "shape-n4",
+            },
+            {
+                id: "arrow-e4",
+                type: "arrow",
+                x: 0,
+                y: 0,
+                from: "shape-n4",
+                to: "shape-n5",
+            },
+            {
+                id: "arrow-e5",
+                type: "arrow",
+                x: 0,
+                y: 0,
+                from: "shape-n5",
+                to: "shape-n6",
             },
         ],
     };
@@ -714,6 +902,86 @@ describe("Prompt Builders", () => {
         });
     });
 
+    describe("buildMinimalDiagramPrompt", () => {
+        test("includes MinimalElement schema", () => {
+            const prompt = buildMinimalDiagramPrompt();
+            expect(prompt).toContain("MinimalDiagram");
+            expect(prompt).toContain("MINIMAL ELEMENT SCHEMA");
+            expect(prompt).not.toContain("strokeColor");
+            expect(prompt).not.toContain("fillStyle");
+            expect(prompt).not.toContain("roughness");
+        });
+
+        test("includes element ID convention", () => {
+            const prompt = buildMinimalDiagramPrompt();
+            expect(prompt).toContain("shape-nX");
+            expect(prompt).toContain("group-gX");
+            expect(prompt).toContain("arrow-eX");
+        });
+
+        test("includes layout rules", () => {
+            const prompt = buildMinimalDiagramPrompt();
+            expect(prompt).toContain("LAYOUT RULES");
+            expect(prompt).toContain("80px gap");
+        });
+
+        test("includes compact example", () => {
+            const prompt = buildMinimalDiagramPrompt();
+            expect(prompt).toContain("EXAMPLE");
+            expect(prompt).toContain("shape-n1");
+        });
+
+        test("includes self-review checklist", () => {
+            const prompt = buildMinimalDiagramPrompt();
+            expect(prompt).toContain("SELF-REVIEW");
+        });
+
+        test("does NOT include verbose Excalidraw fields", () => {
+            const prompt = buildMinimalDiagramPrompt();
+            expect(prompt).not.toContain("boundElements");
+            expect(prompt).not.toContain("opacity");
+            expect(prompt).not.toContain("seed");
+            expect(prompt).not.toContain("versionNonce");
+        });
+    });
+
+    describe("buildMinimalCorrectionPrompt", () => {
+        test("includes issues and plan", () => {
+            const plan = createSimplePlan();
+            const issues = [
+                {
+                    severity: "error" as const,
+                    type: "missing_node" as const,
+                    description: 'Plan node "n2" has no corresponding shape',
+                    elementId: "shape-n2",
+                },
+            ];
+            const prompt = buildMinimalCorrectionPrompt(
+                '{"elements":[]}',
+                issues,
+                plan,
+            );
+
+            expect(prompt).toContain("missing_node");
+            expect(prompt).toContain("n2");
+            expect(prompt).toContain("Simple Flow");
+            expect(prompt).toContain("MinimalDiagram");
+        });
+
+        test("uses compact schema not full Excalidraw", () => {
+            const plan = createSimplePlan();
+            const prompt = buildMinimalCorrectionPrompt(
+                '{"elements":[]}',
+                [],
+                plan,
+            );
+
+            expect(prompt).toContain("MinimalDiagram");
+            expect(prompt).not.toContain("strokeColor");
+            expect(prompt).not.toContain("fillStyle");
+        });
+    });
+
     describe("buildCorrectionPrompt", () => {
         test("includes issues and plan in correction prompt", () => {
             const plan = createSimplePlan();
@@ -1033,7 +1301,7 @@ describe("shouldUseChunkedGeneration", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Chunked prompt builder tests
+// Chunked prompt builder tests (kept for backward compat)
 // ---------------------------------------------------------------------------
 
 describe("Chunked prompt builders", () => {
@@ -1115,6 +1383,528 @@ describe("Chunked prompt builders", () => {
             const prompt = buildChunkedEdgesPrompt(["shape-n1"]);
             expect(prompt).toContain("startBinding");
             expect(prompt).toContain("endBinding");
+        });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// expandToExcalidraw tests
+// ---------------------------------------------------------------------------
+
+describe("expandToExcalidraw", () => {
+    describe("basic expansion", () => {
+        test("expands a simple MinimalDiagram into valid Excalidraw document", () => {
+            const minimal = createSimpleMinimalDiagram();
+            const doc = expandToExcalidraw(minimal);
+
+            expect(doc.type).toBe("excalidraw");
+            expect(doc.version).toBe(2);
+            expect(doc.source).toBe("typeagent-excalidraw");
+            expect(doc.elements).toBeDefined();
+            expect(Array.isArray(doc.elements)).toBe(true);
+        });
+
+        test("generates shape + text for each labeled shape element", () => {
+            const minimal: MinimalDiagram = {
+                elements: [
+                    {
+                        id: "shape-n1",
+                        type: "rectangle",
+                        x: 0,
+                        y: 0,
+                        w: 160,
+                        h: 60,
+                        label: "Hello",
+                    },
+                ],
+            };
+            const doc = expandToExcalidraw(minimal);
+
+            // Should have the shape and its text label
+            const shape = doc.elements.find((e: any) => e.id === "shape-n1");
+            const text = doc.elements.find((e: any) => e.id === "text-n1");
+
+            expect(shape).toBeDefined();
+            expect(text).toBeDefined();
+            expect(shape!.type).toBe("rectangle");
+            expect((text as any).type).toBe("text");
+            expect((text as any).text).toBe("Hello");
+            expect((text as any).containerId).toBe("shape-n1");
+        });
+
+        test("generates arrow elements with computed geometry", () => {
+            const minimal = createSimpleMinimalDiagram();
+            const doc = expandToExcalidraw(minimal);
+
+            const arrow = doc.elements.find((e: any) => e.id === "arrow-e1");
+            expect(arrow).toBeDefined();
+            expect(arrow!.type).toBe("arrow");
+            expect((arrow as any).startBinding).toBeDefined();
+            expect((arrow as any).startBinding.elementId).toBe("shape-n1");
+            expect((arrow as any).endBinding).toBeDefined();
+            expect((arrow as any).endBinding.elementId).toBe("shape-n2");
+            // Arrow should have computed points (not [0,0])
+            expect((arrow as any).points).toBeDefined();
+            expect((arrow as any).points).toHaveLength(2);
+        });
+
+        test("total element count matches shapes + texts + arrows", () => {
+            const minimal = createSimpleMinimalDiagram();
+            const doc = expandToExcalidraw(minimal);
+
+            // 3 shapes + 3 texts + 2 arrows = 8 elements
+            expect(doc.elements).toHaveLength(8);
+        });
+    });
+
+    describe("field completeness", () => {
+        test("shape elements have all required Excalidraw fields", () => {
+            const minimal: MinimalDiagram = {
+                elements: [
+                    {
+                        id: "shape-n1",
+                        type: "rectangle",
+                        x: 100,
+                        y: 200,
+                        w: 160,
+                        h: 60,
+                        label: "Test",
+                    },
+                ],
+            };
+            const doc = expandToExcalidraw(minimal);
+            const shape = doc.elements.find((e: any) => e.id === "shape-n1")!;
+
+            // Check all required fields exist
+            expect(shape.id).toBe("shape-n1");
+            expect(shape.type).toBe("rectangle");
+            expect(shape.x).toBe(100);
+            expect(shape.y).toBe(200);
+            expect(shape.width).toBe(160);
+            expect(shape.height).toBe(60);
+            expect((shape as any).angle).toBe(0);
+            expect((shape as any).strokeColor).toBe("#1e1e1e");
+            expect((shape as any).backgroundColor).toBe("transparent");
+            expect((shape as any).fillStyle).toBe("solid");
+            expect((shape as any).strokeWidth).toBe(2);
+            expect((shape as any).strokeStyle).toBe("solid");
+            expect((shape as any).roughness).toBe(1);
+            expect((shape as any).opacity).toBe(100);
+            expect((shape as any).isDeleted).toBe(false);
+            expect((shape as any).locked).toBe(false);
+            expect((shape as any).link).toBeNull();
+            expect((shape as any).frameId).toBeNull();
+            expect((shape as any).groupIds).toEqual([]);
+            expect((shape as any).seed).toEqual(expect.any(Number));
+            expect((shape as any).version).toBe(1);
+            expect((shape as any).roundness).toEqual({ type: 3 });
+        });
+
+        test("text elements have all required fields", () => {
+            const minimal: MinimalDiagram = {
+                elements: [
+                    {
+                        id: "shape-n1",
+                        type: "rectangle",
+                        x: 100,
+                        y: 200,
+                        w: 160,
+                        h: 60,
+                        label: "Test",
+                    },
+                ],
+            };
+            const doc = expandToExcalidraw(minimal);
+            const text = doc.elements.find((e: any) => e.id === "text-n1")!;
+
+            expect((text as any).text).toBe("Test");
+            expect((text as any).fontSize).toBe(20);
+            expect((text as any).fontFamily).toBe(1);
+            expect((text as any).textAlign).toBe("center");
+            expect((text as any).verticalAlign).toBe("middle");
+            expect((text as any).containerId).toBe("shape-n1");
+            expect((text as any).originalText).toBe("Test");
+        });
+
+        test("arrow elements have all required fields", () => {
+            const minimal: MinimalDiagram = {
+                elements: [
+                    {
+                        id: "shape-n1",
+                        type: "rectangle",
+                        x: 0,
+                        y: 0,
+                        w: 100,
+                        h: 50,
+                    },
+                    {
+                        id: "shape-n2",
+                        type: "rectangle",
+                        x: 200,
+                        y: 0,
+                        w: 100,
+                        h: 50,
+                    },
+                    {
+                        id: "arrow-e1",
+                        type: "arrow",
+                        x: 0,
+                        y: 0,
+                        from: "shape-n1",
+                        to: "shape-n2",
+                    },
+                ],
+            };
+            const doc = expandToExcalidraw(minimal);
+            const arrow = doc.elements.find((e: any) => e.id === "arrow-e1")!;
+
+            expect((arrow as any).points).toBeDefined();
+            expect((arrow as any).startBinding).toBeDefined();
+            expect((arrow as any).endBinding).toBeDefined();
+            expect((arrow as any).endArrowhead).toBe("arrow");
+            expect((arrow as any).startArrowhead).toBeNull();
+            expect((arrow as any).strokeColor).toBe("#1e1e1e");
+        });
+    });
+
+    describe("group/frame expansion", () => {
+        test("frame type elements are expanded as rectangles", () => {
+            const minimal: MinimalDiagram = {
+                elements: [
+                    {
+                        id: "group-g1",
+                        type: "frame",
+                        x: 0,
+                        y: 0,
+                        w: 300,
+                        h: 200,
+                        label: "Group 1",
+                        color: "#a5d8ff",
+                    },
+                ],
+            };
+            const doc = expandToExcalidraw(minimal);
+            const group = doc.elements.find((e: any) => e.id === "group-g1")!;
+
+            expect(group.type).toBe("rectangle");
+            expect((group as any).backgroundColor).toBe("#a5d8ff");
+            expect((group as any).strokeStyle).toBe("dashed");
+            expect((group as any).strokeWidth).toBe(1);
+            expect((group as any).opacity).toBe(60);
+        });
+
+        test("group label text is generated with grouplabel- prefix", () => {
+            const minimal: MinimalDiagram = {
+                elements: [
+                    {
+                        id: "group-g1",
+                        type: "frame",
+                        x: 0,
+                        y: 0,
+                        w: 300,
+                        h: 200,
+                        label: "Group 1",
+                    },
+                ],
+            };
+            const doc = expandToExcalidraw(minimal);
+            const label = doc.elements.find(
+                (e: any) => e.id === "grouplabel-g1",
+            );
+
+            expect(label).toBeDefined();
+            expect((label as any).text).toBe("Group 1");
+            expect((label as any).containerId).toBe("group-g1");
+            expect((label as any).textAlign).toBe("left");
+            expect((label as any).verticalAlign).toBe("top");
+        });
+    });
+
+    describe("arrow label expansion", () => {
+        test("arrow with label generates arrowlabel text element", () => {
+            const minimal: MinimalDiagram = {
+                elements: [
+                    {
+                        id: "shape-n1",
+                        type: "rectangle",
+                        x: 0,
+                        y: 0,
+                        w: 100,
+                        h: 50,
+                    },
+                    {
+                        id: "shape-n2",
+                        type: "rectangle",
+                        x: 200,
+                        y: 0,
+                        w: 100,
+                        h: 50,
+                    },
+                    {
+                        id: "arrow-e1",
+                        type: "arrow",
+                        x: 0,
+                        y: 0,
+                        from: "shape-n1",
+                        to: "shape-n2",
+                        label: "sends",
+                    },
+                ],
+            };
+            const doc = expandToExcalidraw(minimal);
+            const arrowLabel = doc.elements.find(
+                (e: any) => e.id === "arrowlabel-e1",
+            );
+
+            expect(arrowLabel).toBeDefined();
+            expect((arrowLabel as any).text).toBe("sends");
+            expect((arrowLabel as any).containerId).toBe("arrow-e1");
+        });
+
+        test("arrow without label does not generate label text", () => {
+            const minimal: MinimalDiagram = {
+                elements: [
+                    {
+                        id: "shape-n1",
+                        type: "rectangle",
+                        x: 0,
+                        y: 0,
+                        w: 100,
+                        h: 50,
+                    },
+                    {
+                        id: "shape-n2",
+                        type: "rectangle",
+                        x: 200,
+                        y: 0,
+                        w: 100,
+                        h: 50,
+                    },
+                    {
+                        id: "arrow-e1",
+                        type: "arrow",
+                        x: 0,
+                        y: 0,
+                        from: "shape-n1",
+                        to: "shape-n2",
+                    },
+                ],
+            };
+            const doc = expandToExcalidraw(minimal);
+            const arrowLabel = doc.elements.find(
+                (e: any) => e.id === "arrowlabel-e1",
+            );
+
+            expect(arrowLabel).toBeUndefined();
+        });
+    });
+
+    describe("boundElements wiring", () => {
+        test("shapes include arrow refs in boundElements", () => {
+            const minimal: MinimalDiagram = {
+                elements: [
+                    {
+                        id: "shape-n1",
+                        type: "rectangle",
+                        x: 0,
+                        y: 0,
+                        w: 100,
+                        h: 50,
+                        label: "A",
+                    },
+                    {
+                        id: "shape-n2",
+                        type: "rectangle",
+                        x: 200,
+                        y: 0,
+                        w: 100,
+                        h: 50,
+                        label: "B",
+                    },
+                    {
+                        id: "arrow-e1",
+                        type: "arrow",
+                        x: 0,
+                        y: 0,
+                        from: "shape-n1",
+                        to: "shape-n2",
+                    },
+                ],
+            };
+            const doc = expandToExcalidraw(minimal);
+            const n1 = doc.elements.find((e: any) => e.id === "shape-n1")!;
+            const n2 = doc.elements.find((e: any) => e.id === "shape-n2")!;
+
+            const n1Bounds = (n1 as any).boundElements as any[];
+            const n2Bounds = (n2 as any).boundElements as any[];
+
+            expect(n1Bounds.some((b: any) => b.id === "arrow-e1")).toBe(true);
+            expect(n2Bounds.some((b: any) => b.id === "arrow-e1")).toBe(true);
+            expect(n1Bounds.some((b: any) => b.id === "text-n1")).toBe(true);
+            expect(n2Bounds.some((b: any) => b.id === "text-n2")).toBe(true);
+        });
+    });
+
+    describe("default dimensions", () => {
+        test("uses default width=160 and height=60 when not specified", () => {
+            const minimal: MinimalDiagram = {
+                elements: [
+                    {
+                        id: "shape-n1",
+                        type: "rectangle",
+                        x: 0,
+                        y: 0,
+                        label: "Test",
+                    },
+                ],
+            };
+            const doc = expandToExcalidraw(minimal);
+            const shape = doc.elements.find((e: any) => e.id === "shape-n1")!;
+
+            expect(shape.width).toBe(160);
+            expect(shape.height).toBe(60);
+        });
+    });
+
+    describe("validates against plan", () => {
+        test("expanded simple diagram passes validation", () => {
+            const plan = createSimplePlan();
+            const minimal = createSimpleMinimalDiagram();
+            const doc = expandToExcalidraw(minimal);
+
+            const result = validateDiagram(doc, plan);
+            expect(result.stats.foundNodes).toBe(3);
+            expect(result.stats.foundEdges).toBe(2);
+            // All nodes and edges should be found (no missing_node or missing_edge errors)
+            const missingNodes = result.issues.filter(
+                (i) => i.type === "missing_node",
+            );
+            const missingEdges = result.issues.filter(
+                (i) => i.type === "missing_edge",
+            );
+            expect(missingNodes).toHaveLength(0);
+            expect(missingEdges).toHaveLength(0);
+        });
+
+        test("expanded nested diagram passes validation for completeness", () => {
+            const plan = createNestedPlan();
+            const minimal = createNestedMinimalDiagram();
+            const doc = expandToExcalidraw(minimal);
+
+            const result = validateDiagram(doc, plan);
+            expect(result.stats.foundNodes).toBe(6);
+            expect(result.stats.foundEdges).toBe(5);
+            expect(result.stats.foundGroups).toBe(2);
+
+            const missingNodes = result.issues.filter(
+                (i) => i.type === "missing_node",
+            );
+            const missingEdges = result.issues.filter(
+                (i) => i.type === "missing_edge",
+            );
+            const missingGroups = result.issues.filter(
+                (i) => i.type === "missing_group",
+            );
+            expect(missingNodes).toHaveLength(0);
+            expect(missingEdges).toHaveLength(0);
+            expect(missingGroups).toHaveLength(0);
+        });
+    });
+
+    describe("output size comparison", () => {
+        test("MinimalDiagram for 18 nodes + 13 edges is well under 4096 tokens", () => {
+            // Simulate a large diagram: 18 nodes + 13 edges = 31 elements
+            const elements: MinimalElement[] = [];
+
+            // 18 nodes
+            for (let i = 1; i <= 18; i++) {
+                elements.push({
+                    id: `shape-n${i}`,
+                    type: "rectangle",
+                    x: ((i - 1) % 6) * 200,
+                    y: Math.floor((i - 1) / 6) * 150,
+                    w: 160,
+                    h: 60,
+                    label: `Node ${i}`,
+                });
+            }
+
+            // 13 edges
+            for (let i = 1; i <= 13; i++) {
+                elements.push({
+                    id: `arrow-e${i}`,
+                    type: "arrow",
+                    x: 0,
+                    y: 0,
+                    from: `shape-n${i}`,
+                    to: `shape-n${i + 1}`,
+                });
+            }
+
+            const minimalDiagram: MinimalDiagram = { elements };
+            const minimalJson = JSON.stringify(minimalDiagram);
+
+            // At ~4 chars per token, 4096 tokens ≈ 16384 chars
+            // The minimal format should be WAY under this
+            expect(minimalJson.length).toBeLessThan(4000);
+
+            // Verify it expands successfully
+            const doc = expandToExcalidraw(minimalDiagram);
+            expect(doc.elements.length).toBe(18 * 2 + 13); // 18 shapes + 18 texts + 13 arrows = 49
+
+            // The full Excalidraw JSON will be large, but that's generated in code, not by the LLM
+            const fullJson = JSON.stringify(doc);
+            expect(fullJson.length).toBeGreaterThan(minimalJson.length);
+        });
+    });
+
+    describe("empty diagram", () => {
+        test("handles empty elements array", () => {
+            const minimal: MinimalDiagram = { elements: [] };
+            const doc = expandToExcalidraw(minimal);
+
+            expect(doc.elements).toHaveLength(0);
+            expect(doc.type).toBe("excalidraw");
+        });
+    });
+
+    describe("ellipse and diamond types", () => {
+        test("ellipse shapes have null roundness", () => {
+            const minimal: MinimalDiagram = {
+                elements: [
+                    {
+                        id: "shape-n1",
+                        type: "ellipse",
+                        x: 0,
+                        y: 0,
+                        w: 100,
+                        h: 60,
+                        label: "Start",
+                    },
+                ],
+            };
+            const doc = expandToExcalidraw(minimal);
+            const shape = doc.elements.find((e: any) => e.id === "shape-n1")!;
+            expect((shape as any).roundness).toBeNull();
+        });
+
+        test("diamond shapes are preserved", () => {
+            const minimal: MinimalDiagram = {
+                elements: [
+                    {
+                        id: "shape-n1",
+                        type: "diamond",
+                        x: 0,
+                        y: 0,
+                        w: 100,
+                        h: 100,
+                        label: "Decision?",
+                    },
+                ],
+            };
+            const doc = expandToExcalidraw(minimal);
+            const shape = doc.elements.find((e: any) => e.id === "shape-n1")!;
+            expect(shape.type).toBe("diamond");
         });
     });
 });

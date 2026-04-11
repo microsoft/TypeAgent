@@ -4,7 +4,7 @@
 **Worktree:** `TypeAgent-excalidraw`
 **Started:** 2026-04-10
 
-## Current Phase: TRUNCATION FIX COMPLETE
+## Current Phase: MINIMAL SCHEMA MIGRATION COMPLETE
 - [x] Worktree created and isolated from main repo
 - [x] Deep exploration of current implementation complete
 - [x] Architecture design document written (`excalidraw_agent_design.md`)
@@ -16,8 +16,11 @@
 - [x] Full end-to-end pipeline review — no further bugs found
 - [x] Fix JSON truncation for large diagrams (Option B: compact output + Option A: chunked generation)
 - [x] Add truncation recovery as last-ditch safety net
+- [x] **Switch to MinimalDiagram schema — LLM generates ~5x smaller output, TypeScript expands deterministically**
+- [x] New `expandToExcalidraw()` function handles all Excalidraw field population
+- [x] Correction loop updated to work in minimal format
 - [x] TypeScript compilation clean — 0 errors
-- [x] All 54 tests passing (24 original + 30 new)
+- [x] All 81 tests passing (54 previous + 27 new for minimal schema + expandToExcalidraw)
 
 ## Milestones
 
@@ -31,10 +34,24 @@
 | 6 | Bug Fix: max_tokens | DONE | Removed hardcoded max_tokens (8000/16000) that exceeded model's 4096 limit |
 | 7 | Robustness Improvements | DONE | stripMarkdownFences, better error messages, full pipeline review |
 | 8 | Fix: JSON Truncation | DONE | Compact output (Option B) + Chunked generation (Option A) + Truncation recovery |
+| 9 | MinimalDiagram Schema | DONE | LLM generates ~5x smaller MinimalDiagram; `expandToExcalidraw()` expands deterministically to full Excalidraw JSON |
 
 ## What Changed
 
 ### Bug Fixes (2026-04-10)
+
+#### Fix 5: Switch to MinimalDiagram schema to eliminate truncation (CRITICAL)
+**Error:** Despite compact output instructions and chunked generation, LLM still emits verbose Excalidraw fields (`seed`, `version`, `opacity`, `roughness`, `fillStyle`, `strokeWidth`, etc.) causing truncation at ~12,761 chars for large diagrams (18 nodes, 13 edges = 31 items).
+
+**Root cause:** Asking the LLM to produce Excalidraw JSON (even "compact") relies on the LLM to actually omit ~20 default fields per element. LLMs frequently ignore this instruction, producing verbose output that exceeds token limits.
+
+**Fix — MinimalDiagram schema + deterministic expansion:**
+1. **New MinimalDiagram format:** LLM now generates a compact intermediate format with only ~7 fields per element (`id`, `type`, `x`, `y`, `w`, `h`, `label`/`from`/`to`) — ~5x smaller than full Excalidraw JSON.
+2. **New `expandToExcalidraw()` function:** ~200 lines of TypeScript that deterministically converts MinimalDiagram → full Excalidraw document with all required fields (strokeColor, backgroundColor, fillStyle, seed, version, etc.), arrow edge-point geometry, text label binding, and boundElements wiring.
+3. **Correction loop updated:** Phase 4 now uses `buildMinimalCorrectionPrompt()` to correct in minimal format, then re-expands — keeping correction prompts small.
+4. **Result:** A 31-element diagram produces well under 4000 chars of LLM output (verified by test), eliminating truncation entirely.
+
+**New test coverage:** 27 new tests covering `expandToExcalidraw` (basic expansion, field completeness, group/frame expansion, arrow labels, boundElements wiring, default dimensions, plan validation, output size comparison, empty diagram, ellipse/diamond types), `buildMinimalDiagramPrompt`, and `buildMinimalCorrectionPrompt`.
 
 #### Fix 4: JSON truncation for large diagrams (CRITICAL)
 **Error:** `Unterminated string in JSON at position 12564` — LLM output truncated mid-response for diagrams with 16+ nodes, 7+ edges, 2+ groups.
@@ -93,9 +110,11 @@
 ```
 Source Content
   → Phase 1: LLM extracts DiagramPlan (structured JSON with groups/containment)
-  → Phase 2: LLM generates Excalidraw JSON from DiagramPlan (with ID conventions)
+  → Phase 2: LLM generates MinimalDiagram JSON (~5x smaller than Excalidraw)
+  → Phase 2b: TypeScript expandToExcalidraw() deterministically expands to full Excalidraw JSON
   → Phase 3: Programmatic validation (8 check categories)
-  → Phase 4: If errors, LLM fixes specific issues (max 3 iterations)
+  → Phase 4: If errors, LLM fixes specific issues in MinimalDiagram format (max 3 iterations)
+  → Phase 4b: Re-expand corrected MinimalDiagram to Excalidraw JSON
   → Final: Mechanical repair pass (arrow geometry, reference patching)
   → Save .excalidraw file
 ```
@@ -126,13 +145,29 @@ PASS dist/test/diagramValidator.spec.js
     bound elements consistency ............. 1 passed
     empty and edge cases ................... 2 passed
     statistics tracking .................... 1 passed
-  Prompt Builders .......................... 6 passed
+  Prompt Builders
+    buildPlanExtractionPrompt .............. 3 passed
+    buildExcalidrawGenerationPrompt ........ 3 passed
+    buildMinimalDiagramPrompt .............. 6 passed
+    buildMinimalCorrectionPrompt ........... 2 passed
+    buildCorrectionPrompt .................. 2 passed
   DiagramPlan structure .................... 3 passed
   injectDefaults ........................... 8 passed
   recoverTruncatedJson ..................... 6 passed
   shouldUseChunkedGeneration ............... 5 passed
   Chunked prompt builders .................. 11 passed
+  expandToExcalidraw
+    basic expansion ........................ 4 passed
+    field completeness ..................... 3 passed
+    group/frame expansion .................. 2 passed
+    arrow label expansion .................. 2 passed
+    boundElements wiring ................... 1 passed
+    default dimensions ..................... 1 passed
+    validates against plan ................. 2 passed
+    output size comparison ................. 1 passed
+    empty diagram .......................... 1 passed
+    ellipse and diamond types .............. 2 passed
 
 Test Suites: 1 passed, 1 total
-Tests:       54 passed, 54 total
+Tests:       81 passed, 81 total
 ```

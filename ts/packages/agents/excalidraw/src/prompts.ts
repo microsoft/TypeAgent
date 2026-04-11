@@ -5,8 +5,9 @@
  * All LLM prompt builders for the iterative excalidraw generation pipeline.
  *
  * Phase 1 — Plan Extraction: source content → DiagramPlan JSON
- * Phase 2 — Excalidraw Generation: DiagramPlan → Excalidraw JSON
- * Phase 4 — Correction: current JSON + issues → corrected JSON
+ * Phase 2 — Minimal Diagram Generation: DiagramPlan → MinimalDiagram JSON
+ *           (TypeScript code then expands MinimalDiagram → full Excalidraw JSON)
+ * Phase 4 — Correction: current MinimalDiagram + issues → corrected MinimalDiagram
  */
 
 import { DiagramPlan } from "./diagramPlan.js";
@@ -82,11 +83,84 @@ SOURCE CONTENT TYPE: ${sourceType}
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2: Excalidraw Generation Prompt
+// Phase 2: Minimal Diagram Generation Prompt
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds the prompt that asks the LLM to produce a MinimalDiagram JSON from
+ * a DiagramPlan.  The MinimalDiagram uses a compact schema (~5x smaller than
+ * full Excalidraw JSON) and TypeScript code expands it programmatically.
+ */
+export function buildMinimalDiagramPrompt(): string {
+    return `You are a diagram layout engine. Given a DiagramPlan, produce a MinimalDiagram JSON.
+
+OUTPUT FORMAT:
+Output ONLY valid JSON — no markdown fences, no explanation.
+{
+  "elements": [ ... ]
+}
+
+MINIMAL ELEMENT SCHEMA — each element is one of:
+
+Shape (rectangle, ellipse, diamond, frame):
+  { "id": "<string>", "type": "<rectangle|ellipse|diamond|frame>", "x": <num>, "y": <num>, "w": <num>, "h": <num>, "label": "<text>", "color": "<hex or null>", "group": "<parent group id or null>" }
+
+Arrow:
+  { "id": "<string>", "type": "arrow", "x": 0, "y": 0, "from": "<source element id>", "to": "<target element id>", "label": "<optional text>" }
+
+ELEMENT ID CONVENTION — CRITICAL:
+- Plan node "nX" → element id "shape-nX"
+- Plan group "gX" → element id "group-gX"
+- Plan edge "eX" → element id "arrow-eX"
+
+SIZING SHAPES:
+- Estimate ~10px per character width for labels
+- Add 48px horizontal padding, 32px vertical padding
+- Minimum shape size: 120 × 60 px
+- Example: "Hello World" (11 chars) → w = max(11*10+48, 120) = 158, h = 60
+
+LAYOUT RULES:
+- Top-down (TD): stack nodes vertically, 80px gap between rows
+- Left-to-right (LR): stack horizontally, 80px gap between columns
+- Within a group: arrange child nodes in a row (LR) or column (TD) with 40px gaps
+- No overlaps between shapes at the same level
+- Group frame elements: use "frame" type, sized to contain all children + 40px padding on sides + 50px top padding (for label)
+- Group frames use the group's color, with style "dashed"
+- Position group frame BEFORE its children in the elements array
+
+GROUP RENDERING:
+- Each plan group → one "frame" element (id: "group-<groupId>", label: group title)
+- All child nodes MUST be positioned INSIDE the group frame bounds (≥20px margin)
+- Nested groups: inner frame inside outer frame
+
+ARROW ELEMENTS:
+- For arrows, set x:0, y:0 — the system will compute geometry from source/target positions
+- Set "from" to the source shape id (e.g. "shape-n1")
+- Set "to" to the target shape id (e.g. "shape-n2")
+- Only include "label" if the plan edge has a label
+
+EXAMPLE — a 3-node flow with one edge:
+DiagramPlan: { nodes: [{id:"n1",label:"Start",shape:"ellipse"},{id:"n2",label:"Process",shape:"rectangle"},{id:"n3",label:"End",shape:"ellipse"}], edges: [{id:"e1",sourceNodeId:"n1",targetNodeId:"n2"},{id:"e2",sourceNodeId:"n2",targetNodeId:"n3"}], groups: [] }
+
+MinimalDiagram output:
+{"elements":[{"id":"shape-n1","type":"ellipse","x":100,"y":50,"w":120,"h":60,"label":"Start"},{"id":"shape-n2","type":"rectangle","x":100,"y":190,"w":160,"h":60,"label":"Process"},{"id":"shape-n3","type":"ellipse","x":100,"y":330,"w":120,"h":60,"label":"End"},{"id":"arrow-e1","type":"arrow","x":0,"y":0,"from":"shape-n1","to":"shape-n2"},{"id":"arrow-e2","type":"arrow","x":0,"y":0,"from":"shape-n2","to":"shape-n3"}]}
+
+SELF-REVIEW before outputting:
+1. Every plan node has a shape element (id: "shape-<nodeId>")
+2. Every plan edge has an arrow element (id: "arrow-<edgeId>")
+3. Every plan group has a frame element (id: "group-<groupId>")
+4. All children are positioned inside their group frame
+5. No two shapes overlap
+6. Output is compact — no extra whitespace, no extra fields`;
+}
+
+// ---------------------------------------------------------------------------
+// Legacy: Excalidraw Generation Prompt (kept for small-diagram fallback)
 // ---------------------------------------------------------------------------
 
 /**
  * Core instructions shared by all generation prompts (single-shot and chunked).
+ * @deprecated — only used by buildExcalidrawGenerationPrompt for backward compat
  */
 function coreExcalidrawInstructions(): string {
     return `ELEMENT ID CONVENTION — CRITICAL:
@@ -185,13 +259,15 @@ SELF-REVIEW before outputting:
 }
 
 // ---------------------------------------------------------------------------
-// Phase 2 — Chunked Generation Prompts (for large diagrams)
+// Phase 2 — Chunked Generation Prompts (legacy, kept for backward compat)
 // ---------------------------------------------------------------------------
 
 /**
- * Returns true if the plan is large enough to warrant chunked generation.
- * Threshold: more than 12 total plan items (nodes + edges + groups), which
- * typically produces JSON that risks exceeding model output limits.
+ * Returns true if the plan is large enough to warrant the minimal schema approach.
+ * Threshold: more than 12 total plan items (nodes + edges + groups).
+ *
+ * NOTE: In the new architecture, ALL plans go through the minimal schema path.
+ * This function is kept for backward compatibility with tests.
  */
 export function shouldUseChunkedGeneration(plan: {
     nodes: unknown[];
@@ -268,8 +344,53 @@ For each arrow:
 }
 
 // ---------------------------------------------------------------------------
-// Phase 4: Correction Prompt
+// Phase 4: Correction Prompt (updated for MinimalDiagram)
 // ---------------------------------------------------------------------------
+
+export function buildMinimalCorrectionPrompt(
+    currentMinimalJson: string,
+    issues: ValidationIssue[],
+    plan: DiagramPlan,
+): string {
+    const issueList = issues
+        .map(
+            (issue, i) =>
+                `${i + 1}. [${issue.severity.toUpperCase()}] ${issue.type}: ${issue.description}` +
+                (issue.elementId ? ` (element: ${issue.elementId})` : ""),
+        )
+        .join("\n");
+
+    return `You are fixing issues in a MinimalDiagram. The diagram was generated from a DiagramPlan but has problems.
+
+FIX ONLY the listed issues. Preserve all correct elements. Output the corrected MinimalDiagram JSON.
+
+ISSUES TO FIX:
+${issueList}
+
+REFERENCE — ORIGINAL DIAGRAM PLAN:
+${JSON.stringify(plan, null, 2)}
+
+ELEMENT ID CONVENTION (must be followed):
+- Plan node "nX" → element id "shape-nX"
+- Plan group "gX" → element id "group-gX"
+- Plan edge "eX" → element id "arrow-eX"
+
+MINIMAL ELEMENT SCHEMA:
+Shape: { "id", "type": "rectangle|ellipse|diamond|frame", "x", "y", "w", "h", "label", "color"?, "group"? }
+Arrow: { "id", "type": "arrow", "x": 0, "y": 0, "from": "<source id>", "to": "<target id>", "label"? }
+
+CURRENT MINIMAL DIAGRAM JSON (fix this):
+${currentMinimalJson}
+
+RULES:
+- Output ONLY valid JSON — no markdown fences, no explanation
+- Keep the compact MinimalDiagram format — do NOT output full Excalidraw JSON
+- Every plan node must have a shape element
+- Every plan edge must have an arrow element
+- Every plan group must have a frame element
+- Group children must be spatially inside their group frame
+- No overlapping shapes`;
+}
 
 export function buildCorrectionPrompt(
     currentJson: string,
