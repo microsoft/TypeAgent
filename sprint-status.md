@@ -4,12 +4,18 @@
 **Worktree:** `TypeAgent-excalidraw`
 **Started:** 2026-04-10
 
-## Current Phase: COMPLETE
+## Current Phase: BUG FIX & HARDENING COMPLETE
 - [x] Worktree created and isolated from main repo
 - [x] Deep exploration of current implementation complete
 - [x] Architecture design document written (`excalidraw_agent_design.md`)
 - [x] Implementation of iterative loop approach
 - [x] Testing and validation — 24/24 tests pass
+- [x] Fix max_tokens bug (8000/16000 exceeded model's 4096 limit)
+- [x] Add stripMarkdownFences for JSON parse robustness
+- [x] Improve error messages for parse failures
+- [x] Full end-to-end pipeline review — no further bugs found
+- [x] TypeScript compilation clean — 0 errors
+- [x] All 24 tests passing
 
 ## Milestones
 
@@ -20,8 +26,32 @@
 | 3 | Architecture Design | DONE | `excalidraw_agent_design.md` — iterative loop w/ DiagramPlan |
 | 4 | Implementation | DONE | 4 files: diagramPlan.ts, prompts.ts, diagramValidator.ts, refactored handler |
 | 5 | Testing & Validation | DONE | 24 unit tests covering validator, prompts, plan types |
+| 6 | Bug Fix: max_tokens | DONE | Removed hardcoded max_tokens (8000/16000) that exceeded model's 4096 limit |
+| 7 | Robustness Improvements | DONE | stripMarkdownFences, better error messages, full pipeline review |
 
 ## What Changed
+
+### Bug Fixes (2026-04-10)
+
+#### Fix 1: max_tokens exceeds model limit (CRITICAL)
+**Error:** `fetch error: 400: Bad Request: max_tokens is too large: 8000. This model supports at most 4096 completion tokens`
+
+**Root cause:** All three LLM calls in the pipeline had hardcoded `max_tokens` overrides:
+- Phase 1 (plan extraction): `{ max_tokens: 8000 }` — exceeds 4096 limit
+- Phase 2 (excalidraw generation): `{ max_tokens: 16000 }` — exceeds 4096 limit
+- Phase 3 (correction): `{ max_tokens: 16000 }` — exceeds 4096 limit
+
+**Fix:** Removed all `max_tokens` overrides. `openai.createJsonChatModel()` is now called with no arguments, which lets the API use the model's default maximum token limit. This is model-agnostic and respects whatever model is configured.
+
+#### Fix 2: JSON parse robustness
+**Issue:** Some models emit markdown code fences (` ```json ... ``` `) even in `json_object` mode, causing `JSON.parse` to fail.
+
+**Fix:** Added `stripMarkdownFences()` utility that strips markdown fencing before parsing. Applied to all three JSON parse sites (plan extraction, excalidraw generation, correction).
+
+#### Fix 3: Better error diagnostics
+**Issue:** Parse failures returned generic "please try again" messages with no context.
+
+**Fix:** Error messages now include the specific parse error and the last 200 characters of the LLM response, making debugging much easier.
 
 ### Architecture
 - **Eliminated Mermaid intermediate representation** — replaced with typed `DiagramPlan` JSON that explicitly captures nodes, edges, groups (containment), and layout direction
