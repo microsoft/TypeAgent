@@ -92,7 +92,14 @@ async function handleRefineSchema(
             role: "system" as const,
             content:
                 "You are a TypeScript expert. Modify the given TypeAgent action schema according to the instructions. " +
-                "Preserve all copyright headers and existing structure. Respond in JSON format. Return a JSON object with a single `schema` key containing the updated TypeScript file content as a string.",
+                "Preserve all copyright headers and existing structure. " +
+                "IMPORTANT: Use single-line `// comment` syntax for ALL comments. Do NOT use multi-line `/* */` or JSDoc `/** */` comments — the TypeAgent schema parser does not support them. " +
+                "Follow these best practices:\n" +
+                "- Enum-like properties: always define the type as an explicit union of string literals instead of `string`. " +
+                "The inline comment should name the underlying API enum it maps to and explain the default value and why. " +
+                "Example: `position?: \"Top\" | \"Bottom\" | \"Center\" | \"InsideEnd\" | \"InsideBase\" | \"OutsideEnd\" | \"Left\" | \"Right\" | \"BestFit\" | \"Callout\" | \"None\"; " +
+                "// Label position (Office.js ChartDataLabelPosition enum). Default is \"BestFit\" (automatic placement chosen by Office.js)`\n" +
+                "Respond in JSON format. Return a JSON object with a single `schema` key containing the updated TypeScript file content as a string.",
         },
         {
             role: "user" as const,
@@ -173,6 +180,11 @@ function buildSchemaPrompt(
                 "- Use `actionName: \"camelCaseName\"` as a string literal type\n" +
                 "- Parameters use camelCase names\n" +
                 "- Optional parameters use `?: type` syntax\n" +
+                "Follow these best practices:\n" +
+                "- Enum-like properties: always define the type as an explicit union of string literals instead of `string`. " +
+                "The inline comment should name the underlying API enum it maps to and explain the default value and why. " +
+                "Example: `position?: \"Top\" | \"Bottom\" | \"Center\" | \"InsideEnd\" | \"InsideBase\" | \"OutsideEnd\" | \"Left\" | \"Right\" | \"BestFit\" | \"Callout\" | \"None\"; " +
+                "// Label position (Office.js ChartDataLabelPosition enum). Default is \"BestFit\" (automatic placement chosen by Office.js)`\n" +
                 "Respond in JSON format. Return a JSON object with a single `schema` key containing the TypeScript file content as a string.",
         },
         {
