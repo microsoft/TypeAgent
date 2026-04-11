@@ -264,6 +264,7 @@ export function toPartitions<T extends CompletionItem = CompletionItem>(
     groups: CompletionGroup[],
     input: string,
     startIndex: number,
+    // Cast required: TS cannot narrow CompletionItem → T at the default site.
     createItem: (
         choice: string,
         group: CompletionGroup,

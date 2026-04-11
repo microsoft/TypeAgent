@@ -95,6 +95,8 @@ async function getCompletionsData(
         // Use the shared isModeAtLevel to determine whether any partition
         // requires a separator at level 1 (space) — this is more accurate
         // than the previous heuristic that only checked raw group modes.
+        // Matches modes visible at level 1 but NOT level 0 — i.e. "space"
+        // and "spacePunctuation" (modes that require a separator character).
         const needsSep = partitions.some(
             (p) => isModeAtLevel(p.mode, 1) && !isModeAtLevel(p.mode, 0),
         );
