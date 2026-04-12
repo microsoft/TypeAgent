@@ -243,7 +243,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/knowPro/src/collections.ts` | 94 | make this 2 methods: addExact and addRelated | Low | High | Component | Fix | No |
 | `ts/packages/knowPro/src/collections.ts` | 260 | this should be minHitCount > 1 | Low | High | Local | Fix | No |
 | `ts/packages/knowPro/src/conversationIndex.ts` | 269 | update: pass in TextLocation instead of messageOrdinal + chunkOrdinal | Medium | Medium | Component | Fix | No |
-| `ts/packages/knowPro/src/conversationIndex.ts` | 409 | Should rename this to TermToSemanticRefIndex | Low | High | Component | Fix | No |
 | `ts/packages/knowPro/src/index.ts` | 23 | mergeConcreteEntitiesEx avoids forcing the data to be lower case. | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/knowPro/src/interfaces.ts` | 671 | Move to dataFormats.ts | Low | High | Component | Fix | No |
 | `ts/packages/knowPro/src/query.ts` | 66 | also require secondary indices, once we have removed non-index based retrieval to test | Medium | Medium | Component | Fix | Yes |

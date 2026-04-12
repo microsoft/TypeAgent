@@ -18,7 +18,7 @@ const debugLogger = registerDebug("conversation-memory.podcast");
 export class Podcast implements kp.IConversation<PodcastMessage> {
     public settings: kp.ConversationSettings;
     public messages: kp.MessageCollection<PodcastMessage>;
-    public semanticRefIndex: kp.ConversationIndex;
+    public semanticRefIndex: kp.TermToSemanticRefIndex;
     public secondaryIndexes: PodcastSecondaryIndexes;
     public semanticRefs: kp.SemanticRefCollection;
 
@@ -37,7 +37,7 @@ export class Podcast implements kp.IConversation<PodcastMessage> {
             settings = this.createSettings();
         }
         this.settings = settings;
-        this.semanticRefIndex = new kp.ConversationIndex();
+        this.semanticRefIndex = new kp.TermToSemanticRefIndex();
         this.secondaryIndexes = new PodcastSecondaryIndexes(this.settings);
     }
 
@@ -126,7 +126,7 @@ export class Podcast implements kp.IConversation<PodcastMessage> {
         );
         this.tags = podcastData.tags;
         if (podcastData.semanticIndexData) {
-            this.semanticRefIndex = new kp.ConversationIndex(
+            this.semanticRefIndex = new kp.TermToSemanticRefIndex(
                 podcastData.semanticIndexData,
             );
         }

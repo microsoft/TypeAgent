@@ -111,7 +111,7 @@ export class ConversationMemory
     implements kp.IConversation<ConversationMessage>
 {
     public messages: kp.MessageCollection<ConversationMessage>;
-    public semanticRefIndex: kp.ConversationIndex;
+    public semanticRefIndex: kp.TermToSemanticRefIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
     public semanticRefs: kp.SemanticRefCollection;
 
@@ -132,7 +132,7 @@ export class ConversationMemory
         this.messages = new kp.MessageCollection<ConversationMessage>(messages);
         this.semanticRefs = new kp.SemanticRefCollection();
 
-        this.semanticRefIndex = new kp.ConversationIndex();
+        this.semanticRefIndex = new kp.TermToSemanticRefIndex();
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
             this.settings.conversationSettings,
         );
@@ -254,7 +254,7 @@ export class ConversationMemory
         this.semanticRefs = new kp.SemanticRefCollection(data.semanticRefs);
         this.tags = data.tags;
         if (data.semanticIndexData) {
-            this.semanticRefIndex = new kp.ConversationIndex(
+            this.semanticRefIndex = new kp.TermToSemanticRefIndex(
                 data.semanticIndexData,
             );
         }
