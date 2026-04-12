@@ -6,6 +6,7 @@ module.exports = {
     ...base,
     moduleNameMapper: {
         ...base.moduleNameMapper,
-        "^../../src/(.*)$": "<rootDir>/dist/$1",
+        // Map any relative ../src/ import (at any depth) to the compiled dist/ output.
+        "^(?:\\.\\./)+src/(.*)$": "<rootDir>/dist/$1",
     },
 };

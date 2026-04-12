@@ -28,6 +28,7 @@ import type {
 } from "agent-dispatcher";
 import type { ICompletionDispatcher } from "agent-dispatcher/helpers/completion";
 import { PartialCompletionSession } from "agent-dispatcher/helpers/completion";
+import type { SearchMenuPosition } from "agent-dispatcher/helpers/completion";
 import { CliSearchMenu } from "./cliSearchMenu.js";
 import chalk from "chalk";
 import fs from "fs";
@@ -49,6 +50,10 @@ import {
     getDebugPanel,
     PromptRenderer,
 } from "./debugInterceptor.js";
+
+type CompletionSource<T> =
+    | ((line: string, context: T) => Promise<any>)
+    | ICompletionDispatcher;
 
 // Track current processing state
 let currentSpinner: EnhancedSpinner | null = null;
@@ -1053,8 +1058,10 @@ async function questionWithCompletion(
         let completionPrefix = ""; // Fixed prefix before completions
         let updatingCompletions = false;
         // Session-mode state (used when completionDispatcher is provided)
-        let session: PartialCompletionSession | null = null;
-        let menu: CliSearchMenu | null = null;
+        let session: PartialCompletionSession | undefined;
+        let menu: CliSearchMenu | undefined;
+        // Position callback for session APIs (CLI has no spatial positioning).
+        const getPos = (): SearchMenuPosition => ({ left: 0, bottom: 0 });
         const stdin = process.stdin;
         const stdout = process.stdout;
 
@@ -1111,7 +1118,7 @@ async function questionWithCompletion(
                     filteredCompletions = completions;
                     filterStartIndex = 0;
                     completionPrefix = "";
-                } else if (session !== null && menu !== null) {
+                } else if (session !== undefined && menu !== undefined) {
                     const sessionItems = menu.getItems();
                     const rawPrefix = session.getCompletionPrefix(input);
                     if (sessionItems.length > 0 && rawPrefix !== undefined) {
@@ -1331,14 +1338,10 @@ async function questionWithCompletion(
             }
 
             if (data === "\x1b") {
-                if (session !== null && menu !== null) {
+                if (session !== undefined && menu !== undefined) {
                     // Session mode: use explicitHide for smart level-shift / refetch
                     if (filteredCompletions.length > 0) {
-                        session.explicitHide(
-                            input,
-                            () => ({ left: 0, bottom: 0 }),
-                            "forward",
-                        );
+                        session.explicitHide(input, getPos, "forward");
                     } else {
                         // Esc with no completions — clear input
                         input = "";
@@ -1407,6 +1410,9 @@ async function questionWithCompletion(
                             : "") +
                         completion;
                 }
+                if (session !== undefined) {
+                    session.resetToIdle();
+                }
                 // Tear down the scroll region and write the finalized input
                 // into the normal terminal flow so it appears in scrollback.
                 cleanup();
@@ -1436,7 +1442,7 @@ async function questionWithCompletion(
                             : "") +
                         completion;
                     cursorPos = input.length; // Move cursor to end
-                    if (session !== null) {
+                    if (session !== undefined) {
                         // Session mode: reset so next render sees no completions
                         session.resetToIdle();
                     } else {
@@ -1452,14 +1458,9 @@ async function questionWithCompletion(
                     input =
                         input.slice(0, cursorPos - 1) + input.slice(cursorPos);
                     cursorPos--;
-                    if (session !== null) {
+                    if (session !== undefined) {
                         // Session mode: drive the session backward
-                        session.update(
-                            input,
-                            () => ({ left: 0, bottom: 0 }),
-                            "backward",
-                        );
-                        render();
+                        session.update(input, getPos, "backward");
                     } else {
                         // Callback mode: update completions state
                         if (
@@ -1481,14 +1482,9 @@ async function questionWithCompletion(
                 input =
                     input.slice(0, cursorPos) + data + input.slice(cursorPos);
                 cursorPos++;
-                if (session !== null) {
+                if (session !== undefined) {
                     // Session mode: drive the session forward on every character
-                    session.update(
-                        input,
-                        () => ({ left: 0, bottom: 0 }),
-                        "forward",
-                    );
-                    render();
+                    session.update(input, getPos, "forward");
                 } else if (data === " ") {
                     // Callback mode: typing a space always fetches new completions
                     filteredCompletions = [];
@@ -1754,9 +1750,7 @@ export async function processCommandsEnhanced<T>(
     processCommand: (request: string, context: T) => Promise<any>,
     context: T,
     inputs?: string[],
-    completionSource?:
-        | ((line: string, context: T) => Promise<any>)
-        | ICompletionDispatcher,
+    completionSource?: CompletionSource<T>,
     dispatcherForCancel?: Dispatcher,
 ) {
     const fs = await import("node:fs");
