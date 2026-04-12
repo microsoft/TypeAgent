@@ -271,7 +271,7 @@ async function writeToIndex(
     index: knowLib.TextIndex<string, ChunkId>,
 ) {
     for (const phrase of phrases ?? []) {
-        await exponentialBackoff(io, index.put, phrase, [chunkId]);
+        await exponentialBackoff(io, index.addUpdate.bind(index), phrase, [chunkId]);
     }
 }
 
