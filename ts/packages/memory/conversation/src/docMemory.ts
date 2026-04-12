@@ -96,7 +96,7 @@ export class DocMemory
 {
     public messages: kp.MessageCollection<DocPart>;
     public semanticRefs: kp.SemanticRefCollection;
-    public semanticRefIndex: kp.ConversationIndex;
+    public semanticRefIndex: kp.TermToSemanticRefIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
     public indexingState: DocIndexingState;
 
@@ -115,7 +115,7 @@ export class DocMemory
         this.messages = new kp.MessageCollection<DocPart>(docParts);
         this.semanticRefs = new kp.SemanticRefCollection();
 
-        this.semanticRefIndex = new kp.ConversationIndex();
+        this.semanticRefIndex = new kp.TermToSemanticRefIndex();
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
             this.settings.conversationSettings,
         );
@@ -336,7 +336,7 @@ export class DocMemory
         );
         this.tags = docMemoryData.tags;
         if (docMemoryData.semanticIndexData) {
-            this.semanticRefIndex = new kp.ConversationIndex(
+            this.semanticRefIndex = new kp.TermToSemanticRefIndex(
                 docMemoryData.semanticIndexData,
             );
         }
