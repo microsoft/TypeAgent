@@ -277,7 +277,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
     }
 
     async function addName(name: string, sourceIds: EntityId[]): Promise<void> {
-        await nameIndex.put(name, sourceIds);
+        await nameIndex.addUpdate(name, sourceIds);
     }
 
     async function addTypes(
@@ -291,7 +291,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
                 type: TextBlockType.Word,
             };
         });
-        await typeIndex.putMultiple(typeEntries);
+        await typeIndex.addUpdateMultiple(typeEntries);
     }
 
     async function addFacets(
@@ -306,7 +306,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
                     type: TextBlockType.Word,
                 };
             });
-            await facetIndex.putMultiple(facetEntries);
+            await facetIndex.addUpdateMultiple(facetEntries);
         }
     }
 

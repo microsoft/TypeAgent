@@ -256,7 +256,7 @@ export async function createActionIndexOnStorage<TSourceId = any>(
         actionIds: ActionId[],
     ): Promise<void> {
         const fullVerb = actionVerbsToString(action.verbs, action.verbTense);
-        await verbIndex.put(fullVerb, actionIds);
+        await verbIndex.addUpdate(fullVerb, actionIds);
     }
 
     async function addName(
