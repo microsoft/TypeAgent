@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using autoShell.Logging;
 using autoShell.Services;
@@ -14,62 +15,47 @@ namespace autoShell.Handlers.Settings;
 /// Handles display settings: brightness, color temperature, orientation, resolution, scaling,
 /// blue light filter, and rotation lock.
 /// </summary>
-internal class DisplaySettingsHandler : ICommandHandler
+internal class DisplaySettingsHandler : SettingsHandlerBase
 {
-    private readonly IRegistryService _registry;
     private readonly IProcessService _process;
     private readonly IBrightnessService _brightness;
     private readonly ILogger _logger;
 
+    /// <summary>
+    /// Registers registered actions for color temperature, screen orientation, display resolution,
+    /// and rotation lock. Brightness, scaling, and blue light filter require custom logic.
+    /// </summary>
     public DisplaySettingsHandler(IRegistryService registry, IProcessService process, IBrightnessService brightness, ILogger logger)
+        : base(registry, process)
     {
-        _registry = registry;
         _process = process;
         _brightness = brightness;
         _logger = logger;
+
+        AddOpenSettingsAction("AdjustColorTemperature", new OpenSettingsConfig("ms-settings:nightlight", "night light settings"));
+        AddOpenSettingsAction("AdjustScreenOrientation", new OpenSettingsConfig("ms-settings:display", "display settings"));
+        AddOpenSettingsAction("DisplayResolutionAndAspectRatio", new OpenSettingsConfig("ms-settings:display", "display settings"));
+        AddRegistryToggleAction("RotationLock", new RegistryToggleConfig(
+            @"Software\Microsoft\Windows\CurrentVersion\ImmersiveShell", "RotationLockPreference", "enable", 1, 0));
     }
 
-    /// <inheritdoc/>
-    public IEnumerable<string> SupportedCommands { get; } =
-    [
-        "AdjustColorTemperature",
-        "AdjustScreenBrightness",
-        "AdjustScreenOrientation",
-        "DisplayResolutionAndAspectRatio",
-        "DisplayScaling",
-        "EnableBlueLightFilterSchedule",
-        "RotationLock",
-    ];
+    private static readonly string[] SpecializedActions =
+        ["AdjustScreenBrightness", "DisplayScaling", "EnableBlueLightFilterSchedule"];
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JsonElement parameters)
+    public override IEnumerable<string> SupportedCommands =>
+        SpecializedActions.Concat(RegisteredActions);
+
+    /// <inheritdoc/>
+    protected override CommandResult HandleSpecialized(string key, JsonElement parameters)
     {
-        switch (key)
+        return key switch
         {
-            case "AdjustColorTemperature":
-                _process.StartShellExecute("ms-settings:nightlight");
-                return CommandResult.Ok("Opened Night Light settings");
-
-            case "AdjustScreenBrightness":
-                return HandleAdjustScreenBrightness(parameters);
-
-            case "AdjustScreenOrientation":
-            case "DisplayResolutionAndAspectRatio":
-                _process.StartShellExecute("ms-settings:display");
-                return CommandResult.Ok("Opened display settings");
-
-            case "DisplayScaling":
-                return HandleDisplayScaling(parameters);
-
-            case "EnableBlueLightFilterSchedule":
-                return HandleBlueLightFilter(parameters);
-
-            case "RotationLock":
-                return HandleRotationLock(parameters);
-
-            default:
-                return CommandResult.Fail($"Unknown display settings command: {key}");
-        }
+            "AdjustScreenBrightness" => HandleAdjustScreenBrightness(parameters),
+            "DisplayScaling" => HandleDisplayScaling(parameters),
+            "EnableBlueLightFilterSchedule" => HandleBlueLightFilter(parameters),
+            _ => base.HandleSpecialized(key, parameters),
+        };
     }
 
     private CommandResult HandleAdjustScreenBrightness(JsonElement parameters)
@@ -119,7 +105,7 @@ internal class DisplaySettingsHandler : ICommandHandler
             ? [0x02, 0x00, 0x00, 0x00]
             : [0x02, 0x00, 0x00, 0x01];
 
-        _registry.SetValue(
+        Registry.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\default$windows.data.bluelightreduction.settings\windows.data.bluelightreduction.settings",
             "Data",
             data,
@@ -127,14 +113,4 @@ internal class DisplaySettingsHandler : ICommandHandler
         return CommandResult.Ok($"Night Light schedule {(disabled ? "disabled" : "enabled")}");
     }
 
-    private CommandResult HandleRotationLock(JsonElement parameters)
-    {
-        bool enable = parameters.GetBoolOrDefault("enable", true);
-        _registry.SetValue(
-            @"Software\Microsoft\Windows\CurrentVersion\ImmersiveShell",
-            "RotationLockPreference",
-            enable ? 1 : 0,
-            RegistryValueKind.DWord);
-        return CommandResult.Ok($"Rotation lock {(enable ? "enabled" : "disabled")}");
-    }
 }

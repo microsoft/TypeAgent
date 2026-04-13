@@ -10,7 +10,7 @@ namespace autoShell.Handlers;
 
 /// <summary>
 /// Handles network commands: BluetoothToggle, ConnectWifi, DisconnectWifi,
-/// EnableMeteredConnections, EnableWifi, ListWifiNetworks, and ToggleAirplaneMode.
+/// EnableWifi, ListWifiNetworks, ToggleAirplaneMode, and EnableMeteredConnections.
 /// </summary>
 internal class NetworkCommandHandler : ICommandHandler
 {
@@ -47,15 +47,6 @@ internal class NetworkCommandHandler : ICommandHandler
                 _network.ToggleBluetooth(enableBt);
                 return CommandResult.Ok($"Bluetooth {(enableBt ? "enabled" : "disabled")}");
 
-            case "EnableMeteredConnections":
-                _process.StartShellExecute("ms-settings:network-status");
-                return CommandResult.Ok("Opened metered connections settings");
-
-            case "EnableWifi":
-                bool enableWifi = parameters.GetBoolOrDefault("enable", true);
-                _network.EnableWifi(enableWifi);
-                return CommandResult.Ok($"WiFi {(enableWifi ? "enabled" : "disabled")}");
-
             case "ConnectWifi":
                 string ssid = parameters.GetStringOrDefault("ssid");
                 string password = parameters.GetStringOrDefault("password", "");
@@ -65,6 +56,15 @@ internal class NetworkCommandHandler : ICommandHandler
             case "DisconnectWifi":
                 _network.DisconnectFromWifi();
                 return CommandResult.Ok("Disconnected from WiFi");
+
+            case "EnableMeteredConnections":
+                _process.StartShellExecute("ms-settings:network-status");
+                return CommandResult.Ok("Opened network status settings");
+
+            case "EnableWifi":
+                bool enableWifi = parameters.GetBoolOrDefault("enable", true);
+                _network.EnableWifi(enableWifi);
+                return CommandResult.Ok($"WiFi {(enableWifi ? "enabled" : "disabled")}");
 
             case "ListWifiNetworks":
                 string networks = _network.ListWifiNetworks();

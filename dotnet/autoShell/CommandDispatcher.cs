@@ -9,7 +9,7 @@ using autoShell.Handlers;
 using autoShell.Handlers.Settings;
 using autoShell.Logging;
 using autoShell.Services;
-
+    
 namespace autoShell;
 
 /// <summary>
@@ -70,6 +70,7 @@ internal class CommandDispatcher
         IVirtualDesktopService virtualDesktop)
     {
         var dispatcher = new CommandDispatcher(logger);
+
         dispatcher.Register(
             new AudioCommandHandler(audio),
             new AppCommandHandler(appRegistry, process, window, logger),
@@ -78,15 +79,15 @@ internal class CommandDispatcher
             new VirtualDesktopCommandHandler(appRegistry, window, virtualDesktop, logger),
             new NetworkCommandHandler(network, process, logger),
             new DisplayCommandHandler(display, logger),
-            new TaskbarSettingsHandler(registry),
+            new TaskbarSettingsHandler(registry, process),
             new DisplaySettingsHandler(registry, process, brightness, logger),
             new PersonalizationSettingsHandler(registry, process),
-            new MouseSettingsHandler(systemParams, process, logger),
+            new MouseSettingsHandler(registry, process, systemParams, logger),
             new AccessibilitySettingsHandler(registry, process),
-            new PrivacySettingsHandler(registry),
             new PowerSettingsHandler(registry, process),
             new FileExplorerSettingsHandler(registry),
-            new SystemSettingsHandler(registry, process, logger),
+            new PrivacySettingsHandler(registry),
+            new SystemSettingsHandler(registry, process),
             new SystemCommandHandler(process, debugger)
         );
 

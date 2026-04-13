@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using autoShell.Services;
@@ -14,7 +15,7 @@ namespace autoShell.Handlers.Settings;
 /// <summary>
 /// Handles File Explorer settings: file extensions and hidden/system files visibility.
 /// </summary>
-internal partial class FileExplorerSettingsHandler : ICommandHandler
+internal partial class FileExplorerSettingsHandler : SettingsHandlerBase
 {
     #region P/Invoke
     private const string ExplorerAdvanced = @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
@@ -23,32 +24,35 @@ internal partial class FileExplorerSettingsHandler : ICommandHandler
     private static partial IntPtr SendNotifyMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
     #endregion P/Invoke
 
-    private readonly IRegistryService _registry;
-
+    /// <summary>
+    /// Registers a registered action for showing file extensions (inverted toggle).
+    /// Show hidden files requires a multi-value registry write and is handled as a custom action.
+    /// </summary>
     public FileExplorerSettingsHandler(IRegistryService registry)
+        : base(registry)
     {
-        _registry = registry;
+
+        AddRegistryToggleAction("ShowFileExtensions", new RegistryToggleConfig(
+            ExplorerAdvanced, "HideFileExt", "enable", OnValue: 0, OffValue: 1));
     }
 
-    /// <inheritdoc/>
-    public IEnumerable<string> SupportedCommands { get; } =
-    [
-        "ShowFileExtensions",
-        "ShowHiddenAndSystemFiles",
-    ];
+    private static readonly string[] SpecializedActions = ["ShowHiddenAndSystemFiles"];
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JsonElement parameters)
+    public override IEnumerable<string> SupportedCommands =>
+        SpecializedActions.Concat(RegisteredActions);
+
+    /// <inheritdoc/>
+    protected override CommandResult HandleSpecialized(string key, JsonElement parameters)
     {
-        CommandResult result = key switch
+        if (key == "ShowHiddenAndSystemFiles")
         {
-            "ShowFileExtensions" => HandleShowFileExtensions(parameters),
-            "ShowHiddenAndSystemFiles" => HandleShowHiddenAndSystemFiles(parameters),
-            _ => CommandResult.Fail($"Unknown file explorer command: {key}"),
-        };
+            var result = HandleShowHiddenAndSystemFiles(parameters);
+            NotifySettingsChange();
+            return result;
+        }
 
-        NotifySettingsChange();
-        return result;
+        return base.HandleSpecialized(key, parameters);
     }
 
     private static void NotifySettingsChange()
@@ -63,21 +67,13 @@ internal partial class FileExplorerSettingsHandler : ICommandHandler
         }
     }
 
-    private CommandResult HandleShowFileExtensions(JsonElement parameters)
-    {
-        bool enable = parameters.GetBoolOrDefault("enable", true);
-        // Inverted: enable showing extensions = HideFileExt 0
-        _registry.SetValue(ExplorerAdvanced, "HideFileExt", enable ? 0 : 1, RegistryValueKind.DWord);
-        return CommandResult.Ok($"File extensions {(enable ? "shown" : "hidden")}");
-    }
-
     private CommandResult HandleShowHiddenAndSystemFiles(JsonElement parameters)
     {
         bool enable = parameters.GetBoolOrDefault("enable", true);
         // 1 = show hidden files, 2 = don't show hidden files
-        _registry.SetValue(ExplorerAdvanced, "Hidden", enable ? 1 : 2, RegistryValueKind.DWord);
+        Registry.SetValue(ExplorerAdvanced, "Hidden", enable ? 1 : 2, RegistryValueKind.DWord);
         // Show protected operating system files
-        _registry.SetValue(ExplorerAdvanced, "ShowSuperHidden", enable ? 1 : 0, RegistryValueKind.DWord);
+        Registry.SetValue(ExplorerAdvanced, "ShowSuperHidden", enable ? 1 : 0, RegistryValueKind.DWord);
         return CommandResult.Ok($"Hidden files {(enable ? "shown" : "hidden")}");
     }
 }

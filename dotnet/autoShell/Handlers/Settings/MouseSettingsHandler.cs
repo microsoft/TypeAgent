@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using autoShell.Logging;
 using autoShell.Services;
@@ -10,10 +11,10 @@ using autoShell.Services;
 namespace autoShell.Handlers.Settings;
 
 /// <summary>
-/// Handles mouse and touchpad settings: pointer size, precision, cursor speed, scroll lines,
-/// primary button, customization, and touchpad.
+/// Handles mouse and touchpad settings: precision, cursor speed, scroll lines,
+/// primary button, cursor trail, pointer size, pointer customization, and touchpad.
 /// </summary>
-internal class MouseSettingsHandler : ICommandHandler
+internal class MouseSettingsHandler : SettingsHandlerBase
 {
     private const int SPI_GETMOUSE = 3;
     private const int SPI_SETMOUSE = 4;
@@ -25,63 +26,43 @@ internal class MouseSettingsHandler : ICommandHandler
     private const int SPIF_UPDATEINIFILE_SENDCHANGE = 3;
 
     private readonly ISystemParametersService _systemParams;
-    private readonly IProcessService _process;
     private readonly ILogger _logger;
 
-    public MouseSettingsHandler(ISystemParametersService systemParams, IProcessService process, ILogger logger)
+    /// <summary>
+    /// Registers registered open-settings actions for mouse pointer size, pointer customization,
+    /// touchpad enable, and touchpad cursor speed. SPI-based actions are handled as custom actions.
+    /// </summary>
+    public MouseSettingsHandler(IRegistryService registry, IProcessService process, ISystemParametersService systemParams, ILogger logger)
+        : base(registry, process)
     {
         _systemParams = systemParams;
-        _process = process;
         _logger = logger;
+
+        AddOpenSettingsAction("AdjustMousePointerSize", new OpenSettingsConfig("ms-settings:easeofaccess-mouse", "mouse settings"));
+        AddOpenSettingsAction("MousePointerCustomization", new OpenSettingsConfig("ms-settings:easeofaccess-mouse", "mouse settings"));
+        AddOpenSettingsAction("EnableTouchPad", new OpenSettingsConfig("ms-settings:devices-touchpad", "touchpad settings"));
+        AddOpenSettingsAction("TouchpadCursorSpeed", new OpenSettingsConfig("ms-settings:devices-touchpad", "touchpad settings"));
     }
 
-    /// <inheritdoc/>
-    public IEnumerable<string> SupportedCommands { get; } =
-    [
-        "AdjustMousePointerSize",
-        "CursorTrail",
-        "EnableTouchPad",
-        "EnhancePointerPrecision",
-        "MouseCursorSpeed",
-        "MousePointerCustomization",
-        "MouseWheelScrollLines",
-        "SetPrimaryMouseButton",
-        "TouchpadCursorSpeed",
-    ];
+    private static readonly string[] SpecializedActions =
+        ["CursorTrail", "EnhancePointerPrecision", "MouseCursorSpeed", "MouseWheelScrollLines", "SetPrimaryMouseButton"];
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JsonElement parameters)
+    public override IEnumerable<string> SupportedCommands =>
+        SpecializedActions.Concat(RegisteredActions);
+
+    /// <inheritdoc/>
+    protected override CommandResult HandleSpecialized(string key, JsonElement parameters)
     {
-        switch (key)
+        return key switch
         {
-            case "AdjustMousePointerSize":
-            case "MousePointerCustomization":
-                _process.StartShellExecute("ms-settings:easeofaccess-mouse");
-                return CommandResult.Ok("Opened mouse pointer settings");
-
-            case "CursorTrail":
-                return HandleMouseCursorTrail(parameters);
-
-            case "EnableTouchPad":
-            case "TouchpadCursorSpeed":
-                _process.StartShellExecute("ms-settings:devices-touchpad");
-                return CommandResult.Ok("Opened touchpad settings");
-
-            case "EnhancePointerPrecision":
-                return HandleEnhancePointerPrecision(parameters);
-
-            case "MouseCursorSpeed":
-                return HandleMouseCursorSpeed(parameters);
-
-            case "MouseWheelScrollLines":
-                return HandleMouseWheelScrollLines(parameters);
-
-            case "SetPrimaryMouseButton":
-                return HandleSetPrimaryMouseButton(parameters);
-
-            default:
-                return CommandResult.Fail($"Unknown mouse command: {key}");
-        }
+            "CursorTrail" => HandleMouseCursorTrail(parameters),
+            "EnhancePointerPrecision" => HandleEnhancePointerPrecision(parameters),
+            "MouseCursorSpeed" => HandleMouseCursorSpeed(parameters),
+            "MouseWheelScrollLines" => HandleMouseWheelScrollLines(parameters),
+            "SetPrimaryMouseButton" => HandleSetPrimaryMouseButton(parameters),
+            _ => base.HandleSpecialized(key, parameters),
+        };
     }
 
     private CommandResult HandleEnhancePointerPrecision(JsonElement parameters)

@@ -25,31 +25,29 @@ public class PersonalizationSettingsHandlerTests
     }
 
     /// <summary>
-    /// Verifies that enabling title bar color sets ColorPrevalence to 1 in the DWM registry key.
+    /// Verifies that enabling title bar color sets DWM ColorPrevalence to 1.
     /// </summary>
     [Fact]
     public void ApplyColorToTitleBar_Enable_SetsColorPrevalence1()
     {
         Handle("ApplyColorToTitleBar", """{"enableColor":true}""");
 
-        _registryMock.Verify(r => r.SetValue(
-            @"Software\Microsoft\Windows\DWM", "ColorPrevalence", 1, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(@"Software\Microsoft\Windows\DWM", "ColorPrevalence", 1, RegistryValueKind.DWord), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that disabling title bar color sets ColorPrevalence to 0 in the DWM registry key.
+    /// Verifies that disabling title bar color sets DWM ColorPrevalence to 0.
     /// </summary>
     [Fact]
     public void ApplyColorToTitleBar_Disable_SetsColorPrevalence0()
     {
         Handle("ApplyColorToTitleBar", """{"enableColor":false}""");
 
-        _registryMock.Verify(r => r.SetValue(
-            @"Software\Microsoft\Windows\DWM", "ColorPrevalence", 0, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(@"Software\Microsoft\Windows\DWM", "ColorPrevalence", 0, RegistryValueKind.DWord), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that enabling transparency sets EnableTransparency to 1 in the Personalize registry key.
+    /// Verifies that enabling transparency sets EnableTransparency to 1.
     /// </summary>
     [Fact]
     public void EnableTransparency_Enable_SetsTransparency1()
@@ -62,7 +60,7 @@ public class PersonalizationSettingsHandlerTests
     }
 
     /// <summary>
-    /// Verifies that disabling transparency sets EnableTransparency to 0 in the Personalize registry key.
+    /// Verifies that disabling transparency sets EnableTransparency to 0.
     /// </summary>
     [Fact]
     public void EnableTransparency_Disable_SetsTransparency0()
@@ -101,12 +99,12 @@ public class PersonalizationSettingsHandlerTests
     }
 
     /// <summary>
-    /// Verifies that the HighContrastTheme command opens the high-contrast accessibility settings page.
+    /// Verifies that the high contrast theme action opens the high contrast settings page.
     /// </summary>
     [Fact]
     public void HighContrastTheme_OpensSettings()
     {
-        Handle("HighContrastTheme", """{}""");
+        Handle("HighContrastTheme", "{}");
 
         _processMock.Verify(p => p.StartShellExecute("ms-settings:easeofaccess-highcontrast"), Times.Once);
     }
@@ -132,52 +130,48 @@ public class PrivacySettingsHandlerTests
     }
 
     /// <summary>
-    /// Verifies that denying camera access writes "Deny" to the webcam consent store registry key.
+    /// Verifies that denying camera access writes "Deny" to the webcam consent store.
     /// </summary>
     [Fact]
     public void ManageCameraAccess_Deny_WritesDeny()
     {
         Handle("ManageCameraAccess", """{"accessSetting":"deny"}""");
-
         _registryMock.Verify(r => r.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam",
             "Value", "Deny", RegistryValueKind.String), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that allowing camera access writes "Allow" to the webcam consent store registry key.
+    /// Verifies that allowing camera access writes "Allow" to the webcam consent store.
     /// </summary>
     [Fact]
     public void ManageCameraAccess_Allow_WritesAllow()
     {
         Handle("ManageCameraAccess", """{"accessSetting":"allow"}""");
-
         _registryMock.Verify(r => r.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam",
             "Value", "Allow", RegistryValueKind.String), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that denying microphone access writes "Deny" to the microphone consent store registry key.
+    /// Verifies that denying microphone access writes "Deny" to the microphone consent store.
     /// </summary>
     [Fact]
     public void ManageMicrophoneAccess_Deny_WritesDeny()
     {
         Handle("ManageMicrophoneAccess", """{"accessSetting":"deny"}""");
-
         _registryMock.Verify(r => r.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone",
             "Value", "Deny", RegistryValueKind.String), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that allowing location access writes "Allow" to the location consent store registry key.
+    /// Verifies that allowing location access writes "Allow" to the location consent store.
     /// </summary>
     [Fact]
     public void ManageLocationAccess_Allow_WritesAllow()
     {
         Handle("ManageLocationAccess", """{"accessSetting":"allow"}""");
-
         _registryMock.Verify(r => r.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\location",
             "Value", "Allow", RegistryValueKind.String), Times.Once);
@@ -204,7 +198,7 @@ public class FileExplorerSettingsHandlerTests
     }
 
     /// <summary>
-    /// Verifies that enabling file extensions sets HideFileExt to 0 in the Explorer Advanced registry key.
+    /// Verifies that enabling file extensions sets HideFileExt to 0 (inverted toggle).
     /// </summary>
     [Fact]
     public void ShowFileExtensions_Enable_SetsHideFileExt0()
@@ -217,7 +211,7 @@ public class FileExplorerSettingsHandlerTests
     }
 
     /// <summary>
-    /// Verifies that disabling file extensions sets HideFileExt to 1 in the Explorer Advanced registry key.
+    /// Verifies that disabling file extensions sets HideFileExt to 1 (inverted toggle).
     /// </summary>
     [Fact]
     public void ShowFileExtensions_Disable_SetsHideFileExt1()
@@ -295,8 +289,7 @@ public class PowerSettingsHandlerTests
     [Fact]
     public void SetPowerModeOnBattery_OpensSettings()
     {
-        Handle("SetPowerModeOnBattery", """{}""");
-
+        Handle("SetPowerModeOnBattery", "{}");
         _processMock.Verify(p => p.StartShellExecute("ms-settings:powersleep"), Times.Once);
     }
 
@@ -306,8 +299,7 @@ public class PowerSettingsHandlerTests
     [Fact]
     public void SetPowerModePluggedIn_OpensSettings()
     {
-        Handle("SetPowerModePluggedIn", """{}""");
-
+        Handle("SetPowerModePluggedIn", "{}");
         _processMock.Verify(p => p.StartShellExecute("ms-settings:powersleep"), Times.Once);
     }
 
@@ -385,16 +377,13 @@ public class AccessibilitySettingsHandlerTests
     }
 
     /// <summary>
-    /// Verifies that enabling mono audio sets AccessibilityMonoMixState to 1 in the registry.
+    /// Verifies that enabling mono audio sets the AccessibilityMonoMixState registry value to 1.
     /// </summary>
     [Fact]
     public void MonoAudioToggle_Enable_SetsMonoMix1()
     {
         Handle("MonoAudioToggle", """{"enable":true}""");
-
-        _registryMock.Verify(r => r.SetValue(
-            @"Software\Microsoft\Multimedia\Audio",
-            "AccessibilityMonoMixState", 1, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(@"Software\Microsoft\Multimedia\Audio", "AccessibilityMonoMixState", 1, RegistryValueKind.DWord), Times.Once);
     }
 
     /// <summary>
@@ -446,13 +435,18 @@ public class AccessibilitySettingsHandlerTests
 
 public class MouseSettingsHandlerTests
 {
-    private readonly Mock<ISystemParametersService> _systemParamsMock = new();
+    private readonly Mock<IRegistryService> _registryMock = new();
     private readonly Mock<IProcessService> _processMock = new();
+    private readonly Mock<ISystemParametersService> _systemParamsMock = new();
     private readonly MouseSettingsHandler _handler;
 
     public MouseSettingsHandlerTests()
     {
-        _handler = new MouseSettingsHandler(_systemParamsMock.Object, _processMock.Object, new Mock<ILogger>().Object);
+        _handler = new MouseSettingsHandler(
+            _registryMock.Object,
+            _processMock.Object,
+            _systemParamsMock.Object,
+            new Mock<ILogger>().Object);
     }
 
     /// <summary>
@@ -506,13 +500,12 @@ public class MouseSettingsHandlerTests
     }
 
     /// <summary>
-    /// Verifies that AdjustMousePointerSize opens the ease-of-access mouse settings page.
+    /// Verifies that AdjustMousePointerSize opens the ease of access mouse settings page.
     /// </summary>
     [Fact]
     public void AdjustMousePointerSize_OpensMouseSettings()
     {
-        Handle("AdjustMousePointerSize", """{}""");
-
+        Handle("AdjustMousePointerSize", "{}");
         _processMock.Verify(p => p.StartShellExecute("ms-settings:easeofaccess-mouse"), Times.Once);
     }
 
@@ -522,19 +515,17 @@ public class MouseSettingsHandlerTests
     [Fact]
     public void EnableTouchPad_OpensTouchpadSettings()
     {
-        Handle("EnableTouchPad", """{}""");
-
+        Handle("EnableTouchPad", "{}");
         _processMock.Verify(p => p.StartShellExecute("ms-settings:devices-touchpad"), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that MousePointerCustomization opens the ease-of-access mouse settings page.
+    /// Verifies that MousePointerCustomization opens the ease of access mouse settings page.
     /// </summary>
     [Fact]
     public void MousePointerCustomization_OpensMouseSettings()
     {
-        Handle("MousePointerCustomization", """{}""");
-
+        Handle("MousePointerCustomization", "{}");
         _processMock.Verify(p => p.StartShellExecute("ms-settings:easeofaccess-mouse"), Times.Once);
     }
 
@@ -544,8 +535,7 @@ public class MouseSettingsHandlerTests
     [Fact]
     public void TouchpadCursorSpeed_OpensTouchpadSettings()
     {
-        Handle("TouchpadCursorSpeed", """{}""");
-
+        Handle("TouchpadCursorSpeed", "{}");
         _processMock.Verify(p => p.StartShellExecute("ms-settings:devices-touchpad"), Times.Once);
     }
 
@@ -631,7 +621,6 @@ public class MouseSettingsHandlerTests
 
 public class TaskbarSettingsHandlerTests
 {
-    private const string ExplorerAdvanced = @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
     private const string StuckRects3 = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StuckRects3";
 
     private readonly Mock<IRegistryService> _registryMock = new();
@@ -639,7 +628,7 @@ public class TaskbarSettingsHandlerTests
 
     public TaskbarSettingsHandlerTests()
     {
-        _handler = new TaskbarSettingsHandler(_registryMock.Object);
+        _handler = new TaskbarSettingsHandler(_registryMock.Object, new Mock<IProcessService>().Object);
     }
 
     /// <summary>
@@ -680,9 +669,7 @@ public class TaskbarSettingsHandlerTests
     public void DisplaySecondsInSystrayClock_Enable_SetsShowSeconds1()
     {
         Handle("DisplaySecondsInSystrayClock", """{"enable":true}""");
-
-        _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
-            "ShowSecondsInSystemClock", 1, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(@"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "ShowSecondsInSystemClock", 1, RegistryValueKind.DWord), Times.Once);
     }
 
     /// <summary>
@@ -692,33 +679,27 @@ public class TaskbarSettingsHandlerTests
     public void DisplaySecondsInSystrayClock_Disable_SetsShowSeconds0()
     {
         Handle("DisplaySecondsInSystrayClock", """{"enable":false}""");
-
-        _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
-            "ShowSecondsInSystemClock", 0, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(@"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "ShowSecondsInSystemClock", 0, RegistryValueKind.DWord), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that enabling the taskbar on all monitors sets MMTaskbarEnabled to 1.
+    /// Verifies that enabling taskbar on all monitors sets MMTaskbarEnabled to 1.
     /// </summary>
     [Fact]
     public void DisplayTaskbarOnAllMonitors_Enable_SetsMMTaskbar1()
     {
         Handle("DisplayTaskbarOnAllMonitors", """{"enable":true}""");
-
-        _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
-            "MMTaskbarEnabled", 1, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(@"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "MMTaskbarEnabled", 1, RegistryValueKind.DWord), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that disabling the taskbar on all monitors sets MMTaskbarEnabled to 0.
+    /// Verifies that disabling taskbar on all monitors sets MMTaskbarEnabled to 0.
     /// </summary>
     [Fact]
     public void DisplayTaskbarOnAllMonitors_Disable_SetsMMTaskbar0()
     {
         Handle("DisplayTaskbarOnAllMonitors", """{"enable":false}""");
-
-        _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
-            "MMTaskbarEnabled", 0, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(@"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "MMTaskbarEnabled", 0, RegistryValueKind.DWord), Times.Once);
     }
 
     /// <summary>
@@ -728,9 +709,7 @@ public class TaskbarSettingsHandlerTests
     public void ShowBadgesOnTaskbar_Enable_SetsBadges1()
     {
         Handle("ShowBadgesOnTaskbar", """{"enableBadging":true}""");
-
-        _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
-            "TaskbarBadges", 1, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(@"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "TaskbarBadges", 1, RegistryValueKind.DWord), Times.Once);
     }
 
     /// <summary>
@@ -740,33 +719,27 @@ public class TaskbarSettingsHandlerTests
     public void ShowBadgesOnTaskbar_Disable_SetsBadges0()
     {
         Handle("ShowBadgesOnTaskbar", """{"enableBadging":false}""");
-
-        _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
-            "TaskbarBadges", 0, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(@"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "TaskbarBadges", 0, RegistryValueKind.DWord), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that center taskbar alignment sets TaskbarAl to 1.
+    /// Verifies that setting taskbar alignment to center sets TaskbarAl to 1.
     /// </summary>
     [Fact]
     public void TaskbarAlignment_Center_SetsTaskbarAl1()
     {
         Handle("TaskbarAlignment", """{"alignment":"center"}""");
-
-        _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
-            "TaskbarAl", 1, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(@"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "TaskbarAl", 1, RegistryValueKind.DWord), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that left taskbar alignment sets TaskbarAl to 0.
+    /// Verifies that setting taskbar alignment to left sets TaskbarAl to 0.
     /// </summary>
     [Fact]
     public void TaskbarAlignment_Left_SetsTaskbarAl0()
     {
         Handle("TaskbarAlignment", """{"alignment":"left"}""");
-
-        _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
-            "TaskbarAl", 0, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(@"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "TaskbarAl", 0, RegistryValueKind.DWord), Times.Once);
     }
 
     /// <summary>
@@ -776,9 +749,7 @@ public class TaskbarSettingsHandlerTests
     public void TaskViewVisibility_Show_SetsButton1()
     {
         Handle("TaskViewVisibility", """{"visibility":true}""");
-
-        _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
-            "ShowTaskViewButton", 1, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(@"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "ShowTaskViewButton", 1, RegistryValueKind.DWord), Times.Once);
     }
 
     /// <summary>
@@ -788,9 +759,7 @@ public class TaskbarSettingsHandlerTests
     public void TaskViewVisibility_Hide_SetsButton0()
     {
         Handle("TaskViewVisibility", """{"visibility":false}""");
-
-        _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
-            "ShowTaskViewButton", 0, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(@"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "ShowTaskViewButton", 0, RegistryValueKind.DWord), Times.Once);
     }
 
     /// <summary>
@@ -800,9 +769,7 @@ public class TaskbarSettingsHandlerTests
     public void ToggleWidgetsButtonVisibility_Show_SetsTaskbarDa1()
     {
         Handle("ToggleWidgetsButtonVisibility", """{"visibility":"show"}""");
-
-        _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
-            "TaskbarDa", 1, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(@"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "TaskbarDa", 1, RegistryValueKind.DWord), Times.Once);
     }
 
     /// <summary>
@@ -812,9 +779,7 @@ public class TaskbarSettingsHandlerTests
     public void ToggleWidgetsButtonVisibility_Hide_SetsTaskbarDa0()
     {
         Handle("ToggleWidgetsButtonVisibility", """{"visibility":"hide"}""");
-
-        _registryMock.Verify(r => r.SetValue(ExplorerAdvanced,
-            "TaskbarDa", 0, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(@"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "TaskbarDa", 0, RegistryValueKind.DWord), Times.Once);
     }
 
     private void Handle(string key, string jsonValue)
@@ -845,8 +810,7 @@ public class DisplaySettingsHandlerTests
     [Fact]
     public void AdjustColorTemperature_OpensNightLightSettings()
     {
-        Handle("AdjustColorTemperature", """{}""");
-
+        Handle("AdjustColorTemperature", "{}");
         _processMock.Verify(p => p.StartShellExecute("ms-settings:nightlight"), Times.Once);
     }
 
@@ -856,8 +820,7 @@ public class DisplaySettingsHandlerTests
     [Fact]
     public void AdjustScreenOrientation_OpensDisplaySettings()
     {
-        Handle("AdjustScreenOrientation", """{}""");
-
+        Handle("AdjustScreenOrientation", "{}");
         _processMock.Verify(p => p.StartShellExecute("ms-settings:display"), Times.Once);
     }
 
@@ -867,8 +830,7 @@ public class DisplaySettingsHandlerTests
     [Fact]
     public void DisplayResolutionAndAspectRatio_OpensDisplaySettings()
     {
-        Handle("DisplayResolutionAndAspectRatio", """{}""");
-
+        Handle("DisplayResolutionAndAspectRatio", "{}");
         _processMock.Verify(p => p.StartShellExecute("ms-settings:display"), Times.Once);
     }
 
@@ -914,29 +876,23 @@ public class DisplaySettingsHandlerTests
     }
 
     /// <summary>
-    /// Verifies that enabling rotation lock sets RotationLockPreference to 1 in the registry.
+    /// Verifies that enabling rotation lock sets RotationLockPreference to 1.
     /// </summary>
     [Fact]
     public void RotationLock_Enable_SetsPreference1()
     {
         Handle("RotationLock", """{"enable":true}""");
-
-        _registryMock.Verify(r => r.SetValue(
-            @"Software\Microsoft\Windows\CurrentVersion\ImmersiveShell",
-            "RotationLockPreference", 1, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(@"Software\Microsoft\Windows\CurrentVersion\ImmersiveShell", "RotationLockPreference", 1, RegistryValueKind.DWord), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that disabling rotation lock sets RotationLockPreference to 0 in the registry.
+    /// Verifies that disabling rotation lock sets RotationLockPreference to 0.
     /// </summary>
     [Fact]
     public void RotationLock_Disable_SetsPreference0()
     {
         Handle("RotationLock", """{"enable":false}""");
-
-        _registryMock.Verify(r => r.SetValue(
-            @"Software\Microsoft\Windows\CurrentVersion\ImmersiveShell",
-            "RotationLockPreference", 0, RegistryValueKind.DWord), Times.Once);
+        _registryMock.Verify(r => r.SetValue(@"Software\Microsoft\Windows\CurrentVersion\ImmersiveShell", "RotationLockPreference", 0, RegistryValueKind.DWord), Times.Once);
     }
 
     /// <summary>
@@ -1030,7 +986,7 @@ public class SystemSettingsHandlerTests
 
     public SystemSettingsHandlerTests()
     {
-        _handler = new SystemSettingsHandler(_registryMock.Object, _processMock.Object, new Mock<ILogger>().Object);
+        _handler = new SystemSettingsHandler(_registryMock.Object, _processMock.Object);
     }
 
     /// <summary>
@@ -1039,30 +995,27 @@ public class SystemSettingsHandlerTests
     [Fact]
     public void AutomaticTimeSettingAction_OpensDateTimeSettings()
     {
-        Handle("AutomaticTimeSettingAction", """{}""");
-
+        Handle("AutomaticTimeSettingAction", "{}");
         _processMock.Verify(p => p.StartShellExecute("ms-settings:dateandtime"), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that EnableGameMode opens the gaming game-mode settings page.
+    /// Verifies that EnableGameMode opens the gaming game mode settings page.
     /// </summary>
     [Fact]
     public void EnableGameMode_OpensGamingSettings()
     {
-        Handle("EnableGameMode", """{}""");
-
+        Handle("EnableGameMode", "{}");
         _processMock.Verify(p => p.StartShellExecute("ms-settings:gaming-gamemode"), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that EnableQuietHours opens the quiet hours (focus assist) settings page.
+    /// Verifies that EnableQuietHours opens the quiet hours settings page.
     /// </summary>
     [Fact]
     public void EnableQuietHours_OpensQuietHoursSettings()
     {
-        Handle("EnableQuietHours", """{}""");
-
+        Handle("EnableQuietHours", "{}");
         _processMock.Verify(p => p.StartShellExecute("ms-settings:quiethours"), Times.Once);
     }
 
@@ -1072,8 +1025,7 @@ public class SystemSettingsHandlerTests
     [Fact]
     public void MinimizeWindowsOnMonitorDisconnectAction_OpensDisplaySettings()
     {
-        Handle("MinimizeWindowsOnMonitorDisconnectAction", """{}""");
-
+        Handle("MinimizeWindowsOnMonitorDisconnectAction", "{}");
         _processMock.Verify(p => p.StartShellExecute("ms-settings:display"), Times.Once);
     }
 
@@ -1083,8 +1035,7 @@ public class SystemSettingsHandlerTests
     [Fact]
     public void RememberWindowLocations_OpensDisplaySettings()
     {
-        Handle("RememberWindowLocations", """{}""");
-
+        Handle("RememberWindowLocations", "{}");
         _processMock.Verify(p => p.StartShellExecute("ms-settings:display"), Times.Once);
     }
 
@@ -1095,10 +1046,9 @@ public class SystemSettingsHandlerTests
     public void AutomaticDSTAdjustment_Enable_SetsRegistryValue()
     {
         Handle("AutomaticDSTAdjustment", """{"enable":true}""");
-
         _registryMock.Verify(r => r.SetValueLocalMachine(
-            It.IsAny<string>(), "DynamicDaylightTimeDisabled",
-            0, Microsoft.Win32.RegistryValueKind.DWord), Times.Once);
+            @"SYSTEM\CurrentControlSet\Control\TimeZoneInformation",
+            "DynamicDaylightTimeDisabled", 0, RegistryValueKind.DWord), Times.Once);
     }
 
     /// <summary>
@@ -1108,12 +1058,9 @@ public class SystemSettingsHandlerTests
     public void AutomaticDSTAdjustment_Disable_SetsRegistryValue()
     {
         Handle("AutomaticDSTAdjustment", """{"enable":false}""");
-
         _registryMock.Verify(r => r.SetValueLocalMachine(
             @"SYSTEM\CurrentControlSet\Control\TimeZoneInformation",
-            "DynamicDaylightTimeDisabled",
-            1,
-            RegistryValueKind.DWord), Times.Once);
+            "DynamicDaylightTimeDisabled", 1, RegistryValueKind.DWord), Times.Once);
     }
 
     private void Handle(string key, string jsonValue)

@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using autoShell.Services;
 using Microsoft.Win32;
@@ -11,72 +12,45 @@ namespace autoShell.Handlers.Settings;
 /// <summary>
 /// Handles accessibility settings: filter keys, magnifier, narrator, sticky keys, and mono audio.
 /// </summary>
-internal class AccessibilitySettingsHandler : ICommandHandler
+internal class AccessibilitySettingsHandler : SettingsHandlerBase
 {
-    private readonly IRegistryService _registry;
     private readonly IProcessService _process;
 
+    /// <summary>
+    /// Registers registered actions for mono audio, filter keys, and sticky keys.
+    /// Magnifier and Narrator require process start/kill and are handled as custom actions.
+    /// </summary>
     public AccessibilitySettingsHandler(IRegistryService registry, IProcessService process)
+        : base(registry, process)
     {
-        _registry = registry;
         _process = process;
+
+        AddRegistryToggleAction("MonoAudioToggle", new RegistryToggleConfig(
+            @"Software\Microsoft\Multimedia\Audio", "AccessibilityMonoMixState", "enable", 1, 0));
+        AddRegistryToggleAction("EnableFilterKeysAction", new RegistryToggleConfig(
+            @"Control Panel\Accessibility\Keyboard Response", "Flags", "enable",
+            OnValue: "2", OffValue: "126", ValueKind: RegistryValueKind.String, DisplayName: "Filter Keys"));
+        AddRegistryToggleAction("EnableStickyKeys", new RegistryToggleConfig(
+            @"Control Panel\Accessibility\StickyKeys", "Flags", "enable",
+            OnValue: "510", OffValue: "506", ValueKind: RegistryValueKind.String, DisplayName: "Sticky Keys"));
     }
 
-    /// <inheritdoc/>
-    public IEnumerable<string> SupportedCommands { get; } =
-    [
-        "EnableFilterKeysAction",
-        "EnableMagnifier",
-        "EnableNarratorAction",
-        "EnableStickyKeys",
-        "MonoAudioToggle",
-    ];
+    private static readonly string[] SpecializedActions =
+        ["EnableMagnifier", "EnableNarratorAction"];
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JsonElement parameters)
+    public override IEnumerable<string> SupportedCommands =>
+        SpecializedActions.Concat(RegisteredActions);
+
+    /// <inheritdoc/>
+    protected override CommandResult HandleSpecialized(string key, JsonElement parameters)
     {
         return key switch
         {
-            "EnableFilterKeysAction" => HandleFilterKeys(parameters, "Filter Keys"),
             "EnableMagnifier" => HandleToggleProcess(parameters, "magnify.exe", "Magnify", "Magnifier"),
             "EnableNarratorAction" => HandleToggleProcess(parameters, "narrator.exe", "Narrator", "Narrator"),
-            "EnableStickyKeys" => HandleStickyKeys(parameters, "Sticky Keys"),
-            "MonoAudioToggle" => HandleMonoAudio(parameters, "Mono audio"),
-            _ => CommandResult.Fail($"Unknown accessibility command: {key}"),
+            _ => base.HandleSpecialized(key, parameters),
         };
-    }
-
-    private CommandResult HandleFilterKeys(JsonElement parameters, string displayName)
-    {
-        bool enable = parameters.GetBoolOrDefault("enable", true);
-        _registry.SetValue(
-            @"Control Panel\Accessibility\Keyboard Response",
-            "Flags",
-            enable ? "2" : "126",
-            RegistryValueKind.String);
-        return CommandResult.Ok($"{displayName} {(enable ? "enabled" : "disabled")}");
-    }
-
-    private CommandResult HandleStickyKeys(JsonElement parameters, string displayName)
-    {
-        bool enable = parameters.GetBoolOrDefault("enable", true);
-        _registry.SetValue(
-            @"Control Panel\Accessibility\StickyKeys",
-            "Flags",
-            enable ? "510" : "506",
-            RegistryValueKind.String);
-        return CommandResult.Ok($"{displayName} {(enable ? "enabled" : "disabled")}");
-    }
-
-    private CommandResult HandleMonoAudio(JsonElement parameters, string displayName)
-    {
-        bool enable = parameters.GetBoolOrDefault("enable", true);
-        _registry.SetValue(
-            @"Software\Microsoft\Multimedia\Audio",
-            "AccessibilityMonoMixState",
-            enable ? 1 : 0,
-            RegistryValueKind.DWord);
-        return CommandResult.Ok($"{displayName} {(enable ? "enabled" : "disabled")}");
     }
 
     private CommandResult HandleToggleProcess(JsonElement parameters, string exeName, string processName, string displayName)

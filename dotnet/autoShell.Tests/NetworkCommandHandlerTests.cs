@@ -12,13 +12,12 @@ namespace autoShell.Tests;
 public class NetworkCommandHandlerTests
 {
     private readonly Mock<INetworkService> _networkMock = new();
-    private readonly Mock<IProcessService> _processMock = new();
     private readonly Mock<ILogger> _loggerMock = new();
     private readonly NetworkCommandHandler _handler;
 
     public NetworkCommandHandlerTests()
     {
-        _handler = new NetworkCommandHandler(_networkMock.Object, _processMock.Object, _loggerMock.Object);
+        _handler = new NetworkCommandHandler(_networkMock.Object, new Mock<IProcessService>().Object, _loggerMock.Object);
     }
 
     // --- ConnectWifi ---
@@ -155,18 +154,5 @@ public class NetworkCommandHandlerTests
         _handler.Handle("EnableWifi", json);
 
         _networkMock.Verify(n => n.EnableWifi(false), Times.Once);
-    }
-
-    // --- EnableMeteredConnections ---
-
-    /// <summary>
-    /// Verifies that EnableMeteredConnections opens the network settings URI.
-    /// </summary>
-    [Fact]
-    public void EnableMeteredConnections_OpensSettingsUri()
-    {
-        _handler.Handle("EnableMeteredConnections", JsonDocument.Parse("{}").RootElement);
-
-        _processMock.Verify(p => p.StartShellExecute("ms-settings:network-status"), Times.Once);
     }
 }
