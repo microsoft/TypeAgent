@@ -24,6 +24,9 @@ import {
 
 const debugCompletion = registerDebug("typeagent:grammar:completion");
 
+// Pre-compiled regex for stripping leading separator characters.
+const leadingSeparatorRegExp = new RegExp(`^[${separatorRegExpStr}]+`, "u");
+
 // True when the substring text[from..to) contains only separator
 // characters (whitespace / punctuation).  Used to decide whether
 // advancing maxPrefixLength across a gap should preserve or clear
@@ -165,9 +168,7 @@ function matchKeywordWordsFrom(
     const word = words[matchedWords];
     let textToCheck = input.slice(endIndex);
     if (matchedWords > 0 && spacingMode !== "none") {
-        const sepMatch = textToCheck.match(
-            new RegExp(`^[${separatorRegExpStr}]+`, "u"),
-        );
+        const sepMatch = textToCheck.match(leadingSeparatorRegExp);
         if (sepMatch) {
             textToCheck = textToCheck.slice(sepMatch[0].length);
         } else if (

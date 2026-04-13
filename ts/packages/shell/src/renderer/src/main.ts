@@ -27,6 +27,7 @@ import { ClientIO, Dispatcher, RequestId } from "agent-dispatcher";
 import { swapContent } from "./setContent";
 import { remoteSearchMenuUIOnCompletion } from "./searchMenuUI/remoteSearchMenuUI";
 import { ChatInput } from "./chat/chatInput";
+import { SessionSelector } from "./chat/sessionSelector";
 
 export function isElectron(): boolean {
     return globalThis.api !== undefined;
@@ -137,6 +138,7 @@ function registerClient(
     tabsView: TabView,
     cameraView: CameraView,
     chatHistoryReady: Promise<void>,
+    sessionSelector: SessionSelector,
 ) {
     let replayPending = true;
     const replayQueue: Array<() => void> = [];
@@ -544,6 +546,9 @@ function registerClient(
             }
             chatView.addNotificationMessage(message, "shell", id);
         },
+        sessionChanged(sessionId: string, name: string): void {
+            sessionSelector.setCurrentSession(sessionId, name);
+        },
     };
 
     getClientAPI().registerClient(client);
@@ -647,6 +652,18 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     chatView.setChatInput(chatInput);
 
+    // Session selector dropdown — placed above the chat area
+    const sessionSelector = new SessionSelector((_sessionId, name) => {
+        // On session switch, clear chat and show notification
+        chatView.clear();
+        chatView.addNotificationMessage(
+            `Switched to session "${name}"`,
+            "session",
+            undefined,
+        );
+    });
+    wrapper.appendChild(sessionSelector.getElement());
+
     const chatHistoryReady = initializeChatHistory(chatView);
 
     const cameraView = new CameraView((image: HTMLImageElement) => {
@@ -690,6 +707,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         tabs,
         cameraView,
         chatHistoryReady,
+        sessionSelector,
     );
 
     try {

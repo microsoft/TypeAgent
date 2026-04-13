@@ -4,6 +4,7 @@
 import { IdGenerator } from "../main";
 import { ChatInput } from "./chatInput";
 import { ExpandableTextArea } from "./expandableTextArea";
+import { handleSessionCommand } from "./sessionCommands";
 import { iconCheckMarkCircle, iconX } from "../icon";
 import {
     DisplayAppendMode,
@@ -459,12 +460,41 @@ export class ChatView {
         request: string | { type: "html"; content: string },
         hidden: boolean = false,
     ) {
-        const localId = this.idGenerator.genId();
-
-        let images: string[] = [];
         let requestText: string;
         if (typeof request === "string") {
             requestText = request;
+        } else if (request.type === "html") {
+            let tempDiv: HTMLDivElement = document.createElement("div");
+            tempDiv.innerHTML = request.content;
+            requestText = tempDiv.innerText;
+        } else {
+            requestText = request.content;
+        }
+
+        // Intercept /session commands before sending to dispatcher
+        if (requestText.trim().startsWith("/session")) {
+            const handled = await handleSessionCommand(requestText, {
+                addSystemMessage: (content: string) => {
+                    this.addNotificationMessage(
+                        { type: "html", content, kind: "info" },
+                        "session",
+                        undefined,
+                    );
+                },
+                clear: () => {
+                    this.clear();
+                },
+            });
+            if (handled) {
+                return;
+            }
+        }
+
+        const localId = this.idGenerator.genId();
+
+        let images: string[] = [];
+        if (typeof request === "string") {
+            // requestText already set above
         } else if (request.type === "html") {
             let tempDiv: HTMLDivElement = document.createElement("div");
             tempDiv.innerHTML = request.content;

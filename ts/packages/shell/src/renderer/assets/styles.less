@@ -1352,3 +1352,140 @@ input[type="file"] {
     }
   }
 }
+
+// =============================================================
+// Session Selector
+// =============================================================
+
+.session-selector {
+  position: relative;
+  display: inline-block;
+  padding: 4px 8px;
+  z-index: 100;
+}
+
+.session-selector-button {
+  background: transparent;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  color: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+
+  &:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+}
+
+.session-selector-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 8px;
+  min-width: 240px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 200;
+}
+
+.session-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+
+  &:hover {
+    background-color: #f0f0f0;
+  }
+}
+
+.session-item-current {
+  background-color: #e8f0fe;
+  font-weight: 600;
+}
+
+.session-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-item-meta {
+  font-size: 11px;
+  color: #888;
+  margin-left: 8px;
+  white-space: nowrap;
+}
+
+.session-separator {
+  height: 1px;
+  background: #ddd;
+  margin: 4px 0;
+}
+
+.session-new {
+  color: #1a73e8;
+  font-weight: 500;
+}
+
+.session-loading,
+.session-error {
+  padding: 12px;
+  text-align: center;
+  color: #888;
+  font-size: 13px;
+}
+
+.session-error {
+  color: #d93025;
+}
+
+.dark-mode {
+  .session-selector-button {
+    border-color: #3a3a50;
+    color: #e8e8f0;
+
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.05);
+    }
+  }
+
+  .session-selector-dropdown {
+    background: #2a2a40;
+    border-color: #3a3a50;
+  }
+
+  .session-item {
+    &:hover {
+      background-color: #3a3a50;
+    }
+  }
+
+  .session-item-current {
+    background-color: #3a3a60;
+  }
+
+  .session-item-meta {
+    color: #aaa;
+  }
+
+  .session-separator {
+    background: #3a3a50;
+  }
+
+  .session-loading,
+  .session-error {
+    color: #aaa;
+  }
+}

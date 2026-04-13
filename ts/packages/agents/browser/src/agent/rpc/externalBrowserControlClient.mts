@@ -11,9 +11,13 @@ export interface ExternalBrowserClient {
 
 export function createExternalBrowserClient(
     agentWebSocketServer: AgentWebSocketServer,
+    sessionId: string,
 ): ExternalBrowserClient {
     function getActiveRpc() {
-        const client = agentWebSocketServer.getActiveClient("extension");
+        const client = agentWebSocketServer.getActiveClient(
+            sessionId,
+            "extension",
+        );
         if (!client?.browserControlRpc) {
             throw new Error("No browser control connection available");
         }

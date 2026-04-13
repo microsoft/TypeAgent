@@ -63,6 +63,7 @@ export class BrowserAgentIpc {
                     "client",
                     "inlineBrowser",
                     8081,
+                    "default",
                 );
                 if (!this.webSocket) {
                     this.webSocketPromise = null;

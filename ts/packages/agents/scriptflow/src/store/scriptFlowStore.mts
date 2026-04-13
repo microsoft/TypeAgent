@@ -437,6 +437,23 @@ export class ScriptFlowStore {
 
         lines.push(
             "",
+            "// Test a script without registering it (test-then-register pattern)",
+            "export type TestScriptFlow = {",
+            '    actionName: "testScriptFlow";',
+            "    parameters: {",
+            "        // PowerShell script body to test",
+            "        script: string;",
+            "        // Cmdlets the script is allowed to use",
+            "        allowedCmdlets: string[];",
+            "        // Modules the script is allowed to use (optional)",
+            "        allowedModules?: string[];",
+            "        // Whether the script needs network access (optional, default false)",
+            "        networkAccess?: boolean;",
+            "        // JSON string of test parameters to pass to the script (optional)",
+            "        testParameters?: string;",
+            "    };",
+            "};",
+            "",
             "// Create a new script flow with grammar rules for future reuse",
             "export type CreateScriptFlow = {",
             '    actionName: "createScriptFlow";',
@@ -487,6 +504,7 @@ export class ScriptFlowStore {
         for (const typeName of flowTypeNames) {
             lines.push(`    | ${typeName}`);
         }
+        lines.push("    | TestScriptFlow");
         lines.push("    | CreateScriptFlow");
         lines.push("    | EditScriptFlow");
         lines.push("    | ImportScriptFlow;");

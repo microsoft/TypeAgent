@@ -26,6 +26,7 @@ export async function createWebSocket(
     role: "dispatcher" | "client",
     clientId?: string,
     port: number = 8081,
+    sessionId?: string,
 ) {
     return new Promise<WebSocket | undefined>((resolve, reject) => {
         let endpoint = `ws://localhost:${port}`;
@@ -44,6 +45,9 @@ export async function createWebSocket(
         endpoint += `?channel=${channel}&role=${role}`;
         if (clientId) {
             endpoint += `&clientId=${clientId}`;
+        }
+        if (sessionId) {
+            endpoint += `&sessionId=${sessionId}`;
         }
 
         const webSocket = new WebSocket(endpoint);

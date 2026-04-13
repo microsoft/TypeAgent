@@ -24,6 +24,10 @@ import { createShellAgentProvider } from "./agent.js";
 import { createInlineBrowserControl } from "./inlineBrowserControl.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
 import {
+    createLocalSessionBackend,
+    registerSessionIpcHandlers,
+} from "./sessionManager.js";
+import {
     ClientIO,
     createDispatcher,
     Dispatcher,
@@ -281,6 +285,11 @@ export function initializeInstance(
 
     const shellWindow = new ShellWindow(shellSettings, inputOnly);
 
+    // Register session management IPC handlers (local-only backend for now;
+    // remote backend would be wired in when connect mode gains multi-session).
+    const sessionBackend = createLocalSessionBackend();
+    const cleanupSessionIpc = registerSessionIpcHandlers(sessionBackend);
+
     // Set up notification callback for browser agent IPC early,
     // so messages queued during tab restoration can trigger notifications
     BrowserAgentIpc.getinstance().onSendNotification = (
@@ -361,6 +370,7 @@ export function initializeInstance(
 
     shellWindow.mainWindow.on("closed", () => {
         ensureCleanupInstance();
+        cleanupSessionIpc();
         ipcMain.removeListener("chat-view-ready", onChatViewReady);
     });
 

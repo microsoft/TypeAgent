@@ -77,6 +77,16 @@ export interface ClientAPI {
     searchMenuSelectCompletion(id: number): void;
     searchMenuClose(id: number): void;
     continuousSpeechProcessing(text: string): Promise<string | undefined>;
+
+    // Session management
+    sessionList(): Promise<SessionInfo[]>;
+    sessionCreate(name: string): Promise<SessionInfo>;
+    sessionSwitch(sessionId: string): Promise<SessionSwitchResult>;
+    sessionRename(sessionId: string, newName: string): Promise<void>;
+    sessionDelete(sessionId: string): Promise<void>;
+    sessionGetCurrent(): Promise<
+        { sessionId: string; name: string } | undefined
+    >;
 }
 
 // Functions that are called from the main process to the renderer process.
@@ -97,6 +107,7 @@ export interface Client {
     continuousSpeechProcessed(userExpressions: UserExpression[]): void;
     tabRestoreStatus(count: number): void;
     systemNotification?(message: string, id: string, timestamp: number): void;
+    sessionChanged?(sessionId: string, name: string): void;
 }
 
 export interface ElectronWindowFields {
@@ -112,4 +123,19 @@ export type UserExpression = {
     confidence: "low" | "medium" | "high";
     complete_statement: boolean;
     text: string;
+};
+
+// Session management types
+export type SessionInfo = {
+    sessionId: string;
+    name: string;
+    clientCount: number;
+    createdAt: string; // ISO 8601
+};
+
+export type SessionSwitchResult = {
+    success: boolean;
+    sessionId?: string;
+    name?: string;
+    error?: string;
 };
