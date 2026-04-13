@@ -23,13 +23,16 @@ function detectWorkspaceRoot() {
     try {
         const gitRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
             encoding: "utf8",
-        }).trim().replace(/\\/g, "/");
+        })
+            .trim()
+            .replace(/\\/g, "/");
         const cwdNorm = process.cwd().replace(/\\/g, "/");
-        const rel = cwdNorm === gitRoot
-            ? ""
-            : cwdNorm.startsWith(gitRoot + "/")
-                ? cwdNorm.slice(gitRoot.length + 1)
-                : "";
+        const rel =
+            cwdNorm === gitRoot
+                ? ""
+                : cwdNorm.startsWith(gitRoot + "/")
+                  ? cwdNorm.slice(gitRoot.length + 1)
+                  : "";
         const wsPrefix = rel ? rel.split("/")[0] : "";
         return wsPrefix ? resolve(gitRoot, wsPrefix) : resolve(cwdNorm);
     } catch {
@@ -2105,13 +2108,18 @@ function fetchAlerts() {
     // even when the script is invoked from a subdirectory like ts/tools).
     let wsPrefix = "";
     try {
-        const gitRoot = runCmd("git", ["rev-parse", "--show-toplevel"]).replace(/\\/g, "/");
+        const gitRoot = runCmd("git", ["rev-parse", "--show-toplevel"]).replace(
+            /\\/g,
+            "/",
+        );
         const rootNorm = ROOT.replace(/\\/g, "/");
         wsPrefix = rootNorm.startsWith(gitRoot + "/")
             ? rootNorm.slice(gitRoot.length + 1).split("/")[0]
             : "";
     } catch {
-        verbose("  Could not determine git root; skipping workspace-specific alert filtering.");
+        verbose(
+            "  Could not determine git root; skipping workspace-specific alert filtering.",
+        );
     }
     if (wsPrefix) {
         const before = alerts.length;
@@ -2120,7 +2128,9 @@ function fetchAlerts() {
             return manifest.startsWith(wsPrefix + "/") || manifest === wsPrefix;
         });
         if (alerts.length < before) {
-            verbose(`  Filtered to ${alerts.length}/${before} alerts matching workspace "${wsPrefix}/"`);
+            verbose(
+                `  Filtered to ${alerts.length}/${before} alerts matching workspace "${wsPrefix}/"`,
+            );
         }
     }
 
