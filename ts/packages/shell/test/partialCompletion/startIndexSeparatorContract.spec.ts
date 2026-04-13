@@ -19,7 +19,7 @@
 //
 //   (B) startIndex AFTER the separator (e.g. "play "|"J")
 //       → rawPrefix = "J", no leading separator
-//       → separatorMode = "none" or "optional" (no separator needed)
+//       → separatorMode = "none" or "optionalSpace" (no separator needed)
 //       → trie filters on "J" directly
 //
 //   (C) startIndex AFTER the separator + separatorMode still requires one
@@ -228,15 +228,15 @@ describe("Pattern B — startIndex past separator (separatorMode=none)", () => {
     });
 });
 
-// ── Pattern B variant: separatorMode="optional" ──────────────────────────────
+// ── Pattern B variant: separatorMode="optionalSpace" ──────────────────────────────
 
 describe("Pattern B variant — startIndex past separator (separatorMode=optional)", () => {
-    // Same as Pattern B but with separatorMode="optional" — also does not
+    // Same as Pattern B but with separatorMode="optionalSpace" — also does not
     // require a separator.  This covers CJK/mixed script grammars where
     // the grammar consumed through the space but tokens can abut.
 
     const result = makeCompletionResult(["Rock", "Jazz", "Blues"], 5, {
-        separatorMode: "optional",
+        separatorMode: "optionalSpace",
         closedSet: false,
     });
 

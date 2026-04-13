@@ -8,6 +8,7 @@ import {
     CompletionDirection,
     CompletionGroup,
     CompletionGroups,
+    SeparatorMode,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { DeepPartialUndefined } from "@typeagent/common-utils";
@@ -98,25 +99,16 @@ export async function requestCompletion(
     }
 
     const matchedPrefixLength = results.matchedPrefixLength;
-    const separatorMode = results.separatorMode;
     const closedSet = results.closedSet;
     const directionSensitive = results.directionSensitive;
     const afterWildcard = results.afterWildcard;
-    const completions: CompletionGroup[] = [];
-    if (results.completions.length > 0) {
-        completions.push({
-            name: "Request Completions",
-            completions: results.completions,
-            needQuotes: false, // Request completions are partial, no quotes needed
-            kind: "literal",
-        });
-    }
+    // Groups already carry per-group separatorMode from the cache layer.
+    const completions: CompletionGroup[] = [...results.groups];
 
     if (results.properties === undefined) {
         return {
             groups: completions,
             matchedPrefixLength,
-            separatorMode,
             closedSet,
             directionSensitive,
             afterWildcard,
@@ -135,6 +127,7 @@ export async function requestCompletion(
                 completionProperty.actions,
                 context,
                 propertyCompletions,
+                completionProperty.separatorMode,
             );
         }
     }
@@ -143,7 +136,6 @@ export async function requestCompletion(
     return {
         groups: completions,
         matchedPrefixLength,
-        separatorMode,
         closedSet,
         directionSensitive,
         afterWildcard,
@@ -155,6 +147,7 @@ async function collectActionCompletions(
     partialActions: ExecutableAction[],
     context: CommandHandlerContext,
     propertyCompletions: Map<string, CompletionGroup>,
+    separatorMode: SeparatorMode,
 ) {
     for (const propertyName of properties) {
         const { action, parameterName } = getPropertyInfo(
@@ -176,7 +169,9 @@ async function collectActionCompletions(
         if (paramCompletion !== undefined) {
             propertyCompletions.set(propertyName, {
                 name: `property ${propertyName}`,
-                ...paramCompletion,
+                completions: paramCompletion.completions,
+                emojiChar: paramCompletion.emojiChar,
+                separatorMode,
                 needQuotes: false, // Request completions are partial, no quotes needed
                 sorted: true, // REVIEW: assume property completions are already in desired order by the agent.
                 kind: "entity",

@@ -6,7 +6,9 @@ export {
     AgentServerConnection,
     SessionDispatcher,
     connectDispatcher,
+    ensureAgentServer,
     ensureAndConnectDispatcher,
+    ensureAndConnectSession,
     stopAgentServer,
 } from "./agentServerClient.js";
 export type * from "@typeagent/dispatcher-rpc/types";

@@ -384,6 +384,12 @@ export class SettingsView {
         getClientAPI().saveSettings(this.shellSettings);
     }
 
+    public setInlineCompletions(value: boolean) {
+        this._shellSettings.ui.inlineCompletions = value;
+        this.inlineCompletionsCheckBox.checked = value;
+        this.saveSettings();
+    }
+
     public isDisplayTypeAllowed(displayType: DisplayType): boolean {
         const disallowed = this.shellSettings.disallowedDisplayType.split(";");
         return !disallowed.includes(displayType);

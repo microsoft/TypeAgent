@@ -48,7 +48,6 @@ Maintains a pool of per-session `SharedDispatcher` instances. Key behaviors:
 - **Persistence:** session metadata stored in `~/.typeagent/server-sessions/sessions.json`; each session's data in `~/.typeagent/server-sessions/<sessionId>/`
 - **Lazy init:** each session's `SharedDispatcher` is created on first `joinSession()` and torn down after 5 minutes of inactivity
 - **Auto-create:** if no session exists and no `sessionId` is provided, a `"default"` session is created automatically
-- **Last active tracking:** `lastActiveSessionId` is updated on each join so the most recently used session is resumed by default
 
 ### `sharedDispatcher.ts` — Routing layer
 

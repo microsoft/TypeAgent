@@ -27,11 +27,11 @@ import { DesktopInputActions } from "./inputActionsSchema.ts";
   | scroll $(lines:number) lines (per notch)? -> { actionName: "MouseWheelScrollLines", parameters: { scrollLines: lines } };
 
 <SetPrimaryMouseButton> =
-    set primary mouse button to left -> { actionName: "setPrimaryMouseButton", parameters: { primaryButton: "left" } }
-  | set primary mouse button to right -> { actionName: "setPrimaryMouseButton", parameters: { primaryButton: "right" } }
-  | swap mouse buttons -> { actionName: "setPrimaryMouseButton", parameters: { primaryButton: "right" } }
-  | use left handed mouse -> { actionName: "setPrimaryMouseButton", parameters: { primaryButton: "right" } }
-  | use right handed mouse -> { actionName: "setPrimaryMouseButton", parameters: { primaryButton: "left" } };
+    set primary mouse button to left -> { actionName: "SetPrimaryMouseButton", parameters: { primaryButton: "left" } }
+  | set primary mouse button to right -> { actionName: "SetPrimaryMouseButton", parameters: { primaryButton: "right" } }
+  | swap mouse buttons -> { actionName: "SetPrimaryMouseButton", parameters: { primaryButton: "right" } }
+  | use left handed mouse -> { actionName: "SetPrimaryMouseButton", parameters: { primaryButton: "right" } }
+  | use right handed mouse -> { actionName: "SetPrimaryMouseButton", parameters: { primaryButton: "left" } };
 
 <EnhancePointerPrecision> =
     enable enhanced pointer precision -> { actionName: "EnhancePointerPrecision", parameters: { enable: true } }
@@ -50,9 +50,9 @@ import { DesktopInputActions } from "./inputActionsSchema.ts";
   | smaller cursor -> { actionName: "AdjustMousePointerSize", parameters: { sizeAdjustment: "decrease" } };
 
 <MousePointerCustomization> =
-    customize mouse pointer to $(color:wildcard) -> { actionName: "mousePointerCustomization", parameters: { color } }
-  | change mouse pointer (style)? to $(color:wildcard) -> { actionName: "mousePointerCustomization", parameters: { color } }
-  | set mouse pointer color to $(color:wildcard) -> { actionName: "mousePointerCustomization", parameters: { color } };
+    customize mouse pointer to $(color:wildcard) -> { actionName: "MousePointerCustomization", parameters: { color } }
+  | change mouse pointer (style)? to $(color:wildcard) -> { actionName: "MousePointerCustomization", parameters: { color } }
+  | set mouse pointer color to $(color:wildcard) -> { actionName: "MousePointerCustomization", parameters: { color } };
 
 <CursorTrail> =
     enable cursor trail -> { actionName: "CursorTrail", parameters: { enable: true } }

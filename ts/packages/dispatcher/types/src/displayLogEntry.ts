@@ -2,8 +2,13 @@
 // Licensed under the MIT License.
 
 import type { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
-import type { IAgentMessage, NotifyExplainedData } from "./clientIO.js";
+import type {
+    IAgentMessage,
+    NotifyExplainedData,
+    TemplateEditConfig,
+} from "./clientIO.js";
 import type { RequestId } from "./dispatcher.js";
+import type { PendingInteractionType } from "./pendingInteraction.js";
 
 export type SetDisplayEntry = {
     type: "set-display";
@@ -48,9 +53,42 @@ export type UserRequestEntry = {
     command: string;
 };
 
+export type PendingInteractionEntry = {
+    type: "pending-interaction";
+    seq: number;
+    timestamp: number;
+    interactionId: string;
+    interactionType: PendingInteractionType;
+    requestId?: RequestId;
+    source: string;
+    message?: string;
+    defaultValue?: boolean;
+    choices?: string[];
+    defaultId?: number;
+    actionTemplates?: TemplateEditConfig;
+};
+
+export type InteractionResolvedEntry = {
+    type: "interaction-resolved";
+    seq: number;
+    timestamp: number;
+    interactionId: string;
+    response: unknown;
+};
+
+export type InteractionCancelledEntry = {
+    type: "interaction-cancelled";
+    seq: number;
+    timestamp: number;
+    interactionId: string;
+};
+
 export type DisplayLogEntry =
     | SetDisplayEntry
     | AppendDisplayEntry
     | SetDisplayInfoEntry
     | NotifyEntry
-    | UserRequestEntry;
+    | UserRequestEntry
+    | PendingInteractionEntry
+    | InteractionResolvedEntry
+    | InteractionCancelledEntry;

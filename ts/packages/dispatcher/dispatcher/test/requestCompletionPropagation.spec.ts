@@ -50,9 +50,14 @@ describe("Request handler completion propagation", () => {
 
     it('propagates afterWildcard="all" from cache through request handler', async () => {
         patchCacheCompletion({
-            completions: ["by", "from"],
+            groups: [
+                {
+                    name: "Request Completions",
+                    completions: ["by", "from"],
+                    separatorMode: "spacePunctuation",
+                },
+            ],
             matchedPrefixLength: 10,
-            separatorMode: "spacePunctuation",
             closedSet: true,
             directionSensitive: true,
             afterWildcard: "all",
@@ -67,14 +72,19 @@ describe("Request handler completion propagation", () => {
         expect(result.afterWildcard).toBe("all");
         expect(result.directionSensitive).toBe(true);
         expect(result.closedSet).toBe(true);
-        expect(result.separatorMode).toBe("spacePunctuation");
+        expect(result.completions[0].separatorMode).toBe("spacePunctuation");
     });
 
     it('propagates afterWildcard="none" from cache through request handler', async () => {
         patchCacheCompletion({
-            completions: ["music"],
+            groups: [
+                {
+                    name: "Request Completions",
+                    completions: ["music"],
+                    separatorMode: "spacePunctuation",
+                },
+            ],
             matchedPrefixLength: 5,
-            separatorMode: "spacePunctuation",
             closedSet: true,
             directionSensitive: false,
             afterWildcard: "none",
@@ -99,7 +109,13 @@ describe("Request handler completion propagation", () => {
 
     it("propagates directionSensitive through request handler", async () => {
         patchCacheCompletion({
-            completions: ["by"],
+            groups: [
+                {
+                    name: "Request Completions",
+                    completions: ["by"],
+                    separatorMode: "space",
+                },
+            ],
             matchedPrefixLength: 5,
             closedSet: false,
             directionSensitive: true,
@@ -113,7 +129,13 @@ describe("Request handler completion propagation", () => {
 
     it("propagates closedSet from cache through request handler", async () => {
         patchCacheCompletion({
-            completions: ["by", "from"],
+            groups: [
+                {
+                    name: "Request Completions",
+                    completions: ["by", "from"],
+                    separatorMode: "space",
+                },
+            ],
             matchedPrefixLength: 10,
             closedSet: true,
             afterWildcard: "all",

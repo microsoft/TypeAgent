@@ -316,6 +316,16 @@ function createConsoleClientIO(
                 console.error(chalk.red(`Choice error: ${err}`));
             });
         },
+        // Async deferred pattern stubs (used by server, no-op in console)
+        requestInteraction(): void {
+            // Console does not support deferred interactions
+        },
+        interactionResolved(): void {
+            // Console does not support deferred interactions
+        },
+        interactionCancelled(): void {
+            // Console does not support deferred interactions
+        },
         // Host specific (TODO: Formalize the API)
         takeAction(requestId: RequestId, action: string, data: unknown): void {
             if (action === "open-folder") {

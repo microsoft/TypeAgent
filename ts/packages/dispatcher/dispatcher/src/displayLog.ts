@@ -4,9 +4,11 @@
 import type {
     AppendDisplayEntry,
     DisplayLogEntry,
+    PendingInteractionEntry,
     SetDisplayInfoEntry,
     IAgentMessage,
     RequestId,
+    PendingInteractionRequest,
 } from "@typeagent/dispatcher-types";
 
 import fs from "node:fs";
@@ -24,6 +26,7 @@ export class DisplayLog {
     private entries: DisplayLogEntry[] = [];
     private nextSeq: number = 0;
     private dirty: boolean = false;
+    private saveTimer: ReturnType<typeof setImmediate> | undefined = undefined;
 
     constructor(private readonly dirPath: string | undefined) {}
 
@@ -192,6 +195,93 @@ export class DisplayLog {
         this.entries.length = 0;
         this.nextSeq = 0;
         this.dirty = true;
+    }
+
+    /**
+     * Append a pending-interaction entry.
+     * @returns the assigned sequence number
+     */
+    logPendingInteraction(interaction: PendingInteractionRequest): number {
+        const seq = this.nextSeq++;
+        const entry: PendingInteractionEntry = {
+            type: "pending-interaction",
+            seq,
+            timestamp: interaction.timestamp,
+            interactionId: interaction.interactionId,
+            interactionType: interaction.type,
+            source: interaction.source,
+        };
+        if (interaction.requestId !== undefined) {
+            entry.requestId = interaction.requestId;
+        }
+        if (interaction.type === "askYesNo") {
+            entry.message = interaction.message;
+            if (interaction.defaultValue !== undefined) {
+                entry.defaultValue = interaction.defaultValue;
+            }
+        } else if (interaction.type === "popupQuestion") {
+            entry.message = interaction.message;
+            entry.choices = interaction.choices;
+            if (interaction.defaultId !== undefined) {
+                entry.defaultId = interaction.defaultId;
+            }
+        } else if (interaction.type === "proposeAction") {
+            entry.actionTemplates = interaction.actionTemplates;
+        }
+        this.entries.push(entry);
+        this.dirty = true;
+        return seq;
+    }
+
+    /**
+     * Append an interaction-resolved entry.
+     * @returns the assigned sequence number
+     */
+    logInteractionResolved(interactionId: string, response: unknown): number {
+        const seq = this.nextSeq++;
+        let safeResponse: unknown;
+        try {
+            safeResponse = JSON.parse(JSON.stringify(response));
+        } catch {
+            safeResponse = String(response);
+        }
+        this.entries.push({
+            type: "interaction-resolved",
+            seq,
+            timestamp: Date.now(),
+            interactionId,
+            response: safeResponse,
+        });
+        this.dirty = true;
+        return seq;
+    }
+
+    /**
+     * Append an interaction-cancelled entry.
+     * @returns the assigned sequence number
+     */
+    logInteractionCancelled(interactionId: string): number {
+        const seq = this.nextSeq++;
+        this.entries.push({
+            type: "interaction-cancelled",
+            seq,
+            timestamp: Date.now(),
+            interactionId,
+        });
+        this.dirty = true;
+        return seq;
+    }
+
+    /**
+     * Schedule a save at the end of the current event-loop tick.
+     * Multiple calls within the same tick are coalesced into one write.
+     */
+    saveQueued(): void {
+        if (this.saveTimer !== undefined) return;
+        this.saveTimer = setImmediate(() => {
+            this.saveTimer = undefined;
+            this.save().catch(() => {});
+        });
     }
 
     /**

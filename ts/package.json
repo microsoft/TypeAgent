@@ -59,16 +59,26 @@
     "@fluidframework/build-tools": "^0.57.0",
     "@types/node": "^20.17.28",
     "markdown-link-check": "^3.14.2",
-    "prebuild-install": "^7.1.3",
     "prettier": "^3.5.3",
     "shx": "^0.4.0"
   },
   "packageManager": "pnpm@10.33.0+sha512.10568bb4a6afb58c9eb3630da90cc9516417abebd3fabbe6739f0ae795728da1491e9db5a544c76ad8eb7570f5c4bb3d6c637b2cb41bfdcdb47fa823c8649319",
   "engines": {
-    "node": ">=20",
+    "node": ">=20.18.1",
     "pnpm": ">=10"
   },
   "pnpm": {
+    "peerDependencyRules": {
+      "allowedVersions": {
+        "@azure/core-rest-pipeline": "*",
+        "jest": "*",
+        "zod": "*"
+      },
+      "ignoreMissing": [
+        "eslint",
+        "zod"
+      ]
+    },
     "onlyBuiltDependencies": [
       "@azure/msal-node-extensions",
       "@azure/msal-node-runtime",
@@ -87,7 +97,22 @@
       "sharp"
     ],
     "allowedDeprecatedVersions": {
-      "crx": "5"
+      "@cliqz/adblocker": "*",
+      "@cliqz/adblocker-content": "*",
+      "@cliqz/adblocker-extended-selectors": "*",
+      "@cliqz/adblocker-puppeteer": "*",
+      "@xmldom/xmldom": "<0.9.9",
+      "abab": "*",
+      "boolean": "*",
+      "crx": "5",
+      "domexception": "*",
+      "glob": "<12",
+      "inflight": "*",
+      "lodash.isequal": "*",
+      "node-domexception": "*",
+      "prebuild-install": "*",
+      "rimraf": "<4",
+      "whatwg-encoding": "*"
     },
     "supportedArchitectures": {
       "cpu": [
@@ -106,19 +131,6 @@
       "router>path-to-regexp": ">=8.4.0 <9.0.0",
       "serialize-javascript": ">=7.0.5 <8.0.0"
     },
-    "ignoredBuiltDependencies": [
-      "leveldown"
-    ]
-  },
-  "peerDependencyRules": {
-    "ignoreMissing": [
-      "eslint",
-      "zod"
-    ],
-    "allowedVersions": {
-      "zod": "*",
-      "jest": "*",
-      "@azure/core-rest-pipeline": "*"
-    }
+    "ignoredBuiltDependencies": []
   }
 }

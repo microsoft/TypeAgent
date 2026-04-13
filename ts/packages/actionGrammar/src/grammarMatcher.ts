@@ -11,6 +11,7 @@ import {
     GrammarPart,
     RulesPart,
     StringPart,
+    StringPartRegExpEntry,
     VarNumberPart,
     VarStringPart,
 } from "./grammarTypes.js";
@@ -18,10 +19,14 @@ import {
 // Separator mode for completion results.  Structurally identical to
 // SeparatorMode from @typeagent/agent-sdk (command.ts); independently
 // defined here so actionGrammar does not depend on agentSdk.  Keep
-// both definitions in sync.  The grammar matcher only produces
-// "spacePunctuation", "optional", and "none" — never "space"
-// (which is strictly command/flag-level).
-export type SeparatorMode = "space" | "spacePunctuation" | "optional" | "none";
+// both definitions in sync.
+export type SeparatorMode =
+    | "space"
+    | "spacePunctuation"
+    | "optionalSpacePunctuation"
+    | "optionalSpace"
+    | "none"
+    | "autoSpacePunctuation";
 
 const debugMatchRaw = registerDebug("typeagent:grammar:match");
 
@@ -89,54 +94,6 @@ export function requiresSeparator(
         case undefined: // auto
             return needsSeparatorInAutoMode(a, b);
     }
-}
-
-// Convert a per-candidate (needsSep, spacingMode) pair into a
-// SeparatorMode value.  When needsSep is true (separator required),
-// the grammar always uses spacePunctuation separators.
-// When needsSep is false: "none" spacingMode → "none", otherwise
-// → "optional" (covers auto mode/CJK/mixed and explicit "optional").
-export function candidateSeparatorMode(
-    needsSep: boolean,
-    spacingMode: CompiledSpacingMode,
-): SeparatorMode {
-    if (needsSep) {
-        return "spacePunctuation";
-    }
-    if (spacingMode === "none") {
-        return "none";
-    }
-    return "optional";
-}
-
-// Merge a new candidate's separator mode into the running aggregate.
-// The mode requiring the strongest separator wins (i.e. the mode that
-// demands the most from the user): space > spacePunctuation > optional > none.
-export function mergeSeparatorMode(
-    current: SeparatorMode | undefined,
-    needsSep: boolean,
-    spacingMode: CompiledSpacingMode,
-): SeparatorMode {
-    const candidateMode = candidateSeparatorMode(needsSep, spacingMode);
-    if (current === undefined) {
-        return candidateMode;
-    }
-    // "space" requires strict whitespace — strongest requirement.
-    if (current === "space" || candidateMode === "space") {
-        return "space";
-    }
-    // "spacePunctuation" requires a separator — next strongest.
-    if (
-        current === "spacePunctuation" ||
-        candidateMode === "spacePunctuation"
-    ) {
-        return "spacePunctuation";
-    }
-    // "optional" is a stronger requirement than "none".
-    if (current === "optional" || candidateMode === "optional") {
-        return "optional";
-    }
-    return "none";
 }
 
 export function isBoundarySatisfied(
@@ -813,13 +770,12 @@ export function finalizeNestedRule(
 }
 
 function matchStringPartWithWildcard(
-    regExpStr: string,
+    regExp: RegExp,
     request: string,
     part: StringPart,
     state: MatchState,
     pending: MatchState[],
 ) {
-    const regExp = new RegExp(regExpStr, "iug");
     regExp.lastIndex = state.index;
     while (true) {
         const match = regExp.exec(request);
@@ -872,12 +828,11 @@ function matchStringPartWithWildcard(
 }
 
 function matchStringPartWithoutWildcard(
-    regExpStr: string,
+    regExp: RegExp,
     request: string,
     part: StringPart,
     state: MatchState,
 ) {
-    const regExp = new RegExp(regExpStr, "iuy");
     const curr = state.index;
     regExp.lastIndex = curr;
     const match = regExp.exec(request);
@@ -950,16 +905,15 @@ export function leadingSpacingMode(state: MatchState): CompiledSpacingMode {
     return state.spacingMode;
 }
 
-function matchStringPart(
-    request: string,
-    state: MatchState,
+/**
+ * Build the regex pattern string for a StringPart given the spacing mode and
+ * whether leading separators should be suppressed ("none" leading mode).
+ */
+function buildStringPartRegExpStr(
     part: StringPart,
-    pending: MatchState[],
-) {
-    debugMatch(
-        state,
-        `Checking string expr "${part.value.join(" ")}" with${state.pendingWildcard ? "" : "out"} wildcard`,
-    );
+    spacingMode: CompiledSpacingMode,
+    leadingIsNone: boolean,
+): string {
     const escaped = part.value.map(escapeMatch);
     // Build the joined regex string using an array to avoid O(N²) string concatenation.
     // "required" → [\s\p{P}]+, "optional" → [\s\p{P}]*.
@@ -974,13 +928,13 @@ function matchStringPart(
         // (e.g. from "\ ") are already part of the segment text and will
         // be matched by the regex itself.
         const sep =
-            state.spacingMode === "none"
+            spacingMode === "none"
                 ? ""
                 : requiresSeparator(
                         // Invariant: segments are always non-empty (guaranteed by the parser).
                         part.value[i - 1].at(-1)!,
                         part.value[i][0],
-                        state.spacingMode,
+                        spacingMode,
                     )
                   ? `[${separatorRegExpStr}]+`
                   : `[${separatorRegExpStr}]*`;
@@ -992,13 +946,60 @@ function matchStringPart(
     // parent's spacing mode decides; otherwise the rule's own mode.
     // In "none" mode no leading separator is consumed; the match must
     // start exactly at the current position.
-    const regExpStr =
-        leadingSpacingMode(state) === "none"
-            ? joined
-            : `[${separatorRegExpStr}]*?${joined}`;
+    return leadingIsNone ? joined : `[${separatorRegExpStr}]*?${joined}`;
+}
+
+/**
+ * Get or create cached RegExp objects for a StringPart.  The cache key
+ * is derived from (spacingMode, leadingIsNone) — for the same StringPart
+ * and spacing configuration, the compiled regex is reused across calls.
+ */
+function getStringPartRegExp(
+    part: StringPart,
+    spacingMode: CompiledSpacingMode,
+    leadingIsNone: boolean,
+): StringPartRegExpEntry {
+    const key = `${spacingMode ?? "auto"}:${leadingIsNone}`;
+    if (part.regexpCache === undefined) {
+        part.regexpCache = new Map();
+    }
+    let entry = part.regexpCache.get(key);
+    if (entry === undefined) {
+        const regExpStr = buildStringPartRegExpStr(
+            part,
+            spacingMode,
+            leadingIsNone,
+        );
+        entry = {
+            global: new RegExp(regExpStr, "iug"),
+            sticky: new RegExp(regExpStr, "iuy"),
+        };
+        part.regexpCache.set(key, entry);
+    }
+    return entry;
+}
+
+function matchStringPart(
+    request: string,
+    state: MatchState,
+    part: StringPart,
+    pending: MatchState[],
+) {
+    debugMatch(
+        state,
+        `Checking string expr "${part.value.join(" ")}" with${state.pendingWildcard ? "" : "out"} wildcard`,
+    );
+    const leadingIsNone = leadingSpacingMode(state) === "none";
+    const entry = getStringPartRegExp(part, state.spacingMode, leadingIsNone);
     return state.pendingWildcard !== undefined
-        ? matchStringPartWithWildcard(regExpStr, request, part, state, pending)
-        : matchStringPartWithoutWildcard(regExpStr, request, part, state);
+        ? matchStringPartWithWildcard(
+              entry.global,
+              request,
+              part,
+              state,
+              pending,
+          )
+        : matchStringPartWithoutWildcard(entry.sticky, request, part, state);
 }
 
 const matchNumberPartWithWildcardRegExp =

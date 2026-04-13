@@ -22,6 +22,7 @@ import {
 import { getLineCol } from "./utils.js";
 import { globalEntityRegistry } from "./entityRegistry.js";
 import { globalPhraseSetRegistry } from "./builtInPhraseMatchers.js";
+import { getBuiltInEntitiesGrammarContent } from "./builtInFileLoader.js";
 import type {
     SchemaTypeDefinition,
     SchemaType,
@@ -80,6 +81,8 @@ type CompileContext = {
     ruleDefMap: DefinitionMap;
     exportedNames: Set<string>; // Only rules with export keyword are importable
     importedRuleMap: Map<string, CompileContext>; // Rule names imported from .agr files
+    importedRulePositions: Map<string, number | undefined>; // Source positions of rule import statements for diagnostics
+    usedImportedRules: Set<string>; // Imported rules actually referenced during compilation
     importedTypeNames: Map<string, number | undefined>; // All imported type names with positions (source-less entity imports + .ts type imports)
     usedImportedTypes: Set<string>; // Imported types actually referenced in variables (entity + .ts type imports)
     resolvedTypes: Map<string, SchemaTypeDefinition>; // Parsed schema types resolved via SchemaLoader
@@ -116,6 +119,103 @@ function createImportCompileContext(
     return importContext;
 }
 
+const BUILTIN_ENTITIES_VIRTUAL_PATH = "__builtInEntities__";
+
+/**
+ * Lazily create (or retrieve from cache) the CompileContext for the built-in
+ * entity grammar. Uses a virtual path so it is compiled at most once per
+ * grammarFileMap.
+ */
+function getBuiltInGrammarContext(
+    grammarFileMap: Map<string, CompileContext>,
+): CompileContext {
+    const cached = grammarFileMap.get(BUILTIN_ENTITIES_VIRTUAL_PATH);
+    if (cached) return cached;
+
+    const content = getBuiltInEntitiesGrammarContent();
+    const displayPath = "builtInEntities.agr";
+    const result = parseGrammarRules(
+        displayPath,
+        content,
+        undefined,
+        true, // enableValueExpressions — built-in grammar uses them
+    );
+    return createCompileContext(
+        grammarFileMap,
+        content,
+        displayPath,
+        BUILTIN_ENTITIES_VIRTUAL_PATH,
+        undefined,
+        result.definitions,
+        result.imports,
+    );
+}
+
+// Cached set of built-in exported rule names, lazily initialised.
+// Used to decide whether a source-less import name (e.g. `import { Ordinal }`)
+// refers to a built-in grammar rule or a legacy entity type.
+let builtInExportedNamesCache: Set<string> | undefined;
+
+function getBuiltInExportedNames(
+    grammarFileMap: Map<string, CompileContext>,
+): Set<string> {
+    if (builtInExportedNamesCache === undefined) {
+        builtInExportedNamesCache =
+            getBuiltInGrammarContext(grammarFileMap).exportedNames;
+    }
+    return builtInExportedNamesCache;
+}
+
+/**
+ * Import a single grammar rule from an import context.
+ * Validates that the rule is exported and doesn't conflict with local
+ * definitions, then adds it to importedRuleMap.
+ *
+ * For wildcard imports (import *), non-exported rules are silently skipped.
+ * For named imports (sourced or source-less), non-exported rules produce an error.
+ */
+function importGrammarRule(
+    context: CompileContext,
+    importContext: CompileContext,
+    ruleName: string,
+    importStmt: ImportStatement,
+    ruleDefMap: DefinitionMap,
+    importedRuleMap: Map<string, CompileContext>,
+): void {
+    if (!importContext.exportedNames.has(ruleName)) {
+        // Wildcard imports silently skip non-exported rules.
+        // Named imports (sourced or source-less) produce an error.
+        if (importStmt.names !== "*") {
+            const source = importStmt.source ?? "built-in entities";
+            context.errors.push({
+                message: `Rule '<${ruleName}>' is not exported from '${source}'.`,
+                definition: ruleName,
+                pos: importStmt.pos,
+            });
+        }
+        return;
+    }
+    if (ruleDefMap.has(ruleName)) {
+        context.errors.push({
+            message: `Rule '<${ruleName}>' cannot be imported because it is already defined in this file.`,
+            definition: ruleName,
+            pos: importStmt.pos,
+        });
+    } else if (
+        importedRuleMap.has(ruleName) &&
+        importedRuleMap.get(ruleName) !== importContext
+    ) {
+        context.errors.push({
+            message: `Rule '<${ruleName}>' is already imported from '${importedRuleMap.get(ruleName)!.displayPath}'.`,
+            definition: ruleName,
+            pos: importStmt.pos,
+        });
+    } else {
+        importedRuleMap.set(ruleName, importContext);
+        context.importedRulePositions.set(ruleName, importStmt.pos);
+    }
+}
+
 function createCompileContext(
     grammarFileMap: Map<string, CompileContext>,
     content: string,
@@ -130,6 +230,8 @@ function createCompileContext(
 
     // Build imported rule names and type names
     const importedRuleMap = new Map<string, CompileContext>();
+    const importedRulePositions = new Map<string, number | undefined>();
+    const usedImportedRules = new Set<string>();
     const importedTypeNames = new Map<string, number | undefined>();
     const usedImportedTypes = new Set<string>();
     const resolvedTypes = new Map<string, SchemaTypeDefinition>();
@@ -152,6 +254,8 @@ function createCompileContext(
         ruleDefMap,
         exportedNames,
         importedRuleMap,
+        importedRulePositions,
+        usedImportedRules,
         importedTypeNames,
         usedImportedTypes,
         resolvedTypes,
@@ -186,11 +290,46 @@ function createCompileContext(
     // Process imports AFTER definitions - this populates importedRuleMap
     if (imports) {
         for (const importStmt of imports) {
-            // Source-less imports are entity declarations: import { Ordinal, Cardinal };
+            // Source-less imports are entity/built-in declarations: import { Ordinal, Cardinal };
+            // Names that match exported rules in the built-in entity grammar are
+            // imported as grammar rules (same as .agr imports).  All names are
+            // also registered as entity type names for runtime entity registry
+            // compatibility.
             if (importStmt.source === undefined) {
                 if (importStmt.names !== "*") {
+                    const builtInCtx = getBuiltInGrammarContext(grammarFileMap);
+                    const builtInExported =
+                        getBuiltInExportedNames(grammarFileMap);
+
                     for (const { name } of importStmt.names) {
+                        // If the name matches a built-in exported rule,
+                        // import it as a grammar rule (same as .agr imports).
+                        // If it's a camelCase alias (e.g., "ordinal" for
+                        // "Ordinal"), treat as a legacy entity type only.
+                        // All other names produce an error via
+                        // importGrammarRule (not exported from built-in).
+                        const isLegacyCamelCase =
+                            !builtInExported.has(name) &&
+                            builtInExported.has(
+                                name[0].toUpperCase() + name.slice(1),
+                            );
+                        if (!isLegacyCamelCase) {
+                            importGrammarRule(
+                                context,
+                                builtInCtx,
+                                name,
+                                importStmt,
+                                ruleDefMap,
+                                importedRuleMap,
+                            );
+                        }
+                        // Legacy: Always register the name as an imported type so it
+                        // appears in grammar.entities for runtime entity
+                        // registry compatibility.
                         importedTypeNames.set(name, importStmt.pos);
+
+                        // Don't warn not used as type.
+                        usedImportedTypes.add(name);
                     }
                 }
                 continue;
@@ -214,29 +353,14 @@ function createCompileContext(
                         : importStmt.names.map((n) => n.name);
 
                 for (const ruleName of ruleNames) {
-                    // Check if the rule is exported from the source file
-                    if (!importContext.exportedNames.has(ruleName)) {
-                        // Rule is not exported from the source file
-                        if (importStmt.names !== "*") {
-                            // Only error for named imports; wildcard silently skips
-                            context.errors.push({
-                                message: `Rule '<${ruleName}>' is not exported from '${importStmt.source}'.`,
-                                definition: ruleName,
-                                pos: importStmt.pos,
-                            });
-                        }
-                        continue;
-                    }
-                    // Check if we're trying to import a rule that's already defined locally
-                    if (ruleDefMap.has(ruleName)) {
-                        context.errors.push({
-                            message: `Rule '<${ruleName}>' cannot be imported because it is already defined in this file.`,
-                            definition: ruleName,
-                            pos: importStmt.pos,
-                        });
-                    } else {
-                        importedRuleMap.set(ruleName, importContext);
-                    }
+                    importGrammarRule(
+                        context,
+                        importContext,
+                        ruleName,
+                        importStmt,
+                        ruleDefMap,
+                        importedRuleMap,
+                    );
                 }
             } else {
                 if (importStmt.names === "*") {
@@ -324,6 +448,18 @@ export function compileGrammar(
                 message: `Rule '<${name}>' is defined but never used.`,
                 pos: record.definitions[0]?.pos,
             });
+        }
+    }
+
+    // Warn about imported rules that are declared but never used
+    for (const [, compileContext] of context.grammarFileMap) {
+        for (const [ruleName, pos] of compileContext.importedRulePositions) {
+            if (!compileContext.usedImportedRules.has(ruleName)) {
+                compileContext.warnings.push({
+                    message: `Imported rule '<${ruleName}>' is declared but never used.`,
+                    pos,
+                });
+            }
         }
     }
 
@@ -637,6 +773,7 @@ function createNamedGrammarRules(
             context.ruleDefMap.set(name, emptyRecord);
             return emptyRecord;
         }
+        context.usedImportedRules.add(name);
         return createNamedGrammarRules(
             importedContext,
             name,
@@ -927,6 +1064,11 @@ function createGrammarRule(
     hasValue: boolean;
     nullable: boolean;
 } {
+    // Per-alternate [spacing=...] overrides definition-level spacing
+    if (rule.spacingMode !== undefined) {
+        spacingMode =
+            rule.spacingMode === "auto" ? undefined : rule.spacingMode;
+    }
     const { expressions, value } = rule;
     const parts: GrammarPart[] = [];
     const availableVariables = new Set<string>();

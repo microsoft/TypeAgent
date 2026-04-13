@@ -10,6 +10,7 @@ import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
 import WebSocket from "isomorphic-ws";
 import { spawn } from "child_process";
 import fs from "fs";
+import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -30,6 +31,7 @@ const debugErr = registerDebug("typeagent:agent-server-client:error");
 export type SessionDispatcher = {
     dispatcher: Dispatcher;
     sessionId: string;
+    name: string;
 };
 
 export type AgentServerConnection = {
@@ -121,7 +123,11 @@ export async function connectAgentServer(
                     connectionId: result.connectionId,
                 });
 
-                return { dispatcher, sessionId };
+                return {
+                    dispatcher,
+                    sessionId,
+                    name: result.name,
+                };
             },
 
             async leaveSession(sessionId: string): Promise<void> {
@@ -247,19 +253,45 @@ function isServerRunning(url: string): Promise<boolean> {
     });
 }
 
-function spawnAgentServer(serverPath: string): void {
-    debug(`Starting agent server from ${serverPath}`);
-    const isWindows = process.platform === "win32";
-    const child = spawn("node", [serverPath], {
-        // On Unix, detached creates a new session so the child survives parent exit.
-        // On Windows, detached creates a visible console window, so we skip it —
-        // stdio: 'ignore' + unref() is sufficient for the child to outlive the parent.
-        detached: !isWindows,
-        stdio: "ignore",
-        windowsHide: true,
-    });
-    child.unref();
-    debug(`Agent server process spawned (pid: ${child.pid})`);
+function spawnAgentServer(serverPath: string, port: number): void {
+    // Use an exclusive lock file to prevent two concurrent client processes from
+    // both concluding the server is down and each spawning their own copy.
+    // fs.openSync with 'wx' is atomic: exactly one caller creates the file.
+    const lockFile = path.join(
+        os.tmpdir(),
+        `typeagent-server-${port}.spawn.lock`,
+    );
+    let fd: number;
+    try {
+        fd = fs.openSync(lockFile, "wx");
+    } catch {
+        // Another process is already spawning the server — just wait for it.
+        debug(
+            `Agent server spawn lock held by another process, skipping spawn`,
+        );
+        return;
+    }
+    try {
+        debug(`Starting agent server from ${serverPath}`);
+        const isWindows = process.platform === "win32";
+        const child = spawn("node", [serverPath, "--port", String(port)], {
+            // On Unix, detached creates a new session so the child survives parent exit.
+            // On Windows, detached creates a visible console window, so we skip it —
+            // stdio: 'ignore' + unref() is sufficient for the child to outlive the parent.
+            detached: !isWindows,
+            stdio: "ignore",
+            windowsHide: true,
+        });
+        child.unref();
+        debug(`Agent server process spawned (pid: ${child.pid})`);
+    } finally {
+        fs.closeSync(fd);
+        try {
+            fs.unlinkSync(lockFile);
+        } catch {
+            // Best effort — lock file cleanup
+        }
+    }
 }
 
 async function waitForServer(
@@ -279,19 +311,40 @@ async function waitForServer(
     );
 }
 
+export async function ensureAgentServer(port: number = 8999): Promise<void> {
+    const url = `ws://localhost:${port}`;
+    if (!(await isServerRunning(url))) {
+        const serverPath = getAgentServerEntryPoint();
+        spawnAgentServer(serverPath, port);
+        await waitForServer(url);
+    }
+}
+
 export async function ensureAndConnectDispatcher(
     clientIO: ClientIO,
     port: number = 8999,
     options?: DispatcherConnectOptions,
     onDisconnect?: () => void,
 ): Promise<Dispatcher> {
+    await ensureAgentServer(port);
     const url = `ws://localhost:${port}`;
-    if (!(await isServerRunning(url))) {
-        const serverPath = getAgentServerEntryPoint();
-        spawnAgentServer(serverPath);
-        await waitForServer(url);
-    }
     return connectDispatcher(clientIO, url, options, onDisconnect);
+}
+
+export async function ensureAndConnectSession(
+    clientIO: ClientIO,
+    port: number = 8999,
+    options?: DispatcherConnectOptions,
+    onDisconnect?: () => void,
+): Promise<SessionDispatcher> {
+    await ensureAgentServer(port);
+    const url = `ws://localhost:${port}`;
+    const connection = await connectAgentServer(url, onDisconnect);
+    const session = await connection.joinSession(clientIO, options);
+    session.dispatcher.close = async () => {
+        await connection.close();
+    };
+    return session;
 }
 
 export async function stopAgentServer(port: number = 8999): Promise<void> {

@@ -126,10 +126,8 @@ export class AppAgentManager implements ActionConfigProvider {
     private readyWaiters: Array<() => void> = [];
     private readonly actionSemanticMap?: ActionSchemaSemanticMap;
     private readonly actionSchemaFileCache: ActionSchemaFileCache;
-    private nextPortIndex = 0;
     public constructor(
         cacheDir: string | undefined,
-        private readonly portBase: number,
         private readonly allowSharedLocalView?: string[],
         private readonly agentInitOptions?: Record<string, unknown>,
     ) {
@@ -168,6 +166,12 @@ export class AppAgentManager implements ActionConfigProvider {
     public getLocalHostPort(appAgentName: string) {
         const record = this.getRecord(appAgentName);
         return record.port;
+    }
+
+    public setLocalHostPort(appAgentName: string, port: number) {
+        const record = this.getRecord(appAgentName);
+        record.port = port;
+        debug(`Port ${port} assigned to ${appAgentName}`);
     }
 
     public getSharedLocalHostPort(requester: string, target: string) {
@@ -507,12 +511,10 @@ export class AppAgentManager implements ActionConfigProvider {
             }
         }
 
-        const port = manifest.localView
-            ? this.portBase + this.nextPortIndex++
-            : undefined;
+        const port = manifest.localView ? 0 : undefined;
 
         if (port !== undefined) {
-            debug(`Port ${port} assigned to ${appAgentName}`);
+            debug(`Dynamic port (OS-assigned) reserved for ${appAgentName}`);
         }
 
         const record: AppAgentRecord = {
@@ -1238,10 +1240,11 @@ export class AppAgentManager implements ActionConfigProvider {
             return;
         }
 
-        // Unload cached schema files so they get reloaded from disk
+        // Unload cached schema files and semantic map entries so they get reloaded
         for (const schemaName of this.actionConfigs.keys()) {
             if (getAppAgentName(schemaName) === appAgentName) {
                 this.actionSchemaFileCache.unloadActionSchemaFile(schemaName);
+                this.actionSemanticMap?.removeActionSchemaFile(schemaName);
             }
         }
 
@@ -1256,6 +1259,25 @@ export class AppAgentManager implements ActionConfigProvider {
             undefined,
         );
         await Promise.all(semanticMapP);
+
+        // Reload dynamic schemas and grammars if agent is active
+        if (record.appAgent && record.sessionContextP) {
+            const sessionContext = await record.sessionContextP;
+            for (const schemaName of record.actions) {
+                await this.loadDynamicSchema(
+                    schemaName,
+                    record.appAgent,
+                    sessionContext,
+                    context,
+                );
+                await this.loadDynamicGrammar(
+                    schemaName,
+                    record.appAgent,
+                    sessionContext,
+                    context,
+                );
+            }
+        }
 
         // Clear translator cache to force re-translation with new schema
         context.translatorCache.clear();

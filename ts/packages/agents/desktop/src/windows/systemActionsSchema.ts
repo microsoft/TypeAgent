@@ -19,7 +19,7 @@ export type DesktopSystemActions =
 
 // Enables or disables metered connection settings
 export type EnableMeteredConnectionsAction = {
-    actionName: "enableMeteredConnections";
+    actionName: "EnableMeteredConnections";
     parameters: {
         enable: boolean;
     };
@@ -27,7 +27,7 @@ export type EnableMeteredConnectionsAction = {
 
 // Enables or disables Game Mode
 export type EnableGameModeAction = {
-    actionName: "enableGameMode";
+    actionName: "EnableGameMode";
     parameters: {};
 };
 
@@ -49,7 +49,7 @@ export type EnableMagnifierAction = {
 
 // Enables or disables Sticky Keys
 export type EnableStickyKeysAction = {
-    actionName: "enableStickyKeys";
+    actionName: "EnableStickyKeys";
     parameters: {
         enable: boolean;
     };

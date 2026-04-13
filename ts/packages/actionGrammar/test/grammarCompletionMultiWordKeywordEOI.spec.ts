@@ -34,7 +34,7 @@ describeForEachCompletion(
         it('forward: "play something played" — should offer "by", not "played"', () => {
             // Buggy result:
             //   completions: ["played"], matchedPrefixLength: 21,
-            //   separatorMode: "spacePunctuation", afterWildcard: "all"
+            //   separatorMode: "autoSpacePunctuation", afterWildcard: "all"
             //
             // Correct: "played" is keyword word 0, fully matched to EOI.
             // The completion should be "by" (keyword word 1) at
@@ -48,7 +48,7 @@ describeForEachCompletion(
             expectMetadata(result, {
                 completions: ["by"],
                 matchedPrefixLength: 21,
-                separatorMode: "spacePunctuation",
+                separatorMode: "autoSpacePunctuation",
                 closedSet: true,
                 directionSensitive: true,
                 afterWildcard: "all",
@@ -71,7 +71,7 @@ describeForEachCompletion(
             expectMetadata(result, {
                 completions: ["good", "played"],
                 matchedPrefixLength: 14,
-                separatorMode: "spacePunctuation",
+                separatorMode: "autoSpacePunctuation",
                 closedSet: true,
                 directionSensitive: true,
                 afterWildcard: "some",
@@ -95,7 +95,7 @@ describeForEachCompletion(
             expectMetadata(result, {
                 completions: ["good", "played"],
                 matchedPrefixLength: 14,
-                separatorMode: "spacePunctuation",
+                separatorMode: "autoSpacePunctuation",
                 closedSet: true,
                 directionSensitive: true,
                 afterWildcard: "some",
@@ -118,7 +118,7 @@ describeForEachCompletion(
             expectMetadata(result, {
                 completions: ["good", "played"],
                 matchedPrefixLength: 14,
-                separatorMode: "spacePunctuation",
+                separatorMode: "autoSpacePunctuation",
                 closedSet: true,
                 directionSensitive: true,
                 afterWildcard: "some",
@@ -129,7 +129,7 @@ describeForEachCompletion(
         it('forward: "play something played " — first keyword word + space, should offer "by"', () => {
             // Buggy result:
             //   completions: ["played"], matchedPrefixLength: 22,
-            //   separatorMode: "optional", afterWildcard: "all"
+            //   separatorMode: "autoSpacePunctuation", afterWildcard: "all"
             //
             // Correct: "played " with trailing space — the first keyword
             // word was fully matched.  Should offer "by" at
@@ -143,7 +143,7 @@ describeForEachCompletion(
             expectMetadata(result, {
                 completions: ["by"],
                 matchedPrefixLength: 22,
-                separatorMode: "optional",
+                separatorMode: "autoSpacePunctuation",
                 closedSet: true,
                 directionSensitive: true,
                 afterWildcard: "all",
@@ -166,7 +166,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["by"],
                     matchedPrefixLength: 18,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -181,10 +181,10 @@ describeForEachCompletion(
                     undefined,
                     "forward",
                 );
-                expect(result.completions).toContain("by");
                 expectMetadata(result, {
+                    completions: ["by"],
                     matchedPrefixLength: 17,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -202,14 +202,18 @@ describeForEachCompletion(
                 // Trailing space is inside the wildcard content, not
                 // after a committed keyword boundary — backward still
                 // backs up to the wildcard start.
-                expect(result.properties).toBeDefined();
-                expect(result.properties!.length).toBeGreaterThan(0);
                 expectMetadata(result, {
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
+                    properties: [
+                        {
+                            match: {},
+                            propertyNames: ["name"],
+                        },
+                    ],
                 });
             });
 
@@ -220,10 +224,10 @@ describeForEachCompletion(
                     undefined,
                     "backward",
                 );
-                expect(result.completions).toContain("played");
                 expectMetadata(result, {
+                    completions: ["played"],
                     matchedPrefixLength: 10,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -245,7 +249,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -265,10 +269,10 @@ describeForEachCompletion(
                     undefined,
                     "backward",
                 );
-                expect(result.completions).toContain("by");
                 expectMetadata(result, {
+                    completions: ["by"],
                     matchedPrefixLength: 17,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -293,7 +297,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["someone"],
                     matchedPrefixLength: 20,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",
@@ -315,7 +319,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: [],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: false,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -350,7 +354,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["safely"],
                     matchedPrefixLength: 15,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "all",

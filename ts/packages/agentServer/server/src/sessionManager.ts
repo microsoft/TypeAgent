@@ -9,10 +9,12 @@ import {
     SessionInfo,
 } from "@typeagent/agent-server-protocol";
 import { ClientIO, Dispatcher, DispatcherOptions } from "agent-dispatcher";
+import type { PendingInteractionRequest } from "@typeagent/dispatcher-types";
 import {
     createSharedDispatcher,
     SharedDispatcher,
 } from "./sharedDispatcher.js";
+import { lockInstanceDir } from "agent-dispatcher/internal";
 
 import registerDebug from "debug";
 const debugSession = registerDebug("agent-server:session");
@@ -40,14 +42,13 @@ type SessionRecord = {
 
 type PersistedMetadata = {
     sessions: SessionMetadata[];
-    lastActiveSessionId: string | undefined;
 };
 
 export type SessionManager = {
     createSession(name: string): Promise<SessionInfo>;
     /**
-     * Resolve a session ID. If undefined, returns the most recently active
-     * session, creating a default one if none exist.
+     * Resolve a session ID. If undefined, returns the default session,
+     * creating one if none exist.
      */
     resolveSessionId(sessionId: string | undefined): Promise<string>;
     /**
@@ -61,7 +62,12 @@ export type SessionManager = {
         clientIO: ClientIO,
         closeFn: () => void,
         options?: DispatcherConnectOptions,
-    ): Promise<{ dispatcher: Dispatcher; connectionId: string }>;
+    ): Promise<{
+        dispatcher: Dispatcher;
+        connectionId: string;
+        name: string;
+        pendingInteractions: PendingInteractionRequest[];
+    }>;
     leaveSession(sessionId: string, connectionId: string): Promise<void>;
     listSessions(name?: string): SessionInfo[];
     renameSession(sessionId: string, newName: string): Promise<void>;
@@ -78,8 +84,12 @@ export async function createSessionManager(
     const sessionsDir = path.join(baseDir, SESSIONS_DIR);
     await fs.promises.mkdir(sessionsDir, { recursive: true });
 
+    // Lock the shared instance directory for the lifetime of this process.
+    // Each per-session dispatcher locks its own persistDir; this lock covers
+    // the instanceDir (= baseDir) that backs instanceStorage across all sessions.
+    const unlockInstanceDir = await lockInstanceDir(baseDir);
+
     const sessions = new Map<string, SessionRecord>();
-    let lastActiveSessionId: string | undefined;
 
     // Load persisted metadata
     await loadMetadata();
@@ -100,7 +110,6 @@ export async function createSessionManager(
                     idleTimer: undefined,
                 });
             }
-            lastActiveSessionId = persisted.lastActiveSessionId;
             debugSession(`Loaded ${sessions.size} session(s) from metadata`);
         } catch (e: any) {
             if (e?.code === "ENOENT") {
@@ -138,7 +147,6 @@ export async function createSessionManager(
         }
         const persisted: PersistedMetadata = {
             sessions: entries,
-            lastActiveSessionId,
         };
         await fs.promises.writeFile(
             tmpPath,
@@ -225,16 +233,19 @@ export async function createSessionManager(
         const record = sessions.get(sessionId);
         if (record) {
             record.lastActiveAt = Date.now();
-            lastActiveSessionId = sessionId;
         }
     }
 
-    function getMostRecentSessionId(): string | undefined {
-        // Prefer explicitly tracked last active session
-        if (lastActiveSessionId && sessions.has(lastActiveSessionId)) {
-            return lastActiveSessionId;
+    function getDefaultSessionId(): string | undefined {
+        for (const [id, record] of sessions) {
+            if (record.name === "default") {
+                return id;
+            }
         }
-        // Fall back to any existing session
+        return undefined;
+    }
+
+    function getAnySessionId(): string | undefined {
         for (const id of sessions.keys()) {
             return id;
         }
@@ -264,7 +275,6 @@ export async function createSessionManager(
                 idleTimer: undefined,
             };
             sessions.set(sessionId, record);
-            lastActiveSessionId = sessionId;
             await saveMetadata();
             debugSession(`Session created: "${name}" (${sessionId})`);
             return {
@@ -282,7 +292,8 @@ export async function createSessionManager(
                 }
                 return sessionId;
             }
-            const resolved = getMostRecentSessionId();
+            // Prefer the session named "default"; fall back to any existing session
+            const resolved = getDefaultSessionId() ?? getAnySessionId();
             if (resolved !== undefined) {
                 return resolved;
             }
@@ -306,7 +317,12 @@ export async function createSessionManager(
             clientIO: ClientIO,
             closeFn: () => void,
             options?: DispatcherConnectOptions,
-        ): Promise<{ dispatcher: Dispatcher; connectionId: string }> {
+        ): Promise<{
+            dispatcher: Dispatcher;
+            connectionId: string;
+            name: string;
+            pendingInteractions: PendingInteractionRequest[];
+        }> {
             const record = sessions.get(sessionId);
             if (record === undefined) {
                 throw new Error(`Session not found: ${sessionId}`);
@@ -329,6 +345,11 @@ export async function createSessionManager(
             return {
                 dispatcher,
                 connectionId: dispatcher.connectionId!,
+                name: record.name,
+                pendingInteractions: sharedDispatcher.getPendingInteractions(
+                    dispatcher.connectionId!,
+                    options?.filter ?? false,
+                ),
             };
         },
 
@@ -356,15 +377,16 @@ export async function createSessionManager(
         listSessions(name?: string): SessionInfo[] {
             const result: SessionInfo[] = [];
             for (const record of sessions.values()) {
+                const recordName = record.name ?? "";
                 if (
-                    name !== undefined &&
-                    !record.name.toLowerCase().includes(name.toLowerCase())
+                    name != null &&
+                    !recordName.toLowerCase().includes(name.toLowerCase())
                 ) {
                     continue;
                 }
                 result.push({
                     sessionId: record.sessionId,
-                    name: record.name,
+                    name: recordName,
                     clientCount: record.sharedDispatcher?.clientCount ?? 0,
                     createdAt: record.createdAt,
                 });
@@ -399,11 +421,6 @@ export async function createSessionManager(
 
             sessions.delete(sessionId);
 
-            // Update last active if we just deleted it
-            if (lastActiveSessionId === sessionId) {
-                lastActiveSessionId = getMostRecentSessionId();
-            }
-
             // Remove persist directory
             const persistDir = getSessionPersistDir(sessionId);
             try {
@@ -429,6 +446,7 @@ export async function createSessionManager(
             }
             await Promise.all(promises);
             await saveMetadata();
+            await unlockInstanceDir();
             debugSession("SessionManager closed");
         },
     };

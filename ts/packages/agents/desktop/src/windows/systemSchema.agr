@@ -23,16 +23,16 @@ import { DesktopSystemActions } from "./systemActionsSchema.ts";
 
 // ===== Network =====
 <EnableMeteredConnections> =
-    enable metered connection -> { actionName: "enableMeteredConnections", parameters: { enable: true } }
-  | disable metered connection -> { actionName: "enableMeteredConnections", parameters: { enable: false } }
-  | turn on metered connection -> { actionName: "enableMeteredConnections", parameters: { enable: true } }
-  | turn off metered connection -> { actionName: "enableMeteredConnections", parameters: { enable: false } };
+    enable metered connection -> { actionName: "EnableMeteredConnections", parameters: { enable: true } }
+  | disable metered connection -> { actionName: "EnableMeteredConnections", parameters: { enable: false } }
+  | turn on metered connection -> { actionName: "EnableMeteredConnections", parameters: { enable: true } }
+  | turn off metered connection -> { actionName: "EnableMeteredConnections", parameters: { enable: false } };
 
 // ===== Gaming =====
 <EnableGameMode> =
-    enable game mode -> { actionName: "enableGameMode", parameters: {} }
-  | open game mode (settings)? -> { actionName: "enableGameMode", parameters: {} }
-  | turn on game mode -> { actionName: "enableGameMode", parameters: {} };
+    enable game mode -> { actionName: "EnableGameMode", parameters: {} }
+  | open game mode (settings)? -> { actionName: "EnableGameMode", parameters: {} }
+  | turn on game mode -> { actionName: "EnableGameMode", parameters: {} };
 
 // ===== Accessibility =====
 <EnableNarrator> =
@@ -52,10 +52,10 @@ import { DesktopSystemActions } from "./systemActionsSchema.ts";
   | turn off magnifier -> { actionName: "EnableMagnifier", parameters: { enable: false } };
 
 <EnableStickyKeys> =
-    enable sticky keys -> { actionName: "enableStickyKeys", parameters: { enable: true } }
-  | disable sticky keys -> { actionName: "enableStickyKeys", parameters: { enable: false } }
-  | turn on sticky keys -> { actionName: "enableStickyKeys", parameters: { enable: true } }
-  | turn off sticky keys -> { actionName: "enableStickyKeys", parameters: { enable: false } };
+    enable sticky keys -> { actionName: "EnableStickyKeys", parameters: { enable: true } }
+  | disable sticky keys -> { actionName: "EnableStickyKeys", parameters: { enable: false } }
+  | turn on sticky keys -> { actionName: "EnableStickyKeys", parameters: { enable: true } }
+  | turn off sticky keys -> { actionName: "EnableStickyKeys", parameters: { enable: false } };
 
 <EnableFilterKeys> =
     enable filter keys -> { actionName: "EnableFilterKeysAction", parameters: { enable: true } }

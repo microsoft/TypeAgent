@@ -79,14 +79,15 @@ async function getCompletionsData(
         const filterStartIndex = result.startIndex;
         const prefix = line.substring(0, filterStartIndex);
 
-        // When the result reports a separator-requiring mode between the
+        // When any group reports a separator-requiring mode between the
         // typed prefix and the completion text, prepend a space so the
         // readline display doesn't produce "playmusic" for "play" + "music".
-        const separator =
-            result.separatorMode === "space" ||
-            result.separatorMode === "spacePunctuation"
-                ? " "
-                : "";
+        const needsSep = result.completions.some(
+            (g) =>
+                g.separatorMode === "space" ||
+                g.separatorMode === "spacePunctuation",
+        );
+        const separator = needsSep ? " " : "";
 
         return {
             allCompletions,
@@ -168,6 +169,11 @@ export default class Interactive extends Command {
         );
         installDebugInterceptor();
 
+        // Clear screen and move cursor to top for a clean full-height start
+        if (process.stdout.isTTY) {
+            process.stdout.write("\x1b[2J\x1b[H");
+        }
+
         await withEnhancedConsoleClientIO(async (clientIO, bindDispatcher) => {
             const persistDir = !flags.memory ? instanceDir : undefined;
             const indexingServiceRegistry =
@@ -190,7 +196,7 @@ export default class Interactive extends Command {
                 traceId: getTraceId(),
                 constructionProvider: getDefaultConstructionProvider(),
             });
-            bindDispatcher?.(dispatcher);
+            bindDispatcher(dispatcher);
 
             try {
                 if (args.input) {

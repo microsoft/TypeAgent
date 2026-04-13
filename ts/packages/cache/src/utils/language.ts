@@ -414,29 +414,3 @@ export function getLanguageTools(language: string): LanguageTools | undefined {
 
     return languageToolsEn;
 }
-
-// ---------------------------------------------------------------------------
-// Separator heuristic — inlined from action-grammar's grammarMatcher to avoid
-// pulling the full barrel (which includes Node-only modules) into browser
-// bundles via the cache's indexBrowser entry point.
-// ---------------------------------------------------------------------------
-
-const wordBoundaryScriptRe =
-    /\p{Script=Latin}|\p{Script=Cyrillic}|\p{Script=Greek}|\p{Script=Armenian}|\p{Script=Georgian}|\p{Script=Hangul}|\p{Script=Arabic}|\p{Script=Hebrew}|\p{Script=Devanagari}|\p{Script=Bengali}|\p{Script=Tamil}|\p{Script=Telugu}|\p{Script=Kannada}|\p{Script=Malayalam}|\p{Script=Gujarati}|\p{Script=Gurmukhi}|\p{Script=Oriya}|\p{Script=Sinhala}|\p{Script=Ethiopic}|\p{Script=Mongolian}/u;
-
-const digitRe = /[0-9]/;
-
-function isWordBoundaryScript(c: string): boolean {
-    const code = c.charCodeAt(0);
-    if (code < 128) {
-        return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
-    }
-    return wordBoundaryScriptRe.test(c);
-}
-
-export function needsSeparatorInAutoMode(a: string, b: string): boolean {
-    if (digitRe.test(a) && digitRe.test(b)) {
-        return true;
-    }
-    return isWordBoundaryScript(a) && isWordBoundaryScript(b);
-}

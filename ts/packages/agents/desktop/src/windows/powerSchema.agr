@@ -17,13 +17,13 @@ import { DesktopPowerActions } from "./powerActionsSchema.ts";
   | turn on battery saver at $(level:number) (percent)? -> { actionName: "BatterySaverActivationLevel", parameters: { thresholdValue: level } };
 
 <SetPowerModePluggedIn> =
-    set power mode to best performance -> { actionName: "setPowerModePluggedIn", parameters: { powerMode: "bestPerformance" } }
-  | set power mode to balanced -> { actionName: "setPowerModePluggedIn", parameters: { powerMode: "balanced" } }
-  | set power mode to best power efficiency -> { actionName: "setPowerModePluggedIn", parameters: { powerMode: "bestPowerEfficiency" } }
-  | enable best performance mode -> { actionName: "setPowerModePluggedIn", parameters: { powerMode: "bestPerformance" } }
-  | enable balanced mode -> { actionName: "setPowerModePluggedIn", parameters: { powerMode: "balanced" } }
-  | enable power saver mode -> { actionName: "setPowerModePluggedIn", parameters: { powerMode: "bestPowerEfficiency" } }
-  | use best performance -> { actionName: "setPowerModePluggedIn", parameters: { powerMode: "bestPerformance" } };
+    set power mode to best performance -> { actionName: "SetPowerModePluggedIn", parameters: { powerMode: "bestPerformance" } }
+  | set power mode to balanced -> { actionName: "SetPowerModePluggedIn", parameters: { powerMode: "balanced" } }
+  | set power mode to best power efficiency -> { actionName: "SetPowerModePluggedIn", parameters: { powerMode: "bestPowerEfficiency" } }
+  | enable best performance mode -> { actionName: "SetPowerModePluggedIn", parameters: { powerMode: "bestPerformance" } }
+  | enable balanced mode -> { actionName: "SetPowerModePluggedIn", parameters: { powerMode: "balanced" } }
+  | enable power saver mode -> { actionName: "SetPowerModePluggedIn", parameters: { powerMode: "bestPowerEfficiency" } }
+  | use best performance -> { actionName: "SetPowerModePluggedIn", parameters: { powerMode: "bestPerformance" } };
 
 <SetPowerModeOnBattery> =
     set battery power mode to best performance -> { actionName: "SetPowerModeOnBattery", parameters: { mode: "bestPerformance" } }

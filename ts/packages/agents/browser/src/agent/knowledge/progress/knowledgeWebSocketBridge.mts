@@ -41,7 +41,9 @@ export class KnowledgeWebSocketBridge {
         };
 
         const agentServer = this.context.agentContext.agentWebSocketServer;
-        const client = agentServer?.getActiveClient() ?? undefined;
+        const client =
+            agentServer?.getActiveClient(this.context.agentContext.sessionId) ??
+            undefined;
 
         sendKnowledgeExtractionProgressViaWebSocket(
             client,

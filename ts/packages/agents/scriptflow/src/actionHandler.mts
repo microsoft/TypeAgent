@@ -15,12 +15,14 @@ import {
 } from "@typeagent/agent-sdk/helpers/action";
 import {
     type CommandHandler,
+    type CommandHandlerNoParams,
     type CommandHandlerTable,
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
 import type { ParsedCommandParams } from "@typeagent/agent-sdk";
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { join, dirname, isAbsolute, resolve, extname } from "path";
+import { homedir } from "os";
 import { ScriptAnalyzer } from "./analysis/scriptAnalyzer.mjs";
 import { fileURLToPath } from "url";
 import { ScriptFlowStore } from "./store/scriptFlowStore.mjs";
@@ -96,6 +98,8 @@ async function executeFlowScript(
             maxExecutionTime: flow.sandbox.maxExecutionTime,
             networkAccess: flow.sandbox.networkAccess,
         },
+        // Use user's home directory as working directory for consistent path resolution
+        workingDirectory: homedir(),
     };
 
     const result = await executeScript(request);
@@ -377,6 +381,65 @@ async function handleScriptFlowAction(
             );
         }
 
+        case "testScriptFlow": {
+            // Execute a script without registering it (test-then-register pattern)
+            const params = action.parameters as Record<string, unknown>;
+            const scriptBody = params.script as string;
+            if (!scriptBody) {
+                return createActionResultFromError(
+                    "Missing required parameter: script",
+                );
+            }
+
+            const allowedCmdlets = (params.allowedCmdlets as string[]) ?? [];
+            const allowedModules = (params.allowedModules as string[]) ?? [
+                "Microsoft.PowerShell.Management",
+            ];
+            const networkAccess = (params.networkAccess as boolean) ?? false;
+
+            // Parse test parameters if provided
+            let testParams: Record<string, unknown> = {};
+            const testParamsJson = params.testParameters as string | undefined;
+            if (testParamsJson) {
+                try {
+                    testParams = JSON.parse(testParamsJson);
+                } catch {
+                    return createActionResultFromError(
+                        `Invalid JSON in testParameters: ${testParamsJson}`,
+                    );
+                }
+            }
+
+            // Execute the script in sandbox without saving
+            const request: ScriptExecutionRequest = {
+                script: scriptBody,
+                parameters: testParams,
+                sandbox: {
+                    allowedCmdlets,
+                    allowedPaths: ["$env:USERPROFILE", "$PWD", "$env:TEMP"],
+                    allowedModules,
+                    maxExecutionTime: 30,
+                    networkAccess,
+                },
+                workingDirectory: homedir(),
+            };
+
+            const result = await executeScript(request);
+
+            if (result.success) {
+                const output = result.stdout.trim() || "(no output)";
+                return createActionResultFromTextDisplay(
+                    `Script test PASSED:\n${output}\n\nTo register this script, use createScriptFlow with the same script.`,
+                );
+            }
+
+            const errorMsg =
+                result.stderr || `Script exited with code ${result.exitCode}`;
+            return createActionResultFromError(
+                `Script test FAILED: ${errorMsg}\n\nFix the script and try testScriptFlow again.`,
+            );
+        }
+
         case "executeScriptFlow": {
             if (!flowStore) {
                 return createActionResultFromError(
@@ -610,6 +673,12 @@ class ImportScriptHandler implements CommandHandler {
                 implicitQuotes: true,
             },
         },
+        flags: {
+            actionName: {
+                description: "Override the generated action name",
+                type: "string",
+            },
+        },
     } as const;
     public async run(
         context: ActionContext<ScriptFlowAgentContext>,
@@ -643,11 +712,16 @@ class ImportScriptHandler implements CommandHandler {
         }
 
         const analyzer = new ScriptAnalyzer();
-        const recipe = await analyzer.analyze(scriptContent, resolvedPath);
+        const overrideName = params.flags.actionName;
+        const recipe = await analyzer.analyze(
+            scriptContent,
+            resolvedPath,
+            overrideName,
+        );
 
         if (store.hasFlow(recipe.actionName)) {
             throw new Error(
-                `A flow named '${recipe.actionName}' already exists. Delete it first or use a different name.`,
+                `A flow named '${recipe.actionName}' already exists. Delete it first or use --actionName to specify a different name.`,
             );
         }
 
@@ -663,9 +737,227 @@ class ImportScriptHandler implements CommandHandler {
     }
 }
 
+class ListHandler implements CommandHandlerNoParams {
+    public readonly description = "List all registered script flows";
+    public async run(context: ActionContext<ScriptFlowAgentContext>) {
+        const store = _agentStore;
+        if (!store) {
+            throw new Error("Script flow store not available");
+        }
+        const entries = store.listFlows();
+        if (entries.length === 0) {
+            context.actionIO.setDisplay("No script flows registered.");
+            return;
+        }
+        const lines = entries.map(
+            (e) =>
+                `  ${e.actionName}: ${e.description} [usage: ${e.usageCount}]${e.source === "seed" ? " (sample)" : ""}`,
+        );
+        context.actionIO.setDisplay(
+            `Script flows (${entries.length}):\n${lines.join("\n")}`,
+        );
+    }
+}
+
+class RunHandler implements CommandHandler {
+    public readonly description = "Execute a script flow by name";
+    public readonly parameters = {
+        args: {
+            flowName: {
+                description: "Name of the script flow to execute",
+            },
+        },
+        flags: {
+            flowParametersJson: {
+                description:
+                    'JSON string of parameters, e.g. \'{"path":"C:\\\\Users"}\'',
+                type: "string",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<ScriptFlowAgentContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const store = _agentStore;
+        if (!store) {
+            throw new Error("Script flow store not available");
+        }
+
+        const flowName = params.args.flowName;
+        if (!flowName) {
+            throw new Error("Missing required argument: flowName");
+        }
+
+        const flow = await store.getFlow(flowName);
+        if (!flow) {
+            throw new Error(
+                `Unknown script flow '${flowName}'. Use '@scriptflow list' to see available flows.`,
+            );
+        }
+
+        const script = await store.getScript(flowName);
+        if (!script) {
+            throw new Error(`Script not found for flow: ${flowName}`);
+        }
+
+        let flowParameters: Record<string, unknown> = {};
+        if (params.flags.flowParametersJson) {
+            try {
+                flowParameters = JSON.parse(params.flags.flowParametersJson);
+            } catch {
+                throw new Error(
+                    `Invalid JSON in --flowParametersJson: ${params.flags.flowParametersJson}`,
+                );
+            }
+        }
+
+        expandEnvVarsInParams(flowParameters, flow.parameters);
+        const pathError = validatePathParameters(
+            flowParameters,
+            flow.parameters,
+        );
+        if (pathError) {
+            throw new Error(pathError);
+        }
+        const validationError = validateParameterRules(
+            flowParameters,
+            flow.parameters,
+        );
+        if (validationError) {
+            throw new Error(validationError);
+        }
+
+        const result = await executeFlowScript(flow, script, flowParameters);
+        if (result.error !== undefined) {
+            throw new Error(String(result.error));
+        }
+
+        await store.recordUsage(flowName);
+        if ("displayContent" in result && result.displayContent) {
+            const content = result.displayContent;
+            const text =
+                typeof content === "string"
+                    ? content
+                    : "content" in content
+                      ? content.content
+                      : String(content);
+            context.actionIO.setDisplay(text);
+        }
+    }
+}
+
+class DeleteHandler implements CommandHandler {
+    public readonly description = "Delete a script flow by name";
+    public readonly parameters = {
+        args: {
+            name: {
+                description: "Name of the script flow to delete",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<ScriptFlowAgentContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const store = _agentStore;
+        if (!store) {
+            throw new Error("Script flow store not available");
+        }
+
+        const name = params.args.name;
+        if (!name) {
+            throw new Error("Missing required argument: name");
+        }
+
+        const deleted = await store.deleteFlow(name);
+        if (!deleted) {
+            throw new Error(`Script flow not found: ${name}`);
+        }
+
+        await context.sessionContext.reloadAgentSchema();
+        context.actionIO.setDisplay(`Deleted script flow: ${name}`);
+    }
+}
+
+class ShowHandler implements CommandHandler {
+    public readonly description = "Show details of a script flow";
+    public readonly parameters = {
+        args: {
+            flowName: {
+                description: "Name of the script flow to show",
+            },
+        },
+    } as const;
+    public async run(
+        context: ActionContext<ScriptFlowAgentContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const store = _agentStore;
+        if (!store) {
+            throw new Error("Script flow store not available");
+        }
+
+        const flowName = params.args.flowName;
+        if (!flowName) {
+            throw new Error("Missing required argument: flowName");
+        }
+
+        const flow = await store.getFlow(flowName);
+        if (!flow) {
+            throw new Error(
+                `Unknown script flow '${flowName}'. Use '@scriptflow list' to see available flows.`,
+            );
+        }
+
+        const script = await store.getScript(flowName);
+        const entries = store.listFlows();
+        const entry = entries.find((e) => e.actionName === flowName);
+
+        const paramLines = flow.parameters.map(
+            (p) =>
+                `    ${p.name} (${p.type}${p.required ? ", required" : ""}): ${p.description}${p.default !== undefined ? ` [default: ${p.default}]` : ""}`,
+        );
+        const grammarLines = flow.grammarPatterns.map(
+            (g) => `    "${g.pattern}"${g.isAlias ? " (alias)" : ""}`,
+        );
+        const cmdletList = flow.sandbox.allowedCmdlets.join(", ");
+
+        const output = [
+            `Flow: ${flow.actionName}`,
+            `Description: ${flow.description}`,
+            `Display Name: ${flow.displayName}`,
+            `Source: ${flow.source?.type ?? "unknown"}`,
+            `Usage Count: ${entry?.usageCount ?? 0}`,
+            "",
+            "Parameters:",
+            paramLines.length > 0 ? paramLines.join("\n") : "    (none)",
+            "",
+            "Grammar Patterns:",
+            grammarLines.length > 0 ? grammarLines.join("\n") : "    (none)",
+            "",
+            "Sandbox:",
+            `    Cmdlets: ${cmdletList || "(none)"}`,
+            `    Timeout: ${flow.sandbox.maxExecutionTime}s`,
+            `    Network: ${flow.sandbox.networkAccess ? "allowed" : "blocked"}`,
+            "",
+            "Script:",
+            "```powershell",
+            script ?? "(script not found)",
+            "```",
+        ];
+
+        context.actionIO.setDisplay(output.join("\n"));
+    }
+}
+
 const handlers: CommandHandlerTable = {
     description: "ScriptFlow commands",
     commands: {
+        list: new ListHandler(),
+        run: new RunHandler(),
+        delete: new DeleteHandler(),
+        show: new ShowHandler(),
         import: new ImportScriptHandler(),
     },
 };

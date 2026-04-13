@@ -91,23 +91,33 @@ async function getSecrets(keyVaultClient, vaultName, shared) {
         keyVaultClient,
         vaultName,
     );
-    const p = [];
-    for (const secret of secretList) {
-        if (secret.attributes.enabled) {
-            const secretName = secret.id.split("/").pop();
-            p.push(
-                (async () => {
+    const enabled = secretList
+        .filter((s) => s.attributes.enabled)
+        .map((s) => s.id.split("/").pop());
+
+    const results = [];
+    const failures = [];
+    const concurrency = 5;
+    for (let i = 0; i < enabled.length; i += concurrency) {
+        const batch = enabled.slice(i, i + concurrency);
+        const batchResults = await Promise.all(
+            batch.map(async (secretName) => {
+                try {
                     const response = await keyVaultClient.readSecret(
                         vaultName,
                         secretName,
                     );
                     return [secretName, response.value];
-                })(),
-            );
-        }
+                } catch (e) {
+                    failures.push({ name: secretName, error: e.message });
+                    return null;
+                }
+            }),
+        );
+        results.push(...batchResults.filter((r) => r !== null));
     }
 
-    return Promise.all(p);
+    return { results, failures };
 }
 
 async function execAsync(command, options) {
@@ -123,6 +133,27 @@ async function execAsync(command, options) {
             res(stdout);
         });
     });
+}
+
+async function execWithRetry(command, options, maxRetries = 3) {
+    const SSL_ERROR = "SSL: UNEXPECTED_EOF_WHILE_READING";
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await execAsync(command, options);
+        } catch (e) {
+            if (attempt < maxRetries && e.message.includes(SSL_ERROR)) {
+                const delay = attempt * 1000;
+                console.warn(
+                    chalk.yellow(
+                        `SSL error on attempt ${attempt}/${maxRetries}, retrying in ${delay}ms...`,
+                    ),
+                );
+                await new Promise((res) => setTimeout(res, delay));
+            } else {
+                throw e;
+            }
+        }
+    }
 }
 
 class AzCliKeyVaultClient {
@@ -144,7 +175,7 @@ class AzCliKeyVaultClient {
 
     async getSecrets(vaultName) {
         return JSON.parse(
-            await execAsync(
+            await execWithRetry(
                 `az keyvault secret list --vault-name ${vaultName}`,
             ),
         );
@@ -152,7 +183,7 @@ class AzCliKeyVaultClient {
 
     async readSecret(vaultName, secretName) {
         return JSON.parse(
-            await execAsync(
+            await execWithRetry(
                 `az keyvault secret show --vault-name ${vaultName} --name ${secretName}`,
             ),
         );
@@ -323,14 +354,18 @@ async function pushSecrets() {
 
 async function pullSecretsFromVault(keyVaultClient, vaultName, shared, dotEnv) {
     const keys = shared ? sharedKeys : privateKeys;
-    const secrets = await getSecrets(keyVaultClient, vaultName, shared);
+    const { results: secrets, failures } = await getSecrets(
+        keyVaultClient,
+        vaultName,
+        shared,
+    );
     if (secrets.length === 0) {
         console.log(
             chalk.yellow(
                 `WARNING: No secrets found in key vault ${chalk.cyanBright(vaultName)}.`,
             ),
         );
-        return undefined;
+        return { updated: undefined, failures };
     }
 
     let updated = 0;
@@ -342,7 +377,7 @@ async function pullSecretsFromVault(keyVaultClient, vaultName, shared, dotEnv) {
             updated++;
         }
     }
-    return updated;
+    return { updated, failures };
 }
 
 async function pullSecrets() {
@@ -350,13 +385,13 @@ async function pullSecrets() {
     const keyVaultClient = await getKeyVaultClient();
     const vaultNames = getVaultNames(dotEnv);
     console.log(`Pulling secrets to ${chalk.cyanBright(dotenvPath)}`);
-    const sharedUpdated = await pullSecretsFromVault(
+    const sharedResult = await pullSecretsFromVault(
         keyVaultClient,
         vaultNames.shared,
         true,
         dotEnv,
     );
-    const privateUpdated = vaultNames.private
+    const privateResult = vaultNames.private
         ? await pullSecretsFromVault(
               keyVaultClient,
               vaultNames.private,
@@ -365,11 +400,19 @@ async function pullSecrets() {
           )
         : undefined;
 
-    if (sharedUpdated === undefined && privateUpdated === undefined) {
+    if (
+        sharedResult.updated === undefined &&
+        privateResult?.updated === undefined
+    ) {
         throw new Error("No secrets found in key vaults.");
     }
 
-    let updated = (sharedUpdated ?? 0) + (privateUpdated ?? 0);
+    const allFailures = [
+        ...(sharedResult.failures ?? []),
+        ...(privateResult?.failures ?? []),
+    ];
+
+    let updated = (sharedResult.updated ?? 0) + (privateResult?.updated ?? 0);
     for (const key of deleteKeys) {
         if (dotEnv.has(key)) {
             console.log(`  Deleting ${key}`);
@@ -389,6 +432,18 @@ async function pullSecrets() {
         console.log(`  Updating TYPEAGENT_PRIVATEVAULT`);
         dotEnv.set("TYPEAGENT_PRIVATEVAULT", vaultNames.private);
         updated++;
+    }
+
+    if (allFailures.length > 0) {
+        console.warn(
+            chalk.yellow(
+                `\nWARNING: Failed to fetch ${allFailures.length} secret(s) — these values were not updated in .env:`,
+            ),
+        );
+        for (const { name, error } of allFailures) {
+            console.warn(chalk.yellow(`  - ${name}: ${error}`));
+        }
+        process.exitCode = 1;
     }
 
     if (updated === 0) {
