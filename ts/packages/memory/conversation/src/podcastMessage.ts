@@ -42,6 +42,7 @@ export class PodcastMessageMeta
             });
             entities.push(...listenerEntities);
             const actions: kpLib.Action[] = [];
+            const inverseActions: kpLib.Action[] = [];
             for (const listener of this.listeners) {
                 actions.push({
                     verbs: ["say"],
@@ -49,12 +50,17 @@ export class PodcastMessageMeta
                     subjectEntityName: this.speaker,
                     objectEntityName: listener,
                 } as kpLib.Action);
+                inverseActions.push({
+                    verbs: ["hear"],
+                    verbTense: "past",
+                    subjectEntityName: listener,
+                    objectEntityName: this.speaker,
+                } as kpLib.Action);
             }
             return {
                 entities,
                 actions,
-                // TODO: Also create inverse actions
-                inverseActions: [],
+                inverseActions,
                 topics: [],
             };
         }
