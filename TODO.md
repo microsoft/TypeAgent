@@ -153,6 +153,8 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/agents/spelunker/src/typescriptChunker.ts` | 198 | Move to caller? | Low | High | Local | Fix | No |
 | `ts/packages/agents/video/src/videoActionHandler.ts` | 54 | dynamic duration | Medium | Medium | Local | Fix | Yes |
 | `ts/packages/agents/weather/src/weatherActionHandler.ts` | 227 | Add more sophisticated validation: | Medium | High | Local | Fix | No |
+| `ts/packages/aiclient/src/models.ts` | 31 | JsonSchemaType | Low | High | Local | Fix | No |
+| `ts/packages/aiclient/src/models.ts` | 39 | JsonSchemaType | Low | High | Local | Fix | No |
 | `ts/packages/aiclient/src/models.ts` | 176 | add support for videos | High | Medium | Component | Fix | Yes |
 | `ts/packages/aiclient/src/openai.ts` | 580 | remove after API endpoint correctly handles this case | Low | Medium | Local | Fix | Yes |
 | `ts/packages/aiclient/src/tokenCounter.ts` | 58 | intermittently cache these with the session | Medium | Medium | Component | Fix | Yes |
@@ -278,6 +280,8 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/memory/image/src/imageMeta.ts` | 151 | image taker name | Low | High | Local | Fix | No |
 | `ts/packages/memory/image/src/imageMeta.ts` | 356 | Ensure localization | Medium | Medium | Local | Fix | No |
 | `ts/packages/memory/image/src/indexingService.ts` | 5 | add support for "monitoring" the indexed folder for changes | High | Medium | Component | Fix | No |
+| `ts/packages/memory/image/src/indexingService.ts` | 23 | add token stats | Low | High | Local | Fix | No |
+| `ts/packages/memory/image/src/indexingService.ts` | 132 | make this less chatty - maybe percentage based or something? | Low | High | Local | Fix | No |
 | `ts/packages/memory/storage/src/azSearch/azQuery.ts` | 90 | handle related terms | Medium | Medium | Component | Fix | No |
 | `ts/packages/memory/website/src/websiteCollection.ts` | 2646 | If we have access to Graphology graphs, compute more advanced metrics | High | Low | Component | No Fix | Yes |
 | `ts/packages/memory/website/src/websiteCollection.ts` | 2709 | In a full implementation, this would: | High | Low | Component | No Fix | Yes |
@@ -294,6 +298,7 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/shell/test/testHelper.ts` | 236 | fix completion to not need this workaround | Medium | Medium | Local | Fix | No |
 | `ts/packages/telemetry/src/logger/cosmosDBLoggerSink.ts` | 55 | add backoff/queuing logic for ENOTFOUND (no internet) | Medium | High | Local | Fix | No |
 | `ts/packages/telemetry/src/logger/mongoLoggerSink.ts` | 41 | add backoff/queuing logic for ENOTFOUND (no internet) | Medium | High | Local | Fix | No |
+| `ts/packages/typeagent/src/storage/embeddingFS.ts` | 158 | parallelize | Low | High | Local | Fix | No |
 | `ts/packages/typeagent/src/vector/vectorIndex.ts` | 176 | batch operations | Medium | High | Local | Fix | No |
 | `ts/packages/utils/typechatUtils/src/location.ts` | 138 | update any once @azure-rest/maps-search incorporates V1 return types | Low | Low | Local | No Fix | Yes |
 | `ts/packages/utils/typechatUtils/src/location.ts` | 154 | handle more result types | Medium | Medium | Local | Fix | Yes |
