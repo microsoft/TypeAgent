@@ -228,7 +228,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/knowledgeProcessor/src/images/image.ts` | 147 | add actions for all extracted entities being photographed/contained by image | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/images/image.ts` | 195 | logged in user for now? | Low | Low | Local | No Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/setOperations.ts` | 587 | Optimize. | Medium | Medium | Local | Fix | Yes |
-| `ts/packages/knowledgeProcessor/src/setOperations.ts` | 606 | Optimize. | Medium | Medium | Local | Fix | No |
 | `ts/packages/knowledgeProcessor/src/storageProvider.ts` | 131 | implement this once conversation is cleaned up and message Index is also backed by storageProvider | High | Low | Cross-cutting | No Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/textIndex.ts` | 323 | parallelize | Medium | Medium | Local | Fix | No |
 | `ts/packages/knowledgeProcessor/test/searchProcessor.spec.ts` | 17 | this test is not enabled on all dev machines yet. Currently requires some private datasets and indexes | High | Low | Component | No Fix | Yes |
