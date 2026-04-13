@@ -228,6 +228,18 @@
 <StatusPrint> = show my GitHub status -> {
     actionName: "statusPrint",
     parameters: {}
+}
+  | (show | give | what's) (me)? (the)? (current)? status of (my)? (issues and pull requests | issues and PRs | notifications and PRs | notifications) -> {
+    actionName: "statusPrint",
+    parameters: {}
+}
+  | (print | show) (the)? latest updates on my repositories -> {
+    actionName: "statusPrint",
+    parameters: {}
+}
+  | (give me)? (a)? summary of (relevant | my)? issues and (pull requests | PRs | notifications) -> {
+    actionName: "statusPrint",
+    parameters: {}
 };
 
 <RunView> = view workflow run $(id:word) -> {
