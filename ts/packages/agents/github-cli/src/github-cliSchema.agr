@@ -4,45 +4,19 @@
 <AuthLogin> = log me into GitHub -> {
     actionName: "authLogin",
     parameters: {}
-}
-  | authenticate my GitHub account with hostname $(hostname:word) -> {
-    actionName: "authLogin",
-    parameters: {
-        hostname
-    }
 };
 
 <AuthLogout> = log me out of GitHub -> {
     actionName: "authLogout",
     parameters: {}
-}
-  | sign me out of GitHub -> {
-    actionName: "authLogout",
-    parameters: {}
 };
 
-<AuthStatus> = show my GitHub auth status -> {
-    actionName: "authStatus",
-    parameters: {}
-}
-  | check my GitHub authentication -> {
+<AuthStatus> = check my GitHub authentication -> {
     actionName: "authStatus",
     parameters: {}
 };
 
-<IssueCreate> = create an issue titled $(title:wildcard) -> {
-    actionName: "issueCreate",
-    parameters: {
-        title
-    }
-}
-  | open a new issue called $(title:wildcard) -> {
-    actionName: "issueCreate",
-    parameters: {
-        title
-    }
-}
-  | open new issue $(title:wildcard) -> {
+<IssueCreate> = create issue $(title:wildcard) -> {
     actionName: "issueCreate",
     parameters: {
         title
@@ -53,43 +27,54 @@
     parameters: {
         title
     }
-}
-  | report a bug about $(title:wildcard) -> {
-    actionName: "issueCreate",
-    parameters: {
-        title
-    }
-}
-  | create issue $(title:wildcard) -> {
-    actionName: "issueCreate",
-    parameters: {
-        title
-    }
 };
 
-<IssueClose> = close issue number $(number:number) -> {
-    actionName: "issueClose",
-    parameters: {
-        number
-    }
-}
-  | close issue $(number:number) -> {
+<IssueClose> = close issue $(number:number) -> {
     actionName: "issueClose",
     parameters: {
         number
     }
 };
 
-<IssueReopen> = reopen issue number $(number:number) -> {
+<IssueReopen> = reopen issue $(number:number) -> {
     actionName: "issueReopen",
     parameters: {
         number
     }
+};
+
+<IssueList> = show open issues in $(repo:wildcard) -> {
+    actionName: "issueList",
+    parameters: {
+        repo,
+        state: "open"
+    }
 }
-  | reopen issue $(number:number) -> {
-    actionName: "issueReopen",
+  | list issues in $(repo:wildcard) -> {
+    actionName: "issueList",
+    parameters: {
+        repo
+    }
+}
+  | get latest $(limit:number) issues in $(repo:wildcard) -> {
+    actionName: "issueList",
+    parameters: {
+        repo,
+        limit
+    }
+};
+
+<IssueView> = show issue $(number:number) -> {
+    actionName: "issueView",
     parameters: {
         number
+    }
+}
+  | show issue $(number:number) in $(repo:wildcard) -> {
+    actionName: "issueView",
+    parameters: {
+        number,
+        repo
     }
 };
 
@@ -97,26 +82,6 @@
     actionName: "prCreate",
     parameters: {
         title
-    }
-}
-  | open a PR titled $(title:wildcard) -> {
-    actionName: "prCreate",
-    parameters: {
-        title
-    }
-}
-  | open a draft PR titled $(title:wildcard) -> {
-    actionName: "prCreate",
-    parameters: {
-        title,
-        draft: true
-    }
-}
-  | create a draft pull request titled $(title:wildcard) -> {
-    actionName: "prCreate",
-    parameters: {
-        title,
-        draft: true
     }
 }
   | open a draft PR for branch $(head:word) -> {
@@ -134,27 +99,57 @@
     }
 };
 
-<PrClose> = close pull request number $(number:number) -> {
-    actionName: "prClose",
-    parameters: {
-        number
-    }
-}
-  | close PR $(number:number) -> {
+<PrClose> = close PR $(number:number) -> {
     actionName: "prClose",
     parameters: {
         number
     }
 };
 
-<PrMerge> = merge pull request number $(number:number) -> {
+<PrMerge> = merge PR $(number:number) -> {
     actionName: "prMerge",
     parameters: {
         number
     }
+};
+
+<PrList> = list open PRs in $(repo:wildcard) -> {
+    actionName: "prList",
+    parameters: {
+        repo,
+        state: "open"
+    }
 }
-  | merge PR $(number:number) -> {
-    actionName: "prMerge",
+  | list PRs in $(repo:wildcard) -> {
+    actionName: "prList",
+    parameters: {
+        repo
+    }
+}
+  | get latest $(limit:number) PRs in $(repo:wildcard) -> {
+    actionName: "prList",
+    parameters: {
+        repo,
+        limit
+    }
+};
+
+<PrView> = show PR $(number:number) -> {
+    actionName: "prView",
+    parameters: {
+        number
+    }
+}
+  | show PR $(number:number) in $(repo:wildcard) -> {
+    actionName: "prView",
+    parameters: {
+        number,
+        repo
+    }
+};
+
+<PrCheckout> = checkout PR $(number:number) -> {
+    actionName: "prCheckout",
     parameters: {
         number
     }
@@ -180,65 +175,36 @@
         repo
     }
 }
-  | view repo $(repo:wildcard) -> {
-    actionName: "repoView",
-    parameters: {
-        repo
-    }
-}
   | how many stars does $(repo:wildcard) have -> {
     actionName: "repoView",
     parameters: {
         repo,
         field: "stars"
     }
-}
-  | how many forks does $(repo:wildcard) have -> {
-    actionName: "repoView",
-    parameters: {
-        repo,
-        field: "forks"
-    }
-}
-  | what language is $(repo:wildcard) written in -> {
-    actionName: "repoView",
-    parameters: {
-        repo,
-        field: "language"
-    }
-}
-  | tell me about repository $(repo:wildcard) -> {
-    actionName: "repoView",
-    parameters: {
-        repo
-    }
-}
-  | info about $(repo:wildcard) -> {
-    actionName: "repoView",
-    parameters: {
-        repo
-    }
-}
-  | details for repository $(repo:wildcard) -> {
-    actionName: "repoView",
+};
+
+<RepoFork> = fork $(repo:wildcard) -> {
+    actionName: "repoFork",
     parameters: {
         repo
     }
 };
 
-<ApiRequest> = call the GitHub API endpoint $(endpoint:wildcard) -> {
-    actionName: "apiRequest",
+<StarRepo> = star $(repo:wildcard) -> {
+    actionName: "starRepo",
     parameters: {
-        endpoint
+        repo
     }
 }
-  | list contributors to $(endpoint:wildcard) -> {
-    actionName: "apiRequest",
+  | unstar $(repo:wildcard) -> {
+    actionName: "starRepo",
     parameters: {
-        endpoint
+        repo,
+        unstar: true
     }
-}
-  | top contributors to $(endpoint:wildcard) -> {
+};
+
+<ApiRequest> = list contributors to $(endpoint:wildcard) -> {
     actionName: "apiRequest",
     parameters: {
         endpoint
@@ -259,209 +225,7 @@
     }
 };
 
-<IssueList> = list issues -> {
-    actionName: "issueList",
-    parameters: {}
-}
-  | list issues in $(repo:wildcard) -> {
-    actionName: "issueList",
-    parameters: {
-        repo
-    }
-}
-  | show open issues -> {
-    actionName: "issueList",
-    parameters: {
-        state: "open"
-    }
-}
-  | show open issues in $(repo:wildcard) -> {
-    actionName: "issueList",
-    parameters: {
-        repo,
-        state: "open"
-    }
-}
-  | show closed issues in $(repo:wildcard) -> {
-    actionName: "issueList",
-    parameters: {
-        repo,
-        state: "closed"
-    }
-}
-  | get latest $(limit:number) issues in $(repo:wildcard) -> {
-    actionName: "issueList",
-    parameters: {
-        repo,
-        limit
-    }
-}
-  | show latest $(limit:number) issues in $(repo:wildcard) -> {
-    actionName: "issueList",
-    parameters: {
-        repo,
-        limit
-    }
-}
-  | last $(limit:number) issues in $(repo:wildcard) -> {
-    actionName: "issueList",
-    parameters: {
-        repo,
-        limit
-    }
-};
-
-<IssueView> = show issue $(number:number) -> {
-    actionName: "issueView",
-    parameters: {
-        number
-    }
-}
-  | view issue $(number:number) in $(repo:wildcard) -> {
-    actionName: "issueView",
-    parameters: {
-        number,
-        repo
-    }
-};
-
-<PrList> = list pull requests -> {
-    actionName: "prList",
-    parameters: {}
-}
-  | list pull requests in $(repo:wildcard) -> {
-    actionName: "prList",
-    parameters: {
-        repo
-    }
-}
-  | show open pull requests -> {
-    actionName: "prList",
-    parameters: {
-        state: "open"
-    }
-}
-  | show open pull requests in $(repo:wildcard) -> {
-    actionName: "prList",
-    parameters: {
-        repo,
-        state: "open"
-    }
-}
-  | list open PRs in $(repo:wildcard) -> {
-    actionName: "prList",
-    parameters: {
-        repo,
-        state: "open"
-    }
-}
-  | how many open PRs are in $(repo:wildcard) -> {
-    actionName: "prList",
-    parameters: {
-        repo,
-        state: "open"
-    }
-}
-  | show PRs -> {
-    actionName: "prList",
-    parameters: {}
-}
-  | list PRs in $(repo:wildcard) -> {
-    actionName: "prList",
-    parameters: {
-        repo
-    }
-}
-  | get latest $(limit:number) PRs in $(repo:wildcard) -> {
-    actionName: "prList",
-    parameters: {
-        repo,
-        limit
-    }
-}
-  | show latest $(limit:number) PRs in $(repo:wildcard) -> {
-    actionName: "prList",
-    parameters: {
-        repo,
-        limit
-    }
-}
-  | last $(limit:number) PRs in $(repo:wildcard) -> {
-    actionName: "prList",
-    parameters: {
-        repo,
-        limit
-    }
-}
-  | get latest $(limit:number) pull requests in $(repo:wildcard) -> {
-    actionName: "prList",
-    parameters: {
-        repo,
-        limit
-    }
-};
-
-<PrView> = show pull request $(number:number) -> {
-    actionName: "prView",
-    parameters: {
-        number
-    }
-}
-  | view PR $(number:number) -> {
-    actionName: "prView",
-    parameters: {
-        number
-    }
-}
-  | view pull request $(number:number) in $(repo:wildcard) -> {
-    actionName: "prView",
-    parameters: {
-        number,
-        repo
-    }
-};
-
 <StatusPrint> = show my GitHub status -> {
-    actionName: "statusPrint",
-    parameters: {}
-}
-  | print my GitHub notifications -> {
-    actionName: "statusPrint",
-    parameters: {}
-}
-  | status of issues and pull requests -> {
-    actionName: "statusPrint",
-    parameters: {}
-}
-  | current status of issues and pull requests -> {
-    actionName: "statusPrint",
-    parameters: {}
-}
-  | status of my notifications -> {
-    actionName: "statusPrint",
-    parameters: {}
-}
-  | status of my notifications and PRs -> {
-    actionName: "statusPrint",
-    parameters: {}
-}
-  | summary of issues and pull requests -> {
-    actionName: "statusPrint",
-    parameters: {}
-}
-  | summary of relevant issues and pull requests -> {
-    actionName: "statusPrint",
-    parameters: {}
-}
-  | updates on my repositories -> {
-    actionName: "statusPrint",
-    parameters: {}
-}
-  | latest updates on my repositories -> {
-    actionName: "statusPrint",
-    parameters: {}
-}
-  | information on recent issues and notifications -> {
     actionName: "statusPrint",
     parameters: {}
 };
@@ -471,69 +235,9 @@
     parameters: {
         id
     }
-}
-  | details for workflow run $(id:word) -> {
-    actionName: "runView",
-    parameters: {
-        id
-    }
-}
-  | details for the workflow run with ID $(id:word) -> {
-    actionName: "runView",
-    parameters: {
-        id
-    }
-}
-  | details of the workflow run with ID $(id:word) -> {
-    actionName: "runView",
-    parameters: {
-        id
-    }
-}
-  | workflow run with ID $(id:word) -> {
-    actionName: "runView",
-    parameters: {
-        id
-    }
-}
-  | workflow run details for ID $(id:word) -> {
-    actionName: "runView",
-    parameters: {
-        id
-    }
-}
-  | workflow run details for $(id:word) -> {
-    actionName: "runView",
-    parameters: {
-        id
-    }
-}
-  | workflow run identified by $(id:word) -> {
-    actionName: "runView",
-    parameters: {
-        id
-    }
-}
-  | details for the workflow run with the ID $(id:word) -> {
-    actionName: "runView",
-    parameters: {
-        id
-    }
 };
 
 <WorkflowView> = show me workflow $(id:word) -> {
-    actionName: "workflowView",
-    parameters: {
-        id
-    }
-}
-  | view the workflow definition for $(id:word) -> {
-    actionName: "workflowView",
-    parameters: {
-        id
-    }
-}
-  | workflow details for $(id:word) -> {
     actionName: "workflowView",
     parameters: {
         id
@@ -546,77 +250,14 @@
         name,
         value
     }
-}
-  | update the gh config with $(name:word) and $(value:word) -> {
-    actionName: "configSet",
-    parameters: {
-        name,
-        value
-    }
 };
 
-<SshKeyAdd> = add this SSH key $(key:wildcard) -> {
-    actionName: "sshKeyAdd",
-    parameters: {
-        key
-    }
-}
-  | add an SSH key for me -> {
+<SshKeyAdd> = add an SSH key for me -> {
     actionName: "sshKeyAdd",
     parameters: {}
-};
-
-<PrCheckout> = checkout PR $(number:number) -> {
-    actionName: "prCheckout",
-    parameters: {
-        number
-    }
-}
-  | checkout pull request $(number:number) -> {
-    actionName: "prCheckout",
-    parameters: {
-        number
-    }
-};
-
-<RepoFork> = fork $(repo:wildcard) -> {
-    actionName: "repoFork",
-    parameters: {
-        repo
-    }
-}
-  | fork repository $(repo:wildcard) -> {
-    actionName: "repoFork",
-    parameters: {
-        repo
-    }
-};
-
-<StarRepo> = star $(repo:wildcard) -> {
-    actionName: "starRepo",
-    parameters: {
-        repo
-    }
-}
-  | star repository $(repo:wildcard) -> {
-    actionName: "starRepo",
-    parameters: {
-        repo
-    }
-}
-  | unstar $(repo:wildcard) -> {
-    actionName: "starRepo",
-    parameters: {
-        repo,
-        unstar: true
-    }
 };
 
 <GistList> = list my gists -> {
-    actionName: "gistList",
-    parameters: {}
-}
-  | show my gists -> {
     actionName: "gistList",
     parameters: {}
 };
@@ -626,10 +267,6 @@
     parameters: {
         repo
     }
-}
-  | show releases -> {
-    actionName: "releaseList",
-    parameters: {}
 };
 
 <DependabotAlerts> = show dependabot alerts in $(repo:wildcard) -> {
@@ -650,25 +287,6 @@
     parameters: {
         repo,
         severity: "critical"
-    }
-}
-  | get dependabot alerts for $(repo:wildcard) -> {
-    actionName: "dependabotAlerts",
-    parameters: {
-        repo
-    }
-}
-  | list security vulnerabilities in $(repo:wildcard) -> {
-    actionName: "dependabotAlerts",
-    parameters: {
-        repo
-    }
-}
-  | show all high severity dependabot issues in $(repo:wildcard) -> {
-    actionName: "dependabotAlerts",
-    parameters: {
-        repo,
-        severity: "high"
     }
 };
 
