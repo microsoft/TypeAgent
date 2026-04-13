@@ -241,7 +241,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/knowledgeProcessor/test/searchProcessor.spec.ts` | 17 | this test is not enabled on all dev machines yet. Currently requires some private datasets and indexes | High | Low | Component | No Fix | Yes |
 | `ts/packages/knowledgeVisualizer/src/route/visualizationNotifier.ts` | 433 | enumerate facets | Medium | Medium | Local | Fix | Yes |
 | `ts/packages/memory/conversation/src/memory.ts` | 224 | using mergeConcreteEntitiesEx to avoid forcing the data to be lower case. | Low | Medium | Local | No Fix | Yes |
-| `ts/packages/memory/conversation/src/podcastMessage.ts` | 56 | Also create inverse actions | Medium | Medium | Component | Fix | No |
 | `ts/packages/memory/image/src/imageCollection.ts` | 78 | select other Facets/meta data fields | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/memory/image/src/imageCollection.ts` | 79 | put everything in a single table? | High | Medium | Component | No Fix | Yes |
 | `ts/packages/memory/image/src/imageCollection.ts` | 133 | add additional meta data tables | Medium | Medium | Component | Fix | Yes |
