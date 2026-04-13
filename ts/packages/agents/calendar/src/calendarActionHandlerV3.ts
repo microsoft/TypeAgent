@@ -1117,15 +1117,37 @@ export function instantiate(): AppAgent {
 // These will be called by the grammar matcher to validate wildcard matches
 
 export function validateCalendarDate(value: string): boolean {
-    // TODO: Implement sophisticated date parsing
-    // For now, accept any non-empty string
-    return value.trim().length > 0;
+    const trimmed = value.trim();
+    if (trimmed.length === 0) return false;
+    if (/^(today|tomorrow|yesterday)$/i.test(trimmed)) return true;
+    if (/^(next|last|this)\s+\w+$/i.test(trimmed)) return true;
+    return parseFuzzyDateString(trimmed) !== undefined;
 }
 
 export function validateCalendarTime(value: string): boolean {
-    // TODO: Implement sophisticated time parsing
-    // For now, accept any non-empty string
-    return value.trim().length > 0;
+    const trimmed = value.trim();
+    if (trimmed.length === 0) return false;
+    if (/^(noon|midnight|morning|evening|afternoon|night)$/i.test(trimmed))
+        return true;
+    if (/^\d{1,2}:\d{2}$/.test(trimmed)) {
+        const [h, m] = trimmed.split(":").map(Number);
+        return h >= 0 && h <= 23 && m >= 0 && m <= 59;
+    }
+    if (/^\d{1,2}(am|pm)$/i.test(trimmed)) {
+        const h = parseInt(trimmed, 10);
+        return h >= 1 && h <= 12;
+    }
+    if (/^\d{1,2}:\d{2}(am|pm)$/i.test(trimmed)) {
+        const [timePart] = trimmed.split(/[ap]m/i);
+        const [h, m] = timePart.split(":").map(Number);
+        return h >= 1 && h <= 12 && m >= 0 && m <= 59;
+    }
+    try {
+        parseTimeString(trimmed);
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 export function validateEventDescription(value: string): boolean {
