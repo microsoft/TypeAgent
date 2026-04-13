@@ -23,8 +23,9 @@ export function createSessionContext<T = unknown>(
     const storage = sessionDirPath
         ? storageProvider!.getStorage(name, sessionDirPath)
         : undefined;
-    const instanceStorage = context.persistDir
-        ? storageProvider!.getStorage(name, context.persistDir)
+    const instanceStorageDir = context.instanceDir ?? context.persistDir;
+    const instanceStorage = instanceStorageDir
+        ? storageProvider!.getStorage(name, instanceStorageDir)
         : undefined;
     const dynamicAgentNames = new Set<string>();
     const addDynamicAgent = allowDynamicAgent
@@ -139,6 +140,9 @@ export function createSessionContext<T = unknown>(
                 );
             }
             return localHostPort;
+        },
+        setLocalHostPort(port: number) {
+            context.agents.setLocalHostPort(name, port);
         },
         indexes(type: string): Promise<any[]> {
             return new Promise<IndexData[]>((resolve, reject) => {

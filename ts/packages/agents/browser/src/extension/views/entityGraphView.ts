@@ -1338,9 +1338,10 @@ class EntityGraphView {
                     ),
                     relationships: validRelationships || [],
                     firstSeen: this.getEarliestDate(
-                        // TODO: limit this to "contains" relationships
                         graphData.entities,
-                        validatedRelationships,
+                        validatedRelationships.filter(
+                            (r: any) => r.type === "contains",
+                        ),
                     ),
                     lastSeen: this.getLatestDate(
                         graphData.entities,

@@ -277,6 +277,13 @@ export async function createAgentRpcClient(
             const context = contextMap.get(param.contextId);
             return context.getSharedLocalHostPort(param.agentName);
         },
+        setLocalHostPort: async (param: {
+            contextId: number;
+            port: number;
+        }) => {
+            const context = contextMap.get(param.contextId);
+            context.setLocalHostPort(param.port);
+        },
         indexes: async (param: { contextId: number; type: string }) => {
             const context = contextMap.get(param.contextId);
             return context.indexes(param.type as any);

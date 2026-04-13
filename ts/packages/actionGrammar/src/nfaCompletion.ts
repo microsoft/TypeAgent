@@ -262,7 +262,7 @@ export function computeNFACompletions(
     if (reachableStates.length === 0) {
         debugCompletion(`  → no reachable states, returning empty`);
         return {
-            completions: [],
+            groups: [],
             directionSensitive: false,
             afterWildcard: "none",
         };
@@ -288,7 +288,15 @@ export function computeNFACompletions(
     );
 
     const result: GrammarCompletionResult = {
-        completions: uniqueCompletions,
+        groups: [
+            {
+                completions: uniqueCompletions,
+                // NFA does not track per-rule spacing modes, so use
+                // auto mode — the consumer resolves per-item based on
+                // the character pair (last input char, first completion char).
+                separatorMode: "autoSpacePunctuation",
+            },
+        ],
         directionSensitive: false,
         // TODO: The NFA path does not yet track wildcard-at-EOI states.
         // If NFA grammars gain wildcard support, this should be computed
@@ -332,6 +340,7 @@ function buildGrammarProperties(
                 parameters: {},
             },
             propertyNames: [prop.propertyPath],
+            separatorMode: "autoSpacePunctuation",
         });
     }
 

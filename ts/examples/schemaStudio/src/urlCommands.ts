@@ -84,8 +84,8 @@ export function createURLResolverCommands(
             );
             let passFail = "";
 
-            // resolved site matches expected site accounting for varying / at the end
-            // TODO: handle redirects + default parameters, etc.
+            // resolved site matches expected site accounting for varying / at the end,
+            // redirects (http→https, www prefix, path extensions), and default parameters
             if (resolved === null) {
                 // resolved site was blocked by content filtering
                 passFail = "CONTENT_FILTERING";
@@ -97,8 +97,8 @@ export function createURLResolverCommands(
             } else if (sitesMatch(resolved[0], site, io.writer)) {
                 passFail = "PASS";
                 passCount++;
-            } else if (resolved[0]?.startsWith(site)) {
-                // resolved site starts with expected site, indicating a redirect
+            } else if (isRedirectUrl(resolved[0], site)) {
+                // resolved site is a redirect of expected site (e.g. path extension or parameter addition)
                 passFail = "REDIRECT";
                 redirectCount++;
             } else {
@@ -139,16 +139,93 @@ export function createURLResolverCommands(
     return handler;
 }
 
+// Normalizes a URL for comparison: upgrades http to https, strips query
+// parameters and fragments, and removes trailing slashes from the path.
+function normalizeUrl(rawUrl: string): string {
+    try {
+        const u = new URL(rawUrl);
+        if (u.protocol === "http:") {
+            u.protocol = "https:";
+        }
+        u.search = "";
+        u.hash = "";
+        u.pathname = u.pathname.replace(/\/+$/, "") || "/";
+        return u.toString();
+    } catch {
+        return rawUrl;
+    }
+}
+
+// Maximum subdomain level difference allowed when matching site to resolved URL
+// (handles www.example.com ↔ example.com and similar single-level redirects)
+const MAX_SUBDOMAIN_DIFFERENCE = 1;
+
+// Returns true when `resolved` looks like a redirect of `site`:
+// same origin (hostname + optional single subdomain), but with an
+// extended path or added query parameters.
+function isRedirectUrl(
+    resolved: string | undefined | null,
+    site: string,
+): boolean {
+    if (!resolved) {
+        return false;
+    }
+    try {
+        const resolvedUrl = new URL(resolved);
+        const siteUrl = new URL(site);
+
+        // Normalize protocols
+        const resolvedHost = resolvedUrl.hostname;
+        const siteHost = siteUrl.hostname;
+
+        const resolvedParts = resolvedHost.split(".").reverse();
+        const siteParts = siteHost.split(".").reverse();
+
+        // Hosts must be within one subdomain level of each other (handles both
+        // www.example.com ↔ example.com and other single-level subdomain redirects)
+        if (
+            Math.abs(resolvedParts.length - siteParts.length) >
+            MAX_SUBDOMAIN_DIFFERENCE
+        ) {
+            return false;
+        }
+
+        const smallParts =
+            resolvedParts.length <= siteParts.length
+                ? resolvedParts
+                : siteParts;
+        const bigParts =
+            resolvedParts.length > siteParts.length ? resolvedParts : siteParts;
+
+        for (let i = 0; i < smallParts.length; i++) {
+            if (smallParts[i] !== bigParts[i]) {
+                return false;
+            }
+        }
+
+        // The resolved URL must extend the site URL's path (redirect with added path)
+        const sitePath = siteUrl.pathname.replace(/\/+$/, "") || "/";
+        return resolvedUrl.pathname.startsWith(sitePath);
+    } catch {
+        return false;
+    }
+}
+
 function sitesMatch(
     resolved: string | undefined | null,
     site: string,
     io: ConsoleWriter,
 ): boolean {
-    // Check if resolved site matches expected site accounting for varying / at the end
+    // Check if resolved site matches expected site accounting for varying / at the end,
+    // protocol redirects (http→https), and default/tracking query parameters.
+    const normalizedResolved = resolved ? normalizeUrl(resolved) : resolved;
+    const normalizedSite = normalizeUrl(site);
     if (
-        resolved === site ||
-        (site.endsWith("/") && site === `${resolved}/`) ||
-        (resolved?.endsWith("/") && `${site}/` === resolved)
+        normalizedResolved === normalizedSite ||
+        (normalizedSite.endsWith("/") &&
+            normalizedSite === `${normalizedResolved}/`) ||
+        (normalizedResolved?.endsWith("/") &&
+            `${normalizedSite}/` === normalizedResolved)
     ) {
         return true;
     }

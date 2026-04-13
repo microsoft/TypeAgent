@@ -41,6 +41,39 @@ The dispatcher already has the scaffolding for session persistence:
 
 However, this is **transparent to clients**: there is no protocol-level API to list, choose, or delete sessions. The server always resumes whatever was last active.
 
+### Instance Storage vs. Session Storage
+
+The dispatcher exposes two storage scopes to agents via `SessionContext`:
+
+- **`instanceStorage`** — scoped to `instanceDir` when present, falling back to `persistDir` when `instanceDir` is absent (standalone Shell, CLI, tests). Intended for configuration and data that should **survive across dispatcher sessions** (e.g. agent auth tokens, user preferences, learned config). Agents write here and expect to read it back regardless of which session the user is in.
+- **`sessionStorage`** — scoped to `persistDir/sessions/<sessionId>/`. Intended for ephemeral, session-local data (e.g. caches, in-progress state) that is discarded when the user creates a new session.
+
+In `sessionContext.ts`, the mapping is explicit:
+
+```typescript
+const storage = storageProvider.getStorage(name, sessionDirPath); // sessionStorage
+const instanceStorage =
+  (context.instanceDir ?? context.persistDir)
+    ? storageProvider!.getStorage(
+        name,
+        context.instanceDir ?? context.persistDir!,
+      )
+    : undefined; // instanceStorage
+```
+
+This contract — `instanceStorage` survives, `sessionStorage` is ephemeral — holds today in both the standalone Shell and the CLI.
+
+### The Problem with Scoping `persistDir` per Server Session
+
+Naively scoping each server-session's `persistDir` to `server-sessions/<server-session-id>/` breaks this contract:
+
+```
+server-sessions/<server-session-id>/                        ← persistDir → instanceStorage root
+server-sessions/<server-session-id>/sessions/<session-id>/  ← sessionStorage
+```
+
+**Every time a new server session is created, both `instanceStorage` and `sessionStorage` start fresh.** Agent configuration data (auth tokens, user preferences, learned state) is silently discarded whenever the user connects to a new server session. The fix is a split storage root described in Section 4.
+
 ### One Shared Context for All Clients
 
 A critical detail: `createSharedDispatcher()` calls `initializeCommandHandlerContext()` **once** at startup, producing a single `context`. Every subsequent `join()` call creates a `Dispatcher` via `createDispatcherFromContext(context, connectionId, ...)` — all clients share the same underlying session context. Chat history, conversation memory, and session config are fully shared state. The `connectionId` only isolates `ClientIO` routing (display output reaches the right client), not the conversation itself.
@@ -77,7 +110,7 @@ Each session is identified by:
 
 ### 2. Session Metadata
 
-A `sessions.json` file lives at `persistDir/server-sessions/sessions.json` and is the authoritative registry:
+A `sessions.json` file lives at `instanceDir/server-sessions/sessions.json` and is the authoritative registry:
 
 ```json
 {
@@ -91,7 +124,7 @@ A `sessions.json` file lives at `persistDir/server-sessions/sessions.json` and i
 }
 ```
 
-Each session's full data (chat history, conversation memory, display log) is stored in `persistDir/server-sessions/<sessionId>/` — the same layout that exists today, but keyed on UUID.
+Each session's ephemeral data (chat history, conversation memory, display log, session config) is stored in `instanceDir/server-sessions/<sessionId>/`. Agent `instanceStorage` (config, auth tokens, learned state) is stored directly under `instanceDir/<agentName>/`, **shared across all server sessions**.
 
 > **Note:** `clientCount` is a runtime-only field — it is **never written to `sessions.json`**. It is populated at query time by inspecting the live dispatcher pool.
 
@@ -166,7 +199,85 @@ AgentServer
               └── SharedDispatcher ← client 2 (connected to session B)
 ```
 
-Each session's `SharedDispatcher` is created lazily on first `joinSession()` and calls `initializeCommandHandlerContext()` with a `persistDir` scoped to `server-sessions/<sessionId>/`, giving it fully isolated chat history, conversation memory, display log, and session config. Clients connecting to the same session share one dispatcher instance and its routing `ClientIO` table, consistent with how the current single dispatcher works today.
+#### Storage Split: `instanceDir` vs. `persistDir`
+
+To preserve the `instanceStorage` / `sessionStorage` contract across server sessions, the dispatcher must be initialized with **two distinct root directories** rather than one:
+
+| Directory     | Purpose                                                                                                                                 | Lifetime                                                                                                  |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `instanceDir` | Global instance root — maps to `instanceStorage` for all agents. Contains agent config, auth tokens, user preferences, embedding cache. | Lives for the lifetime of the agentServer process (or the user profile). Never scoped per server session. |
+| `persistDir`  | Per-server-session root — maps to `sessionStorage` and holds chat history, conversation memory, display log, and session config.        | Scoped to `instanceDir/server-sessions/<sessionId>/`. Discarded with the session.                         |
+
+**Concrete paths:**
+
+```
+~/.typeagent/profiles/dev/                                              ← instanceDir (global)
+~/.typeagent/profiles/dev/server-sessions/<sessionId>/                  ← persistDir (per session)
+~/.typeagent/profiles/dev/server-sessions/<sessionId>/sessions/<id>/    ← sessionStorage
+~/.typeagent/profiles/dev/<agentName>/                                  ← instanceStorage (global)
+```
+
+#### `DispatcherOptions` changes
+
+`initializeCommandHandlerContext()` today accepts a single `persistDir`. To support the split, a new optional `instanceDir` field is added:
+
+```typescript
+type DispatcherOptions = {
+  // ...existing fields...
+  persistDir?: string; // per-server-session directory (chat history, memory, config)
+  instanceDir?: string; // global instance directory for cross-session agent storage
+  // ...
+};
+```
+
+When `instanceDir` is provided, `instanceStorage` is rooted there instead of at `persistDir`. When `instanceDir` is omitted (standalone Shell, CLI, tests), behavior is unchanged — `instanceStorage` falls back to `persistDir`, preserving full backward compatibility.
+
+#### `SessionContext` wiring
+
+In `sessionContext.ts`, the `instanceStorage` base changes from `context.persistDir` to the new `context.instanceDir` (falling back to `context.persistDir` when `instanceDir` is absent):
+
+```typescript
+const instanceStorage =
+  (context.instanceDir ?? context.persistDir)
+    ? storageProvider!.getStorage(
+        name,
+        context.instanceDir ?? context.persistDir!,
+      )
+    : undefined;
+```
+
+This is the only change needed in the storage wiring — no changes to the `Storage` interface or agent code.
+
+#### Server initialization
+
+When the agentServer starts up, it resolves both directories once and passes them to every per-session dispatcher:
+
+```typescript
+const instanceDir = getProfilePath("dev"); // e.g. ~/.typeagent/profiles/dev
+const persistDir = path.join(instanceDir, "server-sessions", sessionId); // per-session subdirectory
+
+initializeCommandHandlerContext("agentServer", {
+  instanceDir, // global — never changes between sessions
+  persistDir, // scoped to this server session
+  persistSession: true,
+  // ...
+});
+```
+
+#### `CommandHandlerContext` changes
+
+A new `instanceDir` field is added alongside the existing `persistDir`:
+
+```typescript
+export type CommandHandlerContext = {
+  // ...existing fields...
+  readonly persistDir: string | undefined; // per-server-session root (chat, memory, config)
+  readonly instanceDir: string | undefined; // global instance root (agent config, auth tokens)
+  // ...
+};
+```
+
+Each session's `SharedDispatcher` is created lazily on first `joinSession()` and calls `initializeCommandHandlerContext()` with a `persistDir` scoped to `server-sessions/<sessionId>/` and a shared `instanceDir`, giving it fully isolated chat history and session config while preserving agent configuration across session boundaries. Clients connecting to the same session share one dispatcher instance and its routing `ClientIO` table, consistent with how the current single dispatcher works today.
 
 `SharedDispatcher.join()` calls `createDispatcherFromContext(context, connectionId, ...)` per client — producing a lightweight `Dispatcher` handle bound to a unique `connectionId` but sharing the same underlying context. Output routing is per-client via `connectionId`; conversation state is shared across all clients in the session.
 
@@ -185,12 +296,14 @@ Each session uses namespaced WebSocket channels to allow multiple sessions over 
 Client calls joinSession({ sessionId?, clientType, filter })
   │
   ├─ sessionId provided?
-  │   ├─ Yes → look up sessions.json
+  │   ├─ Yes → look up instanceDir/server-sessions/sessions.json
   │   │   ├─ Found → load SharedDispatcher for this session (lazy init if not in memory pool)
   │   │   └─ Not found → return error: "Session not found"
   │   └─ No → connect to the default session
   │       ├─ Session named "default" exists → use it
   │       └─ No sessions exist → auto-create session named "default"
+  │           ├─ Create instanceDir/server-sessions/<sessionId>/     ← persistDir
+  │           └─ Init dispatcher with instanceDir (global) + persistDir (session-scoped)
   │
   ├─ Register client in session's SharedDispatcher routing table
   └─ Return JoinSessionResult { connectionId, sessionId }
@@ -224,7 +337,7 @@ SessionInfo[]
 
 1. Close all active client dispatcher handles for the session.
 2. Shut down and evict the session's `SharedDispatcher` from the in-memory pool.
-3. Remove `persistDir/server-sessions/<sessionId>/` from disk (recursive delete, best-effort).
+3. Remove `instanceDir/server-sessions/<sessionId>/` from disk (recursive delete of the `persistDir` subtree only, best-effort). **Agent `instanceStorage` under `instanceDir/<agentName>/` is not touched.**
 4. Remove the entry from `sessions.json`.
 
 > **Note:** Any connected client can call `deleteSession` on any session, including sessions they are not currently connected to. The calling client's session-namespaced channels are cleaned up immediately; other clients connected to the deleted session have their dispatcher handles closed when `SharedDispatcher.close()` is called. Server-side authorization is out of scope for v1 (see Open Questions).
@@ -314,6 +427,7 @@ This design adds explicit session management to the agentServer without fundamen
 - `listSessions(name?)` with optional substring filtering as the primary session discovery mechanism.
 - Session-namespaced WebSocket channels (`dispatcher:<id>`, `clientio:<id>`) enabling multiple concurrent sessions over a single connection.
 - Idle dispatcher eviction after 5 minutes to free memory for inactive sessions.
+- **A split storage root**: `instanceDir` (global, shared across all server sessions) and `persistDir` (per-server-session, discarded with the session). `instanceStorage` is rooted at `instanceDir`, preserving agent configuration and auth tokens across session boundaries. `sessionStorage` and all ephemeral dispatcher data (chat history, memory, display log) remain scoped to `persistDir`. A new `instanceDir` field is added to `DispatcherOptions` and `CommandHandlerContext`; when absent, behavior falls back to `persistDir` for full backward compatibility with the standalone Shell, CLI, and tests.
 
 The server enforces no policy on who can join or delete a session — `clientCount` gives clients the signal to make that decision themselves.
 

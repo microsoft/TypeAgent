@@ -226,6 +226,93 @@ describe("sqlite.textTable", () => {
     );
 
     test(
+        "getIds_in_clause",
+        async () => {
+            // Explicitly tests the IN clause batch lookup path in getIds()
+            const table = await createTextIndex<number, number>(
+                { caseSensitive: false, concurrency: 2, semanticIndex: false },
+                db!,
+                "getIds_in_clause",
+                "INTEGER",
+                "INTEGER",
+            );
+            const blocks = composers();
+            await table.putMultiple(blocks);
+
+            const texts = blocks.map((b) => b.value);
+
+            // Empty array returns empty
+            const emptyResult = await table.getIds([]);
+            expect(emptyResult).toEqual([]);
+
+            // Single value lookup via IN clause
+            const singleResult = await table.getIds([texts[0]]);
+            expect(singleResult).toHaveLength(1);
+            expect(singleResult[0]).toBeDefined();
+
+            // Multi-value batch lookup via IN clause preserves order
+            const allIds = await table.getIds(texts);
+            expect(allIds).toHaveLength(texts.length);
+            allIds.forEach((id) => expect(id).toBeDefined());
+
+            // Unknown text maps to undefined
+            const withUnknown = await table.getIds([texts[0], "Unknown_XYZ"]);
+            expect(withUnknown).toHaveLength(2);
+            expect(withUnknown[0]).toBeDefined();
+            expect(withUnknown[1]).toBeUndefined();
+
+            // Round-trip: getIds then getText
+            const fetchedId = allIds[0]!;
+            const fetched = await table.getText(fetchedId);
+            expect(fetched).toEqual(texts[0]);
+        },
+        testTimeout,
+    );
+
+    test(
+        "getExactHits_join",
+        async () => {
+            // Explicitly tests the JOIN-based getExactHits() path
+            const table = await createTextIndex<number, number>(
+                { caseSensitive: false, concurrency: 2, semanticIndex: false },
+                db!,
+                "getExactHits_join",
+                "INTEGER",
+                "INTEGER",
+            );
+            const blocks = composers();
+            await table.putMultiple(blocks);
+
+            // No values returns nothing
+            const emptyHits = [...table.getExactHits([])];
+            expect(emptyHits).toHaveLength(0);
+
+            // Single value — hits should include all source ids for that value
+            const hitsOne = [...table.getExactHits([blocks[0].value])];
+            const hitItems0 = hitsOne.map((h) => h.item);
+            for (const sourceId of blocks[0].sourceIds!) {
+                expect(hitItems0).toContain(sourceId);
+            }
+
+            // Multiple values — source ids shared across values score higher
+            // blocks[0] (Bach) and blocks[1] (Debussy) both list sourceId 3 and 7
+            const sharedSourceId = 3;
+            const hitsMulti = [
+                ...table.getExactHits([blocks[0].value, blocks[1].value]),
+            ];
+            const sharedHit = hitsMulti.find((h) => h.item === sharedSourceId);
+            const singleHit = hitsMulti.find(
+                (h) => h.item === blocks[0].sourceIds![0],
+            );
+            expect(sharedHit).toBeDefined();
+            expect(singleHit).toBeDefined();
+            // shared sourceId appears in both → score 2; exclusive → score 1
+            expect(sharedHit!.score).toBeGreaterThanOrEqual(singleHit!.score);
+        },
+        testTimeout,
+    );
+
+    test(
         "getNearest_exact_range",
         async () => {
             // This index does *not* have semantic indexing

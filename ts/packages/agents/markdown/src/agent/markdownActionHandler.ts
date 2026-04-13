@@ -297,10 +297,15 @@ async function updateMarkdownContext(
             const fullPath = await getFullMarkdownFilePath(fileName, storage!);
             if (fullPath) {
                 process.env.MARKDOWN_FILE = fullPath;
-                context.agentContext.viewProcess = await createViewServiceHost(
+                const result = await createViewServiceHost(
                     fullPath,
                     context.agentContext.localHostPort,
                 );
+                if (result) {
+                    context.agentContext.viewProcess = result.process;
+                    context.agentContext.localHostPort = result.port;
+                    context.setLocalHostPort(result.port);
+                }
             }
         }
 
@@ -878,7 +883,10 @@ async function getDocumentContentFromView(
 // NOTE: Function commented out per Flow 1 consolidation
 // Collaboration server now managed by view process
 
-async function createViewServiceHost(filePath: string, port: number) {
+async function createViewServiceHost(
+    filePath: string,
+    port: number,
+): Promise<{ process: ChildProcess; port: number } | undefined> {
     let timeoutHandle: NodeJS.Timeout;
 
     const timeoutPromise = new Promise<undefined>((_resolve, reject) => {
@@ -888,47 +896,47 @@ async function createViewServiceHost(filePath: string, port: number) {
         }, 10000);
     });
 
-    const viewServicePromise = new Promise<ChildProcess | undefined>(
-        (resolve, reject) => {
-            try {
-                const expressService = fileURLToPath(
-                    new URL(
-                        path.join("..", "./view/route/service.js"),
-                        import.meta.url,
-                    ),
-                );
+    const viewServicePromise = new Promise<
+        { process: ChildProcess; port: number } | undefined
+    >((resolve, reject) => {
+        try {
+            const expressService = fileURLToPath(
+                new URL(
+                    path.join("..", "./view/route/service.js"),
+                    import.meta.url,
+                ),
+            );
 
-                const folderPath = path.dirname(filePath!);
+            const folderPath = path.dirname(filePath!);
 
-                const childProcess = fork(expressService, [port.toString()], {
-                    env: {
-                        ...process.env,
-                        TYPEAGENT_MARKDOWN_ROOT: folderPath,
-                    },
-                });
+            const childProcess = fork(expressService, [port.toString()], {
+                env: {
+                    ...process.env,
+                    TYPEAGENT_MARKDOWN_ROOT: folderPath,
+                },
+            });
 
-                childProcess.send({
-                    type: "setFile",
-                    filePath: path.basename(filePath),
-                });
+            childProcess.send({
+                type: "setFile",
+                filePath: path.basename(filePath),
+            });
 
-                childProcess.on("message", function (message: any) {
-                    if (message === "Success") {
-                        resolve(childProcess);
-                    } else if (message === "Failure") {
-                        resolve(undefined);
-                    }
-                });
+            childProcess.on("message", function (message: any) {
+                if (message?.type === "Success") {
+                    resolve({ process: childProcess, port: message.port });
+                } else if (message === "Failure") {
+                    resolve(undefined);
+                }
+            });
 
-                childProcess.on("exit", (code) => {
-                    debug("Markdown view server exited with code:", code);
-                });
-            } catch (e: any) {
-                console.error(e);
-                resolve(undefined);
-            }
-        },
-    );
+            childProcess.on("exit", (code) => {
+                debug("Markdown view server exited with code:", code);
+            });
+        } catch (e: any) {
+            console.error(e);
+            resolve(undefined);
+        }
+    });
 
     return Promise.race([viewServicePromise, timeoutPromise]).then((result) => {
         clearTimeout(timeoutHandle);

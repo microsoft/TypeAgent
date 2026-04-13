@@ -9,10 +9,12 @@ import {
     SessionInfo,
 } from "@typeagent/agent-server-protocol";
 import { ClientIO, Dispatcher, DispatcherOptions } from "agent-dispatcher";
+import type { PendingInteractionRequest } from "@typeagent/dispatcher-types";
 import {
     createSharedDispatcher,
     SharedDispatcher,
 } from "./sharedDispatcher.js";
+import { lockInstanceDir } from "agent-dispatcher/internal";
 
 import registerDebug from "debug";
 const debugSession = registerDebug("agent-server:session");
@@ -60,7 +62,12 @@ export type SessionManager = {
         clientIO: ClientIO,
         closeFn: () => void,
         options?: DispatcherConnectOptions,
-    ): Promise<{ dispatcher: Dispatcher; connectionId: string; name: string }>;
+    ): Promise<{
+        dispatcher: Dispatcher;
+        connectionId: string;
+        name: string;
+        pendingInteractions: PendingInteractionRequest[];
+    }>;
     leaveSession(sessionId: string, connectionId: string): Promise<void>;
     listSessions(name?: string): SessionInfo[];
     renameSession(sessionId: string, newName: string): Promise<void>;
@@ -76,6 +83,11 @@ export async function createSessionManager(
 ): Promise<SessionManager> {
     const sessionsDir = path.join(baseDir, SESSIONS_DIR);
     await fs.promises.mkdir(sessionsDir, { recursive: true });
+
+    // Lock the shared instance directory for the lifetime of this process.
+    // Each per-session dispatcher locks its own persistDir; this lock covers
+    // the instanceDir (= baseDir) that backs instanceStorage across all sessions.
+    const unlockInstanceDir = await lockInstanceDir(baseDir);
 
     const sessions = new Map<string, SessionRecord>();
 
@@ -161,6 +173,7 @@ export async function createSessionManager(
                     createSharedDispatcher(hostName, {
                         ...baseOptions,
                         persistDir,
+                        instanceDir: baseDir, // global instance root — shared across all server sessions
                         persistSession: true,
                     }),
                 )
@@ -309,6 +322,7 @@ export async function createSessionManager(
             dispatcher: Dispatcher;
             connectionId: string;
             name: string;
+            pendingInteractions: PendingInteractionRequest[];
         }> {
             const record = sessions.get(sessionId);
             if (record === undefined) {
@@ -333,6 +347,10 @@ export async function createSessionManager(
                 dispatcher,
                 connectionId: dispatcher.connectionId!,
                 name: record.name,
+                pendingInteractions: sharedDispatcher.getPendingInteractions(
+                    dispatcher.connectionId!,
+                    options?.filter ?? false,
+                ),
             };
         },
 
@@ -429,6 +447,7 @@ export async function createSessionManager(
             }
             await Promise.all(promises);
             await saveMetadata();
+            await unlockInstanceDir();
             debugSession("SessionManager closed");
         },
     };

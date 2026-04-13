@@ -59,10 +59,6 @@ jobs:
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml
 
-      - name: Install dependencies
-        working-directory: ts
-        run: pnpm install --frozen-lockfile --strict-peer-dependencies
-
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v1
@@ -78,140 +74,195 @@ jobs:
           echo "---"
           gh api repos/${{ github.repository }}/dependabot/alerts?per_page=1 --jq 'length' || echo "API call failed with exit $?"
 
-      # ── Analyse and fix alerts (bisect) ─────────────────────────────
+      # ── Analyse and fix alerts across workspaces ──────────────────────
       #
-      # 1. Dry-run to discover fixable packages
-      # 2. Apply each package's fix individually
-      # 3. Build-check after each; rollback failures
-      # 4. Only passing fixes survive into the PR
+      # Auto-discovers which workspaces have open alerts by querying the
+      # Dependabot API, then for each workspace:
+      # 1. Installs dependencies (if not already installed)
+      # 2. Dry-run to discover fixable packages
+      # 3. Applies each package's fix individually
+      # 4. Build-checks after each; rolls back failures
+      # 5. Only passing fixes survive into the PR
       - name: Analyse and fix alerts
         id: fix
-        working-directory: ts
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          # ── Step 1: Discover fixable packages ───────────────────────
-          echo "::group::Analysing alerts"
-          node tools/scripts/fix-dependabot-alerts.mjs --dry-run --json --skip-install > /tmp/dep-analysis.json 2>/tmp/dep-analysis.log || true
+          SCRIPT="$GITHUB_WORKSPACE/ts/tools/scripts/fix-dependabot-alerts.mjs"
+          FLAGS="${{ inputs.auto-fix-args || '--auto-fix' }}"
+          ALL_APPLIED=""
+          ALL_ROLLED_BACK=""
+          ALL_BLOCKED_PACKAGES=""
+          ALL_NO_PATCH_PACKAGES=""
+          TOTAL_RESOLVED=0
+          TOTAL_BLOCKED=0
+          TOTAL_FAILED=0
 
-          if ! jq -e '.summary' /tmp/dep-analysis.json > /dev/null 2>&1; then
-            echo "::error::Script produced no valid JSON output"
-            echo "--- stderr log ---"
-            cat /tmp/dep-analysis.log || true
-            echo "--- end stderr log ---"
+          # Discover workspaces with open npm alerts from the Dependabot API
+          WORKSPACES=$(gh api "repos/${{ github.repository }}/dependabot/alerts?state=open&per_page=100" \
+            --paginate \
+            --jq '[.[] | select(.dependency.package.ecosystem == "npm") | .dependency.manifest_path | split("/")[0]] | unique | .[]')
+
+          if [ -z "$WORKSPACES" ]; then
+            echo "No open npm Dependabot alerts found 🎉"
             echo "resolved=0" >> "$GITHUB_OUTPUT"
             echo "blocked=0" >> "$GITHUB_OUTPUT"
             echo "failed=0" >> "$GITHUB_OUTPUT"
             echo "changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Workspaces with alerts: $WORKSPACES"
+
+          for WS_DIR in $WORKSPACES; do
+            echo "=========================================="
+            echo "Processing workspace: $WS_DIR"
+            echo "=========================================="
+            cd "$GITHUB_WORKSPACE/$WS_DIR"
+
+            # Install dependencies for this workspace
+            echo "::group::Installing $WS_DIR dependencies"
+            corepack enable
+            if ! pnpm install --frozen-lockfile 2>&1; then
+              echo "::warning::Dependency install failed for $WS_DIR — skipping (analysis would be unreliable)"
+              echo "::endgroup::"
+              continue
+            fi
             echo "::endgroup::"
-            exit 0
-          fi
 
-          TOTAL_BLOCKED=$(jq '.summary.blocked' /tmp/dep-analysis.json)
-          TOTAL_NO_PATCH=$(jq '.summary.noPatch' /tmp/dep-analysis.json)
+            # ── Step 1: Discover fixable packages ───────────────────
+            echo "::group::Analysing $WS_DIR alerts"
+            node "$SCRIPT" --dry-run --json --skip-install > /tmp/dep-analysis.json 2>/tmp/dep-analysis.log || true
 
-          # Get blocked and no-patch package names
-          BLOCKED_PACKAGES=$(jq -r '[.blocked[].package] | unique | join(", ")' /tmp/dep-analysis.json)
-          NO_PATCH_PACKAGES=$(jq -r '[.noPatch[].package] | unique | join(", ")' /tmp/dep-analysis.json)
-
-          # Get the list of packages the script would resolve
-          FIXABLE=$(jq -r '.resolved[].package' /tmp/dep-analysis.json | sort -u)
-          FIXABLE_COUNT=$(echo "$FIXABLE" | grep -c . || true)
-          echo "Fixable packages ($FIXABLE_COUNT): $FIXABLE"
-          echo "::endgroup::"
-
-          if [ "$FIXABLE_COUNT" -eq 0 ]; then
-            echo "No fixable alerts"
-            echo "resolved=0" >> "$GITHUB_OUTPUT"
-            echo "blocked=$TOTAL_BLOCKED" >> "$GITHUB_OUTPUT"
-            echo "failed=0" >> "$GITHUB_OUTPUT"
-            echo "changes=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [ "${{ inputs.dry-run }}" == "true" ]; then
-            echo "resolved=$FIXABLE_COUNT" >> "$GITHUB_OUTPUT"
-            echo "blocked=$TOTAL_BLOCKED" >> "$GITHUB_OUTPUT"
-            echo "failed=0" >> "$GITHUB_OUTPUT"
-            echo "changes=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # ── Step 2: Apply fixes one package at a time ───────────────
-          APPLIED=""
-          ROLLED_BACK=""
-          FLAGS="${{ inputs.auto-fix-args || '--auto-fix' }}"
-
-          for PKG in $FIXABLE; do
-            echo "::group::Fixing $PKG"
-
-            # Save a rollback point
-            cp package.json /tmp/pkg-backup.json
-            cp pnpm-lock.yaml /tmp/lock-backup.yaml 2>/dev/null || true
-
-            # Apply fix for this specific package — always use --auto-fix=$PKG
-            # regardless of other flags, so each package is targeted individually
-            read -r -a extra_args <<< "$FLAGS"
-            filtered_args=()
-            for arg in "${extra_args[@]}"; do
-              case "$arg" in
-                --auto-fix|--auto-fix=*)
-                  ;;
-                *)
-                  filtered_args+=("$arg")
-                  ;;
-              esac
-            done
-            filtered_args+=("--auto-fix=$PKG")
-            filtered_args+=("--skip-install")
-            echo "Running: fix-dependabot-alerts.mjs ${filtered_args[*]}"
-            set +e
-            node tools/scripts/fix-dependabot-alerts.mjs "${filtered_args[@]}" 2>&1
-            fix_exit=$?
-            set -e
-
-            if ! git diff --quiet; then
-              # Changes were made — verify build
-              echo "Changes detected, verifying build..."
-              node tools/scripts/repo-policy-check.mjs --fix 2>/dev/null || true
-
-              set +e
-              pnpm run build 2>&1
-              build_exit=$?
-              set -e
-
-              if [ "$build_exit" -ne 0 ]; then
-                echo "::warning::Build failed after fixing $PKG — rolling back"
-                # Rollback: restore package.json and lockfile, reinstall
-                cp /tmp/pkg-backup.json package.json
-                cp /tmp/lock-backup.yaml pnpm-lock.yaml 2>/dev/null || true
-                pnpm install 2>&1 || true
-                git checkout -- . 2>/dev/null || true
-                ROLLED_BACK="$ROLLED_BACK $PKG"
-              else
-                echo "✅ $PKG fixed and build passed"
-                APPLIED="$APPLIED $PKG"
-              fi
-            else
-              echo "No changes for $PKG (may already be fixed)"
+            if ! jq -e '.summary' /tmp/dep-analysis.json > /dev/null 2>&1; then
+              echo "No valid analysis for $WS_DIR — skipping"
+              cat /tmp/dep-analysis.log || true
+              echo "::endgroup::"
+              continue
             fi
 
+            WS_BLOCKED=$(jq '.summary.blocked' /tmp/dep-analysis.json)
+            WS_NO_PATCH=$(jq '.summary.noPatch' /tmp/dep-analysis.json)
+            BLOCKED_PKGS=$(jq -r '[.blocked[].package] | unique | join(", ")' /tmp/dep-analysis.json)
+            NO_PATCH_PKGS=$(jq -r '[.noPatch[].package] | unique | join(", ")' /tmp/dep-analysis.json)
+
+            FIXABLE=$(jq -r '.resolved[].package' /tmp/dep-analysis.json | sort -u)
+            FIXABLE_COUNT=$(echo "$FIXABLE" | grep -c . || true)
+            echo "Fixable $WS_DIR packages ($FIXABLE_COUNT): $FIXABLE"
             echo "::endgroup::"
+
+            # Accumulate blocked/no-patch
+            TOTAL_BLOCKED=$((TOTAL_BLOCKED + WS_BLOCKED))
+            [ -n "$BLOCKED_PKGS" ] && ALL_BLOCKED_PACKAGES="${ALL_BLOCKED_PACKAGES:+$ALL_BLOCKED_PACKAGES, }$BLOCKED_PKGS"
+            [ -n "$NO_PATCH_PKGS" ] && ALL_NO_PATCH_PACKAGES="${ALL_NO_PATCH_PACKAGES:+$ALL_NO_PATCH_PACKAGES, }$NO_PATCH_PKGS"
+
+            if [ "$FIXABLE_COUNT" -eq 0 ]; then
+              echo "No fixable alerts in $WS_DIR"
+              continue
+            fi
+
+            if [ "${{ inputs.dry-run }}" == "true" ]; then
+              TOTAL_RESOLVED=$((TOTAL_RESOLVED + FIXABLE_COUNT))
+              continue
+            fi
+
+            # ── Step 2: Apply fixes one package at a time ───────────
+            for PKG in $FIXABLE; do
+              echo "::group::Fixing $WS_DIR/$PKG"
+
+              # Save a rollback point
+              cp package.json /tmp/pkg-backup.json
+              cp pnpm-lock.yaml /tmp/lock-backup.yaml 2>/dev/null || true
+
+              # Build targeted args
+              read -r -a extra_args <<< "$FLAGS"
+              filtered_args=()
+              for arg in "${extra_args[@]}"; do
+                case "$arg" in
+                  --auto-fix|--auto-fix=*)
+                    ;;
+                  *)
+                    filtered_args+=("$arg")
+                    ;;
+                esac
+              done
+              filtered_args+=("--auto-fix=$PKG")
+              filtered_args+=("--skip-install")
+              echo "Running: fix-dependabot-alerts.mjs ${filtered_args[*]}"
+              set +e
+              node "$SCRIPT" "${filtered_args[@]}" 2>&1
+              fix_exit=$?
+              set -e
+
+              if [ "$fix_exit" -ne 0 ] && git diff --quiet; then
+                echo "::warning::Script failed for $PKG in $WS_DIR (exit $fix_exit) with no file changes"
+                TOTAL_FAILED=$((TOTAL_FAILED + 1))
+                echo "::endgroup::"
+                continue
+              fi
+
+              if ! git diff --quiet; then
+                echo "Changes detected, reinstalling and verifying build..."
+                set +e
+                if [ "$WS_DIR" = "ts" ]; then
+                  pnpm install --frozen-lockfile --strict-peer-dependencies 2>&1
+                else
+                  pnpm install --frozen-lockfile 2>&1
+                fi
+                install_exit=$?
+                set -e
+
+                if [ "$install_exit" -ne 0 ]; then
+                  echo "::warning::pnpm install failed after fixing $PKG in $WS_DIR — rolling back"
+                  cp /tmp/pkg-backup.json package.json
+                  cp /tmp/lock-backup.yaml pnpm-lock.yaml 2>/dev/null || true
+                  pnpm install 2>&1 || true
+                  git checkout -- . 2>/dev/null || true
+                  ALL_ROLLED_BACK="$ALL_ROLLED_BACK $PKG"
+                  TOTAL_FAILED=$((TOTAL_FAILED + 1))
+                  echo "::endgroup::"
+                  continue
+                fi
+
+                if [ "$WS_DIR" = "ts" ]; then
+                  node tools/scripts/repo-policy-check.mjs --fix 2>/dev/null || true
+                fi
+
+                set +e
+                pnpm run build 2>&1
+                build_exit=$?
+                set -e
+
+                if [ "$build_exit" -ne 0 ]; then
+                  echo "::warning::Build failed after fixing $PKG in $WS_DIR — rolling back"
+                  cp /tmp/pkg-backup.json package.json
+                  cp /tmp/lock-backup.yaml pnpm-lock.yaml 2>/dev/null || true
+                  pnpm install 2>&1 || true
+                  git checkout -- . 2>/dev/null || true
+                  ALL_ROLLED_BACK="$ALL_ROLLED_BACK $PKG"
+                  TOTAL_FAILED=$((TOTAL_FAILED + 1))
+                else
+                  echo "✅ $PKG fixed and build passed"
+                  ALL_APPLIED="$ALL_APPLIED $PKG"
+                  TOTAL_RESOLVED=$((TOTAL_RESOLVED + 1))
+                fi
+              else
+                echo "No changes for $PKG (may already be fixed)"
+              fi
+
+              echo "::endgroup::"
+            done
           done
 
           # ── Step 3: Report results ──────────────────────────────────
-          APPLIED_COUNT=$(echo "$APPLIED" | wc -w | tr -d ' ')
-          ROLLED_BACK_COUNT=$(echo "$ROLLED_BACK" | wc -w | tr -d ' ')
-
-          echo "resolved=$APPLIED_COUNT" >> "$GITHUB_OUTPUT"
+          echo "resolved=$TOTAL_RESOLVED" >> "$GITHUB_OUTPUT"
           echo "blocked=$TOTAL_BLOCKED" >> "$GITHUB_OUTPUT"
-          echo "failed=$ROLLED_BACK_COUNT" >> "$GITHUB_OUTPUT"
-          echo "applied_packages=$APPLIED" >> "$GITHUB_OUTPUT"
-          echo "rolled_back_packages=$ROLLED_BACK" >> "$GITHUB_OUTPUT"
-          echo "blocked_packages=$BLOCKED_PACKAGES" >> "$GITHUB_OUTPUT"
-          echo "no_patch_packages=$NO_PATCH_PACKAGES" >> "$GITHUB_OUTPUT"
+          echo "failed=$TOTAL_FAILED" >> "$GITHUB_OUTPUT"
+          echo "applied_packages=$ALL_APPLIED" >> "$GITHUB_OUTPUT"
+          echo "rolled_back_packages=$ALL_ROLLED_BACK" >> "$GITHUB_OUTPUT"
+          echo "blocked_packages=$ALL_BLOCKED_PACKAGES" >> "$GITHUB_OUTPUT"
+          echo "no_patch_packages=$ALL_NO_PATCH_PACKAGES" >> "$GITHUB_OUTPUT"
 
-          cd ..
+          cd "$GITHUB_WORKSPACE"
           if git diff --quiet; then
             echo "changes=false" >> "$GITHUB_OUTPUT"
           else

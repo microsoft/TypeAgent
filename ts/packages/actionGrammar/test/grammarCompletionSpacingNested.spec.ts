@@ -112,13 +112,11 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "play ");
                 // "play " → "play" matched, trailing separator consumed.
                 // Next is <Track> whose first part is "ab".  Leading
-                // separator mode = parent's auto mode (compiles to
-                // spacePunctuation; Latin→Latin requires space).
-                // But we already have a trailing separator.
+                // separator mode = parent's auto mode.
                 expectMetadata(result, {
                     completions: ["ab"],
                     matchedPrefixLength: 4,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -193,7 +191,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["hello"],
                     matchedPrefixLength: 2,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -210,7 +208,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["end"],
                     matchedPrefixLength: 8,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -245,7 +243,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["baz"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -259,7 +257,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["baz"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -308,7 +306,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["baz"],
                     matchedPrefixLength: 3,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -390,8 +388,8 @@ describeForEachCompletion(
         // Section 8: Mixed modes with alternation
         //
         // Two alternatives with different spacing modes but no
-        // spacing=none rule.  "required" and "optional" are NOT a
-        // true separator conflict — "optional" is compatible with
+        // spacing=none rule.  "required" and "optionalSpace" are NOT a
+        // true separator conflict — "optionalSpace" is compatible with
         // both trailing-separator states.  The result is a normal
         // merge with the strongest separator mode winning.
         // ================================================================
@@ -399,7 +397,7 @@ describeForEachCompletion(
         describe("alternation with different spacing modes", () => {
             const g = `
                 <RequiredRule> [spacing=required] = hello world -> "required";
-                <OptionalRule> [spacing=optional] = hello world -> "optional";
+                <OptionalRule> [spacing=optional] = hello world -> "optionalSpace";
                 <Start> = $(x:<RequiredRule>) -> x | $(x:<OptionalRule>) -> x;
             `;
             const grammar = loadGrammarRules("test.grammar", g);
@@ -408,12 +406,19 @@ describeForEachCompletion(
                 const result = matchGrammarCompletion(grammar, "hello");
                 // Both alternatives match "hello" and offer "world".
                 // Required mode → spacePunctuation; optional mode →
-                // optional.  No "none" mode present, so no conflict.
-                // Normal merge: spacePunctuation is strongest.
+                // optionalSpacePunctuation.  Per-group: two separate groups.
                 expectMetadata(result, {
-                    completions: ["world"],
+                    groups: [
+                        {
+                            completions: ["world"],
+                            separatorMode: "spacePunctuation",
+                        },
+                        {
+                            completions: ["world"],
+                            separatorMode: "optionalSpacePunctuation",
+                        },
+                    ],
                     matchedPrefixLength: 5,
-                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -423,12 +428,20 @@ describeForEachCompletion(
 
             it("trailing separator: normal merge, no P advancement", () => {
                 const result = matchGrammarCompletion(grammar, "hello ");
-                // No conflict → no filtering, no P advancement.
-                // Normal merge at P=5 with trailing separator.
+                // Trailing separator: both alternatives still offer "world".
+                // Per-group: two separate groups with their respective modes.
                 expectMetadata(result, {
-                    completions: ["world"],
+                    groups: [
+                        {
+                            completions: ["world"],
+                            separatorMode: "spacePunctuation",
+                        },
+                        {
+                            completions: ["world"],
+                            separatorMode: "optionalSpacePunctuation",
+                        },
+                    ],
                     matchedPrefixLength: 5,
-                    separatorMode: "spacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -457,13 +470,18 @@ describeForEachCompletion(
 
             it("no trailing separator: keeps none-mode completions", () => {
                 const result = matchGrammarCompletion(grammar, "ab");
-                // Conflict: NoneRule → "none", AutoRule → "spacePunctuation"
-                // No trailing sep → drop spacePunctuation, keep "none"
+                // Per-group: NoneRule → "none" group, AutoRule → "auto" group.
+                // No conflict filtering — both kept.
                 expectMetadata(result, {
-                    completions: ["cd"],
+                    groups: [
+                        { completions: ["cd"], separatorMode: "none" },
+                        {
+                            completions: ["cd"],
+                            separatorMode: "autoSpacePunctuation",
+                        },
+                    ],
                     matchedPrefixLength: 2,
-                    separatorMode: "none",
-                    closedSet: false,
+                    closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
                     properties: [],
@@ -472,14 +490,17 @@ describeForEachCompletion(
 
             it("trailing separator: keeps requiring completions, P advanced", () => {
                 const result = matchGrammarCompletion(grammar, "ab ");
-                // Trailing space → drop "none", keep "spacePunctuation"
-                // P advances from 2 to 3 (past the space).
-                // separatorMode is "optional" since sep is consumed.
+                // Per-group: both kept; no filtering.
                 expectMetadata(result, {
-                    completions: ["cd"],
-                    matchedPrefixLength: 3,
-                    separatorMode: "optional",
-                    closedSet: false,
+                    groups: [
+                        { completions: ["cd"], separatorMode: "none" },
+                        {
+                            completions: ["cd"],
+                            separatorMode: "autoSpacePunctuation",
+                        },
+                    ],
+                    matchedPrefixLength: 2,
+                    closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
                     properties: [],
@@ -505,15 +526,21 @@ describeForEachCompletion(
 
             it("no trailing separator: keeps none + optional", () => {
                 const result = matchGrammarCompletion(grammar, "ab");
-                // Conflict: NoneRule → "none", OptRule → "optional",
-                //           ReqRule → "spacePunctuation"
-                // No trailing sep → drop spacePunctuation
-                // Keep "none" + "optional" → merge to "optional"
+                // Per-group: three separate groups, one per spacing mode.
                 expectMetadata(result, {
-                    completions: ["cd"],
+                    groups: [
+                        { completions: ["cd"], separatorMode: "none" },
+                        {
+                            completions: ["cd"],
+                            separatorMode: "optionalSpacePunctuation",
+                        },
+                        {
+                            completions: ["cd"],
+                            separatorMode: "spacePunctuation",
+                        },
+                    ],
                     matchedPrefixLength: 2,
-                    separatorMode: "optional",
-                    closedSet: false,
+                    closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
                     properties: [],
@@ -522,15 +549,21 @@ describeForEachCompletion(
 
             it("trailing separator: keeps optional + required, drops none, P advanced", () => {
                 const result = matchGrammarCompletion(grammar, "ab ");
-                // Trailing space → drop "none", keep "spacePunctuation" + "optional"
-                // P advances to 3 (past space).
-                // Both spacePunctuation and optional merge to "optional"
-                // (sep already consumed into P).
+                // Per-group: three groups kept; no filtering.
                 expectMetadata(result, {
-                    completions: ["cd"],
-                    matchedPrefixLength: 3,
-                    separatorMode: "optional",
-                    closedSet: false,
+                    groups: [
+                        { completions: ["cd"], separatorMode: "none" },
+                        {
+                            completions: ["cd"],
+                            separatorMode: "optionalSpacePunctuation",
+                        },
+                        {
+                            completions: ["cd"],
+                            separatorMode: "spacePunctuation",
+                        },
+                    ],
+                    matchedPrefixLength: 2,
+                    closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
                     properties: [],
@@ -575,12 +608,12 @@ describeForEachCompletion(
             `;
             const grammar = loadGrammarRules("test.grammar", g);
 
-            it("no conflict: optional, closedSet true", () => {
+            it("no conflict: optionalSpacePunctuation, closedSet true", () => {
                 const result = matchGrammarCompletion(grammar, "hello");
                 expectMetadata(result, {
                     completions: ["world"],
                     matchedPrefixLength: 5,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -644,7 +677,7 @@ describeForEachCompletion(
                 // Backward reconsiders the last matched word "ab".
                 // Without a second rule pushing maxPrefixLength higher,
                 // the backed-up P=0 candidate wins.
-                // separatorMode is "optional" because at P=0 the
+                // separatorMode is "autoSpacePunctuation" because at P=0 the
                 // separator between cursor and completion is governed
                 // by the parent Start rule (auto spacing), not
                 // NoneRule's internal spacing.
@@ -657,7 +690,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["ab"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -686,7 +719,7 @@ describeForEachCompletion(
                 // "ab" to P=0.  No second rule exists to establish a
                 // higher maxPrefixLength, so the shadow candidate
                 // (consumedLength=2) is NOT flushed.  P=0 wins.
-                // separatorMode is "optional" (same as above — parent
+                // separatorMode is "optionalSpace" (same as above — parent
                 // Start rule's auto spacing at P=0).
                 const result = matchGrammarCompletion(
                     grammar,
@@ -697,7 +730,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["ab"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -818,7 +851,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["gh"],
                     matchedPrefixLength: 5,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -841,7 +874,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["cd", "ef"],
                     matchedPrefixLength: 2,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -854,7 +887,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["cd", "ef"],
                     matchedPrefixLength: 2,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -875,7 +908,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["ab"],
                     matchedPrefixLength: 0,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: false,
                     afterWildcard: "none",
@@ -907,7 +940,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["gh"],
                     matchedPrefixLength: 4,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -920,7 +953,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["cd", "ef"],
                     matchedPrefixLength: 2,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -943,7 +976,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["ef", "cd"],
                     matchedPrefixLength: 2,
-                    separatorMode: "optional",
+                    separatorMode: "optionalSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -978,7 +1011,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["1cd", "1ef"],
                     matchedPrefixLength: 2,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -993,7 +1026,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["gh"],
                     matchedPrefixLength: 5,
-                    separatorMode: "spacePunctuation",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1016,7 +1049,7 @@ describeForEachCompletion(
                 expectMetadata(result, {
                     completions: ["1ef", "1cd"],
                     matchedPrefixLength: 2,
-                    separatorMode: "optional",
+                    separatorMode: "autoSpacePunctuation",
                     closedSet: true,
                     directionSensitive: true,
                     afterWildcard: "none",
@@ -1057,9 +1090,10 @@ describeForEachCompletion(
                 // NoneRule: Cat 3b → P=2, offers "cd"
                 // WildcardRule: wildcard absorbs "ab", EOI deferred →
                 //   Phase 2 instantiates "done" at P=2
-                expect(result.matchedPrefixLength).toBe(2);
-                expect(result.completions).toContain("cd");
-                expect(result.completions).toContain("done");
+                expectMetadata(result, {
+                    completions: ["cd", "done"],
+                    matchedPrefixLength: 2,
+                });
             });
 
             it("backward 'abdo': Phase 2 advances P, shadow flushes 'cd'", () => {
@@ -1086,9 +1120,10 @@ describeForEachCompletion(
                     undefined,
                     "backward",
                 );
-                expect(result.matchedPrefixLength).toBe(2);
-                expect(result.completions).toContain("cd");
-                expect(result.completions).toContain("done");
+                expectMetadata(result, {
+                    completions: ["done", "cd"],
+                    matchedPrefixLength: 2,
+                });
             });
         });
 
@@ -1111,9 +1146,10 @@ describeForEachCompletion(
 
             it("forward 'ab': both rules contribute at P=2", () => {
                 const result = matchGrammarCompletion(grammar, "ab");
-                expect(result.matchedPrefixLength).toBe(2);
-                expect(result.completions).toContain("1cd");
-                expect(result.completions).toContain("1done");
+                expectMetadata(result, {
+                    completions: ["1cd", "1done"],
+                    matchedPrefixLength: 2,
+                });
             });
 
             it("backward 'ab1do': Phase 2 advances P, shadow flushes '1cd'", () => {
@@ -1132,9 +1168,10 @@ describeForEachCompletion(
                     undefined,
                     "backward",
                 );
-                expect(result.matchedPrefixLength).toBe(2);
-                expect(result.completions).toContain("1cd");
-                expect(result.completions).toContain("1done");
+                expectMetadata(result, {
+                    completions: ["1done", "1cd"],
+                    matchedPrefixLength: 2,
+                });
             });
         });
 
@@ -1161,9 +1198,10 @@ describeForEachCompletion(
 
             it("forward 'hello ': both rules at P=5", () => {
                 const result = matchGrammarCompletion(grammar, "hello ");
-                expect(result.matchedPrefixLength).toBe(5);
-                expect(result.completions).toContain("world");
-                expect(result.completions).toContain("there");
+                expectMetadata(result, {
+                    completions: ["world", "there"],
+                    matchedPrefixLength: 5,
+                });
             });
 
             it("backward 'hello ': Cat 2 takes forward path, both completions present", () => {
@@ -1178,9 +1216,10 @@ describeForEachCompletion(
                     undefined,
                     "backward",
                 );
-                expect(result.matchedPrefixLength).toBe(5);
-                expect(result.completions).toContain("world");
-                expect(result.completions).toContain("there");
+                expectMetadata(result, {
+                    completions: ["world", "there"],
+                    matchedPrefixLength: 5,
+                });
             });
         });
 
@@ -1230,13 +1269,12 @@ describeForEachCompletion(
                 // (invariant #3: result at P is a function of
                 // input[0..P] alone).
                 const result = matchGrammarCompletion(grammar, "ab foo c");
-                expect(result.completions).toContain("cd");
-                expect(result.matchedPrefixLength).toBe(6);
-                // closedSet=true: no drops at the displaced anchor.
-                expect(result.closedSet).toBe(true);
-                // afterWildcard="all": all completions are after a
-                // wildcard (partial keyword inside wildcard).
-                expect(result.afterWildcard).toBe("all");
+                expectMetadata(result, {
+                    completions: ["cd"],
+                    matchedPrefixLength: 6,
+                    closedSet: true,
+                    afterWildcard: "all",
+                });
             });
         });
 

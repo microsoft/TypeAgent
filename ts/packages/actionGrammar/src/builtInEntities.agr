@@ -1,0 +1,297 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// ==========================================================================
+// Built-in Entity Rules — AGR equivalents of builtInEntities.ts
+//
+// These rules express the same matching/conversion logic as the programmatic
+// EntityConverter implementations, structured so the grammar matcher can
+// match them directly (no runtime entity registry needed).
+//
+// Ordinal and Cardinal use compositional sub-rules (<Ones>, <Tens>, etc.)
+// so compound word-forms like "forty-second" or "three hundred and five"
+// are matched and converted without enumerating every combination.
+// The grammar matcher's default auto spacing treats hyphens as separators,
+// so "twenty-first" naturally matches <Tens> <OrdinalOnes>.
+//
+// LIMITATIONS vs. the TypeScript converters:
+//   1. CalendarDate: ISO date format (YYYY-MM-DD) requires bare numeric
+//      matching which AGR cannot express (regex-based token validation).
+//      Only relative dates and weekday names are covered here.
+//   2. CalendarTime/CalendarTimeRange: Formats with colons (e.g., "2:30pm",
+//      "14:00") require [spacing=optional] and multi-part captures. The rules
+//      below handle the most common patterns but do not cover every variant
+//      the TypeScript parsers accept.
+//   3. Rich value types (CalendarDateValue, CalendarTimeValue, etc.) cannot
+//      be constructed from AGR value expressions. The rules return primitive
+//      values (numbers or strings).
+//   4. Case-insensitivity: AGR's string matching is already case-insensitive,
+//      matching the .toLowerCase() calls in the TS converters.
+// ==========================================================================
+
+// ==========================================================================
+// Shared Helper Rules — Building Blocks for Ordinal & Cardinal
+// ==========================================================================
+
+// Cardinal ones (1-9)
+<Ones> =
+    one -> 1 | two -> 2 | three -> 3 | four -> 4 | five -> 5
+  | six -> 6 | seven -> 7 | eight -> 8 | nine -> 9
+;
+
+// Cardinal teens (10-19)
+<Teens> =
+    ten -> 10 | eleven -> 11 | twelve -> 12 | thirteen -> 13
+  | fourteen -> 14 | fifteen -> 15 | sixteen -> 16 | seventeen -> 17
+  | eighteen -> 18 | nineteen -> 19
+;
+
+// Cardinal tens (20-90)
+<Tens> =
+    twenty -> 20 | thirty -> 30 | forty -> 40 | fifty -> 50
+  | sixty -> 60 | seventy -> 70 | eighty -> 80 | ninety -> 90
+;
+
+// Cardinal 1-99 (non-recursive helper)
+// Compound forms: "twenty-one" or "twenty one" (optional dash)
+<Cardinal_1_99> =
+    <Ones> | <Teens> | <Tens>
+  | $(t:<Tens>) (\-)? $(o:<Ones>) -> t + o
+;
+
+// ==========================================================================
+// Ordinal Helper Rules
+// ==========================================================================
+
+// Ordinal ones (1st-9th)
+<OrdinalOnes> =
+    first -> 1 | second -> 2 | third -> 3 | fourth -> 4 | fifth -> 5
+  | sixth -> 6 | seventh -> 7 | eighth -> 8 | ninth -> 9
+;
+
+// Ordinal teens (10th-19th)
+<OrdinalTeens> =
+    tenth -> 10 | eleventh -> 11 | twelfth -> 12 | thirteenth -> 13
+  | fourteenth -> 14 | fifteenth -> 15 | sixteenth -> 16 | seventeenth -> 17
+  | eighteenth -> 18 | nineteenth -> 19
+;
+
+// Ordinal tens (20th-90th)
+<OrdinalTens> =
+    twentieth -> 20 | thirtieth -> 30 | fortieth -> 40 | fiftieth -> 50
+  | sixtieth -> 60 | seventieth -> 70 | eightieth -> 80 | ninetieth -> 90
+;
+
+// Ordinal 1st-99th (non-recursive helper)
+// "twenty-first" or "twenty first" → Tens(20) + OrdinalOnes(1) → 21
+<Ordinal_1_99> =
+    <OrdinalOnes> | <OrdinalTeens> | <OrdinalTens>
+  | $(t:<Tens>) (\-)? $(o:<OrdinalOnes>) -> t + o
+;
+
+// ==========================================================================
+// Ordinal Entity
+// Converts ordinal words to their numeric value (1st-999th+)
+//
+// Compositional: "forty-second" → Tens(40) + OrdinalOnes(2) → 42
+//                "three hundredth" → Ones(3) * 100 → 300
+//                "five hundred and twenty-first" → Ones(5)*100 + Ordinal_1_99(21) → 521
+// ==========================================================================
+export <Ordinal> =
+    // 1st-99th
+    <Ordinal_1_99>
+    // Exact hundreds: "hundredth", "two hundredth"
+  | hundredth -> 100
+  | $(h:<Ones>) hundredth -> h * 100
+    // Hundreds + remainder: "one hundred (and) third", "five hundred and forty-second"
+  | $(h:<Ones>) hundred (and)? $(r:<Ordinal_1_99>) -> h * 100 + r
+  | a hundred (and)? $(r:<Ordinal_1_99>) -> 100 + r
+    // Exact thousands: "thousandth", "two thousandth"
+  | thousandth -> 1000
+  | $(h:<Ones>) thousandth -> h * 1000
+;
+
+// ==========================================================================
+// Cardinal Entity
+// Converts cardinal words, quantity phrases, and bare numbers to numeric values
+//
+// Compositional: "forty-two" → Tens(40) + Ones(2) → 42
+//                "three hundred" → Ones(3) * 100 → 300
+//                "five hundred and twenty-one" → Ones(5)*100 + Cardinal_1_99(21) → 521
+// ==========================================================================
+export <Cardinal> =
+    // 1-99
+    <Cardinal_1_99>
+    // Exact hundreds: "a hundred", "one hundred", "three hundred"
+  | (a | one) hundred -> 100
+  | $(h:<Ones>) hundred -> h * 100
+    // Hundreds + remainder: "one hundred (and) five", "three hundred and forty-two"
+  | $(h:<Ones>) hundred (and)? $(r:<Cardinal_1_99>) -> h * 100 + r
+  | a hundred (and)? $(r:<Cardinal_1_99>) -> 100 + r
+    // Exact thousands: "a thousand", "one thousand", "five thousand"
+  | (a | one) thousand -> 1000
+  | $(h:<Ones>) thousand -> h * 1000
+    // Thousands + hundreds/remainder: "two thousand three hundred"
+  | $(th:<Ones>) thousand $(h:<Ones>) hundred -> th * 1000 + h * 100
+  | $(th:<Ones>) thousand $(r:<Cardinal_1_99>) -> th * 1000 + r
+  | $(th:<Ones>) thousand $(h:<Ones>) hundred (and)? $(r:<Cardinal_1_99>) -> th * 1000 + h * 100 + r
+    // Multi-word quantity phrases
+  | a couple      -> 2
+  | a pair        -> 2
+  | a few         -> 3
+  | several       -> 4
+  | a handful     -> 5
+  | half a dozen  -> 6
+  | a dozen       -> 12
+  | a score       -> 20
+    // Bare numeric passthrough
+  | $(n:number)   -> n
+;
+
+// ==========================================================================
+// CalendarDate Entity
+// Matches relative dates and weekday names
+// Returns the original text as a string (no lazy CalendarDateValue)
+// NOTE: ISO "YYYY-MM-DD" format is not expressible in AGR
+// ==========================================================================
+export <CalendarDate> =
+    today      -> "today"
+  | tomorrow   -> "tomorrow"
+  | yesterday  -> "yesterday"
+  | sunday     -> "sunday"
+  | monday     -> "monday"
+  | tuesday    -> "tuesday"
+  | wednesday  -> "wednesday"
+  | thursday   -> "thursday"
+  | friday     -> "friday"
+  | saturday   -> "saturday"
+;
+
+// ==========================================================================
+// CalendarTime Entity
+// Matches time expressions and converts to 24-hour { hours, minutes }
+//
+// Patterns covered:
+//   - Special words: "noon", "midnight"
+//   - Hour + AM/PM: "2pm", "11am"
+//   - Hour:Minute + AM/PM: "2:30pm"  (via [spacing=optional])
+//   - 24-hour bare: "14:00"          (via [spacing=optional])
+//   - Bare hour: "2", "14"           (ambiguous, but accepted by TS converter)
+//
+// NOTE: The TS converter returns CalendarTimeValue; AGR returns an object
+// with { hours, minutes } or a 24-hour string.
+// ==========================================================================
+
+// Helper: match AM hours and convert to 24-hour
+//   "12am" -> 0, all others stay as-is
+export <CalendarTime> =
+    noon       -> { hours: 12, minutes: 0 }
+  | midnight   -> { hours: 0, minutes: 0 }
+    // "Hpm" — PM hours
+  | $(h:number) pm  -> { hours: h < 12 ? h + 12 : h, minutes: 0 }
+    // "Ham" — AM hours
+  | $(h:number) am  -> { hours: h === 12 ? 0 : h, minutes: 0 }
+    // "H:MMpm"
+  | [spacing=optional] $(h:number) : $(m:number) pm -> { hours: h < 12 ? h + 12 : h, minutes: m }
+    // "H:MMam"
+  | [spacing=optional] $(h:number) : $(m:number) am -> { hours: h === 12 ? 0 : h, minutes: m }
+    // "HH:MM" (24-hour, no suffix)
+  | [spacing=optional] $(h:number) : $(m:number)    -> { hours: h, minutes: m }
+;
+
+// ==========================================================================
+// CalendarTimeRange Entity
+// Matches time range expressions
+//
+// Patterns covered:
+//   - Shared suffix: "10-11pm", "1-2am"
+//   - Separate suffix: "2pm to 3pm", "9am-10am"
+//   - "from" prefix: "from 1 to 2pm"
+//   - Single time (treated as range with no end)
+//
+// Returns { start: {hours, minutes}, end?: {hours, minutes} }
+// ==========================================================================
+
+export <CalendarTimeRange> =
+    // "H-Hpm" / "H-Ham" — shared AM/PM suffix
+    $(h1:number) \- $(h2:number) pm -> {
+        start: { hours: h1 < 12 ? h1 + 12 : h1, minutes: 0 },
+        end:   { hours: h2 < 12 ? h2 + 12 : h2, minutes: 0 }
+    }
+  | $(h1:number) \- $(h2:number) am -> {
+        start: { hours: h1 === 12 ? 0 : h1, minutes: 0 },
+        end:   { hours: h2 === 12 ? 0 : h2, minutes: 0 }
+    }
+    // "Hpm to Hpm" / "Hpm-Hpm"
+  | $(h1:number) pm (to | \-) $(h2:number) pm -> {
+        start: { hours: h1 < 12 ? h1 + 12 : h1, minutes: 0 },
+        end:   { hours: h2 < 12 ? h2 + 12 : h2, minutes: 0 }
+    }
+  | $(h1:number) am (to | \-) $(h2:number) am -> {
+        start: { hours: h1 === 12 ? 0 : h1, minutes: 0 },
+        end:   { hours: h2 === 12 ? 0 : h2, minutes: 0 }
+    }
+  | $(h1:number) am (to | \-) $(h2:number) pm -> {
+        start: { hours: h1 === 12 ? 0 : h1, minutes: 0 },
+        end:   { hours: h2 < 12 ? h2 + 12 : h2, minutes: 0 }
+    }
+  | $(h1:number) pm (to | \-) $(h2:number) am -> {
+        start: { hours: h1 < 12 ? h1 + 12 : h1, minutes: 0 },
+        end:   { hours: h2 === 12 ? 0 : h2, minutes: 0 }
+    }
+    // "from H to Hpm" / "from H to Ham"
+  | from $(h1:number) to $(h2:number) pm -> {
+        start: { hours: h1 < 12 ? h1 + 12 : h1, minutes: 0 },
+        end:   { hours: h2 < 12 ? h2 + 12 : h2, minutes: 0 }
+    }
+  | from $(h1:number) to $(h2:number) am -> {
+        start: { hours: h1 === 12 ? 0 : h1, minutes: 0 },
+        end:   { hours: h2 === 12 ? 0 : h2, minutes: 0 }
+    }
+    // Single time — range with no end (delegate to CalendarTime).
+    // Note: this catch-all means any CalendarTime also matches as a
+    // CalendarTimeRange. Action handlers should check for a missing
+    // "end" field to distinguish a point-in-time from a true range.
+  | $(t:<CalendarTime>) -> { start: t }
+;
+
+// ==========================================================================
+// CalendarDayRange Entity
+// Matches natural-language day/week/month range phrases
+// Returns the original text (no lazy CalendarDayRangeValue)
+//
+// For the grammar matcher path, structural matching is the goal;
+// actual date arithmetic would be performed by the action handler.
+// ==========================================================================
+export <CalendarDayRange> =
+    // Fixed phrases
+    today       -> "today"
+  | yesterday   -> "yesterday"
+  | this week   -> "this week"
+  | past week   -> "past week"
+  | last week   -> "last week"
+  | this month  -> "this month"
+  | past month  -> "past month"
+  | last month  -> "last month"
+    // "last/past N days/weeks/months" (singular and plural via optional "s")
+  | last $(n:number) (day | days)    -> `last ${n} days`
+  | past $(n:number) (day | days)    -> `past ${n} days`
+  | last $(n:number) (week | weeks)  -> `last ${n} weeks`
+  | past $(n:number) (week | weeks)  -> `past ${n} weeks`
+  | last $(n:number) (month | months) -> `last ${n} months`
+  | past $(n:number) (month | months) -> `past ${n} months`
+    // 4-digit year (matched as bare number)
+  | $(y:number) -> `${y}`
+;
+
+// ==========================================================================
+// Percentage Entity
+// Matches percentage expressions: "35%", bare numbers, cardinal words
+// Returns the numeric value
+// ==========================================================================
+export <Percentage> =
+    // "N%" — number with percent sign ([spacing=optional] for possible adjacency)
+    [spacing=optional] $(n:number) % -> n
+    // Cardinal word numbers
+  | $(n:<Cardinal>) -> n
+;

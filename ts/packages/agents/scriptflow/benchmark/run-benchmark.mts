@@ -135,7 +135,6 @@ async function createLiveDispatcher(
         agents: { actions: true, commands: true },
         execution: { history: false },
         collectCommandResult: true,
-        portBase: 9100,
         persistDir,
         storageProvider: getFsStorageProvider(),
     });

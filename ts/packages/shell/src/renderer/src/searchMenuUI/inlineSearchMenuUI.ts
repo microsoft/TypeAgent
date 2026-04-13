@@ -8,7 +8,7 @@ import {
 } from "./searchMenuUI";
 
 export class InlineSearchMenuUI implements SearchMenuUI {
-    private ghostSpan: HTMLSpanElement | null = null;
+    private wrapperSpan: HTMLSpanElement | null = null;
     private selected: number = -1;
     private items: SearchMenuItem[] = [];
     private prefix: string = "";
@@ -62,10 +62,10 @@ export class InlineSearchMenuUI implements SearchMenuUI {
     }
 
     private removeGhost() {
-        if (this.ghostSpan && this.ghostSpan.parentNode) {
-            this.ghostSpan.parentNode.removeChild(this.ghostSpan);
+        if (this.wrapperSpan && this.wrapperSpan.parentNode) {
+            this.wrapperSpan.parentNode.removeChild(this.wrapperSpan);
         }
-        this.ghostSpan = null;
+        this.wrapperSpan = null;
     }
 
     private renderGhost() {
@@ -90,22 +90,28 @@ export class InlineSearchMenuUI implements SearchMenuUI {
         // Build counter text
         const counter = ` ${this.selected + 1}/${this.items.length}`;
 
+        // Create wrapper span for ghost text
+        const wrapper = document.createElement("span");
+        wrapper.className = "inline-completion-area";
+        wrapper.contentEditable = "false";
+
         // Create ghost span
         const ghost = document.createElement("span");
         ghost.className = "inline-ghost";
-        ghost.contentEditable = "false";
         ghost.textContent = suffix + counter;
-        this.ghostSpan = ghost;
+        wrapper.appendChild(ghost);
 
-        // Append ghost to text entry
-        this.textEntry.appendChild(ghost);
+        this.wrapperSpan = wrapper;
 
-        // Restore cursor position before the ghost span
+        // Append wrapper to text entry
+        this.textEntry.appendChild(wrapper);
+
+        // Restore cursor position before the wrapper span
         this.setCursorBeforeGhost();
     }
 
     private setCursorBeforeGhost() {
-        if (!this.ghostSpan) {
+        if (!this.wrapperSpan) {
             return;
         }
         const s = document.getSelection();
@@ -113,8 +119,8 @@ export class InlineSearchMenuUI implements SearchMenuUI {
             return;
         }
         const r = document.createRange();
-        // Set cursor right before the ghost span
-        r.setStartBefore(this.ghostSpan);
+        // Set cursor right before the wrapper span
+        r.setStartBefore(this.wrapperSpan);
         r.collapse(true);
         s.removeAllRanges();
         s.addRange(r);

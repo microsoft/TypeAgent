@@ -56,7 +56,14 @@ export function createCommandTransformer(
             return undefined;
         } else {
             // console.log("[Success:]", JSON.stringify(result, null, 2));
-            // TODO: Validate that result.data is a valid NamedArgs?
+            if (
+                typeof result.data !== "object" ||
+                result.data === null ||
+                typeof (result.data as NamedArgs).name !== "string"
+            ) {
+                console.log("[Error:] result.data is not a valid NamedArgs");
+                return undefined;
+            }
             return result.data;
         }
     }

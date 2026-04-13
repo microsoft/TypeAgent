@@ -3,10 +3,10 @@
 
 import {
     CompletionDirection,
+    CompletionGroup,
     SeparatorMode,
     AfterWildcard,
 } from "@typeagent/agent-sdk";
-import { mergeSeparatorMode } from "@typeagent/agent-sdk/helpers/command";
 import {
     ExecutableAction,
     HistoryContext,
@@ -30,10 +30,7 @@ import {
     ConstructionCacheJSON,
     constructionCacheJSONVersion,
 } from "./constructionJSONTypes.js";
-import {
-    getLanguageTools,
-    needsSeparatorInAutoMode,
-} from "../utils/language.js";
+import { getLanguageTools } from "../utils/language.js";
 const debugConst = registerDebug("typeagent:const");
 const debugConstMatchStat = registerDebug("typeagent:const:match:stat");
 const debugCompletion = registerDebug("typeagent:const:completion");
@@ -80,16 +77,14 @@ export type MatchOptions = {
 export type CompletionProperty = {
     actions: ExecutableAction[];
     names: string[];
+    separatorMode: SeparatorMode;
 };
 
 export type CompletionResult = {
-    completions: string[];
+    groups: CompletionGroup[];
     properties?: CompletionProperty[] | undefined;
     // Characters consumed by the grammar before the completion point.
     matchedPrefixLength?: number | undefined;
-    // What kind of separator is required between the already-typed prefix
-    // and the completion text.  See SeparatorMode in @typeagent/agent-sdk.
-    separatorMode?: SeparatorMode | undefined;
     // True when the completions form a closed set — if the user types
     // something not in the list, no further completions can exist
     // beyond it.  False or undefined means the parser can continue
@@ -214,24 +209,20 @@ export function mergeCompletionResults(
             ? second
             : first;
     }
-    // Same prefix length — merge completions from both sources.
+    // Same prefix length — merge groups from both sources.
     const matchedPrefixLength =
         first.matchedPrefixLength !== undefined ||
         second.matchedPrefixLength !== undefined
             ? firstLen
             : undefined;
     return {
-        completions: [...first.completions, ...second.completions],
+        groups: [...first.groups, ...second.groups],
         properties: first.properties
             ? second.properties
                 ? [...first.properties, ...second.properties]
                 : first.properties
             : second.properties,
         matchedPrefixLength,
-        separatorMode: mergeSeparatorMode(
-            first.separatorMode,
-            second.separatorMode,
-        ),
         // Closed set only when both sources are closed sets.
         closedSet:
             first.closedSet !== undefined || second.closedSet !== undefined
@@ -515,8 +506,8 @@ export class ConstructionCache {
         // discarded — mirroring the grammar matcher's approach.
         let maxPrefixLength = 0;
         const completionProperty: CompletionProperty[] = [];
-        const requestText: string[] = [];
-        let separatorMode: SeparatorMode | undefined;
+        // Per-mode string completion buckets.
+        const modeCompletions = new Map<SeparatorMode, string[]>();
         // Whether the accumulated completions form a closed set.
         // Starts true; set to false when property/wildcard completions
         // are added (entity values are external).  Reset to true when
@@ -529,12 +520,20 @@ export class ConstructionCache {
         const rejectReferences = options?.rejectReferences ?? true;
         const langTools = getLanguageTools("en");
 
+        function addCompletion(text: string, mode: SeparatorMode): void {
+            let bucket = modeCompletions.get(mode);
+            if (bucket === undefined) {
+                bucket = [];
+                modeCompletions.set(mode, bucket);
+            }
+            bucket.push(text);
+        }
+
         function updateMaxPrefixLength(prefixLength: number): void {
             if (prefixLength > maxPrefixLength) {
                 maxPrefixLength = prefixLength;
-                requestText.length = 0;
+                modeCompletions.clear();
                 completionProperty.length = 0;
-                separatorMode = undefined;
                 closedSet = true;
                 hasMatchedPart = false;
             }
@@ -610,20 +609,7 @@ export class ConstructionCache {
                         ) {
                             continue;
                         }
-                        requestText.push(completionText);
-                        if (
-                            candidatePrefixLength > 0 &&
-                            completionText.length > 0
-                        ) {
-                            const needsSep = needsSeparatorInAutoMode(
-                                input[candidatePrefixLength - 1],
-                                completionText[0],
-                            );
-                            separatorMode = mergeSeparatorMode(
-                                separatorMode,
-                                needsSep ? "spacePunctuation" : "optional",
-                            );
-                        }
+                        addCompletion(completionText, "autoSpacePunctuation");
                     }
                 }
             }
@@ -656,17 +642,8 @@ export class ConstructionCache {
                         completionProperty.push({
                             actions: result.match.actions,
                             names: queryPropertyNames,
+                            separatorMode: "autoSpacePunctuation",
                         });
-                        if (candidatePrefixLength > 0) {
-                            const needsSep = needsSeparatorInAutoMode(
-                                input[candidatePrefixLength - 1],
-                                "a",
-                            );
-                            separatorMode = mergeSeparatorMode(
-                                separatorMode,
-                                needsSep ? "spacePunctuation" : "optional",
-                            );
-                        }
                         closedSet = false;
                     }
                 }
@@ -675,18 +652,11 @@ export class ConstructionCache {
 
         // Advance past trailing separators so that the reported prefix
         // length includes any trailing whitespace the user typed.
-        // When advancing, demote separatorMode to "optional" — the
-        // trailing space is already consumed.
-        //
-        // Skip advancement when backward backed up: the backed-up
-        // position is where backward wants completions to anchor.
-        // Advancing past trailing separator chars would defeat the
-        // backup (e.g. separator-only keywords like "...").
+        // No longer demotes separatorMode — each group carries its own.
         if (!backward && maxPrefixLength < input.length) {
             const trailing = input.substring(maxPrefixLength);
             if (/^[\s\p{P}]+$/u.test(trailing)) {
                 maxPrefixLength = input.length;
-                separatorMode = "optional";
             }
         }
 
@@ -698,11 +668,22 @@ export class ConstructionCache {
         const noTrailingSeparator = !/[\s\p{P}]$/u.test(input);
         const directionSensitive = hasMatchedPart && noTrailingSeparator;
 
+        // Build per-mode groups.
+        const groups: CompletionGroup[] = [];
+        for (const [mode, completions] of modeCompletions) {
+            groups.push({
+                name: "Construction Completions",
+                completions,
+                separatorMode: mode,
+                needQuotes: false,
+                kind: "literal",
+            });
+        }
+
         return {
-            completions: requestText,
+            groups,
             properties: completionProperty,
             matchedPrefixLength: maxPrefixLength,
-            separatorMode,
             closedSet,
             directionSensitive,
         };
