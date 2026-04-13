@@ -209,9 +209,18 @@ async function handleCrawlDocUrl(
 
 // Strip HTML tags and collapse whitespace to extract readable text.
 function stripHtml(html: string): string {
-    return html
-        .replace(/<script[\s\S]*?<\/script>/gi, "")
-        .replace(/<style[\s\S]*?<\/style>/gi, "")
+    // Repeatedly remove multi-character patterns until stable to avoid
+    // incomplete sanitization from overlapping/re-formed substrings.
+    let sanitized = html;
+    let previous: string;
+    do {
+        previous = sanitized;
+        sanitized = sanitized
+            .replace(/<script[\s\S]*?<\/script>/gi, "")
+            .replace(/<style[\s\S]*?<\/style>/gi, "");
+    } while (sanitized !== previous);
+
+    return sanitized
         .replace(/<[^>]+>/g, " ")
         .replace(/&nbsp;/g, " ")
         .replace(/&lt;/g, "<")
