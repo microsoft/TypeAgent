@@ -36,5 +36,7 @@ export function getTestingModel(): ChatModel {
 }
 
 export function getPackagingModel(): ChatModel {
-    return openai.createChatModelDefault("onboarding:packaging");
+    return openai.createChatModel(undefined, undefined, undefined, [
+        "onboarding:packaging",
+    ]);
 }
