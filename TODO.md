@@ -102,8 +102,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/agentSdkWrapper/src/webtask/tracing/types.ts` | 138 | Phase 2: Extract key elements from HTML | High | Low | Component | No Fix | Yes |
 | `ts/packages/agents/browser/src/extension/views/extensionServiceBase.ts` | 579 | remove "type" from this dictionary. That will remove the need to wrap these values in a "parameters" object | Medium | Medium | Component | Fix | No |
 | `ts/packages/agents/browser/src/extension/views/topicGraphView.ts` | 296 | Implement topic viewport neighborhood functionality | High | Medium | Component | Fix | Yes |
-| `ts/packages/agents/calendar/src/calendarActionHandlerV3.ts` | 1120 | Implement sophisticated date parsing | Medium | High | Local | Fix | No |
-| `ts/packages/agents/calendar/src/calendarActionHandlerV3.ts` | 1126 | Implement sophisticated time parsing | Medium | High | Local | Fix | No |
 | `ts/packages/agents/desktop/src/connector.ts` | 127 | add shared agent storage or known storage location (requires permissions, trusted agents, etc.) | High | Low | Cross-cutting | No Fix | Yes |
 | `ts/packages/agents/greeting/src/greetingCommandHandler.ts` | 292 | personalize list based on user preferences | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/agents/list/src/listActionHandler.ts` | 386 | formalize the schema for activityContext | Medium | Medium | Component | Fix | Yes |
