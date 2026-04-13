@@ -10,11 +10,15 @@
 import { ChatModel, openai } from "aiclient";
 
 export function getDiscoveryModel(): ChatModel {
-    return openai.createChatModelDefault("onboarding:discovery");
+    return openai.createChatModel(undefined, undefined, undefined, [
+        "onboarding:discovery",
+    ]);
 }
 
 export function getPhraseGenModel(): ChatModel {
-    return openai.createChatModelDefault("onboarding:phrasegen");
+    return openai.createChatModel(undefined, undefined, undefined, [
+        "onboarding:phrasegen",
+    ]);
 }
 
 export function getSchemaGenModel(): ChatModel {
