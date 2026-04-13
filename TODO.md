@@ -103,7 +103,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/actionSchema/src/jsonSchemaParser.ts` | 51 | resolve? | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/actionSchema/src/parser.ts` | 608 | Faithfully resolve intersection types | High | Medium | Component | Fix | No |
 | `ts/packages/actionSchema/src/utils.ts` | 60 | doesn't work on union types yet. | Medium | Medium | Component | Fix | No |
-| `ts/packages/agentRpc/src/client.ts` | 633 | Clean up the associated options. | Low | High | Local | Fix | No |
 | `ts/packages/agentSdk/src/agentInterface.ts` | 57 | enable non-stringify pas content. | Medium | Medium | Cross-cutting | Fix | Yes |
 | `ts/packages/agentSdk/src/agentInterface.ts` | 234 | only utf8 & base64 is supported for now. | Medium | Medium | Component | Fix | No |
 | `ts/packages/agentSdkWrapper/src/webtask/tracing/types.ts` | 138 | Phase 2: Extract key elements from HTML | High | Low | Component | No Fix | Yes |
