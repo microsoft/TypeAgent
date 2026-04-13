@@ -14,10 +14,10 @@ Before you can use the onboarding agent from your AI assistant, you need to regi
 
 TypeAgent exposes a stdio MCP server at `ts/packages/commandExecutor/dist/server.js`. It provides three tools to your AI assistant:
 
-| Tool | What it does |
-|---|---|
-| `discover_agents` | Lists all TypeAgent agents and their actions |
-| `execute_action` | Calls any agent action directly by name with typed parameters |
+| Tool              | What it does                                                  |
+| ----------------- | ------------------------------------------------------------- |
+| `discover_agents` | Lists all TypeAgent agents and their actions                  |
+| `execute_action`  | Calls any agent action directly by name with typed parameters |
 | `execute_command` | Passes a natural language request to the TypeAgent dispatcher |
 
 The onboarding agent's actions (`startOnboarding`, `crawlDocUrl`, `generateSchema`, etc.) are discovered and called via these tools.
@@ -52,7 +52,9 @@ You should see `command-executor` listed as connected.
   "mcpServers": {
     "typeagent": {
       "command": "node",
-      "args": ["<absolute-path-to-repo>/ts/packages/commandExecutor/dist/server.js"],
+      "args": [
+        "<absolute-path-to-repo>/ts/packages/commandExecutor/dist/server.js"
+      ],
       "env": {}
     }
   }
@@ -60,6 +62,7 @@ You should see `command-executor` listed as connected.
 ```
 
 Replace `<absolute-path-to-repo>` with the full path to your TypeAgent clone, for example:
+
 - Windows: `C:/repos/TypeAgent/ts/packages/commandExecutor/dist/server.js`
 - Mac/Linux: `/home/you/repos/TypeAgent/ts/packages/commandExecutor/dist/server.js`
 
@@ -78,7 +81,9 @@ GitHub Copilot uses VS Code's MCP configuration. Add the TypeAgent server via th
   "github.copilot.chat.mcpServers": {
     "typeagent": {
       "command": "node",
-      "args": ["<absolute-path-to-repo>/ts/packages/commandExecutor/dist/server.js"],
+      "args": [
+        "<absolute-path-to-repo>/ts/packages/commandExecutor/dist/server.js"
+      ],
       "type": "stdio"
     }
   }
@@ -86,6 +91,7 @@ GitHub Copilot uses VS Code's MCP configuration. Add the TypeAgent server via th
 ```
 
 **Via the VS Code UI** — open the Command Palette (`Ctrl+Shift+P`), run **"MCP: Add MCP Server"**, choose **"Command (stdio)"**, and enter:
+
 - Command: `node`
 - Args: `<absolute-path-to-repo>/ts/packages/commandExecutor/dist/server.js`
 - Name: `typeagent`
@@ -111,6 +117,7 @@ or
 The assistant will call `discover_agents` and return a list that includes `onboarding` (among others). If you see the list, you're ready to start onboarding.
 
 **Troubleshooting:**
+
 - If the server isn't found, check that `ts/packages/commandExecutor/dist/server.js` exists — run `pnpm run build` from `ts/` if not
 - If tools don't appear, restart your AI assistant or reload the VS Code window
 - Logs are written to `~/.tmp/typeagent-mcp/` — check there for connection errors
@@ -267,6 +274,7 @@ If compilation fails, the error message will tell you which rule is invalid. You
 ```
 > Generate the grammar for slack
 ```
+
 again after the schema is adjusted, or manually edit the grammar file at `~/.typeagent/onboarding/slack/grammarGen/schema.agr`.
 
 When the grammar compiles cleanly:
@@ -284,6 +292,7 @@ When the grammar compiles cleanly:
 ```
 
 This stamps out a complete TypeAgent agent package at `ts/packages/agents/slack/` with:
+
 - `slackManifest.json`
 - `slackSchema.ts` (the approved schema)
 - `slackSchema.agr` (the approved grammar)
@@ -415,13 +424,13 @@ After scaffolding, you'll have a stub handler at `ts/packages/agents/slack/src/s
 
 ```typescript
 async function executeAction(
-    action: TypeAgentAction<SlackActions>,
-    context: ActionContext<unknown>,
+  action: TypeAgentAction<SlackActions>,
+  context: ActionContext<unknown>,
 ): Promise<ActionResult> {
-    // TODO: implement action handlers
-    return createActionResultFromTextDisplay(
-        `Executing ${action.actionName} — not yet implemented.`,
-    );
+  // TODO: implement action handlers
+  return createActionResultFromTextDisplay(
+    `Executing ${action.actionName} — not yet implemented.`,
+  );
 }
 ```
 
@@ -429,16 +438,16 @@ Fill in the cases using the Slack Web API client. For example:
 
 ```typescript
 switch (action.actionName) {
-    case "postMessage": {
-        const result = await slackClient.chat.postMessage({
-            channel: action.parameters.channelId,
-            text: action.parameters.message,
-        });
-        return createActionResultFromTextDisplay(
-            `Message sent to ${action.parameters.channelId}`,
-        );
-    }
-    // ...
+  case "postMessage": {
+    const result = await slackClient.chat.postMessage({
+      channel: action.parameters.channelId,
+      text: action.parameters.message,
+    });
+    return createActionResultFromTextDisplay(
+      `Message sent to ${action.parameters.channelId}`,
+    );
+  }
+  // ...
 }
 ```
 

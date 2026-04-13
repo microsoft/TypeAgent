@@ -144,7 +144,12 @@ async function executeAction(
     }
 
     // Packaging phase
-    if (actionName === "packageAgent" || actionName === "validatePackage" || actionName === "generateDemo" || actionName === "generateReadme") {
+    if (
+        actionName === "packageAgent" ||
+        actionName === "validatePackage" ||
+        actionName === "generateDemo" ||
+        actionName === "generateReadme"
+    ) {
         return executePackagingAction(
             action as TypeAgentAction<PackagingActions>,
             context,

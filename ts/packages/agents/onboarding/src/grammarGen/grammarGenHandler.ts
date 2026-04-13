@@ -10,9 +10,7 @@ import {
     TypeAgentAction,
     ActionResult,
 } from "@typeagent/agent-sdk";
-import {
-    createActionResultFromMarkdownDisplay,
-} from "@typeagent/agent-sdk/helpers/action";
+import { createActionResultFromMarkdownDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { GrammarGenActions } from "./grammarGenSchema.js";
 import {
     loadState,
@@ -44,40 +42,73 @@ export async function executeGrammarGenAction(
     }
 }
 
-async function handleGenerateGrammar(integrationName: string): Promise<ActionResult> {
+async function handleGenerateGrammar(
+    integrationName: string,
+): Promise<ActionResult> {
     const state = await loadState(integrationName);
     if (!state) return { error: `Integration "${integrationName}" not found.` };
     if (state.phases.schemaGen.status !== "approved") {
-        return { error: `Schema phase must be approved first. Run approveSchema.` };
+        return {
+            error: `Schema phase must be approved first. Run approveSchema.`,
+        };
     }
 
-    const surface = await readArtifactJson<ApiSurface>(integrationName, "discovery", "api-surface.json");
-    const phraseSet = await readArtifactJson<PhraseSet>(integrationName, "phraseGen", "phrases.json");
-    const schemaTs = await readArtifact(integrationName, "schemaGen", "schema.ts");
+    const surface = await readArtifactJson<ApiSurface>(
+        integrationName,
+        "discovery",
+        "api-surface.json",
+    );
+    const phraseSet = await readArtifactJson<PhraseSet>(
+        integrationName,
+        "phraseGen",
+        "phrases.json",
+    );
+    const schemaTs = await readArtifact(
+        integrationName,
+        "schemaGen",
+        "schema.ts",
+    );
     if (!surface || !phraseSet || !schemaTs) {
-        return { error: `Missing required artifacts for "${integrationName}".` };
+        return {
+            error: `Missing required artifacts for "${integrationName}".`,
+        };
     }
 
     await updatePhase(integrationName, "grammarGen", { status: "in-progress" });
 
     const model = getGrammarGenModel();
-    const prompt = buildGrammarPrompt(integrationName, surface, phraseSet, schemaTs);
+    const prompt = buildGrammarPrompt(
+        integrationName,
+        surface,
+        phraseSet,
+        schemaTs,
+    );
     const result = await model.complete(prompt);
     if (!result.success) {
         return { error: `Grammar generation failed: ${result.message}` };
     }
 
     const grammarContent = extractGrammarContent(result.data);
-    await writeArtifact(integrationName, "grammarGen", "schema.agr", grammarContent);
+    await writeArtifact(
+        integrationName,
+        "grammarGen",
+        "schema.agr",
+        grammarContent,
+    );
 
     return createActionResultFromMarkdownDisplay(
         `## Grammar generated: ${integrationName}\n\n` +
-            "```\n" + grammarContent.slice(0, 2000) + (grammarContent.length > 2000 ? "\n// ... (truncated)" : "") + "\n```\n\n" +
+            "```\n" +
+            grammarContent.slice(0, 2000) +
+            (grammarContent.length > 2000 ? "\n// ... (truncated)" : "") +
+            "\n```\n\n" +
             `Use \`compileGrammar\` to validate, or \`approveGrammar\` if it looks correct.`,
     );
 }
 
-async function handleCompileGrammar(integrationName: string): Promise<ActionResult> {
+async function handleCompileGrammar(
+    integrationName: string,
+): Promise<ActionResult> {
     const grammarPath = path.join(
         getPhasePath(integrationName, "grammarGen"),
         "schema.agr",
@@ -87,27 +118,47 @@ async function handleCompileGrammar(integrationName: string): Promise<ActionResu
         "schema.ag.json",
     );
 
-    const grammarContent = await readArtifact(integrationName, "grammarGen", "schema.agr");
+    const grammarContent = await readArtifact(
+        integrationName,
+        "grammarGen",
+        "schema.agr",
+    );
     if (!grammarContent) {
-        return { error: `No grammar file found for "${integrationName}". Run generateGrammar first.` };
+        return {
+            error: `No grammar file found for "${integrationName}". Run generateGrammar first.`,
+        };
     }
 
     // Copy the schema .ts file into grammarGen/ so the agr import resolves
-    const schemaSrc = path.join(getPhasePath(integrationName, "schemaGen"), "schema.ts");
-    const schemaDst = path.join(getPhasePath(integrationName, "grammarGen"), "schema.ts");
+    const schemaSrc = path.join(
+        getPhasePath(integrationName, "schemaGen"),
+        "schema.ts",
+    );
+    const schemaDst = path.join(
+        getPhasePath(integrationName, "grammarGen"),
+        "schema.ts",
+    );
     try {
         await fs.copyFile(schemaSrc, schemaDst);
     } catch {
-        return { error: `Could not copy schema.ts into grammarGen/ for compilation. Ensure schema is approved.` };
+        return {
+            error: `Could not copy schema.ts into grammarGen/ for compilation. Ensure schema is approved.`,
+        };
     }
 
     return new Promise((resolve) => {
         // Resolve agc from the package's own node_modules/.bin
         const pkgDir = path.resolve(
-            fileURLToPath(import.meta.url), "..", "..", "..",
+            fileURLToPath(import.meta.url),
+            "..",
+            "..",
+            "..",
         );
         const binDir = path.join(pkgDir, "node_modules", ".bin");
-        const env = { ...process.env, PATH: binDir + path.delimiter + (process.env.PATH ?? "") };
+        const env = {
+            ...process.env,
+            PATH: binDir + path.delimiter + (process.env.PATH ?? ""),
+        };
 
         const proc = spawn("agc", ["-i", grammarPath, "-o", outputPath], {
             stdio: ["ignore", "pipe", "pipe"],
@@ -117,8 +168,12 @@ async function handleCompileGrammar(integrationName: string): Promise<ActionResu
 
         let stdout = "";
         let stderr = "";
-        proc.stdout?.on("data", (d: Buffer) => { stdout += d.toString(); });
-        proc.stderr?.on("data", (d: Buffer) => { stderr += d.toString(); });
+        proc.stdout?.on("data", (d: Buffer) => {
+            stdout += d.toString();
+        });
+        proc.stderr?.on("data", (d: Buffer) => {
+            stderr += d.toString();
+        });
 
         proc.on("close", (code) => {
             if (code === 0) {
@@ -126,7 +181,9 @@ async function handleCompileGrammar(integrationName: string): Promise<ActionResu
                     createActionResultFromMarkdownDisplay(
                         `## Grammar compiled successfully: ${integrationName}\n\n` +
                             `Output: \`schema.ag.json\`\n\n` +
-                            (stdout ? `Compiler output:\n\`\`\`\n${stdout}\n\`\`\`` : "") +
+                            (stdout
+                                ? `Compiler output:\n\`\`\`\n${stdout}\n\`\`\``
+                                : "") +
                             `\n\nUse \`approveGrammar\` to proceed to scaffolding.`,
                     ),
                 );
@@ -141,15 +198,25 @@ async function handleCompileGrammar(integrationName: string): Promise<ActionResu
         });
 
         proc.on("error", (err) => {
-            resolve({ error: `Failed to run agc: ${err.message}. Is action-grammar-compiler installed?` });
+            resolve({
+                error: `Failed to run agc: ${err.message}. Is action-grammar-compiler installed?`,
+            });
         });
     });
 }
 
-async function handleApproveGrammar(integrationName: string): Promise<ActionResult> {
-    const grammar = await readArtifact(integrationName, "grammarGen", "schema.agr");
+async function handleApproveGrammar(
+    integrationName: string,
+): Promise<ActionResult> {
+    const grammar = await readArtifact(
+        integrationName,
+        "grammarGen",
+        "schema.agr",
+    );
     if (!grammar) {
-        return { error: `No grammar found for "${integrationName}". Run generateGrammar first.` };
+        return {
+            error: `No grammar found for "${integrationName}". Run generateGrammar first.`,
+        };
     }
 
     await updatePhase(integrationName, "grammarGen", { status: "approved" });
@@ -169,7 +236,10 @@ function buildGrammarPrompt(
     const actionExamples = surface.actions
         .map((a) => {
             const phrases = phraseSet.phrases[a.name] ?? [];
-            return `Action: ${a.name}\nPhrases:\n${phrases.slice(0, 4).map((p) => `  - "${p}"`).join("\n")}`;
+            return `Action: ${a.name}\nPhrases:\n${phrases
+                .slice(0, 4)
+                .map((p) => `  - "${p}"`)
+                .join("\n")}`;
         })
         .join("\n\n");
 
@@ -179,7 +249,7 @@ function buildGrammarPrompt(
             content:
                 "You are an expert in TypeAgent grammar files (.agr format). " +
                 "Grammar rules use this syntax:\n" +
-                "  <RuleName> = pattern -> { actionName: \"name\", parameters: { ... } }\n" +
+                '  <RuleName> = pattern -> { actionName: "name", parameters: { ... } }\n' +
                 "  | alternative -> { ... };\n\n" +
                 "Pattern syntax:\n" +
                 "  - $(paramName:wildcard) captures 1+ words into a variable\n" +
@@ -190,7 +260,7 @@ function buildGrammarPrompt(
                 "IMPORTANT: In the action output object after ->, reference captured parameters by BARE NAME only, NOT with $() syntax.\n" +
                 "Example:\n" +
                 "  <AddItems> = add $(item:wildcard) to (the)? $(listName:wildcard) list -> {\n" +
-                "    actionName: \"addItems\",\n" +
+                '    actionName: "addItems",\n' +
                 "    parameters: {\n" +
                 "        items: [item],\n" +
                 "        listName\n" +
@@ -198,7 +268,7 @@ function buildGrammarPrompt(
                 "  };\n\n" +
                 "The action output must use multi-line format with proper indentation as shown above.\n" +
                 "The file must start with a copyright header comment and end with:\n" +
-                "  import { ActionType } from \"./schemaFile.ts\";\n" +
+                '  import { ActionType } from "./schemaFile.ts";\n' +
                 "  <Start> : ActionType = <Rule1> | <Rule2> | ...;\n\n" +
                 "Respond in JSON format. Return a JSON object with a single `grammar` key containing the .agr file content as a string.",
         },

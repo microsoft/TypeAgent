@@ -39,7 +39,11 @@ import type {
     RequestId,
     CommandResult,
 } from "@typeagent/dispatcher-types";
-import type { DisplayAppendMode, DisplayContent, MessageContent } from "@typeagent/agent-sdk";
+import type {
+    DisplayAppendMode,
+    DisplayContent,
+    MessageContent,
+} from "@typeagent/agent-sdk";
 
 export type TestCase = {
     phrase: string;
@@ -111,11 +115,15 @@ export async function executeTestingAction(
     }
 }
 
-async function handleGenerateTests(integrationName: string): Promise<ActionResult> {
+async function handleGenerateTests(
+    integrationName: string,
+): Promise<ActionResult> {
     const state = await loadState(integrationName);
     if (!state) return { error: `Integration "${integrationName}" not found.` };
     if (state.phases.scaffolder.status !== "approved") {
-        return { error: `Scaffolder phase must be approved first. Run scaffoldAgent.` };
+        return {
+            error: `Scaffolder phase must be approved first. Run scaffoldAgent.`,
+        };
     }
 
     const phraseSet = await readArtifactJson<PhraseSet>(
@@ -167,7 +175,9 @@ async function handleRunTests(
         "test-cases.json",
     );
     if (!testCases || testCases.length === 0) {
-        return { error: `No test cases found for "${integrationName}". Run generateTests first.` };
+        return {
+            error: `No test cases found for "${integrationName}". Run generateTests first.`,
+        };
     }
 
     let toRun = forActions
@@ -178,7 +188,9 @@ async function handleRunTests(
     // Create a dispatcher and run each phrase through it.
     // The scaffolded agent must be registered in config.json before running tests.
     // Use `packageAgent --register` (phase 7) or add manually and restart TypeAgent.
-    let dispatcherSession: Awaited<ReturnType<typeof createTestDispatcher>> | undefined;
+    let dispatcherSession:
+        | Awaited<ReturnType<typeof createTestDispatcher>>
+        | undefined;
     try {
         dispatcherSession = await createTestDispatcher();
     } catch (err: any) {
@@ -192,7 +204,11 @@ async function handleRunTests(
 
     const results: TestResult[] = [];
     for (const tc of toRun) {
-        const result = await runSingleTest(tc, integrationName, dispatcherSession.dispatcher);
+        const result = await runSingleTest(
+            tc,
+            integrationName,
+            dispatcherSession.dispatcher,
+        );
         results.push(result);
     }
 
@@ -210,7 +226,12 @@ async function handleRunTests(
         results,
     };
 
-    await writeArtifactJson(integrationName, "testing", "results.json", testRun);
+    await writeArtifactJson(
+        integrationName,
+        "testing",
+        "results.json",
+        testRun,
+    );
 
     const passRate = Math.round((passed / results.length) * 100);
 
@@ -243,7 +264,9 @@ async function handleGetTestResults(
         "results.json",
     );
     if (!testRun) {
-        return { error: `No test results found for "${integrationName}". Run runTests first.` };
+        return {
+            error: `No test results found for "${integrationName}". Run runTests first.`,
+        };
     }
 
     const results = filter
@@ -260,10 +283,12 @@ async function handleGetTestResults(
         ``,
         `| Result | Phrase | Expected | Actual |`,
         `|---|---|---|---|`,
-        ...results.slice(0, 50).map(
-            (r) =>
-                `| ${r.passed ? "✅" : "❌"} | "${r.phrase}" | \`${r.expectedActionName}\` | \`${r.actualActionName ?? r.error ?? "—"}\` |`,
-        ),
+        ...results
+            .slice(0, 50)
+            .map(
+                (r) =>
+                    `| ${r.passed ? "✅" : "❌"} | "${r.phrase}" | \`${r.expectedActionName}\` | \`${r.actualActionName ?? r.error ?? "—"}\` |`,
+            ),
     ];
     if (results.length > 50) {
         lines.push(``, `_...and ${results.length - 50} more_`);
@@ -292,8 +317,16 @@ async function handleProposeRepair(
         );
     }
 
-    const schemaTs = await readArtifact(integrationName, "schemaGen", "schema.ts");
-    const grammarAgr = await readArtifact(integrationName, "grammarGen", "schema.agr");
+    const schemaTs = await readArtifact(
+        integrationName,
+        "schemaGen",
+        "schema.ts",
+    );
+    const grammarAgr = await readArtifact(
+        integrationName,
+        "grammarGen",
+        "schema.agr",
+    );
 
     const filteredFailing = forActions
         ? failing.filter((r) => forActions.includes(r.expectedActionName))
@@ -332,8 +365,12 @@ async function handleProposeRepair(
     };
 
     // Extract suggested schema and grammar changes from the response
-    const schemaMatch = schemaFromJson ? null : result.data.match(/```typescript([\s\S]*?)```/);
-    const grammarMatch = grammarFromJson ? null : result.data.match(/```(?:agr)?([\s\S]*?)```/);
+    const schemaMatch = schemaFromJson
+        ? null
+        : result.data.match(/```typescript([\s\S]*?)```/);
+    const grammarMatch = grammarFromJson
+        ? null
+        : result.data.match(/```(?:agr)?([\s\S]*?)```/);
     if (schemaFromJson) repair.schemaChanges = schemaFromJson.trim();
     else if (schemaMatch) repair.schemaChanges = schemaMatch[1].trim();
     if (grammarFromJson) repair.grammarChanges = grammarFromJson.trim();
@@ -355,7 +392,9 @@ async function handleProposeRepair(
     );
 }
 
-async function handleApproveRepair(integrationName: string): Promise<ActionResult> {
+async function handleApproveRepair(
+    integrationName: string,
+): Promise<ActionResult> {
     const repair = await readArtifactJson<ProposedRepair>(
         integrationName,
         "testing",
@@ -371,7 +410,11 @@ async function handleApproveRepair(integrationName: string): Promise<ActionResul
     // Apply schema changes if present
     if (repair.schemaChanges) {
         const version = Date.now();
-        const existing = await readArtifact(integrationName, "schemaGen", "schema.ts");
+        const existing = await readArtifact(
+            integrationName,
+            "schemaGen",
+            "schema.ts",
+        );
         if (existing) {
             await writeArtifactJson(
                 integrationName,
@@ -381,13 +424,22 @@ async function handleApproveRepair(integrationName: string): Promise<ActionResul
             );
         }
         const { writeArtifact } = await import("../lib/workspace.js");
-        await writeArtifact(integrationName, "schemaGen", "schema.ts", repair.schemaChanges);
+        await writeArtifact(
+            integrationName,
+            "schemaGen",
+            "schema.ts",
+            repair.schemaChanges,
+        );
     }
 
     // Apply grammar changes if present
     if (repair.grammarChanges) {
         const version = Date.now();
-        const existing = await readArtifact(integrationName, "grammarGen", "schema.agr");
+        const existing = await readArtifact(
+            integrationName,
+            "grammarGen",
+            "schema.agr",
+        );
         if (existing) {
             await writeArtifactJson(
                 integrationName,
@@ -397,12 +449,22 @@ async function handleApproveRepair(integrationName: string): Promise<ActionResul
             );
         }
         const { writeArtifact } = await import("../lib/workspace.js");
-        await writeArtifact(integrationName, "grammarGen", "schema.agr", repair.grammarChanges);
+        await writeArtifact(
+            integrationName,
+            "grammarGen",
+            "schema.agr",
+            repair.grammarChanges,
+        );
     }
 
     repair.applied = true;
     repair.appliedAt = new Date().toISOString();
-    await writeArtifactJson(integrationName, "testing", "proposed-repair.json", repair);
+    await writeArtifactJson(
+        integrationName,
+        "testing",
+        "proposed-repair.json",
+        repair,
+    );
 
     await updatePhase(integrationName, "testing", { status: "approved" });
 
@@ -425,7 +487,8 @@ function createCapturingClientIO(buffer: string[]): ClientIO {
         if (typeof content === "string") return content;
         if (Array.isArray(content)) {
             if (content.length === 0) return "";
-            if (typeof content[0] === "string") return (content as string[]).join("\n");
+            if (typeof content[0] === "string")
+                return (content as string[]).join("\n");
             return (content as string[][]).map((r) => r.join(" | ")).join("\n");
         }
         // TypedDisplayContent
@@ -452,7 +515,9 @@ function createCapturingClientIO(buffer: string[]): ClientIO {
         setDynamicDisplay: noop,
         askYesNo: async (_id: RequestId, _msg: string, def = false) => def,
         proposeAction: async () => undefined,
-        popupQuestion: async () => { throw new Error("popupQuestion not supported in test runner"); },
+        popupQuestion: async () => {
+            throw new Error("popupQuestion not supported in test runner");
+        },
         notify: noop,
         openLocalView: async () => {},
         closeLocalView: async () => {},
@@ -468,7 +533,8 @@ function getExternalAppAgentProviders(instanceDir: string) {
     const configPath = path.join(instanceDir, "externalAgentsConfig.json");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const agents = fs.existsSync(configPath)
-        ? (JSON.parse(fs.readFileSync(configPath, "utf8")) as any).agents ?? {}
+        ? ((JSON.parse(fs.readFileSync(configPath, "utf8")) as any).agents ??
+          {})
         : {};
     return [
         createNpmAppAgentProvider(

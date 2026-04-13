@@ -10,9 +10,7 @@ import {
     TypeAgentAction,
     ActionResult,
 } from "@typeagent/agent-sdk";
-import {
-    createActionResultFromMarkdownDisplay,
-} from "@typeagent/agent-sdk/helpers/action";
+import { createActionResultFromMarkdownDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { DiscoveryActions } from "./discoverySchema.js";
 import {
     loadState,
@@ -92,7 +90,9 @@ async function handleCrawlDocUrl(
 ): Promise<ActionResult> {
     const state = await loadState(integrationName);
     if (!state) {
-        return { error: `Integration "${integrationName}" not found. Run startOnboarding first.` };
+        return {
+            error: `Integration "${integrationName}" not found. Run startOnboarding first.`,
+        };
     }
 
     await updatePhase(integrationName, "discovery", { status: "in-progress" });
@@ -104,7 +104,9 @@ async function handleCrawlDocUrl(
     try {
         const response = await fetch(url);
         if (!response.ok) {
-            return { error: `Failed to fetch ${url}: ${response.status} ${response.statusText}` };
+            return {
+                error: `Failed to fetch ${url}: ${response.status} ${response.statusText}`,
+            };
         }
         pageContent = await response.text();
     } catch (err: any) {
@@ -115,7 +117,12 @@ async function handleCrawlDocUrl(
     const textContent = stripHtml(pageContent);
 
     // Follow links up to maxDepth levels
-    const linkedContent = await crawlLinks(url, pageContent, maxDepth, integrationName);
+    const linkedContent = await crawlLinks(
+        url,
+        pageContent,
+        maxDepth,
+        integrationName,
+    );
 
     // Use LLM to extract API actions from the page content
     const prompt = [
@@ -169,8 +176,8 @@ async function handleCrawlDocUrl(
         discoveredAt: new Date().toISOString(),
         source: url,
         actions: [
-            ...(existing?.actions ?? []).filter((a) =>
-                !actions.find((n) => n.name === a.name),
+            ...(existing?.actions ?? []).filter(
+                (a) => !actions.find((n) => n.name === a.name),
             ),
             ...actions,
         ],
@@ -227,7 +234,9 @@ function extractLinks(baseUrl: string, html: string): string[] {
             // Only follow links on the same hostname and path prefix
             if (
                 resolved.hostname === base.hostname &&
-                resolved.pathname.startsWith(base.pathname.split("/").slice(0, -1).join("/"))
+                resolved.pathname.startsWith(
+                    base.pathname.split("/").slice(0, -1).join("/"),
+                )
             ) {
                 links.push(resolved.href);
             }
@@ -271,9 +280,20 @@ async function crawlLinks(
 
 // Names that are internal Office.js / API framework infrastructure, not user-facing operations.
 const INTERNAL_ACTION_NAMES = new Set([
-    "load", "sync", "toJSON", "track", "untrack", "context",
-    "getItem", "getCount", "getItemOrNullObject", "getFirstOrNullObject",
-    "getLastOrNullObject", "getLast", "getFirst", "items",
+    "load",
+    "sync",
+    "toJSON",
+    "track",
+    "untrack",
+    "context",
+    "getItem",
+    "getCount",
+    "getItemOrNullObject",
+    "getFirstOrNullObject",
+    "getLastOrNullObject",
+    "getLast",
+    "getFirst",
+    "items",
 ]);
 
 function isInternalAction(name: string): boolean {
@@ -289,7 +309,9 @@ async function handleParseOpenApiSpec(
 ): Promise<ActionResult> {
     const state = await loadState(integrationName);
     if (!state) {
-        return { error: `Integration "${integrationName}" not found. Run startOnboarding first.` };
+        return {
+            error: `Integration "${integrationName}" not found. Run startOnboarding first.`,
+        };
     }
 
     await updatePhase(integrationName, "discovery", { status: "in-progress" });
@@ -297,10 +319,15 @@ async function handleParseOpenApiSpec(
     // Fetch the spec (URL or file path)
     let specContent: string;
     try {
-        if (specSource.startsWith("http://") || specSource.startsWith("https://")) {
+        if (
+            specSource.startsWith("http://") ||
+            specSource.startsWith("https://")
+        ) {
             const response = await fetch(specSource);
             if (!response.ok) {
-                return { error: `Failed to fetch spec: ${response.status} ${response.statusText}` };
+                return {
+                    error: `Failed to fetch spec: ${response.status} ${response.statusText}`,
+                };
             }
             specContent = await response.text();
         } else {
@@ -308,7 +335,9 @@ async function handleParseOpenApiSpec(
             specContent = await fs.readFile(specSource, "utf-8");
         }
     } catch (err: any) {
-        return { error: `Failed to read spec from ${specSource}: ${err?.message ?? err}` };
+        return {
+            error: `Failed to read spec from ${specSource}: ${err?.message ?? err}`,
+        };
     }
 
     let spec: any;
@@ -317,7 +346,9 @@ async function handleParseOpenApiSpec(
     } catch {
         try {
             // Try YAML if JSON fails (basic line parsing)
-            return { error: "YAML specs not yet supported — please provide a JSON OpenAPI spec." };
+            return {
+                error: "YAML specs not yet supported — please provide a JSON OpenAPI spec.",
+            };
         } catch {
             return { error: "Could not parse spec as JSON or YAML." };
         }
@@ -326,13 +357,27 @@ async function handleParseOpenApiSpec(
     // Extract actions from OpenAPI paths
     const actions: DiscoveredAction[] = [];
     const paths = spec.paths ?? {};
-    for (const [pathStr, pathItem] of Object.entries(paths) as [string, any][]) {
-        for (const method of ["get", "post", "put", "patch", "delete"] as const) {
+    for (const [pathStr, pathItem] of Object.entries(paths) as [
+        string,
+        any,
+    ][]) {
+        for (const method of [
+            "get",
+            "post",
+            "put",
+            "patch",
+            "delete",
+        ] as const) {
             const op = pathItem?.[method];
             if (!op) continue;
 
-            const name = op.operationId ?? `${method}${pathStr.replace(/[^a-zA-Z0-9]/g, "_")}`;
-            const camelName = name.replace(/_([a-z])/g, (_: string, c: string) => c.toUpperCase());
+            const name =
+                op.operationId ??
+                `${method}${pathStr.replace(/[^a-zA-Z0-9]/g, "_")}`;
+            const camelName = name.replace(
+                /_([a-z])/g,
+                (_: string, c: string) => c.toUpperCase(),
+            );
 
             const parameters: DiscoveredParameter[] = (op.parameters ?? []).map(
                 (p: any) => ({
@@ -344,21 +389,28 @@ async function handleParseOpenApiSpec(
             );
 
             // Also include request body fields as parameters
-            const requestBody = op.requestBody?.content?.["application/json"]?.schema;
+            const requestBody =
+                op.requestBody?.content?.["application/json"]?.schema;
             if (requestBody?.properties) {
-                for (const [propName, propSchema] of Object.entries(requestBody.properties) as [string, any][]) {
+                for (const [propName, propSchema] of Object.entries(
+                    requestBody.properties,
+                ) as [string, any][]) {
                     parameters.push({
                         name: propName,
                         type: propSchema.type ?? "string",
                         description: propSchema.description,
-                        required: requestBody.required?.includes(propName) ?? false,
+                        required:
+                            requestBody.required?.includes(propName) ?? false,
                     });
                 }
             }
 
             actions.push({
                 name: camelName,
-                description: op.summary ?? op.description ?? `${method.toUpperCase()} ${pathStr}`,
+                description:
+                    op.summary ??
+                    op.description ??
+                    `${method.toUpperCase()} ${pathStr}`,
                 method: method.toUpperCase(),
                 path: pathStr,
                 parameters,
@@ -374,7 +426,12 @@ async function handleParseOpenApiSpec(
         actions,
     };
 
-    await writeArtifactJson(integrationName, "discovery", "api-surface.json", surface);
+    await writeArtifactJson(
+        integrationName,
+        "discovery",
+        "api-surface.json",
+        surface,
+    );
 
     return createActionResultFromMarkdownDisplay(
         `## OpenAPI spec parsed: ${integrationName}\n\n` +
@@ -383,9 +440,14 @@ async function handleParseOpenApiSpec(
             `**Actions found:** ${actions.length}\n\n` +
             actions
                 .slice(0, 20)
-                .map((a) => `- **${a.name}** (\`${a.method} ${a.path}\`): ${a.description}`)
+                .map(
+                    (a) =>
+                        `- **${a.name}** (\`${a.method} ${a.path}\`): ${a.description}`,
+                )
                 .join("\n") +
-            (actions.length > 20 ? `\n\n_...and ${actions.length - 20} more_` : "") +
+            (actions.length > 20
+                ? `\n\n_...and ${actions.length - 20} more_`
+                : "") +
             `\n\nReview with \`listDiscoveredActions\`, then \`approveApiSurface\` to proceed.`,
     );
 }
@@ -399,7 +461,9 @@ async function handleListDiscoveredActions(
         "api-surface.json",
     );
     if (!surface) {
-        return { error: `No discovered actions found for "${integrationName}". Run crawlDocUrl or parseOpenApiSpec first.` };
+        return {
+            error: `No discovered actions found for "${integrationName}". Run crawlDocUrl or parseOpenApiSpec first.`,
+        };
     }
 
     const lines = [
@@ -413,8 +477,7 @@ async function handleListDiscoveredActions(
         `| # | Name | Description |`,
         `|---|---|---|`,
         ...surface.actions.map(
-            (a, i) =>
-                `| ${i + 1} | \`${a.name}\` | ${a.description} |`,
+            (a, i) => `| ${i + 1} | \`${a.name}\` | ${a.description} |`,
         ),
     ];
 
@@ -432,7 +495,9 @@ async function handleApproveApiSurface(
         "api-surface.json",
     );
     if (!surface) {
-        return { error: `No discovered actions found for "${integrationName}".` };
+        return {
+            error: `No discovered actions found for "${integrationName}".`,
+        };
     }
 
     let approved = surface.actions;
@@ -451,7 +516,12 @@ async function handleApproveApiSurface(
         actions: approved,
     };
 
-    await writeArtifactJson(integrationName, "discovery", "api-surface.json", updated);
+    await writeArtifactJson(
+        integrationName,
+        "discovery",
+        "api-surface.json",
+        updated,
+    );
     await updatePhase(integrationName, "discovery", { status: "approved" });
 
     // If many actions, recommend sub-schema categorization
@@ -466,7 +536,9 @@ async function handleApproveApiSurface(
     return createActionResultFromMarkdownDisplay(
         `## API surface approved: ${integrationName}\n\n` +
             `**Approved actions:** ${approved.length}\n\n` +
-            approved.map((a) => `- \`${a.name}\`: ${a.description}`).join("\n") +
+            approved
+                .map((a) => `- \`${a.name}\`: ${a.description}`)
+                .join("\n") +
             subSchemaNote +
             `\n\n**Next step:** Phase 2 — use \`generatePhrases\` to create natural language samples.`,
     );
@@ -507,8 +579,7 @@ async function generateSubSchemaRecommendation(
         },
         {
             role: "user" as const,
-            content:
-                `Categorize these ${approved.length} actions for the "${integrationName}" integration into logical sub-schema groups:\n\n${actionList}`,
+            content: `Categorize these ${approved.length} actions for the "${integrationName}" integration into logical sub-schema groups:\n\n${actionList}`,
         },
     ];
 

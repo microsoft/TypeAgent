@@ -10,9 +10,7 @@ import {
     TypeAgentAction,
     ActionResult,
 } from "@typeagent/agent-sdk";
-import {
-    createActionResultFromMarkdownDisplay,
-} from "@typeagent/agent-sdk/helpers/action";
+import { createActionResultFromMarkdownDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { ScaffolderActions } from "./scaffolderSchema.js";
 import {
     loadState,
@@ -71,13 +69,25 @@ async function handleScaffoldAgent(
     const state = await loadState(integrationName);
     if (!state) return { error: `Integration "${integrationName}" not found.` };
     if (state.phases.grammarGen.status !== "approved") {
-        return { error: `Grammar phase must be approved first. Run approveGrammar.` };
+        return {
+            error: `Grammar phase must be approved first. Run approveGrammar.`,
+        };
     }
 
-    const schemaTs = await readArtifact(integrationName, "schemaGen", "schema.ts");
-    const grammarAgr = await readArtifact(integrationName, "grammarGen", "schema.agr");
+    const schemaTs = await readArtifact(
+        integrationName,
+        "schemaGen",
+        "schema.ts",
+    );
+    const grammarAgr = await readArtifact(
+        integrationName,
+        "grammarGen",
+        "schema.agr",
+    );
     if (!schemaTs || !grammarAgr) {
-        return { error: `Missing schema or grammar artifacts for "${integrationName}".` };
+        return {
+            error: `Missing schema or grammar artifacts for "${integrationName}".`,
+        };
     }
 
     await updatePhase(integrationName, "scaffolder", { status: "in-progress" });
@@ -91,22 +101,19 @@ async function handleScaffoldAgent(
     await fs.mkdir(srcDir, { recursive: true });
 
     // Check if sub-schema groups exist from the discovery phase
-    const subSchemaSuggestion =
-        await readArtifactJson<SubSchemaSuggestion>(
-            integrationName,
-            "discovery",
-            "sub-schema-groups.json",
-        );
+    const subSchemaSuggestion = await readArtifactJson<SubSchemaSuggestion>(
+        integrationName,
+        "discovery",
+        "sub-schema-groups.json",
+    );
     const subGroups =
-        subSchemaSuggestion?.recommended && subSchemaSuggestion.groups.length > 0
+        subSchemaSuggestion?.recommended &&
+        subSchemaSuggestion.groups.length > 0
             ? subSchemaSuggestion.groups
             : undefined;
 
     // Write core schema and grammar
-    await writeFile(
-        path.join(srcDir, `${integrationName}Schema.ts`),
-        schemaTs,
-    );
+    await writeFile(path.join(srcDir, `${integrationName}Schema.ts`), schemaTs);
     await writeFile(
         path.join(srcDir, `${integrationName}Schema.agr`),
         grammarAgr.replace(
@@ -186,7 +193,12 @@ async function handleScaffoldAgent(
     await writeFile(
         path.join(targetDir, "package.json"),
         JSON.stringify(
-            buildPackageJson(integrationName, packageName, pascalName, subSchemaNames),
+            buildPackageJson(
+                integrationName,
+                packageName,
+                pascalName,
+                subSchemaNames,
+            ),
             null,
             2,
         ),
@@ -337,7 +349,9 @@ async function handleScaffoldPlugin(
 
     const templateInfo = PLUGIN_TEMPLATES[template];
     if (!templateInfo) {
-        return { error: `Unknown template "${template}". Use listTemplates to see available templates.` };
+        return {
+            error: `Unknown template "${template}". Use listTemplates to see available templates.`,
+        };
     }
 
     const targetDir =

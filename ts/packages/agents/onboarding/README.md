@@ -6,15 +6,15 @@ A TypeAgent agent that automates the end-to-end process of integrating a new app
 
 Integrating a new application into TypeAgent involves 7 phases:
 
-| Phase | Sub-agent | What it does |
-|---|---|---|
-| 1 | `onboarding-discovery` | Crawls docs or parses an OpenAPI spec to enumerate the API surface |
-| 2 | `onboarding-phrasegen` | Generates natural language sample phrases for each action |
-| 3 | `onboarding-schemagen` | Generates TypeScript action schemas from the API surface |
-| 4 | `onboarding-grammargen` | Generates `.agr` grammar files from schemas and phrases |
-| 5 | `onboarding-scaffolder` | Stamps out the agent package infrastructure |
-| 6 | `onboarding-testing` | Generates test cases and runs a phrase→action validation loop |
-| 7 | `onboarding-packaging` | Packages the agent for distribution and registration |
+| Phase | Sub-agent               | What it does                                                       |
+| ----- | ----------------------- | ------------------------------------------------------------------ |
+| 1     | `onboarding-discovery`  | Crawls docs or parses an OpenAPI spec to enumerate the API surface |
+| 2     | `onboarding-phrasegen`  | Generates natural language sample phrases for each action          |
+| 3     | `onboarding-schemagen`  | Generates TypeScript action schemas from the API surface           |
+| 4     | `onboarding-grammargen` | Generates `.agr` grammar files from schemas and phrases            |
+| 5     | `onboarding-scaffolder` | Stamps out the agent package infrastructure                        |
+| 6     | `onboarding-testing`    | Generates test cases and runs a phrase→action validation loop      |
+| 7     | `onboarding-packaging`  | Packages the agent for distribution and registration               |
 
 Each phase produces **artifacts saved to disk** at `~/.typeagent/onboarding/<integration-name>/`, so work can be resumed across sessions.
 

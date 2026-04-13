@@ -537,7 +537,7 @@ export class CommandServer {
                         .enum(["reconnect", "full"])
                         .optional()
                         .describe(
-                            'reconnect: disconnect and reconnect to the agent server (default). full: exit the MCP server process so the client can restart it (picks up new MCP server code).',
+                            "reconnect: disconnect and reconnect to the agent server (default). full: exit the MCP server process so the client can restart it (picks up new MCP server code).",
                         ),
                 },
                 description:
@@ -548,9 +548,7 @@ export class CommandServer {
         );
     }
 
-    private async restart(
-        mode: "reconnect" | "full",
-    ): Promise<CallToolResult> {
+    private async restart(mode: "reconnect" | "full"): Promise<CallToolResult> {
         if (mode === "full") {
             this.logger.log("Full restart requested — exiting process.");
             // Give time for the response to be sent before exiting

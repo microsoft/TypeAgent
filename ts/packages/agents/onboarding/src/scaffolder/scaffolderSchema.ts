@@ -22,7 +22,12 @@ export type ScaffoldPluginAction = {
         // Integration name to scaffold the host-side plugin for
         integrationName: string;
         // Template to use for the plugin side
-        template: "office-addin" | "vscode-extension" | "electron-app" | "browser-extension" | "rest-client";
+        template:
+            | "office-addin"
+            | "vscode-extension"
+            | "electron-app"
+            | "browser-extension"
+            | "rest-client";
         // Target directory for the plugin (defaults to ts/packages/agents/<name>/plugin)
         outputDir?: string;
     };

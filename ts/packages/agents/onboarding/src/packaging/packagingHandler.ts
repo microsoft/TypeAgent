@@ -10,9 +10,7 @@ import {
     TypeAgentAction,
     ActionResult,
 } from "@typeagent/agent-sdk";
-import {
-    createActionResultFromMarkdownDisplay,
-} from "@typeagent/agent-sdk/helpers/action";
+import { createActionResultFromMarkdownDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { PackagingActions } from "./packagingSchema.js";
 import {
     loadState,
@@ -93,11 +91,16 @@ async function handlePackageAgent(
         `**Agent directory:** \`${agentDir}\``,
         `**Build output:** \`${path.join(agentDir, "dist")}\``,
         ``,
-        buildResult.output ? `\`\`\`\n${buildResult.output.slice(0, 500)}\n\`\`\`` : "",
+        buildResult.output
+            ? `\`\`\`\n${buildResult.output.slice(0, 500)}\n\`\`\``
+            : "",
     ];
 
     if (register) {
-        const registerResult = await registerWithDispatcher(integrationName, agentDir);
+        const registerResult = await registerWithDispatcher(
+            integrationName,
+            agentDir,
+        );
         summary.push(``, registerResult);
     }
 
@@ -116,7 +119,9 @@ async function handlePackageAgent(
     return createActionResultFromMarkdownDisplay(summary.join("\n"));
 }
 
-async function handleValidatePackage(integrationName: string): Promise<ActionResult> {
+async function handleValidatePackage(
+    integrationName: string,
+): Promise<ActionResult> {
     const scaffoldedTo = await readArtifact(
         integrationName,
         "scaffolder",
@@ -145,10 +150,8 @@ async function handleValidatePackage(integrationName: string): Promise<ActionRes
         const pkgJson = JSON.parse(
             await fs.readFile(path.join(agentDir, "package.json"), "utf-8"),
         );
-        const hasManifestExport =
-            !!pkgJson.exports?.["./agent/manifest"];
-        const hasHandlerExport =
-            !!pkgJson.exports?.["./agent/handlers"];
+        const hasManifestExport = !!pkgJson.exports?.["./agent/manifest"];
+        const hasHandlerExport = !!pkgJson.exports?.["./agent/handlers"];
         checks.push({
             name: "package.json: exports ./agent/manifest",
             passed: hasManifestExport,
@@ -199,7 +202,9 @@ async function handleGenerateDemo(
     const state = await loadState(integrationName);
     if (!state) return { error: `Integration "${integrationName}" not found.` };
     if (state.phases.testing.status !== "approved") {
-        return { error: `Testing phase must be approved before generating a demo.` };
+        return {
+            error: `Testing phase must be approved before generating a demo.`,
+        };
     }
 
     // Load discovery artifacts
@@ -207,12 +212,16 @@ async function handleGenerateDemo(
         actions: { name: string; description: string; category?: string }[];
     }>(integrationName, "discovery", "api-surface.json");
     if (!apiSurface) {
-        return { error: `No approved API surface found. Complete discovery first.` };
+        return {
+            error: `No approved API surface found. Complete discovery first.`,
+        };
     }
 
-    const subSchemaGroups = await readArtifactJson<
-        Record<string, string[]>
-    >(integrationName, "discovery", "sub-schema-groups.json");
+    const subSchemaGroups = await readArtifactJson<Record<string, string[]>>(
+        integrationName,
+        "discovery",
+        "sub-schema-groups.json",
+    );
 
     // Load the generated schema
     const schemaTs = await readArtifact(
@@ -264,10 +273,14 @@ async function handleGenerateDemo(
     // Parse the LLM response — expect two fenced blocks:
     //   ```demo ... ```  and  ```narration ... ```
     const responseText = result.data;
-    const demoScript = extractFencedBlock(responseText, "demo") ??
-        extractFirstFencedBlock(responseText) ?? responseText;
-    const narrationScript = extractFencedBlock(responseText, "narration") ??
-        extractSecondFencedBlock(responseText) ?? "";
+    const demoScript =
+        extractFencedBlock(responseText, "demo") ??
+        extractFirstFencedBlock(responseText) ??
+        responseText;
+    const narrationScript =
+        extractFencedBlock(responseText, "narration") ??
+        extractSecondFencedBlock(responseText) ??
+        "";
 
     // Find the scaffolded agent directory
     const scaffoldedTo = await readArtifact(
@@ -376,10 +389,7 @@ Wrap the narration in a fenced code block with the label \`narration\`:
 }
 
 function extractFencedBlock(text: string, label: string): string | undefined {
-    const regex = new RegExp(
-        "```" + label + "\\s*\\n([\\s\\S]*?)\\n```",
-        "i",
-    );
+    const regex = new RegExp("```" + label + "\\s*\\n([\\s\\S]*?)\\n```", "i");
     const match = text.match(regex);
     return match?.[1]?.trim();
 }
@@ -420,7 +430,11 @@ async function registerWithDispatcher(
             name: `${integrationName}-agent`,
         };
 
-        await fs.writeFile(configPath, JSON.stringify(config, null, 2), "utf-8");
+        await fs.writeFile(
+            configPath,
+            JSON.stringify(config, null, 2),
+            "utf-8",
+        );
         return `✅ Registered "${integrationName}" in dispatcher config at \`${configPath}\`\n\nRestart TypeAgent to load the new agent.`;
     } catch (err: any) {
         return `⚠️ Could not auto-register — update dispatcher config manually.\n${err?.message ?? err}`;
@@ -440,8 +454,12 @@ async function runCommand(
         });
 
         let output = "";
-        proc.stdout?.on("data", (d: Buffer) => { output += d.toString(); });
-        proc.stderr?.on("data", (d: Buffer) => { output += d.toString(); });
+        proc.stdout?.on("data", (d: Buffer) => {
+            output += d.toString();
+        });
+        proc.stderr?.on("data", (d: Buffer) => {
+            output += d.toString();
+        });
 
         proc.on("close", (code) => {
             resolve({ success: code === 0, output });
@@ -467,9 +485,14 @@ async function handleGenerateReadme(
         recommended: boolean;
         groups: { name: string; description: string; actions: string[] }[];
     }>(integrationName, "discovery", "sub-schema-groups.json");
-    const scaffoldedTo = await readArtifact(integrationName, "scaffolder", "scaffolded-to.txt");
+    const scaffoldedTo = await readArtifact(
+        integrationName,
+        "scaffolder",
+        "scaffolded-to.txt",
+    );
 
-    const description = state.config.description ?? `Agent for ${integrationName}`;
+    const description =
+        state.config.description ?? `Agent for ${integrationName}`;
     const totalActions = surface?.actions.length ?? 0;
 
     // Build action listing for the LLM
@@ -551,7 +574,12 @@ async function handleGenerateReadme(
     }
 
     // Save as artifact
-    await writeArtifact(integrationName, "packaging", "README.md", readmeContent);
+    await writeArtifact(
+        integrationName,
+        "packaging",
+        "README.md",
+        readmeContent,
+    );
 
     return createActionResultFromMarkdownDisplay(
         `## README generated: ${integrationName}\n\n` +

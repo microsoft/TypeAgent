@@ -74,7 +74,9 @@ async function handleGeneratePhrases(
         return { error: `Integration "${integrationName}" not found.` };
     }
     if (state.phases.discovery.status !== "approved") {
-        return { error: `Discovery phase must be approved before generating phrases. Run approveApiSurface first.` };
+        return {
+            error: `Discovery phase must be approved before generating phrases. Run approveApiSurface first.`,
+        };
     }
 
     const surface = await readArtifactJson<ApiSurface>(
@@ -123,7 +125,12 @@ async function handleGeneratePhrases(
         phrases: phraseMap,
     };
 
-    await writeArtifactJson(integrationName, "phraseGen", "phrases.json", phraseSet);
+    await writeArtifactJson(
+        integrationName,
+        "phraseGen",
+        "phrases.json",
+        phraseSet,
+    );
 
     const totalPhrases = Object.values(phraseMap).reduce(
         (sum, p) => sum + p.length,
@@ -166,7 +173,10 @@ async function handleAddPhrase(
     }
 
     await writeArtifactJson(integrationName, "phraseGen", "phrases.json", {
-        ...(existing ?? { integrationName, generatedAt: new Date().toISOString() }),
+        ...(existing ?? {
+            integrationName,
+            generatedAt: new Date().toISOString(),
+        }),
         phrases: phraseMap,
     });
 
@@ -191,7 +201,12 @@ async function handleRemovePhrase(
 
     const phrases = existing.phrases[actionName] ?? [];
     existing.phrases[actionName] = phrases.filter((p) => p !== phrase);
-    await writeArtifactJson(integrationName, "phraseGen", "phrases.json", existing);
+    await writeArtifactJson(
+        integrationName,
+        "phraseGen",
+        "phrases.json",
+        existing,
+    );
 
     return createActionResultFromTextDisplay(
         `Removed phrase "${phrase}" from action "${actionName}" for ${integrationName}.`,
@@ -207,7 +222,9 @@ async function handleApprovePhrases(
         "phrases.json",
     );
     if (!phraseSet) {
-        return { error: `No phrases found for "${integrationName}". Run generatePhrases first.` };
+        return {
+            error: `No phrases found for "${integrationName}". Run generatePhrases first.`,
+        };
     }
 
     const updated: PhraseSet = {
@@ -216,7 +233,12 @@ async function handleApprovePhrases(
         approvedAt: new Date().toISOString(),
     };
 
-    await writeArtifactJson(integrationName, "phraseGen", "phrases.json", updated);
+    await writeArtifactJson(
+        integrationName,
+        "phraseGen",
+        "phrases.json",
+        updated,
+    );
     await updatePhase(integrationName, "phraseGen", { status: "approved" });
 
     const totalPhrases = Object.values(phraseSet.phrases).reduce(

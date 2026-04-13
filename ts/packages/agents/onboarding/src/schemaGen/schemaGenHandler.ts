@@ -10,9 +10,7 @@ import {
     TypeAgentAction,
     ActionResult,
 } from "@typeagent/agent-sdk";
-import {
-    createActionResultFromMarkdownDisplay,
-} from "@typeagent/agent-sdk/helpers/action";
+import { createActionResultFromMarkdownDisplay } from "@typeagent/agent-sdk/helpers/action";
 import { SchemaGenActions } from "./schemaGenSchema.js";
 import {
     loadState,
@@ -73,24 +71,43 @@ export async function executeSchemaGenAction(
     }
 }
 
-async function handleGenerateSchema(integrationName: string): Promise<ActionResult> {
+async function handleGenerateSchema(
+    integrationName: string,
+): Promise<ActionResult> {
     const state = await loadState(integrationName);
     if (!state) return { error: `Integration "${integrationName}" not found.` };
     if (state.phases.discovery.status !== "approved") {
-        return { error: `Discovery phase must be approved first. Run approveApiSurface.` };
+        return {
+            error: `Discovery phase must be approved first. Run approveApiSurface.`,
+        };
     }
 
-    const surface = await readArtifactJson<ApiSurface>(integrationName, "discovery", "api-surface.json");
+    const surface = await readArtifactJson<ApiSurface>(
+        integrationName,
+        "discovery",
+        "api-surface.json",
+    );
     if (!surface) {
-        return { error: `Missing discovery artifact for "${integrationName}".` };
+        return {
+            error: `Missing discovery artifact for "${integrationName}".`,
+        };
     }
     // phraseSet is optional — we can still generate a schema without sample phrases
-    const phraseSet = await readArtifactJson<PhraseSet>(integrationName, "phraseGen", "phrases.json");
+    const phraseSet = await readArtifactJson<PhraseSet>(
+        integrationName,
+        "phraseGen",
+        "phrases.json",
+    );
 
     await updatePhase(integrationName, "schemaGen", { status: "in-progress" });
 
     const model = getSchemaGenModel();
-    const prompt = buildSchemaPrompt(integrationName, surface, phraseSet ?? null, state.config.description);
+    const prompt = buildSchemaPrompt(
+        integrationName,
+        surface,
+        phraseSet ?? null,
+        state.config.description,
+    );
     const result = await model.complete(prompt);
     if (!result.success) {
         return { error: `Schema generation failed: ${result.message}` };
@@ -101,7 +118,10 @@ async function handleGenerateSchema(integrationName: string): Promise<ActionResu
 
     return createActionResultFromMarkdownDisplay(
         `## Schema generated: ${integrationName}\n\n` +
-            "```typescript\n" + schemaTs.slice(0, 2000) + (schemaTs.length > 2000 ? "\n// ... (truncated)" : "") + "\n```\n\n" +
+            "```typescript\n" +
+            schemaTs.slice(0, 2000) +
+            (schemaTs.length > 2000 ? "\n// ... (truncated)" : "") +
+            "\n```\n\n" +
             `Use \`refineSchema\` to adjust, or \`approveSchema\` to proceed to grammar generation.`,
     );
 }
@@ -110,9 +130,15 @@ async function handleRefineSchema(
     integrationName: string,
     instructions: string,
 ): Promise<ActionResult> {
-    const existing = await readArtifact(integrationName, "schemaGen", "schema.ts");
+    const existing = await readArtifact(
+        integrationName,
+        "schemaGen",
+        "schema.ts",
+    );
     if (!existing) {
-        return { error: `No schema found for "${integrationName}". Run generateSchema first.` };
+        return {
+            error: `No schema found for "${integrationName}". Run generateSchema first.`,
+        };
     }
 
     const model = getSchemaGenModel();
@@ -142,20 +168,36 @@ async function handleRefineSchema(
     const refined = extractTypeScript(result.data);
     // Archive the previous version
     const version = Date.now();
-    await writeArtifact(integrationName, "schemaGen", `schema.v${version}.ts`, existing);
+    await writeArtifact(
+        integrationName,
+        "schemaGen",
+        `schema.v${version}.ts`,
+        existing,
+    );
     await writeArtifact(integrationName, "schemaGen", "schema.ts", refined);
 
     return createActionResultFromMarkdownDisplay(
         `## Schema refined: ${integrationName}\n\n` +
             `Previous version archived as \`schema.v${version}.ts\`\n\n` +
-            "```typescript\n" + refined.slice(0, 2000) + (refined.length > 2000 ? "\n// ... (truncated)" : "") + "\n```",
+            "```typescript\n" +
+            refined.slice(0, 2000) +
+            (refined.length > 2000 ? "\n// ... (truncated)" : "") +
+            "\n```",
     );
 }
 
-async function handleApproveSchema(integrationName: string): Promise<ActionResult> {
-    const schema = await readArtifact(integrationName, "schemaGen", "schema.ts");
+async function handleApproveSchema(
+    integrationName: string,
+): Promise<ActionResult> {
+    const schema = await readArtifact(
+        integrationName,
+        "schemaGen",
+        "schema.ts",
+    );
     if (!schema) {
-        return { error: `No schema found for "${integrationName}". Run generateSchema first.` };
+        return {
+            error: `No schema found for "${integrationName}". Run generateSchema first.`,
+        };
     }
 
     await updatePhase(integrationName, "schemaGen", { status: "approved" });
@@ -183,7 +225,10 @@ function buildSchemaPrompt(
                     ? `Parameters: ${a.parameters.map((p) => `${p.name}: ${p.type}${p.required ? "" : "?"}`).join(", ")}\n`
                     : "") +
                 (phrases.length
-                    ? `Sample phrases:\n${phrases.slice(0, 3).map((p) => `  - "${p}"`).join("\n")}`
+                    ? `Sample phrases:\n${phrases
+                          .slice(0, 3)
+                          .map((p) => `  - "${p}"`)
+                          .join("\n")}`
                     : "")
             );
         })
@@ -199,7 +244,7 @@ function buildSchemaPrompt(
                 "- Start the file with:\n  // Copyright (c) Microsoft Corporation.\n  // Licensed under the MIT License.\n" +
                 "- Export a top-level union type named `<IntegrationPascalCase>Actions`\n" +
                 "- Each action type is named `<ActionPascalCase>Action`\n" +
-                "- Use `actionName: \"camelCaseName\"` as a string literal type\n" +
+                '- Use `actionName: "camelCaseName"` as a string literal type\n' +
                 "- Parameters use camelCase names\n" +
                 "- Optional parameters use `?: type` syntax\n" +
                 SCHEMA_GUIDELINES +
@@ -225,7 +270,9 @@ function extractTypeScript(llmResponse: string): string {
         // Not JSON, fall through to other extraction methods
     }
     // Strip markdown code fences if present
-    const fenceMatch = llmResponse.match(/```(?:typescript|ts)?\n([\s\S]*?)```/);
+    const fenceMatch = llmResponse.match(
+        /```(?:typescript|ts)?\n([\s\S]*?)```/,
+    );
     if (fenceMatch) return fenceMatch[1].trim();
     return llmResponse.trim();
 }
