@@ -20,6 +20,7 @@
   "scripts": {
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "jest-esm": "node --experimental-vm-modules ./node_modules/.bin/jest",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
     "regen": "node ./bin/run.js data regenerate ../defaultAgentProvider/test/data/explanations/**/**/*.json",
@@ -27,6 +28,7 @@
     "start": "node ./bin/run.js",
     "start:dev": "node --loader ts-node/esm --no-warnings=ExperimentalWarning ./bin/dev.js",
     "stat": "node ./bin/run.js data stat -f ../defaultAgentProvider/test/data/explanations/**/**/*.json",
+    "test": "npm run build && jest",
     "tsc": "tsc -b"
   },
   "oclif": {
@@ -73,12 +75,14 @@
     "typechat-utils": "workspace:*"
   },
   "devDependencies": {
+    "@jest/globals": "^29.7.0",
     "@types/debug": "^4.1.12",
     "@types/html-to-text": "^9.0.4",
     "@types/jest": "^29.5.7",
     "jest": "^29.7.0",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
+    "ts-jest": "^29.4.9",
     "typescript": "~5.4.5"
   }
 }
