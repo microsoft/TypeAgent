@@ -324,20 +324,22 @@ AutoShell uses a handler-based architecture with dependency injection. All platf
 ```
 autoShell/
 ├── AutoShell.cs              # Entry point — stdin/stdout command loop
-├── CommandDispatcher.cs      # Routes JSON keys to handlers; Create() wires all dependencies
+├── ActionDispatcher.cs      # Routes JSON keys to handlers; Create() wires all dependencies
 ├── IAppRegistry.cs           # App registry interface (shared across handlers)
 ├── WindowsAppRegistry.cs     # Maps friendly app names to paths and AppUserModelIDs
 ├── Handlers/
-│   ├── ICommandHandler.cs    # Handler interface (SupportedCommands + Handle)
-│   ├── AppCommandHandler.cs          # LaunchProgram, CloseProgram, ListAppNames
-│   ├── AudioCommandHandler.cs        # Volume, Mute, RestoreVolume
-│   ├── DisplayCommandHandler.cs      # SetScreenResolution, ListResolutions, SetTextSize
-│   ├── NetworkCommandHandler.cs      # ConnectWifi, ToggleAirplaneMode, etc.
-│   ├── SystemCommandHandler.cs       # Debug, ToggleNotifications
-│   ├── ThemeCommandHandler.cs        # ApplyTheme, ListThemes, SetThemeMode, SetWallpaper
-│   ├── VirtualDesktopCommandHandler.cs  # CreateDesktop, SwitchDesktop, PinWindow, etc.
-│   ├── WindowCommandHandler.cs       # Maximize, Minimize, SwitchTo, Tile
+│   ├── IActionHandler.cs    # Handler interface (SupportedActions + Handle)
+│   ├── ActionHandlerBase.cs          # Base class — AddAction registration + dictionary dispatch
+│   ├── AppActionHandler.cs           # LaunchProgram, CloseProgram, ListAppNames
+│   ├── AudioActionHandler.cs         # Volume, Mute, RestoreVolume
+│   ├── DisplayActionHandler.cs       # SetScreenResolution, ListResolutions, SetTextSize
+│   ├── NetworkActionHandler.cs       # ConnectWifi, ToggleAirplaneMode, etc.
+│   ├── SystemActionHandler.cs        # Debug, ToggleNotifications
+│   ├── ThemeActionHandler.cs         # ApplyTheme, ListThemes, SetThemeMode, SetWallpaper
+│   ├── VirtualDesktopActionHandler.cs  # CreateDesktop, SwitchDesktop, PinWindow, etc.
+│   ├── WindowActionHandler.cs        # Maximize, Minimize, SwitchTo, Tile
 │   └── Settings/
+│       ├── SettingsHandlerBase.cs     # Extends ActionHandlerBase with registry patterns
 │       ├── AccessibilitySettingsHandler.cs
 │       ├── DisplaySettingsHandler.cs
 │       ├── FileExplorerSettingsHandler.cs
@@ -369,7 +371,9 @@ autoShell/
 
 ### Key design decisions
 
-- **CommandDispatcher.Create()** is the composition root — it creates all concrete services and wires them into handlers. Tests bypass this and inject mocks directly.
+- **ActionDispatcher.Create()** is the composition root — it creates all concrete services and wires them into handlers. Tests bypass this and inject mocks directly.
+- **Single handler hierarchy** — All handlers inherit from `ActionHandlerBase`, which provides `AddAction(name, handler)` registration and dictionary-based dispatch. Actions are registered once in the constructor; `SupportedActions` and `Handle()` are auto-derived.
+- **SettingsHandlerBase** extends `ActionHandlerBase` with registry-specific convenience methods: `AddRegistryToggleAction`, `AddRegistryMapAction`, and `AddOpenSettingsAction`. These internally delegate to `AddAction` with wrapper lambdas. Custom actions use `AddAction` directly.
 - **Handlers are thin** — they parse JSON parameters and delegate to services. No P/Invoke or COM code lives in handlers.
 - **Services own all platform calls** — P/Invoke, COM, WMI, and registry access are encapsulated behind interfaces (`I*Service` / `Windows*Service`).
 - **ILogger** abstracts all diagnostic output with four levels: Error (red), Warning (yellow), Info (cyan), and Debug (diagnostics only). `ConsoleLogger` preserves the original colored formatting.

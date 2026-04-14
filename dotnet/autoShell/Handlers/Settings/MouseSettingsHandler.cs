@@ -40,28 +40,14 @@ internal class MouseSettingsHandler : SettingsHandlerBase
         AddOpenSettingsAction("MousePointerCustomization", new OpenSettingsConfig("ms-settings:easeofaccess-mouse", "mouse settings"));
         AddOpenSettingsAction("EnableTouchPad", new OpenSettingsConfig("ms-settings:devices-touchpad", "touchpad settings"));
         AddOpenSettingsAction("TouchpadCursorSpeed", new OpenSettingsConfig("ms-settings:devices-touchpad", "touchpad settings"));
-        AddSpecializedAction("CursorTrail");
-        AddSpecializedAction("EnhancePointerPrecision");
-        AddSpecializedAction("MouseCursorSpeed");
-        AddSpecializedAction("MouseWheelScrollLines");
-        AddSpecializedAction("SetPrimaryMouseButton");
+        AddAction("CursorTrail", HandleMouseCursorTrail);
+        AddAction("EnhancePointerPrecision", HandleEnhancePointerPrecision);
+        AddAction("MouseCursorSpeed", HandleMouseCursorSpeed);
+        AddAction("MouseWheelScrollLines", HandleMouseWheelScrollLines);
+        AddAction("SetPrimaryMouseButton", HandleSetPrimaryMouseButton);
     }
 
-    /// <inheritdoc/>
-    protected override CommandResult HandleSpecialized(string key, JsonElement parameters)
-    {
-        return key switch
-        {
-            "CursorTrail" => HandleMouseCursorTrail(parameters),
-            "EnhancePointerPrecision" => HandleEnhancePointerPrecision(parameters),
-            "MouseCursorSpeed" => HandleMouseCursorSpeed(parameters),
-            "MouseWheelScrollLines" => HandleMouseWheelScrollLines(parameters),
-            "SetPrimaryMouseButton" => HandleSetPrimaryMouseButton(parameters),
-            _ => base.HandleSpecialized(key, parameters),
-        };
-    }
-
-    private CommandResult HandleEnhancePointerPrecision(JsonElement parameters)
+    private ActionResult HandleEnhancePointerPrecision(JsonElement parameters)
     {
         bool enable = parameters.GetBoolOrDefault("enable", true);
         int[] mouseParams = new int[3];
@@ -69,23 +55,23 @@ internal class MouseSettingsHandler : SettingsHandlerBase
         // Set acceleration (third parameter): 1 = enhanced precision on, 0 = off
         mouseParams[2] = enable ? 1 : 0;
         _systemParams.SetParameter(SPI_SETMOUSE, 0, mouseParams, SPIF_UPDATEINIFILE_SENDCHANGE);
-        return CommandResult.Ok($"Enhanced pointer precision {(enable ? "enabled" : "disabled")}");
+        return ActionResult.Ok($"Enhanced pointer precision {(enable ? "enabled" : "disabled")}");
     }
 
-    private CommandResult HandleMouseCursorSpeed(JsonElement parameters)
+    private ActionResult HandleMouseCursorSpeed(JsonElement parameters)
     {
         // Speed range: 1-20 (default 10)
         int speed = parameters.GetNullableInt("speedLevel") ?? 10;
         speed = Math.Clamp(speed, 1, 20);
         _systemParams.SetParameter(SPI_SETMOUSESPEED, 0, (IntPtr)speed, SPIF_UPDATEINIFILE_SENDCHANGE);
-        return CommandResult.Ok($"Mouse cursor speed set to {speed}");
+        return ActionResult.Ok($"Mouse cursor speed set to {speed}");
     }
 
     /// <summary>
     /// Enables or disables the mouse cursor trail and sets its length.
     /// SPI_SETMOUSETRAILS: 0 = off, 2-12 = trail length
     /// </summary>
-    private CommandResult HandleMouseCursorTrail(JsonElement parameters)
+    private ActionResult HandleMouseCursorTrail(JsonElement parameters)
     {
         var enable = parameters.GetBoolOrDefault("enable", true);
         var length = parameters.GetNullableInt("length") ?? 7;
@@ -99,22 +85,22 @@ internal class MouseSettingsHandler : SettingsHandlerBase
         _logger.Debug(enable
             ? $"Cursor trail enabled with length {length}"
             : "Cursor trail disabled");
-        return CommandResult.Ok($"Cursor trail {(enable ? $"enabled (length {length})" : "disabled")}");
+        return ActionResult.Ok($"Cursor trail {(enable ? $"enabled (length {length})" : "disabled")}");
     }
 
-    private CommandResult HandleMouseWheelScrollLines(JsonElement parameters)
+    private ActionResult HandleMouseWheelScrollLines(JsonElement parameters)
     {
         int lines = parameters.GetNullableInt("scrollLines") ?? 3;
         lines = Math.Clamp(lines, 1, 100);
         _systemParams.SetParameter(SPI_SETWHEELSCROLLLINES, lines, IntPtr.Zero, SPIF_UPDATEINIFILE_SENDCHANGE);
-        return CommandResult.Ok($"Mouse wheel scroll lines set to {lines}");
+        return ActionResult.Ok($"Mouse wheel scroll lines set to {lines}");
     }
 
-    private CommandResult HandleSetPrimaryMouseButton(JsonElement parameters)
+    private ActionResult HandleSetPrimaryMouseButton(JsonElement parameters)
     {
         string button = parameters.GetStringOrDefault("primaryButton", "left");
         bool leftPrimary = button.Equals("left", StringComparison.OrdinalIgnoreCase);
         _systemParams.SwapMouseButton(!leftPrimary);
-        return CommandResult.Ok($"Primary mouse button set to {button}");
+        return ActionResult.Ok($"Primary mouse button set to {button}");
     }
 }

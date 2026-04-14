@@ -23,20 +23,10 @@ internal class PowerSettingsHandler : SettingsHandlerBase
 
         AddOpenSettingsAction("SetPowerModeOnBattery", new OpenSettingsConfig("ms-settings:powersleep", "power settings"));
         AddOpenSettingsAction("SetPowerModePluggedIn", new OpenSettingsConfig("ms-settings:powersleep", "power settings"));
-        AddSpecializedAction("BatterySaverActivationLevel");
+        AddAction("BatterySaverActivationLevel", HandleBatterySaverThreshold);
     }
 
-    /// <inheritdoc/>
-    protected override CommandResult HandleSpecialized(string key, JsonElement parameters)
-    {
-        return key switch
-        {
-            "BatterySaverActivationLevel" => HandleBatterySaverThreshold(parameters),
-            _ => base.HandleSpecialized(key, parameters),
-        };
-    }
-
-    private CommandResult HandleBatterySaverThreshold(JsonElement parameters)
+    private ActionResult HandleBatterySaverThreshold(JsonElement parameters)
     {
         int threshold = parameters.GetNullableInt("thresholdValue") ?? 20;
         threshold = Math.Clamp(threshold, 0, 100);
@@ -45,6 +35,6 @@ internal class PowerSettingsHandler : SettingsHandlerBase
             "ActivationThreshold",
             threshold,
             RegistryValueKind.DWord);
-        return CommandResult.Ok($"Battery saver threshold set to {threshold}%");
+        return ActionResult.Ok($"Battery saver threshold set to {threshold}%");
     }
 }

@@ -13,27 +13,27 @@ using autoShell.Services;
 namespace autoShell;
 
 /// <summary>
-/// Routes incoming JSON commands to the appropriate handler via a direct dictionary lookup.
+/// Routes incoming JSON actions to the appropriate handler via a direct dictionary lookup.
 /// </summary>
-internal class CommandDispatcher
+internal class ActionDispatcher
 {
-    private readonly Dictionary<string, ICommandHandler> _handlers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IActionHandler> _handlers = new(StringComparer.OrdinalIgnoreCase);
     private readonly ILogger _logger;
 
-    public CommandDispatcher(ILogger logger)
+    public ActionDispatcher(ILogger logger)
     {
         _logger = logger;
     }
 
     /// <summary>
-    /// Gets the names of all registered commands.
+    /// Gets the names of all registered actions.
     /// </summary>
-    public IEnumerable<string> RegisteredCommands => _handlers.Keys;
+    public IEnumerable<string> RegisteredActions => _handlers.Keys;
 
     /// <summary>
-    /// Creates a <see cref="CommandDispatcher"/> with all production services and handlers registered.
+    /// Creates a <see cref="ActionDispatcher"/> with all production services and handlers registered.
     /// </summary>
-    public static CommandDispatcher Create(ILogger logger)
+    public static ActionDispatcher Create(ILogger logger)
     {
         return Create(
             logger,
@@ -52,10 +52,10 @@ internal class CommandDispatcher
     }
 
     /// <summary>
-    /// Creates a <see cref="CommandDispatcher"/> with the specified services, enabling integration testing
+    /// Creates a <see cref="ActionDispatcher"/> with the specified services, enabling integration testing
     /// with mock services while exercising real handler wiring.
     /// </summary>
-    internal static CommandDispatcher Create(
+    internal static ActionDispatcher Create(
         ILogger logger,
         IRegistryService registry,
         ISystemParametersService systemParams,
@@ -69,16 +69,16 @@ internal class CommandDispatcher
         INetworkService network,
         IVirtualDesktopService virtualDesktop)
     {
-        var dispatcher = new CommandDispatcher(logger);
+        var dispatcher = new ActionDispatcher(logger);
 
         dispatcher.Register(
-            new AudioCommandHandler(audio),
-            new AppCommandHandler(appRegistry, process, window, logger),
-            new WindowCommandHandler(appRegistry, window),
-            new ThemeCommandHandler(registry, process, systemParams),
-            new VirtualDesktopCommandHandler(appRegistry, window, virtualDesktop, logger),
-            new NetworkCommandHandler(network, process, logger),
-            new DisplayCommandHandler(display, logger),
+            new AudioActionHandler(audio),
+            new AppActionHandler(appRegistry, process, window, logger),
+            new WindowActionHandler(appRegistry, window),
+            new ThemeActionHandler(registry, process, systemParams),
+            new VirtualDesktopActionHandler(appRegistry, window, virtualDesktop, logger),
+            new NetworkActionHandler(network, process, logger),
+            new DisplayActionHandler(display, logger),
             new TaskbarSettingsHandler(registry, process),
             new DisplaySettingsHandler(registry, process, brightness, logger),
             new PersonalizationSettingsHandler(registry, process),
@@ -88,7 +88,7 @@ internal class CommandDispatcher
             new FileExplorerSettingsHandler(registry),
             new PrivacySettingsHandler(registry),
             new SystemSettingsHandler(registry, process),
-            new SystemCommandHandler(process, debugger)
+            new SystemActionHandler(process, debugger)
         );
 
         var validator = new SchemaValidator(logger);
@@ -96,26 +96,26 @@ internal class CommandDispatcher
         var schemaActions = validator.LoadActionNames(schemaDir);
         if (schemaActions.Count > 0)
         {
-            validator.ValidateWiring(schemaActions, dispatcher.RegisteredCommands);
+            validator.ValidateWiring(schemaActions, dispatcher.RegisteredActions);
         }
 
         return dispatcher;
     }
 
     /// <summary>
-    /// Registers one or more command handlers with the dispatcher.
-    /// Throws if a command name is already registered.
+    /// Registers one or more handlers with the dispatcher.
+    /// Throws if an action name is already registered.
     /// </summary>
-    public void Register(params ICommandHandler[] handlers)
+    public void Register(params IActionHandler[] handlers)
     {
         foreach (var handler in handlers)
         {
-            foreach (string command in handler.SupportedCommands)
+            foreach (string action in handler.SupportedActions)
             {
-                if (!_handlers.TryAdd(command, handler))
+                if (!_handlers.TryAdd(action, handler))
                 {
                     throw new InvalidOperationException(
-                        $"Command '{command}' is already registered by {_handlers[command].GetType().Name}. " +
+                        $"Action '{action}' is already registered by {_handlers[action].GetType().Name}. " +
                         $"Cannot register again from {handler.GetType().Name}.");
                 }
             }
@@ -123,26 +123,26 @@ internal class CommandDispatcher
     }
 
     /// <summary>
-    /// Dispatches a command in the format <c>{"actionName":"Volume","parameters":{"targetVolume":50}}</c>
+    /// Dispatches an action in the format <c>{"actionName":"Volume","parameters":{"targetVolume":50}}</c>
     /// to the appropriate handler.
     /// </summary>
     /// <returns>
-    /// A <see cref="CommandResult"/> for the executed command. Check <see cref="CommandResult.IsQuit"/>
+    /// A <see cref="ActionResult"/> for the executed action. Check <see cref="ActionResult.IsQuit"/>
     /// to determine if the caller should exit the interactive loop.
     /// </returns>
-    public CommandResult Dispatch(JsonElement root)
+    public ActionResult Dispatch(JsonElement root)
     {
         string actionName = root.TryGetProperty("actionName", out JsonElement actionNameElement)
             ? actionNameElement.GetString()
             : null;
         if (string.IsNullOrEmpty(actionName))
         {
-            return CommandResult.Fail("Missing actionName in command JSON");
+            return ActionResult.Fail("Missing actionName in action JSON");
         }
 
         if (string.Equals(actionName, "quit", StringComparison.OrdinalIgnoreCase))
         {
-            return CommandResult.Quit();
+            return ActionResult.Quit();
         }
 
         JsonElement parameters = root.TryGetProperty("parameters", out JsonElement p)
@@ -151,14 +151,14 @@ internal class CommandDispatcher
 
         try
         {
-            return _handlers.TryGetValue(actionName, out ICommandHandler handler)
+            return _handlers.TryGetValue(actionName, out IActionHandler handler)
                 ? handler.Handle(actionName, parameters)
-                : CommandResult.Fail($"Unknown action: {actionName}");
+                : ActionResult.Fail($"Unknown action: {actionName}");
         }
         catch (Exception ex)
         {
             _logger.Error(ex);
-            return CommandResult.Fail($"Error executing {actionName}: {ex.Message}");
+            return ActionResult.Fail($"Error executing {actionName}: {ex.Message}");
         }
     }
 }

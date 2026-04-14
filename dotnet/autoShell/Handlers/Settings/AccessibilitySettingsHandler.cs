@@ -31,22 +31,11 @@ internal class AccessibilitySettingsHandler : SettingsHandlerBase
         AddRegistryToggleAction("EnableStickyKeys", new RegistryToggleConfig(
             @"Control Panel\Accessibility\StickyKeys", "Flags", "enable",
             OnValue: "510", OffValue: "506", ValueKind: RegistryValueKind.String, DisplayName: "Sticky Keys"));
-        AddSpecializedAction("EnableMagnifier");
-        AddSpecializedAction("EnableNarratorAction");
+        AddAction("EnableMagnifier", parameters => HandleToggleProcess(parameters, "magnify.exe", "Magnify", "Magnifier"));
+        AddAction("EnableNarratorAction", parameters => HandleToggleProcess(parameters, "narrator.exe", "Narrator", "Narrator"));
     }
 
-    /// <inheritdoc/>
-    protected override CommandResult HandleSpecialized(string key, JsonElement parameters)
-    {
-        return key switch
-        {
-            "EnableMagnifier" => HandleToggleProcess(parameters, "magnify.exe", "Magnify", "Magnifier"),
-            "EnableNarratorAction" => HandleToggleProcess(parameters, "narrator.exe", "Narrator", "Narrator"),
-            _ => base.HandleSpecialized(key, parameters),
-        };
-    }
-
-    private CommandResult HandleToggleProcess(JsonElement parameters, string exeName, string processName, string displayName)
+    private ActionResult HandleToggleProcess(JsonElement parameters, string exeName, string processName, string displayName)
     {
         bool enable = parameters.GetBoolOrDefault("enable", true);
 
@@ -62,6 +51,6 @@ internal class AccessibilitySettingsHandler : SettingsHandlerBase
             }
         }
 
-        return CommandResult.Ok($"{displayName} {(enable ? "enabled" : "disabled")}");
+        return ActionResult.Ok($"{displayName} {(enable ? "enabled" : "disabled")}");
     }
 }

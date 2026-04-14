@@ -9,15 +9,15 @@ using Moq;
 
 namespace autoShell.Tests;
 
-public class DisplayCommandHandlerTests
+public class DisplayActionHandlerTests
 {
     private readonly Mock<IDisplayService> _displayMock = new();
     private readonly Mock<ILogger> _loggerMock = new();
-    private readonly DisplayCommandHandler _handler;
+    private readonly DisplayActionHandler _handler;
 
-    public DisplayCommandHandlerTests()
+    public DisplayActionHandlerTests()
     {
-        _handler = new DisplayCommandHandler(_displayMock.Object, _loggerMock.Object);
+        _handler = new DisplayActionHandler(_displayMock.Object, _loggerMock.Object);
     }
     // --- ListResolutions ---
 

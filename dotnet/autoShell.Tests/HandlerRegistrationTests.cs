@@ -11,7 +11,7 @@ namespace autoShell.Tests;
 /// </summary>
 public class HandlerRegistrationTests
 {
-    private readonly List<ICommandHandler> _handlers;
+    private readonly List<IActionHandler> _handlers;
 
     public HandlerRegistrationTests()
     {
@@ -30,13 +30,13 @@ public class HandlerRegistrationTests
 
         _handlers =
         [
-            new AudioCommandHandler(audioMock.Object),
-            new AppCommandHandler(appRegistryMock.Object, processMock.Object, windowMock.Object, loggerMock.Object),
-            new WindowCommandHandler(appRegistryMock.Object, windowMock.Object),
-            new ThemeCommandHandler(registryMock.Object, processMock.Object, systemParamsMock.Object),
-            new VirtualDesktopCommandHandler(appRegistryMock.Object, windowMock.Object, virtualDesktopMock.Object, loggerMock.Object),
-            new NetworkCommandHandler(networkMock.Object, processMock.Object, loggerMock.Object),
-            new DisplayCommandHandler(displayMock.Object, loggerMock.Object),
+            new AudioActionHandler(audioMock.Object),
+            new AppActionHandler(appRegistryMock.Object, processMock.Object, windowMock.Object, loggerMock.Object),
+            new WindowActionHandler(appRegistryMock.Object, windowMock.Object),
+            new ThemeActionHandler(registryMock.Object, processMock.Object, systemParamsMock.Object),
+            new VirtualDesktopActionHandler(appRegistryMock.Object, windowMock.Object, virtualDesktopMock.Object, loggerMock.Object),
+            new NetworkActionHandler(networkMock.Object, processMock.Object, loggerMock.Object),
+            new DisplayActionHandler(displayMock.Object, loggerMock.Object),
             new TaskbarSettingsHandler(registryMock.Object, processMock.Object),
             new DisplaySettingsHandler(registryMock.Object, processMock.Object, brightnessMock.Object, loggerMock.Object),
             new PersonalizationSettingsHandler(registryMock.Object, processMock.Object),
@@ -46,7 +46,7 @@ public class HandlerRegistrationTests
             new FileExplorerSettingsHandler(registryMock.Object),
             new PrivacySettingsHandler(registryMock.Object),
             new SystemSettingsHandler(registryMock.Object, processMock.Object),
-            new SystemCommandHandler(processMock.Object, debuggerMock.Object),
+            new SystemActionHandler(processMock.Object, debuggerMock.Object),
         ];
     }
 
@@ -58,7 +58,7 @@ public class HandlerRegistrationTests
     {
         foreach (var handler in _handlers)
         {
-            var commands = handler.SupportedCommands.ToList();
+            var commands = handler.SupportedActions.ToList();
             var duplicates = commands.GroupBy(c => c).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
 
             Assert.Empty(duplicates);
@@ -77,7 +77,7 @@ public class HandlerRegistrationTests
         foreach (var handler in _handlers)
         {
             string handlerName = handler.GetType().Name;
-            foreach (string cmd in handler.SupportedCommands)
+            foreach (string cmd in handler.SupportedActions)
             {
                 if (seen.TryGetValue(cmd, out string? existingHandler))
                 {

@@ -9,15 +9,15 @@ using Moq;
 
 namespace autoShell.Tests;
 
-public class NetworkCommandHandlerTests
+public class NetworkActionHandlerTests
 {
     private readonly Mock<INetworkService> _networkMock = new();
     private readonly Mock<ILogger> _loggerMock = new();
-    private readonly NetworkCommandHandler _handler;
+    private readonly NetworkActionHandler _handler;
 
-    public NetworkCommandHandlerTests()
+    public NetworkActionHandlerTests()
     {
-        _handler = new NetworkCommandHandler(_networkMock.Object, new Mock<IProcessService>().Object, _loggerMock.Object);
+        _handler = new NetworkActionHandler(_networkMock.Object, new Mock<IProcessService>().Object, _loggerMock.Object);
     }
 
     // --- ConnectWifi ---

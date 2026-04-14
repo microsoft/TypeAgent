@@ -13,7 +13,7 @@ namespace autoShell;
 /// <summary>
 /// Entry point for the autoShell Windows automation console application.
 /// Reads JSON commands from stdin (interactive mode) or command-line arguments
-/// and dispatches them to the appropriate handler via <see cref="CommandDispatcher"/>.
+/// and dispatches them to the appropriate handler via <see cref="ActionDispatcher"/>.
 /// </summary>
 /// <remarks>
 /// Each JSON command is a single object where property names are command names
@@ -31,7 +31,7 @@ internal class AutoShell
     #endregion P/Invoke
 
     private static readonly ConsoleLogger s_logger = new();
-    private static readonly CommandDispatcher s_dispatcher = CommandDispatcher.Create(s_logger);
+    private static readonly ActionDispatcher s_dispatcher = ActionDispatcher.Create(s_logger);
 
     /// <summary>
     /// Program entry point. Runs in one of two modes:
@@ -106,7 +106,7 @@ internal class AutoShell
                 // Each line is a JSON object with one or more command keys
                 using var doc = JsonDocument.Parse(line);
                 var root = doc.RootElement;
-                CommandResult result = ExecLine(root);
+                ActionResult result = ExecLine(root);
 
                 // Pass through the request id if present
                 if (root.TryGetProperty("id", out JsonElement idElement))
@@ -159,6 +159,6 @@ internal class AutoShell
     /// <summary>
     /// Dispatches a parsed JSON command object to the appropriate handler.
     /// </summary>
-    private static CommandResult ExecLine(JsonElement root)
+    private static ActionResult ExecLine(JsonElement root)
         => s_dispatcher.Dispatch(root);
 }

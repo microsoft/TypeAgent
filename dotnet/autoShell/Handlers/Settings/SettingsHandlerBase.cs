@@ -5,7 +5,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json;
 using autoShell.Services;
 using Microsoft.Win32;
@@ -63,21 +62,16 @@ internal record OpenSettingsConfig(
     string? DisplayName = null);
 
 /// <summary>
-/// Base class for settings handlers that support both registered and specialized actions.
-/// Subclasses register actions via <see cref="AddRegistryToggleAction"/>, <see cref="AddRegistryMapAction"/>, and
-/// <see cref="AddOpenSettingsAction"/> in their constructor, and override <see cref="HandleSpecialized"/>
-/// for actions requiring custom logic.
+/// Base class for settings handlers that extends <see cref="ActionHandlerBase"/> with
+/// registry-specific action patterns. Subclasses register actions via
+/// <see cref="AddRegistryToggleAction"/>, <see cref="AddRegistryMapAction"/>,
+/// <see cref="AddOpenSettingsAction"/>, and <see cref="ActionHandlerBase.AddAction"/>
+/// in their constructor.
 /// </summary>
-internal abstract class SettingsHandlerBase : ICommandHandler
+internal abstract class SettingsHandlerBase : ActionHandlerBase
 {
     protected readonly IRegistryService Registry;
     private readonly IProcessService? _process;
-
-    private readonly Dictionary<string, RegistryToggleConfig> _registryToggles = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, RegistryMapConfig> _registryMaps = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, OpenSettingsConfig> _openSettings = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> _allRegisteredActions = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> _specializedActions = new(StringComparer.OrdinalIgnoreCase);
 
     protected SettingsHandlerBase(IRegistryService registry, IProcessService? process = null)
     {
@@ -86,30 +80,11 @@ internal abstract class SettingsHandlerBase : ICommandHandler
     }
 
     /// <summary>
-    /// Action names registered via the Add methods. Subclasses should combine this with
-    /// <see cref="SpecializedActions"/> for <see cref="SupportedCommands"/>.
-    /// </summary>
-    protected IEnumerable<string> RegisteredActions => _allRegisteredActions;
-
-    /// <summary>
-    /// Action names registered as specialized (hand-coded) via <see cref="AddSpecializedAction"/>.
-    /// </summary>
-    protected IEnumerable<string> SpecializedActions => _specializedActions;
-
-    /// <inheritdoc/>
-    public virtual IEnumerable<string> SupportedCommands =>
-        _specializedActions.Count > 0
-            ? _specializedActions.Concat(_allRegisteredActions)
-            : _allRegisteredActions;
-
-    /// <summary>
     /// Registers a registry toggle action. Throws if the action name is already registered.
     /// </summary>
     protected void AddRegistryToggleAction(string actionName, RegistryToggleConfig config)
     {
-        ThrowIfDuplicate(actionName);
-        _registryToggles[actionName] = config;
-        _allRegisteredActions.Add(actionName);
+        AddAction(actionName, parameters => ExecuteRegistryToggle(actionName, parameters, config));
     }
 
     /// <summary>
@@ -118,8 +93,6 @@ internal abstract class SettingsHandlerBase : ICommandHandler
     /// </summary>
     protected void AddRegistryMapAction(string actionName, RegistryMapConfig config)
     {
-        ThrowIfDuplicate(actionName);
-
         // Ensure case-insensitive lookup for map keys (e.g., "Deny" matches "deny").
         if (config.ValueMap.Comparer != StringComparer.OrdinalIgnoreCase)
         {
@@ -129,8 +102,7 @@ internal abstract class SettingsHandlerBase : ICommandHandler
             };
         }
 
-        _registryMaps[actionName] = config;
-        _allRegisteredActions.Add(actionName);
+        AddAction(actionName, parameters => ExecuteRegistryMap(actionName, parameters, config));
     }
 
     /// <summary>
@@ -145,54 +117,13 @@ internal abstract class SettingsHandlerBase : ICommandHandler
                 $"Cannot register open-settings action '{actionName}' without an IProcessService.");
         }
 
-        ThrowIfDuplicate(actionName);
-        _openSettings[actionName] = config;
-        _allRegisteredActions.Add(actionName);
+        AddAction(actionName, _ => ExecuteOpenSettings(config));
     }
 
     /// <summary>
-    /// Registers a specialized action name so it appears in <see cref="SpecializedActions"/>
-    /// and <see cref="SupportedCommands"/>. The action must be handled in <see cref="HandleSpecialized"/>.
+    /// Reads a bool parameter and writes the corresponding on/off value to the registry.
     /// </summary>
-    protected void AddSpecializedAction(string actionName)
-    {
-        ThrowIfDuplicate(actionName);
-        _specializedActions.Add(actionName);
-    }
-
-    private void ThrowIfDuplicate(string actionName)
-    {
-        if (_allRegisteredActions.Contains(actionName) || _specializedActions.Contains(actionName))
-        {
-            throw new InvalidOperationException(
-                $"Action '{actionName}' is already registered in {GetType().Name}.");
-        }
-    }
-
-    /// <inheritdoc/>
-    public virtual CommandResult Handle(string key, JsonElement parameters)
-    {
-        return _registryToggles.TryGetValue(key, out var toggle)
-            ? HandleRegistryToggleAction(key, parameters, toggle)
-            : _registryMaps.TryGetValue(key, out var map)
-            ? HandleRegistryMapAction(key, parameters, map)
-            : _openSettings.TryGetValue(key, out var settings) ? HandleOpenSettingsAction(settings) : HandleSpecialized(key, parameters);
-    }
-
-    /// <summary>
-    /// Override to handle actions that don't fit registered patterns.
-    /// Default implementation returns a failure result.
-    /// </summary>
-    protected virtual CommandResult HandleSpecialized(string key, JsonElement parameters)
-    {
-        return CommandResult.Fail($"Unknown command: {key}");
-    }
-
-    /// <summary>
-    /// Handles a registry toggle action by reading a bool parameter and writing the
-    /// corresponding on/off value to the registry.
-    /// </summary>
-    private CommandResult HandleRegistryToggleAction(string key, JsonElement parameters, RegistryToggleConfig config)
+    private ActionResult ExecuteRegistryToggle(string key, JsonElement parameters, RegistryToggleConfig config)
     {
         bool enable = parameters.GetBoolOrDefault(config.ParameterName, true);
         object value = enable ? config.OnValue : config.OffValue;
@@ -207,14 +138,13 @@ internal abstract class SettingsHandlerBase : ICommandHandler
         }
 
         string displayName = config.DisplayName ?? key;
-        return CommandResult.Ok($"{displayName} {(enable ? "enabled" : "disabled")}");
+        return ActionResult.Ok($"{displayName} {(enable ? "enabled" : "disabled")}");
     }
 
     /// <summary>
-    /// Handles a registry map action by reading a string parameter, mapping it to a
-    /// registry value via the configured value map, and writing the result.
+    /// Reads a string parameter, maps it to a registry value, and writes the result.
     /// </summary>
-    private CommandResult HandleRegistryMapAction(string key, JsonElement parameters, RegistryMapConfig config)
+    private ActionResult ExecuteRegistryMap(string key, JsonElement parameters, RegistryMapConfig config)
     {
         string paramValue = parameters.GetStringOrDefault(config.ParameterName, "");
         object regValue = config.ValueMap.TryGetValue(paramValue, out var mapped) ? mapped : config.DefaultValue;
@@ -222,16 +152,16 @@ internal abstract class SettingsHandlerBase : ICommandHandler
         Registry.SetValue(config.KeyPath, config.ValueName, regValue, config.ValueKind);
 
         string displayName = config.DisplayName ?? key;
-        return CommandResult.Ok($"{displayName} set to {paramValue}");
+        return ActionResult.Ok($"{displayName} set to {paramValue}");
     }
 
     /// <summary>
-    /// Handles an open-settings action by launching the configured ms-settings: URI.
+    /// Launches the configured ms-settings: URI.
     /// </summary>
-    private CommandResult HandleOpenSettingsAction(OpenSettingsConfig config)
+    private ActionResult ExecuteOpenSettings(OpenSettingsConfig config)
     {
         _process!.StartShellExecute(config.SettingsUri);
         string displayName = config.DisplayName ?? config.SettingsUri;
-        return CommandResult.Ok($"Opened {displayName}");
+        return ActionResult.Ok($"Opened {displayName}");
     }
 }

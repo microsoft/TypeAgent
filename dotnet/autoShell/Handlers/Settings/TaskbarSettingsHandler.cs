@@ -42,21 +42,15 @@ internal partial class TaskbarSettingsHandler : SettingsHandlerBase
             new Dictionary<string, object> { ["left"] = 0, ["center"] = 1 }, DefaultValue: 0));
         AddRegistryMapAction("ToggleWidgetsButtonVisibility", new RegistryMapConfig(ExplorerAdvanced, "TaskbarDa", "visibility",
             new Dictionary<string, object> { ["show"] = 1 }, DefaultValue: 0));
-        AddSpecializedAction("AutoHideTaskbar");
+        AddAction("AutoHideTaskbar", HandleAutoHideTaskbar);
     }
 
     /// <inheritdoc/>
-    public override CommandResult Handle(string key, JsonElement parameters)
+    public override ActionResult Handle(string key, JsonElement parameters)
     {
         var result = base.Handle(key, parameters);
         NotifySettingsChange();
         return result;
-    }
-
-    /// <inheritdoc/>
-    protected override CommandResult HandleSpecialized(string key, JsonElement parameters)
-    {
-        return key == "AutoHideTaskbar" ? HandleAutoHideTaskbar(parameters) : base.HandleSpecialized(key, parameters);
     }
 
     private static void NotifySettingsChange()
@@ -71,7 +65,7 @@ internal partial class TaskbarSettingsHandler : SettingsHandlerBase
         }
     }
 
-    private CommandResult HandleAutoHideTaskbar(JsonElement parameters)
+    private ActionResult HandleAutoHideTaskbar(JsonElement parameters)
     {
         bool hide = parameters.GetBoolOrDefault("hideWhenNotUsing");
 
@@ -91,6 +85,6 @@ internal partial class TaskbarSettingsHandler : SettingsHandlerBase
             Registry.SetValue(StuckRects3, "Settings", settings, RegistryValueKind.Binary);
         }
 
-        return CommandResult.Ok($"Taskbar auto-hide {(hide ? "enabled" : "disabled")}");
+        return ActionResult.Ok($"Taskbar auto-hide {(hide ? "enabled" : "disabled")}");
     }
 }

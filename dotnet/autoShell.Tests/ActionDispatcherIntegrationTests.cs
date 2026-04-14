@@ -9,10 +9,10 @@ using Moq;
 namespace autoShell.Tests;
 
 /// <summary>
-/// Integration tests that exercise the full <see cref="CommandDispatcher.Create"/> → <see cref="CommandDispatcher.Dispatch"/> → handler → service pipeline
-/// using mock services. These verify that <see cref="CommandDispatcher"/> wiring is correct.
+/// Integration tests that exercise the full <see cref="ActionDispatcher.Create"/> → <see cref="ActionDispatcher.Dispatch"/> → handler → service pipeline
+/// using mock services. These verify that <see cref="ActionDispatcher"/> wiring is correct.
 /// </summary>
-public class CommandDispatcherIntegrationTests
+public class ActionDispatcherIntegrationTests
 {
     private readonly Mock<IRegistryService> _registryMock = new();
     private readonly Mock<ISystemParametersService> _systemParamsMock = new();
@@ -26,11 +26,11 @@ public class CommandDispatcherIntegrationTests
     private readonly Mock<INetworkService> _networkMock = new();
     private readonly Mock<IVirtualDesktopService> _virtualDesktopMock = new();
     private readonly Mock<ILogger> _loggerMock = new();
-    private readonly CommandDispatcher _dispatcher;
+    private readonly ActionDispatcher _dispatcher;
 
-    public CommandDispatcherIntegrationTests()
+    public ActionDispatcherIntegrationTests()
     {
-        _dispatcher = CommandDispatcher.Create(
+        _dispatcher = ActionDispatcher.Create(
             _loggerMock.Object,
             _registryMock.Object,
             _systemParamsMock.Object,
@@ -46,7 +46,7 @@ public class CommandDispatcherIntegrationTests
     }
 
     /// <summary>
-    /// Verifies that a Volume command dispatched through <see cref="CommandDispatcher.Create"/> reaches the audio service.
+    /// Verifies that a Volume command dispatched through <see cref="ActionDispatcher.Create"/> reaches the audio service.
     /// </summary>
     [Fact]
     public void Dispatch_Volume_ReachesAudioService()
@@ -59,7 +59,7 @@ public class CommandDispatcherIntegrationTests
     }
 
     /// <summary>
-    /// Verifies that a Mute command dispatched through <see cref="CommandDispatcher.Create"/> reaches the audio service.
+    /// Verifies that a Mute command dispatched through <see cref="ActionDispatcher.Create"/> reaches the audio service.
     /// </summary>
     [Fact]
     public void Dispatch_Mute_ReachesAudioService()
@@ -70,7 +70,7 @@ public class CommandDispatcherIntegrationTests
     }
 
     /// <summary>
-    /// Verifies that a LaunchProgram command dispatched through <see cref="CommandDispatcher.Create"/> reaches the process service.
+    /// Verifies that a LaunchProgram command dispatched through <see cref="ActionDispatcher.Create"/> reaches the process service.
     /// </summary>
     [Fact]
     public void Dispatch_LaunchProgram_ReachesProcessService()
@@ -85,7 +85,7 @@ public class CommandDispatcherIntegrationTests
     }
 
     /// <summary>
-    /// Verifies that a SetWallpaper command dispatched through <see cref="CommandDispatcher.Create"/> reaches the system parameters service.
+    /// Verifies that a SetWallpaper command dispatched through <see cref="ActionDispatcher.Create"/> reaches the system parameters service.
     /// </summary>
     [Fact]
     public void Dispatch_SetWallpaper_ReachesSystemParamsService()
@@ -96,7 +96,7 @@ public class CommandDispatcherIntegrationTests
     }
 
     /// <summary>
-    /// Verifies that a ConnectWifi command dispatched through <see cref="CommandDispatcher.Create"/> reaches the network service.
+    /// Verifies that a ConnectWifi command dispatched through <see cref="ActionDispatcher.Create"/> reaches the network service.
     /// </summary>
     [Fact]
     public void Dispatch_ConnectWifi_ReachesNetworkService()
@@ -107,7 +107,7 @@ public class CommandDispatcherIntegrationTests
     }
 
     /// <summary>
-    /// Verifies that a NextDesktop command dispatched through <see cref="CommandDispatcher.Create"/> reaches the virtual desktop service.
+    /// Verifies that a NextDesktop command dispatched through <see cref="ActionDispatcher.Create"/> reaches the virtual desktop service.
     /// </summary>
     [Fact]
     public void Dispatch_NextDesktop_ReachesVirtualDesktopService()
@@ -118,7 +118,7 @@ public class CommandDispatcherIntegrationTests
     }
 
     /// <summary>
-    /// Verifies that a SetThemeMode command dispatched through <see cref="CommandDispatcher.Create"/> reaches the registry service.
+    /// Verifies that a SetThemeMode command dispatched through <see cref="ActionDispatcher.Create"/> reaches the registry service.
     /// </summary>
     [Fact]
     public void Dispatch_SetThemeMode_ReachesRegistryService()
@@ -161,7 +161,7 @@ public class CommandDispatcherIntegrationTests
     [Fact]
     public void Dispatch_Quit_ReturnsQuitResult()
     {
-        CommandResult result = _dispatcher.Dispatch(JsonDocument.Parse("""{"actionName":"quit","parameters":{}}""").RootElement);
+        ActionResult result = _dispatcher.Dispatch(JsonDocument.Parse("""{"actionName":"quit","parameters":{}}""").RootElement);
 
         Assert.NotNull(result);
         Assert.True(result.Success);

@@ -8,15 +8,15 @@ using Moq;
 
 namespace autoShell.Tests;
 
-public class SystemCommandHandlerTests
+public class SystemActionHandlerTests
 {
     private readonly Mock<IProcessService> _processMock = new();
     private readonly Mock<IDebuggerService> _debuggerMock = new();
-    private readonly SystemCommandHandler _handler;
+    private readonly SystemActionHandler _handler;
 
-    public SystemCommandHandlerTests()
+    public SystemActionHandlerTests()
     {
-        _handler = new SystemCommandHandler(_processMock.Object, _debuggerMock.Object);
+        _handler = new SystemActionHandler(_processMock.Object, _debuggerMock.Object);
     }
 
     /// <summary>

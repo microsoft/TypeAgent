@@ -8,16 +8,16 @@ using Moq;
 
 namespace autoShell.Tests;
 
-public class VirtualDesktopCommandHandlerTests
+public class VirtualDesktopActionHandlerTests
 {
     private readonly Mock<IAppRegistry> _appRegistryMock = new();
     private readonly Mock<IWindowService> _windowMock = new();
     private readonly Mock<IVirtualDesktopService> _virtualDesktopMock = new();
-    private readonly VirtualDesktopCommandHandler _handler;
+    private readonly VirtualDesktopActionHandler _handler;
 
-    public VirtualDesktopCommandHandlerTests()
+    public VirtualDesktopActionHandlerTests()
     {
-        _handler = new VirtualDesktopCommandHandler(_appRegistryMock.Object, _windowMock.Object, _virtualDesktopMock.Object, new Mock<autoShell.Logging.ILogger>().Object);
+        _handler = new VirtualDesktopActionHandler(_appRegistryMock.Object, _windowMock.Object, _virtualDesktopMock.Object, new Mock<autoShell.Logging.ILogger>().Object);
     }
 
     // --- CreateDesktop ---

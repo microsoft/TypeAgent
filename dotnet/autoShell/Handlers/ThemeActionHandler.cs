@@ -17,7 +17,7 @@ namespace autoShell.Handlers;
 /// Contains all Windows theme management logic including discovery, application,
 /// and light/dark mode toggling.
 /// </summary>
-internal partial class ThemeCommandHandler : ICommandHandler
+internal partial class ThemeActionHandler : ActionHandlerBase
 {
     #region P/Invoke
 
@@ -45,59 +45,47 @@ internal partial class ThemeCommandHandler : ICommandHandler
     private Dictionary<string, string> _themeDictionary;
     private Dictionary<string, string> _themeDisplayNameDictionary;
 
-    public ThemeCommandHandler(IRegistryService registry, IProcessService process, ISystemParametersService systemParams)
+    public ThemeActionHandler(IRegistryService registry, IProcessService process, ISystemParametersService systemParams)
     {
         _registry = registry;
         _process = process;
         _systemParams = systemParams;
 
         LoadThemes();
+
+        AddAction("ApplyTheme", HandleApplyTheme);
+        AddAction("ListThemes", HandleListThemes);
+        AddAction("SetThemeMode", HandleSetThemeModeCommand);
+        AddAction("SetWallpaper", HandleSetWallpaper);
     }
 
-    /// <inheritdoc/>
-    public IEnumerable<string> SupportedCommands { get; } =
-    [
-        "ApplyTheme",
-        "ListThemes",
-        "SetThemeMode",
-        "SetWallpaper",
-    ];
-
-    /// <inheritdoc/>
-    public CommandResult Handle(string key, JsonElement parameters)
+    private ActionResult HandleApplyTheme(JsonElement parameters)
     {
-        switch (key)
-        {
-            case "ApplyTheme":
-            {
-                string themeName = parameters.GetStringOrDefault("filePath");
-                bool success = ApplyTheme(themeName);
-                return success
-                    ? CommandResult.Ok($"Applied theme '{themeName}'")
-                    : CommandResult.Fail($"Failed to apply theme '{themeName}'");
-            }
+        string themeName = parameters.GetStringOrDefault("filePath");
+        bool success = ApplyTheme(themeName);
+        return success
+            ? ActionResult.Ok($"Applied theme '{themeName}'")
+            : ActionResult.Fail($"Failed to apply theme '{themeName}'");
+    }
 
-            case "ListThemes":
-                var themes = GetInstalledThemes();
-                return CommandResult.Ok("Listed themes", JsonSerializer.SerializeToElement(themes));
+    private ActionResult HandleListThemes(JsonElement parameters)
+    {
+        var themes = GetInstalledThemes();
+        return ActionResult.Ok("Listed themes", JsonSerializer.SerializeToElement(themes));
+    }
 
-            case "SetThemeMode":
-            {
-                string mode = parameters.GetStringOrDefault("mode");
-                HandleSetThemeMode(mode);
-                return CommandResult.Ok($"Theme mode set to '{mode}'");
-            }
+    private ActionResult HandleSetThemeModeCommand(JsonElement parameters)
+    {
+        string mode = parameters.GetStringOrDefault("mode");
+        HandleSetThemeMode(mode);
+        return ActionResult.Ok($"Theme mode set to '{mode}'");
+    }
 
-            case "SetWallpaper":
-            {
-                string filePath = parameters.GetStringOrDefault("filePath");
-                _systemParams.SetParameter(SPI_SETDESKWALLPAPER, 0, filePath, SPIF_UPDATEINIFILE_SENDCHANGE);
-                return CommandResult.Ok($"Wallpaper set to '{filePath}'");
-            }
-
-            default:
-                return CommandResult.Fail($"Unknown theme command: {key}");
-        }
+    private ActionResult HandleSetWallpaper(JsonElement parameters)
+    {
+        string filePath = parameters.GetStringOrDefault("filePath");
+        _systemParams.SetParameter(SPI_SETDESKWALLPAPER, 0, filePath, SPIF_UPDATEINIFILE_SENDCHANGE);
+        return ActionResult.Ok($"Wallpaper set to '{filePath}'");
     }
 
     #region Theme Management

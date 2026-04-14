@@ -8,14 +8,14 @@ using Moq;
 
 namespace autoShell.Tests;
 
-public class AudioCommandHandlerTests
+public class AudioActionHandlerTests
 {
     private readonly Mock<IAudioService> _audioMock = new();
-    private readonly AudioCommandHandler _handler;
+    private readonly AudioActionHandler _handler;
 
-    public AudioCommandHandlerTests()
+    public AudioActionHandlerTests()
     {
-        _handler = new AudioCommandHandler(_audioMock.Object);
+        _handler = new AudioActionHandler(_audioMock.Object);
     }
 
     // --- Volume ---

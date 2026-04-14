@@ -8,15 +8,15 @@ using Moq;
 
 namespace autoShell.Tests;
 
-public class WindowCommandHandlerTests
+public class WindowActionHandlerTests
 {
     private readonly Mock<IAppRegistry> _mockAppRegistry = new();
     private readonly Mock<IWindowService> _mockWindow = new();
-    private readonly WindowCommandHandler _handler;
+    private readonly WindowActionHandler _handler;
 
-    public WindowCommandHandlerTests()
+    public WindowActionHandlerTests()
     {
-        _handler = new WindowCommandHandler(_mockAppRegistry.Object, _mockWindow.Object);
+        _handler = new WindowActionHandler(_mockAppRegistry.Object, _mockWindow.Object);
     }
     // --- Maximize ---
 

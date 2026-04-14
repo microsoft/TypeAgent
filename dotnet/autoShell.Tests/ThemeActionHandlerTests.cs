@@ -9,16 +9,16 @@ using Moq;
 
 namespace autoShell.Tests;
 
-public class ThemeCommandHandlerTests
+public class ThemeActionHandlerTests
 {
     private readonly Mock<IRegistryService> _registryMock = new();
     private readonly Mock<IProcessService> _processMock = new();
     private readonly Mock<ISystemParametersService> _systemParamsMock = new();
-    private readonly ThemeCommandHandler _handler;
+    private readonly ThemeActionHandler _handler;
 
-    public ThemeCommandHandlerTests()
+    public ThemeActionHandlerTests()
     {
-        _handler = new ThemeCommandHandler(
+        _handler = new ThemeActionHandler(
             _registryMock.Object, _processMock.Object, _systemParamsMock.Object);
     }
 

@@ -1,7 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System;
 using System.Text.Json;
+using autoShell.Handlers;
 using autoShell.Handlers.Settings;
 using autoShell.Services;
 using Microsoft.Win32;
@@ -27,8 +29,8 @@ internal class TestSettingsHandler : SettingsHandlerBase
     public new void AddOpenSettingsAction(string actionName, OpenSettingsConfig config) =>
         base.AddOpenSettingsAction(actionName, config);
 
-    public new void AddSpecializedAction(string actionName) =>
-        base.AddSpecializedAction(actionName);
+    public new void AddAction(string actionName, Func<JsonElement, ActionResult> handler) =>
+        base.AddAction(actionName, handler);
 }
 
 public class SettingsHandlerBaseTests
@@ -199,16 +201,16 @@ public class SettingsHandlerBaseTests
     }
 
     /// <summary>
-    /// Verifies that SupportedCommands returns all registered action names across all patterns.
+    /// Verifies that SupportedActions returns all registered action names across all patterns.
     /// </summary>
     [Fact]
-    public void SupportedCommands_ReturnsAllRegisteredActions()
+    public void SupportedActions_ReturnsAllRegisteredActions()
     {
         _handler.AddRegistryToggleAction("Toggle1", new RegistryToggleConfig("k", "v", "p", 1, 0));
         _handler.AddRegistryMapAction("Map1", new RegistryMapConfig("k", "v", "p", [], 0));
         _handler.AddOpenSettingsAction("Open1", new OpenSettingsConfig("ms-settings:test"));
 
-        var commands = new HashSet<string>(_handler.SupportedCommands);
+        var commands = new HashSet<string>(_handler.SupportedActions);
 
         Assert.Equal(3, commands.Count);
         Assert.Contains("Toggle1", commands);
@@ -217,15 +219,15 @@ public class SettingsHandlerBaseTests
     }
 
     /// <summary>
-    /// Verifies that SupportedCommands includes both specialized and registered actions.
+    /// Verifies that SupportedActions includes both AddAction and registered actions.
     /// </summary>
     [Fact]
-    public void SupportedCommands_IncludesSpecializedAndRegistered()
+    public void SupportedActions_IncludesSpecializedAndRegistered()
     {
         _handler.AddRegistryToggleAction("Toggle1", new RegistryToggleConfig("k", "v", "p", 1, 0));
-        _handler.AddSpecializedAction("Custom1");
+        _handler.AddAction("Custom1", _ => ActionResult.Ok("custom"));
 
-        var commands = new HashSet<string>(_handler.SupportedCommands);
+        var commands = new HashSet<string>(_handler.SupportedActions);
 
         Assert.Equal(2, commands.Count);
         Assert.Contains("Toggle1", commands);
@@ -245,7 +247,7 @@ public class SettingsHandlerBaseTests
     }
 
     /// <summary>
-    /// Verifies that registering a specialized action with the same name as a registered action throws.
+    /// Verifies that registering an AddAction with the same name as a registered action throws.
     /// </summary>
     [Fact]
     public void DuplicateSpecializedRegistration_Throws()
@@ -253,7 +255,7 @@ public class SettingsHandlerBaseTests
         _handler.AddRegistryToggleAction("Duplicate", new RegistryToggleConfig("k", "v", "p", 1, 0));
 
         Assert.Throws<InvalidOperationException>(() =>
-            _handler.AddSpecializedAction("Duplicate"));
+            _handler.AddAction("Duplicate", _ => ActionResult.Ok("dup")));
     }
 
     /// <summary>

@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text.Json;
 using autoShell.Logging;
@@ -13,51 +12,42 @@ namespace autoShell.Handlers;
 /// <summary>
 /// Handles application lifecycle commands: CloseProgram, LaunchProgram, and ListAppNames.
 /// </summary>
-internal class AppCommandHandler : ICommandHandler
+internal class AppActionHandler : ActionHandlerBase
 {
     private readonly IAppRegistry _appRegistry;
     private readonly IProcessService _processService;
     private readonly IWindowService _window;
     private readonly ILogger _logger;
 
-    public AppCommandHandler(IAppRegistry appRegistry, IProcessService processService, IWindowService window, ILogger logger)
+    public AppActionHandler(IAppRegistry appRegistry, IProcessService processService, IWindowService window, ILogger logger)
     {
         _appRegistry = appRegistry;
         _processService = processService;
         _window = window;
         _logger = logger;
+        AddAction("CloseProgram", HandleCloseProgram);
+        AddAction("LaunchProgram", HandleLaunchProgram);
+        AddAction("ListAppNames", HandleListAppNames);
     }
 
-    /// <inheritdoc/>
-    public IEnumerable<string> SupportedCommands { get; } =
-    [
-        "CloseProgram",
-        "LaunchProgram",
-        "ListAppNames",
-    ];
-
-    /// <inheritdoc/>
-    public CommandResult Handle(string key, JsonElement parameters)
+    private ActionResult HandleCloseProgram(JsonElement parameters)
     {
         string name = parameters.GetStringOrDefault("name");
+        CloseApplication(name);
+        return ActionResult.Ok($"Closed {name}");
+    }
 
-        switch (key)
-        {
-            case "CloseProgram":
-                CloseApplication(name);
-                return CommandResult.Ok($"Closed {name}");
+    private ActionResult HandleLaunchProgram(JsonElement parameters)
+    {
+        string name = parameters.GetStringOrDefault("name");
+        OpenApplication(name);
+        return ActionResult.Ok($"Launched {name}");
+    }
 
-            case "LaunchProgram":
-                OpenApplication(name);
-                return CommandResult.Ok($"Launched {name}");
-
-            case "ListAppNames":
-                var appNames = _appRegistry.GetAllAppNames();
-                return CommandResult.Ok("Listed app names", JsonSerializer.SerializeToElement(appNames));
-
-            default:
-                return CommandResult.Fail($"Unknown app command: {key}");
-        }
+    private ActionResult HandleListAppNames(JsonElement parameters)
+    {
+        var appNames = _appRegistry.GetAllAppNames();
+        return ActionResult.Ok("Listed app names", JsonSerializer.SerializeToElement(appNames));
     }
 
     private void CloseApplication(string friendlyName)

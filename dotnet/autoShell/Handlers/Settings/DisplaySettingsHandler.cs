@@ -35,24 +35,12 @@ internal class DisplaySettingsHandler : SettingsHandlerBase
         AddOpenSettingsAction("DisplayResolutionAndAspectRatio", new OpenSettingsConfig("ms-settings:display", "display settings"));
         AddRegistryToggleAction("RotationLock", new RegistryToggleConfig(
             @"Software\Microsoft\Windows\CurrentVersion\ImmersiveShell", "RotationLockPreference", "enable", 1, 0));
-        AddSpecializedAction("AdjustScreenBrightness");
-        AddSpecializedAction("DisplayScaling");
-        AddSpecializedAction("EnableBlueLightFilterSchedule");
+        AddAction("AdjustScreenBrightness", HandleAdjustScreenBrightness);
+        AddAction("DisplayScaling", HandleDisplayScaling);
+        AddAction("EnableBlueLightFilterSchedule", HandleBlueLightFilter);
     }
 
-    /// <inheritdoc/>
-    protected override CommandResult HandleSpecialized(string key, JsonElement parameters)
-    {
-        return key switch
-        {
-            "AdjustScreenBrightness" => HandleAdjustScreenBrightness(parameters),
-            "DisplayScaling" => HandleDisplayScaling(parameters),
-            "EnableBlueLightFilterSchedule" => HandleBlueLightFilter(parameters),
-            _ => base.HandleSpecialized(key, parameters),
-        };
-    }
-
-    private CommandResult HandleAdjustScreenBrightness(JsonElement parameters)
+    private ActionResult HandleAdjustScreenBrightness(JsonElement parameters)
     {
         string level = parameters.GetStringOrDefault("brightnessLevel");
         bool increase = level == "increase";
@@ -64,10 +52,10 @@ internal class DisplaySettingsHandler : SettingsHandlerBase
 
         _brightness.SetBrightness(newBrightness);
         _logger.Debug($"Brightness adjusted to: {newBrightness}%");
-        return CommandResult.Ok($"Brightness adjusted to {newBrightness}%");
+        return ActionResult.Ok($"Brightness adjusted to {newBrightness}%");
     }
 
-    private CommandResult HandleDisplayScaling(JsonElement parameters)
+    private ActionResult HandleDisplayScaling(JsonElement parameters)
     {
         string sizeStr = parameters.GetStringOrDefault("sizeOverride");
 
@@ -86,13 +74,13 @@ internal class DisplaySettingsHandler : SettingsHandlerBase
             // DPI scaling requires opening settings
             _process.StartShellExecute("ms-settings:display");
             _logger.Debug($"Display scaling target: {percentage}%");
-            return CommandResult.Ok($"Display scaling set to {percentage}%");
+            return ActionResult.Ok($"Display scaling set to {percentage}%");
         }
 
-        return CommandResult.Fail("Invalid display scaling value");
+        return ActionResult.Fail("Invalid display scaling value");
     }
 
-    private CommandResult HandleBlueLightFilter(JsonElement parameters)
+    private ActionResult HandleBlueLightFilter(JsonElement parameters)
     {
         bool disabled = parameters.GetBoolOrDefault("nightLightScheduleDisabled");
         byte[] data = disabled
@@ -104,7 +92,7 @@ internal class DisplaySettingsHandler : SettingsHandlerBase
             "Data",
             data,
             RegistryValueKind.Binary);
-        return CommandResult.Ok($"Night Light schedule {(disabled ? "disabled" : "enabled")}");
+        return ActionResult.Ok($"Night Light schedule {(disabled ? "disabled" : "enabled")}");
     }
 
 }

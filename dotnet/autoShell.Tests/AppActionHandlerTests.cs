@@ -10,17 +10,17 @@ using Moq;
 
 namespace autoShell.Tests;
 
-public class AppCommandHandlerTests
+public class AppActionHandlerTests
 {
     private readonly Mock<IAppRegistry> _appRegistryMock = new();
     private readonly Mock<IProcessService> _processMock = new();
     private readonly Mock<IWindowService> _windowMock = new();
     private readonly Mock<ILogger> _loggerMock = new();
-    private readonly AppCommandHandler _handler;
+    private readonly AppActionHandler _handler;
 
-    public AppCommandHandlerTests()
+    public AppActionHandlerTests()
     {
-        _handler = new AppCommandHandler(_appRegistryMock.Object, _processMock.Object, _windowMock.Object, _loggerMock.Object);
+        _handler = new AppActionHandler(_appRegistryMock.Object, _processMock.Object, _windowMock.Object, _loggerMock.Object);
     }
 
     /// <summary>

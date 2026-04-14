@@ -27,20 +27,10 @@ internal class PersonalizationSettingsHandler : SettingsHandlerBase
             @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency", "enable", 1, 0));
         AddOpenSettingsAction("HighContrastTheme", new OpenSettingsConfig(
             "ms-settings:easeofaccess-highcontrast", "high contrast settings"));
-        AddSpecializedAction("SystemThemeMode");
+        AddAction("SystemThemeMode", HandleSystemThemeMode);
     }
 
-    /// <inheritdoc/>
-    protected override CommandResult HandleSpecialized(string key, JsonElement parameters)
-    {
-        return key switch
-        {
-            "SystemThemeMode" => HandleSystemThemeMode(parameters),
-            _ => base.HandleSpecialized(key, parameters),
-        };
-    }
-
-    private CommandResult HandleSystemThemeMode(JsonElement parameters)
+    private ActionResult HandleSystemThemeMode(JsonElement parameters)
     {
         string mode = parameters.GetStringOrDefault("mode", "dark");
         int value = mode.Equals("light", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
@@ -51,6 +41,6 @@ internal class PersonalizationSettingsHandler : SettingsHandlerBase
         // Set system theme — taskbar, Start menu, etc.
         Registry.SetValue(PersonalizePath, "SystemUsesLightTheme", value, RegistryValueKind.DWord);
         Registry.BroadcastSettingChange("ImmersiveColorSet");
-        return CommandResult.Ok($"System theme set to {mode}");
+        return ActionResult.Ok($"System theme set to {mode}");
     }
 }

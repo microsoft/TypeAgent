@@ -112,14 +112,14 @@ internal class SchemaValidator
     }
 
     /// <summary>
-    /// Compares schema-defined action names against registered handler commands
+    /// Compares schema-defined action names against registered handler actions
     /// and logs warnings for any mismatches.
     /// </summary>
     /// <param name="schemaActions">Action names from .pas.json files.</param>
-    /// <param name="registeredCommands">Command names from handler SupportedCommands.</param>
-    public void ValidateWiring(HashSet<string> schemaActions, IEnumerable<string> registeredCommands)
+    /// <param name="registeredActions">Action names from handler SupportedActions.</param>
+    public void ValidateWiring(HashSet<string> schemaActions, IEnumerable<string> registeredActions)
     {
-        var registered = new HashSet<string>(registeredCommands, StringComparer.OrdinalIgnoreCase);
+        var registered = new HashSet<string>(registeredActions, StringComparer.OrdinalIgnoreCase);
 
         foreach (var action in schemaActions)
         {
@@ -129,11 +129,11 @@ internal class SchemaValidator
             }
         }
 
-        foreach (var command in registered)
+        foreach (var action in registered)
         {
-            if (!schemaActions.Contains(command))
+            if (!schemaActions.Contains(action))
             {
-                _logger.Warning($"Handler command '{command}' has no matching schema definition.");
+                _logger.Warning($"Handler action '{action}' has no matching schema definition.");
             }
         }
     }

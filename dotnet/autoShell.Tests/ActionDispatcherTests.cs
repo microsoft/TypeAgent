@@ -8,14 +8,14 @@ using Moq;
 
 namespace autoShell.Tests;
 
-public class CommandDispatcherTests
+public class ActionDispatcherTests
 {
     private readonly Mock<ILogger> _loggerMock = new();
-    private readonly CommandDispatcher _dispatcher;
+    private readonly ActionDispatcher _dispatcher;
 
-    public CommandDispatcherTests()
+    public ActionDispatcherTests()
     {
-        _dispatcher = new CommandDispatcher(_loggerMock.Object);
+        _dispatcher = new ActionDispatcher(_loggerMock.Object);
     }
 
     private static JsonElement Parse(string json) => JsonDocument.Parse(json).RootElement;
@@ -27,21 +27,21 @@ public class CommandDispatcherTests
     public void Dispatch_QuitKey_ReturnsQuitResult()
     {
         var json = Parse("""{"actionName":"quit","parameters":{}}""");
-        CommandResult result = _dispatcher.Dispatch(json);
+        ActionResult result = _dispatcher.Dispatch(json);
         Assert.NotNull(result);
         Assert.True(result.Success);
         Assert.True(result.IsQuit);
     }
 
     /// <summary>
-    /// Verifies that dispatching a non-quit command returns a successful CommandResult.
+    /// Verifies that dispatching a non-quit command returns a successful ActionResult.
     /// </summary>
     [Fact]
     public void Dispatch_NonQuitKey_ReturnsSuccessResult()
     {
         _dispatcher.Register(new StubHandler("TestCmd"));
         var json = Parse("""{"actionName":"TestCmd","parameters":{}}""");
-        CommandResult result = _dispatcher.Dispatch(json);
+        ActionResult result = _dispatcher.Dispatch(json);
         Assert.NotNull(result);
         Assert.True(result.Success);
     }
@@ -71,7 +71,7 @@ public class CommandDispatcherTests
     public void Dispatch_UnknownCommand_ReturnsFailure()
     {
         var json = Parse("""{"actionName":"UnknownCmd","parameters":{}}""");
-        CommandResult result = _dispatcher.Dispatch(json);
+        ActionResult result = _dispatcher.Dispatch(json);
         Assert.NotNull(result);
         Assert.False(result.Success);
         Assert.Contains("Unknown action", result.Message);
@@ -83,7 +83,7 @@ public class CommandDispatcherTests
     [Fact]
     public void Dispatch_EmptyObject_ReturnsFailure()
     {
-        CommandResult result = _dispatcher.Dispatch(Parse("{}"));
+        ActionResult result = _dispatcher.Dispatch(Parse("{}"));
         Assert.NotNull(result);
         Assert.False(result.Success);
     }
@@ -112,7 +112,7 @@ public class CommandDispatcherTests
         _dispatcher.Register(handler);
 
         var json = Parse("""{"actionName":"Boom","parameters":{}}""");
-        CommandResult result = _dispatcher.Dispatch(json);
+        ActionResult result = _dispatcher.Dispatch(json);
         Assert.NotNull(result);
         Assert.False(result.Success);
         Assert.Contains("Boom", result.Message);
@@ -134,7 +134,7 @@ public class CommandDispatcherTests
     }
 
     /// <summary>
-    /// Verifies that registering duplicate command names throws.
+    /// Verifies that registering duplicate action names throws.
     /// </summary>
     [Fact]
     public void Register_DuplicateCommand_Throws()
@@ -146,38 +146,38 @@ public class CommandDispatcherTests
     /// <summary>
     /// Stub handler that records the last key and parameters it received.
     /// </summary>
-    private class StubHandler : ICommandHandler
+    private class StubHandler : IActionHandler
     {
-        public IEnumerable<string> SupportedCommands { get; }
+        public IEnumerable<string> SupportedActions { get; }
         public string? LastKey { get; private set; }
         public JsonElement? LastParameters { get; private set; }
 
         public StubHandler(params string[] commands)
         {
-            SupportedCommands = commands;
+            SupportedActions = commands;
         }
 
-        public CommandResult Handle(string key, JsonElement parameters)
+        public ActionResult Handle(string key, JsonElement parameters)
         {
             LastKey = key;
             LastParameters = parameters;
-            return CommandResult.Ok($"Handled {key}");
+            return ActionResult.Ok($"Handled {key}");
         }
     }
 
     /// <summary>
     /// Handler that always throws, for testing exception isolation.
     /// </summary>
-    private class ThrowingHandler : ICommandHandler
+    private class ThrowingHandler : IActionHandler
     {
-        public IEnumerable<string> SupportedCommands { get; }
+        public IEnumerable<string> SupportedActions { get; }
 
         public ThrowingHandler(params string[] commands)
         {
-            SupportedCommands = commands;
+            SupportedActions = commands;
         }
 
-        public CommandResult Handle(string key, JsonElement parameters)
+        public ActionResult Handle(string key, JsonElement parameters)
         {
             throw new InvalidOperationException("Test exception");
         }

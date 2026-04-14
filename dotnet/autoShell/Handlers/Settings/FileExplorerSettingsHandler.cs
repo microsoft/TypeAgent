@@ -32,21 +32,15 @@ internal partial class FileExplorerSettingsHandler : SettingsHandlerBase
 
         AddRegistryToggleAction("ShowFileExtensions", new RegistryToggleConfig(
             ExplorerAdvanced, "HideFileExt", "enable", OnValue: 0, OffValue: 1));
-        AddSpecializedAction("ShowHiddenAndSystemFiles");
+        AddAction("ShowHiddenAndSystemFiles", HandleShowHiddenAndSystemFiles);
     }
 
     /// <inheritdoc/>
-    public override CommandResult Handle(string key, JsonElement parameters)
+    public override ActionResult Handle(string key, JsonElement parameters)
     {
         var result = base.Handle(key, parameters);
         NotifySettingsChange();
         return result;
-    }
-
-    /// <inheritdoc/>
-    protected override CommandResult HandleSpecialized(string key, JsonElement parameters)
-    {
-        return key == "ShowHiddenAndSystemFiles" ? HandleShowHiddenAndSystemFiles(parameters) : base.HandleSpecialized(key, parameters);
     }
 
     private static void NotifySettingsChange()
@@ -61,13 +55,13 @@ internal partial class FileExplorerSettingsHandler : SettingsHandlerBase
         }
     }
 
-    private CommandResult HandleShowHiddenAndSystemFiles(JsonElement parameters)
+    private ActionResult HandleShowHiddenAndSystemFiles(JsonElement parameters)
     {
         bool enable = parameters.GetBoolOrDefault("enable", true);
         // 1 = show hidden files, 2 = don't show hidden files
         Registry.SetValue(ExplorerAdvanced, "Hidden", enable ? 1 : 2, RegistryValueKind.DWord);
         // Show protected operating system files
         Registry.SetValue(ExplorerAdvanced, "ShowSuperHidden", enable ? 1 : 0, RegistryValueKind.DWord);
-        return CommandResult.Ok($"Hidden files {(enable ? "shown" : "hidden")}");
+        return ActionResult.Ok($"Hidden files {(enable ? "shown" : "hidden")}");
     }
 }
