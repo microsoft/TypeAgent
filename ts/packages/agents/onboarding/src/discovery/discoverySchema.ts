@@ -37,7 +37,7 @@ export type CrawlCliHelpAction = {
         integrationName: string;
         // The CLI command to crawl (e.g. "gh", "az", "kubectl")
         command: string;
-        // Maximum recursion depth into subcommands (omit for unlimited)
+        // Maximum recursion depth into subcommands (default: 4)
         maxDepth?: number;
     };
 };

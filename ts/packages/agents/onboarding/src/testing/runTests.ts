@@ -11,7 +11,8 @@ import os from "node:os";
 
 // Load .env from ts/ root so API keys are available for LLM translation fallback
 const __filename = fileURLToPath(import.meta.url);
-const envPath = path.resolve(__filename, "../../../../../../.env");
+const __dirname = path.dirname(__filename);
+const envPath = path.resolve(__dirname, "../../../../../../.env");
 if (fs.existsSync(envPath)) {
     for (const line of fs.readFileSync(envPath, "utf-8").split("\n")) {
         const trimmed = line.trim();
@@ -27,7 +28,7 @@ if (fs.existsSync(envPath)) {
 
 const integrationName = process.argv[2] || "github-cli";
 
-const AGENTS_DIR = path.resolve(__filename, "../../../../../../packages/agents");
+const AGENTS_DIR = path.resolve(__dirname, "../../../../../../packages/agents");
 const WORKSPACE_DIR = path.join(os.homedir(), ".typeagent", "onboarding", integrationName);
 
 const testCasesFile = path.join(WORKSPACE_DIR, "testing", "test-cases.json");

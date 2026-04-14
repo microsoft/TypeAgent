@@ -536,7 +536,7 @@ function createCapturingClientIO(buffer: string[]): ClientIO {
 // the generated agent (which would create a circular dependency via
 // default-agent-provider).
 const AGENTS_DIR = path.resolve(
-    fileURLToPath(import.meta.url),
+    path.dirname(fileURLToPath(import.meta.url)),
     "../../../../../../packages/agents",
 );
 
@@ -560,7 +560,7 @@ async function createTestDispatcher(integrationName: string) {
     // Use a temp directory for the test dispatcher so it starts with a
     // fresh cache on every run — stale wildcard entries from prior runs
     // can override newly-added grammar rules.
-    const tmpDir = path.join(instanceDir, "onboarding-test-tmp");
+    const tmpDir = path.join(instanceDir, "onboarding-test-tmp-" + Date.now());
 
     const dispatcher = await createDispatcher("onboarding-test-runner", {
         appAgentProviders,

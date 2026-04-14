@@ -1415,11 +1415,11 @@ function buildCliHandler(
                 const flag = p.name.startsWith("-") ? p.name : `--${p.name}`;
                 if (p.type === "boolean") {
                     flagLines.push(
-                        `            if (params.${camel}) args.push("${flag}");`,
+                        `            if (params.${camel} === true) args.push("${flag}");`,
                     );
                 } else {
                     flagLines.push(
-                        `            if (params.${camel}) args.push("${flag}", String(params.${camel}));`,
+                        `            if (params.${camel} !== undefined && params.${camel} !== null) args.push("${flag}", String(params.${camel}));`,
                     );
                 }
             }
