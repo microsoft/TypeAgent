@@ -96,11 +96,11 @@ function makeQuestion(
         type: "question",
         message: "Are you sure?",
         choices,
-        defaultId,
+        ...(defaultId !== undefined && { defaultId }),
         requestId: { requestId: "req-1" },
         source: "test",
         timestamp: Date.now(),
-    } as unknown as PendingInteractionRequest;
+    };
 }
 
 /** Wait for microtasks and a short real tick so async IIFEs inside

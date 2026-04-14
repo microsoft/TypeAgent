@@ -215,9 +215,10 @@ function registerClient(
                 ),
             );
         },
-        question: (async (requestId: any, message: any, choices: any) => {
-            // For binary Yes/No, delegate to the existing chatView UI.
+        question: async (requestId, message, choices) => {
+            // For binary Yes/No with a known requestId, delegate to the existing chatView UI.
             if (
+                requestId !== undefined &&
                 choices.length === 2 &&
                 choices[0] === "Yes" &&
                 choices[1] === "No"
@@ -225,11 +226,12 @@ function registerClient(
                 const yes = await chatView.askYesNo(requestId, message, "");
                 return yes ? 0 : 1;
             }
-            // General multi-choice is not yet implemented in the Shell.
+            // General multi-choice and broadcast (no requestId) are not yet implemented
+            // in the Shell renderer — the main process handles those via dialog.showMessageBox.
             throw new Error(
                 "Main process should have handled multi-choice question",
             );
-        }) as any,
+        },
         requestChoice: (
             requestId,
             choiceId,

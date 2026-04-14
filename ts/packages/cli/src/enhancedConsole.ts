@@ -380,6 +380,10 @@ type InteractionResolvedReason = {
 };
 const INTERACTION_CANCELLED = "cancelled";
 
+function isYesNoChoices(choices: string[]): boolean {
+    return choices.length === 2 && choices[0] === "Yes" && choices[1] === "No";
+}
+
 /**
  * Parse a user's raw input string into a 0-based choice index.
  * Accepts:
@@ -393,7 +397,7 @@ function parseChoiceInput(
     defaultId: number | undefined,
 ): number {
     const trimmed = input.trim().toLowerCase();
-    if (choices.length === 2 && choices[0] === "Yes" && choices[1] === "No") {
+    if (isYesNoChoices(choices)) {
         if (trimmed === "y" || trimmed === "yes") return 0;
         if (trimmed === "n" || trimmed === "no") return 1;
     }
@@ -670,12 +674,8 @@ export function createEnhancedClientIO(
             });
 
             process.stdout.write("\n");
-            const isYesNo =
-                choices.length === 2 &&
-                choices[0] === "Yes" &&
-                choices[1] === "No";
             const prompt = chalk.dim(
-                isYesNo
+                isYesNoChoices(choices)
                     ? "Enter y/n or number (1-2): "
                     : `Enter number (1-${choices.length}): `,
             );
@@ -886,12 +886,8 @@ export function createEnhancedClientIO(
                     });
                     displayContent(promptText);
 
-                    const isYesNo =
-                        interaction.choices.length === 2 &&
-                        interaction.choices[0] === "Yes" &&
-                        interaction.choices[1] === "No";
                     const prompt = chalk.dim(
-                        isYesNo
+                        isYesNoChoices(interaction.choices)
                             ? "Enter y/n or number (1-2): "
                             : `Enter number (1-${interaction.choices.length}): `,
                     );

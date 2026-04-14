@@ -6,9 +6,9 @@
 
 ## Overview
 
-Three `ClientIO` methods — `askYesNo`, `proposeAction`, and `popupQuestion` — use a **non-blocking, deferred-promise pattern** in the agent-server's `SharedDispatcher`. Rather than blocking on a synchronous RPC round-trip to the originating client, the server broadcasts a fire-and-forget notification, suspends execution via a stored `Promise`, and resumes when any connected client responds. This allows commands to survive client disconnects, supports multi-client sessions, and integrates with the `DisplayLog` for session replay.
+Two `ClientIO` methods — `question` and `proposeAction` — use a **non-blocking, deferred-promise pattern** in the agent-server's `SharedDispatcher`. Rather than blocking on a synchronous RPC round-trip to the originating client, the server broadcasts a fire-and-forget notification, suspends execution via a stored `Promise`, and resumes when any connected client responds. This allows commands to survive client disconnects, supports multi-client sessions, and integrates with the `DisplayLog` for session replay.
 
-The `ClientIO` interface signatures are unchanged — callers receive a `Promise<boolean | unknown | number>` as before. Only the server-side fulfillment mechanism differs.
+The `ClientIO` interface signatures are unchanged — callers receive a `Promise<number | unknown>` as before. Only the server-side fulfillment mechanism differs.
 
 ---
 
@@ -17,7 +17,7 @@ The `ClientIO` interface signatures are unchanged — callers receive a `Promise
 ### Flow
 
 ```
-Agent code → askYesNoWithContext() → context.clientIO.askYesNo()
+Agent code → askYesNoWithContext() → context.clientIO.question()
   → SharedDispatcher:
      1. Broadcast requestInteraction (fire-and-forget) to eligible clients
      2. Log pending-interaction to DisplayLog
@@ -31,11 +31,11 @@ Agent code → askYesNoWithContext() → context.clientIO.askYesNo()
   → Agent code continues
 ```
 
-`popupQuestion` is identical except it broadcasts to all clients (it has no `requestId`). `proposeAction` follows the same pattern as `askYesNo` but throws instead of returning a default when no clients are connected.
+`popupQuestion` (via `SessionContext`) follows the same path as `askYesNoWithContext` — both delegate to `clientIO.question()`. `proposeAction` follows the same deferred pattern but throws instead of returning a default when no clients are connected.
 
 ### Key invariant: always log
 
-`logPendingInteraction` is called unconditionally for all three interaction types — even when no clients are currently connected. This ensures that a client which reconnects within the timeout window can see the pending interaction in `JoinSessionResult.pendingInteractions` and respond to it. The log and `PendingInteractionManager` entry are created before the broadcast so the interaction is visible to any client joining concurrently.
+`logPendingInteraction` is called unconditionally for both interaction types — even when no clients are currently connected. This ensures that a client which reconnects within the timeout window can see the pending interaction in `JoinSessionResult.pendingInteractions` and respond to it. The log and `PendingInteractionManager` entry are created before the broadcast so the interaction is visible to any client joining concurrently.
 
 ### Routing
 
@@ -44,7 +44,7 @@ The `broadcast()` helper respects each client's `filter` setting:
 - `filter: false` (default) — receives all messages, plus those routed to its own `connectionId`
 - `filter: true` — receives only messages routed to its own `connectionId`
 
-`askYesNo` and `proposeAction` broadcast to clients eligible for `requestId.connectionId`. `popupQuestion` broadcasts to all clients unconditionally.
+`question` and `proposeAction` broadcast to clients eligible for `requestId.connectionId`. `popupQuestion` (which passes no `requestId`) broadcasts to all clients unconditionally.
 
 ### Pending Interaction Manager
 
@@ -52,18 +52,18 @@ The `broadcast()` helper respects each client's `filter` setting:
 
 - `create(request, timeoutMs)` — stores the deferred Promise, sets an optional timeout
 - `resolve(interactionId, value)` — fulfills the Promise; returns false if not found
-- `cancel(interactionId, error)` — for `askYesNo`: resolves with `defaultValue` if provided, otherwise rejects; for `proposeAction` and `popupQuestion`: always rejects
+- `cancel(interactionId, error)` — for `question` with a `defaultId`: resolves with that index; otherwise rejects; for `proposeAction`: always rejects
 - `getPending()` — returns all in-flight `PendingInteractionRequest` objects
 
 ### Timeouts
 
-All three types use a 10-minute timeout, kept as separate constants so they can be tuned independently. On timeout, `cancel()` is called with a timeout error.
+Both types use a 10-minute timeout, kept as separate constants so they can be tuned independently. On timeout, `cancel()` is called with a timeout error.
 
 ### Client Disconnect
 
 Disconnecting a client does **not** automatically cancel pending interactions. Interactions remain pending until they time out or a client explicitly calls `cancelInteraction`. This allows a reconnecting client to respond to the same interaction within the timeout window.
 
-All three interaction types log unconditionally and survive in the pending map if no client is connected, so a later-joining client will see them in `JoinSessionResult.pendingInteractions`. However, with the current ephemeral `connectionId` design, a reconnecting client's new `connectionId` will not match `requestId.connectionId` for `askYesNo`/`proposeAction` interactions and they will be filtered out — see Open Question 5.
+Both interaction types log unconditionally and survive in the pending map if no client is connected, so a later-joining client will see them in `JoinSessionResult.pendingInteractions`. However, with the current ephemeral `connectionId` design, a reconnecting client's new `connectionId` will not match the stored one for `question`/`proposeAction` interactions and they will be filtered out — see Open Question 5.
 
 Clients that want to cancel an interaction (e.g., on user dismissal) call `dispatcher.cancelInteraction(interactionId)`, which triggers:
 
@@ -106,33 +106,22 @@ cancelInteraction(interactionId: string): void;                            // se
 ### Types (`@typeagent/dispatcher-types`)
 
 ```typescript
-export type PendingInteractionType =
-  | "askYesNo"
-  | "proposeAction"
-  | "popupQuestion";
+export type PendingInteractionType = "question" | "proposeAction";
 
 export type PendingInteractionRequest = {
   interactionId: string;
   type: PendingInteractionType;
-  requestId?: RequestId; // absent for popupQuestion
+  requestId?: RequestId;
   source: string;
   timestamp: number;
 } & (
-  | { type: "askYesNo"; message: string; defaultValue?: boolean }
+  | { type: "question"; message: string; choices: string[]; defaultId?: number }
   | { type: "proposeAction"; actionTemplates: TemplateEditConfig }
-  | {
-      type: "popupQuestion";
-      message: string;
-      choices: string[];
-      defaultId?: number;
-    }
 );
 
-export type PendingInteractionResponse = {
-  interactionId: string;
-  type: PendingInteractionType;
-  value: boolean | unknown | number;
-};
+export type PendingInteractionResponse =
+  | { interactionId: string; type: "question"; value: number }
+  | { interactionId: string; type: "proposeAction"; value: unknown };
 ```
 
 ---
@@ -151,7 +140,7 @@ The shell and CLI `requestInteraction`/`interactionResolved`/`interactionCancell
 
    Currently broadcast to all clients; first responder wins. Other clients receive `interactionResolved` and dismiss their UI. Routing to a designated primary client would be more precise but requires adding a `connectionId` to the `popupQuestion` signature.
 
-2. **Timeouts** — resolved: 10 minutes for all three types (separate constants).
+2. **Timeouts** — resolved: 10 minutes for all types (separate constants).
 
 3. **Unify `requestChoice`/`respondToChoice` with this system?**
 
@@ -159,7 +148,7 @@ The shell and CLI `requestInteraction`/`interactionResolved`/`interactionCancell
 
 4. **Grace period on disconnect** — disconnecting a client does not auto-cancel pending interactions. Interactions remain pending until they time out or a client explicitly calls `cancelInteraction`. Reconnecting clients see pending interactions in `JoinSessionResult.pendingInteractions` and can respond or cancel them.
 
-5. **Stable client identity for reconnect routing** — `askYesNo`/`proposeAction` interactions capture `requestId.connectionId` at creation time, but `connectionId` is ephemeral: each `join()` call mints a new value. A reconnecting client therefore gets a new `connectionId` that never matches the stored one, so `getPendingInteractions()` filters those interactions out and they become permanently unresolvable until timeout.
+5. **Stable client identity for reconnect routing** — `question`/`proposeAction` interactions capture `requestId.connectionId` at creation time, but `connectionId` is ephemeral: each `join()` call mints a new value. A reconnecting client therefore gets a new `connectionId` that never matches the stored one, so `getPendingInteractions()` filters those interactions out and they become permanently unresolvable until timeout.
 
    Two candidate fixes:
 
@@ -172,25 +161,25 @@ The shell and CLI `requestInteraction`/`interactionResolved`/`interactionCancell
 
 ## Sequence Diagrams
 
-### askYesNo: Normal Flow
+### question: Normal Flow
 
 ```
 Client              SharedDispatcher          PendingInteractionMgr     DisplayLog
   |                       |                           |                      |
-  |   (command in progress, agent calls askYesNo)     |                      |
+  |   (command in progress, agent calls question())   |                      |
   |<-- requestInteraction-|                           |                      |
   |                       |--- logPendingInteraction --------------------->  |
   |                       |--- create(request) ------->                      |
-  |                       |<-- Promise<boolean> -------|                      |
+  |                       |<-- Promise<number> --------|                      |
   |                       |   (server suspends here)  |                      |
-  |   (user clicks Yes)   |                           |                      |
+  |   (user picks "1")    |                           |                      |
   |-- respondToInteraction -->                        |                      |
-  |                       |--- resolve(id, true) ---->|                      |
+  |                       |--- resolve(id, 0) ------->|                      |
   |                       |--- logInteractionResolved -------------------->  |
   |                       |   (Promise resolves, command continues)          |
 ```
 
-### askYesNo: Client Disconnect (interaction survives)
+### question: Client Disconnect (interaction survives)
 
 ```
 Client              SharedDispatcher          PendingInteractionMgr
@@ -219,7 +208,7 @@ ClientA             ClientB           SharedDispatcher          PendingInteracti
   |                   |<-- requestInteraction --|                      |
   |  (user answers 1) |                     |                           |
   |-- respondToInteraction ---------------->|                           |
-  |                   |                     |--- resolve(id, 1) ------>|
-  |                   |<-- interactionResolved (id, 1) --|              |
+  |                   |                     |--- resolve(id, 0) ------>|
+  |                   |<-- interactionResolved (id, 0) --|              |
   |                   |   (ClientB dismisses UI)        |              |
 ```

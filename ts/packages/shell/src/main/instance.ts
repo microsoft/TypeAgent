@@ -76,11 +76,11 @@ async function initializeDispatcher(
         const clientIO: ClientIO = {
             ...newClientIO,
             // Main process intercepted clientIO calls
-            question: (async (
-                _requestId: any,
+            question: async (
+                _requestId: RequestId | undefined,
                 message: string,
                 choices: string[],
-                defaultId: number | undefined,
+                defaultId?: number,
             ) => {
                 const result = await dialog.showMessageBox(
                     shellWindow.mainWindow,
@@ -92,7 +92,7 @@ async function initializeDispatcher(
                     },
                 );
                 return result.response;
-            }) as any,
+            },
             openLocalView: async (_: RequestId, port: number) => {
                 debugShell(`Opening local view on port ${port}`);
                 shellWindow.createBrowserTab(
