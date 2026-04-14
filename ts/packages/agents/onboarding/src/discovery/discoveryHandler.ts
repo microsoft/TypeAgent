@@ -510,12 +510,45 @@ async function handleParseOpenApiSpec(
 
 // ── CLI Help Crawler ──────────────────────────────────────────────────────
 
+// CLIs where both --help and -h are known to be safe help flags.
+// For unlisted commands only --help is attempted (since -h can mean
+// something else, e.g. -h is "human-readable" in some Unix tools).
+const SAFE_SHORT_HELP_CLIS = new Set([
+    "gh",
+    "git",
+    "az",
+    "kubectl",
+    "docker",
+    "npm",
+    "pnpm",
+    "yarn",
+    "node",
+    "python",
+    "pip",
+    "dotnet",
+    "cargo",
+    "go",
+    "terraform",
+    "helm",
+    "aws",
+    "gcloud",
+    "heroku",
+]);
+
 async function runHelp(
     command: string,
     args: string[],
 ): Promise<string | undefined> {
-    // Try --help first, fall back to -h
-    for (const flag of ["--help", "-h"]) {
+    const flags = SAFE_SHORT_HELP_CLIS.has(command)
+        ? ["--help", "-h"]
+        : ["--help"];
+    if (!SAFE_SHORT_HELP_CLIS.has(command)) {
+        debug(
+            "Skipping -h fallback for unknown CLI %s (only --help is tried)",
+            command,
+        );
+    }
+    for (const flag of flags) {
         try {
             const { stdout, stderr } = await execFileAsync(
                 command,
