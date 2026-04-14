@@ -321,15 +321,17 @@ Additionally, AutoShell automatically discovers all installed Windows Store appl
 
 AutoShell uses a handler-based architecture with dependency injection. All platform-specific (P/Invoke, COM, WMI) code is isolated behind service interfaces, keeping handlers thin and fully unit-testable.
 
+A **Roslyn source generator** (`autoShell.Generators`) reads the `.pas.json` schema files at build time and generates strongly-typed C# record classes for each action's parameters. Handlers can use these generated types via `AddAction<T>` instead of manually extracting fields from `JsonElement`.
+
 ```
 autoShell/
 ├── AutoShell.cs              # Entry point — stdin/stdout command loop
-├── ActionDispatcher.cs      # Routes JSON keys to handlers; Create() wires all dependencies
+├── ActionDispatcher.cs       # Routes JSON keys to handlers; Create() wires all dependencies
 ├── IAppRegistry.cs           # App registry interface (shared across handlers)
 ├── WindowsAppRegistry.cs     # Maps friendly app names to paths and AppUserModelIDs
 ├── Handlers/
-│   ├── IActionHandler.cs    # Handler interface (SupportedActions + Handle)
-│   ├── ActionHandlerBase.cs          # Base class — AddAction registration + dictionary dispatch
+│   ├── IActionHandler.cs     # Handler interface (SupportedActions + Handle)
+│   ├── ActionHandlerBase.cs  # Base class — AddAction/AddAction<T> registration + dispatch
 │   ├── AppActionHandler.cs           # LaunchProgram, CloseProgram, ListAppNames
 │   ├── AudioActionHandler.cs         # Volume, Mute, RestoreVolume
 │   ├── DisplayActionHandler.cs       # SetScreenResolution, ListResolutions, SetTextSize
@@ -367,16 +369,200 @@ autoShell/
 │   ├── ILogger.cs            # Logging interface (Error, Warning, Info, Debug)
 │   └── ConsoleLogger.cs      # Colored console + diagnostics output
 └── autoShell.Tests/          # unit, integration, and E2E tests
+
+autoShell.Generators/         # Roslyn source generator (netstandard2.0)
+├── ActionParamsGenerator.cs  # IIncrementalGenerator entry point
+├── SchemaParser.cs           # Parses .pas.json → ActionDefinition list
+└── RecordEmitter.cs          # Generates C# records from ActionDefinitions
 ```
 
 ### Key design decisions
 
 - **ActionDispatcher.Create()** is the composition root — it creates all concrete services and wires them into handlers. Tests bypass this and inject mocks directly.
-- **Single handler hierarchy** — All handlers inherit from `ActionHandlerBase`, which provides `AddAction(name, handler)` registration and dictionary-based dispatch. Actions are registered once in the constructor; `SupportedActions` and `Handle()` are auto-derived.
+- **Single handler hierarchy** — All handlers inherit from `ActionHandlerBase`, which provides `AddAction(name, handler)` and `AddAction<T>(name, handler)` registration with dictionary-based dispatch. Actions are registered once in the constructor; `SupportedActions` and `Handle()` are auto-derived.
+- **Source-generated parameter records** — The `.pas.json` schema files in `ts/packages/agents/desktop/dist/` are the single source of truth for action definitions. A Roslyn source generator reads them at build time and produces strongly-typed C# records (e.g., `MuteParams`, `VolumeParams`) in the `autoShell.Handlers.Generated` namespace. Handlers use `AddAction<T>` to get auto-deserialized parameters.
 - **SettingsHandlerBase** extends `ActionHandlerBase` with registry-specific convenience methods: `AddRegistryToggleAction`, `AddRegistryMapAction`, and `AddOpenSettingsAction`. These internally delegate to `AddAction` with wrapper lambdas. Custom actions use `AddAction` directly.
-- **Handlers are thin** — they parse JSON parameters and delegate to services. No P/Invoke or COM code lives in handlers.
+- **Handlers are thin** — they receive typed parameters and delegate to services. No P/Invoke or COM code lives in handlers.
 - **Services own all platform calls** — P/Invoke, COM, WMI, and registry access are encapsulated behind interfaces (`I*Service` / `Windows*Service`).
 - **ILogger** abstracts all diagnostic output with four levels: Error (red), Warning (yellow), Info (cyan), and Debug (diagnostics only). `ConsoleLogger` preserves the original colored formatting.
+
+## Adding a New Action
+
+This section walks through adding a new action end-to-end. There are three categories of actions, each with a different amount of work required.
+
+### Option A: Registry-based settings action (simplest)
+
+For actions that toggle a registry value or map a string parameter to a registry entry, you only need to add a line in an existing settings handler constructor. No new files, no new classes.
+
+**Example — adding a new registry toggle:**
+
+```csharp
+// In an existing SettingsHandler constructor (e.g., SystemSettingsHandler.cs):
+AddRegistryToggleAction("MyNewToggle", new RegistryToggleConfig(
+    KeyPath: @"SOFTWARE\Microsoft\Windows\CurrentVersion\MyFeature",
+    ValueName: "Enabled",
+    ParameterName: "enable",
+    OnValue: 1,
+    OffValue: 0,
+    DisplayName: "My New Feature"
+));
+```
+
+That's it. The base class handles parameter extraction, registry writes, and success/failure responses. Other config-driven options:
+- `AddRegistryMapAction` — maps a string parameter (e.g., `"left"/"center"`) to registry values
+- `AddOpenSettingsAction` — opens a Windows Settings URI (e.g., `ms-settings:display`)
+
+### Option B: Typed action in an existing handler (most common)
+
+For actions that need custom logic but fit within an existing handler's domain.
+
+**1. Define the action in the TypeScript schema** (`ts/packages/agents/desktop/dist/<schema>.pas.json`):
+
+The `.pas.json` file is the single source of truth. When you add an action type here, the source generator automatically creates a C# parameter record at build time.
+
+```json
+{
+  "types": {
+    "MyNewAction": {
+      "type": {
+        "fields": {
+          "actionName": {
+            "type": { "type": "string", "typeEnum": ["MyAction"] }
+          },
+          "parameters": {
+            "type": {
+              "fields": {
+                "level": { "type": { "type": "number" } },
+                "name": { "type": { "type": "string" }, "optional": true }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+After building, this generates:
+
+```csharp
+// Auto-generated in autoShell.Handlers.Generated namespace
+internal record MyActionParams
+{
+    [JsonPropertyName("level")]
+    public int Level { get; init; } = 0;
+
+    [JsonPropertyName("name")]
+    public string? Name { get; init; } = null;
+}
+```
+
+**2. Register and handle the action** in the appropriate handler:
+
+```csharp
+using autoShell.Handlers.Generated;
+
+internal class AudioActionHandler : ActionHandlerBase
+{
+    public AudioActionHandler(IAudioService audio)
+    {
+        // ... existing actions ...
+        AddAction<MyActionParams>("MyAction", HandleMyAction);
+    }
+
+    private ActionResult HandleMyAction(MyActionParams p)
+    {
+        // p.Level and p.Name are already deserialized and typed
+        return ActionResult.Ok($"Did something with level {p.Level}");
+    }
+}
+```
+
+**That's all the C# you need.** The dispatcher automatically discovers the action through the handler's `SupportedActions`.
+
+### Option C: New handler with new service (rare)
+
+For actions that require a new Windows API or a new domain.
+
+**1. Define the schema** in the TypeScript `.pas.json` file (same as Option B, step 1).
+
+**2. Create a service interface and implementation:**
+
+```csharp
+// Services/IMyService.cs
+internal interface IMyService
+{
+    void DoSomething(int level);
+}
+
+// Services/WindowsMyService.cs
+internal class WindowsMyService : IMyService
+{
+    public void DoSomething(int level)
+    {
+        // P/Invoke, COM, WMI, etc.
+    }
+}
+```
+
+**3. Create a handler:**
+
+```csharp
+// Handlers/MyActionHandler.cs
+using autoShell.Handlers.Generated;
+using autoShell.Services;
+
+internal class MyActionHandler : ActionHandlerBase
+{
+    private readonly IMyService _myService;
+
+    public MyActionHandler(IMyService myService)
+    {
+        _myService = myService;
+        AddAction<MyActionParams>("MyAction", HandleMyAction);
+    }
+
+    private ActionResult HandleMyAction(MyActionParams p)
+    {
+        _myService.DoSomething(p.Level);
+        return ActionResult.Ok($"Done at level {p.Level}");
+    }
+}
+```
+
+**4. Wire it in `ActionDispatcher.Create()`:**
+
+```csharp
+// In ActionDispatcher.cs, Create() method:
+dispatcher.Register(
+    // ... existing handlers ...
+    new MyActionHandler(new WindowsMyService())
+);
+```
+
+**5. Add the service to the testable `Create()` overload** so tests can inject a mock.
+
+### Schema-to-code type mapping
+
+The source generator maps `.pas.json` types to C# as follows:
+
+| Schema type | C# type | Default value |
+|---|---|---|
+| `number` | `int` | `0` |
+| `boolean` | `bool` | `false` |
+| `string` | `string` | `""` |
+| `string-union` | `string` | `""` |
+| Optional field | nullable (`int?`, `bool?`, `string?`) | `null` |
+
+### Checklist
+
+- [ ] Action defined in `.pas.json` schema (single source of truth)
+- [ ] Handler method registered with `AddAction<T>` in the constructor
+- [ ] Handler registered in `ActionDispatcher.Create()` (if new handler)
+- [ ] Service interface + implementation created (if new Windows API)
+- [ ] Unit tests added for the handler logic
+- [ ] `dotnet test --filter "Category!=E2E"` passes
 
 ## License
 
