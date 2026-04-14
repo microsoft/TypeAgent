@@ -386,6 +386,55 @@ autoShell.Generators/         # Roslyn source generator (netstandard2.0)
 - **Services own all platform calls** — P/Invoke, COM, WMI, and registry access are encapsulated behind interfaces (`I*Service` / `Windows*Service`).
 - **ILogger** abstracts all diagnostic output with four levels: Error (red), Warning (yellow), Info (cyan), and Debug (diagnostics only). `ConsoleLogger` preserves the original colored formatting.
 
+### Source generator (`autoShell.Generators`)
+
+The `autoShell.Generators` project is a [Roslyn incremental source generator](https://learn.microsoft.com/en-us/dotnet/csharp/roslyn-sdk/source-generators-overview) that runs automatically during every build of `autoShell.csproj`. It reads the `.pas.json` schema files and generates strongly-typed C# parameter records so handlers don't need to manually extract fields from raw JSON.
+
+**How it works:**
+
+1. The `.pas.json` files from `ts/packages/agents/desktop/dist/` are included as `AdditionalFiles` in `autoShell.csproj`
+2. During compilation, the Roslyn compiler loads `autoShell.Generators.dll` as an analyzer
+3. `ActionParamsGenerator` (the `IIncrementalGenerator` entry point) filters for `.pas.json` files and passes each to the pipeline
+4. `SchemaParser` extracts action definitions — action name, parameter names, and types — from the schema JSON structure
+5. `RecordEmitter` produces C# source for each action, emitting `internal record` classes with `[JsonPropertyName]` attributes
+6. The compiler compiles the generated records alongside the hand-written source code
+
+**Project structure:**
+
+| File | Purpose |
+|---|---|
+| `ActionParamsGenerator.cs` | `IIncrementalGenerator` entry point — wires the pipeline |
+| `SchemaParser.cs` | Parses `.pas.json` → list of `ActionDefinition` (action name + parameter fields) |
+| `RecordEmitter.cs` | Generates C# `record` source from `ActionDefinition` list |
+
+**Generated output:**
+
+The generated `.g.cs` files are emitted to `autoShell/Generated/` for inspection (gitignored — they're build artifacts). Each `.pas.json` schema produces one file:
+
+| Schema | Generated file | Example records |
+|---|---|---|
+| `desktopSchema.pas.json` | `desktopSchema.pas.g.cs` | `VolumeParams`, `MuteParams`, `LaunchProgramParams` |
+| `taskbarSchema.pas.json` | `taskbarSchema.pas.g.cs` | `AutoHideTaskbarParams`, `TaskbarAlignmentParams` |
+| `displaySchema.pas.json` | `displaySchema.pas.g.cs` | `DisplayScalingParams`, `RotationLockParams` |
+| ... | ... | ... |
+
+**Type mapping:**
+
+| `.pas.json` type | C# type | Default |
+|---|---|---|
+| `number` | `int` | `0` |
+| `boolean` | `bool` | `false` |
+| `string` | `string` | `""` |
+| `string-union` | `string` | `""` |
+| `type-union` | resolved inner type | varies |
+| Optional field | nullable (`int?`, `bool?`, `string?`) | `null` |
+
+**Constraints:**
+
+- Targets `netstandard2.0` (Roslyn requirement for source generators)
+- References `Microsoft.CodeAnalysis.CSharp` and `System.Text.Json` as `PrivateAssets="all"`
+- Referenced by `autoShell.csproj` as `OutputItemType="Analyzer"` with `ReferenceOutputAssembly="false"`
+
 ## Adding a New Action
 
 This section walks through adding a new action end-to-end. There are three categories of actions, each with a different amount of work required.
