@@ -46,6 +46,7 @@
     "aiclient": "workspace:*",
     "debug": "^4.3.4",
     "dispatcher-node-providers": "workspace:*",
+    "typeagent": "workspace:*",
     "typechat": "^0.1.1"
   },
   "devDependencies": {

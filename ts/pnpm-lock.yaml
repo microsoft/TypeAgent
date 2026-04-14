@@ -2274,6 +2274,9 @@ importers:
       dispatcher-node-providers:
         specifier: workspace:*
         version: link:../../dispatcher/nodeProviders
+      typeagent:
+        specifier: workspace:*
+        version: link:../../typeagent
       typechat:
         specifier: ^0.1.1
         version: 0.1.1(typescript@5.4.5)(zod@3.25.76)

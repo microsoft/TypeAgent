@@ -21,7 +21,13 @@ import {
 import { getDiscoveryModel } from "../lib/llm.js";
 import { execFile } from "child_process";
 import { promisify } from "util";
+import path from "path";
+import { fileURLToPath } from "url";
 import registerDebug from "debug";
+import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
+import { createTypeScriptJsonValidator } from "typechat/ts";
+import { loadSchema } from "typeagent";
+import { CliDiscoveryResult } from "./discoveryLlmSchema.js";
 
 const execFileAsync = promisify(execFile);
 const debug = registerDebug("typeagent:onboarding:discovery");
@@ -56,6 +62,22 @@ export type ApiSurface = {
     approvedAt?: string;
     approvedActions?: string[];
 };
+
+// TypeChat translator for structured CLI help extraction
+function createCliDiscoveryTranslator(): TypeChatJsonTranslator<CliDiscoveryResult> {
+    const model = getDiscoveryModel();
+    // At runtime __dirname is dist/discovery/; resolve back to src/discovery/
+    const schemaPath = path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "../../src/discovery/discoveryLlmSchema.ts",
+    );
+    const schema = loadSchema([schemaPath]);
+    const validator = createTypeScriptJsonValidator<CliDiscoveryResult>(
+        schema,
+        "CliDiscoveryResult",
+    );
+    return createJsonTranslator<CliDiscoveryResult>(model, validator);
+}
 
 export async function executeDiscoveryAction(
     action: TypeAgentAction<DiscoveryActions>,
@@ -608,45 +630,43 @@ async function handleCrawlCliHelp(
         );
     }
 
-    const model = getDiscoveryModel();
+    // Use TypeChat for structured LLM extraction with validation and retry
+    const translator = createCliDiscoveryTranslator();
+    const request =
+        `Extract all leaf CLI actions from the following help output for "${integrationName}".\n\n` +
+        `Base command: ${command}\n` +
+        `Total subcommands crawled: ${helpEntries.length}\n` +
+        `Only include leaf commands that perform an action, not command groups.\n` +
+        `Derive camelCase names from the command path (e.g. "gh repo create" → "repoCreate").\n\n` +
+        `Help output:\n${helpText}`;
 
-    const prompt = [
-        {
-            role: "system" as const,
-            content:
-                "You are a CLI documentation analyzer. Extract a list of CLI actions/commands from the provided help output. " +
-                "For each action, identify: name (camelCase derived from the command path, e.g. 'gh repo create' becomes 'repoCreate'), " +
-                "description, the full command path as the 'path' field, and parameters (flags/arguments with their types). " +
-                "Only include leaf commands (commands that perform an action, not command groups). " +
-                "Return a JSON array of actions.",
-        },
-        {
-            role: "user" as const,
-            content:
-                `Extract all CLI actions from this help output for the "${integrationName}" integration.\n\n` +
-                `Base command: ${command}\n` +
-                `Total subcommands crawled: ${helpEntries.length}\n\n` +
-                `Help output (truncated to ${maxHelpChars} chars):\n${helpText}`,
-        },
-    ];
-
-    const result = await model.complete(prompt);
+    const result = await translator.translate(request);
     if (!result.success) {
         return { error: `LLM extraction failed: ${result.message}` };
     }
 
-    let actions: DiscoveredAction[] = [];
-    try {
-        const jsonMatch = result.data.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-            actions = JSON.parse(jsonMatch[0]);
-        }
-    } catch {
-        return { error: "Failed to parse LLM response as JSON action list." };
-    }
-
     const source = `cli:${command}`;
-    actions = actions.map((a) => ({ ...a, method: "CLI", sourceUrl: source }));
+    let actions: DiscoveredAction[] = result.data.actions.map((a) => {
+        const action: DiscoveredAction = {
+            name: a.name,
+            description: a.description,
+            method: "CLI",
+            path: a.path,
+            sourceUrl: source,
+        };
+        if (a.parameters && a.parameters.length > 0) {
+            action.parameters = a.parameters.map((p) => {
+                const param: DiscoveredParameter = {
+                    name: p.name,
+                    type: p.type,
+                };
+                if (p.description) param.description = p.description;
+                if (p.required !== undefined) param.required = p.required;
+                return param;
+            });
+        }
+        return action;
+    });
 
     // Merge with any existing discovered actions
     const existing = await readArtifactJson<ApiSurface>(
