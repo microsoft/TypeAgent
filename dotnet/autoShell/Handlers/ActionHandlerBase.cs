@@ -54,6 +54,10 @@ internal abstract class ActionHandlerBase : IActionHandler
             {
                 return ActionResult.Fail($"Invalid parameters for '{actionName}': {ex.Message}");
             }
+            if (typed == null)
+            {
+                return ActionResult.Fail($"Invalid parameters for '{actionName}': null parameters not allowed");
+            }
             return handler(typed);
         });
     }

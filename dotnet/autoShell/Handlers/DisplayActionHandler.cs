@@ -46,12 +46,20 @@ internal class DisplayActionHandler : ActionHandlerBase
         {
             int width = p.Width;
             int height = p.Height;
-            if (width == 0 || height == 0)
+            if (width <= 0 || height <= 0)
             {
-                return ActionResult.Fail("Invalid resolution: width and height required");
+                return ActionResult.Fail("Invalid resolution: width and height must be positive");
             }
 
-            uint? refreshRate = p.RefreshRate.HasValue ? (uint)p.RefreshRate.Value : null;
+            uint? refreshRate = null;
+            if (p.RefreshRate.HasValue)
+            {
+                if (p.RefreshRate.Value <= 0)
+                {
+                    return ActionResult.Fail("Invalid refresh rate: must be positive");
+                }
+                refreshRate = (uint)p.RefreshRate.Value;
+            }
 
             string result = _display.SetResolution((uint)width, (uint)height, refreshRate);
             return ActionResult.Ok($"Screen resolution set to {width}x{height}", JsonDocument.Parse(result).RootElement.Clone());
