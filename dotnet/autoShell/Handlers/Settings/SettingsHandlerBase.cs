@@ -114,10 +114,21 @@ internal abstract class SettingsHandlerBase : ICommandHandler
 
     /// <summary>
     /// Registers a registry map action. Throws if the action name is already registered.
+    /// The value map is stored with case-insensitive keys to match original behavior.
     /// </summary>
     protected void AddRegistryMapAction(string actionName, RegistryMapConfig config)
     {
         ThrowIfDuplicate(actionName);
+
+        // Ensure case-insensitive lookup for map keys (e.g., "Deny" matches "deny").
+        if (config.ValueMap.Comparer != StringComparer.OrdinalIgnoreCase)
+        {
+            config = config with
+            {
+                ValueMap = new Dictionary<string, object>(config.ValueMap, StringComparer.OrdinalIgnoreCase)
+            };
+        }
+
         _registryMaps[actionName] = config;
         _allRegisteredActions.Add(actionName);
     }
@@ -206,17 +217,7 @@ internal abstract class SettingsHandlerBase : ICommandHandler
     private CommandResult HandleRegistryMapAction(string key, JsonElement parameters, RegistryMapConfig config)
     {
         string paramValue = parameters.GetStringOrDefault(config.ParameterName, "");
-
-        // Case-insensitive lookup to match original behavior (e.g., "Deny" == "deny").
-        object regValue = config.DefaultValue;
-        foreach (var kvp in config.ValueMap)
-        {
-            if (string.Equals(kvp.Key, paramValue, StringComparison.OrdinalIgnoreCase))
-            {
-                regValue = kvp.Value;
-                break;
-            }
-        }
+        object regValue = config.ValueMap.TryGetValue(paramValue, out var mapped) ? mapped : config.DefaultValue;
 
         Registry.SetValue(config.KeyPath, config.ValueName, regValue, config.ValueKind);
 
