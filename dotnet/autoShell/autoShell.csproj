@@ -22,4 +22,14 @@
 
     <PackageReference Include="System.Management" Version="8.0.0" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Source generator for typed action parameter records -->
+    <ProjectReference Include="..\autoShell.Generators\autoShell.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Schema files consumed by the source generator -->
+    <AdditionalFiles Include="..\..\ts\packages\agents\desktop\dist\*.pas.json" />
+  </ItemGroup>
 </Project>

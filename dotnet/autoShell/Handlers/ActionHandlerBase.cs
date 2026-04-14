@@ -9,11 +9,17 @@ namespace autoShell.Handlers;
 
 /// <summary>
 /// Base class for all action handlers. Co-registers action names and handler functions
-/// via <see cref="AddAction"/>, providing automatic <see cref="SupportedActions"/>
-/// and dictionary-based dispatch. Subclasses register actions in their constructor.
+/// via <see cref="AddAction"/> or <see cref="AddAction{T}"/>, providing automatic
+/// <see cref="SupportedActions"/> and dictionary-based dispatch.
+/// Subclasses register actions in their constructor.
 /// </summary>
 internal abstract class ActionHandlerBase : IActionHandler
 {
+    private static readonly JsonSerializerOptions CamelCaseOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly Dictionary<string, Func<JsonElement, ActionResult>> _actions = new(StringComparer.OrdinalIgnoreCase);
 
     /// <inheritdoc/>
@@ -29,6 +35,19 @@ internal abstract class ActionHandlerBase : IActionHandler
             throw new InvalidOperationException(
                 $"Action '{actionName}' is already registered in {GetType().Name}.");
         }
+    }
+
+    /// <summary>
+    /// Registers an action with a strongly-typed parameter record.
+    /// The <see cref="JsonElement"/> is automatically deserialized to <typeparamref name="T"/>.
+    /// </summary>
+    protected void AddAction<T>(string actionName, Func<T, ActionResult> handler)
+    {
+        AddAction(actionName, parameters =>
+        {
+            var typed = JsonSerializer.Deserialize<T>(parameters.GetRawText(), CamelCaseOptions);
+            return handler(typed);
+        });
     }
 
     /// <inheritdoc/>
