@@ -117,7 +117,7 @@ internal abstract class SettingsHandlerBase : ICommandHandler
     }
 
     /// <inheritdoc/>
-    public CommandResult Handle(string key, JsonElement parameters)
+    public virtual CommandResult Handle(string key, JsonElement parameters)
     {
         if (_registryToggles.TryGetValue(key, out var toggle))
         {
@@ -167,7 +167,17 @@ internal abstract class SettingsHandlerBase : ICommandHandler
     private CommandResult HandleRegistryMapAction(string key, JsonElement parameters, RegistryMapConfig config)
     {
         string paramValue = parameters.GetStringOrDefault(config.ParameterName, "");
-        object regValue = config.ValueMap.TryGetValue(paramValue, out var mapped) ? mapped : config.DefaultValue;
+
+        // Case-insensitive lookup to match original behavior (e.g., "Deny" == "deny").
+        object regValue = config.DefaultValue;
+        foreach (var kvp in config.ValueMap)
+        {
+            if (string.Equals(kvp.Key, paramValue, StringComparison.OrdinalIgnoreCase))
+            {
+                regValue = kvp.Value;
+                break;
+            }
+        }
 
         Registry.SetValue(config.KeyPath, config.ValueName, regValue, config.ValueKind);
 

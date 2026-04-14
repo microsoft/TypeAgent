@@ -43,13 +43,19 @@ internal partial class FileExplorerSettingsHandler : SettingsHandlerBase
         SpecializedActions.Concat(RegisteredActions);
 
     /// <inheritdoc/>
+    public override CommandResult Handle(string key, JsonElement parameters)
+    {
+        var result = base.Handle(key, parameters);
+        NotifySettingsChange();
+        return result;
+    }
+
+    /// <inheritdoc/>
     protected override CommandResult HandleSpecialized(string key, JsonElement parameters)
     {
         if (key == "ShowHiddenAndSystemFiles")
         {
-            var result = HandleShowHiddenAndSystemFiles(parameters);
-            NotifySettingsChange();
-            return result;
+            return HandleShowHiddenAndSystemFiles(parameters);
         }
 
         return base.HandleSpecialized(key, parameters);

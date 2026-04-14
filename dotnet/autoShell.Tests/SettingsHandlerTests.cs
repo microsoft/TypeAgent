@@ -142,6 +142,18 @@ public class PrivacySettingsHandlerTests
     }
 
     /// <summary>
+    /// Verifies that denying camera access is case-insensitive (e.g., "Deny" matches "deny").
+    /// </summary>
+    [Fact]
+    public void ManageCameraAccess_DenyMixedCase_WritesDeny()
+    {
+        Handle("ManageCameraAccess", """{"accessSetting":"Deny"}""");
+        _registryMock.Verify(r => r.SetValue(
+            @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam",
+            "Value", "Deny", RegistryValueKind.String), Times.Once);
+    }
+
+    /// <summary>
     /// Verifies that allowing camera access writes "Allow" to the webcam consent store.
     /// </summary>
     [Fact]
