@@ -11,7 +11,7 @@ import {
     ActionResult,
 } from "@typeagent/agent-sdk";
 import { createActionResultFromMarkdownDisplay } from "@typeagent/agent-sdk/helpers/action";
-import { ScaffolderActions } from "./scaffolderSchema.js";
+import { AgentPattern, ScaffolderActions } from "./scaffolderSchema.js";
 import {
     loadState,
     updatePhase,
@@ -49,6 +49,7 @@ export async function executeScaffolderAction(
         case "scaffoldAgent":
             return handleScaffoldAgent(
                 action.parameters.integrationName,
+                action.parameters.pattern,
                 action.parameters.outputDir,
             );
         case "scaffoldPlugin":
@@ -59,11 +60,14 @@ export async function executeScaffolderAction(
             );
         case "listTemplates":
             return handleListTemplates();
+        case "listPatterns":
+            return handleListPatterns();
     }
 }
 
 async function handleScaffoldAgent(
     integrationName: string,
+    pattern: AgentPattern = "schema-grammar",
     outputDir?: string,
 ): Promise<ActionResult> {
     const state = await loadState(integrationName);
@@ -173,6 +177,7 @@ async function handleScaffoldAgent(
                 integrationName,
                 pascalName,
                 state.config.description ?? "",
+                pattern,
                 subGroups,
             ),
             null,
@@ -184,7 +189,7 @@ async function handleScaffoldAgent(
     // Stamp out handler
     await writeFile(
         path.join(srcDir, `${integrationName}ActionHandler.ts`),
-        buildHandler(integrationName, pascalName),
+        buildHandler(integrationName, pascalName, pattern),
     );
     files.push(`src/${integrationName}ActionHandler.ts`);
 
@@ -197,6 +202,7 @@ async function handleScaffoldAgent(
                 integrationName,
                 packageName,
                 pascalName,
+                pattern,
                 subSchemaNames,
             ),
             null,
@@ -404,6 +410,7 @@ function buildManifest(
     name: string,
     pascalName: string,
     description: string,
+    pattern: AgentPattern = "schema-grammar",
     subGroups?: SubSchemaGroup[],
 ) {
     const manifest: Record<string, unknown> = {
@@ -418,6 +425,15 @@ function buildManifest(
             schemaType: `${pascalName}Actions`,
         },
     };
+
+    // Pattern-specific manifest flags
+    if (pattern === "llm-streaming") {
+        manifest.injected = true;
+        manifest.cached = false;
+        manifest.streamingActions = ["generateResponse"];
+    } else if (pattern === "view-ui") {
+        manifest.localView = true;
+    }
 
     if (subGroups && subGroups.length > 0) {
         const subActionManifests: Record<string, unknown> = {};
@@ -439,7 +455,34 @@ function buildManifest(
     return manifest;
 }
 
-function buildHandler(name: string, pascalName: string): string {
+function buildHandler(
+    name: string,
+    pascalName: string,
+    pattern: AgentPattern = "schema-grammar",
+): string {
+    switch (pattern) {
+        case "external-api":
+            return buildExternalApiHandler(name, pascalName);
+        case "llm-streaming":
+            return buildLlmStreamingHandler(name, pascalName);
+        case "sub-agent-orchestrator":
+            return buildSubAgentOrchestratorHandler(name, pascalName);
+        case "websocket-bridge":
+            return buildWebSocketBridgeHandler(name, pascalName);
+        case "state-machine":
+            return buildStateMachineHandler(name, pascalName);
+        case "native-platform":
+            return buildNativePlatformHandler(name, pascalName);
+        case "view-ui":
+            return buildViewUiHandler(name, pascalName);
+        case "command-handler":
+            return buildCommandHandlerTemplate(name, pascalName);
+        default:
+            return buildSchemaGrammarHandler(name, pascalName);
+    }
+}
+
+function buildSchemaGrammarHandler(name: string, pascalName: string): string {
     return `// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
@@ -479,6 +522,7 @@ function buildPackageJson(
     name: string,
     packageName: string,
     pascalName: string,
+    pattern: AgentPattern = "schema-grammar",
     subSchemaNames?: string[],
 ) {
     const scripts: Record<string, string> = {
@@ -518,6 +562,13 @@ function buildPackageJson(
         scripts,
         dependencies: {
             "@typeagent/agent-sdk": "workspace:*",
+            ...(pattern === "llm-streaming"
+                ? { aiclient: "workspace:*", typechat: "workspace:*" }
+                : pattern === "external-api"
+                  ? { aiclient: "workspace:*" }
+                  : pattern === "websocket-bridge"
+                    ? { ws: "^8.18.0" }
+                    : {}),
         },
         devDependencies: {
             "@typeagent/action-schema-compiler": "workspace:*",
@@ -746,4 +797,576 @@ function buildOfficeManifestXml(name: string): string {
 async function writeFile(filePath: string, content: string): Promise<void> {
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, content, "utf-8");
+}
+
+// ─── Pattern listing ─────────────────────────────────────────────────────────
+
+async function handleListPatterns(): Promise<ActionResult> {
+    const lines = [
+        `## Agent architectural patterns`,
+        ``,
+        `Pass \`pattern\` to \`scaffoldAgent\` to generate pattern-appropriate boilerplate.`,
+        ``,
+        `| Pattern | When to use | Examples |`,
+        `|---------|-------------|----------|`,
+        `| \`schema-grammar\` | Standard: bounded set of typed actions (default) | weather, photo, list |`,
+        `| \`external-api\` | REST/OAuth cloud API (MS Graph, Spotify, GitHub…) | calendar, email, player |`,
+        `| \`llm-streaming\` | Agent calls an LLM and streams partial results | chat, greeting |`,
+        `| \`sub-agent-orchestrator\` | API surface too large for one schema; split into groups | desktop, code, browser |`,
+        `| \`websocket-bridge\` | Automate an app via a host-side plugin over WebSocket | browser, code |`,
+        `| \`state-machine\` | Multi-phase workflow with approval gates and disk persistence | onboarding, scriptflow |`,
+        `| \`native-platform\` | OS/device APIs via child_process or SDK; no cloud | androidMobile, playerLocal |`,
+        `| \`view-ui\` | Rich interactive UI rendered in a local web view | turtle, montage, markdown |`,
+        `| \`command-handler\` | Simple settings-style agent; direct dispatch, no schema | settings, test |`,
+    ];
+    return createActionResultFromMarkdownDisplay(lines.join("\n"));
+}
+
+// ─── Pattern-specific handler builders ───────────────────────────────────────
+
+function buildExternalApiHandler(name: string, pascalName: string): string {
+    return `// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Pattern: external-api — REST/OAuth cloud API bridge.
+// Implement ${pascalName}Client with your API's authentication and endpoints.
+
+import {
+    ActionContext,
+    AppAgent,
+    TypeAgentAction,
+    ActionResult,
+} from "@typeagent/agent-sdk";
+import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
+import { ${pascalName}Actions } from "./${name}Schema.js";
+
+// ---- API client --------------------------------------------------------
+
+class ${pascalName}Client {
+    private token: string | undefined;
+
+    /** Authenticate and store the access token. */
+    async authenticate(): Promise<void> {
+        // TODO: implement OAuth flow or API key loading.
+        // Store token in: ~/.typeagent/profiles/<profile>/${name}/token.json
+        throw new Error("authenticate() not yet implemented");
+    }
+
+    async callApi(endpoint: string, params: Record<string, unknown>): Promise<unknown> {
+        if (!this.token) await this.authenticate();
+        // TODO: implement HTTP call using this.token
+        throw new Error(\`callApi(\${endpoint}) not yet implemented\`);
+    }
+}
+
+// ---- Agent lifecycle ---------------------------------------------------
+
+type Context = { client: ${pascalName}Client };
+
+export function instantiate(): AppAgent {
+    return {
+        initializeAgentContext,
+        updateAgentContext,
+        executeAction,
+    };
+}
+
+async function initializeAgentContext(): Promise<Context> {
+    return { client: new ${pascalName}Client() };
+}
+
+async function updateAgentContext(
+    enable: boolean,
+    _context: ActionContext<Context>,
+): Promise<void> {
+    // Optionally authenticate eagerly when the agent is enabled.
+}
+
+async function executeAction(
+    action: TypeAgentAction<${pascalName}Actions>,
+    context: ActionContext<Context>,
+): Promise<ActionResult> {
+    const { client } = context.agentContext;
+    // TODO: map each action to a client.callApi() call.
+    return createActionResultFromTextDisplay(
+        \`Executing \${action.actionName} — not yet implemented.\`,
+    );
+}
+`;
+}
+
+function buildLlmStreamingHandler(name: string, pascalName: string): string {
+    return `// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Pattern: llm-streaming — LLM-injected agent with streaming responses.
+// Runs inside the dispatcher process (injected: true in manifest).
+// Uses aiclient + typechat; streams partial results via streamingActionContext.
+
+import {
+    ActionContext,
+    AppAgent,
+    TypeAgentAction,
+    ActionResult,
+} from "@typeagent/agent-sdk";
+import { createActionResultFromMarkdownDisplay } from "@typeagent/agent-sdk/helpers/action";
+import { ${pascalName}Actions } from "./${name}Schema.js";
+
+export function instantiate(): AppAgent {
+    return {
+        initializeAgentContext,
+        executeAction,
+    };
+}
+
+async function initializeAgentContext(): Promise<unknown> {
+    return {};
+}
+
+async function executeAction(
+    action: TypeAgentAction<${pascalName}Actions>,
+    context: ActionContext<unknown>,
+): Promise<ActionResult> {
+    switch (action.actionName) {
+        case "generateResponse": {
+            // TODO: call your LLM and stream chunks via:
+            //   context.streamingActionContext?.appendDisplay(chunk)
+            return createActionResultFromMarkdownDisplay(
+                "Streaming response not yet implemented.",
+            );
+        }
+        default:
+            return createActionResultFromMarkdownDisplay(
+                \`Unknown action: \${(action as any).actionName}\`,
+            );
+    }
+}
+`;
+}
+
+function buildSubAgentOrchestratorHandler(
+    name: string,
+    pascalName: string,
+): string {
+    return `// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Pattern: sub-agent-orchestrator — root agent routing to N typed sub-schemas.
+// Add one executeXxxAction() per sub-schema group defined in subActionManifests.
+// The root executeAction routes by action name (each group owns disjoint names).
+
+import {
+    ActionContext,
+    AppAgent,
+    TypeAgentAction,
+    ActionResult,
+} from "@typeagent/agent-sdk";
+import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
+import { ${pascalName}Actions } from "./${name}Schema.js";
+
+export function instantiate(): AppAgent {
+    return {
+        initializeAgentContext,
+        executeAction,
+    };
+}
+
+async function initializeAgentContext(): Promise<unknown> {
+    return {};
+}
+
+async function executeAction(
+    action: TypeAgentAction<${pascalName}Actions>,
+    context: ActionContext<unknown>,
+): Promise<ActionResult> {
+    // TODO: route to sub-schema handlers, e.g.:
+    // if (isGroupOneAction(action)) return executeGroupOneAction(action, context);
+    // if (isGroupTwoAction(action)) return executeGroupTwoAction(action, context);
+    return createActionResultFromTextDisplay(
+        \`Executing \${action.actionName} — not yet implemented.\`,
+    );
+}
+
+// ---- Sub-schema handlers (one per subActionManifests group) ------------
+
+// async function executeGroupOneAction(
+//     action: TypeAgentAction<GroupOneActions>,
+//     context: ActionContext<unknown>,
+// ): Promise<ActionResult> { ... }
+`;
+}
+
+function buildWebSocketBridgeHandler(name: string, pascalName: string): string {
+    return `// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Pattern: websocket-bridge — bidirectional RPC to a host-side plugin.
+// The agent owns a WebSocketServer; the host plugin connects as the client.
+// Commands flow TypeAgent → WebSocket → plugin → response.
+
+import {
+    ActionContext,
+    AppAgent,
+    TypeAgentAction,
+    ActionResult,
+} from "@typeagent/agent-sdk";
+import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
+import { WebSocketServer, WebSocket } from "ws";
+import { ${pascalName}Actions } from "./${name}Schema.js";
+
+const BRIDGE_PORT = 5678; // TODO: choose an unused port
+
+// ---- WebSocket bridge --------------------------------------------------
+
+type BridgeRequest = { id: string; actionName: string; parameters: unknown };
+type BridgeResponse = { id: string; success: boolean; result?: unknown; error?: string };
+
+class ${pascalName}Bridge {
+    private wss: WebSocketServer | undefined;
+    private client: WebSocket | undefined;
+    private pending = new Map<string, (r: BridgeResponse) => void>();
+
+    start(): void {
+        this.wss = new WebSocketServer({ port: BRIDGE_PORT });
+        this.wss.on("connection", (ws) => {
+            this.client = ws;
+            ws.on("message", (data) => {
+                const response = JSON.parse(data.toString()) as BridgeResponse;
+                this.pending.get(response.id)?.(response);
+                this.pending.delete(response.id);
+            });
+            ws.on("close", () => { this.client = undefined; });
+        });
+    }
+
+    async stop(): Promise<void> {
+        return new Promise((resolve) => this.wss?.close(() => resolve()));
+    }
+
+    async send(actionName: string, parameters: unknown): Promise<unknown> {
+        if (!this.client) {
+            throw new Error("No host plugin connected on port " + BRIDGE_PORT);
+        }
+        const id = \`\${Date.now()}-\${Math.random().toString(36).slice(2)}\`;
+        return new Promise((resolve, reject) => {
+            this.pending.set(id, (res) =>
+                res.success ? resolve(res.result) : reject(new Error(res.error)),
+            );
+            this.client!.send(
+                JSON.stringify({ id, actionName, parameters } satisfies BridgeRequest),
+            );
+        });
+    }
+
+    get connected(): boolean { return this.client !== undefined; }
+}
+
+// ---- Agent lifecycle ---------------------------------------------------
+
+type Context = { bridge: ${pascalName}Bridge };
+
+export function instantiate(): AppAgent {
+    return {
+        initializeAgentContext,
+        updateAgentContext,
+        closeAgentContext,
+        executeAction,
+    };
+}
+
+async function initializeAgentContext(): Promise<Context> {
+    const bridge = new ${pascalName}Bridge();
+    bridge.start();
+    return { bridge };
+}
+
+async function updateAgentContext(
+    _enable: boolean,
+    _context: ActionContext<Context>,
+): Promise<void> {}
+
+async function closeAgentContext(context: ActionContext<Context>): Promise<void> {
+    await context.agentContext.bridge.stop();
+}
+
+async function executeAction(
+    action: TypeAgentAction<${pascalName}Actions>,
+    context: ActionContext<Context>,
+): Promise<ActionResult> {
+    const { bridge } = context.agentContext;
+    if (!bridge.connected) {
+        return {
+            error: \`Host plugin not connected. Make sure the ${name} plugin is running on port \${BRIDGE_PORT}.\`,
+        };
+    }
+    try {
+        const result = await bridge.send(action.actionName, action.parameters);
+        return createActionResultFromTextDisplay(JSON.stringify(result, null, 2));
+    } catch (err: any) {
+        return { error: err?.message ?? String(err) };
+    }
+}
+`;
+}
+
+function buildStateMachineHandler(name: string, pascalName: string): string {
+    return `// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Pattern: state-machine — multi-phase disk-persisted workflow.
+// State is stored in ~/.typeagent/${name}/<workflowId>/state.json.
+// Each phase must be approved before the next begins.
+
+import {
+    ActionContext,
+    AppAgent,
+    TypeAgentAction,
+    ActionResult,
+} from "@typeagent/agent-sdk";
+import { createActionResultFromMarkdownDisplay } from "@typeagent/agent-sdk/helpers/action";
+import { ${pascalName}Actions } from "./${name}Schema.js";
+import fs from "fs/promises";
+import path from "path";
+import os from "os";
+
+const STATE_ROOT = path.join(os.homedir(), ".typeagent", "${name}");
+
+// ---- State types -------------------------------------------------------
+
+type PhaseStatus = "pending" | "in-progress" | "approved";
+
+type WorkflowState = {
+    workflowId: string;
+    currentPhase: string;
+    phases: Record<string, { status: PhaseStatus; updatedAt: string }>;
+    config: Record<string, unknown>;
+    createdAt: string;
+    updatedAt: string;
+};
+
+// ---- State I/O ---------------------------------------------------------
+
+async function loadState(workflowId: string): Promise<WorkflowState | undefined> {
+    const statePath = path.join(STATE_ROOT, workflowId, "state.json");
+    try {
+        return JSON.parse(await fs.readFile(statePath, "utf-8")) as WorkflowState;
+    } catch {
+        return undefined;
+    }
+}
+
+async function saveState(state: WorkflowState): Promise<void> {
+    const stateDir = path.join(STATE_ROOT, state.workflowId);
+    await fs.mkdir(stateDir, { recursive: true });
+    state.updatedAt = new Date().toISOString();
+    await fs.writeFile(
+        path.join(stateDir, "state.json"),
+        JSON.stringify(state, null, 2),
+        "utf-8",
+    );
+}
+
+// ---- Agent lifecycle ---------------------------------------------------
+
+export function instantiate(): AppAgent {
+    return {
+        initializeAgentContext,
+        executeAction,
+    };
+}
+
+async function initializeAgentContext(): Promise<unknown> {
+    await fs.mkdir(STATE_ROOT, { recursive: true });
+    return {};
+}
+
+async function executeAction(
+    action: TypeAgentAction<${pascalName}Actions>,
+    _context: ActionContext<unknown>,
+): Promise<ActionResult> {
+    // TODO: map actions to phase handlers, e.g.:
+    // case "startWorkflow":  return handleStart(action.parameters.workflowId);
+    // case "runPhaseOne":    return handlePhaseOne(action.parameters.workflowId);
+    // case "approvePhase":   return handleApprove(action.parameters.workflowId, action.parameters.phase);
+    // case "getStatus":      return handleStatus(action.parameters.workflowId);
+    return createActionResultFromMarkdownDisplay(
+        \`Executing \${action.actionName} — not yet implemented.\`,
+    );
+}
+`;
+}
+
+function buildNativePlatformHandler(name: string, pascalName: string): string {
+    return `// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Pattern: native-platform — OS/device APIs via child_process or SDK.
+// No cloud dependency. Handle platform differences in executeCommand().
+
+import {
+    ActionContext,
+    AppAgent,
+    TypeAgentAction,
+    ActionResult,
+} from "@typeagent/agent-sdk";
+import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
+import { exec } from "child_process";
+import { promisify } from "util";
+import { ${pascalName}Actions } from "./${name}Schema.js";
+
+const execAsync = promisify(exec);
+const platform = process.platform; // "win32" | "darwin" | "linux"
+
+export function instantiate(): AppAgent {
+    return {
+        initializeAgentContext,
+        executeAction,
+    };
+}
+
+async function initializeAgentContext(): Promise<unknown> {
+    return {};
+}
+
+async function executeAction(
+    action: TypeAgentAction<${pascalName}Actions>,
+    _context: ActionContext<unknown>,
+): Promise<ActionResult> {
+    try {
+        const output = await executeCommand(
+            action.actionName,
+            action.parameters as Record<string, unknown>,
+        );
+        return createActionResultFromTextDisplay(output ?? "Done.");
+    } catch (err: any) {
+        return { error: err?.message ?? String(err) };
+    }
+}
+
+/**
+ * Map a typed action to a platform-specific shell command or SDK call.
+ * Add one case per action defined in ${pascalName}Actions.
+ */
+async function executeCommand(
+    actionName: string,
+    parameters: Record<string, unknown>,
+): Promise<string> {
+    switch (actionName) {
+        // TODO: add cases for each action. Example:
+        // case "openFile": {
+        //     const cmd = platform === "win32" ? \`start "" "\${parameters.path}"\`
+        //               : platform === "darwin" ? \`open "\${parameters.path}"\`
+        //               : \`xdg-open "\${parameters.path}"\`;
+        //     return (await execAsync(cmd)).stdout;
+        // }
+        default:
+            throw new Error(\`Not implemented: \${actionName}\`);
+    }
+}
+`;
+}
+
+function buildViewUiHandler(name: string, pascalName: string): string {
+    return `// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Pattern: view-ui — web view renderer with IPC handler.
+// Opens a local HTTP server serving site/ and communicates via display APIs.
+// The actual UX lives in the site/ directory.
+
+import {
+    ActionContext,
+    AppAgent,
+    TypeAgentAction,
+    ActionResult,
+} from "@typeagent/agent-sdk";
+import { createActionResultFromHtmlDisplay } from "@typeagent/agent-sdk/helpers/action";
+import { ${pascalName}Actions } from "./${name}Schema.js";
+
+const VIEW_PORT = 3456; // TODO: choose an unused port
+
+export function instantiate(): AppAgent {
+    return {
+        initializeAgentContext,
+        updateAgentContext,
+        closeAgentContext,
+        executeAction,
+    };
+}
+
+async function initializeAgentContext(): Promise<unknown> {
+    // TODO: start the local HTTP server that serves site/
+    return {};
+}
+
+async function updateAgentContext(
+    enable: boolean,
+    context: ActionContext<unknown>,
+): Promise<void> {
+    if (enable) {
+        await context.sessionContext.agentIO.openLocalView(
+            context.sessionContext.requestId,
+            VIEW_PORT,
+        );
+    } else {
+        await context.sessionContext.agentIO.closeLocalView(
+            context.sessionContext.requestId,
+            VIEW_PORT,
+        );
+    }
+}
+
+async function closeAgentContext(_context: ActionContext<unknown>): Promise<void> {
+    // TODO: stop the local HTTP server
+}
+
+async function executeAction(
+    action: TypeAgentAction<${pascalName}Actions>,
+    _context: ActionContext<unknown>,
+): Promise<ActionResult> {
+    // Push state changes to the view via HTML display updates.
+    return createActionResultFromHtmlDisplay(
+        \`<p>Executing \${action.actionName} — not yet implemented.</p>\`,
+    );
+}
+`;
+}
+
+function buildCommandHandlerTemplate(name: string, pascalName: string): string {
+    return `// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Pattern: command-handler — direct dispatch via a handlers map.
+// Suited for settings-style agents with a small number of well-known commands.
+
+import { AppAgent, ActionResult } from "@typeagent/agent-sdk";
+import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
+
+export function instantiate(): AppAgent {
+    return getCommandInterface(handlers);
+}
+
+// ---- Handlers ----------------------------------------------------------
+// Add one entry per action name defined in ${pascalName}Actions.
+
+const handlers: Record<string, (params: unknown) => Promise<ActionResult>> = {
+    // exampleAction: async (params) => {
+    //     return createActionResultFromTextDisplay("Done.");
+    // },
+};
+
+function getCommandInterface(
+    handlerMap: Record<string, (params: unknown) => Promise<ActionResult>>,
+): AppAgent {
+    return {
+        async executeAction(action: any): Promise<ActionResult> {
+            const handler = handlerMap[action.actionName];
+            if (!handler) {
+                return { error: \`Unknown action: \${action.actionName}\` };
+            }
+            return handler(action.parameters);
+        },
+    };
+}
+`;
 }

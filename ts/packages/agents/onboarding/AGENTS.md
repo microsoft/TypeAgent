@@ -71,6 +71,51 @@ Each phase has a status: `pending → in-progress → approved`. An `approve*` a
 - `aiclient` — `createChatModelDefault`, `ChatModel`
 - `typechat` — `createJsonTranslator` for structured LLM output
 
+## Scaffolder — choosing a pattern
+
+The scaffolder (Phase 5) generates pattern-appropriate boilerplate. Before calling `scaffoldAgent`, determine which pattern fits the integration being onboarded. The discovery phase artifacts should give you enough information to decide.
+
+**Decision guide**
+
+| Signal from discovery                                                    | Pattern to use             |
+| ------------------------------------------------------------------------ | -------------------------- |
+| Integration streams text (chat, code gen, summarization)                 | `llm-streaming`            |
+| Integration is a desktop/browser/Electron app with a JS runtime          | `websocket-bridge`         |
+| Integration is a long-running, multi-step process needing human sign-off | `state-machine`            |
+| API surface has 5+ distinct domains (e.g., files + calendar + mail)      | `sub-agent-orchestrator`   |
+| Integration needs a custom interactive UI                                | `view-ui`                  |
+| Integration has an authenticated REST or OAuth API                       | `external-api`             |
+| Integration is a CLI tool, mobile device, or OS service                  | `native-platform`          |
+| Integration has only a few toggle/config actions                         | `command-handler`          |
+| None of the above                                                        | `schema-grammar` (default) |
+
+**Scaffold with a pattern**
+
+```
+scaffold the <name> agent using the <pattern> pattern
+```
+
+**List all patterns**
+
+```
+list agent patterns
+```
+
+Full pattern reference (file layouts, manifest flags, example code) is in
+[docs/architecture/agent-patterns.md](../../../../docs/architecture/agent-patterns.md).
+
+**What the scaffolder generates per pattern**
+
+- `schema-grammar` — manifest, handler, schema, grammar, tsconfigs, package.json
+- `external-api` — above + `*Bridge.ts` with an API client class stub; adds `aiclient` dependency
+- `llm-streaming` — above + `injected: true / cached: false / streamingActions` in manifest; adds `aiclient` + `typechat` dependencies
+- `sub-agent-orchestrator` — above + `actions/` directory with per-group schema and grammar stubs; `subActionManifests` in manifest
+- `websocket-bridge` — above + `*Bridge.ts` with a `WebSocketServer` + pending-request map; adds `ws` dependency
+- `state-machine` — above + state type definitions and `loadState` / `saveState` helpers
+- `native-platform` — above + `child_process` / platform-branching boilerplate
+- `view-ui` — above + `openLocalView` / `closeLocalView` lifecycle; `localView: true` in manifest
+- `command-handler` — replaces `executeAction` dispatch with a named `handlers` map
+
 ## Testing
 
 Run phrase→action tests with the `runTests` action after completing the testing phase setup. Results are saved to `~/.typeagent/onboarding/<name>/testing/results.json`. The `proposeRepair` action uses an LLM to suggest schema/grammar fixes for failing tests.

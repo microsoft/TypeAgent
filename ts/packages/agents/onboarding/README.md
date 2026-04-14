@@ -107,7 +107,23 @@ TypeAgent exposes a **Command Executor MCP server** that bridges any MCP-compati
 
 4. **Restart your AI client** (Claude Code or Copilot) to pick up the new MCP configuration.
 
-Once connected, your AI client can drive onboarding phases end-to-end using natural language — e.g. *"start onboarding for Slack"* — without any manual copy-paste between tools.
+Once connected, your AI client can drive onboarding phases end-to-end using natural language — e.g. _"start onboarding for Slack"_ — without any manual copy-paste between tools.
+
+## Agent Patterns
+
+The scaffolder supports nine architectural patterns. Use `list agent patterns` at runtime for the full table, or see [docs/architecture/agent-patterns.md](../../../../docs/architecture/agent-patterns.md) for the complete reference including when-to-use guidance, file layouts, and manifest flags.
+
+| Pattern                  | When to use                              | Examples                        |
+| ------------------------ | ---------------------------------------- | ------------------------------- |
+| `schema-grammar`         | Bounded set of typed actions (default)   | `weather`, `photo`, `list`      |
+| `external-api`           | Authenticated REST / cloud API           | `calendar`, `email`, `player`   |
+| `llm-streaming`          | Agent calls an LLM, streams results      | `chat`, `greeting`              |
+| `sub-agent-orchestrator` | API surface too large for one schema     | `desktop`, `code`, `browser`    |
+| `websocket-bridge`       | Automate a host app via a plugin         | `browser`, `code`               |
+| `state-machine`          | Multi-phase workflow with approval gates | `onboarding`, `scriptflow`      |
+| `native-platform`        | OS / device APIs, no cloud               | `androidMobile`, `playerLocal`  |
+| `view-ui`                | Rich interactive web-view UI             | `turtle`, `montage`, `markdown` |
+| `command-handler`        | Simple settings-style direct dispatch    | `settings`, `test`              |
 
 ## Building
 
