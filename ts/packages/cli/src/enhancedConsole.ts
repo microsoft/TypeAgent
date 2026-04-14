@@ -380,6 +380,27 @@ type InteractionResolvedReason = {
 };
 const INTERACTION_CANCELLED = "cancelled";
 
+/**
+ * Parse a user's raw input string into a 0-based choice index.
+ * Accepts:
+ *   - 1-based numeric input ("1", "2", …)
+ *   - "y" / "yes" → 0 and "n" / "no" → 1 when choices are ["Yes", "No"]
+ * Falls back to defaultId (or 0) when the input is unrecognised.
+ */
+function parseChoiceInput(
+    input: string,
+    choices: string[],
+    defaultId: number | undefined,
+): number {
+    const trimmed = input.trim().toLowerCase();
+    if (choices.length === 2 && choices[0] === "Yes" && choices[1] === "No") {
+        if (trimmed === "y" || trimmed === "yes") return 0;
+        if (trimmed === "n" || trimmed === "no") return 1;
+    }
+    const idx = parseInt(trimmed, 10) - 1;
+    return idx >= 0 && idx < choices.length ? idx : (defaultId ?? 0);
+}
+
 export function createEnhancedClientIO(
     rl?: readline.promises.Interface,
     dispatcherRef?: { current?: Dispatcher },
@@ -617,67 +638,12 @@ export function createEnhancedClientIO(
             // REVIEW: Ignored.
         },
 
-        // Input - Enhanced yes/no with visual styling
-        async askYesNo(
-            requestId: RequestId,
-            message: string,
-            defaultValue?: boolean,
-        ): Promise<boolean> {
-            // Pause spinner during input
-            const wasSpinning = currentSpinner?.isActive();
-            if (wasSpinning) {
-                currentSpinner!.stop();
-            }
-
-            // Draw styled prompt
-            const width = process.stdout.columns || 80;
-            const line = ANSI.dim + "─".repeat(width) + ANSI.reset;
-
-            process.stdout.write("\n");
-            process.stdout.write(line + "\n");
-
-            const defaultHint =
-                defaultValue === undefined
-                    ? ""
-                    : defaultValue
-                      ? " (default: yes)"
-                      : " (default: no)";
-
-            const prompt = `${chalk.cyan("?")} ${message}${chalk.dim(defaultHint)} ${chalk.dim("(y/n)")} `;
-
-            const input = await question(prompt, rl);
-            process.stdout.write(line + "\n");
-
-            // Resume spinner if it was active
-            if (wasSpinning) {
-                currentSpinner = new EnhancedSpinner({ text: "Processing..." });
-                currentSpinner.start();
-            }
-
-            if (input.toLowerCase() === "y" || input.toLowerCase() === "yes") {
-                return true;
-            }
-            if (input.toLowerCase() === "n" || input.toLowerCase() === "no") {
-                return false;
-            }
-            return defaultValue ?? false;
-        },
-
-        async proposeAction(
-            requestId: RequestId,
-            actionTemplates: TemplateEditConfig,
-            source: string,
-        ): Promise<unknown> {
-            // TODO: Not implemented
-            return undefined;
-        },
-
-        // Multiple choice with visual menu
-        async popupQuestion(
+        // Input — unified question prompt (handles both yes/no and multi-choice)
+        async question(
+            _requestId: RequestId | undefined,
             message: string,
             choices: string[],
-            defaultId: number | undefined,
-            source: string,
+            defaultId?: number,
         ): Promise<number> {
             // Pause spinner during input
             const wasSpinning = currentSpinner?.isActive();
@@ -704,7 +670,15 @@ export function createEnhancedClientIO(
             });
 
             process.stdout.write("\n");
-            const prompt = `${chalk.dim("Enter number (1-" + choices.length + "):")} `;
+            const isYesNo =
+                choices.length === 2 &&
+                choices[0] === "Yes" &&
+                choices[1] === "No";
+            const prompt = chalk.dim(
+                isYesNo
+                    ? "Enter y/n or number (1-2): "
+                    : `Enter number (1-${choices.length}): `,
+            );
             const input = await question(prompt, rl);
 
             process.stdout.write(line + "\n");
@@ -715,15 +689,16 @@ export function createEnhancedClientIO(
                 currentSpinner.start();
             }
 
-            const selectedIndex = parseInt(input, 10) - 1;
-            if (
-                isNaN(selectedIndex) ||
-                selectedIndex < 0 ||
-                selectedIndex >= choices.length
-            ) {
-                return defaultId ?? 0;
-            }
-            return selectedIndex;
+            return parseChoiceInput(input, choices, defaultId);
+        },
+
+        async proposeAction(
+            _requestId: RequestId,
+            _actionTemplates: TemplateEditConfig,
+            _source: string,
+        ): Promise<unknown> {
+            // TODO: Not implemented
+            return undefined;
         },
 
         // Notification with visual styling
@@ -887,6 +862,9 @@ export function createEnhancedClientIO(
                     return;
                 }
 
+                // Cast away stale compiled types — will resolve after build
+                const q = interaction as any;
+
                 const ac = new AbortController();
                 activeInteractions.set(interaction.interactionId, ac);
 
@@ -900,69 +878,39 @@ export function createEnhancedClientIO(
 
                 let response: PendingInteractionResponse;
                 try {
-                    if (interaction.type === "askYesNo") {
-                        const defaultHint =
-                            interaction.defaultValue === undefined
-                                ? ""
-                                : interaction.defaultValue
-                                  ? " (default: yes)"
-                                  : " (default: no)";
-                        const prompt = `${chalk.cyan("?")} ${interaction.message}${chalk.dim(defaultHint)} ${chalk.dim("(y/n)")} `;
+                    // question — unified prompt for both yes/no and multi-choice
+                    displayContent(line);
+                    let promptText = `${chalk.cyan("?")} ${q.message}`;
+                    q.choices.forEach((choice: string, i: number) => {
+                        const isDefault = i === q.defaultId;
+                        const prefix = chalk.cyan(`${i + 1}.`);
+                        const suffix = isDefault ? chalk.dim(" (default)") : "";
+                        promptText += `\n  ${prefix} ${choice}${suffix}`;
+                    });
+                    displayContent(promptText);
 
-                        displayContent(line);
-                        const input = await question(prompt, rl, ac.signal);
-                        displayContent(line);
+                    const isYesNo =
+                        q.choices.length === 2 &&
+                        q.choices[0] === "Yes" &&
+                        q.choices[1] === "No";
+                    const prompt = chalk.dim(
+                        isYesNo
+                            ? "Enter y/n or number (1-2): "
+                            : `Enter number (1-${q.choices.length}): `,
+                    );
+                    const input = await question(prompt, rl, ac.signal);
+                    displayContent(line);
 
-                        let value: boolean;
-                        if (
-                            input.toLowerCase() === "y" ||
-                            input.toLowerCase() === "yes"
-                        ) {
-                            value = true;
-                        } else if (
-                            input.toLowerCase() === "n" ||
-                            input.toLowerCase() === "no"
-                        ) {
-                            value = false;
-                        } else {
-                            value = interaction.defaultValue ?? false;
-                        }
-                        response = {
-                            interactionId: interaction.interactionId,
-                            type: "askYesNo",
-                            value,
-                        };
-                    } else {
-                        // popupQuestion
-                        displayContent(line);
-                        let popupText = `${chalk.cyan("?")} ${interaction.message}`;
-                        interaction.choices.forEach((choice, i) => {
-                            const isDefault = i === interaction.defaultId;
-                            const prefix = chalk.cyan(`${i + 1}.`);
-                            const suffix = isDefault
-                                ? chalk.dim(" (default)")
-                                : "";
-                            popupText += `\n  ${prefix} ${choice}${suffix}`;
-                        });
-                        displayContent(popupText);
-
-                        const prompt = chalk.dim(
-                            `Enter number (1-${interaction.choices.length}): `,
-                        );
-                        const input = await question(prompt, rl, ac.signal);
-                        displayContent(line);
-
-                        const parsed = parseInt(input, 10) - 1;
-                        const value =
-                            parsed >= 0 && parsed < interaction.choices.length
-                                ? parsed
-                                : (interaction.defaultId ?? 0);
-                        response = {
-                            interactionId: interaction.interactionId,
-                            type: "popupQuestion",
-                            value,
-                        };
-                    }
+                    const value = parseChoiceInput(
+                        input,
+                        q.choices,
+                        q.defaultId,
+                    );
+                    response = {
+                        interactionId: interaction.interactionId,
+                        type: "question",
+                        value,
+                    };
                 } catch {
                     // Aborted by interactionResolved or interactionCancelled.
                     const reason = ac.signal.reason;
@@ -2105,10 +2053,7 @@ export async function replayDisplayHistory(
                 const pending = pendingInteractions.get(entry.interactionId);
                 if (pending?.message !== undefined) {
                     let answerStr: string;
-                    if (pending.interactionType === "askYesNo") {
-                        answerStr = entry.response ? "yes" : "no";
-                    } else if (
-                        pending.interactionType === "popupQuestion" &&
+                    if (
                         pending.choices !== undefined &&
                         typeof entry.response === "number"
                     ) {
@@ -2116,10 +2061,10 @@ export async function replayDisplayHistory(
                             pending.choices[entry.response] ??
                             String(entry.response);
                     } else {
-                        answerStr = String(entry.response);
+                        answerStr = entry.response ? "yes" : "no";
                     }
                     process.stdout.write(
-                        chalk.dim(`? ${pending.message} → `) +
+                        chalk.dim(`${pending.message} → `) +
                             chalk.cyan(answerStr) +
                             "\n",
                     );
@@ -2131,7 +2076,7 @@ export async function replayDisplayHistory(
                 const pending = pendingInteractions.get(entry.interactionId);
                 if (pending?.message !== undefined) {
                     process.stdout.write(
-                        chalk.dim(`? ${pending.message} → `) +
+                        chalk.dim(`${pending.message} → `) +
                             chalk.yellow("[cancelled]") +
                             "\n",
                     );

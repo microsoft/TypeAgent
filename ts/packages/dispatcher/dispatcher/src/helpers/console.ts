@@ -196,13 +196,31 @@ function createConsoleClientIO(
         },
 
         // Input
-        async askYesNo(
-            requestId: RequestId,
+        async question(
+            _requestId: RequestId | undefined,
             message: string,
-            defaultValue?: boolean,
-        ): Promise<boolean> {
-            const input = await question(`${message} (y/n)`, rl);
-            return input.toLowerCase() === "y";
+            choices: string[],
+            defaultId?: number,
+        ): Promise<number> {
+            const isYesNo =
+                choices.length === 2 &&
+                choices[0] === "Yes" &&
+                choices[1] === "No";
+            const numbered = choices
+                .map((c, i) => `  ${i + 1}. ${c}`)
+                .join("\n");
+            const hint = isYesNo ? "(y/n or 1-2)" : `(1-${choices.length})`;
+            const input = await question(
+                `${message}\n${numbered}\n${hint}> `,
+                rl,
+            );
+            const trimmed = input.trim().toLowerCase();
+            if (isYesNo) {
+                if (trimmed === "y" || trimmed === "yes") return 0;
+                if (trimmed === "n" || trimmed === "no") return 1;
+            }
+            const idx = parseInt(trimmed, 10) - 1;
+            return idx >= 0 && idx < choices.length ? idx : (defaultId ?? 0);
         },
         async proposeAction(
             requestId: RequestId,
@@ -211,16 +229,6 @@ function createConsoleClientIO(
         ): Promise<unknown> {
             // TODO: Not implemented
             return undefined;
-        },
-
-        async popupQuestion(
-            message: string,
-            choices: string[],
-            defaultId: number | undefined,
-            source: string,
-        ): Promise<number> {
-            // REVIEW:
-            throw new Error("Not implemented");
         },
 
         // Notification (TODO: turn these in to dispatcher events)

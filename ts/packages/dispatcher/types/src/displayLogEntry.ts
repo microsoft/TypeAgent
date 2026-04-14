@@ -61,10 +61,11 @@ export type PendingInteractionEntry = {
     interactionType: PendingInteractionType;
     requestId?: RequestId;
     source: string;
+    // question fields
     message?: string;
-    defaultValue?: boolean;
     choices?: string[];
     defaultId?: number;
+    // proposeAction fields
     actionTemplates?: TemplateEditConfig;
 };
 

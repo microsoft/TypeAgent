@@ -41,14 +41,11 @@ export function createClientIORpcClient(channel: RpcChannel): ClientIO {
         },
 
         // Input
-        askYesNo(...args): Promise<boolean> {
-            return rpc.invoke("askYesNo", ...args);
+        question(...args): Promise<number> {
+            return rpc.invoke("question", ...args);
         },
         proposeAction(...args): Promise<unknown> {
             return rpc.invoke("proposeAction", ...args);
-        },
-        popupQuestion(...args): Promise<number> {
-            return rpc.invoke("popupQuestion", ...args);
         },
         notify(...args): void {
             return rpc.send("notify", ...args);

@@ -214,19 +214,15 @@ export class DisplayLog {
         if (interaction.requestId !== undefined) {
             entry.requestId = interaction.requestId;
         }
-        if (interaction.type === "askYesNo") {
-            entry.message = interaction.message;
-            if (interaction.defaultValue !== undefined) {
-                entry.defaultValue = interaction.defaultValue;
-            }
-        } else if (interaction.type === "popupQuestion") {
-            entry.message = interaction.message;
-            entry.choices = interaction.choices;
-            if (interaction.defaultId !== undefined) {
-                entry.defaultId = interaction.defaultId;
+        const r = interaction as any;
+        if (interaction.type === "question") {
+            entry.message = r.message;
+            entry.choices = r.choices;
+            if (r.defaultId !== undefined) {
+                entry.defaultId = r.defaultId;
             }
         } else if (interaction.type === "proposeAction") {
-            entry.actionTemplates = interaction.actionTemplates;
+            entry.actionTemplates = r.actionTemplates;
         }
         this.entries.push(entry);
         this.dirty = true;

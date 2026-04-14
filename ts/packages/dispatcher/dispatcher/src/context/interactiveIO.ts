@@ -78,13 +78,17 @@ export async function askYesNoWithContext(
     message: string,
     defaultValue: boolean = false,
 ) {
-    return context?.batchMode
-        ? defaultValue
-        : context.clientIO.askYesNo(
-              getRequestId(context),
-              message,
-              defaultValue,
-          );
+    if (context?.batchMode) {
+        return defaultValue;
+    }
+    const defaultId = defaultValue ? 0 : 1;
+    const index = await context.clientIO.question(
+        getRequestId(context),
+        message,
+        ["Yes", "No"],
+        defaultId,
+    );
+    return index === 0;
 }
 
 export const nullClientIO: ClientIO = {
@@ -96,15 +100,13 @@ export const nullClientIO: ClientIO = {
     appendDisplay: () => {},
     appendDiagnosticData: () => {},
     setDynamicDisplay: () => {},
-    askYesNo: async (
-        requestId: RequestId,
-        message: string,
-        defaultValue: boolean = false,
-    ) => defaultValue,
+    question: async (
+        _requestId: RequestId | undefined,
+        _message: string,
+        _choices: string[],
+        defaultId?: number,
+    ) => defaultId ?? 0,
     proposeAction: async () => undefined,
-    popupQuestion: async () => {
-        throw new Error("popupQuestion not implemented");
-    },
     notify: () => {},
     openLocalView: async () => {},
     closeLocalView: async () => {},
