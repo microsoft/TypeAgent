@@ -119,6 +119,33 @@ public class DisplayActionHandlerTests
         _displayMock.Verify(d => d.SetResolution(It.IsAny<uint>(), It.IsAny<uint>(), It.IsAny<uint?>()), Times.Never);
     }
 
+    /// <summary>
+    /// Verifies that negative dimensions return failure and do not invoke the display service.
+    /// Negative int values would cause uint overflow if not caught.
+    /// </summary>
+    [Fact]
+    public void SetScreenResolution_NegativeDimensions_ReturnsFailure()
+    {
+        var result = _handler.Handle("SetScreenResolution", JsonDocument.Parse("""{"width":-100,"height":1080}""").RootElement);
+
+        Assert.False(result.Success);
+        Assert.Contains("positive", result.Message);
+        _displayMock.Verify(d => d.SetResolution(It.IsAny<uint>(), It.IsAny<uint>(), It.IsAny<uint?>()), Times.Never);
+    }
+
+    /// <summary>
+    /// Verifies that a negative refresh rate returns failure and does not invoke the display service.
+    /// </summary>
+    [Fact]
+    public void SetScreenResolution_NegativeRefreshRate_ReturnsFailure()
+    {
+        var result = _handler.Handle("SetScreenResolution", JsonDocument.Parse("""{"width":1920,"height":1080,"refreshRate":-60}""").RootElement);
+
+        Assert.False(result.Success);
+        Assert.Contains("refresh rate", result.Message, StringComparison.OrdinalIgnoreCase);
+        _displayMock.Verify(d => d.SetResolution(It.IsAny<uint>(), It.IsAny<uint>(), It.IsAny<uint?>()), Times.Never);
+    }
+
     // --- SetTextSize ---
 
     /// <summary>
