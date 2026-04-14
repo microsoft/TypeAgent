@@ -1,3 +1,6 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Quick test runner for onboarding agent tests
 // Run from ts/ root: node --disable-warning=DEP0190 packages/agents/onboarding/dist/testing/runTests.js <integrationName>
 
