@@ -236,7 +236,8 @@ function stripHtml(html: string): string {
             .replace(/<[^>]+>/g, " ");
     } while (sanitized !== previous);
 
-    return sanitized.replace(/\s{2,}/g, " ").trim();
+    // Final hardening: neutralize any remaining tag delimiters as single chars.
+    return sanitized.replace(/[<>]/g, " ").replace(/\s{2,}/g, " ").trim();
 }
 
 // Extract same-origin links from an HTML page.
