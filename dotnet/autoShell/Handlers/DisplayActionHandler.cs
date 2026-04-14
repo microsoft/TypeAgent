@@ -22,10 +22,9 @@ internal class DisplayActionHandler : ActionHandlerBase
         _display = display;
         _logger = logger;
         AddAction("ListResolutions", HandleListResolutions);
-        // SetScreenResolution left as JsonElement because it also reads "refreshRate" not in the generated record
+        // SetScreenResolution left as JsonElement because it reads refreshRate not in schema
         AddAction("SetScreenResolution", HandleSetScreenResolution);
-        // SetTextSize left as JsonElement because non-numeric input needs graceful handling
-        AddAction("SetTextSize", HandleSetTextSize);
+        AddAction<SetTextSizeParams>("SetTextSize", HandleSetTextSize);
     }
 
     private ActionResult HandleListResolutions(JsonElement parameters)
@@ -65,12 +64,12 @@ internal class DisplayActionHandler : ActionHandlerBase
         }
     }
 
-    private ActionResult HandleSetTextSize(JsonElement parameters)
+    private ActionResult HandleSetTextSize(SetTextSizeParams p)
     {
         try
         {
-            int textSizePct = parameters.GetNullableInt("size") ?? -1;
-            if (textSizePct < 0)
+            int textSizePct = p.Size;
+            if (textSizePct <= 0)
             {
                 return ActionResult.Fail("Invalid text size: size required");
             }

@@ -19,8 +19,7 @@ internal class AudioActionHandler : ActionHandlerBase
         _audio = audio;
         AddAction<MuteParams>("Mute", HandleMute);
         AddAction<RestoreVolumeParams>("RestoreVolume", HandleRestoreVolume);
-        // Volume left as JsonElement to distinguish missing targetVolume (default -1) from explicit 0
-        AddAction("Volume", HandleVolume);
+        AddAction<VolumeParams>("Volume", HandleVolume);
     }
 
     private ActionResult HandleMute(MuteParams p)
@@ -36,9 +35,9 @@ internal class AudioActionHandler : ActionHandlerBase
         return ActionResult.Ok($"Volume restored to {(int)_savedVolumePct}%");
     }
 
-    private ActionResult HandleVolume(System.Text.Json.JsonElement parameters)
+    private ActionResult HandleVolume(VolumeParams p)
     {
-        int pct = parameters.GetIntOrDefault("targetVolume", -1);
+        int pct = p.TargetVolume;
         if (pct < 0)
         {
             return ActionResult.Fail("Invalid volume: targetVolume required");

@@ -147,6 +147,8 @@ internal static class SchemaParser
                     return "string";
                 case "type-union":
                     return ResolveTypeUnion(typeInfo, out isNullable);
+                case "array":
+                    return ResolveArrayType(typeInfo);
                 case "type-reference":
                     return "string";
                 case "object":
@@ -157,6 +159,17 @@ internal static class SchemaParser
         }
 
         return "string";
+    }
+
+    private static string ResolveArrayType(JsonElement typeInfo)
+    {
+        if (typeInfo.TryGetProperty("elementType", out var elementType))
+        {
+            string elementCSharpType = ResolveCSharpType(elementType, out _);
+            return elementCSharpType + "[]";
+        }
+
+        return "string[]";
     }
 
     private static string ResolveTypeUnion(JsonElement typeInfo, out bool isNullable)
@@ -194,6 +207,9 @@ internal static class SchemaParser
     private static string GetDefaultValue(string csharpType, bool isOptional)
     {
         if (isOptional)
+            return "null";
+
+        if (csharpType.EndsWith("[]"))
             return "null";
 
         switch (csharpType)

@@ -68,20 +68,22 @@ public class VirtualDesktopActionHandlerTests
     [Fact]
     public void SwitchDesktop_ByIndex_CallsService()
     {
-        _handler.Handle("SwitchDesktop", JsonDocument.Parse("""{"desktopId":"2"}""").RootElement);
+        _handler.Handle("SwitchDesktop", JsonDocument.Parse("""{"desktopId":2}""").RootElement);
 
         _virtualDesktopMock.Verify(v => v.SwitchDesktop("2"), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that SwitchDesktop with a desktop name forwards it to the service.
+    /// Verifies that SwitchDesktop with an invalid (non-numeric) desktopId returns a failure.
+    /// The schema defines desktopId as a number, so a string value fails deserialization.
     /// </summary>
     [Fact]
-    public void SwitchDesktop_ByName_CallsService()
+    public void SwitchDesktop_ByName_ReturnsFailure()
     {
-        _handler.Handle("SwitchDesktop", JsonDocument.Parse("""{"desktopId":"Work"}""").RootElement);
+        var result = _handler.Handle("SwitchDesktop", JsonDocument.Parse("""{"desktopId":"Work"}""").RootElement);
 
-        _virtualDesktopMock.Verify(v => v.SwitchDesktop("Work"), Times.Once);
+        Assert.False(result.Success);
+        _virtualDesktopMock.Verify(v => v.SwitchDesktop(It.IsAny<string>()), Times.Never);
     }
 
     // --- MoveWindowToDesktop ---
@@ -97,7 +99,7 @@ public class VirtualDesktopActionHandlerTests
         _appRegistryMock.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
         _windowMock.Setup(w => w.FindProcessWindowHandle("notepad")).Returns(IntPtr.Zero);
 
-        var json = JsonDocument.Parse("""{"name":"Notepad","desktopId":"2"}""").RootElement;
+        var json = JsonDocument.Parse("""{"name":"Notepad","desktopId":2}""").RootElement;
         _handler.Handle("MoveWindowToDesktop", json);
 
         _appRegistryMock.Verify(a => a.ResolveProcessName("Notepad"), Times.Once);
@@ -167,7 +169,7 @@ public class VirtualDesktopActionHandlerTests
         _appRegistryMock.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
         _windowMock.Setup(w => w.FindProcessWindowHandle("notepad")).Returns(handle);
 
-        var json = JsonDocument.Parse("""{"name":"Notepad","desktopId":"2"}""").RootElement;
+        var json = JsonDocument.Parse("""{"name":"Notepad","desktopId":2}""").RootElement;
         _handler.Handle("MoveWindowToDesktop", json);
 
         _virtualDesktopMock.Verify(v => v.MoveWindowToDesktop(handle, "2"), Times.Once);

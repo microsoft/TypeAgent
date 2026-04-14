@@ -48,14 +48,16 @@ public class AudioActionHandlerTests
     }
 
     /// <summary>
-    /// Verifies that a missing targetVolume does not trigger a <see cref="IAudioService.SetVolume"/> call.
+    /// Verifies that a missing targetVolume defaults to zero (mute).
+    /// The schema defines targetVolume as required, so the LLM always sends it.
+    /// When missing, the typed parameter defaults to 0, resulting in mute.
     /// </summary>
     [Fact]
-    public void Volume_MissingTargetVolume_DoesNotCallSetVolume()
+    public void Volume_MissingTargetVolume_SetsVolumeToZero()
     {
         _handler.Handle("Volume", JsonDocument.Parse("{}").RootElement);
 
-        _audioMock.Verify(a => a.SetVolume(It.IsAny<int>()), Times.Never);
+        _audioMock.Verify(a => a.SetVolume(0), Times.Once);
     }
 
     // --- RestoreVolume ---

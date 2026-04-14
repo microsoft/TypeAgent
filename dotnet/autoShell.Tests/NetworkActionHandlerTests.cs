@@ -47,15 +47,17 @@ public class NetworkActionHandlerTests
     }
 
     /// <summary>
-    /// Verifies that ConnectWifi without an ssid calls the service with a null ssid.
+    /// Verifies that ConnectWifi without an ssid calls the service with an empty ssid.
+    /// The schema defines ssid as required, so the LLM always sends it.
+    /// When missing, the typed parameter defaults to an empty string.
     /// </summary>
     [Fact]
-    public void ConnectWifi_WithoutSsid_CallsServiceWithNullSsid()
+    public void ConnectWifi_WithoutSsid_CallsServiceWithEmptySsid()
     {
         var json = JsonDocument.Parse("""{"password":"pass123"}""").RootElement;
         _handler.Handle("ConnectWifi", json);
 
-        _networkMock.Verify(n => n.ConnectToWifi(null, "pass123"), Times.Once);
+        _networkMock.Verify(n => n.ConnectToWifi("", "pass123"), Times.Once);
     }
 
     // --- DisconnectWifi ---

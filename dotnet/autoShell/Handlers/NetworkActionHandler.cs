@@ -24,8 +24,7 @@ internal class NetworkActionHandler : ActionHandlerBase
         _process = process;
         _logger = logger;
         AddAction<BluetoothToggleParams>("BluetoothToggle", HandleBluetoothToggle);
-        // ConnectWifi left as JsonElement because tests expect null (not "") for missing ssid
-        AddAction("ConnectWifi", HandleConnectWifi);
+        AddAction<ConnectWifiParams>("ConnectWifi", HandleConnectWifi);
         AddAction<DisconnectWifiParams>("DisconnectWifi", HandleDisconnectWifi);
         AddAction<EnableMeteredConnectionsParams>("EnableMeteredConnections", HandleEnableMeteredConnections);
         AddAction<EnableWifiParams>("EnableWifi", HandleEnableWifi);
@@ -40,10 +39,10 @@ internal class NetworkActionHandler : ActionHandlerBase
         return ActionResult.Ok($"Bluetooth {(enableBt ? "enabled" : "disabled")}");
     }
 
-    private ActionResult HandleConnectWifi(System.Text.Json.JsonElement parameters)
+    private ActionResult HandleConnectWifi(ConnectWifiParams p)
     {
-        string ssid = parameters.GetStringOrDefault("ssid");
-        string password = parameters.GetStringOrDefault("password", "");
+        string ssid = p.Ssid;
+        string password = p.Password ?? "";
         _network.ConnectToWifi(ssid, password);
         return ActionResult.Ok($"Connecting to WiFi network '{ssid}'");
     }

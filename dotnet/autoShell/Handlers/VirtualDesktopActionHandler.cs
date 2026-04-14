@@ -26,30 +26,27 @@ internal class VirtualDesktopActionHandler : ActionHandlerBase
         _logger = logger;
         _virtualDesktop = virtualDesktop;
         _window = window;
-        // CreateDesktop left as JsonElement because "names" is an array but generated record has string
-        AddAction("CreateDesktop", HandleCreateDesktop);
-        // MoveWindowToDesktop left as JsonElement because desktopId may be a string in JSON
-        AddAction("MoveWindowToDesktop", HandleMoveWindowToDesktop);
+        AddAction<CreateDesktopParams>("CreateDesktop", HandleCreateDesktop);
+        AddAction<MoveWindowToDesktopParams>("MoveWindowToDesktop", HandleMoveWindowToDesktop);
         AddAction<NextDesktopParams>("NextDesktop", HandleNextDesktop);
         AddAction<PinWindowParams>("PinWindow", HandlePinWindow);
         AddAction<PreviousDesktopParams>("PreviousDesktop", HandlePreviousDesktop);
-        // SwitchDesktop left as JsonElement because desktopId may be a string in JSON
-        AddAction("SwitchDesktop", HandleSwitchDesktop);
+        AddAction<SwitchDesktopParams>("SwitchDesktop", HandleSwitchDesktop);
     }
 
-    private ActionResult HandleCreateDesktop(JsonElement parameters)
+    private ActionResult HandleCreateDesktop(CreateDesktopParams p)
     {
-        string namesJson = parameters.TryGetProperty("names", out JsonElement names)
-            ? names.GetRawText()
+        string namesJson = p.Names != null
+            ? System.Text.Json.JsonSerializer.Serialize(p.Names)
             : "[\"desktop 1\"]";
         _virtualDesktop.CreateDesktops(namesJson);
         return ActionResult.Ok("Created new desktop(s)");
     }
 
-    private ActionResult HandleMoveWindowToDesktop(JsonElement parameters)
+    private ActionResult HandleMoveWindowToDesktop(MoveWindowToDesktopParams p)
     {
-        string process = parameters.GetStringOrDefault("name");
-        string desktop = parameters.GetStringOrDefault("desktopId");
+        string process = p.Name;
+        string desktop = p.DesktopId.ToString();
         if (string.IsNullOrEmpty(process) || string.IsNullOrEmpty(desktop))
         {
             return ActionResult.Fail("MoveWindowToDesktop requires name and desktopId");
@@ -92,9 +89,9 @@ internal class VirtualDesktopActionHandler : ActionHandlerBase
         return ActionResult.Ok("Switched to previous desktop");
     }
 
-    private ActionResult HandleSwitchDesktop(JsonElement parameters)
+    private ActionResult HandleSwitchDesktop(SwitchDesktopParams p)
     {
-        string desktopId = parameters.GetStringOrDefault("desktopId");
+        string desktopId = p.DesktopId.ToString();
         _virtualDesktop.SwitchDesktop(desktopId);
         return ActionResult.Ok($"Switched to desktop {desktopId}");
     }
