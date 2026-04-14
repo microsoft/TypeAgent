@@ -9,6 +9,8 @@
 export type CliDiscoveryResult = {
     /** Leaf CLI actions (commands that perform an action, not command groups). */
     actions: CliAction[];
+    /** Domain entities referenced across the CLI (e.g. repos, issues, users). */
+    entities?: CliEntity[];
 };
 
 export type CliAction = {
@@ -31,4 +33,13 @@ export type CliParameter = {
     description?: string;
     /** Whether the parameter is required. */
     required?: boolean;
+};
+
+export type CliEntity = {
+    /** Singular noun for this entity (e.g. "repository", "issue", "user"). */
+    name: string;
+    /** Brief description of the entity. */
+    description?: string;
+    /** Example values that appear in help text (e.g. "owner/repo", "#123"). */
+    examples?: string[];
 };

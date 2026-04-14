@@ -53,11 +53,18 @@ export type DiscoveredParameter = {
     required?: boolean;
 };
 
+export type DiscoveredEntity = {
+    name: string;
+    description?: string;
+    examples?: string[];
+};
+
 export type ApiSurface = {
     integrationName: string;
     discoveredAt: string;
     source: string;
     actions: DiscoveredAction[];
+    entities?: DiscoveredEntity[];
     approved?: boolean;
     approvedAt?: string;
     approvedActions?: string[];
@@ -670,7 +677,9 @@ async function handleCrawlCliHelp(
         `Base command: ${command}\n` +
         `Total subcommands crawled: ${helpEntries.length}\n` +
         `Only include leaf commands that perform an action, not command groups.\n` +
-        `Derive camelCase names from the command path (e.g. "gh repo create" → "repoCreate").\n\n` +
+        `Derive camelCase names from the command path (e.g. "gh repo create" → "repoCreate").\n` +
+        `Also identify the domain entities referenced across the CLI ` +
+        `(e.g. repositories, issues, pull requests, users).\n\n` +
         `Help output:\n${helpText}`;
 
     const result = await translator.translate(request);
@@ -701,6 +710,17 @@ async function handleCrawlCliHelp(
         return action;
     });
 
+    // Map extracted entities
+    const entities: DiscoveredEntity[] = (result.data.entities ?? []).map(
+        (e) => {
+            const entity: DiscoveredEntity = { name: e.name };
+            if (e.description) entity.description = e.description;
+            if (e.examples && e.examples.length > 0)
+                entity.examples = e.examples;
+            return entity;
+        },
+    );
+
     // Merge with any existing discovered actions
     const existing = await readArtifactJson<ApiSurface>(
         integrationName,
@@ -718,6 +738,15 @@ async function handleCrawlCliHelp(
             ...actions,
         ],
     };
+    if (entities.length > 0) {
+        // Merge entities, deduplicating by name
+        const existingEntities = existing?.entities ?? [];
+        const entityMap = new Map(existingEntities.map((e) => [e.name, e]));
+        for (const e of entities) {
+            entityMap.set(e.name, e);
+        }
+        merged.entities = [...entityMap.values()];
+    }
 
     await writeArtifactJson(
         integrationName,
@@ -730,13 +759,17 @@ async function handleCrawlCliHelp(
         `## CLI discovery complete: ${integrationName}\n\n` +
             `**Command:** \`${command}\`\n` +
             `**Subcommands crawled:** ${helpEntries.length}\n` +
-            `**Actions found:** ${actions.length}\n\n` +
+            `**Actions found:** ${actions.length}\n` +
+            `**Entities found:** ${entities.length}\n\n` +
             actions
                 .slice(0, 20)
                 .map((a) => `- **${a.name}** (\`${a.path}\`): ${a.description}`)
                 .join("\n") +
             (actions.length > 20
                 ? `\n\n_...and ${actions.length - 20} more_`
+                : "") +
+            (entities.length > 0
+                ? `\n\n**Entities:** ${entities.map((e) => e.name).join(", ")}`
                 : "") +
             `\n\nReview with \`listDiscoveredActions\`, then \`approveApiSurface\` to proceed.`,
     );
