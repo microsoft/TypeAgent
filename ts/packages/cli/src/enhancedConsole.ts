@@ -1173,6 +1173,10 @@ async function questionWithCompletion(
 
         // Activate the scroll region and draw initial prompt
         layout.setup(prevInputRows + EXTRA_ROWS);
+        // Re-render when completions arrive asynchronously from the dispatcher.
+        if (controller) {
+            controller.setOnUpdate(() => render());
+        }
         render();
 
         const panel = getDebugPanel();
@@ -1374,6 +1378,9 @@ async function questionWithCompletion(
             terminalLayout = null;
             panel?.setPromptRenderer(null);
             activePromptRenderer = null;
+            if (controller) {
+                controller.setOnUpdate(() => {});
+            }
             stdin.removeListener("data", onData);
             if (stdin.isTTY) {
                 stdin.setRawMode(wasRaw || false);

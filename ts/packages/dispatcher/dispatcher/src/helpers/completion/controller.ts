@@ -33,8 +33,10 @@ const defaultGetPosition = () => defaultPosition;
  * Fires the onUpdate callback whenever items are shown or hidden.
  */
 class CallbackSearchMenu extends SearchMenuBase {
-    constructor(private readonly onUpdate: () => void) {
+    public onUpdate: () => void;
+    constructor(onUpdate: () => void) {
         super();
+        this.onUpdate = onUpdate;
     }
 
     protected override onShow(
@@ -65,14 +67,35 @@ class CallbackSearchMenu extends SearchMenuBase {
  */
 export class CompletionController {
     private readonly session: PartialCompletionSession;
+    private readonly callbackMenu: CallbackSearchMenu | undefined;
 
     constructor(
         dispatcher: ICompletionDispatcher,
         options?: CompletionControllerOptions,
     ) {
         const onUpdate = options?.onUpdate ?? (() => {});
-        const menu = options?.menu ?? new CallbackSearchMenu(onUpdate);
-        this.session = new PartialCompletionSession(menu, dispatcher);
+        if (options?.menu) {
+            this.session = new PartialCompletionSession(
+                options.menu,
+                dispatcher,
+            );
+        } else {
+            this.callbackMenu = new CallbackSearchMenu(onUpdate);
+            this.session = new PartialCompletionSession(
+                this.callbackMenu,
+                dispatcher,
+            );
+        }
+    }
+
+    /**
+     * Set or replace the callback invoked when completions change.
+     * Only effective when using the internal CallbackSearchMenu (CLI path).
+     */
+    public setOnUpdate(onUpdate: () => void): void {
+        if (this.callbackMenu) {
+            this.callbackMenu.onUpdate = onUpdate;
+        }
     }
 
     /**
