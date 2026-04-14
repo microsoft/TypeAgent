@@ -172,4 +172,54 @@ public class ActionDispatcherIntegrationTests
     {
         _dispatcher.Dispatch(JsonDocument.Parse(json).RootElement);
     }
+
+    // --- Schema wiring validation ---
+
+    /// <summary>
+    /// Verifies that every action defined in the .pas.json schemas has a registered C# handler.
+    /// This test fails when a new action is added to a TypeScript schema but not wired in C#.
+    /// </summary>
+    [Fact]
+    public void AllSchemaActions_HaveRegisteredHandlers()
+    {
+        var schemaActions = LoadRealSchemaActions();
+        if (schemaActions.Count == 0)
+        {
+            return; // Schema files not available (e.g., CI without TS build)
+        }
+
+        var (missingHandlers, _) = SchemaValidator.FindMismatches(schemaActions, _dispatcher.RegisteredActions);
+
+        Assert.True(
+            missingHandlers.Count == 0,
+            $"Schema actions without C# handlers: {string.Join(", ", missingHandlers)}");
+    }
+
+    /// <summary>
+    /// Verifies that every registered C# handler action has a matching .pas.json schema definition.
+    /// This test fails when a handler registers an action not present in any TypeScript schema.
+    /// </summary>
+    [Fact]
+    public void AllRegisteredHandlers_HaveSchemaDefinitions()
+    {
+        var schemaActions = LoadRealSchemaActions();
+        if (schemaActions.Count == 0)
+        {
+            return; // Schema files not available (e.g., CI without TS build)
+        }
+
+        var (_, missingSchemas) = SchemaValidator.FindMismatches(schemaActions, _dispatcher.RegisteredActions);
+
+        Assert.True(
+            missingSchemas.Count == 0,
+            $"Handler actions without schema definitions: {string.Join(", ", missingSchemas)}");
+    }
+
+    private static System.Collections.Generic.HashSet<string> LoadRealSchemaActions()
+    {
+        var validator = new SchemaValidator(new Logging.NullLogger());
+        var schemaDir = System.IO.Path.Combine(
+            AppContext.BaseDirectory, SchemaValidator.DefaultSchemaRelativePath);
+        return validator.LoadActionNames(schemaDir);
+    }
 }
