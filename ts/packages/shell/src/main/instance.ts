@@ -77,11 +77,23 @@ async function initializeDispatcher(
             ...newClientIO,
             // Main process intercepted clientIO calls
             question: async (
-                _requestId: RequestId | undefined,
+                requestId: RequestId | undefined,
                 message: string,
                 choices: string[],
                 defaultId?: number,
             ) => {
+                // If a requestId is present, the question is tied to an active request
+                // and should be displayed in the chat view (renderer) so tests and the
+                // UI can observe it.  Only fall back to a native dialog for broadcast
+                // questions (no requestId).
+                if (requestId !== undefined) {
+                    return newClientIO.question(
+                        requestId,
+                        message,
+                        choices,
+                        defaultId,
+                    );
+                }
                 const result = await dialog.showMessageBox(
                     shellWindow.mainWindow,
                     {
