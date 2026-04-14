@@ -25,6 +25,8 @@ import type {
     Dispatcher,
     IAgentMessage,
     TemplateEditConfig,
+    PendingInteractionRequest,
+    PendingInteractionResponse,
 } from "agent-dispatcher";
 import chalk from "chalk";
 import fs from "fs";
@@ -858,9 +860,116 @@ export function createEnhancedClientIO(
                 }
             })();
         },
-        // Async deferred pattern stubs (used by server, no-op in CLI)
-        requestInteraction(): void {
-            // CLI does not support deferred interactions
+        // Async deferred pattern — handle interactions pushed from the server
+        requestInteraction(interaction: PendingInteractionRequest): void {
+            (async () => {
+                if (!dispatcherRef?.current) {
+                    return;
+                }
+                const dispatcher = dispatcherRef.current;
+                let response: PendingInteractionResponse;
+
+                if (interaction.type === "askYesNo") {
+                    const wasSpinning = currentSpinner?.isActive();
+                    if (wasSpinning) {
+                        currentSpinner!.stop();
+                    }
+
+                    const width = process.stdout.columns || 80;
+                    const line = ANSI.dim + "─".repeat(width) + ANSI.reset;
+                    const defaultHint =
+                        interaction.defaultValue === undefined
+                            ? ""
+                            : interaction.defaultValue
+                              ? " (default: yes)"
+                              : " (default: no)";
+                    const prompt = `${chalk.cyan("?")} ${interaction.message}${chalk.dim(defaultHint)} ${chalk.dim("(y/n)")} `;
+
+                    process.stdout.write("\n" + line + "\n");
+                    const input = await question(prompt, rl);
+                    process.stdout.write(line + "\n");
+
+                    if (wasSpinning) {
+                        currentSpinner = new EnhancedSpinner({
+                            text: "Processing...",
+                        });
+                        currentSpinner.start();
+                    }
+
+                    let value: boolean;
+                    if (
+                        input.toLowerCase() === "y" ||
+                        input.toLowerCase() === "yes"
+                    ) {
+                        value = true;
+                    } else if (
+                        input.toLowerCase() === "n" ||
+                        input.toLowerCase() === "no"
+                    ) {
+                        value = false;
+                    } else {
+                        value = interaction.defaultValue ?? false;
+                    }
+                    response = {
+                        interactionId: interaction.interactionId,
+                        type: "askYesNo",
+                        value,
+                    };
+                } else if (interaction.type === "popupQuestion") {
+                    const wasSpinning = currentSpinner?.isActive();
+                    if (wasSpinning) {
+                        currentSpinner!.stop();
+                    }
+
+                    const width = process.stdout.columns || 80;
+                    const line = ANSI.dim + "─".repeat(width) + ANSI.reset;
+                    process.stdout.write("\n" + line + "\n");
+                    process.stdout.write(
+                        `${chalk.cyan("?")} ${interaction.message}\n`,
+                    );
+                    interaction.choices.forEach((choice, i) => {
+                        const isDefault = i === interaction.defaultId;
+                        const prefix = chalk.cyan(`${i + 1}.`);
+                        const suffix = isDefault ? chalk.dim(" (default)") : "";
+                        process.stdout.write(
+                            `  ${prefix} ${choice}${suffix}\n`,
+                        );
+                    });
+
+                    const prompt = chalk.dim(
+                        `Enter number (1-${interaction.choices.length}): `,
+                    );
+                    const input = await question(prompt, rl);
+                    process.stdout.write(line + "\n");
+
+                    if (wasSpinning) {
+                        currentSpinner = new EnhancedSpinner({
+                            text: "Processing...",
+                        });
+                        currentSpinner.start();
+                    }
+
+                    const parsed = parseInt(input, 10) - 1;
+                    const value =
+                        parsed >= 0 && parsed < interaction.choices.length
+                            ? parsed
+                            : (interaction.defaultId ?? 0);
+                    response = {
+                        interactionId: interaction.interactionId,
+                        type: "popupQuestion",
+                        value,
+                    };
+                } else {
+                    // proposeAction — not supported in CLI yet
+                    return;
+                }
+
+                try {
+                    await dispatcher.respondToInteraction(response);
+                } catch {
+                    // Interaction may have already timed out
+                }
+            })();
         },
         interactionResolved(): void {
             // CLI does not support deferred interactions
@@ -1442,23 +1551,56 @@ async function question(
     message: string,
     rl?: readline.promises.Interface,
 ): Promise<string> {
-    const closeOnExit = !rl;
-    if (!rl) {
-        rl = createInterface({
-            input: process.stdin,
-            output: process.stdout,
-            terminal: true,
-        });
+    if (rl) {
+        return rl.question(message);
     }
 
-    try {
-        // Let readline handle cursor positioning natively
-        return await rl.question(message);
-    } finally {
-        if (closeOnExit) {
-            rl.close();
+    // No readline interface — stdin is owned by questionWithCompletion in raw
+    // mode.  Read character-by-character directly so we don't conflict.
+    return new Promise<string>((resolve) => {
+        const stdin = process.stdin;
+        process.stdout.write(message);
+
+        let input = "";
+        const wasRaw = stdin.isRaw;
+        if (stdin.isTTY) {
+            stdin.setRawMode(true);
         }
-    }
+        stdin.resume();
+        stdin.setEncoding("utf8");
+
+        const onData = (data: string) => {
+            const code = data.charCodeAt(0);
+            if (data === "\r" || data === "\n") {
+                // Enter — commit
+                stdin.removeListener("data", onData);
+                if (stdin.isTTY) {
+                    stdin.setRawMode(wasRaw || false);
+                }
+                process.stdout.write("\n");
+                resolve(input);
+            } else if (code === 0x03) {
+                // Ctrl+C — treat as empty input
+                stdin.removeListener("data", onData);
+                if (stdin.isTTY) {
+                    stdin.setRawMode(wasRaw || false);
+                }
+                process.stdout.write("\n");
+                resolve("");
+            } else if (code === 0x7f || code === 0x08) {
+                // Backspace
+                if (input.length > 0) {
+                    input = input.slice(0, -1);
+                    process.stdout.write("\b \b");
+                }
+            } else if (code >= 32 && code < 127) {
+                input += data;
+                process.stdout.write(data);
+            }
+        };
+
+        stdin.on("data", onData);
+    });
 }
 
 /**
