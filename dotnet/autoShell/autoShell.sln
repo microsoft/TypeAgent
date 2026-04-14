@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "autoShell", "autoShell.cspr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "autoShell.Tests", "..\autoShell.Tests\autoShell.Tests.csproj", "{EC831702-9307-4808-9615-FE20D78C14C6}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "autoShell.Generators", "..\autoShell.Generators\autoShell.Generators.csproj", "{0FEE356A-E861-4FFD-8B33-0A5454A7D4D8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -41,6 +43,18 @@ Global
 		{EC831702-9307-4808-9615-FE20D78C14C6}.Release|x64.Build.0 = Release|Any CPU
 		{EC831702-9307-4808-9615-FE20D78C14C6}.Release|x86.ActiveCfg = Release|Any CPU
 		{EC831702-9307-4808-9615-FE20D78C14C6}.Release|x86.Build.0 = Release|Any CPU
+		{0FEE356A-E861-4FFD-8B33-0A5454A7D4D8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0FEE356A-E861-4FFD-8B33-0A5454A7D4D8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0FEE356A-E861-4FFD-8B33-0A5454A7D4D8}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0FEE356A-E861-4FFD-8B33-0A5454A7D4D8}.Debug|x64.Build.0 = Debug|Any CPU
+		{0FEE356A-E861-4FFD-8B33-0A5454A7D4D8}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0FEE356A-E861-4FFD-8B33-0A5454A7D4D8}.Debug|x86.Build.0 = Debug|Any CPU
+		{0FEE356A-E861-4FFD-8B33-0A5454A7D4D8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0FEE356A-E861-4FFD-8B33-0A5454A7D4D8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0FEE356A-E861-4FFD-8B33-0A5454A7D4D8}.Release|x64.ActiveCfg = Release|Any CPU
+		{0FEE356A-E861-4FFD-8B33-0A5454A7D4D8}.Release|x64.Build.0 = Release|Any CPU
+		{0FEE356A-E861-4FFD-8B33-0A5454A7D4D8}.Release|x86.ActiveCfg = Release|Any CPU
+		{0FEE356A-E861-4FFD-8B33-0A5454A7D4D8}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

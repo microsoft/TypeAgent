@@ -15,8 +15,10 @@
     <CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <!-- Exclude emitted generated files from regular compilation (they're already compiled as source-generated) -->
+    <!-- Exclude emitted generated files from regular compilation (already compiled as source-generated) -->
     <Compile Remove="Generated/**" />
+    <!-- But keep them visible in Solution Explorer for inspection -->
+    <None Include="Generated/**" LinkBase="Generated" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="autoShell.Tests" />
