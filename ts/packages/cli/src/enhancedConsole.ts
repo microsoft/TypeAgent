@@ -656,7 +656,7 @@ export function createEnhancedClientIO(
 
             process.stdout.write("\n");
             process.stdout.write(line + "\n");
-            process.stdout.write(`${chalk.cyan("?")} ${message}\n`);
+            process.stdout.write(`${message}\n`);
             process.stdout.write(line + "\n\n");
 
             // Display choices with numbers
@@ -806,7 +806,7 @@ export function createEnhancedClientIO(
 
                     let response: boolean | number[];
                     if (type === "yesNo") {
-                        const prompt = `${chalk.cyan("?")} ${chalk.dim(`[${source}]`)} ${message} ${chalk.dim("(y/n)")} `;
+                        const prompt = `${chalk.dim(`[${source}]`)} ${message} ${chalk.dim("(y/n)")} `;
                         const input = await question(prompt, rl);
                         response =
                             input.toLowerCase() === "y" ||
@@ -814,7 +814,7 @@ export function createEnhancedClientIO(
                     } else {
                         // multiChoice — show numbered list, accept comma-separated
                         process.stdout.write(
-                            `${chalk.cyan("?")} ${chalk.dim(`[${source}]`)} ${message}\n`,
+                            `${chalk.dim(`[${source}]`)} ${message}\n`,
                         );
                         for (let i = 0; i < choices.length; i++) {
                             process.stdout.write(
@@ -862,9 +862,6 @@ export function createEnhancedClientIO(
                     return;
                 }
 
-                // Cast away stale compiled types — will resolve after build
-                const q = interaction as any;
-
                 const ac = new AbortController();
                 activeInteractions.set(interaction.interactionId, ac);
 
@@ -880,9 +877,9 @@ export function createEnhancedClientIO(
                 try {
                     // question — unified prompt for both yes/no and multi-choice
                     displayContent(line);
-                    let promptText = `${chalk.cyan("?")} ${q.message}`;
-                    q.choices.forEach((choice: string, i: number) => {
-                        const isDefault = i === q.defaultId;
+                    let promptText = `${interaction.message}`;
+                    interaction.choices.forEach((choice, i) => {
+                        const isDefault = i === interaction.defaultId;
                         const prefix = chalk.cyan(`${i + 1}.`);
                         const suffix = isDefault ? chalk.dim(" (default)") : "";
                         promptText += `\n  ${prefix} ${choice}${suffix}`;
@@ -890,21 +887,21 @@ export function createEnhancedClientIO(
                     displayContent(promptText);
 
                     const isYesNo =
-                        q.choices.length === 2 &&
-                        q.choices[0] === "Yes" &&
-                        q.choices[1] === "No";
+                        interaction.choices.length === 2 &&
+                        interaction.choices[0] === "Yes" &&
+                        interaction.choices[1] === "No";
                     const prompt = chalk.dim(
                         isYesNo
                             ? "Enter y/n or number (1-2): "
-                            : `Enter number (1-${q.choices.length}): `,
+                            : `Enter number (1-${interaction.choices.length}): `,
                     );
                     const input = await question(prompt, rl, ac.signal);
                     displayContent(line);
 
                     const value = parseChoiceInput(
                         input,
-                        q.choices,
-                        q.defaultId,
+                        interaction.choices,
+                        interaction.defaultId,
                     );
                     response = {
                         interactionId: interaction.interactionId,

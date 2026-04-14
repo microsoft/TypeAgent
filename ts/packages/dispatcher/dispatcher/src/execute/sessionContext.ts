@@ -159,11 +159,12 @@ export function createSessionContext<T = unknown>(
             choices: string[] = ["Yes", "No"], // default choices
             defaultId?: number,
         ): Promise<number> {
-            return (context.clientIO as any).question(
+            return context.clientIO.question(
                 undefined,
                 message,
                 choices,
                 defaultId,
+                name,
             );
         },
         async reloadAgentSchema(): Promise<void> {

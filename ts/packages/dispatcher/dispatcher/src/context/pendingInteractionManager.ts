@@ -3,11 +3,12 @@
 
 import type {
     PendingInteractionRequest,
+    PendingInteractionType,
     RequestId,
 } from "@typeagent/dispatcher-types";
 
 type PendingEntry = {
-    type: string; // "question" | "proposeAction"
+    type: PendingInteractionType;
     requestId?: RequestId;
     resolve: (value: any) => void;
     reject: (error: Error) => void;

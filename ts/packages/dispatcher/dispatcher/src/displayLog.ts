@@ -214,15 +214,14 @@ export class DisplayLog {
         if (interaction.requestId !== undefined) {
             entry.requestId = interaction.requestId;
         }
-        const r = interaction as any;
         if (interaction.type === "question") {
-            entry.message = r.message;
-            entry.choices = r.choices;
-            if (r.defaultId !== undefined) {
-                entry.defaultId = r.defaultId;
+            entry.message = interaction.message;
+            entry.choices = interaction.choices;
+            if (interaction.defaultId !== undefined) {
+                entry.defaultId = interaction.defaultId;
             }
         } else if (interaction.type === "proposeAction") {
-            entry.actionTemplates = r.actionTemplates;
+            entry.actionTemplates = interaction.actionTemplates;
         }
         this.entries.push(entry);
         this.dirty = true;
