@@ -45,7 +45,15 @@ internal abstract class ActionHandlerBase : IActionHandler
     {
         AddAction(actionName, parameters =>
         {
-            var typed = JsonSerializer.Deserialize<T>(parameters.GetRawText(), CamelCaseOptions);
+            T typed;
+            try
+            {
+                typed = JsonSerializer.Deserialize<T>(parameters.GetRawText(), CamelCaseOptions);
+            }
+            catch (JsonException ex)
+            {
+                return ActionResult.Fail($"Invalid parameters for '{actionName}': {ex.Message}");
+            }
             return handler(typed);
         });
     }

@@ -125,19 +125,26 @@ internal abstract class SettingsHandlerBase : ActionHandlerBase
     /// </summary>
     private ActionResult ExecuteRegistryToggle(string key, JsonElement parameters, RegistryToggleConfig config)
     {
+        string displayName = config.DisplayName ?? key;
         bool enable = parameters.GetBoolOrDefault(config.ParameterName, true);
         object value = enable ? config.OnValue : config.OffValue;
 
-        if (config.UseLocalMachine)
+        try
         {
-            Registry.SetValueLocalMachine(config.KeyPath, config.ValueName, value, config.ValueKind);
+            if (config.UseLocalMachine)
+            {
+                Registry.SetValueLocalMachine(config.KeyPath, config.ValueName, value, config.ValueKind);
+            }
+            else
+            {
+                Registry.SetValue(config.KeyPath, config.ValueName, value, config.ValueKind);
+            }
         }
-        else
+        catch (Exception ex)
         {
-            Registry.SetValue(config.KeyPath, config.ValueName, value, config.ValueKind);
+            return ActionResult.Fail($"Failed to set {displayName}: {ex.Message}");
         }
 
-        string displayName = config.DisplayName ?? key;
         return ActionResult.Ok($"{displayName} {(enable ? "enabled" : "disabled")}");
     }
 
@@ -146,12 +153,19 @@ internal abstract class SettingsHandlerBase : ActionHandlerBase
     /// </summary>
     private ActionResult ExecuteRegistryMap(string key, JsonElement parameters, RegistryMapConfig config)
     {
+        string displayName = config.DisplayName ?? key;
         string paramValue = parameters.GetStringOrDefault(config.ParameterName, "");
         object regValue = config.ValueMap.TryGetValue(paramValue, out var mapped) ? mapped : config.DefaultValue;
 
-        Registry.SetValue(config.KeyPath, config.ValueName, regValue, config.ValueKind);
+        try
+        {
+            Registry.SetValue(config.KeyPath, config.ValueName, regValue, config.ValueKind);
+        }
+        catch (Exception ex)
+        {
+            return ActionResult.Fail($"Failed to set {displayName}: {ex.Message}");
+        }
 
-        string displayName = config.DisplayName ?? key;
         return ActionResult.Ok($"{displayName} set to {paramValue}");
     }
 
@@ -160,8 +174,17 @@ internal abstract class SettingsHandlerBase : ActionHandlerBase
     /// </summary>
     private ActionResult ExecuteOpenSettings(OpenSettingsConfig config)
     {
-        _process!.StartShellExecute(config.SettingsUri);
         string displayName = config.DisplayName ?? config.SettingsUri;
+
+        try
+        {
+            _process!.StartShellExecute(config.SettingsUri);
+        }
+        catch (Exception ex)
+        {
+            return ActionResult.Fail($"Failed to open {displayName}: {ex.Message}");
+        }
+
         return ActionResult.Ok($"Opened {displayName}");
     }
 }
