@@ -40,10 +40,33 @@ const pendingRequests = new Map<
 // Buffer for incomplete lines from stdout
 let stdoutBuffer = "";
 
-const autoShellPath = new URL(
-    "../../../../../dotnet/autoShell/bin/Debug/autoShell.exe",
-    import.meta.url,
-);
+const autoShellPath = resolveAutoShellPath();
+
+function resolveAutoShellPath(): URL {
+    // Allow override via environment variable
+    const envPath = process.env.AUTOSHELL_PATH;
+    if (envPath) {
+        return new URL(`file://${path.resolve(envPath)}`);
+    }
+
+    // Search relative to the compiled JS output (dist/)
+    const baseDir = path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "../../../../../dotnet/autoShell/bin",
+    );
+    for (const config of ["Debug", "Release"]) {
+        const candidate = path.join(baseDir, config, "autoShell.exe");
+        if (fs.existsSync(candidate)) {
+            return new URL(`file://${candidate}`);
+        }
+    }
+
+    // Fallback to Debug path (will fail at spawn time with a clear error)
+    return new URL(
+        "../../../../../dotnet/autoShell/bin/Debug/autoShell.exe",
+        import.meta.url,
+    );
+}
 
 // Load known action names from .pas.json schema files for runtime validation.
 // The compiled JS and .pas.json files both live in dist/.

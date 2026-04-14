@@ -5,6 +5,8 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Security;
 using System.Text.Json;
 using autoShell.Services;
 using Microsoft.Win32;
@@ -140,7 +142,7 @@ internal abstract class SettingsHandlerBase : ActionHandlerBase
                 Registry.SetValue(config.KeyPath, config.ValueName, value, config.ValueKind);
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is UnauthorizedAccessException or SecurityException or IOException)
         {
             return ActionResult.Fail($"Failed to set {displayName}: {ex.Message}");
         }
@@ -161,7 +163,7 @@ internal abstract class SettingsHandlerBase : ActionHandlerBase
         {
             Registry.SetValue(config.KeyPath, config.ValueName, regValue, config.ValueKind);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is UnauthorizedAccessException or SecurityException or IOException)
         {
             return ActionResult.Fail($"Failed to set {displayName}: {ex.Message}");
         }
@@ -180,7 +182,7 @@ internal abstract class SettingsHandlerBase : ActionHandlerBase
         {
             _process!.StartShellExecute(config.SettingsUri);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or IOException)
         {
             return ActionResult.Fail($"Failed to open {displayName}: {ex.Message}");
         }
