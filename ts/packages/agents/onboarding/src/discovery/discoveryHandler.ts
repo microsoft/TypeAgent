@@ -237,7 +237,10 @@ function stripHtml(html: string): string {
     } while (sanitized !== previous);
 
     // Final hardening: neutralize any remaining tag delimiters as single chars.
-    return sanitized.replace(/[<>]/g, " ").replace(/\s{2,}/g, " ").trim();
+    return sanitized
+        .replace(/[<>]/g, " ")
+        .replace(/\s{2,}/g, " ")
+        .trim();
 }
 
 // Extract same-origin links from an HTML page.
