@@ -15,6 +15,12 @@ import registerDebug from "debug";
 const debug = registerDebug("typeagent:completion:session");
 const debugError = registerDebug("typeagent:completion:session:error");
 
+export type CompletionState = {
+    items: SearchMenuItem[];
+    prefix: string;
+    anchorIndex: number;
+};
+
 export interface ISearchMenu {
     setChoices(choices: SearchMenuItem[]): void;
     // Returns true when the prefix uniquely satisfies exactly one entry
@@ -24,6 +30,8 @@ export interface ISearchMenu {
     hasExactMatch(text: string): boolean;
     hide(): void;
     isActive(): boolean;
+    // Returns the items currently visible after the last updatePrefix() call.
+    getFilteredItems(): SearchMenuItem[];
 }
 
 export interface ICompletionDispatcher {
@@ -309,6 +317,25 @@ export class PartialCompletionSession {
             return undefined;
         }
         return input.substring(this.menuAnchorIndex);
+    }
+
+    // Returns the current completion state: filtered items, the typed prefix
+    // after the menu anchor, and the anchor index.  Returns undefined when
+    // there are no completions to show.
+    public getCompletionState(input: string): CompletionState | undefined {
+        const prefix = this.getCompletionPrefix(input);
+        if (prefix === undefined) {
+            return undefined;
+        }
+        const items = this.menu.getFilteredItems();
+        if (items.length === 0) {
+            return undefined;
+        }
+        return {
+            items,
+            prefix,
+            anchorIndex: input.length - prefix.length,
+        };
     }
 
     // Decides whether the current session can service `input` without a new

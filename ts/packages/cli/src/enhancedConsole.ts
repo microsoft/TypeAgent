@@ -26,10 +26,7 @@ import type {
     IAgentMessage,
     TemplateEditConfig,
 } from "agent-dispatcher";
-import type { ICompletionDispatcher } from "agent-dispatcher/helpers/completion";
-import { PartialCompletionSession } from "agent-dispatcher/helpers/completion";
-import type { SearchMenuPosition } from "agent-dispatcher/helpers/completion";
-import { CliSearchMenu } from "./cliSearchMenu.js";
+import type { CompletionController } from "agent-dispatcher/helpers/completion";
 import chalk from "chalk";
 import fs from "fs";
 import path from "path";
@@ -50,10 +47,6 @@ import {
     getDebugPanel,
     PromptRenderer,
 } from "./debugInterceptor.js";
-
-type CompletionSource<T> =
-    | ((line: string, context: T) => Promise<any>)
-    | ICompletionDispatcher;
 
 // Track current processing state
 let currentSpinner: EnhancedSpinner | null = null;
@@ -1042,26 +1035,18 @@ function formatDisplayContent(content: string | DisplayContent): string {
  */
 async function questionWithCompletion(
     message: string,
-    getCompletions: ((input: string) => Promise<any>) | undefined,
+    controller: CompletionController | undefined,
     history: string[] = [],
-    completionDispatcher?: ICompletionDispatcher,
 ): Promise<string> {
     return new Promise<string>((resolve) => {
         let input = "";
         let cursorPos = 0; // Position within input string (0 = before first char)
-        let allCompletions: string[] = []; // All available completions
-        let filteredCompletions: string[] = []; // Filtered based on user typing
+        let filteredCompletions: string[] = []; // Render-cache populated from controller
         let completionIndex = 0;
         let historyIndex = history.length; // Start past the end (current empty input)
         let savedInput = ""; // Saves current input when navigating history
-        let filterStartIndex = -1; // Where filtering begins
-        let completionPrefix = ""; // Fixed prefix before completions
-        let updatingCompletions = false;
-        // Session-mode state (used when completionDispatcher is provided)
-        let session: PartialCompletionSession | undefined;
-        let menu: CliSearchMenu | undefined;
-        // Position callback for session APIs (CLI has no spatial positioning).
-        const getPos = (): SearchMenuPosition => ({ left: 0, bottom: 0 });
+        let filterStartIndex = -1; // Where filtering begins (render-cache)
+        let completionPrefix = ""; // Fixed prefix before completions (render-cache)
         const stdin = process.stdin;
         const stdout = process.stdout;
 
@@ -1072,32 +1057,6 @@ async function questionWithCompletion(
         }
         stdin.resume();
         stdin.setEncoding("utf8");
-
-        // Filter completions based on what user typed after the trigger point
-        const filterCompletions = () => {
-            if (allCompletions.length === 0 || filterStartIndex < 0) {
-                filteredCompletions = [];
-                return;
-            }
-
-            // Get the filter text (what user typed after the space/trigger)
-            const filterText = input.substring(filterStartIndex).toLowerCase();
-
-            if (filterText === "") {
-                // No filter text, show all
-                filteredCompletions = allCompletions;
-            } else {
-                // Filter completions that start with the filter text
-                filteredCompletions = allCompletions.filter((comp) =>
-                    comp.toLowerCase().startsWith(filterText),
-                );
-            }
-
-            // Reset index if out of bounds
-            if (completionIndex >= filteredCompletions.length) {
-                completionIndex = 0;
-            }
-        };
 
         let prevInputRows = 1;
         const layout = new TerminalLayout();
@@ -1111,32 +1070,28 @@ async function questionWithCompletion(
         const EXTRA_ROWS = 3; // separator + bottom rule + hint
 
         const render = () => {
-            // Session mode: recompute completions from session/menu state each frame.
-            if (completionDispatcher) {
+            // Recompute completions from controller state each frame.
+            if (controller) {
                 if (isSlashCommand(input)) {
-                    const completions = getSlashCompletions(input);
-                    filteredCompletions = completions;
+                    filteredCompletions = getSlashCompletions(input);
                     filterStartIndex = 0;
                     completionPrefix = "";
-                } else if (session !== undefined && menu !== undefined) {
-                    const sessionItems = menu.getItems();
-                    const rawPrefix = session.getCompletionPrefix(input);
-                    if (sessionItems.length > 0 && rawPrefix !== undefined) {
-                        const anchorIndex = input.length - rawPrefix.length;
-                        filteredCompletions = sessionItems.map(
+                } else {
+                    const state = controller.getCompletionState(input);
+                    if (state) {
+                        filteredCompletions = state.items.map(
                             (i) => i.selectedText,
                         );
-                        filterStartIndex = anchorIndex;
-                        completionPrefix = input.substring(0, anchorIndex);
+                        filterStartIndex = state.anchorIndex;
+                        completionPrefix = input.substring(
+                            0,
+                            state.anchorIndex,
+                        );
                     } else {
                         filteredCompletions = [];
                         filterStartIndex = -1;
                         completionPrefix = "";
                     }
-                } else {
-                    filteredCompletions = [];
-                    filterStartIndex = -1;
-                    completionPrefix = "";
                 }
                 if (completionIndex >= filteredCompletions.length) {
                     completionIndex = 0;
@@ -1216,50 +1171,7 @@ async function questionWithCompletion(
             prevInputRows = inputRows;
         };
 
-        // Fetch completions for current input (callback mode only).
-        // In session mode, completions are driven by session.update() + menu callbacks.
-        const updateCompletions = async () => {
-            if (!getCompletions) {
-                return;
-            }
-            if (updatingCompletions) {
-                return; // Skip if already updating
-            }
-            updatingCompletions = true;
-            try {
-                const result = await getCompletions(input);
-                if (result) {
-                    allCompletions = result.allCompletions || [];
-                    filterStartIndex = result.filterStartIndex;
-                    completionPrefix = result.prefix;
-                    filterCompletions();
-                } else {
-                    allCompletions = [];
-                    filteredCompletions = [];
-                    filterStartIndex = -1;
-                    completionPrefix = "";
-                }
-                completionIndex = 0;
-            } catch (e) {
-                allCompletions = [];
-                filteredCompletions = [];
-                filterStartIndex = -1;
-                completionPrefix = "";
-                completionIndex = 0;
-            }
-            updatingCompletions = false;
-            render();
-        };
-
         // Activate the scroll region and draw initial prompt
-        // Initialize session-based completions after render is defined.
-        if (completionDispatcher) {
-            menu = new CliSearchMenu(() => {
-                completionIndex = 0;
-                render();
-            });
-            session = new PartialCompletionSession(menu, completionDispatcher);
-        }
         layout.setup(prevInputRows + EXTRA_ROWS);
         render();
 
@@ -1338,21 +1250,8 @@ async function questionWithCompletion(
             }
 
             if (data === "\x1b") {
-                if (session !== undefined && menu !== undefined) {
-                    // Session mode: use explicitHide for smart level-shift / refetch
-                    if (filteredCompletions.length > 0) {
-                        session.explicitHide(input, getPos, "forward");
-                    } else {
-                        // Esc with no completions — clear input
-                        input = "";
-                        cursorPos = 0;
-                        historyIndex = history.length;
-                    }
-                } else if (filteredCompletions.length > 0) {
-                    // Callback mode: clear completions
-                    allCompletions = [];
-                    filteredCompletions = [];
-                    filterStartIndex = -1;
+                if (controller && filteredCompletions.length > 0) {
+                    controller.dismiss(input, "forward");
                 } else {
                     // Esc with no completions — clear input
                     input = "";
@@ -1410,8 +1309,8 @@ async function questionWithCompletion(
                             : "") +
                         completion;
                 }
-                if (session !== undefined) {
-                    session.resetToIdle();
+                if (controller) {
+                    controller.accept();
                 }
                 // Tear down the scroll region and write the finalized input
                 // into the normal terminal flow so it appears in scrollback.
@@ -1442,13 +1341,8 @@ async function questionWithCompletion(
                             : "") +
                         completion;
                     cursorPos = input.length; // Move cursor to end
-                    if (session !== undefined) {
-                        // Session mode: reset so next render sees no completions
-                        session.resetToIdle();
-                    } else {
-                        allCompletions = [];
-                        filteredCompletions = [];
-                        filterStartIndex = -1;
+                    if (controller) {
+                        controller.accept();
                     }
                     render();
                 }
@@ -1458,23 +1352,8 @@ async function questionWithCompletion(
                     input =
                         input.slice(0, cursorPos - 1) + input.slice(cursorPos);
                     cursorPos--;
-                    if (session !== undefined) {
-                        // Session mode: drive the session backward
-                        session.update(input, getPos, "backward");
-                    } else {
-                        // Callback mode: update completions state
-                        if (
-                            filterStartIndex < 0 ||
-                            input.length < filterStartIndex
-                        ) {
-                            filteredCompletions = [];
-                            allCompletions = [];
-                            filterStartIndex = -1;
-                        } else {
-                            filterCompletions();
-                        }
-                        // Just render - skip async updateCompletions to avoid double render/flash
-                        render();
+                    if (controller) {
+                        controller.update(input, "backward");
                     }
                 }
             } else if (code >= 32 && code < 127) {
@@ -1482,26 +1361,8 @@ async function questionWithCompletion(
                 input =
                     input.slice(0, cursorPos) + data + input.slice(cursorPos);
                 cursorPos++;
-                if (session !== undefined) {
-                    // Session mode: drive the session forward on every character
-                    session.update(input, getPos, "forward");
-                } else if (data === " ") {
-                    // Callback mode: typing a space always fetches new completions
-                    filteredCompletions = [];
-                    render();
-                    await updateCompletions();
-                } else if (
-                    filterStartIndex >= 0 &&
-                    input.length > filterStartIndex
-                ) {
-                    // If we have completions and are within filter range, just refilter
-                    filterCompletions();
-                    render();
-                } else {
-                    // Clear completions and render immediately to prevent flashing
-                    filteredCompletions = [];
-                    render();
-                    await updateCompletions();
+                if (controller) {
+                    controller.update(input, "forward");
                 }
             }
         };
@@ -1750,7 +1611,7 @@ export async function processCommandsEnhanced<T>(
     processCommand: (request: string, context: T) => Promise<any>,
     context: T,
     inputs?: string[],
-    completionSource?: CompletionSource<T>,
+    completionController?: CompletionController,
     dispatcherForCancel?: Dispatcher,
 ) {
     const fs = await import("node:fs");
@@ -1765,7 +1626,7 @@ export async function processCommandsEnhanced<T>(
     // Only create readline when not using inline completions.
     // questionWithCompletion manages stdin directly; a readline attached
     // to the same stdin would consume events and break input.
-    const rl = completionSource
+    const rl = completionController
         ? undefined
         : createInterface({
               input: process.stdin,
@@ -1790,23 +1651,12 @@ export async function processCommandsEnhanced<T>(
                 ANSI.dim + "─".repeat(width) + ANSI.reset + "\n",
             );
             request = getNextInput(prompt, inputs, promptColor);
-        } else if (completionSource) {
-            if (typeof completionSource === "function") {
-                // Callback mode: legacy path
-                request = await questionWithCompletion(
-                    promptColor(prompt),
-                    (line: string) => completionSource(line, context),
-                    history,
-                );
-            } else {
-                // Dispatcher mode: session-based completions
-                request = await questionWithCompletion(
-                    promptColor(prompt),
-                    undefined,
-                    history,
-                    completionSource,
-                );
-            }
+        } else if (completionController) {
+            request = await questionWithCompletion(
+                promptColor(prompt),
+                completionController,
+                history,
+            );
         } else {
             process.stdout.write(
                 ANSI.dim + "─".repeat(width) + ANSI.reset + "\n",

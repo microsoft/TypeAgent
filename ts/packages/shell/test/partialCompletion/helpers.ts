@@ -7,20 +7,20 @@
 
 import { jest } from "@jest/globals";
 import {
-    ICompletionDispatcher,
-    PartialCompletionSession,
     SearchMenuPosition,
+    createCompletionController,
 } from "agent-dispatcher/helpers/completion";
+import type { CompletionController } from "agent-dispatcher/helpers/completion";
 import { CompletionGroup, SeparatorMode } from "@typeagent/agent-sdk";
 import { CommandCompletionResult } from "agent-dispatcher";
 
-export { PartialCompletionSession };
-export type { SearchMenuPosition };
+export { createCompletionController };
+export type { CompletionController, SearchMenuPosition };
+
+type GetCommandCompletion = (input: string) => Promise<CommandCompletionResult>;
 
 export type MockDispatcher = {
-    getCommandCompletion: jest.MockedFunction<
-        ICompletionDispatcher["getCommandCompletion"]
-    >;
+    getCommandCompletion: jest.MockedFunction<GetCommandCompletion>;
 };
 
 export function makeDispatcher(
@@ -34,7 +34,7 @@ export function makeDispatcher(
 ): MockDispatcher {
     return {
         getCommandCompletion: jest
-            .fn<ICompletionDispatcher["getCommandCompletion"]>()
+            .fn<GetCommandCompletion>()
             .mockResolvedValue(result),
     };
 }

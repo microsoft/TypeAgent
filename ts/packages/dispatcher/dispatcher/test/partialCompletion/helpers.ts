@@ -6,9 +6,11 @@ import {
     ICompletionDispatcher,
     ISearchMenu,
     PartialCompletionSession,
+} from "../../src/helpers/completion/session.js";
+import {
     SearchMenuBase,
     SearchMenuPosition,
-} from "../../src/helpers/completion/index.js";
+} from "../../src/helpers/completion/searchMenu.js";
 import { CompletionGroup, SeparatorMode } from "@typeagent/agent-sdk";
 import { CommandCompletionResult } from "@typeagent/dispatcher-types";
 
@@ -46,6 +48,9 @@ export class TestSearchMenu extends SearchMenuBase {
     override isActive: Mocked<ISearchMenu["isActive"]> = jest.fn(() =>
         super.isActive(),
     ) as any;
+
+    override getFilteredItems: Mocked<ISearchMenu["getFilteredItems"]> =
+        jest.fn(() => super.getFilteredItems()) as any;
 }
 
 export function makeMenu(): TestSearchMenu {

@@ -6,7 +6,7 @@ import {
     makeDispatcher,
     makeCompletionResult,
     getPos,
-    PartialCompletionSession,
+    createCompletionController,
 } from "./helpers.js";
 import type { SearchMenuPosition } from "./helpers.js";
 import { SearchMenuBase } from "agent-dispatcher/helpers/completion";
@@ -294,29 +294,29 @@ describe("SearchMenu state tracking", () => {
     });
 });
 
-// ── switchMode integration with PartialCompletionSession ──────────────────────
+// ── switchMode integration with CompletionController ──────────────────────────
 
-describe("switchMode integration with PartialCompletionSession", () => {
-    test("session continues working after menu switchMode", async () => {
+describe("switchMode integration with CompletionController", () => {
+    test("controller continues working after menu switchMode", async () => {
         const menu = new TestableSearchMenu(true);
         const result = makeCompletionResult(["song", "shuffle"], 5, {
             separatorMode: "none",
         });
         const dispatcher = makeDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const controller = createCompletionController(dispatcher, { menu });
 
         // Trigger initial completion — "play " is anchor, "s" is prefix
-        session.update("play s", getPos);
+        controller.update("play s", "forward", getPos);
         await Promise.resolve();
 
         expect(menu.isActive()).toBe(true);
 
-        // Switch mode — session state should be preserved
+        // Switch mode — controller state should be preserved
         const newUI = makeMockUI();
         menu.uiFactory = () => newUI;
         menu.switchMode(false);
 
-        // Session is still active — new UI should have been created
+        // Controller is still active — new UI should have been created
         expect(menu.isActive()).toBe(true);
         expect(newUI.update).toHaveBeenCalled();
     });
@@ -325,9 +325,9 @@ describe("switchMode integration with PartialCompletionSession", () => {
         const menu = new TestableSearchMenu(true);
         const result = makeCompletionResult(["alpha", "beta"], 0);
         const dispatcher = makeDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const controller = createCompletionController(dispatcher, { menu });
 
-        session.update("a", getPos);
+        controller.update("a", "forward", getPos);
         await Promise.resolve();
 
         menu.switchMode(false);

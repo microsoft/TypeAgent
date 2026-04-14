@@ -8,6 +8,7 @@ import {
     getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { getTraceId, getInstanceDir } from "agent-dispatcher/helpers/data";
+import { createCompletionController } from "agent-dispatcher/helpers/completion";
 import {
     getDefaultAppAgentProviders,
     getDefaultConstructionProvider,
@@ -149,7 +150,7 @@ export default class Interactive extends Command {
                         dispatcher.processCommand(command),
                     dispatcher,
                     undefined, // inputs
-                    dispatcher, // session-based completions
+                    createCompletionController(dispatcher),
                     dispatcher,
                 );
             } finally {

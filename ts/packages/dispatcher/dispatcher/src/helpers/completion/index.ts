@@ -4,15 +4,13 @@
 // Re-export completion utilities for consumers that import through the dispatcher.
 
 export {
-    BaseTSTData,
-    TST,
     SearchMenuPosition,
     SearchMenuItem,
     SearchMenuBase,
-    normalizeMatchText,
 } from "./searchMenu.js";
+export { ISearchMenu, CompletionState } from "./session.js";
 export {
-    ISearchMenu,
-    ICompletionDispatcher,
-    PartialCompletionSession,
-} from "./session.js";
+    CompletionController,
+    CompletionControllerOptions,
+    createCompletionController,
+} from "./controller.js";

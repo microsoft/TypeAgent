@@ -3,6 +3,7 @@
 
 import { Args, Command, Flags } from "@oclif/core";
 import { Dispatcher } from "agent-dispatcher";
+import { createCompletionController } from "agent-dispatcher/helpers/completion";
 import {
     getEnhancedConsolePrompt,
     processCommandsEnhanced,
@@ -237,7 +238,7 @@ export default class Connect extends Command {
                         dispatcher.processCommand(command),
                     dispatcher,
                     undefined,
-                    dispatcher, // session-based completions
+                    createCompletionController(dispatcher),
                     dispatcher,
                 );
             } finally {

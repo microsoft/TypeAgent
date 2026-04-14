@@ -339,9 +339,11 @@ export class SearchMenuBase {
     private trie: TST<SearchMenuItem> = new TST<SearchMenuItem>();
     private prefix: string | undefined;
     private _active: boolean = false;
+    private _filteredItems: SearchMenuItem[] = [];
 
     public setChoices(choices: SearchMenuItem[]): void {
         this.prefix = undefined;
+        this._filteredItems = [];
         this.trie.init();
         for (const choice of choices) {
             // choices are sorted in priority order so prefer first norm text
@@ -380,6 +382,7 @@ export class SearchMenuBase {
 
         if (showMenu) {
             this._active = true;
+            this._filteredItems = items;
             this.onShow(position, prefix, items);
         } else {
             this.hide();
@@ -390,12 +393,17 @@ export class SearchMenuBase {
     public hide(): void {
         if (this._active) {
             this._active = false;
+            this._filteredItems = [];
             this.onHide();
         }
     }
 
     public isActive(): boolean {
         return this._active;
+    }
+
+    public getFilteredItems(): SearchMenuItem[] {
+        return this._filteredItems;
     }
 
     protected onShow(
