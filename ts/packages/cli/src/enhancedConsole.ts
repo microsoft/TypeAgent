@@ -1355,6 +1355,7 @@ async function questionWithCompletion(
                     if (controller) {
                         controller.update(input, "backward");
                     }
+                    render();
                 }
             } else if (code >= 32 && code < 127) {
                 // Printable ASCII character - insert at cursor position
@@ -1364,6 +1365,7 @@ async function questionWithCompletion(
                 if (controller) {
                     controller.update(input, "forward");
                 }
+                render();
             }
         };
 
