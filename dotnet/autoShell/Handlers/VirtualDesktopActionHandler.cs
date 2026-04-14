@@ -3,6 +3,7 @@
 
 using System;
 using System.Text.Json;
+using autoShell.Handlers.Generated;
 using autoShell.Logging;
 using autoShell.Services;
 
@@ -25,11 +26,14 @@ internal class VirtualDesktopActionHandler : ActionHandlerBase
         _logger = logger;
         _virtualDesktop = virtualDesktop;
         _window = window;
+        // CreateDesktop left as JsonElement because "names" is an array but generated record has string
         AddAction("CreateDesktop", HandleCreateDesktop);
+        // MoveWindowToDesktop left as JsonElement because desktopId may be a string in JSON
         AddAction("MoveWindowToDesktop", HandleMoveWindowToDesktop);
-        AddAction("NextDesktop", HandleNextDesktop);
-        AddAction("PinWindow", HandlePinWindow);
-        AddAction("PreviousDesktop", HandlePreviousDesktop);
+        AddAction<NextDesktopParams>("NextDesktop", HandleNextDesktop);
+        AddAction<PinWindowParams>("PinWindow", HandlePinWindow);
+        AddAction<PreviousDesktopParams>("PreviousDesktop", HandlePreviousDesktop);
+        // SwitchDesktop left as JsonElement because desktopId may be a string in JSON
         AddAction("SwitchDesktop", HandleSwitchDesktop);
     }
 
@@ -62,15 +66,15 @@ internal class VirtualDesktopActionHandler : ActionHandlerBase
         return ActionResult.Ok($"Moved {process} to desktop {desktop}");
     }
 
-    private ActionResult HandleNextDesktop(JsonElement parameters)
+    private ActionResult HandleNextDesktop(NextDesktopParams p)
     {
         _virtualDesktop.NextDesktop();
         return ActionResult.Ok("Switched to next desktop");
     }
 
-    private ActionResult HandlePinWindow(JsonElement parameters)
+    private ActionResult HandlePinWindow(PinWindowParams p)
     {
-        string name = parameters.GetStringOrDefault("name");
+        string name = p.Name;
         string pinProcess = _appRegistry.ResolveProcessName(name);
         IntPtr pinHWnd = _window.FindProcessWindowHandle(pinProcess);
         if (pinHWnd == IntPtr.Zero)
@@ -82,7 +86,7 @@ internal class VirtualDesktopActionHandler : ActionHandlerBase
         return ActionResult.Ok($"Pinned '{name}' to all desktops");
     }
 
-    private ActionResult HandlePreviousDesktop(JsonElement parameters)
+    private ActionResult HandlePreviousDesktop(PreviousDesktopParams p)
     {
         _virtualDesktop.PreviousDesktop();
         return ActionResult.Ok("Switched to previous desktop");

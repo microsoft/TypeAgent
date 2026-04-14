@@ -4,6 +4,7 @@
 using System;
 using System.Diagnostics;
 using System.Text.Json;
+using autoShell.Handlers.Generated;
 using autoShell.Logging;
 using autoShell.Services;
 
@@ -25,21 +26,21 @@ internal class AppActionHandler : ActionHandlerBase
         _processService = processService;
         _window = window;
         _logger = logger;
-        AddAction("CloseProgram", HandleCloseProgram);
-        AddAction("LaunchProgram", HandleLaunchProgram);
+        AddAction<CloseProgramParams>("CloseProgram", HandleCloseProgram);
+        AddAction<LaunchProgramParams>("LaunchProgram", HandleLaunchProgram);
         AddAction("ListAppNames", HandleListAppNames);
     }
 
-    private ActionResult HandleCloseProgram(JsonElement parameters)
+    private ActionResult HandleCloseProgram(CloseProgramParams p)
     {
-        string name = parameters.GetStringOrDefault("name");
+        string name = p.Name;
         CloseApplication(name);
         return ActionResult.Ok($"Closed {name}");
     }
 
-    private ActionResult HandleLaunchProgram(JsonElement parameters)
+    private ActionResult HandleLaunchProgram(LaunchProgramParams p)
     {
-        string name = parameters.GetStringOrDefault("name");
+        string name = p.Name;
         OpenApplication(name);
         return ActionResult.Ok($"Launched {name}");
     }

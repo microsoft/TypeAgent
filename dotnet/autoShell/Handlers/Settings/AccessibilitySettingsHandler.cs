@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Text.Json;
+using autoShell.Handlers.Generated;
 using autoShell.Services;
 using Microsoft.Win32;
 
@@ -31,14 +31,12 @@ internal class AccessibilitySettingsHandler : SettingsHandlerBase
         AddRegistryToggleAction("EnableStickyKeys", new RegistryToggleConfig(
             @"Control Panel\Accessibility\StickyKeys", "Flags", "enable",
             OnValue: "510", OffValue: "506", ValueKind: RegistryValueKind.String, DisplayName: "Sticky Keys"));
-        AddAction("EnableMagnifier", parameters => HandleToggleProcess(parameters, "magnify.exe", "Magnify", "Magnifier"));
-        AddAction("EnableNarratorAction", parameters => HandleToggleProcess(parameters, "narrator.exe", "Narrator", "Narrator"));
+        AddAction<EnableMagnifierParams>("EnableMagnifier", p => HandleToggleProcess(p.Enable ?? true, "magnify.exe", "Magnify", "Magnifier"));
+        AddAction<EnableNarratorActionParams>("EnableNarratorAction", p => HandleToggleProcess(p.Enable ?? true, "narrator.exe", "Narrator", "Narrator"));
     }
 
-    private ActionResult HandleToggleProcess(JsonElement parameters, string exeName, string processName, string displayName)
+    private ActionResult HandleToggleProcess(bool enable, string exeName, string processName, string displayName)
     {
-        bool enable = parameters.GetBoolOrDefault("enable", true);
-
         if (enable)
         {
             _process.Start(new System.Diagnostics.ProcessStartInfo { FileName = exeName });

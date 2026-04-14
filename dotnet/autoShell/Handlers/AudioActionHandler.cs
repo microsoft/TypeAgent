@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Text.Json;
+using autoShell.Handlers.Generated;
 using autoShell.Services;
 
 namespace autoShell.Handlers;
@@ -17,25 +17,26 @@ internal class AudioActionHandler : ActionHandlerBase
     public AudioActionHandler(IAudioService audio)
     {
         _audio = audio;
-        AddAction("Mute", HandleMute);
-        AddAction("RestoreVolume", HandleRestoreVolume);
+        AddAction<MuteParams>("Mute", HandleMute);
+        AddAction<RestoreVolumeParams>("RestoreVolume", HandleRestoreVolume);
+        // Volume left as JsonElement to distinguish missing targetVolume (default -1) from explicit 0
         AddAction("Volume", HandleVolume);
     }
 
-    private ActionResult HandleMute(JsonElement parameters)
+    private ActionResult HandleMute(MuteParams p)
     {
-        bool mute = parameters.GetBoolOrDefault("on");
+        bool mute = p.On;
         _audio.SetMute(mute);
         return ActionResult.Ok($"Audio {(mute ? "muted" : "unmuted")}");
     }
 
-    private ActionResult HandleRestoreVolume(JsonElement parameters)
+    private ActionResult HandleRestoreVolume(RestoreVolumeParams p)
     {
         _audio.SetVolume((int)_savedVolumePct);
         return ActionResult.Ok($"Volume restored to {(int)_savedVolumePct}%");
     }
 
-    private ActionResult HandleVolume(JsonElement parameters)
+    private ActionResult HandleVolume(System.Text.Json.JsonElement parameters)
     {
         int pct = parameters.GetIntOrDefault("targetVolume", -1);
         if (pct < 0)

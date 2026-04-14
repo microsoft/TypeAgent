@@ -3,6 +3,7 @@
 
 using System;
 using System.Text.Json;
+using autoShell.Handlers.Generated;
 using autoShell.Logging;
 using autoShell.Services;
 
@@ -21,7 +22,9 @@ internal class DisplayActionHandler : ActionHandlerBase
         _display = display;
         _logger = logger;
         AddAction("ListResolutions", HandleListResolutions);
+        // SetScreenResolution left as JsonElement because it also reads "refreshRate" not in the generated record
         AddAction("SetScreenResolution", HandleSetScreenResolution);
+        // SetTextSize left as JsonElement because non-numeric input needs graceful handling
         AddAction("SetTextSize", HandleSetTextSize);
     }
 

@@ -3,7 +3,7 @@
 
 using System;
 using System.Runtime.InteropServices;
-using System.Text.Json;
+using autoShell.Handlers.Generated;
 using autoShell.Services;
 using autoShell.Services.Interop;
 using Microsoft.Win32;
@@ -32,11 +32,11 @@ internal partial class FileExplorerSettingsHandler : SettingsHandlerBase
 
         AddRegistryToggleAction("ShowFileExtensions", new RegistryToggleConfig(
             ExplorerAdvanced, "HideFileExt", "enable", OnValue: 0, OffValue: 1));
-        AddAction("ShowHiddenAndSystemFiles", HandleShowHiddenAndSystemFiles);
+        AddAction<ShowHiddenAndSystemFilesParams>("ShowHiddenAndSystemFiles", HandleShowHiddenAndSystemFiles);
     }
 
     /// <inheritdoc/>
-    public override ActionResult Handle(string key, JsonElement parameters)
+    public override ActionResult Handle(string key, System.Text.Json.JsonElement parameters)
     {
         var result = base.Handle(key, parameters);
         NotifySettingsChange();
@@ -55,9 +55,9 @@ internal partial class FileExplorerSettingsHandler : SettingsHandlerBase
         }
     }
 
-    private ActionResult HandleShowHiddenAndSystemFiles(JsonElement parameters)
+    private ActionResult HandleShowHiddenAndSystemFiles(ShowHiddenAndSystemFilesParams p)
     {
-        bool enable = parameters.GetBoolOrDefault("enable", true);
+        bool enable = p.Enable ?? true;
         // 1 = show hidden files, 2 = don't show hidden files
         Registry.SetValue(ExplorerAdvanced, "Hidden", enable ? 1 : 2, RegistryValueKind.DWord);
         // Show protected operating system files

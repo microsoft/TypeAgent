@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Text.Json;
+using autoShell.Handlers.Generated;
 using autoShell.Logging;
 using autoShell.Services;
 
@@ -40,16 +40,16 @@ internal class MouseSettingsHandler : SettingsHandlerBase
         AddOpenSettingsAction("MousePointerCustomization", new OpenSettingsConfig("ms-settings:easeofaccess-mouse", "mouse settings"));
         AddOpenSettingsAction("EnableTouchPad", new OpenSettingsConfig("ms-settings:devices-touchpad", "touchpad settings"));
         AddOpenSettingsAction("TouchpadCursorSpeed", new OpenSettingsConfig("ms-settings:devices-touchpad", "touchpad settings"));
-        AddAction("CursorTrail", HandleMouseCursorTrail);
-        AddAction("EnhancePointerPrecision", HandleEnhancePointerPrecision);
-        AddAction("MouseCursorSpeed", HandleMouseCursorSpeed);
-        AddAction("MouseWheelScrollLines", HandleMouseWheelScrollLines);
-        AddAction("SetPrimaryMouseButton", HandleSetPrimaryMouseButton);
+        AddAction<CursorTrailParams>("CursorTrail", HandleMouseCursorTrail);
+        AddAction<EnhancePointerPrecisionParams>("EnhancePointerPrecision", HandleEnhancePointerPrecision);
+        AddAction<MouseCursorSpeedParams>("MouseCursorSpeed", HandleMouseCursorSpeed);
+        AddAction<MouseWheelScrollLinesParams>("MouseWheelScrollLines", HandleMouseWheelScrollLines);
+        AddAction<SetPrimaryMouseButtonParams>("SetPrimaryMouseButton", HandleSetPrimaryMouseButton);
     }
 
-    private ActionResult HandleEnhancePointerPrecision(JsonElement parameters)
+    private ActionResult HandleEnhancePointerPrecision(EnhancePointerPrecisionParams p)
     {
-        bool enable = parameters.GetBoolOrDefault("enable", true);
+        bool enable = p.Enable ?? true;
         int[] mouseParams = new int[3];
         _systemParams.GetParameter(SPI_GETMOUSE, 0, mouseParams, 0);
         // Set acceleration (third parameter): 1 = enhanced precision on, 0 = off
@@ -58,10 +58,10 @@ internal class MouseSettingsHandler : SettingsHandlerBase
         return ActionResult.Ok($"Enhanced pointer precision {(enable ? "enabled" : "disabled")}");
     }
 
-    private ActionResult HandleMouseCursorSpeed(JsonElement parameters)
+    private ActionResult HandleMouseCursorSpeed(MouseCursorSpeedParams p)
     {
         // Speed range: 1-20 (default 10)
-        int speed = parameters.GetNullableInt("speedLevel") ?? 10;
+        int speed = p.SpeedLevel > 0 ? p.SpeedLevel : 10;
         speed = Math.Clamp(speed, 1, 20);
         _systemParams.SetParameter(SPI_SETMOUSESPEED, 0, (IntPtr)speed, SPIF_UPDATEINIFILE_SENDCHANGE);
         return ActionResult.Ok($"Mouse cursor speed set to {speed}");
@@ -71,10 +71,10 @@ internal class MouseSettingsHandler : SettingsHandlerBase
     /// Enables or disables the mouse cursor trail and sets its length.
     /// SPI_SETMOUSETRAILS: 0 = off, 2-12 = trail length
     /// </summary>
-    private ActionResult HandleMouseCursorTrail(JsonElement parameters)
+    private ActionResult HandleMouseCursorTrail(CursorTrailParams p)
     {
-        var enable = parameters.GetBoolOrDefault("enable", true);
-        var length = parameters.GetNullableInt("length") ?? 7;
+        var enable = p.Enable;
+        var length = p.Length ?? 7;
 
         // Clamp trail length to valid range
         length = Math.Max(2, Math.Min(12, length));
@@ -88,17 +88,18 @@ internal class MouseSettingsHandler : SettingsHandlerBase
         return ActionResult.Ok($"Cursor trail {(enable ? $"enabled (length {length})" : "disabled")}");
     }
 
-    private ActionResult HandleMouseWheelScrollLines(JsonElement parameters)
+    private ActionResult HandleMouseWheelScrollLines(MouseWheelScrollLinesParams p)
     {
-        int lines = parameters.GetNullableInt("scrollLines") ?? 3;
+        int lines = p.ScrollLines > 0 ? p.ScrollLines : 3;
         lines = Math.Clamp(lines, 1, 100);
         _systemParams.SetParameter(SPI_SETWHEELSCROLLLINES, lines, IntPtr.Zero, SPIF_UPDATEINIFILE_SENDCHANGE);
         return ActionResult.Ok($"Mouse wheel scroll lines set to {lines}");
     }
 
-    private ActionResult HandleSetPrimaryMouseButton(JsonElement parameters)
+    private ActionResult HandleSetPrimaryMouseButton(SetPrimaryMouseButtonParams p)
     {
-        string button = parameters.GetStringOrDefault("primaryButton", "left");
+        string button = p.PrimaryButton;
+        if (string.IsNullOrEmpty(button)) button = "left";
         bool leftPrimary = button.Equals("left", StringComparison.OrdinalIgnoreCase);
         _systemParams.SwapMouseButton(!leftPrimary);
         return ActionResult.Ok($"Primary mouse button set to {button}");

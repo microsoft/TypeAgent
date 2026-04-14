@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 using System.Text.Json;
+using autoShell.Handlers.Generated;
 using autoShell.Logging;
 using autoShell.Services;
 
@@ -22,23 +23,24 @@ internal class NetworkActionHandler : ActionHandlerBase
         _network = network;
         _process = process;
         _logger = logger;
-        AddAction("BluetoothToggle", HandleBluetoothToggle);
+        AddAction<BluetoothToggleParams>("BluetoothToggle", HandleBluetoothToggle);
+        // ConnectWifi left as JsonElement because tests expect null (not "") for missing ssid
         AddAction("ConnectWifi", HandleConnectWifi);
-        AddAction("DisconnectWifi", HandleDisconnectWifi);
-        AddAction("EnableMeteredConnections", HandleEnableMeteredConnections);
-        AddAction("EnableWifi", HandleEnableWifi);
+        AddAction<DisconnectWifiParams>("DisconnectWifi", HandleDisconnectWifi);
+        AddAction<EnableMeteredConnectionsParams>("EnableMeteredConnections", HandleEnableMeteredConnections);
+        AddAction<EnableWifiParams>("EnableWifi", HandleEnableWifi);
         AddAction("ListWifiNetworks", HandleListWifiNetworks);
-        AddAction("ToggleAirplaneMode", HandleToggleAirplaneMode);
+        AddAction<ToggleAirplaneModeParams>("ToggleAirplaneMode", HandleToggleAirplaneMode);
     }
 
-    private ActionResult HandleBluetoothToggle(JsonElement parameters)
+    private ActionResult HandleBluetoothToggle(BluetoothToggleParams p)
     {
-        bool enableBt = parameters.GetBoolOrDefault("enableBluetooth", true);
+        bool enableBt = p.EnableBluetooth ?? true;
         _network.ToggleBluetooth(enableBt);
         return ActionResult.Ok($"Bluetooth {(enableBt ? "enabled" : "disabled")}");
     }
 
-    private ActionResult HandleConnectWifi(JsonElement parameters)
+    private ActionResult HandleConnectWifi(System.Text.Json.JsonElement parameters)
     {
         string ssid = parameters.GetStringOrDefault("ssid");
         string password = parameters.GetStringOrDefault("password", "");
@@ -46,21 +48,21 @@ internal class NetworkActionHandler : ActionHandlerBase
         return ActionResult.Ok($"Connecting to WiFi network '{ssid}'");
     }
 
-    private ActionResult HandleDisconnectWifi(JsonElement parameters)
+    private ActionResult HandleDisconnectWifi(DisconnectWifiParams p)
     {
         _network.DisconnectFromWifi();
         return ActionResult.Ok("Disconnected from WiFi");
     }
 
-    private ActionResult HandleEnableMeteredConnections(JsonElement parameters)
+    private ActionResult HandleEnableMeteredConnections(EnableMeteredConnectionsParams p)
     {
         _process.StartShellExecute("ms-settings:network-status");
         return ActionResult.Ok("Opened network status settings");
     }
 
-    private ActionResult HandleEnableWifi(JsonElement parameters)
+    private ActionResult HandleEnableWifi(EnableWifiParams p)
     {
-        bool enableWifi = parameters.GetBoolOrDefault("enable", true);
+        bool enableWifi = p.Enable;
         _network.EnableWifi(enableWifi);
         return ActionResult.Ok($"WiFi {(enableWifi ? "enabled" : "disabled")}");
     }
@@ -71,9 +73,9 @@ internal class NetworkActionHandler : ActionHandlerBase
         return ActionResult.Ok("Listed WiFi networks", JsonDocument.Parse(networks).RootElement.Clone());
     }
 
-    private ActionResult HandleToggleAirplaneMode(JsonElement parameters)
+    private ActionResult HandleToggleAirplaneMode(ToggleAirplaneModeParams p)
     {
-        bool airplaneMode = parameters.GetBoolOrDefault("enable");
+        bool airplaneMode = p.Enable;
         _network.SetAirplaneMode(airplaneMode);
         return ActionResult.Ok($"Airplane mode {(airplaneMode ? "enabled" : "disabled")}");
     }

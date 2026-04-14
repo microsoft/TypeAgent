@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Text.Json;
+using autoShell.Handlers.Generated;
 using autoShell.Services;
 
 namespace autoShell.Handlers;
@@ -18,17 +18,17 @@ internal class SystemActionHandler : ActionHandlerBase
     {
         _process = process;
         _debugger = debugger;
-        AddAction("Debug", HandleDebug);
-        AddAction("ToggleNotifications", HandleToggleNotifications);
+        AddAction<DebugParams>("Debug", HandleDebug);
+        AddAction<ToggleNotificationsParams>("ToggleNotifications", HandleToggleNotifications);
     }
 
-    private ActionResult HandleDebug(JsonElement parameters)
+    private ActionResult HandleDebug(DebugParams p)
     {
         _debugger.Launch();
         return ActionResult.Ok("Debugger launched");
     }
 
-    private ActionResult HandleToggleNotifications(JsonElement parameters)
+    private ActionResult HandleToggleNotifications(ToggleNotificationsParams p)
     {
         _process.StartShellExecute("ms-actioncenter:");
         return ActionResult.Ok("Toggled Action Center");

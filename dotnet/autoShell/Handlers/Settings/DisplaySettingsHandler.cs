@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Text.Json;
+using autoShell.Handlers.Generated;
 using autoShell.Logging;
 using autoShell.Services;
 using Microsoft.Win32;
@@ -35,14 +35,14 @@ internal class DisplaySettingsHandler : SettingsHandlerBase
         AddOpenSettingsAction("DisplayResolutionAndAspectRatio", new OpenSettingsConfig("ms-settings:display", "display settings"));
         AddRegistryToggleAction("RotationLock", new RegistryToggleConfig(
             @"Software\Microsoft\Windows\CurrentVersion\ImmersiveShell", "RotationLockPreference", "enable", 1, 0));
-        AddAction("AdjustScreenBrightness", HandleAdjustScreenBrightness);
-        AddAction("DisplayScaling", HandleDisplayScaling);
-        AddAction("EnableBlueLightFilterSchedule", HandleBlueLightFilter);
+        AddAction<AdjustScreenBrightnessParams>("AdjustScreenBrightness", HandleAdjustScreenBrightness);
+        AddAction<DisplayScalingParams>("DisplayScaling", HandleDisplayScaling);
+        AddAction<EnableBlueLightFilterScheduleParams>("EnableBlueLightFilterSchedule", HandleBlueLightFilter);
     }
 
-    private ActionResult HandleAdjustScreenBrightness(JsonElement parameters)
+    private ActionResult HandleAdjustScreenBrightness(AdjustScreenBrightnessParams p)
     {
-        string level = parameters.GetStringOrDefault("brightnessLevel");
+        string level = p.BrightnessLevel;
         bool increase = level == "increase";
 
         byte currentBrightness = _brightness.GetCurrentBrightness();
@@ -55,9 +55,9 @@ internal class DisplaySettingsHandler : SettingsHandlerBase
         return ActionResult.Ok($"Brightness adjusted to {newBrightness}%");
     }
 
-    private ActionResult HandleDisplayScaling(JsonElement parameters)
+    private ActionResult HandleDisplayScaling(DisplayScalingParams p)
     {
-        string sizeStr = parameters.GetStringOrDefault("sizeOverride");
+        string sizeStr = p.SizeOverride;
 
         if (int.TryParse(sizeStr, out int percentage))
         {
@@ -80,9 +80,9 @@ internal class DisplaySettingsHandler : SettingsHandlerBase
         return ActionResult.Fail("Invalid display scaling value");
     }
 
-    private ActionResult HandleBlueLightFilter(JsonElement parameters)
+    private ActionResult HandleBlueLightFilter(EnableBlueLightFilterScheduleParams p)
     {
-        bool disabled = parameters.GetBoolOrDefault("nightLightScheduleDisabled");
+        bool disabled = p.NightLightScheduleDisabled;
         byte[] data = disabled
             ? [0x02, 0x00, 0x00, 0x00]
             : [0x02, 0x00, 0x00, 0x01];

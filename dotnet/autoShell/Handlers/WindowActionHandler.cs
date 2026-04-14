@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Text.Json;
+using autoShell.Handlers.Generated;
 using autoShell.Services;
 
 namespace autoShell.Handlers;
@@ -18,43 +18,43 @@ internal class WindowActionHandler : ActionHandlerBase
     {
         _appRegistry = appRegistry;
         _window = window;
-        AddAction("Maximize", HandleMaximize);
-        AddAction("Minimize", HandleMinimize);
-        AddAction("SwitchTo", HandleSwitchTo);
-        AddAction("Tile", HandleTile);
+        AddAction<MaximizeParams>("Maximize", HandleMaximize);
+        AddAction<MinimizeParams>("Minimize", HandleMinimize);
+        AddAction<SwitchToParams>("SwitchTo", HandleSwitchTo);
+        AddAction<TileParams>("Tile", HandleTile);
     }
 
-    private ActionResult HandleMaximize(JsonElement parameters)
+    private ActionResult HandleMaximize(MaximizeParams p)
     {
-        string name = parameters.GetStringOrDefault("name");
+        string name = p.Name;
         string maxProcess = _appRegistry.ResolveProcessName(name);
         _window.MaximizeWindow(maxProcess);
         return ActionResult.Ok($"Maximized {name}");
     }
 
-    private ActionResult HandleMinimize(JsonElement parameters)
+    private ActionResult HandleMinimize(MinimizeParams p)
     {
-        string name = parameters.GetStringOrDefault("name");
+        string name = p.Name;
         string minProcess = _appRegistry.ResolveProcessName(name);
         _window.MinimizeWindow(minProcess);
         return ActionResult.Ok($"Minimized {name}");
     }
 
-    private ActionResult HandleSwitchTo(JsonElement parameters)
+    private ActionResult HandleSwitchTo(SwitchToParams p)
     {
-        string name = parameters.GetStringOrDefault("name");
+        string name = p.Name;
         string switchProcess = _appRegistry.ResolveProcessName(name);
         string path = _appRegistry.GetExecutablePath(name);
         _window.RaiseWindow(switchProcess, path);
         return ActionResult.Ok($"Switched to {name}");
     }
 
-    private ActionResult HandleTile(JsonElement parameters)
+    private ActionResult HandleTile(TileParams p)
     {
-        string leftName = parameters.GetStringOrDefault("leftWindow");
-        string rightName = parameters.GetStringOrDefault("rightWindow");
+        string leftName = p.LeftWindow;
+        string rightName = p.RightWindow;
 
-        if (leftName != null && rightName != null)
+        if (!string.IsNullOrEmpty(leftName) && !string.IsNullOrEmpty(rightName))
         {
             string processName1 = _appRegistry.ResolveProcessName(leftName);
             string processName2 = _appRegistry.ResolveProcessName(rightName);

@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Text.Json;
+using autoShell.Handlers.Generated;
 using autoShell.Services;
 using Microsoft.Win32;
 
@@ -23,12 +23,12 @@ internal class PowerSettingsHandler : SettingsHandlerBase
 
         AddOpenSettingsAction("SetPowerModeOnBattery", new OpenSettingsConfig("ms-settings:powersleep", "power settings"));
         AddOpenSettingsAction("SetPowerModePluggedIn", new OpenSettingsConfig("ms-settings:powersleep", "power settings"));
-        AddAction("BatterySaverActivationLevel", HandleBatterySaverThreshold);
+        AddAction<BatterySaverActivationLevelParams>("BatterySaverActivationLevel", HandleBatterySaverThreshold);
     }
 
-    private ActionResult HandleBatterySaverThreshold(JsonElement parameters)
+    private ActionResult HandleBatterySaverThreshold(BatterySaverActivationLevelParams p)
     {
-        int threshold = parameters.GetNullableInt("thresholdValue") ?? 20;
+        int threshold = p.ThresholdValue;
         threshold = Math.Clamp(threshold, 0, 100);
         Registry.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\Power\BatterySaver",

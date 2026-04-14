@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using autoShell.Handlers.Generated;
 using autoShell.Services;
 using autoShell.Services.Interop;
 using Microsoft.Win32;
@@ -55,8 +56,8 @@ internal partial class ThemeActionHandler : ActionHandlerBase
 
         AddAction("ApplyTheme", HandleApplyTheme);
         AddAction("ListThemes", HandleListThemes);
-        AddAction("SetThemeMode", HandleSetThemeModeCommand);
-        AddAction("SetWallpaper", HandleSetWallpaper);
+        AddAction<SetThemeModeParams>("SetThemeMode", HandleSetThemeModeCommand);
+        AddAction<SetWallpaperParams>("SetWallpaper", HandleSetWallpaper);
     }
 
     private ActionResult HandleApplyTheme(JsonElement parameters)
@@ -74,16 +75,16 @@ internal partial class ThemeActionHandler : ActionHandlerBase
         return ActionResult.Ok("Listed themes", JsonSerializer.SerializeToElement(themes));
     }
 
-    private ActionResult HandleSetThemeModeCommand(JsonElement parameters)
+    private ActionResult HandleSetThemeModeCommand(SetThemeModeParams p)
     {
-        string mode = parameters.GetStringOrDefault("mode");
+        string mode = p.Mode;
         HandleSetThemeMode(mode);
         return ActionResult.Ok($"Theme mode set to '{mode}'");
     }
 
-    private ActionResult HandleSetWallpaper(JsonElement parameters)
+    private ActionResult HandleSetWallpaper(SetWallpaperParams p)
     {
-        string filePath = parameters.GetStringOrDefault("filePath");
+        string filePath = p.FilePath;
         _systemParams.SetParameter(SPI_SETDESKWALLPAPER, 0, filePath, SPIF_UPDATEINIFILE_SENDCHANGE);
         return ActionResult.Ok($"Wallpaper set to '{filePath}'");
     }

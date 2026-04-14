@@ -4,7 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using System.Text.Json;
+using autoShell.Handlers.Generated;
 using autoShell.Services;
 using autoShell.Services.Interop;
 using Microsoft.Win32;
@@ -42,11 +42,11 @@ internal partial class TaskbarSettingsHandler : SettingsHandlerBase
             new Dictionary<string, object> { ["left"] = 0, ["center"] = 1 }, DefaultValue: 0));
         AddRegistryMapAction("ToggleWidgetsButtonVisibility", new RegistryMapConfig(ExplorerAdvanced, "TaskbarDa", "visibility",
             new Dictionary<string, object> { ["show"] = 1 }, DefaultValue: 0));
-        AddAction("AutoHideTaskbar", HandleAutoHideTaskbar);
+        AddAction<AutoHideTaskbarParams>("AutoHideTaskbar", HandleAutoHideTaskbar);
     }
 
     /// <inheritdoc/>
-    public override ActionResult Handle(string key, JsonElement parameters)
+    public override ActionResult Handle(string key, System.Text.Json.JsonElement parameters)
     {
         var result = base.Handle(key, parameters);
         NotifySettingsChange();
@@ -65,9 +65,9 @@ internal partial class TaskbarSettingsHandler : SettingsHandlerBase
         }
     }
 
-    private ActionResult HandleAutoHideTaskbar(JsonElement parameters)
+    private ActionResult HandleAutoHideTaskbar(AutoHideTaskbarParams p)
     {
-        bool hide = parameters.GetBoolOrDefault("hideWhenNotUsing");
+        bool hide = p.HideWhenNotUsing;
 
         // Auto-hide uses a binary blob in a different registry path
         if (Registry.GetValue(StuckRects3, "Settings", null) is byte[] settings && settings.Length >= 9)
