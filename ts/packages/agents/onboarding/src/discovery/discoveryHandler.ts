@@ -535,9 +535,12 @@ async function crawlCliRecursive(
     command: string,
     args: string[],
     depth: number,
-    maxDepth: number | undefined,
+    maxDepth: number,
+    visited: Set<string> = new Set(),
 ): Promise<{ command: string; helpText: string }[]> {
-    if (maxDepth !== undefined && depth > maxDepth) return [];
+    const cmdKey = [command, ...args].join(" ");
+    if (depth > maxDepth || visited.has(cmdKey)) return [];
+    visited.add(cmdKey);
 
     const helpText = await runHelp(command, args);
     if (!helpText) return [];
@@ -553,6 +556,7 @@ async function crawlCliRecursive(
             [...args, sub],
             depth + 1,
             maxDepth,
+            visited,
         );
         results.push(...childResults);
     }
@@ -575,7 +579,7 @@ async function handleCrawlCliHelp(
     await updatePhase(integrationName, "discovery", { status: "in-progress" });
 
     // Crawl the CLI help recursively
-    const helpEntries = await crawlCliRecursive(command, [], 0, maxDepth);
+    const helpEntries = await crawlCliRecursive(command, [], 0, maxDepth ?? 4);
     if (helpEntries.length === 0) {
         return {
             error: `Could not retrieve help output from "${command}". Ensure the command is installed and accessible.`,

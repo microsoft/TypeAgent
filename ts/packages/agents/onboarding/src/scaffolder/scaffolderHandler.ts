@@ -1414,9 +1414,15 @@ function buildCliHandler(
             for (const p of action.parameters) {
                 const camel = flagToCamel(p.name);
                 const flag = p.name.startsWith("-") ? p.name : `--${p.name}`;
-                flagLines.push(
-                    `            if (params.${camel}) args.push("${flag}", String(params.${camel}));`,
-                );
+                if (p.type === "boolean") {
+                    flagLines.push(
+                        `            if (params.${camel}) args.push("${flag}");`,
+                    );
+                } else {
+                    flagLines.push(
+                        `            if (params.${camel}) args.push("${flag}", String(params.${camel}));`,
+                    );
+                }
             }
         }
         const body =
