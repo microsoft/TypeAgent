@@ -140,3 +140,25 @@ The cancel functions must distinguish resolved vs. cancelled so the client can p
 ## Shell Implementation Notes
 
 The Shell (`main.ts`) is not yet implemented (stubs in place). The same pattern applies: hold a `Map<interactionId, dismissFn>` and call `dismissFn` from `interactionResolved`/`interactionCancelled`. The UI (modal dialog or inline card) should be dismissed programmatically and a toast shown if resolved by a remote client.
+
+## Future Work
+
+### Unify `askYesNo` and `popupQuestion` into a single `question` type
+
+`askYesNo` is a special case of `popupQuestion` — a two-choice prompt where choices are implicitly `["Yes", "No"]` and the response is a boolean rather than an index. The protocol could be simplified by collapsing both into a single `question` interaction type:
+
+```typescript
+// Unified request
+{ type: "question"; message: string; choices: string[]; defaultId?: number }
+
+// Unified response
+{ interactionId: string; type: "question"; value: number }
+```
+
+Caller ergonomics on `SessionContext` can be preserved with thin wrappers that map the boolean/index conversion. `proposeAction` remains intentionally separate — it renders a structured template editor rather than a text prompt, and its response type is `unknown`.
+
+Benefits:
+
+- One code path in all `ClientIO` implementations instead of two
+- Simpler discriminated union in `PendingInteractionRequest` / `PendingInteractionResponse`
+- Consistent rendering logic across CLI, Shell, and future clients
