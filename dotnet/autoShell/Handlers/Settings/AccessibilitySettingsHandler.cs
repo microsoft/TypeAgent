@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json;
 using autoShell.Services;
 using Microsoft.Win32;
@@ -33,14 +31,9 @@ internal class AccessibilitySettingsHandler : SettingsHandlerBase
         AddRegistryToggleAction("EnableStickyKeys", new RegistryToggleConfig(
             @"Control Panel\Accessibility\StickyKeys", "Flags", "enable",
             OnValue: "510", OffValue: "506", ValueKind: RegistryValueKind.String, DisplayName: "Sticky Keys"));
+        AddSpecializedAction("EnableMagnifier");
+        AddSpecializedAction("EnableNarratorAction");
     }
-
-    private static readonly string[] SpecializedActions =
-        ["EnableMagnifier", "EnableNarratorAction"];
-
-    /// <inheritdoc/>
-    public override IEnumerable<string> SupportedCommands =>
-        SpecializedActions.Concat(RegisteredActions);
 
     /// <inheritdoc/>
     protected override CommandResult HandleSpecialized(string key, JsonElement parameters)

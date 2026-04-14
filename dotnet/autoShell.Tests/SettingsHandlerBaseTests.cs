@@ -18,8 +18,6 @@ internal class TestSettingsHandler : SettingsHandlerBase
     public TestSettingsHandler(IRegistryService registry, IProcessService? process = null)
         : base(registry, process) { }
 
-    public override IEnumerable<string> SupportedCommands => RegisteredActions;
-
     public new void AddRegistryToggleAction(string actionName, RegistryToggleConfig config) =>
         base.AddRegistryToggleAction(actionName, config);
 
@@ -28,6 +26,9 @@ internal class TestSettingsHandler : SettingsHandlerBase
 
     public new void AddOpenSettingsAction(string actionName, OpenSettingsConfig config) =>
         base.AddOpenSettingsAction(actionName, config);
+
+    public new void AddSpecializedAction(string actionName) =>
+        base.AddSpecializedAction(actionName);
 }
 
 public class SettingsHandlerBaseTests
@@ -213,5 +214,57 @@ public class SettingsHandlerBaseTests
         Assert.Contains("Toggle1", commands);
         Assert.Contains("Map1", commands);
         Assert.Contains("Open1", commands);
+    }
+
+    /// <summary>
+    /// Verifies that SupportedCommands includes both specialized and registered actions.
+    /// </summary>
+    [Fact]
+    public void SupportedCommands_IncludesSpecializedAndRegistered()
+    {
+        _handler.AddRegistryToggleAction("Toggle1", new RegistryToggleConfig("k", "v", "p", 1, 0));
+        _handler.AddSpecializedAction("Custom1");
+
+        var commands = new HashSet<string>(_handler.SupportedCommands);
+
+        Assert.Equal(2, commands.Count);
+        Assert.Contains("Toggle1", commands);
+        Assert.Contains("Custom1", commands);
+    }
+
+    /// <summary>
+    /// Verifies that registering the same action name twice throws InvalidOperationException.
+    /// </summary>
+    [Fact]
+    public void DuplicateRegistration_Throws()
+    {
+        _handler.AddRegistryToggleAction("Duplicate", new RegistryToggleConfig("k", "v", "p", 1, 0));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            _handler.AddRegistryMapAction("Duplicate", new RegistryMapConfig("k", "v", "p", [], 0)));
+    }
+
+    /// <summary>
+    /// Verifies that registering a specialized action with the same name as a registered action throws.
+    /// </summary>
+    [Fact]
+    public void DuplicateSpecializedRegistration_Throws()
+    {
+        _handler.AddRegistryToggleAction("Duplicate", new RegistryToggleConfig("k", "v", "p", 1, 0));
+
+        Assert.Throws<InvalidOperationException>(() =>
+            _handler.AddSpecializedAction("Duplicate"));
+    }
+
+    /// <summary>
+    /// Verifies that registering an open-settings action without IProcessService throws.
+    /// </summary>
+    [Fact]
+    public void AddOpenSettingsAction_WithoutProcess_Throws()
+    {
+        var handler = new TestSettingsHandler(_registryMock.Object);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            handler.AddOpenSettingsAction("Test", new OpenSettingsConfig("ms-settings:test")));
     }
 }

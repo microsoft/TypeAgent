@@ -34,7 +34,4 @@ internal class PrivacySettingsHandler : SettingsHandlerBase
             new Dictionary<string, object> { ["deny"] = "Deny" }, DefaultValue: "Allow",
             ValueKind: RegistryValueKind.String, DisplayName: "microphone access"));
     }
-
-    /// <inheritdoc/>
-    public override IEnumerable<string> SupportedCommands => RegisteredActions;
 }

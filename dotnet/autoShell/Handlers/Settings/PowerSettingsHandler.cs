@@ -2,8 +2,6 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json;
 using autoShell.Services;
 using Microsoft.Win32;
@@ -25,13 +23,8 @@ internal class PowerSettingsHandler : SettingsHandlerBase
 
         AddOpenSettingsAction("SetPowerModeOnBattery", new OpenSettingsConfig("ms-settings:powersleep", "power settings"));
         AddOpenSettingsAction("SetPowerModePluggedIn", new OpenSettingsConfig("ms-settings:powersleep", "power settings"));
+        AddSpecializedAction("BatterySaverActivationLevel");
     }
-
-    private static readonly string[] SpecializedActions = ["BatterySaverActivationLevel"];
-
-    /// <inheritdoc/>
-    public override IEnumerable<string> SupportedCommands =>
-        SpecializedActions.Concat(RegisteredActions);
 
     /// <inheritdoc/>
     protected override CommandResult HandleSpecialized(string key, JsonElement parameters)

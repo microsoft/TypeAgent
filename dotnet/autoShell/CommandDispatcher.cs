@@ -9,7 +9,7 @@ using autoShell.Handlers;
 using autoShell.Handlers.Settings;
 using autoShell.Logging;
 using autoShell.Services;
-    
+
 namespace autoShell;
 
 /// <summary>

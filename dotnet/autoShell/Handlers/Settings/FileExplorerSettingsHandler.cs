@@ -2,8 +2,6 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using autoShell.Services;
@@ -34,13 +32,8 @@ internal partial class FileExplorerSettingsHandler : SettingsHandlerBase
 
         AddRegistryToggleAction("ShowFileExtensions", new RegistryToggleConfig(
             ExplorerAdvanced, "HideFileExt", "enable", OnValue: 0, OffValue: 1));
+        AddSpecializedAction("ShowHiddenAndSystemFiles");
     }
-
-    private static readonly string[] SpecializedActions = ["ShowHiddenAndSystemFiles"];
-
-    /// <inheritdoc/>
-    public override IEnumerable<string> SupportedCommands =>
-        SpecializedActions.Concat(RegisteredActions);
 
     /// <inheritdoc/>
     public override CommandResult Handle(string key, JsonElement parameters)
@@ -53,12 +46,7 @@ internal partial class FileExplorerSettingsHandler : SettingsHandlerBase
     /// <inheritdoc/>
     protected override CommandResult HandleSpecialized(string key, JsonElement parameters)
     {
-        if (key == "ShowHiddenAndSystemFiles")
-        {
-            return HandleShowHiddenAndSystemFiles(parameters);
-        }
-
-        return base.HandleSpecialized(key, parameters);
+        return key == "ShowHiddenAndSystemFiles" ? HandleShowHiddenAndSystemFiles(parameters) : base.HandleSpecialized(key, parameters);
     }
 
     private static void NotifySettingsChange()

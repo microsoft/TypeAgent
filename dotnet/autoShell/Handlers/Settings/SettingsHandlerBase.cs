@@ -76,6 +76,8 @@ internal abstract class SettingsHandlerBase : ICommandHandler
     private readonly Dictionary<string, RegistryToggleConfig> _registryToggles = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, RegistryMapConfig> _registryMaps = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, OpenSettingsConfig> _openSettings = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _allRegisteredActions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _specializedActions = new(StringComparer.OrdinalIgnoreCase);
 
     protected SettingsHandlerBase(IRegistryService registry, IProcessService? process = null)
     {
@@ -84,47 +86,84 @@ internal abstract class SettingsHandlerBase : ICommandHandler
     }
 
     /// <summary>
-    /// Action names registered via the Add methods. Subclasses should combine this with any specialized actions.
+    /// Action names registered via the Add methods. Subclasses should combine this with
+    /// <see cref="SpecializedActions"/> for <see cref="SupportedCommands"/>.
     /// </summary>
-    protected IEnumerable<string> RegisteredActions =>
-        _registryToggles.Keys.Concat(_registryMaps.Keys).Concat(_openSettings.Keys);
-
-    /// <inheritdoc/>
-    public abstract IEnumerable<string> SupportedCommands { get; }
+    protected IEnumerable<string> RegisteredActions => _allRegisteredActions;
 
     /// <summary>
-    /// Registers a registry toggle action.
+    /// Action names registered as specialized (hand-coded) via <see cref="AddSpecializedAction"/>.
+    /// </summary>
+    protected IEnumerable<string> SpecializedActions => _specializedActions;
+
+    /// <inheritdoc/>
+    public virtual IEnumerable<string> SupportedCommands =>
+        _specializedActions.Count > 0
+            ? _specializedActions.Concat(_allRegisteredActions)
+            : _allRegisteredActions;
+
+    /// <summary>
+    /// Registers a registry toggle action. Throws if the action name is already registered.
     /// </summary>
     protected void AddRegistryToggleAction(string actionName, RegistryToggleConfig config)
     {
+        ThrowIfDuplicate(actionName);
         _registryToggles[actionName] = config;
+        _allRegisteredActions.Add(actionName);
     }
 
     /// <summary>
-    /// Registers a registry map action.
+    /// Registers a registry map action. Throws if the action name is already registered.
     /// </summary>
     protected void AddRegistryMapAction(string actionName, RegistryMapConfig config)
     {
+        ThrowIfDuplicate(actionName);
         _registryMaps[actionName] = config;
+        _allRegisteredActions.Add(actionName);
     }
 
     /// <summary>
-    /// Registers an open-settings action.
+    /// Registers an open-settings action. Throws if the action name is already registered
+    /// or if no <see cref="IProcessService"/> was provided to the constructor.
     /// </summary>
     protected void AddOpenSettingsAction(string actionName, OpenSettingsConfig config)
     {
+        if (_process is null)
+        {
+            throw new InvalidOperationException(
+                $"Cannot register open-settings action '{actionName}' without an IProcessService.");
+        }
+
+        ThrowIfDuplicate(actionName);
         _openSettings[actionName] = config;
+        _allRegisteredActions.Add(actionName);
+    }
+
+    /// <summary>
+    /// Registers a specialized action name so it appears in <see cref="SpecializedActions"/>
+    /// and <see cref="SupportedCommands"/>. The action must be handled in <see cref="HandleSpecialized"/>.
+    /// </summary>
+    protected void AddSpecializedAction(string actionName)
+    {
+        ThrowIfDuplicate(actionName);
+        _specializedActions.Add(actionName);
+    }
+
+    private void ThrowIfDuplicate(string actionName)
+    {
+        if (_allRegisteredActions.Contains(actionName) || _specializedActions.Contains(actionName))
+        {
+            throw new InvalidOperationException(
+                $"Action '{actionName}' is already registered in {GetType().Name}.");
+        }
     }
 
     /// <inheritdoc/>
     public virtual CommandResult Handle(string key, JsonElement parameters)
     {
-        if (_registryToggles.TryGetValue(key, out var toggle))
-        {
-            return HandleRegistryToggleAction(key, parameters, toggle);
-        }
-
-        return _registryMaps.TryGetValue(key, out var map)
+        return _registryToggles.TryGetValue(key, out var toggle)
+            ? HandleRegistryToggleAction(key, parameters, toggle)
+            : _registryMaps.TryGetValue(key, out var map)
             ? HandleRegistryMapAction(key, parameters, map)
             : _openSettings.TryGetValue(key, out var settings) ? HandleOpenSettingsAction(settings) : HandleSpecialized(key, parameters);
     }

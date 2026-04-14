@@ -2,8 +2,6 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json;
 using autoShell.Logging;
 using autoShell.Services;
@@ -42,14 +40,12 @@ internal class MouseSettingsHandler : SettingsHandlerBase
         AddOpenSettingsAction("MousePointerCustomization", new OpenSettingsConfig("ms-settings:easeofaccess-mouse", "mouse settings"));
         AddOpenSettingsAction("EnableTouchPad", new OpenSettingsConfig("ms-settings:devices-touchpad", "touchpad settings"));
         AddOpenSettingsAction("TouchpadCursorSpeed", new OpenSettingsConfig("ms-settings:devices-touchpad", "touchpad settings"));
+        AddSpecializedAction("CursorTrail");
+        AddSpecializedAction("EnhancePointerPrecision");
+        AddSpecializedAction("MouseCursorSpeed");
+        AddSpecializedAction("MouseWheelScrollLines");
+        AddSpecializedAction("SetPrimaryMouseButton");
     }
-
-    private static readonly string[] SpecializedActions =
-        ["CursorTrail", "EnhancePointerPrecision", "MouseCursorSpeed", "MouseWheelScrollLines", "SetPrimaryMouseButton"];
-
-    /// <inheritdoc/>
-    public override IEnumerable<string> SupportedCommands =>
-        SpecializedActions.Concat(RegisteredActions);
 
     /// <inheritdoc/>
     protected override CommandResult HandleSpecialized(string key, JsonElement parameters)

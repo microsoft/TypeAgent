@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using autoShell.Services;
@@ -43,13 +42,8 @@ internal partial class TaskbarSettingsHandler : SettingsHandlerBase
             new Dictionary<string, object> { ["left"] = 0, ["center"] = 1 }, DefaultValue: 0));
         AddRegistryMapAction("ToggleWidgetsButtonVisibility", new RegistryMapConfig(ExplorerAdvanced, "TaskbarDa", "visibility",
             new Dictionary<string, object> { ["show"] = 1 }, DefaultValue: 0));
+        AddSpecializedAction("AutoHideTaskbar");
     }
-
-    private static readonly string[] SpecializedActions = ["AutoHideTaskbar"];
-
-    /// <inheritdoc/>
-    public override IEnumerable<string> SupportedCommands =>
-        SpecializedActions.Concat(RegisteredActions);
 
     /// <inheritdoc/>
     public override CommandResult Handle(string key, JsonElement parameters)
@@ -62,12 +56,7 @@ internal partial class TaskbarSettingsHandler : SettingsHandlerBase
     /// <inheritdoc/>
     protected override CommandResult HandleSpecialized(string key, JsonElement parameters)
     {
-        if (key == "AutoHideTaskbar")
-        {
-            return HandleAutoHideTaskbar(parameters);
-        }
-
-        return base.HandleSpecialized(key, parameters);
+        return key == "AutoHideTaskbar" ? HandleAutoHideTaskbar(parameters) : base.HandleSpecialized(key, parameters);
     }
 
     private static void NotifySettingsChange()

@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Collections.Generic;
 using autoShell.Services;
 
 namespace autoShell.Handlers.Settings;
@@ -28,7 +27,4 @@ internal class SystemSettingsHandler : SettingsHandlerBase
         AddOpenSettingsAction("MinimizeWindowsOnMonitorDisconnectAction", new OpenSettingsConfig("ms-settings:display", "display settings"));
         AddOpenSettingsAction("RememberWindowLocations", new OpenSettingsConfig("ms-settings:display", "display settings"));
     }
-
-    /// <inheritdoc/>
-    public override IEnumerable<string> SupportedCommands => RegisteredActions;
 }

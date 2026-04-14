@@ -2,8 +2,6 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text.Json;
 using autoShell.Logging;
 using autoShell.Services;
@@ -37,14 +35,10 @@ internal class DisplaySettingsHandler : SettingsHandlerBase
         AddOpenSettingsAction("DisplayResolutionAndAspectRatio", new OpenSettingsConfig("ms-settings:display", "display settings"));
         AddRegistryToggleAction("RotationLock", new RegistryToggleConfig(
             @"Software\Microsoft\Windows\CurrentVersion\ImmersiveShell", "RotationLockPreference", "enable", 1, 0));
+        AddSpecializedAction("AdjustScreenBrightness");
+        AddSpecializedAction("DisplayScaling");
+        AddSpecializedAction("EnableBlueLightFilterSchedule");
     }
-
-    private static readonly string[] SpecializedActions =
-        ["AdjustScreenBrightness", "DisplayScaling", "EnableBlueLightFilterSchedule"];
-
-    /// <inheritdoc/>
-    public override IEnumerable<string> SupportedCommands =>
-        SpecializedActions.Concat(RegisteredActions);
 
     /// <inheritdoc/>
     protected override CommandResult HandleSpecialized(string key, JsonElement parameters)
