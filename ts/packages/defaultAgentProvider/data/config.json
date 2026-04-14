@@ -67,6 +67,9 @@
     },
     "utility": {
       "name": "utility-typeagent"
+    },
+    "onboarding": {
+      "name": "onboarding-agent"
     }
   },
   "mcpServers": {

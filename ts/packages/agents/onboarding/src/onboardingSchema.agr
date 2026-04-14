@@ -1,0 +1,79 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Grammar for top-level onboarding coordination actions.
+
+// startOnboarding - begin a new integration onboarding workflow
+<StartOnboarding> = start onboarding (for)? $(integrationName:wildcard) -> {
+    actionName: "startOnboarding",
+    parameters: {
+        integrationName
+    }
+}
+  | onboard $(integrationName:wildcard) (into TypeAgent)? -> {
+    actionName: "startOnboarding",
+    parameters: {
+        integrationName
+    }
+}
+  | (begin | create) (a)? (new)? $(integrationName:wildcard) integration -> {
+    actionName: "startOnboarding",
+    parameters: {
+        integrationName
+    }
+};
+
+// resumeOnboarding - continue an in-progress onboarding
+<ResumeOnboarding> = resume onboarding (for)? $(integrationName:wildcard) -> {
+    actionName: "resumeOnboarding",
+    parameters: {
+        integrationName
+    }
+}
+  | continue (the)? $(integrationName:wildcard) onboarding -> {
+    actionName: "resumeOnboarding",
+    parameters: {
+        integrationName
+    }
+};
+
+// getOnboardingStatus - check the current phase and status
+<GetOnboardingStatus> = (what's | what is) (the)? status (of)? (the)? $(integrationName:wildcard) onboarding -> {
+    actionName: "getOnboardingStatus",
+    parameters: {
+        integrationName
+    }
+}
+  | show (me)? (the)? $(integrationName:wildcard) onboarding status -> {
+    actionName: "getOnboardingStatus",
+    parameters: {
+        integrationName
+    }
+}
+  | how far along is (the)? $(integrationName:wildcard) (onboarding)? -> {
+    actionName: "getOnboardingStatus",
+    parameters: {
+        integrationName
+    }
+};
+
+// listIntegrations - list all known integrations
+<ListIntegrations> = list (all)? (my)? integrations -> {
+    actionName: "listIntegrations",
+    parameters: {}
+}
+  | show (me)? (all)? (my)? integrations -> {
+    actionName: "listIntegrations",
+    parameters: {}
+}
+  | what integrations (do I have | are there)? -> {
+    actionName: "listIntegrations",
+    parameters: {}
+};
+
+import { OnboardingActions } from "./onboardingSchema.ts";
+
+<Start> : OnboardingActions = <StartOnboarding>
+  | <ResumeOnboarding>
+  | <GetOnboardingStatus>
+  | <ListIntegrations>;

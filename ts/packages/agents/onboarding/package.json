@@ -1,0 +1,61 @@
+{
+  "name": "onboarding-agent",
+  "version": "0.0.1",
+  "private": true,
+  "description": "TypeAgent onboarding agent — automates integrating new applications into TypeAgent",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/agents/onboarding"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/onboardingManifest.json",
+    "./agent/handlers": "./dist/onboardingActionHandler.js"
+  },
+  "scripts": {
+    "agc:discovery": "agc -i ./src/discovery/discoverySchema.agr -o ./dist/discoverySchema.ag.json",
+    "agc:grammargen": "agc -i ./src/grammarGen/grammarGenSchema.agr -o ./dist/grammarGenSchema.ag.json",
+    "agc:main": "agc -i ./src/onboardingSchema.agr -o ./dist/onboardingSchema.ag.json",
+    "agc:packaging": "agc -i ./src/packaging/packagingSchema.agr -o ./dist/packagingSchema.ag.json",
+    "agc:phrasegen": "agc -i ./src/phraseGen/phraseGenSchema.agr -o ./dist/phraseGenSchema.ag.json",
+    "agc:scaffolder": "agc -i ./src/scaffolder/scaffolderSchema.agr -o ./dist/scaffolderSchema.ag.json",
+    "agc:schemagen": "agc -i ./src/schemaGen/schemaGenSchema.agr -o ./dist/schemaGenSchema.ag.json",
+    "agc:testing": "agc -i ./src/testing/testingSchema.agr -o ./dist/testingSchema.ag.json",
+    "asc:discovery": "asc -i ./src/discovery/discoverySchema.ts -o ./dist/discoverySchema.pas.json -t DiscoveryActions",
+    "asc:grammargen": "asc -i ./src/grammarGen/grammarGenSchema.ts -o ./dist/grammarGenSchema.pas.json -t GrammarGenActions",
+    "asc:main": "asc -i ./src/onboardingSchema.ts -o ./dist/onboardingSchema.pas.json -t OnboardingActions",
+    "asc:packaging": "asc -i ./src/packaging/packagingSchema.ts -o ./dist/packagingSchema.pas.json -t PackagingActions",
+    "asc:phrasegen": "asc -i ./src/phraseGen/phraseGenSchema.ts -o ./dist/phraseGenSchema.pas.json -t PhraseGenActions",
+    "asc:scaffolder": "asc -i ./src/scaffolder/scaffolderSchema.ts -o ./dist/scaffolderSchema.pas.json -t ScaffolderActions",
+    "asc:schemagen": "asc -i ./src/schemaGen/schemaGenSchema.ts -o ./dist/schemaGenSchema.pas.json -t SchemaGenActions",
+    "asc:testing": "asc -i ./src/testing/testingSchema.ts -o ./dist/testingSchema.pas.json -t TestingActions",
+    "build": "concurrently npm:tsc npm:asc:* npm:agc:*",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/dispatcher-types": "workspace:*",
+    "agent-dispatcher": "workspace:*",
+    "aiclient": "workspace:*",
+    "dispatcher-node-providers": "workspace:*",
+    "typechat": "^0.1.1"
+  },
+  "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
+    "action-grammar-compiler": "workspace:*",
+    "concurrently": "^9.1.2",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
