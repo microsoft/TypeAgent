@@ -209,26 +209,23 @@ async function handleCrawlDocUrl(
 
 // Strip HTML tags and collapse whitespace to extract readable text.
 function stripHtml(html: string): string {
-    // Repeatedly remove multi-character patterns until stable to avoid
-    // incomplete sanitization from overlapping/re-formed substrings.
     let sanitized = html;
     let previous: string;
+
+    // First pass: remove dangerous blocks and tags until stable.
     do {
         previous = sanitized;
         sanitized = sanitized
             .replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, "")
-            .replace(/<style\b[^>]*>[\s\S]*?<\/style\b[^>]*>/gi, "");
+            .replace(/<style\b[^>]*>[\s\S]*?<\/style\b[^>]*>/gi, "")
+            .replace(/<[^>]+>/g, " ");
     } while (sanitized !== previous);
 
-    // Decode common entities and normalize whitespace.
+    // Decode common entities.
     sanitized = sanitized
         .replace(/&nbsp;/g, " ")
         .replace(/&quot;/g, '"')
-        .replace(/&amp;/g, "&")
-        .replace(/\s{2,}/g, " ")
-        .trim();
-}
-
+        .replace(/&amp;/g, "&");
 
     // Decode can re-introduce tag delimiters; sanitize again until stable.
     do {
@@ -240,6 +237,8 @@ function stripHtml(html: string): string {
     } while (sanitized !== previous);
 
     return sanitized.replace(/\s{2,}/g, " ").trim();
+}
+
 // Extract same-origin links from an HTML page.
 function extractLinks(baseUrl: string, html: string): string[] {
     const base = new URL(baseUrl);
