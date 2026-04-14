@@ -54,15 +54,15 @@ internal partial class ThemeActionHandler : ActionHandlerBase
 
         LoadThemes();
 
-        AddAction("ApplyTheme", HandleApplyTheme);
+        AddAction<ApplyThemeParams>("ApplyTheme", HandleApplyTheme);
         AddAction("ListThemes", HandleListThemes);
         AddAction<SetThemeModeParams>("SetThemeMode", HandleSetThemeModeCommand);
         AddAction<SetWallpaperParams>("SetWallpaper", HandleSetWallpaper);
     }
 
-    private ActionResult HandleApplyTheme(JsonElement parameters)
+    private ActionResult HandleApplyTheme(ApplyThemeParams p)
     {
-        string themeName = parameters.GetStringOrDefault("filePath");
+        string themeName = p.FilePath;
         bool success = ApplyTheme(themeName);
         return success
             ? ActionResult.Ok($"Applied theme '{themeName}'")

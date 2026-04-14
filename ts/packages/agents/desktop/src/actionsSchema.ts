@@ -13,6 +13,7 @@ export type DesktopActions =
     | MuteVolumeAction
     | SetWallpaperAction
     | ChangeThemeModeAction
+    | ApplyThemeAction
     | ConnectWifiAction
     | DisconnectWifiAction
     | ToggleAirplaneModeAction
@@ -119,6 +120,14 @@ export type ChangeThemeModeAction = {
     actionName: "SetThemeMode";
     parameters: {
         mode: "light" | "dark" | "toggle"; // the theme mode
+    };
+};
+
+// Applies a Windows theme by name or file path
+export type ApplyThemeAction = {
+    actionName: "ApplyTheme";
+    parameters: {
+        filePath: string; // The theme name or file path to apply (use "previous" to revert)
     };
 };
 

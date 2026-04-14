@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Text.Json;
+using autoShell.Handlers.Generated;
 using autoShell.Services;
 using Microsoft.Win32;
 
@@ -27,12 +27,13 @@ internal class PersonalizationSettingsHandler : SettingsHandlerBase
             @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency", "enable", 1, 0));
         AddOpenSettingsAction("HighContrastTheme", new OpenSettingsConfig(
             "ms-settings:easeofaccess-highcontrast", "high contrast settings"));
-        AddAction("SystemThemeMode", HandleSystemThemeMode);
+        AddAction<SystemThemeModeParams>("SystemThemeMode", HandleSystemThemeMode);
     }
 
-    private ActionResult HandleSystemThemeMode(JsonElement parameters)
+    private ActionResult HandleSystemThemeMode(SystemThemeModeParams p)
     {
-        string mode = parameters.GetStringOrDefault("mode", "dark");
+        string mode = p.Mode;
+        if (string.IsNullOrEmpty(mode)) mode = "dark";
         int value = mode.Equals("light", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
 
         const string PersonalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
