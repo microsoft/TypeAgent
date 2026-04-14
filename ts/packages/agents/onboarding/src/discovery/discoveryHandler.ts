@@ -216,8 +216,8 @@ function stripHtml(html: string): string {
     do {
         previous = sanitized;
         sanitized = sanitized
-            .replace(/<script[\s\S]*?<\/script>/gi, "")
-            .replace(/<style[\s\S]*?<\/style>/gi, "");
+            .replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, "")
+            .replace(/<style\b[^>]*>[\s\S]*?<\/style\b[^>]*>/gi, "");
     } while (sanitized !== previous);
 
     return sanitized
