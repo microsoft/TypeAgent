@@ -550,7 +550,6 @@ function getTestAgentProvider(integrationName: string) {
     // path the provider resolves the agent directory directly.
     return createNpmAppAgentProvider(configs, import.meta.url);
 }
-}
 
 async function createTestDispatcher(integrationName: string) {
     const instanceDir = getInstanceDir();

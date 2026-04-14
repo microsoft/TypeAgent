@@ -54,6 +54,7 @@ const clientIO = {
     popupQuestion: async () => { throw new Error("not supported"); },
     notify: noop, openLocalView: async () => {},
     closeLocalView: async () => {}, requestChoice: noop, takeAction: noop,
+    requestInteraction: noop, interactionResolved: noop, interactionCancelled: noop,
 };
 
 const instanceDir = getInstanceDir();

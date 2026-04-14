@@ -476,10 +476,10 @@ function buildHandler(
 ): string {
     // If discovery data contains CLI actions, generate a CLI handler
     const cliActions = apiSurface?.actions?.filter(
-        (a) => a.source?.startsWith("cli:"),
+        (a) => a.sourceUrl?.startsWith("cli:"),
     );
     if (cliActions && cliActions.length > 0) {
-        const cliCommand = cliActions[0].source!.split(":")[1];
+        const cliCommand = cliActions[0].sourceUrl!.split(":")[1];
         return buildCliHandler(name, pascalName, cliCommand, cliActions);
     }
 
@@ -1408,7 +1408,7 @@ function buildCliHandler(
 ): string {
     const cases: string[] = [];
     for (const action of actions) {
-        const subCmd = action.endpoint ?? action.name;
+        const subCmd = action.path ?? action.name;
         const flagLines: string[] = [];
         if (action.parameters) {
             for (const p of action.parameters) {
