@@ -229,6 +229,7 @@ export type SetScreenResolutionAction = {
     parameters: {
         width: number; // width in pixels
         height: number; // height in pixels
+        refreshRate?: number; // refresh rate in Hz (e.g. 60, 144)
     };
 };
 

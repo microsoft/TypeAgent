@@ -22,8 +22,7 @@ internal class DisplayActionHandler : ActionHandlerBase
         _display = display;
         _logger = logger;
         AddAction("ListResolutions", HandleListResolutions);
-        // SetScreenResolution left as JsonElement because it reads refreshRate not in schema
-        AddAction("SetScreenResolution", HandleSetScreenResolution);
+        AddAction<SetScreenResolutionParams>("SetScreenResolution", HandleSetScreenResolution);
         AddAction<SetTextSizeParams>("SetTextSize", HandleSetTextSize);
     }
 
@@ -41,20 +40,20 @@ internal class DisplayActionHandler : ActionHandlerBase
         }
     }
 
-    private ActionResult HandleSetScreenResolution(JsonElement parameters)
+    private ActionResult HandleSetScreenResolution(SetScreenResolutionParams p)
     {
         try
         {
-            int? width = parameters.GetNullableInt("width");
-            int? height = parameters.GetNullableInt("height");
-            if ((width ?? 0) == 0 || (height ?? 0) == 0)
+            int width = p.Width;
+            int height = p.Height;
+            if (width == 0 || height == 0)
             {
                 return ActionResult.Fail("Invalid resolution: width and height required");
             }
 
-            uint? refreshRate = (uint?)parameters.GetNullableInt("refreshRate");
+            uint? refreshRate = p.RefreshRate.HasValue ? (uint)p.RefreshRate.Value : null;
 
-            string result = _display.SetResolution((uint)width.Value, (uint)height.Value, refreshRate);
+            string result = _display.SetResolution((uint)width, (uint)height, refreshRate);
             return ActionResult.Ok($"Screen resolution set to {width}x{height}", JsonDocument.Parse(result).RootElement.Clone());
         }
         catch (Exception ex)
