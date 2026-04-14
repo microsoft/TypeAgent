@@ -223,8 +223,6 @@ function stripHtml(html: string): string {
     return sanitized
         .replace(/<[^>]+>/g, " ")
         .replace(/&nbsp;/g, " ")
-        .replace(/&lt;/g, "<")
-        .replace(/&gt;/g, ">")
         .replace(/&quot;/g, '"')
         .replace(/&amp;/g, "&")
         .replace(/\s{2,}/g, " ")
