@@ -2268,6 +2268,9 @@ importers:
       aiclient:
         specifier: workspace:*
         version: link:../../aiclient
+      debug:
+        specifier: ^4.3.4
+        version: 4.4.3(supports-color@8.1.1)
       dispatcher-node-providers:
         specifier: workspace:*
         version: link:../../dispatcher/nodeProviders
@@ -2278,6 +2281,9 @@ importers:
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
       action-grammar-compiler:
         specifier: workspace:*
         version: link:../../actionGrammarCompiler

@@ -21,8 +21,10 @@ import {
 import { getDiscoveryModel } from "../lib/llm.js";
 import { execFile } from "child_process";
 import { promisify } from "util";
+import registerDebug from "debug";
 
 const execFileAsync = promisify(execFile);
+const debug = registerDebug("typeagent:onboarding:discovery");
 
 // Represents a single discovered API action
 export type DiscoveredAction = {
@@ -595,6 +597,17 @@ async function handleCrawlCliHelp(
         .map((e) => `### ${e.command}\n\n${e.helpText}`)
         .join("\n\n---\n\n");
 
+    const maxHelpChars = 12000;
+    const helpText = combinedHelp.slice(0, maxHelpChars);
+    if (combinedHelp.length > maxHelpChars) {
+        debug(
+            "Help output truncated from %d to %d chars for %s",
+            combinedHelp.length,
+            maxHelpChars,
+            command,
+        );
+    }
+
     const model = getDiscoveryModel();
 
     const prompt = [
@@ -613,7 +626,7 @@ async function handleCrawlCliHelp(
                 `Extract all CLI actions from this help output for the "${integrationName}" integration.\n\n` +
                 `Base command: ${command}\n` +
                 `Total subcommands crawled: ${helpEntries.length}\n\n` +
-                `Help output (truncated to 12000 chars):\n${combinedHelp.slice(0, 12000)}`,
+                `Help output (truncated to ${maxHelpChars} chars):\n${helpText}`,
         },
     ];
 
