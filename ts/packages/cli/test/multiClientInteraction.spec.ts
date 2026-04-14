@@ -54,6 +54,8 @@ class FakeStdin extends EventEmitter {
 
 let fakeStdin: FakeStdin;
 let stdoutOutput: string[];
+let realStdin: NodeJS.ReadStream;
+let realStdout: NodeJS.WriteStream;
 
 // ── Dispatcher stub ──────────────────────────────────────────────────────────
 
@@ -112,7 +114,10 @@ beforeEach(() => {
     fakeStdin = new FakeStdin();
     stdoutOutput = [];
 
-    // Redirect process.stdin and process.stdout for the duration of each test.
+    // Capture originals before overriding so afterEach can restore them.
+    realStdin = process.stdin;
+    realStdout = process.stdout;
+
     Object.defineProperty(process, "stdin", {
         value: fakeStdin,
         writable: true,
@@ -132,10 +137,13 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-    // Restore real stdin/stdout (Jest resets the module between test files anyway,
-    // but explicit cleanup prevents cross-test leakage within this file).
     Object.defineProperty(process, "stdin", {
-        value: process.stdin,
+        value: realStdin,
+        writable: true,
+        configurable: true,
+    });
+    Object.defineProperty(process, "stdout", {
+        value: realStdout,
         writable: true,
         configurable: true,
     });

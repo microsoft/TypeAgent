@@ -389,6 +389,8 @@ export function createEnhancedClientIO(
     // Active interaction prompts keyed by interactionId.  Each entry holds an
     // AbortController that, when aborted, dismisses the in-progress question().
     const activeInteractions = new Map<string, AbortController>();
+    // Serial queue for interactions — ensures only one stdin prompt is active at a time.
+    let interactionQueue: Promise<void> = Promise.resolve();
 
     function displayContent(
         content: DisplayContent,
@@ -874,7 +876,7 @@ export function createEnhancedClientIO(
         },
         // Async deferred pattern — handle interactions pushed from the server
         requestInteraction(interaction: PendingInteractionRequest): void {
-            (async () => {
+            interactionQueue = interactionQueue.then(async () => {
                 if (!dispatcherRef?.current) {
                     return;
                 }
@@ -969,9 +971,9 @@ export function createEnhancedClientIO(
                         typeof reason === "object" &&
                         reason.kind === "resolved-by-other"
                     ) {
-                        // Primary client answered — no extra output needed here;
-                        // the question prompt line already appeared when the
-                        // interaction was first displayed.
+                        displayContent(
+                            chalk.gray("[answered by another client]"),
+                        );
                     } else {
                         displayContent(chalk.yellow("Cancelled!"));
                     }
@@ -1000,7 +1002,7 @@ export function createEnhancedClientIO(
                 } catch {
                     // Interaction may have already timed out
                 }
-            })();
+            });
         },
         interactionResolved(interactionId: string, response: unknown): void {
             const ac = activeInteractions.get(interactionId);
@@ -1601,6 +1603,9 @@ async function question(
 
     // No readline interface — stdin is owned by questionWithCompletion in raw
     // mode.  Read character-by-character directly so we don't conflict.
+    if (signal?.aborted) {
+        return Promise.reject(signal.reason);
+    }
     return new Promise<string>((resolve, reject) => {
         const stdin = process.stdin;
         // If the scroll region is active (e.g. secondary client waiting at the
