@@ -220,8 +220,8 @@ function stripHtml(html: string): string {
             .replace(/<style\b[^>]*>[\s\S]*?<\/style\b[^>]*>/gi, "");
     } while (sanitized !== previous);
 
-    return sanitized
-        .replace(/<[^>]+>/g, " ")
+    // Decode common entities and normalize whitespace.
+    sanitized = sanitized
         .replace(/&nbsp;/g, " ")
         .replace(/&quot;/g, '"')
         .replace(/&amp;/g, "&")
@@ -229,6 +229,17 @@ function stripHtml(html: string): string {
         .trim();
 }
 
+
+    // Decode can re-introduce tag delimiters; sanitize again until stable.
+    do {
+        previous = sanitized;
+        sanitized = sanitized
+            .replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, "")
+            .replace(/<style\b[^>]*>[\s\S]*?<\/style\b[^>]*>/gi, "")
+            .replace(/<[^>]+>/g, " ");
+    } while (sanitized !== previous);
+
+    return sanitized.replace(/\s{2,}/g, " ").trim();
 // Extract same-origin links from an HTML page.
 function extractLinks(baseUrl: string, html: string): string[] {
     const base = new URL(baseUrl);
