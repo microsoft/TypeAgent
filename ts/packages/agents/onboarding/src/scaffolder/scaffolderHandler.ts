@@ -201,7 +201,7 @@ async function handleScaffoldAgent(
     // Stamp out handler
     await writeFile(
         path.join(srcDir, `${integrationName}ActionHandler.ts`),
-        buildHandler(integrationName, pascalName, pattern, apiSurface),
+        await buildHandler(integrationName, pascalName, pattern, apiSurface),
     );
     files.push(`src/${integrationName}ActionHandler.ts`);
 
@@ -468,19 +468,19 @@ function buildManifest(
     return manifest;
 }
 
-function buildHandler(
+async function buildHandler(
     name: string,
     pascalName: string,
     pattern: AgentPattern = "schema-grammar",
     apiSurface?: ApiSurface,
-): string {
+): Promise<string> {
     // If discovery data contains CLI actions, generate a CLI handler
     const cliActions = apiSurface?.actions?.filter((a) =>
         a.sourceUrl?.startsWith("cli:"),
     );
     if (cliActions && cliActions.length > 0) {
         const cliCommand = cliActions[0].sourceUrl!.split(":")[1];
-        return buildCliHandler(name, pascalName, cliCommand, cliActions);
+        return await buildCliHandler(name, pascalName, cliCommand, cliActions);
     }
 
     switch (pattern) {

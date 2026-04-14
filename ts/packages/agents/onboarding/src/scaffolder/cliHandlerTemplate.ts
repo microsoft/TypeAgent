@@ -4,8 +4,22 @@
 // CLI handler template generator.
 // Produces a complete TypeScript action handler that shells out to a CLI tool.
 // Called by scaffolderHandler when the API surface contains CLI-sourced actions.
+// The handler skeleton lives in cliHandler.template; this module builds the
+// switch-case body and interpolates the placeholders.
 
 import type { DiscoveredAction } from "../discovery/discoveryHandler.js";
+import fs from "fs/promises";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Resolve template from src/ relative to the package root.
+// At runtime __dirname is dist/scaffolder/, so go up two levels to package root.
+function templatePath(): string {
+    return path.resolve(__dirname, "../../src/scaffolder/cliHandler.template");
+}
 
 function flagToCamel(flag: string): string {
     return flag
@@ -13,12 +27,7 @@ function flagToCamel(flag: string): string {
         .replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 }
 
-export function buildCliHandler(
-    name: string,
-    pascalName: string,
-    cliCommand: string,
-    actions: DiscoveredAction[],
-): string {
+function buildSwitchCases(actions: DiscoveredAction[]): string {
     const cases: string[] = [];
     for (const action of actions) {
         const subCmd = action.path ?? action.name;
@@ -46,60 +55,20 @@ export function buildCliHandler(
             `        case "${action.name}":\n            args.push(...${JSON.stringify(subCmd.split(" "))});${body}break;`,
         );
     }
-
-    return `// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-//
-// Auto-generated CLI handler for ${name}
-
-import { execFile } from "child_process";
-import { promisify } from "util";
-import {
-    ActionContext,
-    AppAgent,
-    TypeAgentAction,
-} from "@typeagent/agent-sdk";
-import {
-    createActionResultFromTextDisplay,
-} from "@typeagent/agent-sdk/helpers/action";
-import { ${pascalName}Actions } from "./${name}Schema.js";
-
-const execFileAsync = promisify(execFile);
-
-async function runCli(...cliArgs: string[]): Promise<string> {
-    const { stdout, stderr } = await execFileAsync("${cliCommand}", cliArgs, {
-        timeout: 30_000,
-    });
-    return (stdout || stderr).trim();
+    return cases.join("\n");
 }
 
-function buildArgs(action: TypeAgentAction<${pascalName}Actions>): string[] {
-    const args: string[] = [];
-    const params = action.parameters as Record<string, unknown>;
-    switch (action.actionName) {
-${cases.join("\n")}
-        default:
-            throw new Error(\`Unknown action: \${action.actionName}\`);
-    }
-    return args;
-}
-
-export function instantiate(): AppAgent {
-    return {
-        executeAction: async (
-            action: TypeAgentAction<${pascalName}Actions>,
-            context: ActionContext<${pascalName}Actions>,
-        ) => {
-            try {
-                const args = buildArgs(action);
-                const output = await runCli(...args);
-                return createActionResultFromTextDisplay(output);
-            } catch (e: unknown) {
-                const msg = e instanceof Error ? e.message : String(e);
-                return createActionResultFromTextDisplay(\`Error: \${msg}\`);
-            }
-        },
-    };
-}
-`;
+export async function buildCliHandler(
+    name: string,
+    pascalName: string,
+    cliCommand: string,
+    actions: DiscoveredAction[],
+): Promise<string> {
+    const tpl = await fs.readFile(templatePath(), "utf-8");
+    const switchCases = buildSwitchCases(actions);
+    return tpl
+        .replace(/\{\{NAME\}\}/g, name)
+        .replace(/\{\{PASCAL_NAME\}\}/g, pascalName)
+        .replace(/\{\{CLI_COMMAND\}\}/g, cliCommand)
+        .replace(/\{\{SWITCH_CASES\}\}/g, switchCases);
 }
