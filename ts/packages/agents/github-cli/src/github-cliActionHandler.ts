@@ -29,10 +29,7 @@ async function initializeAgentContext(): Promise<unknown> {
 }
 
 // Run a gh CLI command and return stdout. Throws on non-zero exit.
-async function runGh(
-    args: string[],
-    timeoutMs = 30_000,
-): Promise<string> {
+async function runGh(args: string[], timeoutMs = 30_000): Promise<string> {
     const { stdout } = await execFileAsync("gh", args, {
         timeout: timeoutMs,
         maxBuffer: 1024 * 1024,
@@ -110,8 +107,7 @@ function buildArgs(
         case "gistCreate": {
             const args = ["gist", "create"];
             if (p.public) args.push("--public");
-            if (p.description)
-                args.push("--desc", String(p.description));
+            if (p.description) args.push("--desc", String(p.description));
             return args;
         }
         case "gistDelete": {
@@ -161,7 +157,10 @@ function buildArgs(
             const args = ["issue", "view"];
             if (p.number) args.push(String(p.number));
             if (p.repo) args.push("--repo", String(p.repo));
-            args.push("--json", "number,title,state,body,author,labels,assignees,comments,url,createdAt,closedAt");
+            args.push(
+                "--json",
+                "number,title,state,body,author,labels,assignees,comments,url,createdAt,closedAt",
+            );
             return args;
         }
 
@@ -192,8 +191,7 @@ function buildArgs(
         case "prMerge": {
             const args = ["pr", "merge"];
             if (p.number) args.push(String(p.number));
-            if (p.mergeMethod)
-                args.push(`--${String(p.mergeMethod)}`);
+            if (p.mergeMethod) args.push(`--${String(p.mergeMethod)}`);
             return args;
         }
         case "prList": {
@@ -203,14 +201,20 @@ function buildArgs(
             if (p.label) args.push("--label", String(p.label));
             if (p.assignee) args.push("--assignee", String(p.assignee));
             if (p.limit) args.push("--limit", String(p.limit));
-            args.push("--json", "number,title,state,url,createdAt,headRefName,isDraft");
+            args.push(
+                "--json",
+                "number,title,state,url,createdAt,headRefName,isDraft",
+            );
             return args;
         }
         case "prView": {
             const args = ["pr", "view"];
             if (p.number) args.push(String(p.number));
             if (p.repo) args.push("--repo", String(p.repo));
-            args.push("--json", "number,title,state,body,author,labels,url,createdAt,headRefName,baseRefName,isDraft,additions,deletions,changedFiles");
+            args.push(
+                "--json",
+                "number,title,state,body,author,labels,url,createdAt,headRefName,baseRefName,isDraft,additions,deletions,changedFiles",
+            );
             return args;
         }
         case "prCheckout": {
@@ -267,8 +271,7 @@ function buildArgs(
         case "repoClone": {
             const args = ["repo", "clone"];
             if (p.repo) args.push(String(p.repo));
-            if (p.branch)
-                args.push("--", "--branch", String(p.branch));
+            if (p.branch) args.push("--", "--branch", String(p.branch));
             return args;
         }
         case "repoDelete": {
@@ -280,7 +283,10 @@ function buildArgs(
         case "repoView": {
             const args = ["repo", "view"];
             if (p.repo) args.push(String(p.repo));
-            args.push("--json", "name,owner,description,stargazerCount,forkCount,watchers,defaultBranchRef,createdAt,updatedAt,url,primaryLanguage,visibility");
+            args.push(
+                "--json",
+                "name,owner,description,stargazerCount,forkCount,watchers,defaultBranchRef,createdAt,updatedAt,url,primaryLanguage,visibility",
+            );
             return args;
         }
         case "repoFork": {
@@ -340,7 +346,10 @@ function buildArgs(
                 let endpoint = String(p.endpoint);
                 // If it looks like "owner/repo" (no leading slash, single slash),
                 // assume /repos/{owner}/{repo}/contributors for contributor queries
-                if (!endpoint.startsWith("/") && endpoint.split("/").length === 2) {
+                if (
+                    !endpoint.startsWith("/") &&
+                    endpoint.split("/").length === 2
+                ) {
                     endpoint = `/repos/${endpoint}/contributors`;
                 }
                 if (p.limit) {
@@ -405,7 +414,10 @@ function buildArgs(
         case "searchRepos": {
             const args = ["search", "repos"];
             if (p.query) args.push(String(p.query));
-            args.push("--json", "fullName,description,stargazersCount,url,updatedAt");
+            args.push(
+                "--json",
+                "fullName,description,stargazersCount,url,updatedAt",
+            );
             return args;
         }
         case "secretCreate": {
@@ -537,7 +549,10 @@ function formatStatusOutput(raw: string): string {
     for (const [header, items] of Object.entries(sections)) {
         if (!header) continue;
         result.push(`**${header}**`);
-        if (items.length === 0 || (items.length === 1 && items[0].includes("Nothing here"))) {
+        if (
+            items.length === 0 ||
+            (items.length === 1 && items[0].includes("Nothing here"))
+        ) {
             result.push("  *Nothing here* 🎉\n");
             continue;
         }
@@ -546,14 +561,22 @@ function formatStatusOutput(raw: string): string {
             const match = item.match(/^(\S+\/\S+)#(\d+)\s+(.*)/);
             if (match) {
                 const [, repo, num, desc] = match;
-                const activity = desc.match(/^(comment on|new PR|new issue)\s*(.*)/);
+                const activity = desc.match(
+                    /^(comment on|new PR|new issue)\s*(.*)/,
+                );
                 if (activity) {
                     const [, verb, rest] = activity;
-                    const preview = rest.length > 80 ? rest.slice(0, 80) + "…" : rest;
-                    result.push(`  - [${repo}#${num}](https://github.com/${repo}/issues/${num}) — *${verb}* ${preview}`);
+                    const preview =
+                        rest.length > 80 ? rest.slice(0, 80) + "…" : rest;
+                    result.push(
+                        `  - [${repo}#${num}](https://github.com/${repo}/issues/${num}) — *${verb}* ${preview}`,
+                    );
                 } else {
-                    const preview = desc.length > 80 ? desc.slice(0, 80) + "…" : desc;
-                    result.push(`  - [${repo}#${num}](https://github.com/${repo}/issues/${num}) ${preview}`);
+                    const preview =
+                        desc.length > 80 ? desc.slice(0, 80) + "…" : desc;
+                    result.push(
+                        `  - [${repo}#${num}](https://github.com/${repo}/issues/${num}) ${preview}`,
+                    );
                 }
             } else {
                 result.push(`  - ${item}`);
@@ -566,16 +589,20 @@ function formatStatusOutput(raw: string): string {
 
 // Format a single issue view from JSON into rich markdown
 function formatIssueView(data: Record<string, unknown>): string {
-    const author = data.author
-        ? formatValue(data.author)
-        : "unknown";
+    const author = data.author ? formatValue(data.author) : "unknown";
     const labels = Array.isArray(data.labels)
-        ? (data.labels as Record<string, unknown>[]).map((l) => `\`${l.name}\``).join(" ")
+        ? (data.labels as Record<string, unknown>[])
+              .map((l) => `\`${l.name}\``)
+              .join(" ")
         : "";
     const assignees = Array.isArray(data.assignees)
-        ? (data.assignees as Record<string, unknown>[]).map((a) => formatValue(a)).join(", ")
+        ? (data.assignees as Record<string, unknown>[])
+              .map((a) => formatValue(a))
+              .join(", ")
         : "";
-    const commentCount = Array.isArray(data.comments) ? data.comments.length : data.comments ?? 0;
+    const commentCount = Array.isArray(data.comments)
+        ? data.comments.length
+        : (data.comments ?? 0);
     const body = data.body ? String(data.body).slice(0, 1000) : "";
     const bodySection = body
         ? `\n\n---\n\n${body}${String(data.body).length > 1000 ? "\n\n*…truncated*" : ""}`
@@ -588,7 +615,8 @@ function formatIssueView(data: Record<string, unknown>): string {
     if (assignees) header += `\n**Assignees:** ${assignees}`;
     header += ` · **Comments:** ${commentCount}`;
     header += ` · **Created:** ${String(data.createdAt).slice(0, 10)}`;
-    if (data.closedAt) header += ` · **Closed:** ${String(data.closedAt).slice(0, 10)}`;
+    if (data.closedAt)
+        header += ` · **Closed:** ${String(data.closedAt).slice(0, 10)}`;
 
     return header + bodySection;
 }
@@ -597,7 +625,9 @@ function formatIssueView(data: Record<string, unknown>): string {
 function formatPrView(data: Record<string, unknown>): string {
     const author = data.author ? formatValue(data.author) : "unknown";
     const labels = Array.isArray(data.labels)
-        ? (data.labels as Record<string, unknown>[]).map((l) => `\`${l.name}\``).join(" ")
+        ? (data.labels as Record<string, unknown>[])
+              .map((l) => `\`${l.name}\``)
+              .join(" ")
         : "";
     const status = data.isDraft ? "DRAFT" : String(data.state);
     const body = data.body ? String(data.body).slice(0, 1000) : "";
@@ -608,7 +638,8 @@ function formatPrView(data: Record<string, unknown>): string {
     let header = `### [#${data.number} ${data.title}](${data.url})\n\n`;
     header += `**State:** ${status}`;
     header += ` · **Author:** ${author}`;
-    if (data.headRefName) header += ` · **Branch:** \`${data.headRefName}\` → \`${data.baseRefName}\``;
+    if (data.headRefName)
+        header += ` · **Branch:** \`${data.headRefName}\` → \`${data.baseRefName}\``;
     if (labels) header += ` · **Labels:** ${labels}`;
     if (data.additions !== undefined) {
         header += `\n**Changes:** +${data.additions} −${data.deletions} across ${data.changedFiles} files`;
@@ -629,7 +660,9 @@ function formatListResults(
         return items
             .map((i) => {
                 const labels = Array.isArray(i.labels)
-                    ? (i.labels as Record<string, unknown>[]).map((l) => l.name).join(", ")
+                    ? (i.labels as Record<string, unknown>[])
+                          .map((l) => l.name)
+                          .join(", ")
                     : "";
                 const labelStr = labels ? ` \`${labels}\`` : "";
                 return `- [#${i.number} ${i.title}](${i.url}) — ${i.state}${labelStr}`;
@@ -652,7 +685,10 @@ function formatListResults(
     if (actionName === "searchRepos" && "fullName" in items[0]) {
         return items
             .map((r) => {
-                const stars = (r.stargazersCount || r.stargazerCount) ? ` ⭐ ${r.stargazersCount ?? r.stargazerCount}` : "";
+                const stars =
+                    r.stargazersCount || r.stargazerCount
+                        ? ` ⭐ ${r.stargazersCount ?? r.stargazerCount}`
+                        : "";
                 const desc = r.description ? ` — ${r.description}` : "";
                 return `- [${r.fullName}](${r.url})${stars}${desc}`;
             })
@@ -781,22 +817,46 @@ async function executeAction(
                             "✅ **No matching Dependabot alerts found!**",
                         );
                     }
-                    return createActionResultFromTextDisplay("No results found.");
+                    return createActionResultFromTextDisplay(
+                        "No results found.",
+                    );
                 }
 
                 // Dependabot alerts
                 if (arr.length > 0 && "security_advisory" in arr[0]) {
-                    const rows = arr.map((a) => {
-                        const adv = a.security_advisory as Record<string, unknown>;
-                        const sev = String(adv.severity ?? "unknown").toUpperCase();
-                        const pkg = a.dependency
-                            ? (a.dependency as Record<string, unknown>).package
-                                ? ((a.dependency as Record<string, unknown>).package as Record<string, unknown>).name
-                                : "unknown"
-                            : "unknown";
-                        const sevEmoji = sev === "CRITICAL" ? "🔴" : sev === "HIGH" ? "🟠" : sev === "MEDIUM" ? "🟡" : "🟢";
-                        return `- ${sevEmoji} **${sev}** — \`${pkg}\` — [${adv.summary}](${a.html_url})`;
-                    }).join("\n");
+                    const rows = arr
+                        .map((a) => {
+                            const adv = a.security_advisory as Record<
+                                string,
+                                unknown
+                            >;
+                            const sev = String(
+                                adv.severity ?? "unknown",
+                            ).toUpperCase();
+                            const pkg = a.dependency
+                                ? (a.dependency as Record<string, unknown>)
+                                      .package
+                                    ? (
+                                          (
+                                              a.dependency as Record<
+                                                  string,
+                                                  unknown
+                                              >
+                                          ).package as Record<string, unknown>
+                                      ).name
+                                    : "unknown"
+                                : "unknown";
+                            const sevEmoji =
+                                sev === "CRITICAL"
+                                    ? "🔴"
+                                    : sev === "HIGH"
+                                      ? "🟠"
+                                      : sev === "MEDIUM"
+                                        ? "🟡"
+                                        : "🟢";
+                            return `- ${sevEmoji} **${sev}** — \`${pkg}\` — [${adv.summary}](${a.html_url})`;
+                        })
+                        .join("\n");
                     const header = `🔒 **${arr.length} Dependabot alert${arr.length === 1 ? "" : "s"}**`;
                     return createActionResultFromMarkdownDisplay(
                         `${header}\n\n${rows}`,
@@ -806,11 +866,15 @@ async function executeAction(
                 // Contributors
                 if (arr.length > 0 && "login" in arr[0]) {
                     const rows = arr
-                        .map((u, i) => `${i + 1}. [**${u.login}**](https://github.com/${u.login}) — ${u.contributions} contributions`)
+                        .map(
+                            (u, i) =>
+                                `${i + 1}. [**${u.login}**](https://github.com/${u.login}) — ${u.contributions} contributions`,
+                        )
                         .join("\n");
-                    const header = arr.length === 1
-                        ? "Top contributor"
-                        : `Top ${arr.length} contributors`;
+                    const header =
+                        arr.length === 1
+                            ? "Top contributor"
+                            : `Top ${arr.length} contributors`;
                     return createActionResultFromMarkdownDisplay(
                         `**${header}**\n\n${rows}`,
                     );

@@ -493,10 +493,14 @@ async function runHelp(
     // Try --help first, fall back to -h
     for (const flag of ["--help", "-h"]) {
         try {
-            const { stdout, stderr } = await execFileAsync(command, [...args, flag], {
-                timeout: 15_000,
-                windowsHide: true,
-            });
+            const { stdout, stderr } = await execFileAsync(
+                command,
+                [...args, flag],
+                {
+                    timeout: 15_000,
+                    windowsHide: true,
+                },
+            );
             const output = (stdout || stderr).trim();
             if (output.length > 0) return output;
         } catch (err: any) {

@@ -9,18 +9,18 @@
 
 ## Supported Actions
 
-| Category | Actions |
-|---|---|
-| **Auth** | Login, logout, check status |
-| **Issues** | Create, close, reopen, list, view, browse |
-| **Pull Requests** | Create (including draft), close, merge, list, view, checkout, browse |
-| **Repos** | Create, clone, delete, view (with field-specific queries like stars/forks), fork, star/unstar, browse |
-| **Search** | Search repositories by keyword |
-| **Status** | Dashboard summary of notifications, PRs, and issues |
-| **Contributors** | Top N contributors for a repo |
-| **Dependabot** | List alerts with severity/state filters |
-| **Workflows** | View workflow runs and workflow details |
-| **Other** | Codespaces, gists, releases, projects, labels, secrets, SSH keys, config, orgs |
+| Category          | Actions                                                                                               |
+| ----------------- | ----------------------------------------------------------------------------------------------------- |
+| **Auth**          | Login, logout, check status                                                                           |
+| **Issues**        | Create, close, reopen, list, view, browse                                                             |
+| **Pull Requests** | Create (including draft), close, merge, list, view, checkout, browse                                  |
+| **Repos**         | Create, clone, delete, view (with field-specific queries like stars/forks), fork, star/unstar, browse |
+| **Search**        | Search repositories by keyword                                                                        |
+| **Status**        | Dashboard summary of notifications, PRs, and issues                                                   |
+| **Contributors**  | Top N contributors for a repo                                                                         |
+| **Dependabot**    | List alerts with severity/state filters                                                               |
+| **Workflows**     | View workflow runs and workflow details                                                               |
+| **Other**         | Codespaces, gists, releases, projects, labels, secrets, SSH keys, config, orgs                        |
 
 ## Example Phrases
 

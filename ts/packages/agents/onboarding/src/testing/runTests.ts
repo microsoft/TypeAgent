@@ -2,7 +2,10 @@
 // Run from ts/ root: node --disable-warning=DEP0190 packages/agents/onboarding/dist/testing/runTests.js <integrationName>
 
 import { createDispatcher } from "agent-dispatcher";
-import { createNpmAppAgentProvider, getFsStorageProvider } from "dispatcher-node-providers";
+import {
+    createNpmAppAgentProvider,
+    getFsStorageProvider,
+} from "dispatcher-node-providers";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,7 +23,10 @@ if (fs.existsSync(envPath)) {
         const eqIdx = trimmed.indexOf("=");
         if (eqIdx < 0) continue;
         const key = trimmed.slice(0, eqIdx).trim();
-        const val = trimmed.slice(eqIdx + 1).trim().replace(/^["']|["']$/g, "");
+        const val = trimmed
+            .slice(eqIdx + 1)
+            .trim()
+            .replace(/^["']|["']$/g, "");
         if (!process.env[key]) process.env[key] = val;
     }
     console.log(`Loaded env from ${envPath}`);
@@ -29,7 +35,12 @@ if (fs.existsSync(envPath)) {
 const integrationName = process.argv[2] || "github-cli";
 
 const AGENTS_DIR = path.resolve(__dirname, "../../../../../../packages/agents");
-const WORKSPACE_DIR = path.join(os.homedir(), ".typeagent", "onboarding", integrationName);
+const WORKSPACE_DIR = path.join(
+    os.homedir(),
+    ".typeagent",
+    "onboarding",
+    integrationName,
+);
 
 const testCasesFile = path.join(WORKSPACE_DIR, "testing", "test-cases.json");
 if (!fs.existsSync(testCasesFile)) {
@@ -46,16 +57,27 @@ const provider = createNpmAppAgentProvider(configs, import.meta.url);
 
 const noop = () => {};
 const clientIO = {
-    clear: noop, exit: () => process.exit(0),
-    setUserRequest: noop, setDisplayInfo: noop,
-    setDisplay: noop, appendDisplay: noop,
-    appendDiagnosticData: noop, setDynamicDisplay: noop,
+    clear: noop,
+    exit: () => process.exit(0),
+    setUserRequest: noop,
+    setDisplayInfo: noop,
+    setDisplay: noop,
+    appendDisplay: noop,
+    appendDiagnosticData: noop,
+    setDynamicDisplay: noop,
     askYesNo: async (_id: any, _msg: any, def = false) => def,
     proposeAction: async () => undefined,
-    popupQuestion: async () => { throw new Error("not supported"); },
-    notify: noop, openLocalView: async () => {},
-    closeLocalView: async () => {}, requestChoice: noop, takeAction: noop,
-    requestInteraction: noop, interactionResolved: noop, interactionCancelled: noop,
+    popupQuestion: async () => {
+        throw new Error("not supported");
+    },
+    notify: noop,
+    openLocalView: async () => {},
+    closeLocalView: async () => {},
+    requestChoice: noop,
+    takeAction: noop,
+    requestInteraction: noop,
+    interactionResolved: noop,
+    interactionCancelled: noop,
 };
 
 const instanceDir = getInstanceDir();
@@ -65,14 +87,23 @@ const tmpDir = path.join(instanceDir, "onboarding-test-tmp-" + Date.now());
 console.log("Agent names from provider:", provider.getAppAgentNames());
 try {
     const manifest = await provider.getAppAgentManifest(integrationName);
-    console.log("Manifest loaded:", JSON.stringify({
-        desc: manifest.description,
-        schema: manifest.schema ? {
-            schemaFile: manifest.schema.schemaFile,
-            grammarFile: manifest.schema.grammarFile,
-            schemaType: manifest.schema.schemaType,
-        } : "NONE",
-    }, null, 2));
+    console.log(
+        "Manifest loaded:",
+        JSON.stringify(
+            {
+                desc: manifest.description,
+                schema: manifest.schema
+                    ? {
+                          schemaFile: manifest.schema.schemaFile,
+                          grammarFile: manifest.schema.grammarFile,
+                          schemaType: manifest.schema.schemaType,
+                      }
+                    : "NONE",
+            },
+            null,
+            2,
+        ),
+    );
 } catch (e: any) {
     console.error("Failed to load manifest:", e.message);
 }
@@ -80,7 +111,11 @@ try {
 console.log("Creating test dispatcher...");
 const dispatcher = await createDispatcher("onboarding-test-runner", {
     appAgentProviders: [provider],
-    agents: { schemas: [integrationName], actions: [integrationName], commands: ["dispatcher", integrationName] },
+    agents: {
+        schemas: [integrationName],
+        actions: [integrationName],
+        commands: ["dispatcher", integrationName],
+    },
     explainer: { enabled: false },
     cache: { enabled: true },
     collectCommandResult: true,
@@ -105,10 +140,16 @@ for (let i = 0; i < testCases.length; i++) {
             expectedActionName: tc.expectedActionName,
             actualActionName: actual,
             passed: ok,
-            ...(ok ? {} : { error: `Expected "${tc.expectedActionName}", got "${actual ?? "none"}"` }),
+            ...(ok
+                ? {}
+                : {
+                      error: `Expected "${tc.expectedActionName}", got "${actual ?? "none"}"`,
+                  }),
         });
         if (!ok) {
-            console.log(`  FAIL [${i+1}/${testCases.length}]: "${tc.phrase.substring(0,60)}" → ${actual ?? "none"} (exp: ${tc.expectedActionName})`);
+            console.log(
+                `  FAIL [${i + 1}/${testCases.length}]: "${tc.phrase.substring(0, 60)}" → ${actual ?? "none"} (exp: ${tc.expectedActionName})`,
+            );
         }
     } catch (err: any) {
         results.push({
@@ -117,23 +158,34 @@ for (let i = 0; i < testCases.length; i++) {
             passed: false,
             error: err?.message ?? String(err),
         });
-        console.log(`  ERROR [${i+1}/${testCases.length}]: "${tc.phrase.substring(0,60)}" → ${err?.message?.substring(0,80)}`);
+        console.log(
+            `  ERROR [${i + 1}/${testCases.length}]: "${tc.phrase.substring(0, 60)}" → ${err?.message?.substring(0, 80)}`,
+        );
     }
 }
 
 const failed = results.length - passed;
 const passRate = Math.round((passed / results.length) * 100);
-console.log(`\nResults: ${passed}/${results.length} (${passRate}%) — ${failed} failures`);
+console.log(
+    `\nResults: ${passed}/${results.length} (${passRate}%) — ${failed} failures`,
+);
 
 const resultFile = path.join(WORKSPACE_DIR, "testing", "results.json");
-fs.writeFileSync(resultFile, JSON.stringify({
-    integrationName,
-    ranAt: new Date().toISOString(),
-    total: results.length,
-    passed,
-    failed,
-    results,
-}, null, 2));
+fs.writeFileSync(
+    resultFile,
+    JSON.stringify(
+        {
+            integrationName,
+            ranAt: new Date().toISOString(),
+            total: results.length,
+            passed,
+            failed,
+            results,
+        },
+        null,
+        2,
+    ),
+);
 console.log(`Results saved to ${resultFile}`);
 
 await dispatcher.close();

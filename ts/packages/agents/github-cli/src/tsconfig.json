@@ -5,9 +5,7 @@
     "rootDir": ".",
     "outDir": "../dist"
   },
-  "include": [
-    "./**/*"
-  ],
+  "include": ["./**/*"],
   "ts-node": {
     "esm": true
   }

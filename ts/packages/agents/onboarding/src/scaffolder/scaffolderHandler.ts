@@ -102,7 +102,9 @@ async function handleScaffoldAgent(
 
     // Load discovery data to determine handler strategy (CLI vs stub)
     const apiSurface = await readArtifactJson<ApiSurface>(
-        integrationName, "discovery", "api-surface.json",
+        integrationName,
+        "discovery",
+        "api-surface.json",
     );
 
     await updatePhase(integrationName, "scaffolder", { status: "in-progress" });
@@ -475,8 +477,8 @@ function buildHandler(
     apiSurface?: ApiSurface,
 ): string {
     // If discovery data contains CLI actions, generate a CLI handler
-    const cliActions = apiSurface?.actions?.filter(
-        (a) => a.sourceUrl?.startsWith("cli:"),
+    const cliActions = apiSurface?.actions?.filter((a) =>
+        a.sourceUrl?.startsWith("cli:"),
     );
     if (cliActions && cliActions.length > 0) {
         const cliCommand = cliActions[0].sourceUrl!.split(":")[1];
@@ -1489,4 +1491,3 @@ export function instantiate(): AppAgent {
 }
 `;
 }
-

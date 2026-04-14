@@ -564,7 +564,11 @@ async function createTestDispatcher(integrationName: string) {
 
     const dispatcher = await createDispatcher("onboarding-test-runner", {
         appAgentProviders,
-        agents: { schemas: [integrationName], actions: [integrationName], commands: ["dispatcher", integrationName] },
+        agents: {
+            schemas: [integrationName],
+            actions: [integrationName],
+            commands: ["dispatcher", integrationName],
+        },
         explainer: { enabled: false },
         // Cache must be enabled for grammar matching to work.
         cache: { enabled: true },

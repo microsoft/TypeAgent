@@ -58,6 +58,7 @@ crawl CLI help for az as azure-cli
 ```
 
 This spawns the binary with `--help` (falling back to `-h`), parses subcommands, and recursively discovers the full command tree. Each subcommand becomes a `DiscoveredAction` with:
+
 - `path`: the full command (e.g., `gh issue create`)
 - `method`: `"CLI"`
 - `parameters`: parsed `--flags` with types
