@@ -13,7 +13,7 @@ internal class ActionDefinition
 {
     public string ActionName { get; set; }
     public string TypeName { get; set; }
-    public List<ParameterDefinition> Parameters { get; set; } = new List<ParameterDefinition>();
+    public List<ParameterDefinition> Parameters { get; set; } = [];
 }
 
 /// <summary>
@@ -44,13 +44,17 @@ internal static class SchemaParser
         var root = doc.RootElement;
 
         if (!root.TryGetProperty("types", out var types))
+        {
             return actions;
+        }
 
         foreach (var typeProp in types.EnumerateObject())
         {
             var actionDef = TryParseActionType(typeProp);
             if (actionDef != null)
+            {
                 actions.Add(actionDef);
+            }
         }
 
         return actions;
@@ -62,21 +66,40 @@ internal static class SchemaParser
 
         // Navigate: type.fields.actionName.type.typeEnum[0]
         if (!typeObj.TryGetProperty("type", out var typeInfo))
+        {
             return null;
+        }
+
         if (!typeInfo.TryGetProperty("fields", out var fields))
+        {
             return null;
+        }
+
         if (!fields.TryGetProperty("actionName", out var actionNameField))
+        {
             return null;
+        }
+
         if (!actionNameField.TryGetProperty("type", out var actionNameType))
+        {
             return null;
+        }
+
         if (!actionNameType.TryGetProperty("typeEnum", out var typeEnum))
+        {
             return null;
+        }
+
         if (typeEnum.GetArrayLength() == 0)
+        {
             return null;
+        }
 
         string actionName = typeEnum[0].GetString();
         if (string.IsNullOrEmpty(actionName))
+        {
             return null;
+        }
 
         var def = new ActionDefinition
         {
@@ -93,7 +116,9 @@ internal static class SchemaParser
             {
                 var paramDef = ParseParameter(paramProp);
                 if (paramDef != null)
+                {
                     def.Parameters.Add(paramDef);
+                }
             }
         }
 
@@ -106,11 +131,15 @@ internal static class SchemaParser
         var paramType = paramProp.Value;
 
         if (!paramType.TryGetProperty("type", out var typeInfo))
+        {
             return null;
+        }
 
         bool isOptional = false;
         if (paramType.TryGetProperty("optional", out var optionalProp))
+        {
             isOptional = optionalProp.GetBoolean();
+        }
 
         string csharpType = ResolveCSharpType(typeInfo, out bool isNullable);
         isOptional = isOptional || isNullable;
@@ -135,27 +164,18 @@ internal static class SchemaParser
         if (typeInfo.TryGetProperty("type", out var simpleType))
         {
             string typeStr = simpleType.GetString();
-            switch (typeStr)
+            return typeStr switch
             {
-                case "number":
-                    return "int";
-                case "boolean":
-                    return "bool";
-                case "string":
-                    return "string";
-                case "string-union":
-                    return "string";
-                case "type-union":
-                    return ResolveTypeUnion(typeInfo, out isNullable);
-                case "array":
-                    return ResolveArrayType(typeInfo);
-                case "type-reference":
-                    return "string";
-                case "object":
-                    return "string";
-                default:
-                    return "string";
-            }
+                "number" => "int",
+                "boolean" => "bool",
+                "string" => "string",
+                "string-union" => "string",
+                "type-union" => ResolveTypeUnion(typeInfo, out isNullable),
+                "array" => ResolveArrayType(typeInfo),
+                "type-reference" => "string",
+                "object" => "string",
+                _ => "string",
+            };
         }
 
         return "string";
@@ -177,7 +197,9 @@ internal static class SchemaParser
         isNullable = false;
 
         if (!typeInfo.TryGetProperty("types", out var unionTypes))
+        {
             return "string";
+        }
 
         string resolvedType = "string";
         foreach (var unionMember in unionTypes.EnumerateArray())
@@ -207,25 +229,27 @@ internal static class SchemaParser
     private static string GetDefaultValue(string csharpType, bool isOptional)
     {
         if (isOptional)
+        {
             return "null";
+        }
 
         if (csharpType.EndsWith("[]"))
-            return "null";
-
-        switch (csharpType)
         {
-            case "int": return "0";
-            case "bool": return "false";
-            case "double": return "0.0";
-            case "string": return "\"\"";
-            default: return "\"\"";
+            return "null";
         }
+
+        return csharpType switch
+        {
+            "int" => "0",
+            "bool" => "false",
+            "double" => "0.0",
+            "string" => "\"\"",
+            _ => "\"\"",
+        };
     }
 
     private static string ToPascalCase(string name)
     {
-        if (string.IsNullOrEmpty(name))
-            return name;
-        return char.ToUpperInvariant(name[0]) + name.Substring(1);
+        return string.IsNullOrEmpty(name) ? name : char.ToUpperInvariant(name[0]) + name.Substring(1);
     }
 }

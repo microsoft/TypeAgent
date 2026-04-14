@@ -1,9 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Collections.Immutable;
 using System.IO;
-using System.Text;
 using Microsoft.CodeAnalysis;
 
 namespace autoShell.Generators;
@@ -26,13 +24,17 @@ public class ActionParamsGenerator : IIncrementalGenerator
         {
             var text = file.GetText(cancellationToken);
             if (text == null)
+            {
                 return (FileName: (string)null, Source: (string)null);
+            }
 
             var json = text.ToString();
             var actions = SchemaParser.Parse(json);
 
             if (actions.Count == 0)
+            {
                 return (FileName: (string)null, Source: (string)null);
+            }
 
             string fileName = Path.GetFileNameWithoutExtension(file.Path);
             string source = RecordEmitter.Emit(actions, Path.GetFileName(file.Path));

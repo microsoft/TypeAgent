@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Text.Json;
 using autoShell.Handlers.Generated;
 using autoShell.Logging;
 using autoShell.Services;

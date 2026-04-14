@@ -99,7 +99,11 @@ internal class MouseSettingsHandler : SettingsHandlerBase
     private ActionResult HandleSetPrimaryMouseButton(SetPrimaryMouseButtonParams p)
     {
         string button = p.PrimaryButton;
-        if (string.IsNullOrEmpty(button)) button = "left";
+        if (string.IsNullOrEmpty(button))
+        {
+            button = "left";
+        }
+
         bool leftPrimary = button.Equals("left", StringComparison.OrdinalIgnoreCase);
         _systemParams.SwapMouseButton(!leftPrimary);
         return ActionResult.Ok($"Primary mouse button set to {button}");
