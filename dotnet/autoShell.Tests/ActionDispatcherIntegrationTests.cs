@@ -185,7 +185,9 @@ public class ActionDispatcherIntegrationTests
         var schemaActions = LoadRealSchemaActions();
         if (schemaActions.Count == 0)
         {
-            return; // Schema files not available (e.g., CI without TS build)
+            // Schemas not reachable from test output dir (relative path differs from autoShell binary).
+            // The source generator validates schemas at compile time; this is a runtime cross-check.
+            return;
         }
 
         var (missingHandlers, _) = SchemaValidator.FindMismatches(schemaActions, _dispatcher.RegisteredActions);
@@ -205,7 +207,9 @@ public class ActionDispatcherIntegrationTests
         var schemaActions = LoadRealSchemaActions();
         if (schemaActions.Count == 0)
         {
-            return; // Schema files not available (e.g., CI without TS build)
+            // Schemas not reachable from test output dir (relative path differs from autoShell binary).
+            // The source generator validates schemas at compile time; this is a runtime cross-check.
+            return;
         }
 
         var (_, missingSchemas) = SchemaValidator.FindMismatches(schemaActions, _dispatcher.RegisteredActions);
