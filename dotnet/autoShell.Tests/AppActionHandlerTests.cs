@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Text.Json;
 using autoShell.Handlers;
@@ -51,6 +52,9 @@ public class AppActionHandlerTests
         _appRegistryMock.Setup(a => a.GetWorkingDirectoryEnvVar("github copilot")).Returns("GITHUB_COPILOT_ROOT_DIR");
 
         _handler.Handle("LaunchProgram", JsonDocument.Parse("""{"name":"github copilot"}""").RootElement);
+
+        _processMock.Verify(p => p.Start(It.Is<ProcessStartInfo>(
+            psi => psi.WorkingDirectory != "")), Times.Once);
     }
 
     /// <summary>
@@ -158,7 +162,7 @@ public class AppActionHandlerTests
         _processMock.Setup(p => p.GetProcessesByName("myapp")).Returns([]);
         _appRegistryMock.Setup(a => a.GetExecutablePath("myapp")).Returns("myapp.exe");
         _processMock.SetupSequence(p => p.Start(It.IsAny<ProcessStartInfo>()))
-            .Throws(new System.ComponentModel.Win32Exception("not found"))
+            .Throws(new Win32Exception("not found"))
             .Returns(Process.GetCurrentProcess());
 
         _handler.Handle("LaunchProgram", JsonDocument.Parse("""{"name":"myapp"}""").RootElement);
