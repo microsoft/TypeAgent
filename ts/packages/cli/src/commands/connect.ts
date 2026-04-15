@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import { Dispatcher } from "@typeagent/dispatcher-types";
+import type { Dispatcher } from "@typeagent/dispatcher-types";
 import {
     getEnhancedConsolePrompt,
     processCommandsEnhanced,
