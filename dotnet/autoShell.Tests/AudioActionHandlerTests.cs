@@ -135,6 +135,80 @@ public class AudioActionHandlerTests
         _audioMock.Verify(a => a.SetMute(false), Times.Once);
     }
 
+    // --- AdjustVolume ---
+
+    /// <summary>
+    /// Verifies that AdjustVolume "up" increases volume by the specified amount.
+    /// </summary>
+    [Fact]
+    public void AdjustVolume_Up_IncreasesVolume()
+    {
+        _audioMock.Setup(a => a.GetVolume()).Returns(50);
+
+        var result = _handler.Handle("AdjustVolume", JsonDocument.Parse("""{"direction":"up","amount":15}""").RootElement);
+
+        Assert.True(result.Success);
+        _audioMock.Verify(a => a.SetVolume(65), Times.Once);
+    }
+
+    /// <summary>
+    /// Verifies that AdjustVolume "down" decreases volume by the specified amount.
+    /// </summary>
+    [Fact]
+    public void AdjustVolume_Down_DecreasesVolume()
+    {
+        _audioMock.Setup(a => a.GetVolume()).Returns(50);
+
+        var result = _handler.Handle("AdjustVolume", JsonDocument.Parse("""{"direction":"down","amount":20}""").RootElement);
+
+        Assert.True(result.Success);
+        _audioMock.Verify(a => a.SetVolume(30), Times.Once);
+    }
+
+    /// <summary>
+    /// Verifies that AdjustVolume defaults to 10% when amount is omitted.
+    /// </summary>
+    [Fact]
+    public void AdjustVolume_DefaultAmount_AdjustsBy10()
+    {
+        _audioMock.Setup(a => a.GetVolume()).Returns(40);
+
+        _handler.Handle("AdjustVolume", JsonDocument.Parse("""{"direction":"up"}""").RootElement);
+
+        _audioMock.Verify(a => a.SetVolume(50), Times.Once);
+    }
+
+    /// <summary>
+    /// Verifies that AdjustVolume clamps to 0-100 range.
+    /// </summary>
+    [Theory]
+    [InlineData("up", 95, 30, 100)]   // 95 + 30 = 125, clamped to 100
+    [InlineData("down", 10, 25, 0)]    // 10 - 25 = -15, clamped to 0
+    public void AdjustVolume_ClampsToRange(string direction, int current, int amount, int expected)
+    {
+        _audioMock.Setup(a => a.GetVolume()).Returns(current);
+
+        _handler.Handle("AdjustVolume", JsonDocument.Parse($$"""{"direction":"{{direction}}","amount":{{amount}}}""").RootElement);
+
+        _audioMock.Verify(a => a.SetVolume(expected), Times.Once);
+    }
+
+    /// <summary>
+    /// Verifies that AdjustVolume saves the current volume before adjusting.
+    /// </summary>
+    [Fact]
+    public void AdjustVolume_SavesCurrentVolume()
+    {
+        _audioMock.Setup(a => a.GetVolume()).Returns(60);
+
+        _handler.Handle("AdjustVolume", JsonDocument.Parse("""{"direction":"up","amount":10}""").RootElement);
+        _audioMock.Invocations.Clear();
+
+        _handler.Handle("RestoreVolume", JsonDocument.Parse("{}").RootElement);
+
+        _audioMock.Verify(a => a.SetVolume(60), Times.Once);
+    }
+
     // --- Unknown key ---
 
     /// <summary>

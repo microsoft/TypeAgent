@@ -9,6 +9,7 @@ export type DesktopActions =
     | MinimizeWindowAction
     | SwitchToWindowAction
     | SetVolumeAction
+    | AdjustVolumeAction
     | RestoreVolumeAction
     | MuteVolumeAction
     | SetWallpaperAction
@@ -93,6 +94,15 @@ export type SetVolumeAction = {
     actionName: "Volume";
     parameters: {
         targetVolume: number; // value between 0 and 100
+    };
+};
+
+// Adjusts system volume up or down by a relative amount
+export type AdjustVolumeAction = {
+    actionName: "AdjustVolume";
+    parameters: {
+        direction: "up" | "down"; // whether to increase or decrease volume
+        amount?: number; // percentage to adjust by (default 10)
     };
 };
 

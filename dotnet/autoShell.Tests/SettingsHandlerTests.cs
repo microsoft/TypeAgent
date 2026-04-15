@@ -621,6 +621,28 @@ public class MouseSettingsHandlerTests
         _systemParamsMock.Verify(s => s.SwapMouseButton(false), Times.Once);
     }
 
+    /// <summary>
+    /// Verifies that ToggleMouseSonar enable writes "1" to the MouseSonar registry value.
+    /// </summary>
+    [Fact]
+    public void ToggleMouseSonar_Enable_SetsSonar1()
+    {
+        Handle("ToggleMouseSonar", """{"enable":true}""");
+
+        _registryMock.Verify(r => r.SetValue(@"Control Panel\Mouse", "MouseSonar", "1", RegistryValueKind.String), Times.Once);
+    }
+
+    /// <summary>
+    /// Verifies that ToggleMouseSonar disable writes "0" to the MouseSonar registry value.
+    /// </summary>
+    [Fact]
+    public void ToggleMouseSonar_Disable_SetsSonar0()
+    {
+        Handle("ToggleMouseSonar", """{"enable":false}""");
+
+        _registryMock.Verify(r => r.SetValue(@"Control Panel\Mouse", "MouseSonar", "0", RegistryValueKind.String), Times.Once);
+    }
+
     private void Handle(string key, string jsonValue)
     {
         _handler.Handle(key, JsonDocument.Parse(jsonValue).RootElement);

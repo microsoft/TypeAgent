@@ -40,6 +40,9 @@ internal class MouseSettingsHandler : SettingsHandlerBase
         AddOpenSettingsAction("MousePointerCustomization", new OpenSettingsConfig("ms-settings:easeofaccess-mouse", "mouse settings"));
         AddOpenSettingsAction("EnableTouchPad", new OpenSettingsConfig("ms-settings:devices-touchpad", "touchpad settings"));
         AddOpenSettingsAction("TouchpadCursorSpeed", new OpenSettingsConfig("ms-settings:devices-touchpad", "touchpad settings"));
+        AddRegistryToggleAction("ToggleMouseSonar", new RegistryToggleConfig(
+            @"Control Panel\Mouse", "MouseSonar", "enable",
+            OnValue: "1", OffValue: "0", ValueKind: Microsoft.Win32.RegistryValueKind.String, DisplayName: "Mouse Sonar"));
         AddAction<CursorTrailParams>("CursorTrail", HandleMouseCursorTrail);
         AddAction<EnhancePointerPrecisionParams>("EnhancePointerPrecision", HandleEnhancePointerPrecision);
         AddAction<MouseCursorSpeedParams>("MouseCursorSpeed", HandleMouseCursorSpeed);

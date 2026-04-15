@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System;
 using autoShell.Handlers.Generated;
 using autoShell.Services;
 
@@ -17,6 +18,7 @@ internal class AudioActionHandler : ActionHandlerBase
     public AudioActionHandler(IAudioService audio)
     {
         _audio = audio;
+        AddAction<AdjustVolumeParams>("AdjustVolume", HandleAdjustVolume);
         AddAction<MuteParams>("Mute", HandleMute);
         AddAction<RestoreVolumeParams>("RestoreVolume", HandleRestoreVolume);
         AddAction<VolumeParams>("Volume", HandleVolume);
@@ -27,6 +29,23 @@ internal class AudioActionHandler : ActionHandlerBase
         bool mute = p.On;
         _audio.SetMute(mute);
         return ActionResult.Ok($"Audio {(mute ? "muted" : "unmuted")}");
+    }
+
+    private ActionResult HandleAdjustVolume(AdjustVolumeParams p)
+    {
+        int current = _audio.GetVolume();
+        int amount = p.Amount is > 0 ? p.Amount.Value : 10;
+        int target = p.Direction.Equals("down", StringComparison.OrdinalIgnoreCase)
+            ? current - amount
+            : current + amount;
+        target = Math.Clamp(target, 0, 100);
+
+        if (current > 0)
+        {
+            _savedVolumePct = current;
+        }
+        _audio.SetVolume(target);
+        return ActionResult.Ok($"Volume adjusted from {current}% to {target}%");
     }
 
     private ActionResult HandleRestoreVolume(RestoreVolumeParams p)
