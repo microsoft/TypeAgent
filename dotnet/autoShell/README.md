@@ -33,21 +33,20 @@ AutoShell is part of the [TypeAgent](https://github.com/microsoft/TypeAgent) pro
 
 ## Building
 
-AutoShell's source generator reads `.pas.json` schema files produced by the TypeScript action schema compiler (`asc`). These must be generated before building:
+AutoShell's build automatically generates `.pas.json` schema files via a pre-build step that invokes the TypeScript action schema compiler (`asc`). You only need Node.js and pnpm installed, plus the `asc` compiler built:
 
 ```bash
-# 1. Generate schemas (from repo root)
+# 1. One-time setup (from repo root)
 cd ts
 pnpm install
 pnpm run --filter @typeagent/action-schema-compiler... build
-pnpm run -C packages/agents/desktop asc:all
 
-# 2. Build AutoShell
+# 2. Build AutoShell (schemas are regenerated automatically)
 cd ../dotnet
 dotnet build autoShell/autoShell.csproj
 ```
 
-If you've already run `pnpm run build` in the `ts/` workspace, the schemas are already generated.
+If you've already run `pnpm run build` in the `ts/` workspace, step 1 is already done.
 
 ## Usage
 

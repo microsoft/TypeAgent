@@ -37,8 +37,11 @@
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />
   </ItemGroup>
-  <ItemGroup>
-    <!-- Schema files consumed by the source generator (grouped under Schemas/ in project view) -->
-    <AdditionalFiles Include="..\..\ts\packages\agents\desktop\dist\*.pas.json" LinkBase="Schemas" />
-  </ItemGroup>
+  <Target Name="GenerateSchemas" BeforeTargets="BeforeBuild">
+    <Exec Command="pnpm run -C ..\..\ts\packages\agents\desktop asc:all" WorkingDirectory="$(MSBuildProjectDirectory)" />
+    <!-- AdditionalFiles must be added after generation so the glob resolves to the freshly-created files -->
+    <ItemGroup>
+      <AdditionalFiles Include="..\..\ts\packages\agents\desktop\dist\*.pas.json" LinkBase="Schemas" />
+    </ItemGroup>
+  </Target>
 </Project>
