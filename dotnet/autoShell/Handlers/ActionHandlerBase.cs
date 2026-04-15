@@ -48,6 +48,10 @@ internal abstract class ActionHandlerBase : IActionHandler
             T typed;
             try
             {
+                if (parameters.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+                {
+                    return ActionResult.Fail($"Invalid parameters for '{actionName}': parameters are missing or null");
+                }
                 typed = JsonSerializer.Deserialize<T>(parameters.GetRawText(), CamelCaseOptions);
             }
             catch (JsonException ex)

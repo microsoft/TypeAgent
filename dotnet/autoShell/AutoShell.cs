@@ -93,9 +93,10 @@ internal class AutoShell
     {
         while (true)
         {
+            string line = null;
             try
             {
-                string line = Console.ReadLine();
+                line = Console.ReadLine();
 
                 // Null means stdin was closed (e.g., parent process exited)
                 if (line == null)
@@ -122,6 +123,22 @@ internal class AutoShell
             }
             catch (Exception ex)
             {
+                // Always write a JSON failure to stdout so the TS sendAction
+                // correlation doesn't hang waiting for a response.
+                var errorResult = ActionResult.Fail($"Error: {ex.Message}");
+
+                // Try to extract the request id from the raw line for correlation
+                try
+                {
+                    using var errDoc = JsonDocument.Parse(line);
+                    if (errDoc.RootElement.TryGetProperty("id", out JsonElement errorId))
+                    {
+                        errorResult.Id = errorId.ToString();
+                    }
+                }
+                catch { /* line wasn't valid JSON — send response without id */ }
+
+                Console.WriteLine(JsonSerializer.Serialize(errorResult));
                 s_logger.Error(ex);
             }
         }

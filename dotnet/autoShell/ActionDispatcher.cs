@@ -147,7 +147,7 @@ internal class ActionDispatcher
 
         JsonElement parameters = root.TryGetProperty("parameters", out JsonElement p)
             ? p
-            : default;
+            : JsonDocument.Parse("{}").RootElement.Clone();
 
         try
         {
