@@ -21,7 +21,7 @@ public class ActionDispatcherTests
     private static JsonElement Parse(string json) => JsonDocument.Parse(json).RootElement;
 
     /// <summary>
-    /// Verifies that dispatching a JSON object with a "quit" actionName returns null.
+    /// Verifies that dispatching a JSON object with a "quit" actionName returns a quit ActionResult.
     /// </summary>
     [Fact]
     public void Dispatch_QuitKey_ReturnsQuitResult()

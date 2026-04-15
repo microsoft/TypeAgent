@@ -42,6 +42,10 @@ internal class NetworkActionHandler : ActionHandlerBase
     private ActionResult HandleConnectWifi(ConnectWifiParams p)
     {
         string ssid = p.Ssid;
+        if (string.IsNullOrWhiteSpace(ssid))
+        {
+            return ActionResult.Fail("WiFi SSID is required");
+        }
         string password = p.Password ?? "";
         _network.ConnectToWifi(ssid, password);
         return ActionResult.Ok($"Connecting to WiFi network '{ssid}'");
@@ -69,7 +73,8 @@ internal class NetworkActionHandler : ActionHandlerBase
     private ActionResult HandleListWifiNetworks(JsonElement parameters)
     {
         string networks = _network.ListWifiNetworks();
-        return ActionResult.Ok("Listed WiFi networks", JsonDocument.Parse(networks).RootElement.Clone());
+        using var doc = JsonDocument.Parse(networks);
+        return ActionResult.Ok("Listed WiFi networks", doc.RootElement.Clone());
     }
 
     private ActionResult HandleToggleAirplaneMode(ToggleAirplaneModeParams p)

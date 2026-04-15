@@ -83,8 +83,9 @@ internal partial class TaskbarSettingsHandler : SettingsHandlerBase
             }
 
             Registry.SetValue(StuckRects3, "Settings", settings, RegistryValueKind.Binary);
+            return ActionResult.Ok($"Taskbar auto-hide {(hide ? "enabled" : "disabled")}");
         }
 
-        return ActionResult.Ok($"Taskbar auto-hide {(hide ? "enabled" : "disabled")}");
+        return ActionResult.Fail("StuckRects3 registry blob not found or invalid");
     }
 }

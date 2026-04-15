@@ -289,7 +289,7 @@ internal class WindowsVirtualDesktopService : IVirtualDesktopService
 
             foreach (var desktopNameElement in desktopNames.EnumerateArray())
             {
-                string desktopName = desktopNameElement.GetString();
+                string desktopName = desktopNameElement.GetString() ?? $"Desktop {desktopNameElement}";
 
                 try
                 {

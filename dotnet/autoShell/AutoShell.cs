@@ -66,20 +66,28 @@ internal class AutoShell
         string rawCmdLine = Marshal.PtrToStringUni(GetCommandLineW());
         string cmdLine = StripExecutableName(rawCmdLine);
 
-        using var doc = JsonDocument.Parse(cmdLine);
-        var root = doc.RootElement;
-
-        if (root.ValueKind == JsonValueKind.Array)
+        try
         {
-            foreach (var element in root.EnumerateArray())
+            using var doc = JsonDocument.Parse(cmdLine);
+            var root = doc.RootElement;
+
+            if (root.ValueKind == JsonValueKind.Array)
             {
-                var result = ExecLine(element);
+                foreach (var element in root.EnumerateArray())
+                {
+                    var result = ExecLine(element);
+                    Console.WriteLine(JsonSerializer.Serialize(result));
+                }
+            }
+            else
+            {
+                var result = ExecLine(root);
                 Console.WriteLine(JsonSerializer.Serialize(result));
             }
         }
-        else
+        catch (Exception ex)
         {
-            var result = ExecLine(root);
+            var result = ActionResult.Fail($"Failed to parse command line: {ex.Message}");
             Console.WriteLine(JsonSerializer.Serialize(result));
         }
     }

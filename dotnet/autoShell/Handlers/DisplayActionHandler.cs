@@ -31,7 +31,8 @@ internal class DisplayActionHandler : ActionHandlerBase
         try
         {
             string resolutions = _display.ListResolutions();
-            return ActionResult.Ok("Listed resolutions", JsonDocument.Parse(resolutions).RootElement.Clone());
+            using var doc = JsonDocument.Parse(resolutions);
+            return ActionResult.Ok("Listed resolutions", doc.RootElement.Clone());
         }
         catch (Exception ex)
         {
@@ -62,7 +63,8 @@ internal class DisplayActionHandler : ActionHandlerBase
             }
 
             string result = _display.SetResolution((uint)width, (uint)height, refreshRate);
-            return ActionResult.Ok($"Screen resolution set to {width}x{height}", JsonDocument.Parse(result).RootElement.Clone());
+            using var doc = JsonDocument.Parse(result);
+            return ActionResult.Ok($"Screen resolution set to {width}x{height}", doc.RootElement.Clone());
         }
         catch (Exception ex)
         {
