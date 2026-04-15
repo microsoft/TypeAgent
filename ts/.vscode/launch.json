@@ -49,11 +49,11 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "CLI interactive",
+      "name": "CLI connect",
       "skipFiles": ["<node_internals>/**"],
       "cwd": "${workspaceFolder}/packages/cli",
       "program": "./bin/run.js",
-      "args": ["interactive"],
+      "args": ["connect"],
       "console": "integratedTerminal",
       "outFiles": ["${workspaceFolder}/**/*.js"]
     },
@@ -76,11 +76,11 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "CLI (dev) interactive",
+      "name": "CLI (dev) connect",
       "skipFiles": ["<node_internals>/**"],
       "cwd": "${workspaceFolder}/packages/cli",
       "program": "./bin/dev.js",
-      "args": ["interactive"],
+      "args": ["connect"],
       "runtimeArgs": [
         "--loader",
         "ts-node/esm",
@@ -92,11 +92,11 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "CLI (dev) interactive [intergrated terminal]",
+      "name": "CLI (dev) connect [integrated terminal]",
       "skipFiles": ["<node_internals>/**"],
       "cwd": "${workspaceFolder}/packages/cli",
       "program": "./bin/dev.js",
-      "args": ["interactive"],
+      "args": ["connect"],
       "runtimeArgs": [
         "--loader",
         "ts-node/esm",
