@@ -260,6 +260,38 @@ export async function createSessionManager(
         }
     }
 
+    // Sweep orphaned ephemeral sessions left behind by unclean CLI exits
+    {
+        const toSweep: string[] = [];
+        for (const [id, record] of sessions) {
+            if (
+                record.name.startsWith("cli-ephemeral-") ||
+                record.name.startsWith("cli-replay-")
+            ) {
+                toSweep.push(id);
+            }
+        }
+        for (const id of toSweep) {
+            const record = sessions.get(id)!;
+            debugSession(
+                `Sweeping orphaned ephemeral session "${record.name}" (${id})`,
+            );
+            sessions.delete(id);
+            const persistDir = getSessionPersistDir(id);
+            try {
+                await fs.promises.rm(persistDir, {
+                    recursive: true,
+                    force: true,
+                });
+            } catch {
+                // Best effort — dir may not exist
+            }
+        }
+        if (toSweep.length > 0) {
+            await saveMetadata();
+        }
+    }
+
     const manager: SessionManager = {
         async createSession(name: string): Promise<SessionInfo> {
             validateSessionName(name);

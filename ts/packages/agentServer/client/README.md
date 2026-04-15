@@ -40,32 +40,46 @@ await connection.close();
 | `deleteSession(sessionId)`          | Delete a session and its persisted data              |
 | `close()`                           | Close the WebSocket connection                       |
 
-### `ensureAndConnectDispatcher(clientIO, port?, options?, onDisconnect?)`
+### `ensureAgentServer(port?, hidden?)`
 
-Convenience wrapper that auto-spawns the server if needed and joins a session, returning a `Dispatcher` directly. Used by Shell and CLI.
+Ensures the agentServer is running, spawning it if needed.
 
-1. Checks whether a server is already listening on `ws://localhost:<port>` (default 8999).
-2. If not, calls `spawnAgentServer()` to start it as a detached child process.
+1. Calls `isServerRunning(port)` to check whether a server is already listening.
+2. If not, calls `spawnAgentServer(hidden)` to start it as a detached child process.
 3. Polls until the server is ready (500 ms interval, 60 s timeout).
-4. Calls `connectDispatcher()` and returns the `Dispatcher` proxy.
 
 ```typescript
-const dispatcher = await ensureAndConnectDispatcher(
-  clientIO,
-  8999,
-  { clientType: "shell" },
-  () => {
-    console.error("Disconnected");
-    process.exit(1);
-  },
-);
+// Start hidden (no window) — default for non-interactive CLI commands
+await ensureAgentServer(8999, true);
 
-await dispatcher.processCommand("help");
+// Start in a visible window — default for interactive connect
+await ensureAgentServer(8999, false);
+
+const connection = await connectAgentServer("ws://localhost:8999");
+```
+
+| Parameter | Type      | Default | Description                                                   |
+| --------- | --------- | ------- | ------------------------------------------------------------- |
+| `port`    | `number`  | `8999`  | Port to check and spawn on                                    |
+| `hidden`  | `boolean` | `false` | When spawning, suppress the terminal/window (`true` = hidden) |
+
+### `isServerRunning(port?)`
+
+Returns `true` if a server is already listening on `ws://localhost:<port>`.
+
+```typescript
+if (await isServerRunning(8999)) {
+  console.log("Server is up");
+}
 ```
 
 ### `stopAgentServer(port?)`
 
 Connects to the running server on the given port and sends a `shutdown()` RPC.
+
+### `ensureAndConnectDispatcher(clientIO, port?, options?, onDisconnect?)` _(deprecated)_
+
+Convenience wrapper that auto-spawns the server if needed and joins a session, returning a `Dispatcher` directly. Prefer calling `ensureAgentServer()` + `connectAgentServer()` + `joinSession()` separately for full control.
 
 ### `connectDispatcher(clientIO, url, options?, onDisconnect?)` _(deprecated)_
 

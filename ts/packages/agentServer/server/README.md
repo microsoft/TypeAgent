@@ -14,7 +14,8 @@ pnpm --filter agent-server start
 pnpm --filter agent-server start -- --config test
 
 # Stop (sends shutdown via RPC)
-pnpm --filter agent-server stop
+agent-cli server stop              # recommended
+pnpm --filter agent-server stop    # alternative
 ```
 
 ### With node directly
@@ -26,7 +27,7 @@ node --disable-warning=DEP0190 packages/agentServer/server/dist/server.js
 node --disable-warning=DEP0190 packages/agentServer/server/dist/server.js --config test
 ```
 
-Listens on `ws://localhost:8999`. The server also starts automatically when clients call `ensureAndConnectDispatcher()`.
+Listens on `ws://localhost:8999`. The server also starts automatically when clients call `ensureAgentServer()`.
 
 ---
 
@@ -48,6 +49,7 @@ Maintains a pool of per-session `SharedDispatcher` instances. Key behaviors:
 - **Persistence:** session metadata stored in `~/.typeagent/server-sessions/sessions.json`; each session's data in `~/.typeagent/server-sessions/<sessionId>/`
 - **Lazy init:** each session's `SharedDispatcher` is created on first `joinSession()` and torn down after 5 minutes of inactivity
 - **Auto-create:** if no session exists and no `sessionId` is provided, a `"default"` session is created automatically
+- **Startup sweep:** on server start, sessions prefixed `cli-ephemeral-` or `cli-replay-` are automatically deleted to reclaim any orphaned ephemeral sessions left over from crashed CLI processes
 
 ### `sharedDispatcher.ts` — Routing layer
 

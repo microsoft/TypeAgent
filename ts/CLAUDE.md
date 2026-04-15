@@ -59,7 +59,7 @@ Detail architecture descriptions are located in the **`docs/architecture`** dire
 - **`packages/knowPro/`** — Structured RAG implementation for conversational memory.
 - **`packages/agents/`** — All application agents (player, calendar, email, list, browser, etc.).
 - **`packages/shell/`** — Electron GUI app.
-- **`packages/cli/`** — Console app.
+- **`packages/cli/`** — Console app (connected-mode only; all commands route through `agent-server` via WebSocket RPC).
 
 ### Agent plugin structure
 

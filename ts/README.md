@@ -175,7 +175,7 @@ Also, you can go to the shell directory `./packages/shell` and start from there.
 [TypeAgent CLI](./packages/cli) provides a console based _interactive agents_ with _natural language interfaces_ experience. Additional console command is available to explore different part of TypeAgent functionalities.
 
 - Run `pnpm run cli` to get the available command
-- Run `pnpm run cli -- interactive` will start the interactive prompt
+- Run `pnpm run cli -- connect` will start the interactive prompt (connecting to the agent server via WebSocket RPC)
 
 Also, you can go to the CLI directory `./packages/cli` and start from there. Please see instruction in TypeAgent CLI's [README.md](./packages/cli/README.md) for more options and detail.
 
@@ -277,13 +277,13 @@ If you open this directory as a workspace in VSCode, multiple launch task is def
 
 Common Debug Launch Task:
 
-- CLI interactive - `./package/cli/bin/run.js interactive`
-- CLI (dev) interactive - `./package/cli/bin/dev.js interactive` with a new command prompt
-- CLI (dev) interactive [Integrated Terminal] - `./bin/dev.js interactive` using VSCode terminal (needed for WSL)
+- CLI connect - `./package/cli/bin/run.js connect`
+- CLI (dev) connect - `./package/cli/bin/dev.js connect` with a new command prompt
+- CLI (dev) connect [Integrated Terminal] - `./bin/dev.js connect` using VSCode terminal (needed for WSL)
 
 #### Attaching to running sessions
 
-To attaching to an existing session with TypeAgent CLI's interactive mode or TypeAgent Shell, you can start inspector by issuing the command `@debug` and use the VSCode `Attach` debugger launch task to attach.
+To attaching to an existing session with TypeAgent CLI's connect mode or TypeAgent Shell, you can start inspector by issuing the command `@debug` and use the VSCode `Attach` debugger launch task to attach.
 
 #### TypeAgent Shell Browser Process
 
@@ -298,7 +298,7 @@ The project uses [debug](https://www.npmjs.com/package/debug) package to enable 
 For example (in Linux), to trace the GPT prompt that get sent when running the interactive CLI.
 
 ```bash
-DEBUG=typeagent:prompt packages/cli/bin/run.js interactive
+DEBUG=typeagent:prompt packages/cli/bin/run.js connect
 ```
 
 **Option 2**: In the shell or CLI's interactive mode, you can issue the command `@trace <pattern>` to add to the list of namespace. Use "-" or "-\*" to disable all the trace.
