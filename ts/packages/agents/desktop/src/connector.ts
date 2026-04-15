@@ -86,9 +86,10 @@ function loadKnownActionNames(): Set<string> {
                     fs.readFileSync(path.join(distDir, file), "utf-8"),
                 );
                 if (content.types) {
-                    for (const typeDef of Object.values(content.types) as any[]) {
-                        const actionField =
-                            typeDef?.type?.fields?.actionName;
+                    for (const typeDef of Object.values(
+                        content.types,
+                    ) as any[]) {
+                        const actionField = typeDef?.type?.fields?.actionName;
                         const typeEnum = actionField?.type?.typeEnum;
                         if (Array.isArray(typeEnum)) {
                             for (const name of typeEnum) {
@@ -150,7 +151,10 @@ async function ensureAutomationProcess(agentContext: DesktopActionContext) {
                 const response: ActionResult = JSON.parse(line);
                 debugData(`Response: ${line}`);
 
-                if (response.id !== undefined && pendingRequests.has(response.id)) {
+                if (
+                    response.id !== undefined &&
+                    pendingRequests.has(response.id)
+                ) {
                     const pending = pendingRequests.get(response.id)!;
                     pendingRequests.delete(response.id);
                     pending.resolve(response);
@@ -183,7 +187,11 @@ async function sendAction(
     return new Promise<ActionResult>((resolve, reject) => {
         const timeout = setTimeout(() => {
             pendingRequests.delete(id);
-            reject(new Error(`sendAction timed out after ${SEND_ACTION_TIMEOUT_MS}ms for: ${payload}`));
+            reject(
+                new Error(
+                    `sendAction timed out after ${SEND_ACTION_TIMEOUT_MS}ms for: ${payload}`,
+                ),
+            );
         }, SEND_ACTION_TIMEOUT_MS);
 
         pendingRequests.set(id, {
@@ -252,7 +260,10 @@ export async function runDesktopActions(
                 ) {
                     file = file.substring(3);
                 } else {
-                    return { success: false, message: "Failed to download the requested image." };
+                    return {
+                        success: false,
+                        message: "Failed to download the requested image.",
+                    };
                 }
             }
 
@@ -284,7 +295,10 @@ export async function runDesktopActions(
                     }
                 }
             } else {
-                return { success: false, message: "Unknown wallpaper location." };
+                return {
+                    success: false,
+                    message: "Unknown wallpaper location.",
+                };
             }
             break;
         }
