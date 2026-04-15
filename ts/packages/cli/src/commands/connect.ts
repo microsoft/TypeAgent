@@ -1,13 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// TODO: The CLI still depends on agent-dispatcher for types (Dispatcher, ClientIO,
-// RequestId, etc.) and helpers (withConsoleClientIO, getStatusSummary). These types
-// should eventually be moved to @typeagent/dispatcher-types to avoid the heavyweight
-// dependency. See cli-agent-server-deprecation.md Phase 5.
-
 import { Args, Command, Flags } from "@oclif/core";
-import { Dispatcher } from "agent-dispatcher";
+import { Dispatcher } from "@typeagent/dispatcher-types";
 import {
     getEnhancedConsolePrompt,
     processCommandsEnhanced,
@@ -21,7 +16,7 @@ import {
     ensureAndConnectSession,
     AgentServerConnection,
 } from "@typeagent/agent-server-client";
-import { getStatusSummary } from "agent-dispatcher/helpers/status";
+import { getStatusSummary } from "@typeagent/dispatcher-types/helpers/status";
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as os from "os";

@@ -55,6 +55,7 @@
     "@typeagent/action-schema": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/agent-server-client": "workspace:*",
+    "@typeagent/dispatcher-types": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "action-grammar": "workspace:*",
     "agent-cache": "workspace:*",
