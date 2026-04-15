@@ -31,15 +31,13 @@ function createTestClientIO(data: IAgentMessage[]): ClientIO {
         setDisplayInfo: () => {},
         appendDiagnosticData: () => {},
         setDynamicDisplay: () => {},
-        askYesNo: async (
-            requestId: RequestId,
-            message: string,
-            defaultValue: boolean = false,
-        ) => defaultValue,
+        question: async (
+            _requestId: RequestId | undefined,
+            _message: string,
+            _choices: string[],
+            defaultId?: number,
+        ) => defaultId ?? 0,
         proposeAction: async () => undefined,
-        popupQuestion: async () => {
-            throw new Error("popupQuestion not implemented");
-        },
         notify: () => {},
         openLocalView: async () => {},
         closeLocalView: async () => {},

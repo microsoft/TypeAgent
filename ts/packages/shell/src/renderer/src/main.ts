@@ -215,8 +215,22 @@ function registerClient(
                 ),
             );
         },
-        askYesNo: async (requestId, message, _defaultValue) => {
-            return chatView.askYesNo(requestId, message, "");
+        question: async (requestId, message, choices) => {
+            // For binary Yes/No with a known requestId, delegate to the existing chatView UI.
+            if (
+                requestId !== undefined &&
+                choices.length === 2 &&
+                choices[0] === "Yes" &&
+                choices[1] === "No"
+            ) {
+                const yes = await chatView.askYesNo(requestId, message, "");
+                return yes ? 0 : 1;
+            }
+            // General multi-choice and broadcast (no requestId) are not yet implemented
+            // in the Shell renderer — the main process handles those via dialog.showMessageBox.
+            throw new Error(
+                "Main process should have handled multi-choice question",
+            );
         },
         requestChoice: (
             requestId,
@@ -239,9 +253,6 @@ function registerClient(
         },
         proposeAction: async (requestId, actionTemplates, source) => {
             return chatView.proposeAction(requestId, actionTemplates, source);
-        },
-        popupQuestion: () => {
-            throw new Error("Main process should have handled popupQuestion");
         },
         notify: (requestId, event, data, source, seq?) => {
             withReplayQueue(() => {
@@ -343,8 +354,8 @@ function registerClient(
             // TODO: Implement deferred interaction support for agent-server connect mode.
             // When the shell connects to a SharedDispatcher, requestInteraction is pushed
             // from the server. Without handling it, the server-side promise hangs for the
-            // full 10-minute timeout before resolving with the default value (askYesNo) or
-            // rejecting (proposeAction/popupQuestion).
+            // full 10-minute timeout before resolving with the defaultId (question) or
+            // rejecting (proposeAction).
             //
             // The fix (Option A): on requestInteraction, dispatch into the existing
             // chatView.askYesNo / chatView.proposeAction / dialog.showMessageBox UI (all

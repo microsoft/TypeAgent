@@ -10,22 +10,18 @@ import type {
 } from "@typeagent/dispatcher-types";
 
 export type ClientIOInvokeFunctions = {
-    askYesNo(
-        requestId: RequestId,
+    question(
+        requestId: RequestId | undefined,
         message: string,
-        defaultValue?: boolean,
-    ): Promise<boolean>;
+        choices: string[],
+        defaultId?: number,
+        source?: string,
+    ): Promise<number>;
     proposeAction(
         requestId: RequestId,
         actionTemplates: TemplateEditConfig,
         source: string,
     ): Promise<unknown>;
-    popupQuestion(
-        message: string,
-        choices: string[],
-        defaultId: number | undefined,
-        source: string,
-    ): Promise<number>;
     openLocalView(requestId: RequestId, port: number): Promise<void>;
     closeLocalView(requestId: RequestId, port: number): Promise<void>;
 };
