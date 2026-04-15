@@ -299,8 +299,6 @@ function createMcpClientIO(
  *   discover_agents   — list agents or fetch a specific agent's schema
  *   execute_action    — call any agent action directly by schema/action name
  *
- * Plus browser automation tools registered via registerBrowserActionTools().
- *
  * Lifecycle: spawned fresh per Claude Code session; connects to the persistent
  * TypeAgent agentServer via WebSocket.
  */
