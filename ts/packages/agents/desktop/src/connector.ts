@@ -25,7 +25,7 @@ export type DesktopActionContext = {
     abortRefresh: AbortController | undefined;
 };
 
-interface CommandResult {
+interface ActionResult {
     id?: string;
     success: boolean;
     message: string;
@@ -35,7 +35,7 @@ interface CommandResult {
 // Pending request map for correlating stdin writes with stdout responses
 const pendingRequests = new Map<
     string,
-    { resolve: (result: CommandResult) => void; reject: (err: Error) => void }
+    { resolve: (result: ActionResult) => void; reject: (err: Error) => void }
 >();
 // Buffer for incomplete lines from stdout
 let stdoutBuffer = "";
@@ -147,7 +147,7 @@ async function ensureAutomationProcess(agentContext: DesktopActionContext) {
             if (!line) continue;
 
             try {
-                const response: CommandResult = JSON.parse(line);
+                const response: ActionResult = JSON.parse(line);
                 debugData(`Response: ${line}`);
 
                 if (response.id !== undefined && pendingRequests.has(response.id)) {
@@ -176,11 +176,11 @@ const SEND_ACTION_TIMEOUT_MS = 30000;
 async function sendAction(
     desktopProcess: child_process.ChildProcess,
     action: object,
-): Promise<CommandResult> {
+): Promise<ActionResult> {
     const id = randomUUID();
     const payload = JSON.stringify({ ...action, id });
 
-    return new Promise<CommandResult>((resolve, reject) => {
+    return new Promise<ActionResult>((resolve, reject) => {
         const timeout = setTimeout(() => {
             pendingRequests.delete(id);
             reject(new Error(`sendAction timed out after ${SEND_ACTION_TIMEOUT_MS}ms for: ${payload}`));
