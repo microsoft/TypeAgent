@@ -39,7 +39,7 @@ internal partial class TaskbarSettingsHandler : SettingsHandlerBase
         AddRegistryToggleAction("ShowBadgesOnTaskbar", new RegistryToggleConfig(ExplorerAdvanced, "TaskbarBadges", "enableBadging", 1, 0));
         AddRegistryToggleAction("TaskViewVisibility", new RegistryToggleConfig(ExplorerAdvanced, "ShowTaskViewButton", "visibility", 1, 0));
         AddRegistryMapAction("TaskbarAlignment", new RegistryMapConfig(ExplorerAdvanced, "TaskbarAl", "alignment",
-            new Dictionary<string, object> { ["left"] = 0, ["center"] = 1 }, DefaultValue: 0));
+            new Dictionary<string, object> { ["left"] = 0, ["center"] = 1 }, DefaultValue: 1));
         AddRegistryMapAction("ToggleWidgetsButtonVisibility", new RegistryMapConfig(ExplorerAdvanced, "TaskbarDa", "visibility",
             new Dictionary<string, object> { ["show"] = 1 }, DefaultValue: 0));
         AddAction<AutoHideTaskbarParams>("AutoHideTaskbar", HandleAutoHideTaskbar);

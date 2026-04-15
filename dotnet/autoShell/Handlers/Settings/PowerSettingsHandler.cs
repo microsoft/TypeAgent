@@ -28,7 +28,7 @@ internal class PowerSettingsHandler : SettingsHandlerBase
 
     private ActionResult HandleBatterySaverThreshold(BatterySaverActivationLevelParams p)
     {
-        int threshold = p.ThresholdValue;
+        int threshold = p.ThresholdValue > 0 ? p.ThresholdValue : 20;
         threshold = Math.Clamp(threshold, 0, 100);
         Registry.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\Power\BatterySaver",
