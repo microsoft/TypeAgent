@@ -214,12 +214,7 @@ export class DisplayLog {
         if (interaction.requestId !== undefined) {
             entry.requestId = interaction.requestId;
         }
-        if (interaction.type === "askYesNo") {
-            entry.message = interaction.message;
-            if (interaction.defaultValue !== undefined) {
-                entry.defaultValue = interaction.defaultValue;
-            }
-        } else if (interaction.type === "popupQuestion") {
+        if (interaction.type === "question") {
             entry.message = interaction.message;
             entry.choices = interaction.choices;
             if (interaction.defaultId !== undefined) {

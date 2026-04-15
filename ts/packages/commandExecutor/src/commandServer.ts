@@ -229,16 +229,30 @@ function createMcpClientIO(
             );
         },
         setDynamicDisplay(): void {},
-        async askYesNo(
-            _requestId: RequestId,
+        async question(
+            _requestId: RequestId | undefined,
             message: string,
-            defaultValue?: boolean,
-        ): Promise<boolean> {
-            if (getConfirmedFlag()) {
-                logger.log(`ClientIO: askYesNo - "${message}" (auto-approved)`);
-                return true;
+            choices: string[],
+            defaultId?: number,
+        ): Promise<number> {
+            // For Yes/No, check the auto-confirm flag (backward compat with askYesNo).
+            if (
+                choices.length === 2 &&
+                choices[0] === "Yes" &&
+                choices[1] === "No"
+            ) {
+                if (getConfirmedFlag()) {
+                    logger.log(
+                        `ClientIO: question - "${message}" (auto-approved)`,
+                    );
+                    return 0; // "Yes"
+                }
+                throw new Error(`USER_CONFIRMATION_REQUIRED: ${message}`);
             }
-            throw new Error(`USER_CONFIRMATION_REQUIRED: ${message}`);
+            logger.log(
+                `ClientIO: question - "${message}" choices=[${choices.join(", ")}] (defaulting to ${defaultId ?? 0})`,
+            );
+            return defaultId ?? 0;
         },
         async proposeAction(
             _requestId: RequestId,
@@ -249,17 +263,6 @@ function createMcpClientIO(
                 `ClientIO: proposeAction(source=${source}) - ${JSON.stringify(actionTemplates)}`,
             );
             return undefined;
-        },
-        async popupQuestion(
-            message: string,
-            choices: string[],
-            defaultId: number | undefined,
-            source: string,
-        ): Promise<number> {
-            logger.log(
-                `ClientIO: popupQuestion(source=${source}) - "${message}" choices=[${choices.join(", ")}] (defaulting to ${defaultId ?? 0})`,
-            );
-            return defaultId ?? 0;
         },
         notify(
             _requestId: RequestId,

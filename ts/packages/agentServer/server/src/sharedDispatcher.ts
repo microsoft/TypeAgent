@@ -50,9 +50,8 @@ export async function createSharedDispatcher(
     // Timeouts for pending interactions. All currently set to 10 minutes but
     // kept separate so they can be tuned independently.
     const INTERACTION_TIMEOUT_MS = {
-        askYesNo: 10 * 60 * 1000,
+        question: 10 * 60 * 1000,
         proposeAction: 10 * 60 * 1000,
-        popupQuestion: 10 * 60 * 1000,
     };
 
     // Returns the number of clients the message was sent to.
@@ -148,22 +147,21 @@ export async function createSharedDispatcher(
         // and broadcast the request to all clients. The first client to
         // respond via respondToInteraction resolves the promise.
 
-        askYesNo: async (requestId, message, defaultValue?) => {
+        question: async (requestId, message, choices, defaultId?, source?) => {
             const interactionId = randomUUID();
             const request: PendingInteractionRequest = {
                 interactionId,
-                type: "askYesNo",
-                requestId,
-                source: requestId.connectionId ?? "unknown",
+                type: "question",
+                ...(requestId !== undefined ? { requestId } : {}),
+                source: source ?? requestId?.connectionId ?? "unknown",
                 timestamp: Date.now(),
                 message,
+                choices,
+                ...(defaultId !== undefined ? { defaultId } : {}),
             };
-            if (defaultValue !== undefined) {
-                request.defaultValue = defaultValue;
-            }
 
             debugInteraction(
-                `askYesNo created: ${interactionId} message="${message}"`,
+                `question created: ${interactionId} message="${message}"`,
             );
 
             // Broadcast to all connected clients
@@ -171,20 +169,12 @@ export async function createSharedDispatcher(
                 cio.requestInteraction(request),
             );
 
-            // Log unconditionally so the interaction survives in the DisplayLog
-            // and is included in JoinSessionResult.pendingInteractions on the
-            // next join. Cancellation is explicit-only (cancelInteraction or
-            // timeout) — there is no auto-cancel on disconnect.
-            // Note: a reconnecting client will receive a new connectionId, so
-            // requestId.connectionId will no longer match and the interaction
-            // will be filtered out of getPendingInteractions until a stable
-            // client identity is introduced (see TODO in join()).
             context.displayLog.logPendingInteraction(request);
             context.displayLog.saveQueued();
 
-            return pendingInteractions.create<boolean>(
+            return pendingInteractions.create<number>(
                 request,
-                INTERACTION_TIMEOUT_MS.askYesNo,
+                INTERACTION_TIMEOUT_MS.question,
             );
         },
 
@@ -203,11 +193,9 @@ export async function createSharedDispatcher(
                 `proposeAction created: ${interactionId} source="${source}"`,
             );
 
-            // Log and queue unconditionally — same reasoning as askYesNo: the
-            // interaction must be in the DisplayLog and PendingInteractionManager
-            // before any broadcast so that a joining client sees it in
-            // JoinSessionResult.pendingInteractions even if no client is
-            // currently connected.
+            // Log and queue unconditionally so the interaction survives in
+            // the DisplayLog and is included in JoinSessionResult.pendingInteractions
+            // on the next join.
             context.displayLog.logPendingInteraction(request);
             context.displayLog.saveQueued();
 
@@ -218,43 +206,6 @@ export async function createSharedDispatcher(
             return pendingInteractions.create<unknown>(
                 request,
                 INTERACTION_TIMEOUT_MS.proposeAction,
-            );
-        },
-
-        popupQuestion: async (message, choices, defaultId, source) => {
-            const interactionId = randomUUID();
-            const request: PendingInteractionRequest = {
-                interactionId,
-                type: "popupQuestion",
-                source,
-                timestamp: Date.now(),
-                message,
-                choices,
-            };
-            if (defaultId !== undefined) {
-                request.defaultId = defaultId;
-            }
-
-            debugInteraction(
-                `popupQuestion created: ${interactionId} message="${message}"`,
-            );
-
-            // Log and queue unconditionally — same reasoning as askYesNo: the
-            // interaction must be in the DisplayLog and PendingInteractionManager
-            // before any broadcast so that a joining client sees it in
-            // JoinSessionResult.pendingInteractions even if no client is
-            // currently connected.
-            context.displayLog.logPendingInteraction(request);
-            context.displayLog.saveQueued();
-
-            // popupQuestion has no requestId, so broadcast to all
-            broadcast("requestInteraction", undefined, (cio) =>
-                cio.requestInteraction(request),
-            );
-
-            return pendingInteractions.create<number>(
-                request,
-                INTERACTION_TIMEOUT_MS.popupQuestion,
             );
         },
 

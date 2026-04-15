@@ -293,15 +293,16 @@ describe("DisplayLog", () => {
     });
 
     describe("logPendingInteraction", () => {
-        it("should log askYesNo with correct fields and omit defaultValue when not provided", () => {
+        it("should log question with correct fields and omit defaultId when not provided", () => {
             const log = new DisplayLog(undefined);
-            const interaction: PendingInteractionRequest = {
+            const interaction = {
                 interactionId: "int-1",
-                type: "askYesNo",
+                type: "question",
                 source: "agent-a",
                 timestamp: Date.now(),
                 message: "Do you want to proceed?",
-            };
+                choices: ["Yes", "No"],
+            } as unknown as PendingInteractionRequest;
 
             log.logPendingInteraction(interaction);
 
@@ -310,50 +311,54 @@ describe("DisplayLog", () => {
             expect(entries[0].type).toBe("pending-interaction");
             if (entries[0].type === "pending-interaction") {
                 expect(entries[0].interactionId).toBe("int-1");
-                expect(entries[0].interactionType).toBe("askYesNo");
+                expect(entries[0].interactionType).toBe("question");
                 expect(entries[0].source).toBe("agent-a");
                 expect(entries[0].message).toBe("Do you want to proceed?");
-                expect(entries[0].defaultValue).toBeUndefined();
+                expect(entries[0].choices).toEqual(["Yes", "No"]);
+                expect(entries[0].defaultId).toBeUndefined();
             }
         });
 
-        it("should include defaultValue for askYesNo when provided", () => {
+        it("should include defaultId for question when provided", () => {
             const log = new DisplayLog(undefined);
-            const interaction: PendingInteractionRequest = {
+            const interaction = {
                 interactionId: "int-2",
-                type: "askYesNo",
+                type: "question",
                 source: "agent-b",
                 timestamp: Date.now(),
                 message: "Continue?",
-                defaultValue: true,
-            };
+                choices: ["Yes", "No"],
+                defaultId: 0,
+            } as unknown as PendingInteractionRequest;
 
             log.logPendingInteraction(interaction);
 
             const entries = log.getEntries();
             if (entries[0].type === "pending-interaction") {
-                expect(entries[0].defaultValue).toBe(true);
+                expect(entries[0].defaultId).toBe(0);
             }
         });
 
         it("should include requestId when provided and omit when not", () => {
             const log = new DisplayLog(undefined);
             const reqId = makeRequestId("req-abc");
-            const withReqId: PendingInteractionRequest = {
+            const withReqId = {
                 interactionId: "int-3",
-                type: "askYesNo",
+                type: "question",
                 source: "agent-c",
                 timestamp: Date.now(),
                 message: "Yes?",
+                choices: ["Yes", "No"],
                 requestId: reqId,
-            };
-            const withoutReqId: PendingInteractionRequest = {
+            } as unknown as PendingInteractionRequest;
+            const withoutReqId = {
                 interactionId: "int-4",
-                type: "askYesNo",
+                type: "question",
                 source: "agent-d",
                 timestamp: Date.now(),
                 message: "No?",
-            };
+                choices: ["Yes", "No"],
+            } as unknown as PendingInteractionRequest;
 
             log.logPendingInteraction(withReqId);
             log.logPendingInteraction(withoutReqId);
@@ -367,40 +372,40 @@ describe("DisplayLog", () => {
             }
         });
 
-        it("should log popupQuestion with message and choices, omit defaultId when not provided", () => {
+        it("should log question with message and choices, omit defaultId when not provided", () => {
             const log = new DisplayLog(undefined);
-            const interaction: PendingInteractionRequest = {
+            const interaction = {
                 interactionId: "int-5",
-                type: "popupQuestion",
+                type: "question",
                 source: "agent-e",
                 timestamp: Date.now(),
                 message: "Pick one",
                 choices: ["alpha", "beta", "gamma"],
-            };
+            } as unknown as PendingInteractionRequest;
 
             log.logPendingInteraction(interaction);
 
             const entries = log.getEntries();
             expect(entries).toHaveLength(1);
             if (entries[0].type === "pending-interaction") {
-                expect(entries[0].interactionType).toBe("popupQuestion");
+                expect(entries[0].interactionType).toBe("question");
                 expect(entries[0].message).toBe("Pick one");
                 expect(entries[0].choices).toEqual(["alpha", "beta", "gamma"]);
                 expect(entries[0].defaultId).toBeUndefined();
             }
         });
 
-        it("should include defaultId for popupQuestion when provided", () => {
+        it("should include defaultId for multi-choice question when provided", () => {
             const log = new DisplayLog(undefined);
-            const interaction: PendingInteractionRequest = {
+            const interaction = {
                 interactionId: "int-6",
-                type: "popupQuestion",
+                type: "question",
                 source: "agent-f",
                 timestamp: Date.now(),
                 message: "Choose",
                 choices: ["x", "y"],
                 defaultId: 1,
-            };
+            } as unknown as PendingInteractionRequest;
 
             log.logPendingInteraction(interaction);
 
@@ -443,20 +448,21 @@ describe("DisplayLog", () => {
             log.logSetDisplay(msg); // seq 0
             log.logPendingInteraction({
                 interactionId: "int-a",
-                type: "askYesNo",
+                type: "question",
                 source: "src",
                 timestamp: Date.now(),
                 message: "q?",
-            }); // seq 1
+                choices: ["Yes", "No"],
+            } as unknown as PendingInteractionRequest); // seq 1
             log.logAppendDisplay(msg, "block"); // seq 2
             log.logPendingInteraction({
                 interactionId: "int-b",
-                type: "popupQuestion",
+                type: "question",
                 source: "src",
                 timestamp: Date.now(),
                 message: "pick",
                 choices: ["a"],
-            }); // seq 3
+            } as unknown as PendingInteractionRequest); // seq 3
             log.logNotify(undefined, "evt", {}, "src"); // seq 4
 
             const entries = log.getEntries();
@@ -469,11 +475,12 @@ describe("DisplayLog", () => {
             const seq0 = log.logSetDisplay(makeMessage("first"));
             const seq1 = log.logPendingInteraction({
                 interactionId: "int-ret",
-                type: "askYesNo",
+                type: "question",
                 source: "src",
                 timestamp: Date.now(),
                 message: "q?",
-            });
+                choices: ["Yes", "No"],
+            } as unknown as PendingInteractionRequest);
             const seq2 = log.logPendingInteraction({
                 interactionId: "int-ret-2",
                 type: "proposeAction",
@@ -696,22 +703,23 @@ describe("DisplayLog", () => {
 
             log.logPendingInteraction({
                 interactionId: "int-p1",
-                type: "askYesNo",
+                type: "question",
                 source: "agent-a",
                 timestamp: Date.now(),
                 message: "Proceed?",
-                defaultValue: false,
+                choices: ["Yes", "No"],
+                defaultId: 1,
                 requestId: reqId,
-            });
+            } as unknown as PendingInteractionRequest);
             log.logPendingInteraction({
                 interactionId: "int-p2",
-                type: "popupQuestion",
+                type: "question",
                 source: "agent-b",
                 timestamp: Date.now(),
                 message: "Choose",
                 choices: ["opt1", "opt2", "opt3"],
                 defaultId: 2,
-            });
+            } as unknown as PendingInteractionRequest);
             log.logPendingInteraction({
                 interactionId: "int-p3",
                 type: "proposeAction",
@@ -719,7 +727,7 @@ describe("DisplayLog", () => {
                 timestamp: Date.now(),
                 actionTemplates: { tpl: "data" } as any,
             });
-            log.logInteractionResolved("int-p1", true);
+            log.logInteractionResolved("int-p1", 1);
             log.logInteractionResolved("int-p2", 1);
             log.logInteractionResolved("int-p3", { accepted: true });
 
@@ -737,20 +745,21 @@ describe("DisplayLog", () => {
                 "interaction-resolved",
             ]);
 
-            // Verify askYesNo fields survived round-trip
+            // Verify first question fields survived round-trip
             if (entries[0].type === "pending-interaction") {
                 expect(entries[0].interactionId).toBe("int-p1");
-                expect(entries[0].interactionType).toBe("askYesNo");
+                expect(entries[0].interactionType).toBe("question");
                 expect(entries[0].message).toBe("Proceed?");
-                expect(entries[0].defaultValue).toBe(false);
+                expect(entries[0].choices).toEqual(["Yes", "No"]);
+                expect(entries[0].defaultId).toBe(1);
                 expect(entries[0].source).toBe("agent-a");
                 expect(entries[0].requestId).toEqual(reqId);
             }
 
-            // Verify popupQuestion fields survived round-trip
+            // Verify second question fields survived round-trip
             if (entries[1].type === "pending-interaction") {
                 expect(entries[1].interactionId).toBe("int-p2");
-                expect(entries[1].interactionType).toBe("popupQuestion");
+                expect(entries[1].interactionType).toBe("question");
                 expect(entries[1].message).toBe("Choose");
                 expect(entries[1].choices).toEqual(["opt1", "opt2", "opt3"]);
                 expect(entries[1].defaultId).toBe(2);
@@ -766,7 +775,7 @@ describe("DisplayLog", () => {
             // Verify interaction-resolved entries survived round-trip
             if (entries[3].type === "interaction-resolved") {
                 expect(entries[3].interactionId).toBe("int-p1");
-                expect(entries[3].response).toBe(true);
+                expect(entries[3].response).toBe(1);
             }
             if (entries[4].type === "interaction-resolved") {
                 expect(entries[4].interactionId).toBe("int-p2");
@@ -780,11 +789,12 @@ describe("DisplayLog", () => {
             // Verify seq numbering resumes correctly after load
             loaded.logPendingInteraction({
                 interactionId: "int-p4",
-                type: "askYesNo",
+                type: "question",
                 source: "agent-d",
                 timestamp: Date.now(),
                 message: "Another?",
-            });
+                choices: ["Yes", "No"],
+            } as unknown as PendingInteractionRequest);
             const allEntries = loaded.getEntries();
             expect(allEntries).toHaveLength(7);
             expect(allEntries[6].seq).toBe(6);

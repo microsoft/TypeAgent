@@ -159,7 +159,8 @@ export function createSessionContext<T = unknown>(
             choices: string[] = ["Yes", "No"], // default choices
             defaultId?: number,
         ): Promise<number> {
-            return context.clientIO.popupQuestion(
+            return context.clientIO.question(
+                undefined,
                 message,
                 choices,
                 defaultId,

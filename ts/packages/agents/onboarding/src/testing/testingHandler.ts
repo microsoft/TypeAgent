@@ -513,11 +513,13 @@ function createCapturingClientIO(buffer: string[]): ClientIO {
         },
         appendDiagnosticData: noop,
         setDynamicDisplay: noop,
-        askYesNo: async (_id: RequestId, _msg: string, def = false) => def,
+        question: async (
+            _requestId: RequestId | undefined,
+            _msg: string,
+            _choices: string[],
+            defaultId?: number,
+        ) => defaultId ?? 0,
         proposeAction: async () => undefined,
-        popupQuestion: async () => {
-            throw new Error("popupQuestion not supported in test runner");
-        },
         notify: noop,
         openLocalView: async () => {},
         closeLocalView: async () => {},

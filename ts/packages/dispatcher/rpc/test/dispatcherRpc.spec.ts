@@ -82,7 +82,11 @@ function makeStubDispatcher(overrides: Partial<Dispatcher> = {}): Dispatcher & {
 // Helpers
 // ---------------------------------------------------------------------------
 function makeResponse(interactionId = "id-1"): PendingInteractionResponse {
-    return { interactionId, type: "askYesNo", value: true };
+    return {
+        interactionId,
+        type: "question",
+        value: 0,
+    } as unknown as PendingInteractionResponse;
 }
 
 // ---------------------------------------------------------------------------
