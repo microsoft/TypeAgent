@@ -29,10 +29,25 @@ AutoShell is part of the [TypeAgent](https://github.com/microsoft/TypeAgent) pro
 - .NET 8
 - [Microsoft.WindowsAPICodePack.Shell](https://www.nuget.org/packages/Microsoft.WindowsAPICodePack.Shell) NuGet package
 - [System.Text.Json](https://learn.microsoft.com/en-us/dotnet/api/system.text.json) (built-in)
+- Node.js ≥ 20 and pnpm (for generating `.pas.json` schemas from TypeScript)
 
 ## Building
 
-dotnet build AutoShell.csproj
+AutoShell's source generator reads `.pas.json` schema files produced by the TypeScript action schema compiler (`asc`). These must be generated before building:
+
+```bash
+# 1. Generate schemas (from repo root)
+cd ts
+pnpm install
+pnpm run --filter @typeagent/action-schema-compiler... build
+pnpm run -C packages/agents/desktop asc:all
+
+# 2. Build AutoShell
+cd ../dotnet
+dotnet build autoShell/autoShell.csproj
+```
+
+If you've already run `pnpm run build` in the `ts/` workspace, the schemas are already generated.
 
 ## Usage
 
@@ -41,15 +56,21 @@ AutoShell runs in two modes:
 **Interactive mode** (default): Run the application and send JSON commands via stdin, one per line:
 ```
 dotnet run --project autoShell.csproj
-{"Volume":50}
-{"Mute":true}
-{"quit":null}
+{"actionName":"Volume","parameters":{"targetVolume":50}}
+{"actionName":"Mute","parameters":{"on":true}}
+{"actionName":"quit","parameters":{}}
 ```
 
 **Command-line mode**: Pass a JSON command (or array) as an argument for one-shot execution:
 ```
-autoShell.exe {"Volume":50}
-autoShell.exe [{"Volume":50},{"Mute":true}]
+autoShell.exe {"actionName":"Volume","parameters":{"targetVolume":50}}
+autoShell.exe [{"actionName":"Volume","parameters":{"targetVolume":50}},{"actionName":"Mute","parameters":{"on":true}}]
+```
+
+Each command returns a JSON `ActionResult` on stdout:
+```json
+{"success":true,"message":"Volume set to 50"}
+{"success":false,"message":"Invalid parameters for 'Volume': ..."}
 ```
 
 ### Command Reference
@@ -465,32 +486,25 @@ That's it. The base class handles parameter extraction, registry writes, and suc
 
 For actions that need custom logic but fit within an existing handler's domain.
 
-**1. Define the action in the TypeScript schema** (`ts/packages/agents/desktop/dist/<schema>.pas.json`):
+**1. Define the action in the TypeScript schema** (e.g., `ts/packages/agents/desktop/src/actionsSchema.ts`):
 
-The `.pas.json` file is the single source of truth. When you add an action type here, the source generator automatically creates a C# parameter record at build time.
+The TypeScript type definitions are the single source of truth. The `asc` compiler transforms them into `.pas.json` files, which the Roslyn source generator then reads to produce C# parameter records.
 
-```json
-{
-  "types": {
-    "MyNewAction": {
-      "type": {
-        "fields": {
-          "actionName": {
-            "type": { "type": "string", "typeEnum": ["MyAction"] }
-          },
-          "parameters": {
-            "type": {
-              "fields": {
-                "level": { "type": { "type": "number" } },
-                "name": { "type": { "type": "string" }, "optional": true }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
+```typescript
+// In the appropriate *Schema.ts file:
+export type MyNewAction = {
+    actionName: "MyAction";
+    parameters: {
+        level: number;
+        name?: string;
+    };
+};
+```
+
+Then regenerate the schema:
+```bash
+cd ts/packages/agents/desktop
+pnpm run asc:all
 ```
 
 After building, this generates:
@@ -534,7 +548,7 @@ internal class AudioActionHandler : ActionHandlerBase
 
 For actions that require a new Windows API or a new domain.
 
-**1. Define the schema** in the TypeScript `.pas.json` file (same as Option B, step 1).
+**1. Define the schema** in the TypeScript schema file and run `pnpm run asc:all` (same as Option B, step 1).
 
 **2. Create a service interface and implementation:**
 
@@ -606,7 +620,8 @@ The source generator maps `.pas.json` types to C# as follows:
 
 ### Checklist
 
-- [ ] Action defined in `.pas.json` schema (single source of truth)
+- [ ] Action type defined in TypeScript schema (`*Schema.ts`)
+- [ ] Schemas regenerated with `pnpm run asc:all`
 - [ ] Handler method registered with `AddAction<T>` in the constructor
 - [ ] Handler registered in `ActionDispatcher.Create()` (if new handler)
 - [ ] Service interface + implementation created (if new Windows API)
