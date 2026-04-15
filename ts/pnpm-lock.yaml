@@ -3112,9 +3112,6 @@ importers:
       default-agent-provider:
         specifier: workspace:*
         version: link:../defaultAgentProvider
-      dispatcher-node-providers:
-        specifier: workspace:*
-        version: link:../dispatcher/nodeProviders
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
@@ -3139,9 +3136,6 @@ importers:
       ts-node:
         specifier: ^10.9.1
         version: 10.9.2(@types/node@25.5.2)(typescript@5.4.5)
-      typechat:
-        specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typechat-utils:
         specifier: workspace:*
         version: link:../utils/typechatUtils

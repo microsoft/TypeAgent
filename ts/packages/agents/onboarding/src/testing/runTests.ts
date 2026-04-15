@@ -68,11 +68,13 @@ const clientIO = {
     appendDisplay: noop,
     appendDiagnosticData: noop,
     setDynamicDisplay: noop,
-    askYesNo: async (_id: any, _msg: any, def = false) => def,
+    question: async (
+        _requestId: any,
+        _message: string,
+        _choices: string[],
+        defaultId?: number,
+    ) => defaultId ?? 0,
     proposeAction: async () => undefined,
-    popupQuestion: async () => {
-        throw new Error("not supported");
-    },
     notify: noop,
     openLocalView: async () => {},
     closeLocalView: async () => {},
