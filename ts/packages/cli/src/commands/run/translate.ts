@@ -48,7 +48,7 @@ export default class TranslateCommand extends Command {
         const { args, flags } = await this.parse(TranslateCommand);
         const url = `ws://localhost:${flags.port}`;
 
-        await ensureAgentServer(flags.port, !flags.show);
+        await ensureAgentServer(flags.port, !flags.show, 600);
         let connection: AgentServerConnection | undefined;
         try {
             connection = await connectAgentServer(url);

@@ -20,7 +20,7 @@ export default class ServerStatus extends Command {
             this.log(`TypeAgent server is running on port ${flags.port}.`);
         } else {
             this.log(`TypeAgent server is not running on port ${flags.port}.`);
+            this.exit(1);
         }
-        process.exit(0);
     }
 }

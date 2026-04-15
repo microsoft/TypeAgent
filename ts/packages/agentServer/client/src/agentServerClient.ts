@@ -257,6 +257,7 @@ function spawnAgentServer(
     serverPath: string,
     port: number,
     hidden: boolean = false,
+    idleTimeout: number = 0,
 ): void {
     // Use an exclusive lock file to prevent two concurrent client processes from
     // both concluding the server is down and each spawning their own copy.
@@ -275,6 +276,10 @@ function spawnAgentServer(
         );
         return;
     }
+
+    const extraArgs =
+        idleTimeout > 0 ? ["--idle-timeout", String(idleTimeout)] : [];
+
     try {
         debug(`Starting agent server from ${serverPath}`);
         const isWindows = process.platform === "win32";
@@ -285,7 +290,7 @@ function spawnAgentServer(
                 // survives the parent exiting.
                 const child = spawn(
                     "node",
-                    [serverPath, "--port", String(port)],
+                    [serverPath, "--port", String(port), ...extraArgs],
                     {
                         detached: true,
                         stdio: "ignore",
@@ -308,7 +313,7 @@ function spawnAgentServer(
                 )
                     ? "pwsh.exe"
                     : "powershell.exe";
-                const psCommand = `node "${serverPath}" --port ${port}`;
+                const psCommand = `node "${serverPath}" --port ${port}${idleTimeout > 0 ? ` --idle-timeout ${idleTimeout}` : ""}`;
                 const psArgs = ["-NoExit", "-Command", psCommand];
                 const child = spawn(
                     "cmd.exe",
@@ -326,10 +331,14 @@ function spawnAgentServer(
         } else {
             // On Unix, detached creates a new session so the child survives
             // parent exit. Background node process, no visible window.
-            const child = spawn("node", [serverPath, "--port", String(port)], {
-                detached: true,
-                stdio: "ignore",
-            });
+            const child = spawn(
+                "node",
+                [serverPath, "--port", String(port), ...extraArgs],
+                {
+                    detached: true,
+                    stdio: "ignore",
+                },
+            );
             child.unref();
             debug(`Agent server process spawned (pid: ${child.pid})`);
         }
@@ -363,6 +372,7 @@ async function waitForServer(
 export async function ensureAgentServer(
     port: number = 8999,
     hidden: boolean = false,
+    idleTimeout: number = 0,
 ): Promise<void> {
     const url = `ws://localhost:${port}`;
     if (await isServerRunning(url)) {
@@ -376,7 +386,7 @@ export async function ensureAgentServer(
             console.log("Starting TypeAgent server in a new window...");
         }
         const serverPath = getAgentServerEntryPoint();
-        spawnAgentServer(serverPath, port, hidden);
+        spawnAgentServer(serverPath, port, hidden, idleTimeout);
         await waitForServer(url);
         console.log("TypeAgent server started.");
     }
@@ -400,8 +410,9 @@ export async function ensureAndConnectSession(
     options?: DispatcherConnectOptions,
     onDisconnect?: () => void,
     hidden: boolean = false,
+    idleTimeout: number = 0,
 ): Promise<SessionDispatcher> {
-    await ensureAgentServer(port, hidden);
+    await ensureAgentServer(port, hidden, idleTimeout);
     const url = `ws://localhost:${port}`;
     const connection = await connectAgentServer(url, onDisconnect);
     const session = await connection.joinSession(clientIO, options);

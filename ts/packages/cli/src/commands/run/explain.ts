@@ -74,10 +74,10 @@ export default class ExplainCommand extends Command {
         const { args, flags } = await this.parse(ExplainCommand);
 
         const command = ["@dispatcher explain"];
-        if (flags.filter?.includes("refvalue")) {
+        if (flags.filter?.some((f) => f.toLowerCase() === "refvalue")) {
             command.push("--filterValueInRequest");
         }
-        if (flags.filter?.includes("reflist")) {
+        if (flags.filter?.some((f) => f.toLowerCase() === "reflist")) {
             command.push("--filterReference");
         }
         if (flags.repeat > 1) {
@@ -94,7 +94,7 @@ export default class ExplainCommand extends Command {
 
         const url = `ws://localhost:${flags.port}`;
 
-        await ensureAgentServer(flags.port, !flags.show);
+        await ensureAgentServer(flags.port, !flags.show, 600);
         let connection: AgentServerConnection | undefined;
         try {
             connection = await connectAgentServer(url);

@@ -163,7 +163,7 @@ export default class Connect extends Command {
         }),
         memory: Flags.boolean({
             description:
-                "Use an ephemeral in-memory session that is deleted on exit",
+                "Use an ephemeral session that is automatically deleted on exit",
             default: false,
             exclusive: ["session", "resume"],
         }),
@@ -171,6 +171,11 @@ export default class Connect extends Command {
             description:
                 "Start the agent server without a visible window (background mode). Only applies when the server is not already running.",
             default: false,
+        }),
+        idleTimeout: Flags.integer({
+            description:
+                "Shut down the agent server after this many seconds with no connected clients. 0 disables (default). Only applies when the server is spawned by this command.",
+            default: 0,
         }),
     };
     static args = {
@@ -221,7 +226,11 @@ export default class Connect extends Command {
 
             // Helper: find the "CLI" session by name (creating it if absent) and join it.
             const connectToCliSession = async () => {
-                await ensureAgentServer(flags.port, flags.hidden);
+                await ensureAgentServer(
+                    flags.port,
+                    flags.hidden,
+                    flags.idleTimeout,
+                );
                 const connection = await connectAgentServer(url, onDisconnect);
                 const existing =
                     await connection.listSessions(CLI_SESSION_NAME);
@@ -245,7 +254,11 @@ export default class Connect extends Command {
 
             // Helper: create an ephemeral session for --memory flag.
             const connectToEphemeralSession = async () => {
-                await ensureAgentServer(flags.port, flags.hidden);
+                await ensureAgentServer(
+                    flags.port,
+                    flags.hidden,
+                    flags.idleTimeout,
+                );
                 const connection = await connectAgentServer(url, onDisconnect);
                 const ephemeralName = `cli-ephemeral-${crypto.randomUUID()}`;
                 const created = await connection.createSession(ephemeralName);
@@ -287,6 +300,7 @@ export default class Connect extends Command {
                               { sessionId: persistedSessionId },
                               onDisconnect,
                               flags.hidden,
+                              flags.idleTimeout,
                           )
                               .then((s) => ({
                                   session: s,

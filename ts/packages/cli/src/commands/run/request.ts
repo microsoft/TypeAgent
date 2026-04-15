@@ -53,7 +53,7 @@ export default class RequestCommand extends Command {
         const { args, flags } = await this.parse(RequestCommand);
         const url = `ws://localhost:${flags.port}`;
 
-        await ensureAgentServer(flags.port, !flags.show);
+        await ensureAgentServer(flags.port, !flags.show, 600);
         let connection: AgentServerConnection | undefined;
         try {
             connection = await connectAgentServer(url);

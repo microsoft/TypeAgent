@@ -69,9 +69,40 @@ async function main() {
     const port =
         portIdx !== -1 ? parseInt(process.argv[portIdx + 1], 10) : 8999;
 
+    const idleShutdownIdx = process.argv.indexOf("--idle-timeout");
+    const idleShutdownMs =
+        idleShutdownIdx !== -1
+            ? parseInt(process.argv[idleShutdownIdx + 1], 10) * 1000
+            : 0;
+
+    let connectionCount = 0;
+    let idleShutdownTimer: ReturnType<typeof setTimeout> | undefined;
+
+    function scheduleIdleShutdown() {
+        if (idleShutdownMs <= 0 || connectionCount > 0) {
+            return;
+        }
+        idleShutdownTimer = setTimeout(async () => {
+            console.log(
+                "No clients connected — idle shutdown after " +
+                    idleShutdownMs / 1000 +
+                    "s. Stopping agent server...",
+            );
+            wss.close();
+            await sessionManager.close();
+            process.exit(0);
+        }, idleShutdownMs);
+    }
+
     const wss = await createWebSocketChannelServer(
         { port },
         (channelProvider: ChannelProvider, closeFn: () => void) => {
+            connectionCount++;
+            if (idleShutdownTimer !== undefined) {
+                clearTimeout(idleShutdownTimer);
+                idleShutdownTimer = undefined;
+            }
+
             // Track which sessions this WebSocket connection has joined
             // sessionId → { dispatcher, connectionId }
             const joinedSessions = new Map<
@@ -205,6 +236,8 @@ async function main() {
 
             // Clean up all sessions on WebSocket disconnect
             channelProvider.on("disconnect", () => {
+                connectionCount--;
+                scheduleIdleShutdown();
                 for (const [
                     sessionId,
                     { connectionId },
@@ -227,6 +260,7 @@ async function main() {
     );
 
     console.log(`Agent server started at ws://localhost:${port}`);
+    scheduleIdleShutdown();
 }
 
 await main();

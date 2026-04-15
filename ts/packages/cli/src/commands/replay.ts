@@ -75,7 +75,7 @@ export default class ReplayCommand extends Command {
         const history = await readHistoryFile(args.history);
         const url = `ws://localhost:${flags.port}`;
 
-        await ensureAgentServer(flags.port, !flags.show);
+        await ensureAgentServer(flags.port, !flags.show, 600);
         const connection = await connectAgentServer(url);
 
         // Create an ephemeral session for replay isolation

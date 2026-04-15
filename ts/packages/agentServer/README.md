@@ -153,15 +153,15 @@ Terminal ↔ ConsoleClientIO ↔ WebSocket ↔ agentServer
 
 ### `agent-cli connect` (interactive)
 
-`connect` calls `ensureAgentServer(port, hidden)` to auto-spawn the server if needed, then calls `connectAgentServer()` and `joinSession()` directly. By default the spawned server window is visible; pass `--hidden` to suppress it.
+`connect` calls `ensureAgentServer(port, hidden, idleTimeout)` to auto-spawn the server if needed, then calls `connectAgentServer()` and `joinSession()` directly. By default the spawned server window is visible; pass `--hidden` to suppress it. Pass `--idle-timeout <seconds>` to enable idle shutdown when spawning (default: `0`, server stays alive indefinitely).
 
 ### `agent-cli run` (non-interactive)
 
-The `run request`, `run translate`, and `run explain` subcommands also call `ensureAgentServer()` — but default to **hidden** (no window), with `--show` to opt into a visible window. All three support `--session <id>` to target a specific session instead of the default `"CLI"` session.
+The `run request`, `run translate`, and `run explain` subcommands also call `ensureAgentServer()` — but default to **hidden** (no window), with `--show` to opt into a visible window. All three support `--session <id>` to target a specific session instead of the default `"CLI"` session. When spawning, passes `--idle-timeout 600` so the server exits 10 minutes after the last client disconnects.
 
 ### `agent-cli replay`
 
-`replay` always creates an ephemeral session (`cli-replay-<uuid>`) and deletes it on exit. Defaults to hidden; `--show` to opt in.
+`replay` always creates an ephemeral session (`cli-replay-<uuid>`) and deletes it on exit. Defaults to hidden; `--show` to opt in. Also passes `--idle-timeout 600` when spawning.
 
 ### `agent-cli server`
 
@@ -191,7 +191,7 @@ Client → connectAgentServer() → joinSession() → Dispatcher proxy
 **Shell or CLI — server not yet running**
 
 ```
-Client → ensureAgentServer(port=8999, hidden)
+Client → ensureAgentServer(port=8999, hidden, idleTimeout)
        → server not found → spawnAgentServer() (hidden or visible window)
        → poll until ready (60 s timeout)
 Client → connectAgentServer() → joinSession() → Dispatcher proxy

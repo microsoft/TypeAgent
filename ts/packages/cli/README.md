@@ -4,7 +4,7 @@
 
 TypeAgent CLI is a command line entry point to **TypeAgent sample code** that explores architectures for building _interactive agents_ with _natural language interfaces_ using structured prompting and LLM.
 
-TypeAgent CLI host multiple subcommands, including the [connect mode](#connect-mode) (the default), a **personal agent** that takes user request and use an extensible set of agents to perform actions, answer questions, and carry a conversation. All CLI commands route through the agent server via WebSocket RPC. [TypeAgent Shell](../shell/) is the UI version, and both shared the core [dispatcher](../dispatcher/) component. Please read dispatcher's [README.md](../dispatcher/README.md) on example requests and usage.
+TypeAgent CLI hosts multiple subcommands, including the [connect mode](#connect-mode) (the default), a **personal agent** that takes user request and use an extensible set of agents to perform actions, answer questions, and carry a conversation. All CLI commands route through the agent server via WebSocket RPC. [TypeAgent Shell](../shell/) is the UI version, and both shared the core [dispatcher](../dispatcher/) component. Please read dispatcher's [README.md](../dispatcher/README.md) on example requests and usage.
 
 TypeAgent CLI includes addition commands to help with development.
 
