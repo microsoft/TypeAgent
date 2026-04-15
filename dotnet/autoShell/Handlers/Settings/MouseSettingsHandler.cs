@@ -28,7 +28,7 @@ internal class MouseSettingsHandler : SettingsHandlerBase
 
     /// <summary>
     /// Registers registered open-settings actions for mouse pointer size, pointer customization,
-    /// touchpad enable, and touchpad cursor speed. SPI-based actions are handled as custom actions.
+    /// touchpad enable, and touchpad cursor speed. SPI-based actions are handled as specialized actions.
     /// </summary>
     public MouseSettingsHandler(IRegistryService registry, IProcessService process, ISystemParametersService systemParams, ILogger logger)
         : base(registry, process)

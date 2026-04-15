@@ -28,7 +28,7 @@ internal partial class TaskbarSettingsHandler : SettingsHandlerBase
     /// <summary>
     /// Registers registered actions for clock seconds, multi-monitor taskbar, badges, task view,
     /// alignment, and widgets visibility. Auto-hide requires binary blob manipulation and is handled
-    /// as a custom action.
+    /// as a specialized action.
     /// </summary>
     public TaskbarSettingsHandler(IRegistryService registry, IProcessService process)
         : base(registry, process)

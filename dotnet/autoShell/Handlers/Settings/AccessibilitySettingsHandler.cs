@@ -16,7 +16,7 @@ internal class AccessibilitySettingsHandler : SettingsHandlerBase
 
     /// <summary>
     /// Registers registered actions for mono audio, filter keys, and sticky keys.
-    /// Magnifier and Narrator require process start/kill and are handled as custom actions.
+    /// Magnifier and Narrator require process start/kill and are handled as specialized actions.
     /// </summary>
     public AccessibilitySettingsHandler(IRegistryService registry, IProcessService process)
         : base(registry, process)

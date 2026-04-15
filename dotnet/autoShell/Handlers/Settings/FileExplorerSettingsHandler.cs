@@ -24,7 +24,7 @@ internal partial class FileExplorerSettingsHandler : SettingsHandlerBase
 
     /// <summary>
     /// Registers a registered action for showing file extensions (inverted toggle).
-    /// Show hidden files requires a multi-value registry write and is handled as a custom action.
+    /// Show hidden files requires a multi-value registry write and is handled as a specialized action.
     /// </summary>
     public FileExplorerSettingsHandler(IRegistryService registry)
         : base(registry)

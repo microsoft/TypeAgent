@@ -15,7 +15,7 @@ internal class PersonalizationSettingsHandler : SettingsHandlerBase
 {
     /// <summary>
     /// Registers registered actions for title bar color, transparency, and high contrast.
-    /// System theme mode requires dual registry writes plus a broadcast and is handled as a custom action.
+    /// System theme mode requires dual registry writes plus a broadcast and is handled as a specialized action.
     /// </summary>
     public PersonalizationSettingsHandler(IRegistryService registry, IProcessService process)
         : base(registry, process)

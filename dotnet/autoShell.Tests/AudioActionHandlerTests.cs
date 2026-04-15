@@ -46,6 +46,7 @@ public class AudioActionHandlerTests
 
         _handler.Handle("Volume", JsonDocument.Parse("""{"targetVolume":80}""").RootElement);
 
+        // GetVolume should have been called to save the current level
         _audioMock.Verify(a => a.GetVolume(), Times.Once);
     }
 

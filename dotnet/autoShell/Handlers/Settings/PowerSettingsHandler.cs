@@ -15,7 +15,7 @@ internal class PowerSettingsHandler : SettingsHandlerBase
 {
     /// <summary>
     /// Registers registered open-settings actions for power mode on battery and plugged in.
-    /// Battery saver threshold requires numeric clamping and is handled as a custom action.
+    /// Battery saver threshold requires numeric clamping and is handled as a specialized action.
     /// </summary>
     public PowerSettingsHandler(IRegistryService registry, IProcessService process)
         : base(registry, process)
