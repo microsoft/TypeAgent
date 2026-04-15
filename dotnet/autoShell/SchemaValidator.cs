@@ -119,13 +119,35 @@ internal class SchemaValidator
     /// <param name="registeredActions">Action names from handler SupportedActions.</param>
     public void ValidateWiring(HashSet<string> schemaActions, IEnumerable<string> registeredActions)
     {
+        var (missingHandlers, missingSchemas) = FindMismatches(schemaActions, registeredActions);
+
+        foreach (var action in missingHandlers)
+        {
+            _logger.Warning($"Schema action '{action}' has no registered C# handler.");
+        }
+
+        foreach (var action in missingSchemas)
+        {
+            _logger.Warning($"Handler action '{action}' has no matching schema definition.");
+        }
+    }
+
+    /// <summary>
+    /// Returns the set of schema actions without handlers and handler actions without schemas.
+    /// Useful for testing that wiring is complete.
+    /// </summary>
+    internal static (List<string> MissingHandlers, List<string> MissingSchemas) FindMismatches(
+        HashSet<string> schemaActions, IEnumerable<string> registeredActions)
+    {
         var registered = new HashSet<string>(registeredActions, StringComparer.OrdinalIgnoreCase);
+        var missingHandlers = new List<string>();
+        var missingSchemas = new List<string>();
 
         foreach (var action in schemaActions)
         {
             if (!registered.Contains(action))
             {
-                _logger.Warning($"Schema action '{action}' has no registered C# handler.");
+                missingHandlers.Add(action);
             }
         }
 
@@ -133,8 +155,10 @@ internal class SchemaValidator
         {
             if (!schemaActions.Contains(action))
             {
-                _logger.Warning($"Handler action '{action}' has no matching schema definition.");
+                missingSchemas.Add(action);
             }
         }
+
+        return (missingHandlers, missingSchemas);
     }
 }
