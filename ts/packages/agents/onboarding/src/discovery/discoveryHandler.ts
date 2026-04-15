@@ -21,8 +21,6 @@ import {
 import { getDiscoveryModel } from "../lib/llm.js";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import path from "path";
-import { fileURLToPath } from "url";
 import registerDebug from "debug";
 import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
@@ -73,12 +71,7 @@ export type ApiSurface = {
 // TypeChat translator for structured CLI help extraction
 function createCliDiscoveryTranslator(): TypeChatJsonTranslator<CliDiscoveryResult> {
     const model = getDiscoveryModel();
-    // At runtime __dirname is dist/discovery/; resolve back to src/discovery/
-    const schemaPath = path.resolve(
-        path.dirname(fileURLToPath(import.meta.url)),
-        "../../src/discovery/discoveryLlmSchema.ts",
-    );
-    const schema = loadSchema([schemaPath]);
+    const schema = loadSchema(["discoveryLlmSchema.ts"], import.meta.url);
     const validator = createTypeScriptJsonValidator<CliDiscoveryResult>(
         schema,
         "CliDiscoveryResult",
