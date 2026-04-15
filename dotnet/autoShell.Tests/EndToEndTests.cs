@@ -38,8 +38,10 @@ public sealed class EndToEndTests : IDisposable
         string? response = await _process.ReadLineAsync();
 
         Assert.NotNull(response);
-        var array = JsonDocument.Parse(response).RootElement;
-        Assert.True(array.GetArrayLength() > 0);
+        var result = JsonDocument.Parse(response).RootElement;
+        Assert.True(result.GetProperty("success").GetBoolean());
+        var data = result.GetProperty("data");
+        Assert.True(data.GetArrayLength() > 0);
     }
 
     /// <summary>
@@ -54,8 +56,10 @@ public sealed class EndToEndTests : IDisposable
         string? response = await _process.ReadLineAsync(10000);
 
         Assert.NotNull(response);
-        var array = JsonDocument.Parse(response).RootElement;
-        Assert.True(array.GetArrayLength() > 0);
+        var result = JsonDocument.Parse(response).RootElement;
+        Assert.True(result.GetProperty("success").GetBoolean());
+        var data = result.GetProperty("data");
+        Assert.True(data.GetArrayLength() > 0);
     }
 
     /// <summary>
@@ -195,11 +199,15 @@ public sealed class EndToEndTests : IDisposable
     public async Task EmptyLine_ProcessSurvives()
     {
         _process.SendCommand("");
-        // Consume the error message that goes to stdout
-        await _process.ReadLineAsync();
+        // Consume the error/status message that goes to stdout.
+        // Allow extra time since empty-line handling may be slow.
+        string? errorLine = await _process.ReadLineAsync(5000);
+
+        // Ensure the first read completed before starting a second one
+        Assert.False(_process.HasExited);
 
         _process.SendCommand("""{"actionName":"ListAppNames","parameters":{}}""");
-        string? response = await _process.ReadLineAsync();
+        string? response = await _process.ReadLineAsync(5000);
 
         Assert.False(_process.HasExited);
         Assert.NotNull(response);
