@@ -314,7 +314,7 @@ function spawnAgentServer(
                 const psArgs = ["-NoExit", "-Command", psCommand];
                 const child = spawn(
                     "cmd.exe",
-                    ["/c", "start", psExe, ...psArgs],
+                    ["/c", "start", "", psExe, ...psArgs],
                     {
                         detached: true,
                         stdio: "ignore",
