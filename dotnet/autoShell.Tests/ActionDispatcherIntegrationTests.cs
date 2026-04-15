@@ -183,12 +183,7 @@ public class ActionDispatcherIntegrationTests
     public void AllSchemaActions_HaveRegisteredHandlers()
     {
         var schemaActions = LoadRealSchemaActions();
-        if (schemaActions.Count == 0)
-        {
-            // Schemas not reachable from test output dir (relative path differs from autoShell binary).
-            // The source generator validates schemas at compile time; this is a runtime cross-check.
-            return;
-        }
+        Assert.True(schemaActions.Count > 0, "No schema actions loaded — .pas.json files must be present after build");
 
         var (missingHandlers, _) = SchemaValidator.FindMismatches(schemaActions, _dispatcher.RegisteredActions);
 
@@ -199,20 +194,26 @@ public class ActionDispatcherIntegrationTests
 
     /// <summary>
     /// Verifies that every registered C# handler action has a matching .pas.json schema definition.
-    /// This test fails when a handler registers an action not present in any TypeScript schema.
+    /// Actions registered in C# handlers that intentionally have no .pas.json schema definition
+    /// (query/utility actions that take no parameters from the LLM).
     /// </summary>
+    private static readonly System.Collections.Generic.HashSet<string> SchemalessActions = new()
+    {
+        "ListAppNames",
+        "ListThemes",
+        "ListWifiNetworks",
+        "ListResolutions",
+        "DisplayResolutionAndAspectRatio",
+    };
+
     [Fact]
     public void AllRegisteredHandlers_HaveSchemaDefinitions()
     {
         var schemaActions = LoadRealSchemaActions();
-        if (schemaActions.Count == 0)
-        {
-            // Schemas not reachable from test output dir (relative path differs from autoShell binary).
-            // The source generator validates schemas at compile time; this is a runtime cross-check.
-            return;
-        }
+        Assert.True(schemaActions.Count > 0, "No schema actions loaded — .pas.json files must be present after build");
 
         var (_, missingSchemas) = SchemaValidator.FindMismatches(schemaActions, _dispatcher.RegisteredActions);
+        missingSchemas.RemoveAll(a => SchemalessActions.Contains(a));
 
         Assert.True(
             missingSchemas.Count == 0,
@@ -222,8 +223,10 @@ public class ActionDispatcherIntegrationTests
     private static System.Collections.Generic.HashSet<string> LoadRealSchemaActions()
     {
         var validator = new SchemaValidator(new Logging.NullLogger());
+        // From test output (autoShell.Tests/bin/Debug/net8.0-windows/) we need 5 levels up to repo root
         var schemaDir = System.IO.Path.Combine(
-            AppContext.BaseDirectory, SchemaValidator.DefaultSchemaRelativePath);
+            AppContext.BaseDirectory, "..", "..", "..", "..", "..",
+            "ts", "packages", "agents", "desktop", "dist");
         return validator.LoadActionNames(schemaDir);
     }
 }
