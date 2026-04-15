@@ -66,6 +66,7 @@ jobs:
         working-directory: ts
         run: |
           pnpm install --frozen-lockfile --strict-peer-dependencies
+          pnpm run --filter @typeagent/action-schema-compiler... build
           pnpm run -C packages/agents/desktop asc:all
       - name: Restore Packages (AutoShell)
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
