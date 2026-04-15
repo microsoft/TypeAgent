@@ -38,7 +38,7 @@
                       ReferenceOutputAssembly="false" />
   </ItemGroup>
   <Target Name="GenerateSchemas" BeforeTargets="BeforeBuild">
-    <Exec Command="pnpm run -C ..\..\ts\packages\agents\desktop asc:all" WorkingDirectory="$(MSBuildProjectDirectory)" />
+    <Exec Command="pnpm run -C ..\..\ts\packages\agents\desktop build" WorkingDirectory="$(MSBuildProjectDirectory)" />
     <!-- AdditionalFiles must be added after generation so the glob resolves to the freshly-created files -->
     <ItemGroup>
       <AdditionalFiles Include="..\..\ts\packages\agents\desktop\dist\*.pas.json" LinkBase="Schemas" />
