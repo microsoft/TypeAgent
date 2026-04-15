@@ -193,7 +193,6 @@ public class ActionDispatcherIntegrationTests
     }
 
     /// <summary>
-    /// Verifies that every registered C# handler action has a matching .pas.json schema definition.
     /// Actions registered in C# handlers that intentionally have no .pas.json schema definition
     /// (query/utility actions that take no parameters from the LLM).
     /// </summary>
@@ -206,6 +205,10 @@ public class ActionDispatcherIntegrationTests
         "DisplayResolutionAndAspectRatio",
     };
 
+    /// <summary>
+    /// Verifies that every registered C# handler action has a matching .pas.json schema definition.
+    /// Known schemaless actions (query/utility) are excluded from the check.
+    /// </summary>
     [Fact]
     public void AllRegisteredHandlers_HaveSchemaDefinitions()
     {
