@@ -62,10 +62,10 @@ async function queryMongoDB(query: object) {
 
     try {
         await client.connect();
-        // TODO: move DB name to .env/config?
-        const database = client.db("telemetrydb");
-        // TODO: move collection name to .env/config?
-        const collection = database.collection("dispatcherlogs");
+        const database = client.db(process.env["DB_NAME"] ?? "telemetrydb");
+        const collection = database.collection(
+            process.env["COLLECTION_NAME"] ?? "dispatcherlogs",
+        );
 
         const documents = await collection.find(query).toArray();
         return documents;

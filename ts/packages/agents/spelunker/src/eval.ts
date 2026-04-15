@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import path from "path";
+import * as fs from "fs";
 
 import dotenv from "dotenv";
 
@@ -24,12 +25,19 @@ dotenv.config({ path: path.join(__dirname, "../../../../.env") }); // .../ts/.en
 
 type ConfigRecord = Record<string, any>;
 
-// TODO: Read this from a file that can be edited before each run,
-// or alternatively, read from command line args.
-const CONFIG: ConfigRecord = {
-    evalFolder: "evals/eval-2",
-    questionId: 2,
-};
+const CONFIG_FILE = path.join(path.dirname(__dirname), "eval-config.json");
+let CONFIG: ConfigRecord;
+try {
+    CONFIG = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8")) as ConfigRecord;
+} catch (error) {
+    console_log(
+        `[eval-config.json not found or invalid, using default config: ${(error as Error).message ?? error}]`,
+    );
+    CONFIG = {
+        evalFolder: "evals/eval-2",
+        questionId: 2,
+    };
+}
 
 async function main() {
     resetEpoch();

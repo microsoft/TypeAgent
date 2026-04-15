@@ -12,6 +12,10 @@ export class PDFViewerCore {
     private currentScale = "auto";
     private totalPages = 0;
     private initialized = false;
+    private searchQuery = "";
+    private searchResults: { page: number; index: number }[] = [];
+    private currentSearchIndex = -1;
+    private documentUrl: string | null = null;
 
     constructor() {
         console.log("📄 Initializing PDF Viewer Core...");
@@ -79,6 +83,8 @@ export class PDFViewerCore {
     async loadDocumentFromURL(url: string): Promise<void> {
         try {
             console.log("📄 Loading PDF document from URL:", url);
+
+            this.documentUrl = url;
 
             // Show loading state
             this.showLoadingState();
@@ -241,29 +247,57 @@ export class PDFViewerCore {
     async search(query: string): Promise<void> {
         if (!query.trim() || !this.pdfDocument) return;
 
-        console.log("🔍 Searching for:", query);
-        // TODO: Implement text search functionality
-        // This would involve:
-        // 1. Getting text content from all pages
-        // 2. Finding matches
-        // 3. Highlighting results
-        // 4. Updating find results counter
+        this.searchQuery = query.trim().toLowerCase();
+        this.searchResults = [];
+        this.currentSearchIndex = -1;
+
+        for (let pageNum = 1; pageNum <= this.totalPages; pageNum++) {
+            const page = await this.pdfDocument.getPage(pageNum);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items
+                .map((item: { str: string }) => item.str)
+                .join(" ")
+                .toLowerCase();
+
+            let index = 0;
+            let pos = pageText.indexOf(this.searchQuery, index);
+            while (pos !== -1) {
+                this.searchResults.push({ page: pageNum, index: pos });
+                index = pos + 1;
+                pos = pageText.indexOf(this.searchQuery, index);
+            }
+        }
+
+        if (this.searchResults.length > 0) {
+            this.currentSearchIndex = 0;
+            await this.renderPage(this.searchResults[0].page);
+            console.log(
+                `🔍 Found ${this.searchResults.length} result(s) for "${query}"`,
+            );
+        } else {
+            console.log(`🔍 No results found for "${query}"`);
+        }
     }
 
     /**
      * Find next search result
      */
-    findNext(): void {
-        console.log("⏭️ Find next");
-        // TODO: Implement find next
+    async findNext(): Promise<void> {
+        if (this.searchResults.length === 0) return;
+        this.currentSearchIndex =
+            (this.currentSearchIndex + 1) % this.searchResults.length;
+        await this.renderPage(this.searchResults[this.currentSearchIndex].page);
     }
 
     /**
      * Find previous search result
      */
-    findPrevious(): void {
-        console.log("⏮️ Find previous");
-        // TODO: Implement find previous
+    async findPrevious(): Promise<void> {
+        if (this.searchResults.length === 0) return;
+        this.currentSearchIndex =
+            (this.currentSearchIndex - 1 + this.searchResults.length) %
+            this.searchResults.length;
+        await this.renderPage(this.searchResults[this.currentSearchIndex].page);
     }
 
     /**
@@ -277,10 +311,19 @@ export class PDFViewerCore {
     /**
      * Download the document
      */
-    download(): void {
-        console.log("💾 Downloading document");
-        // TODO: Implement download functionality
-        // This would trigger a download of the original PDF file
+    async download(): Promise<void> {
+        if (!this.pdfDocument) return;
+
+        const data = await this.pdfDocument.getData();
+        const blob = new Blob([data], { type: "application/pdf" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = this.documentUrl
+            ? this.documentUrl.split("/").pop() || "document.pdf"
+            : "document.pdf";
+        a.click();
+        URL.revokeObjectURL(url);
     }
 
     /**

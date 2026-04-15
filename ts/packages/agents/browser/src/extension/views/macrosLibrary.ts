@@ -647,9 +647,77 @@ class MacroIndexApp {
     }
 
     private editMacro(macro: any) {
-        // TODO: Implement macro editing
-        console.log("Edit macro:", macro);
-        showNotification("Macro editing coming soon!", "info");
+        const existingModal = document.getElementById("editMacroModal");
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        const modal = document.createElement("div");
+        modal.id = "editMacroModal";
+        modal.className = "modal fade";
+        modal.tabIndex = -1;
+        modal.innerHTML = `
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Edit Macro</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Name</label>
+                            <input type="text" class="form-control" id="editMacroName" value="${escapeHtml(macro.name || "")}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-control" id="editMacroDescription" rows="3">${escapeHtml(macro.description || "")}</textarea>
+                        </div>
+                        ${
+                            macro.script
+                                ? `<div class="mb-3">
+                            <label class="form-label">Script</label>
+                            <textarea class="form-control font-monospace" id="editMacroScript" rows="8">${escapeHtml(macro.script)}</textarea>
+                        </div>`
+                                : ""
+                        }
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-primary" id="editMacroSaveBtn">Save Changes</button>
+                    </div>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+
+        const bsModal = new (window as any).bootstrap.Modal(modal);
+        bsModal.show();
+
+        modal
+            .querySelector("#editMacroSaveBtn")!
+            .addEventListener("click", () => {
+                macro.name = (
+                    document.getElementById("editMacroName") as HTMLInputElement
+                ).value.trim();
+                macro.description = (
+                    document.getElementById(
+                        "editMacroDescription",
+                    ) as HTMLTextAreaElement
+                ).value.trim();
+                if (macro.script) {
+                    macro.script = (
+                        document.getElementById(
+                            "editMacroScript",
+                        ) as HTMLTextAreaElement
+                    ).value;
+                }
+                bsModal.hide();
+                this.renderUI();
+                showNotification("Macro updated successfully!", "success");
+            });
+
+        modal.addEventListener("hidden.bs.modal", () => modal.remove(), {
+            once: true,
+        });
     }
 
     private async deleteAction(actionName: string) {

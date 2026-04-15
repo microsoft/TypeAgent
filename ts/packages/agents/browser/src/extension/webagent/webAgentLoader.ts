@@ -278,7 +278,7 @@ export function initializeWebAgentLoader(): void {
     activateAgentForUrl(window.location.href);
 
     // Expose registerWebAgent on window so site-specific IIFE bundles
-    // (sites/commerce.js, etc.) share the same loader state instead of
+    // (sites/crossword.js, etc.) share the same loader state instead of
     // getting their own duplicate copy of module variables.
     window.__webAgentRegister = registerWebAgent;
 

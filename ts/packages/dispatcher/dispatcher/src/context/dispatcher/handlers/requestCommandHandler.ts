@@ -514,7 +514,6 @@ export class RequestCommandHandler implements CommandHandler {
                 );
                 result.groups.push(...requestResult.groups);
                 result.matchedPrefixLength = requestResult.matchedPrefixLength;
-                result.separatorMode = requestResult.separatorMode;
                 result.closedSet = requestResult.closedSet;
                 result.directionSensitive = requestResult.directionSensitive;
                 result.afterWildcard = requestResult.afterWildcard;

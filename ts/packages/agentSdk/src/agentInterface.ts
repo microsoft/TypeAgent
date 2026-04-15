@@ -227,6 +227,9 @@ export interface SessionContext<T = unknown> {
     // Experimental: get the shared local host port
     getSharedLocalHostPort(agentName: string): Promise<number>;
 
+    // Experimental: update this agent's bound local host port (used after OS port assignment)
+    setLocalHostPort(port: number): void;
+
     // Experimental: get the available indexes
     indexes(type: "image" | "email" | "website" | "all"): Promise<any[]>;
 }

@@ -8,6 +8,7 @@ import {
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { RequestId, RequestMetrics } from "./dispatcher.js";
+import type { PendingInteractionRequest } from "./pendingInteraction.js";
 
 export type TemplateData = {
     schema: TemplateSchema;
@@ -70,24 +71,18 @@ export interface ClientIO {
     ): void;
 
     // Input
-    askYesNo(
-        requestId: RequestId,
+    question(
+        requestId: RequestId | undefined,
         message: string,
-        defaultValue?: boolean,
-    ): Promise<boolean>;
+        choices: string[],
+        defaultId?: number,
+        source?: string,
+    ): Promise<number>;
     proposeAction(
         requestId: RequestId,
         actionTemplates: TemplateEditConfig,
         source: string,
     ): Promise<unknown>;
-
-    // A question outside of the request
-    popupQuestion(
-        message: string,
-        choices: string[],
-        defaultId: number | undefined,
-        source: string,
-    ): Promise<number>;
 
     // Notification (TODO: turn these in to dispatcher events)
     notify(
@@ -117,6 +112,11 @@ export interface ClientIO {
         choices: string[],
         source: string,
     ): void;
+
+    // Non-blocking interaction requests (async deferred pattern)
+    requestInteraction(interaction: PendingInteractionRequest): void;
+    interactionResolved(interactionId: string, response: unknown): void;
+    interactionCancelled(interactionId: string): void;
 
     // Host specific (TODO: Formalize the API)
     takeAction(requestId: RequestId, action: string, data: unknown): void;

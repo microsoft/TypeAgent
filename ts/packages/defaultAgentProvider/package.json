@@ -66,6 +66,7 @@
     "montage-agent": "workspace:*",
     "music": "workspace:*",
     "music-local": "workspace:*",
+    "onboarding-agent": "workspace:*",
     "photo-agent": "workspace:*",
     "proper-lockfile": "^4.1.2",
     "scriptflow-typeagent": "workspace:*",

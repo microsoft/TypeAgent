@@ -1,8 +1,8 @@
 # video
 
-Video generation agent. This **sample agent** shows how to make calls to video generation APIs (sora on Azure OpenAI).
+Video generation agent. This **sample agent** shows how to make calls to video generation APIs (sora-2 on Azure OpenAI).
 
-To experiment with video generation models, please add your API key or configure your Sora endpoint in the root **.env** file with the following variable names: AZURE_OPENAI_ENDPOINT_SORA, AZURE_OPENAI_API_KEY_SORA. For identity based authentication to your enpoint specify the key as identity.
+To experiment with video generation models, please add your API key or configure your Sora endpoint in the root **.env** file with the following variable names: AZURE_OPENAI_ENDPOINT_SORA_2, AZURE_OPENAI_API_KEY_SORA_2. For identity based authentication to your endpoint specify the key as identity. The agent uses the **sora-2** model for video generation.
 
 ## Trademarks
 

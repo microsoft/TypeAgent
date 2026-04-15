@@ -1,0 +1,97 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Grammar for Phase 5 — Scaffolder actions.
+
+<ScaffoldAgent> = scaffold (the)? $(integrationName:wildcard) agent -> {
+    actionName: "scaffoldAgent",
+    parameters: {
+        integrationName
+    }
+}
+  | (create | generate | stamp out) (the)? $(integrationName:wildcard) (agent)? (package)? -> {
+    actionName: "scaffoldAgent",
+    parameters: {
+        integrationName
+    }
+}
+  | scaffold (the)? $(integrationName:wildcard) agent (using | with | as) (a | the)? schema grammar pattern -> {
+    actionName: "scaffoldAgent",
+    parameters: { integrationName, pattern: "schema-grammar" }
+}
+  | scaffold (the)? $(integrationName:wildcard) agent (using | with | as) (a | the)? external api pattern -> {
+    actionName: "scaffoldAgent",
+    parameters: { integrationName, pattern: "external-api" }
+}
+  | scaffold (the)? $(integrationName:wildcard) agent (using | with | as) (a | the)? (llm)? streaming pattern -> {
+    actionName: "scaffoldAgent",
+    parameters: { integrationName, pattern: "llm-streaming" }
+}
+  | scaffold (the)? $(integrationName:wildcard) agent (using | with | as) (a | the)? (sub agent)? orchestrator pattern -> {
+    actionName: "scaffoldAgent",
+    parameters: { integrationName, pattern: "sub-agent-orchestrator" }
+}
+  | scaffold (the)? $(integrationName:wildcard) agent (using | with | as) (a | the)? websocket (bridge)? pattern -> {
+    actionName: "scaffoldAgent",
+    parameters: { integrationName, pattern: "websocket-bridge" }
+}
+  | scaffold (the)? $(integrationName:wildcard) agent (using | with | as) (a | the)? state machine pattern -> {
+    actionName: "scaffoldAgent",
+    parameters: { integrationName, pattern: "state-machine" }
+}
+  | scaffold (the)? $(integrationName:wildcard) agent (using | with | as) (a | the)? native platform pattern -> {
+    actionName: "scaffoldAgent",
+    parameters: { integrationName, pattern: "native-platform" }
+}
+  | scaffold (the)? $(integrationName:wildcard) agent (using | with | as) (a | the)? view (ui)? pattern -> {
+    actionName: "scaffoldAgent",
+    parameters: { integrationName, pattern: "view-ui" }
+}
+  | scaffold (the)? $(integrationName:wildcard) agent (using | with | as) (a | the)? command handler pattern -> {
+    actionName: "scaffoldAgent",
+    parameters: { integrationName, pattern: "command-handler" }
+};
+
+<ScaffoldPlugin> = scaffold (the)? $(integrationName:wildcard) (plugin | extension) -> {
+    actionName: "scaffoldPlugin",
+    parameters: {
+        integrationName,
+        template: "rest-client"
+    }
+}
+  | (create | generate) (the)? $(integrationName:wildcard) (plugin | extension) -> {
+    actionName: "scaffoldPlugin",
+    parameters: {
+        integrationName,
+        template: "rest-client"
+    }
+};
+
+<ListTemplates> = list (available)? templates -> {
+    actionName: "listTemplates",
+    parameters: {}
+}
+  | (show | what are) (the)? (available)? (scaffolding)? templates -> {
+    actionName: "listTemplates",
+    parameters: {}
+};
+
+<ListPatterns> = list (available | agent)? patterns -> {
+    actionName: "listPatterns",
+    parameters: {}
+}
+  | (show | what are) (the)? (available | agent)? (agent)? patterns -> {
+    actionName: "listPatterns",
+    parameters: {}
+}
+  | what patterns (are)? (available | supported)? -> {
+    actionName: "listPatterns",
+    parameters: {}
+};
+
+import { ScaffolderActions } from "./scaffolderSchema.ts";
+
+<Start> : ScaffolderActions = <ScaffoldAgent>
+  | <ScaffoldPlugin>
+  | <ListTemplates>
+  | <ListPatterns>;

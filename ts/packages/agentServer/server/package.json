@@ -15,6 +15,10 @@
   "exports": {
     ".": "./dist/server.js"
   },
+  "bin": {
+    "agent-server-status": "./dist/status.js",
+    "agent-server-stop": "./dist/stop.js"
+  },
   "files": [
     "dist",
     "!dist/test"
@@ -34,6 +38,7 @@
     "@typeagent/agent-server-protocol": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
+    "@typeagent/dispatcher-types": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",

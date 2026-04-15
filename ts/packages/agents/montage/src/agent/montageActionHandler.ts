@@ -230,6 +230,10 @@ async function closeMontageContext(
     context: SessionContext<MontageActionContext>,
 ) {
     await saveMontages(context);
+    if (context.agentContext.viewProcess) {
+        context.agentContext.viewProcess.kill();
+        context.agentContext.viewProcess = undefined;
+    }
 }
 
 async function updateMontageContext(
@@ -277,7 +281,7 @@ async function updateMontageContext(
 
         // Start the montage rendering host
         if (!agentContext.viewProcess) {
-            agentContext.viewProcess = await createViewServiceHost(
+            const viewServiceResult = await createViewServiceHost(
                 (montage: PhotoMontage) => {
                     // replace the active montage with the one the client gave is if they match
                     if (agentContext.activeMontageId == montage.id) {
@@ -292,6 +296,10 @@ async function updateMontageContext(
                 },
                 agentContext.localHostPort,
             );
+            if (viewServiceResult) {
+                agentContext.viewProcess = viewServiceResult.process;
+                context.setLocalHostPort(viewServiceResult.port);
+            }
 
             // send the folder info
             if (agentContext.indexes.length !== 0) {
@@ -962,41 +970,47 @@ export async function createViewServiceHost(
         );
     });
 
-    const viewServicePromise = new Promise<ChildProcess | undefined>(
-        (resolve, reject) => {
-            try {
-                const expressService = fileURLToPath(
-                    new URL(
-                        path.join("..", "./route/route.js"),
-                        import.meta.url,
-                    ),
-                );
+    const viewServicePromise = new Promise<
+        { process: ChildProcess; port: number } | undefined
+    >((resolve, reject) => {
+        try {
+            const expressService = fileURLToPath(
+                new URL(path.join("..", "./route/route.js"), import.meta.url),
+            );
 
-                const childProcess = fork(expressService, [port.toString()]);
+            const childProcess = fork(expressService, [port.toString()]);
 
-                childProcess.on("message", function (message) {
-                    if (message === "Success") {
-                        resolve(childProcess);
-                    } else if (message === "Failure") {
-                        resolve(undefined);
-                    } else {
-                        const mon: PhotoMontage | undefined =
-                            message as PhotoMontage;
-                        if (mon) {
-                            montageUpdatedCallback(mon);
-                        }
+            childProcess.on("message", function (message) {
+                if (
+                    message !== null &&
+                    typeof message === "object" &&
+                    "success" in (message as object) &&
+                    (message as { success: boolean }).success
+                ) {
+                    resolve({
+                        process: childProcess,
+                        port: (message as { success: boolean; port: number })
+                            .port,
+                    });
+                } else if (message === "Failure") {
+                    resolve(undefined);
+                } else {
+                    const mon: PhotoMontage | undefined =
+                        message as PhotoMontage;
+                    if (mon) {
+                        montageUpdatedCallback(mon);
                     }
-                });
+                }
+            });
 
-                childProcess.on("exit", (code) => {
-                    debug("Montage view server exited with code:", code);
-                });
-            } catch (e: any) {
-                console.error(e);
-                resolve(undefined);
-            }
-        },
-    );
+            childProcess.on("exit", (code) => {
+                debug("Montage view server exited with code:", code);
+            });
+        } catch (e: any) {
+            console.error(e);
+            resolve(undefined);
+        }
+    });
 
     return Promise.race([viewServicePromise, timeoutPromise]).then((result) => {
         clearTimeout(timeoutHandle);

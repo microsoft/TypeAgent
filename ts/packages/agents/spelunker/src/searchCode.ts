@@ -355,8 +355,70 @@ function getAllSourceFiles(dir: string): FileMtimeSize[] {
     return results;
 }
 
-// TODO: Break into multiple functions.
-// Notably the part that compares files in the database and files on disk.
+function getAllSourceFilesFromFolders(folders: string[]): FileMtimeSize[] {
+    const files: FileMtimeSize[] = [];
+    for (const folder of folders) {
+        files.push(...getAllSourceFiles(folder));
+    }
+    return files;
+}
+
+function compareFilesWithDatabase(
+    files: FileMtimeSize[],
+    prepSelectAllFiles: sqlite.Statement,
+    db: sqlite.Database,
+): { filesToDo: string[]; filesToInsert: FileMtimeSize[] } {
+    const filesToDo: string[] = [];
+    const filesInDb: Map<string, FileMtimeSize> = new Map();
+    const fileRows: any[] = prepSelectAllFiles.all();
+    for (const fileRow of fileRows) {
+        filesInDb.set(fileRow.fileName, {
+            file: fileRow.fileName,
+            mtime: fileRow.mtime,
+            size: fileRow.size,
+        });
+    }
+    const filesToInsert: FileMtimeSize[] = [];
+    for (const file of files) {
+        const dbStat = filesInDb.get(file.file);
+        if (
+            !dbStat ||
+            dbStat.mtime !== file.mtime ||
+            dbStat.size !== file.size
+        ) {
+            filesToDo.push(file.file);
+            // TODO: Make this insert part of the transaction for this file
+            filesToInsert.push(file);
+            filesInDb.set(file.file, {
+                file: file.file,
+                mtime: file.mtime,
+                size: file.size,
+            });
+        }
+    }
+    const filesSet: Set<string> = new Set(files.map((file) => file.file));
+    const filesToDelete: string[] = [...filesInDb.keys()].filter(
+        (file) => !filesSet.has(file),
+    );
+    if (filesToDelete.length) {
+        console_log(`  [Deleting ${filesToDelete.length} files from database]`);
+        for (const file of filesToDelete) {
+            purgeFile(db, file);
+        }
+    }
+    return { filesToDo, filesToInsert };
+}
+
+function logChunkerErrors(items: (ChunkedFile | ChunkerErrorItem)[]): void {
+    const errorItems = items.filter(
+        (item): item is ChunkerErrorItem => "error" in item,
+    );
+    for (const errorItem of errorItems) {
+        console_log(`[Error: ${errorItem.error}; Output: ${errorItem.output}]`);
+    }
+}
+
+// Chunkify all source files across focus directories and load them into the database.
 export async function loadDatabase(context: SpelunkerContext): Promise<void> {
     console_log(`[Step 1: Load database]`);
     if (!context.queryContext) {
@@ -378,54 +440,15 @@ export async function loadDatabase(context: SpelunkerContext): Promise<void> {
     );
 
     // 1a. Find all source files in the focus directories (locally, using a recursive walk).
-    // TODO: Factor into simpler functions
     console_log(`[Step 1a: Find supported source files]`);
-    const files: FileMtimeSize[] = [];
-    for (let i = 0; i < context.focusFolders.length; i++) {
-        files.push(...getAllSourceFiles(context.focusFolders[i]));
-    }
+    const files = getAllSourceFilesFromFolders(context.focusFolders);
 
     // Compare files found and files in the database.
-    const filesToDo: string[] = [];
-    const filesInDb: Map<string, FileMtimeSize> = new Map();
-    const fileRows: any[] = prepSelectAllFiles.all();
-    for (const fileRow of fileRows) {
-        filesInDb.set(fileRow.fileName, {
-            file: fileRow.fileName,
-            mtime: fileRow.mtime,
-            size: fileRow.size,
-        });
-    }
-    const filesToInsert: FileMtimeSize[] = [];
-    for (const file of files) {
-        const dbStat = filesInDb.get(file.file);
-        if (
-            !dbStat ||
-            dbStat.mtime !== file.mtime ||
-            dbStat.size !== file.size
-        ) {
-            // console_log(`  [Need to update ${file} (mtime/size mismatch)]`);
-            filesToDo.push(file.file);
-            // TODO: Make this insert part of the transaction for this file
-            filesToInsert.push(file);
-            filesInDb.set(file.file, {
-                file: file.file,
-                mtime: file.mtime,
-                size: file.size,
-            });
-        }
-    }
-    const filesSet: Set<string> = new Set(files.map((file) => file.file));
-    const filesToDelete: string[] = [...filesInDb.keys()].filter(
-        (file) => !filesSet.has(file),
+    const { filesToDo, filesToInsert } = compareFilesWithDatabase(
+        files,
+        prepSelectAllFiles,
+        db,
     );
-    if (filesToDelete.length) {
-        console_log(`  [Deleting ${filesToDelete.length} files from database]`);
-        for (const file of filesToDelete) {
-            // console_log(`  [Deleting ${file} from database]`);
-            purgeFile(db, file);
-        }
-    }
 
     if (!filesToDo.length) {
         console_log(
@@ -435,7 +458,6 @@ export async function loadDatabase(context: SpelunkerContext): Promise<void> {
     }
 
     // 1b. Chunkify all new files (without LLM help).
-    // TODO: Make this into its own function.
     // TODO: Numbers may look weird when long files are split by pythonChunker.
     console_log(
         `[Step 1b: Chunking ${filesToDo.length} out of ${files.length} files]`,
@@ -451,13 +473,7 @@ export async function loadDatabase(context: SpelunkerContext): Promise<void> {
         const tsItems = await chunkifyTypeScriptFiles(filesToDoTs);
         allItems.push(...tsItems);
     }
-    const allErrorItems = allItems.filter(
-        (item): item is ChunkerErrorItem => "error" in item,
-    );
-    for (const errorItem of allErrorItems) {
-        // TODO: Use appendDisplay (requires passing actionContext)
-        console_log(`[Error: ${errorItem.error}; Output: ${errorItem.output}]`);
-    }
+    logChunkerErrors(allItems);
     const allChunkedFiles = allItems.filter(
         (item): item is ChunkedFile => "chunks" in item,
     );

@@ -393,6 +393,12 @@ provider.getAppAgentNames()     # Discover available agents
 │  │  - Load flow definitions                    │      │
 │  └─────────────────────────────────────────────┘      │
 │                                                       │
+│  If manifest.localView = true:                        │
+│  - Reserve a port slot (assigned 0 = OS-chosen)       │
+│  - Agent's view server spawned on first activation    │
+│  - Server binds to OS-assigned port, reports back     │
+│    via IPC → stored via SessionContext.setLocalHostPort│
+│                                                       │
 └───────────────────────────────────────────────────────┘
 ```
 

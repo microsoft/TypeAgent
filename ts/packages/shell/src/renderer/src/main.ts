@@ -27,6 +27,7 @@ import { ClientIO, Dispatcher, RequestId } from "agent-dispatcher";
 import { swapContent } from "./setContent";
 import { remoteSearchMenuUIOnCompletion } from "./searchMenuUI/remoteSearchMenuUI";
 import { ChatInput } from "./chat/chatInput";
+import { SessionSelector } from "./chat/sessionSelector";
 
 export function isElectron(): boolean {
     return globalThis.api !== undefined;
@@ -137,6 +138,7 @@ function registerClient(
     tabsView: TabView,
     cameraView: CameraView,
     chatHistoryReady: Promise<void>,
+    sessionSelector: SessionSelector,
 ) {
     let replayPending = true;
     const replayQueue: Array<() => void> = [];
@@ -213,8 +215,22 @@ function registerClient(
                 ),
             );
         },
-        askYesNo: async (requestId, message, _defaultValue) => {
-            return chatView.askYesNo(requestId, message, "");
+        question: async (requestId, message, choices) => {
+            // For binary Yes/No with a known requestId, delegate to the existing chatView UI.
+            if (
+                requestId !== undefined &&
+                choices.length === 2 &&
+                choices[0] === "Yes" &&
+                choices[1] === "No"
+            ) {
+                const yes = await chatView.askYesNo(requestId, message, "");
+                return yes ? 0 : 1;
+            }
+            // General multi-choice and broadcast (no requestId) are not yet implemented
+            // in the Shell renderer — the main process handles those via dialog.showMessageBox.
+            throw new Error(
+                "Main process should have handled multi-choice question",
+            );
         },
         requestChoice: (
             requestId,
@@ -237,9 +253,6 @@ function registerClient(
         },
         proposeAction: async (requestId, actionTemplates, source) => {
             return chatView.proposeAction(requestId, actionTemplates, source);
-        },
-        popupQuestion: () => {
-            throw new Error("Main process should have handled popupQuestion");
         },
         notify: (requestId, event, data, source, seq?) => {
             withReplayQueue(() => {
@@ -336,6 +349,25 @@ function registerClient(
         },
         closeLocalView: async () => {
             throw new Error("Main process should have handled closeLocalView");
+        },
+        requestInteraction: () => {
+            // TODO: Implement deferred interaction support for agent-server connect mode.
+            // When the shell connects to a SharedDispatcher, requestInteraction is pushed
+            // from the server. Without handling it, the server-side promise hangs for the
+            // full 10-minute timeout before resolving with the defaultId (question) or
+            // rejecting (proposeAction).
+            //
+            // The fix (Option A): on requestInteraction, dispatch into the existing
+            // chatView.askYesNo / chatView.proposeAction / dialog.showMessageBox UI (all
+            // already implemented for direct mode), await the result, then call
+            // dispatcher.respondToInteraction({ interactionId, type, value }). Hold a
+            // Map<interactionId, cancelFn> and dismiss open prompts on interactionCancelled.
+        },
+        interactionResolved: () => {
+            // Shell does not yet support deferred interactions
+        },
+        interactionCancelled: () => {
+            // Shell does not yet support deferred interactions
         },
         takeAction: (_, action, data) => {
             // Android object gets injected on Android devices, otherwise unavailable
@@ -525,6 +557,9 @@ function registerClient(
             }
             chatView.addNotificationMessage(message, "shell", id);
         },
+        sessionChanged(sessionId: string, name: string): void {
+            sessionSelector.setCurrentSession(sessionId, name);
+        },
     };
 
     getClientAPI().registerClient(client);
@@ -628,6 +663,18 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     chatView.setChatInput(chatInput);
 
+    // Session selector dropdown — placed above the chat area
+    const sessionSelector = new SessionSelector((_sessionId, name) => {
+        // On session switch, clear chat and show notification
+        chatView.clear();
+        chatView.addNotificationMessage(
+            `Switched to session "${name}"`,
+            "session",
+            undefined,
+        );
+    });
+    wrapper.appendChild(sessionSelector.getElement());
+
     const chatHistoryReady = initializeChatHistory(chatView);
 
     const cameraView = new CameraView((image: HTMLImageElement) => {
@@ -671,6 +718,7 @@ document.addEventListener("DOMContentLoaded", async function () {
         tabs,
         cameraView,
         chatHistoryReady,
+        sessionSelector,
     );
 
     try {

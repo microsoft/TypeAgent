@@ -172,7 +172,7 @@ export type VideoGenerationJob = {
     height?: number;
     width?: number;
     size?: "720x1280" | "1280x720" | "1024x1792" | "1792x1024";
-    seconds: 4 | 8 | 12;
+    seconds?: 4 | 8 | 12;
     input_reference?: ImageInPaintItem[]; // TODO: add support for videos
     failure_reason?: string;
     endpoint?: URL;

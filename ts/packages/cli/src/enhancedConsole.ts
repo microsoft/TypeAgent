@@ -25,7 +25,10 @@ import type {
     Dispatcher,
     IAgentMessage,
     TemplateEditConfig,
-} from "agent-dispatcher";
+    PendingInteractionRequest,
+    PendingInteractionResponse,
+    PendingInteractionEntry,
+} from "@typeagent/dispatcher-types";
 import chalk from "chalk";
 import fs from "fs";
 import path from "path";
@@ -100,18 +103,52 @@ class TerminalLayout {
         }
     }
 
+    private inlineBuffer: string = "";
+
     /** Write content into the scroll region (appears above the prompt). */
     writeContent(text: string) {
         if (!this.active) {
             process.stdout.write(text);
             return;
         }
+        this.inlineBuffer = "";
         const height = process.stdout.rows || 24;
         const scrollBottom = height - this.promptRows;
-        // Save cursor, move to bottom of scroll region, write, restore
+        const promptStart = scrollBottom + 1;
+        // Move to bottom of scroll region, scroll the region up by one line
+        // with "\n", write the content, then reposition to the start of the
+        // fixed region so render() can finalise the exact cursor position.
         process.stdout.write(
-            "\x1b[s" + `\x1b[${scrollBottom};1H` + "\n" + text + "\x1b[u",
+            `\x1b[${scrollBottom};1H` + "\n" + text + `\x1b[${promptStart};1H`,
         );
+    }
+
+    /** Append inline (streaming) text. Accumulates tokens in a buffer without
+     *  writing to stdout. An empty-string flush signal (sent when streaming
+     *  ends) commits the full buffer as a single block via writeContent().
+     *  This avoids repeated in-place rewrites that produce duplicate output
+     *  on passive observer clients sharing the same scroll-region state. */
+    writeInline(text: string) {
+        if (!this.active) {
+            process.stdout.write(text);
+            return;
+        }
+        if (text === "") {
+            // End-of-stream flush signal — commit the accumulated buffer.
+            this.flushInline();
+        } else {
+            this.inlineBuffer += text;
+        }
+    }
+
+    /** Flush the inline buffer as a committed block line (called when the
+     *  next message is a non-inline block). */
+    flushInline() {
+        if (!this.active || this.inlineBuffer === "") {
+            return;
+        }
+        // writeContent() clears inlineBuffer as its first step.
+        this.writeContent(this.inlineBuffer);
     }
 
     /** Draw content in the fixed bottom region at a given row offset (0-based from prompt start). */
@@ -336,11 +373,49 @@ export function stopSpinner(
 /**
  * Create an enhanced ClientIO with terminal UI features
  */
+// Reason values passed to AbortController.abort() for pending interactions.
+type InteractionResolvedReason = {
+    kind: "resolved-by-other";
+    response: unknown;
+};
+const INTERACTION_CANCELLED = "cancelled";
+
+function isYesNoChoices(choices: string[]): boolean {
+    return choices.length === 2 && choices[0] === "Yes" && choices[1] === "No";
+}
+
+/**
+ * Parse a user's raw input string into a 0-based choice index.
+ * Accepts:
+ *   - 1-based numeric input ("1", "2", …)
+ *   - "y" / "yes" → 0 and "n" / "no" → 1 when choices are ["Yes", "No"]
+ * Falls back to defaultId (or 0) when the input is unrecognised.
+ */
+function parseChoiceInput(
+    input: string,
+    choices: string[],
+    defaultId: number | undefined,
+): number {
+    const trimmed = input.trim().toLowerCase();
+    if (isYesNoChoices(choices)) {
+        if (trimmed === "y" || trimmed === "yes") return 0;
+        if (trimmed === "n" || trimmed === "no") return 1;
+    }
+    const idx = parseInt(trimmed, 10) - 1;
+    return idx >= 0 && idx < choices.length ? idx : (defaultId ?? 0);
+}
+
 export function createEnhancedClientIO(
     rl?: readline.promises.Interface,
     dispatcherRef?: { current?: Dispatcher },
 ): ClientIO {
     let lastAppendMode: DisplayAppendMode | undefined;
+
+    // Active interaction prompts keyed by interactionId.  Each entry holds an
+    // AbortController that, when aborted, dismisses the in-progress question().
+    const activeInteractions = new Map<string, AbortController>();
+    // Serial queue for interactions — ensures only one stdin prompt is active at a time.
+    let interactionQueue: Promise<void> = Promise.resolve();
 
     function displayContent(
         content: DisplayContent,
@@ -414,12 +489,12 @@ export function createEnhancedClientIO(
             // Scroll region is active — write content into the scroll region.
             // The prompt stays anchored at the bottom automatically.
             if (appendMode !== "inline") {
-                if (lastAppendMode === "inline") {
-                    terminalLayout.writeContent("");
-                }
+                // Any accumulated inline buffer is intentionally discarded here —
+                // writeContent() clears inlineBuffer before writing, so partial
+                // streaming tokens won't be re-emitted with the new block content.
                 terminalLayout.writeContent(displayText);
             } else {
-                terminalLayout.writeContent(displayText);
+                terminalLayout.writeInline(displayText);
             }
             activePromptRenderer.redraw();
         } else if (activePromptRenderer) {
@@ -567,67 +642,12 @@ export function createEnhancedClientIO(
             // REVIEW: Ignored.
         },
 
-        // Input - Enhanced yes/no with visual styling
-        async askYesNo(
-            requestId: RequestId,
-            message: string,
-            defaultValue?: boolean,
-        ): Promise<boolean> {
-            // Pause spinner during input
-            const wasSpinning = currentSpinner?.isActive();
-            if (wasSpinning) {
-                currentSpinner!.stop();
-            }
-
-            // Draw styled prompt
-            const width = process.stdout.columns || 80;
-            const line = ANSI.dim + "─".repeat(width) + ANSI.reset;
-
-            process.stdout.write("\n");
-            process.stdout.write(line + "\n");
-
-            const defaultHint =
-                defaultValue === undefined
-                    ? ""
-                    : defaultValue
-                      ? " (default: yes)"
-                      : " (default: no)";
-
-            const prompt = `${chalk.cyan("?")} ${message}${chalk.dim(defaultHint)} ${chalk.dim("(y/n)")} `;
-
-            const input = await question(prompt, rl);
-            process.stdout.write(line + "\n");
-
-            // Resume spinner if it was active
-            if (wasSpinning) {
-                currentSpinner = new EnhancedSpinner({ text: "Processing..." });
-                currentSpinner.start();
-            }
-
-            if (input.toLowerCase() === "y" || input.toLowerCase() === "yes") {
-                return true;
-            }
-            if (input.toLowerCase() === "n" || input.toLowerCase() === "no") {
-                return false;
-            }
-            return defaultValue ?? false;
-        },
-
-        async proposeAction(
-            requestId: RequestId,
-            actionTemplates: TemplateEditConfig,
-            source: string,
-        ): Promise<unknown> {
-            // TODO: Not implemented
-            return undefined;
-        },
-
-        // Multiple choice with visual menu
-        async popupQuestion(
+        // Input — unified question prompt (handles both yes/no and multi-choice)
+        async question(
+            _requestId: RequestId | undefined,
             message: string,
             choices: string[],
-            defaultId: number | undefined,
-            source: string,
+            defaultId?: number,
         ): Promise<number> {
             // Pause spinner during input
             const wasSpinning = currentSpinner?.isActive();
@@ -640,7 +660,7 @@ export function createEnhancedClientIO(
 
             process.stdout.write("\n");
             process.stdout.write(line + "\n");
-            process.stdout.write(`${chalk.cyan("?")} ${message}\n`);
+            process.stdout.write(`${message}\n`);
             process.stdout.write(line + "\n\n");
 
             // Display choices with numbers
@@ -654,7 +674,11 @@ export function createEnhancedClientIO(
             });
 
             process.stdout.write("\n");
-            const prompt = `${chalk.dim("Enter number (1-" + choices.length + "):")} `;
+            const prompt = chalk.dim(
+                isYesNoChoices(choices)
+                    ? "Enter y/n or number (1-2): "
+                    : `Enter number (1-${choices.length}): `,
+            );
             const input = await question(prompt, rl);
 
             process.stdout.write(line + "\n");
@@ -665,15 +689,16 @@ export function createEnhancedClientIO(
                 currentSpinner.start();
             }
 
-            const selectedIndex = parseInt(input, 10) - 1;
-            if (
-                isNaN(selectedIndex) ||
-                selectedIndex < 0 ||
-                selectedIndex >= choices.length
-            ) {
-                return defaultId ?? 0;
-            }
-            return selectedIndex;
+            return parseChoiceInput(input, choices, defaultId);
+        },
+
+        async proposeAction(
+            _requestId: RequestId,
+            _actionTemplates: TemplateEditConfig,
+            _source: string,
+        ): Promise<unknown> {
+            // TODO: Not implemented
+            return undefined;
         },
 
         // Notification with visual styling
@@ -781,7 +806,7 @@ export function createEnhancedClientIO(
 
                     let response: boolean | number[];
                     if (type === "yesNo") {
-                        const prompt = `${chalk.cyan("?")} ${chalk.dim(`[${source}]`)} ${message} ${chalk.dim("(y/n)")} `;
+                        const prompt = `${chalk.dim(`[${source}]`)} ${message} ${chalk.dim("(y/n)")} `;
                         const input = await question(prompt, rl);
                         response =
                             input.toLowerCase() === "y" ||
@@ -789,7 +814,7 @@ export function createEnhancedClientIO(
                     } else {
                         // multiChoice — show numbered list, accept comma-separated
                         process.stdout.write(
-                            `${chalk.cyan("?")} ${chalk.dim(`[${source}]`)} ${message}\n`,
+                            `${chalk.dim(`[${source}]`)} ${message}\n`,
                         );
                         for (let i = 0; i < choices.length; i++) {
                             process.stdout.write(
@@ -823,6 +848,120 @@ export function createEnhancedClientIO(
                     resolveChoice!();
                 }
             })();
+        },
+        // Async deferred pattern — handle interactions pushed from the server
+        requestInteraction(interaction: PendingInteractionRequest): void {
+            interactionQueue = interactionQueue.then(async () => {
+                if (!dispatcherRef?.current) {
+                    return;
+                }
+                const dispatcher = dispatcherRef.current;
+
+                if (interaction.type === "proposeAction") {
+                    // Not supported in CLI yet
+                    return;
+                }
+
+                const ac = new AbortController();
+                activeInteractions.set(interaction.interactionId, ac);
+
+                const wasSpinning = currentSpinner?.isActive();
+                if (wasSpinning) {
+                    currentSpinner!.stop();
+                }
+
+                const width = process.stdout.columns || 80;
+                const line = ANSI.dim + "─".repeat(width) + ANSI.reset;
+
+                let response: PendingInteractionResponse;
+                try {
+                    // question — unified prompt for both yes/no and multi-choice
+                    displayContent(line);
+                    let promptText = `${interaction.message}`;
+                    interaction.choices.forEach((choice, i) => {
+                        const isDefault = i === interaction.defaultId;
+                        const prefix = chalk.cyan(`${i + 1}.`);
+                        const suffix = isDefault ? chalk.dim(" (default)") : "";
+                        promptText += `\n  ${prefix} ${choice}${suffix}`;
+                    });
+                    displayContent(promptText);
+
+                    const prompt = chalk.dim(
+                        isYesNoChoices(interaction.choices)
+                            ? "Enter y/n or number (1-2): "
+                            : `Enter number (1-${interaction.choices.length}): `,
+                    );
+                    const input = await question(prompt, rl, ac.signal);
+                    displayContent(line);
+
+                    const value = parseChoiceInput(
+                        input,
+                        interaction.choices,
+                        interaction.defaultId,
+                    );
+                    response = {
+                        interactionId: interaction.interactionId,
+                        type: "question",
+                        value,
+                    };
+                } catch {
+                    // Aborted by interactionResolved or interactionCancelled.
+                    const reason = ac.signal.reason;
+                    if (
+                        reason !== null &&
+                        typeof reason === "object" &&
+                        reason.kind === "resolved-by-other"
+                    ) {
+                        displayContent(
+                            chalk.gray("[answered by another client]"),
+                        );
+                    } else {
+                        displayContent(chalk.yellow("Cancelled!"));
+                    }
+
+                    if (wasSpinning) {
+                        currentSpinner = new EnhancedSpinner({
+                            text: "Processing...",
+                        });
+                        currentSpinner.start();
+                    }
+                    activeInteractions.delete(interaction.interactionId);
+                    return;
+                }
+
+                activeInteractions.delete(interaction.interactionId);
+
+                if (wasSpinning) {
+                    currentSpinner = new EnhancedSpinner({
+                        text: "Processing...",
+                    });
+                    currentSpinner.start();
+                }
+
+                try {
+                    await dispatcher.respondToInteraction(response);
+                } catch {
+                    // Interaction may have already timed out
+                }
+            });
+        },
+        interactionResolved(interactionId: string, response: unknown): void {
+            const ac = activeInteractions.get(interactionId);
+            if (ac) {
+                activeInteractions.delete(interactionId);
+                const reason: InteractionResolvedReason = {
+                    kind: "resolved-by-other",
+                    response,
+                };
+                ac.abort(reason);
+            }
+        },
+        interactionCancelled(interactionId: string): void {
+            const ac = activeInteractions.get(interactionId);
+            if (ac) {
+                activeInteractions.delete(interactionId);
+                ac.abort(INTERACTION_CANCELLED);
+            }
         },
         takeAction(requestId: RequestId, action: string, data: unknown): void {
             if (action === "open-folder") {
@@ -1397,24 +1536,78 @@ async function questionWithCompletion(
 async function question(
     message: string,
     rl?: readline.promises.Interface,
+    signal?: AbortSignal,
 ): Promise<string> {
-    const closeOnExit = !rl;
-    if (!rl) {
-        rl = createInterface({
-            input: process.stdin,
-            output: process.stdout,
-            terminal: true,
-        });
+    if (rl) {
+        return rl.question(message, { signal });
     }
 
-    try {
-        // Let readline handle cursor positioning natively
-        return await rl.question(message);
-    } finally {
-        if (closeOnExit) {
-            rl.close();
-        }
+    // No readline interface — stdin is owned by questionWithCompletion in raw
+    // mode.  Read character-by-character directly so we don't conflict.
+    if (signal?.aborted) {
+        return Promise.reject(signal.reason);
     }
+    return new Promise<string>((resolve, reject) => {
+        const stdin = process.stdin;
+        // If the scroll region is active (e.g. secondary client waiting at the
+        // input prompt), write the interaction prompt into the scrollable content
+        // area so it doesn't overwrite the fixed prompt region.
+        if (terminalLayout?.isActive) {
+            terminalLayout.writeContent(message);
+            activePromptRenderer?.redraw();
+        } else {
+            process.stdout.write(message);
+        }
+
+        let input = "";
+        const wasRaw = stdin.isRaw;
+        if (stdin.isTTY) {
+            stdin.setRawMode(true);
+        }
+        stdin.resume();
+        stdin.setEncoding("utf8");
+
+        const cleanup = () => {
+            stdin.removeListener("data", onData);
+            if (stdin.isTTY) {
+                stdin.setRawMode(wasRaw || false);
+            }
+        };
+
+        const onAbort = () => {
+            cleanup();
+            reject(signal!.reason);
+        };
+        signal?.addEventListener("abort", onAbort, { once: true });
+
+        const onData = (data: string) => {
+            const code = data.charCodeAt(0);
+            if (data === "\r" || data === "\n") {
+                // Enter — commit
+                signal?.removeEventListener("abort", onAbort);
+                cleanup();
+                process.stdout.write("\n");
+                resolve(input);
+            } else if (code === 0x03) {
+                // Ctrl+C — treat as empty input
+                signal?.removeEventListener("abort", onAbort);
+                cleanup();
+                process.stdout.write("\n");
+                resolve("");
+            } else if (code === 0x7f || code === 0x08) {
+                // Backspace
+                if (input.length > 0) {
+                    input = input.slice(0, -1);
+                    process.stdout.write("\b \b");
+                }
+            } else if (code >= 32 && code < 127) {
+                input += data;
+                process.stdout.write(data);
+            }
+        };
+
+        stdin.on("data", onData);
+    });
 }
 
 /**
@@ -1805,4 +1998,90 @@ function getNextInput(
  */
 export function getEnhancedConsolePrompt(_text: string): string {
     return `${getVerboseIndicator()}❯ `;
+}
+
+/**
+ * Replay display history entries from a previous (or concurrent) session onto
+ * the given clientIO so that the user sees the chat history when joining.
+ *
+ * User requests are printed as styled prompt lines; agent display entries are
+ * forwarded through setDisplay / appendDisplay exactly as live messages would
+ * be. Notifications and display-info entries are skipped — they are ephemeral.
+ */
+export async function replayDisplayHistory(
+    dispatcher: Dispatcher,
+    clientIO: ClientIO,
+): Promise<void> {
+    const entries = await dispatcher.getDisplayHistory();
+    if (entries.length === 0) {
+        return;
+    }
+
+    const width = process.stdout.columns || 80;
+    process.stdout.write(
+        chalk.dim(
+            "─── session history " + "─".repeat(Math.max(0, width - 20)),
+        ) + "\n",
+    );
+
+    const pendingInteractions = new Map<string, PendingInteractionEntry>();
+
+    for (const entry of entries) {
+        switch (entry.type) {
+            case "user-request":
+                process.stdout.write(
+                    chalk.cyanBright(`❯ `) + chalk.dim(entry.command) + "\n",
+                );
+                break;
+            case "set-display":
+                clientIO.setDisplay(entry.message);
+                break;
+            case "append-display":
+                clientIO.appendDisplay(entry.message, entry.mode);
+                break;
+            case "pending-interaction":
+                pendingInteractions.set(entry.interactionId, entry);
+                break;
+            case "interaction-resolved": {
+                const pending = pendingInteractions.get(entry.interactionId);
+                if (pending?.message !== undefined) {
+                    let answerStr: string;
+                    if (
+                        pending.choices !== undefined &&
+                        typeof entry.response === "number"
+                    ) {
+                        answerStr =
+                            pending.choices[entry.response] ??
+                            String(entry.response);
+                    } else {
+                        answerStr = entry.response ? "yes" : "no";
+                    }
+                    process.stdout.write(
+                        chalk.dim(`${pending.message} → `) +
+                            chalk.cyan(answerStr) +
+                            "\n",
+                    );
+                }
+                pendingInteractions.delete(entry.interactionId);
+                break;
+            }
+            case "interaction-cancelled": {
+                const pending = pendingInteractions.get(entry.interactionId);
+                if (pending?.message !== undefined) {
+                    process.stdout.write(
+                        chalk.dim(`${pending.message} → `) +
+                            chalk.yellow("[cancelled]") +
+                            "\n",
+                    );
+                }
+                pendingInteractions.delete(entry.interactionId);
+                break;
+            }
+            // notify and set-display-info are ephemeral — skip them
+        }
+    }
+
+    process.stdout.write(
+        chalk.dim("─── now " + "─".repeat(Math.max(0, width - 8))) + "\n",
+    );
 }

@@ -7,8 +7,6 @@ import {
     matchGrammar,
     matchGrammarCompletion,
     GrammarCompletionResult,
-    isRequiringSepMode,
-    hasTrailingSeparator,
     NFA,
     compileGrammarToNFA,
     matchGrammarWithNFA,
@@ -21,12 +19,14 @@ import {
 } from "action-grammar";
 
 const debug = registerDebug("typeagent:cache:grammarStore");
+const debugCompletion = registerDebug(
+    "typeagent:cache:grammarStore:completion",
+);
 import {
     CompletionDirection,
-    SeparatorMode,
+    CompletionGroup,
     AfterWildcard,
 } from "@typeagent/agent-sdk";
-import { mergeSeparatorMode } from "@typeagent/agent-sdk/helpers/command";
 import {
     CompletionProperty,
     CompletionResult,
@@ -288,10 +288,9 @@ export class GrammarStoreImpl implements GrammarStore {
         if (namespaceKeys?.length === 0) {
             return undefined;
         }
-        const completions: string[] = [];
+        const groups: CompletionGroup[] = [];
         const properties: CompletionProperty[] = [];
         let matchedPrefixLength = 0;
-        let separatorMode: SeparatorMode | undefined;
         let closedSet: boolean | undefined;
         let directionSensitive: boolean = false;
         let afterWildcard: AfterWildcard | undefined;
@@ -307,6 +306,7 @@ export class GrammarStoreImpl implements GrammarStore {
             if (filter && !filter.has(name)) {
                 continue;
             }
+            debugCompletion(`Processing grammar: ${name}`);
             if (this.useDFA && entry.dfa) {
                 // DFA-based completions
                 const tokens = input
@@ -319,7 +319,10 @@ export class GrammarStoreImpl implements GrammarStore {
                     dfaCompResult.completions &&
                     dfaCompResult.completions.length > 0
                 ) {
-                    completions.push(...dfaCompResult.completions);
+                    groups.push({
+                        name: "Request Completions",
+                        completions: dfaCompResult.completions,
+                    });
                 }
                 if (
                     dfaCompResult.properties &&
@@ -336,6 +339,13 @@ export class GrammarStoreImpl implements GrammarStore {
                                 ),
                             ],
                             names: [p.propertyPath],
+                            // Property completions represent free-form entity
+                            // slots — the actual values come from agents at
+                            // runtime, so the grammar cannot know the first
+                            // character.  "autoSpacePunctuation" defers
+                            // resolution to the shell, which inspects the
+                            // character pair per item.
+                            separatorMode: "autoSpacePunctuation",
                         });
                     }
                 }
@@ -347,8 +357,14 @@ export class GrammarStoreImpl implements GrammarStore {
                     .filter((t) => t.length > 0);
 
                 const nfaResult = computeNFACompletions(entry.nfa, tokens);
-                if (nfaResult.completions.length > 0) {
-                    completions.push(...nfaResult.completions);
+                for (const g of nfaResult.groups) {
+                    if (g.completions.length > 0) {
+                        groups.push({
+                            name: "Request Completions",
+                            completions: g.completions,
+                            separatorMode: g.separatorMode,
+                        });
+                    }
                 }
                 if (
                     nfaResult.properties !== undefined &&
@@ -369,6 +385,9 @@ export class GrammarStoreImpl implements GrammarStore {
                                 ),
                             ],
                             names: p.propertyNames,
+                            // See DFA property comment above — auto
+                            // mode for the same reason.
+                            separatorMode: "autoSpacePunctuation",
                         });
                     }
                 }
@@ -393,9 +412,8 @@ export class GrammarStoreImpl implements GrammarStore {
                     if (!adopt) continue;
 
                     matchedPrefixLength = partialPrefixLength;
-                    completions.length = 0;
+                    groups.length = 0;
                     properties.length = 0;
-                    separatorMode = undefined;
                     closedSet = undefined;
                     directionSensitive = false;
                     afterWildcard = undefined;
@@ -408,70 +426,27 @@ export class GrammarStoreImpl implements GrammarStore {
             }
         }
 
-        // Post-loop merge of grammar-based results with cross-grammar
-        // separator mode conflict detection.
-        //
-        // Each individual grammar's result is already internally
-        // consistent (within-grammar conflict filtering in
-        // grammarCompletion.ts Phase 2 — see filterSepConflicts).
-        // Here we detect when different grammars produce incompatible
-        // separator modes and filter by trailing separator state,
-        // mirroring the same detect/filter/advance/force pattern.
+        // Post-loop merge of grammar-based results — collect per-group
+        // completions from all grammars.  No cross-grammar conflict
+        // filtering: each group carries its own separatorMode and the
+        // shell shows/hides groups based on separator state.
         if (grammarPartials.length > 0) {
-            let hasRequiring = false;
-            let hasNoneMode = false;
-            for (const { partial } of grammarPartials) {
-                if (partial.separatorMode !== undefined) {
-                    if (isRequiringSepMode(partial.separatorMode)) {
-                        hasRequiring = true;
-                    }
-                    if (partial.separatorMode === "none") {
-                        hasNoneMode = true;
-                    }
-                }
-            }
-
-            const hasCrossGrammarConflict = hasRequiring && hasNoneMode;
-            const hasTrailingSep =
-                hasCrossGrammarConflict &&
-                hasTrailingSeparator(input, matchedPrefixLength);
-
-            let effectivePartials = grammarPartials;
-            if (hasCrossGrammarConflict) {
-                effectivePartials = grammarPartials.filter(({ partial }) => {
-                    if (partial.separatorMode === undefined) return true;
-                    if (hasTrailingSep) {
-                        // Trailing separator: drop "none" mode grammars.
-                        return partial.separatorMode !== "none";
-                    } else {
-                        // No trailing separator: drop requiring modes.
-                        return !isRequiringSepMode(partial.separatorMode);
-                    }
-                });
-            }
-
-            // Merge surviving grammar partials.
-            for (const { partial, schemaName } of effectivePartials) {
-                completions.push(...partial.completions);
-                if (partial.separatorMode !== undefined) {
-                    separatorMode = mergeSeparatorMode(
-                        separatorMode,
-                        partial.separatorMode,
-                    );
-                }
-                // AND-merge: closed set only when all grammar
-                // results at this prefix length are closed sets.
+            for (const { partial, schemaName } of grammarPartials) {
+                groups.push(
+                    ...partial.groups.map((g) => ({
+                        name: "Request Completions",
+                        completions: g.completions,
+                        separatorMode: g.separatorMode,
+                    })),
+                );
                 if (partial.closedSet !== undefined) {
                     closedSet =
                         closedSet === undefined
                             ? partial.closedSet
                             : closedSet && partial.closedSet;
                 }
-                // True if any grammar result at this prefix
-                // length is direction-sensitive.
                 directionSensitive =
                     directionSensitive || partial.directionSensitive;
-                // Tri-state merge for afterWildcard.
                 afterWildcard = mergeAfterWildcard(
                     afterWildcard,
                     partial.afterWildcard,
@@ -491,40 +466,17 @@ export class GrammarStoreImpl implements GrammarStore {
                                 ),
                             ],
                             names: p.propertyNames,
+                            separatorMode: p.separatorMode,
                         });
                     }
-                }
-            }
-
-            // When grammars were dropped due to separator conflict,
-            // advance P past trailing separator and adjust metadata
-            // so the shell re-fetches when separator state changes.
-            if (hasCrossGrammarConflict) {
-                closedSet = false;
-                if (hasTrailingSep) {
-                    // Advance past exactly one trailing separator
-                    // (not all consecutive separators).  Each
-                    // backspace in a multi-separator run produces
-                    // a distinct anchor for re-fetch.  Remaining
-                    // separators are stripped by the shell's
-                    // "optional" mode handling, keeping the menu
-                    // visible with a clean trie prefix.
-                    matchedPrefixLength += 1;
-                    separatorMode = "optional";
-                }
-                // Force afterWildcard "all" → "some" so shell
-                // doesn't use "slide" noMatchPolicy.
-                if (afterWildcard === "all") {
-                    afterWildcard = "some";
                 }
             }
         }
 
         return {
-            completions,
+            groups,
             properties,
             matchedPrefixLength,
-            separatorMode,
             closedSet,
             directionSensitive,
             afterWildcard,

@@ -18,7 +18,10 @@ import {
     Dispatcher,
     RequestId,
 } from "@typeagent/dispatcher-types";
-import type { DisplayLogEntry } from "@typeagent/dispatcher-types";
+import type {
+    DisplayLogEntry,
+    PendingInteractionResponse,
+} from "@typeagent/dispatcher-types";
 import { getDispatcherStatus, processCommand } from "./command/command.js";
 import { getCommandCompletion } from "./command/completion.js";
 import { getActionContext } from "./execute/actionContext.js";
@@ -147,16 +150,17 @@ function extractActions(
     return actions;
 }
 
-function getAgentSchemas(
+async function getAgentSchemas(
     context: CommandHandlerContext,
     agentName?: string,
-): AgentSchemaInfo[] {
+): Promise<AgentSchemaInfo[]> {
+    await context.agents.waitUntilReady();
     const configs = context.agents.getActionConfigs();
     // Group configs by top-level agent name (part before first '.')
     const agentMap = new Map<string, typeof configs>();
     for (const config of configs) {
         const topName = config.schemaName.split(".")[0];
-        if (agentName !== undefined && topName !== agentName) continue;
+        if (agentName != null && topName !== agentName) continue;
         const list = agentMap.get(topName) ?? [];
         list.push(config);
         agentMap.set(topName, list);
@@ -173,9 +177,14 @@ function getAgentSchemas(
 
         const subSchemas: AgentSubSchemaInfo[] = [];
         for (const config of sorted) {
-            const schemaFile = context.agents.tryGetActionSchemaFile(
-                config.schemaName,
-            );
+            let schemaFile;
+            try {
+                schemaFile = context.agents.tryGetActionSchemaFile(
+                    config.schemaName,
+                );
+            } catch {
+                continue;
+            }
             const actions = schemaFile
                 ? extractActions(schemaFile.parsedActionSchema.actionSchemas)
                 : [];
@@ -343,6 +352,24 @@ export function createDispatcherFromContext(
                     return result;
                 }
             });
+        },
+        async respondToInteraction(
+            _response: PendingInteractionResponse,
+        ): Promise<void> {
+            // Base dispatcher does not manage pending interactions.
+            // The server's SharedDispatcher overrides this method on the
+            // per-connection dispatcher instance.
+            throw new Error(
+                "respondToInteraction is not supported on this dispatcher instance",
+            );
+        },
+        cancelInteraction(_interactionId: string): void {
+            // Base dispatcher does not manage pending interactions.
+            // The server's SharedDispatcher overrides this method on the
+            // per-connection dispatcher instance.
+            throw new Error(
+                "cancelInteraction is not supported on this dispatcher instance",
+            );
         },
     };
     return dispatcher;

@@ -7,8 +7,10 @@ export {
     closeCommandHandlerContext,
     initializeCommandHandlerContext,
 } from "./context/commandHandlerContext.js";
+export { lockInstanceDir } from "./utils/fsUtils.js";
 export { DisplayLog } from "./displayLog.js";
 export type { DisplayLogEntry } from "./displayLog.js";
+export { PendingInteractionManager } from "./context/pendingInteractionManager.js";
 
 // Internal exports for CLI/testing/debugging purposes
 

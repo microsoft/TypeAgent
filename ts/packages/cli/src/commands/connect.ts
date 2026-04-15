@@ -2,15 +2,71 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import { Dispatcher } from "agent-dispatcher";
+import type { Dispatcher } from "@typeagent/dispatcher-types";
 import {
     getEnhancedConsolePrompt,
     processCommandsEnhanced,
+    replayDisplayHistory,
     withEnhancedConsoleClientIO,
 } from "../enhancedConsole.js";
 import { isSlashCommand, getSlashCompletions } from "../slashCommands.js";
-import { ensureAndConnectDispatcher } from "@typeagent/agent-server-client";
-import { getStatusSummary } from "agent-dispatcher/helpers/status";
+import {
+    connectAgentServer,
+    ensureAgentServer,
+    ensureAndConnectSession,
+    AgentServerConnection,
+} from "@typeagent/agent-server-client";
+import { getStatusSummary } from "@typeagent/dispatcher-types/helpers/status";
+import * as crypto from "crypto";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+import * as readline from "readline";
+
+const CLI_STATE_FILE = path.join(os.homedir(), ".typeagent", "cli-state.json");
+const CLI_SESSION_NAME = "CLI";
+
+function loadLastSessionId(): string | undefined {
+    try {
+        const raw = fs.readFileSync(CLI_STATE_FILE, "utf8");
+        return JSON.parse(raw).lastSessionId ?? undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+function saveLastSessionId(sessionId: string): void {
+    try {
+        fs.mkdirSync(path.dirname(CLI_STATE_FILE), { recursive: true });
+        fs.writeFileSync(
+            CLI_STATE_FILE,
+            JSON.stringify({ lastSessionId: sessionId }),
+        );
+    } catch {
+        // Non-fatal: persistence failure should not block the session.
+    }
+}
+
+function clearLastSessionId(): void {
+    try {
+        fs.unlinkSync(CLI_STATE_FILE);
+    } catch {
+        // Ignore if already gone.
+    }
+}
+
+function promptYesNo(question: string): Promise<boolean> {
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+    });
+    return new Promise((resolve) => {
+        rl.question(`${question} [y/N] `, (answer) => {
+            rl.close();
+            resolve(answer.trim().toLowerCase() === "y");
+        });
+    });
+}
 
 type CompletionData = {
     allCompletions: string[];
@@ -48,11 +104,12 @@ async function getCompletionsData(
         const filterStartIndex = result.startIndex;
         const prefix = line.substring(0, filterStartIndex);
 
-        const separator =
-            result.separatorMode === "space" ||
-            result.separatorMode === "spacePunctuation"
-                ? " "
-                : "";
+        const needsSep = result.completions.some(
+            (g) =>
+                g.separatorMode === "space" ||
+                g.separatorMode === "spacePunctuation",
+        );
+        const separator = needsSep ? " " : "";
 
         return {
             allCompletions,
@@ -65,7 +122,8 @@ async function getCompletionsData(
 }
 
 export default class Connect extends Command {
-    static description = "Interactive mode";
+    static description =
+        "Connect to the agent server in interactive mode. Defaults to the 'CLI' session, or specify --session <id> to join a specific one.";
     static flags = {
         request: Flags.string({
             description:
@@ -78,13 +136,41 @@ export default class Connect extends Command {
             allowNo: true,
         }),
         port: Flags.integer({
+            char: "p",
             description: "Port for type agent server",
             default: 8999,
+        }),
+        resume: Flags.boolean({
+            char: "r",
+            description:
+                "Resume the last used session instead of defaulting to 'CLI'. Ignored if --session is provided.",
+            default: false,
+        }),
+        session: Flags.string({
+            char: "s",
+            description: "Session ID to join. Takes priority over --resume.",
+            required: false,
         }),
         verbose: Flags.string({
             description:
                 "Enable verbose debug output (optional: comma-separated debug namespaces, default: typeagent:*)",
             required: false,
+        }),
+        memory: Flags.boolean({
+            description:
+                "Use an ephemeral session that is automatically deleted on exit",
+            default: false,
+            exclusive: ["session", "resume"],
+        }),
+        hidden: Flags.boolean({
+            description:
+                "Start the agent server without a visible window (background mode). Only applies when the server is not already running.",
+            default: false,
+        }),
+        idleTimeout: Flags.integer({
+            description:
+                "Shut down the agent server after this many seconds with no connected clients. 0 disables (default). Only applies when the server is spawned by this command.",
+            default: 0,
         }),
     };
     static args = {
@@ -113,17 +199,149 @@ export default class Connect extends Command {
         );
         installDebugInterceptor();
 
+        // Clear screen and move cursor to top for a clean full-height start
+        if (process.stdout.isTTY) {
+            process.stdout.write("\x1b[2J\x1b[H");
+        }
+
+        const persistedSessionId =
+            flags.session ?? (flags.resume ? loadLastSessionId() : undefined);
+        // Only intercept "Session not found" when using the client-side default
+        // (no explicit --session flag). Explicit --session errors propagate as-is.
+        const isDefaultSession = flags.session === undefined;
+        const isEphemeral = flags.memory;
+
         await withEnhancedConsoleClientIO(async (clientIO, bindDispatcher) => {
-            const dispatcher = await ensureAndConnectDispatcher(
-                clientIO,
-                flags.port,
-                undefined,
-                () => {
-                    console.error("Disconnected from dispatcher");
-                    process.exit(1);
-                },
-            );
-            bindDispatcher?.(dispatcher);
+            const url = `ws://localhost:${flags.port}`;
+
+            const onDisconnect = () => {
+                console.error("Disconnected from dispatcher");
+                process.exit(1);
+            };
+
+            // Helper: find the "CLI" session by name (creating it if absent) and join it.
+            const connectToCliSession = async () => {
+                await ensureAgentServer(
+                    flags.port,
+                    flags.hidden,
+                    flags.idleTimeout,
+                );
+                const connection = await connectAgentServer(url, onDisconnect);
+                const existing =
+                    await connection.listSessions(CLI_SESSION_NAME);
+                const match = existing.find(
+                    (s) =>
+                        s.name.toLowerCase() === CLI_SESSION_NAME.toLowerCase(),
+                );
+                const cliSessionId =
+                    match !== undefined
+                        ? match.sessionId
+                        : (await connection.createSession(CLI_SESSION_NAME))
+                              .sessionId;
+                const session = await connection.joinSession(clientIO, {
+                    sessionId: cliSessionId,
+                });
+                session.dispatcher.close = async () => {
+                    await connection.close();
+                };
+                return { session, connection };
+            };
+
+            // Helper: create an ephemeral session for --memory flag.
+            const connectToEphemeralSession = async () => {
+                await ensureAgentServer(
+                    flags.port,
+                    flags.hidden,
+                    flags.idleTimeout,
+                );
+                const connection = await connectAgentServer(url, onDisconnect);
+                const ephemeralName = `cli-ephemeral-${crypto.randomUUID()}`;
+                const created = await connection.createSession(ephemeralName);
+                const session = await connection.joinSession(clientIO, {
+                    sessionId: created.sessionId,
+                });
+                session.dispatcher.close = async () => {
+                    await connection.close();
+                };
+                return {
+                    session,
+                    connection,
+                    ephemeralSessionId: created.sessionId,
+                };
+            };
+
+            let session: Awaited<
+                ReturnType<typeof connectToCliSession>
+            >["session"];
+            let connection: AgentServerConnection | undefined;
+            let ephemeralSessionId: string | undefined;
+
+            if (isEphemeral) {
+                // --memory: use an ephemeral session, delete on exit
+                const result = await connectToEphemeralSession();
+                session = result.session;
+                connection = result.connection;
+                ephemeralSessionId = result.ephemeralSessionId;
+            } else {
+                // Resolve the session to join:
+                //   1. explicit --session flag
+                //   2. persisted last-used session ID (with "not found" recovery)
+                //   3. default: find-or-create the "CLI" session
+                const result =
+                    persistedSessionId !== undefined
+                        ? await ensureAndConnectSession(
+                              clientIO,
+                              flags.port,
+                              { sessionId: persistedSessionId },
+                              onDisconnect,
+                              flags.hidden,
+                              flags.idleTimeout,
+                          )
+                              .then((s) => ({
+                                  session: s,
+                                  connection: undefined as
+                                      | AgentServerConnection
+                                      | undefined,
+                              }))
+                              .catch(async (err: any) => {
+                                  if (
+                                      isDefaultSession &&
+                                      typeof err?.message === "string" &&
+                                      err.message.startsWith(
+                                          "Session not found:",
+                                      )
+                                  ) {
+                                      console.log(
+                                          `The last used session no longer exists on the server.`,
+                                      );
+                                      const join = await promptYesNo(
+                                          `Join the default '${CLI_SESSION_NAME}' session?`,
+                                      );
+                                      if (!join) {
+                                          clearLastSessionId();
+                                          return null;
+                                      }
+                                      clearLastSessionId();
+                                      return connectToCliSession();
+                                  }
+                                  throw err;
+                              })
+                        : await connectToCliSession();
+
+                if (result === null) {
+                    return;
+                }
+                session = result.session;
+                connection = result.connection;
+            }
+
+            const { dispatcher, name, sessionId: connectedSessionId } = session;
+            if (!isEphemeral) {
+                saveLastSessionId(connectedSessionId);
+            }
+            console.log(`Connected to session '${name}'.`);
+            bindDispatcher(dispatcher);
+            await replayDisplayHistory(dispatcher, clientIO);
             try {
                 let processed = false;
                 if (flags.request) {
@@ -152,6 +370,16 @@ export default class Connect extends Command {
                     dispatcher,
                 );
             } finally {
+                if (
+                    ephemeralSessionId !== undefined &&
+                    connection !== undefined
+                ) {
+                    try {
+                        await connection.deleteSession(ephemeralSessionId);
+                    } catch {
+                        // Best effort cleanup of ephemeral session
+                    }
+                }
                 if (dispatcher) {
                     await dispatcher.close();
                 }

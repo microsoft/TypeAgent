@@ -131,6 +131,248 @@ async function handleTaskFlowAction(
             );
         }
 
+        case "createTaskFlow": {
+            if (!store) {
+                return createActionResultFromError(
+                    "Task flow store not available",
+                );
+            }
+            const params = action.parameters as Record<string, unknown>;
+            const flowName = params.name as string;
+            if (!flowName) {
+                return createActionResultFromError(
+                    "Missing required parameter: name",
+                );
+            }
+            const script = params.script as string;
+            if (!script) {
+                return createActionResultFromError(
+                    "Missing required parameter: script",
+                );
+            }
+            const description = (params.description as string) ?? "";
+            const parametersJson = (params.parameters as string) ?? "[]";
+            const grammarPatternsJson =
+                (params.grammarPatterns as string) ?? "[]";
+
+            // Check for duplicate name
+            if (store.hasFlow(flowName)) {
+                return createActionResultFromError(
+                    `Task flow '${flowName}' already exists. Use editTaskFlow to modify it.`,
+                );
+            }
+
+            // Parse parameters and grammar patterns
+            let paramDefs: Array<{
+                name: string;
+                type: "string" | "number" | "boolean";
+                required: boolean;
+                description: string;
+                default?: unknown;
+            }>;
+            let grammarPatterns: string[];
+            try {
+                paramDefs = JSON.parse(parametersJson);
+            } catch {
+                return createActionResultFromError(
+                    `Invalid JSON in parameters: ${parametersJson}`,
+                );
+            }
+            try {
+                grammarPatterns = JSON.parse(grammarPatternsJson);
+            } catch {
+                return createActionResultFromError(
+                    `Invalid JSON in grammarPatterns: ${grammarPatternsJson}`,
+                );
+            }
+
+            // Validate script syntax
+            const validation = validateTaskFlowScript(
+                script,
+                paramDefs.map((p) => p.name),
+                Object.fromEntries(
+                    paramDefs.map((p) => [
+                        p.name,
+                        {
+                            type: p.type,
+                            required: p.required,
+                            default: p.default,
+                            description: p.description,
+                        },
+                    ]),
+                ),
+            );
+            if (!validation.valid) {
+                const errors = validation.errors
+                    .filter((e) => e.severity === "error")
+                    .map((e) => e.message);
+                return createActionResultFromError(
+                    `Script validation failed: ${errors.join("; ")}`,
+                );
+            }
+
+            // Create recipe
+            const recipe: ScriptRecipe = {
+                name: flowName,
+                description,
+                parameters: paramDefs,
+                script,
+                grammarPatterns,
+            };
+
+            await store.saveFlow(recipe, "reasoning");
+
+            try {
+                await context.sessionContext.reloadAgentSchema();
+            } catch (e) {
+                debug(`Schema reload after create: ${e}`);
+            }
+
+            return createActionResultFromTextDisplay(
+                `Created task flow '${flowName}'. It is now available for use.`,
+            );
+        }
+
+        case "editTaskFlow": {
+            if (!store) {
+                return createActionResultFromError(
+                    "Task flow store not available",
+                );
+            }
+            const params = action.parameters as Record<string, unknown>;
+            const flowName = params.name as string;
+            if (!flowName) {
+                return createActionResultFromError(
+                    "Missing required parameter: name",
+                );
+            }
+
+            // Check flow exists
+            const existingFlow = await store.getFlow(flowName);
+            if (!existingFlow) {
+                return createActionResultFromError(
+                    `Task flow '${flowName}' not found.`,
+                );
+            }
+
+            const newScript = params.script as string | undefined;
+            const newDescription = params.description as string | undefined;
+            const newGrammarPatternsJson = params.grammarPatterns as
+                | string
+                | undefined;
+            const newParametersJson = params.parameters as string | undefined;
+
+            // Parse new grammar patterns if provided
+            let newGrammarPatterns: string[] | undefined;
+            if (newGrammarPatternsJson) {
+                try {
+                    newGrammarPatterns = JSON.parse(newGrammarPatternsJson);
+                } catch {
+                    return createActionResultFromError(
+                        `Invalid JSON in grammarPatterns: ${newGrammarPatternsJson}`,
+                    );
+                }
+            }
+
+            // Parse new parameters if provided
+            let newParamDefs:
+                | Array<{
+                      name: string;
+                      type: "string" | "number" | "boolean";
+                      required: boolean;
+                      description: string;
+                      default?: unknown;
+                  }>
+                | undefined;
+            let newParameters:
+                | Record<
+                      string,
+                      {
+                          type: "string" | "number" | "boolean";
+                          required?: boolean;
+                          default?: unknown;
+                          description?: string;
+                      }
+                  >
+                | undefined;
+
+            if (newParametersJson) {
+                try {
+                    newParamDefs = JSON.parse(newParametersJson);
+                    // Convert array format to record format
+                    newParameters = Object.fromEntries(
+                        newParamDefs!.map((p) => [
+                            p.name,
+                            {
+                                type: p.type,
+                                required: p.required,
+                                default: p.default,
+                                description: p.description,
+                            },
+                        ]),
+                    );
+                } catch {
+                    return createActionResultFromError(
+                        `Invalid JSON in parameters: ${newParametersJson}`,
+                    );
+                }
+            }
+
+            // Determine which parameters to use for script validation
+            const validationParams = newParameters ?? existingFlow.parameters;
+
+            // Validate new script if provided
+            if (newScript) {
+                const validation = validateTaskFlowScript(
+                    newScript,
+                    Object.keys(validationParams),
+                    validationParams,
+                );
+                if (!validation.valid) {
+                    const errors = validation.errors
+                        .filter((e) => e.severity === "error")
+                        .map((e) => e.message);
+                    return createActionResultFromError(
+                        `Script validation failed: ${errors.join("; ")}`,
+                    );
+                }
+            }
+
+            // Update flow - only include defined properties
+            const updates: {
+                script?: string;
+                description?: string;
+                grammarPatterns?: string[];
+                parameters?: Record<
+                    string,
+                    {
+                        type: "string" | "number" | "boolean";
+                        required?: boolean;
+                        default?: unknown;
+                        description?: string;
+                    }
+                >;
+            } = {};
+            if (newScript !== undefined) updates.script = newScript;
+            if (newDescription !== undefined)
+                updates.description = newDescription;
+            if (newGrammarPatterns !== undefined)
+                updates.grammarPatterns = newGrammarPatterns;
+            if (newParameters !== undefined) updates.parameters = newParameters;
+
+            await store.updateFlow(flowName, updates);
+
+            try {
+                await context.sessionContext.reloadAgentSchema();
+            } catch (e) {
+                debug(`Schema reload after edit: ${e}`);
+            }
+
+            return createActionResultFromTextDisplay(
+                `Updated task flow '${flowName}'.`,
+            );
+        }
+
         default: {
             // Dynamic flow execution — grammar routes directly to flow name
             if (!store) {
