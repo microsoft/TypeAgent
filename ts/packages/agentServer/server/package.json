@@ -16,8 +16,8 @@
     ".": "./dist/server.js"
   },
   "bin": {
-    "agent-server-stop": "./dist/stop.js",
-    "agent-server-status": "./dist/status.js"
+    "agent-server-status": "./dist/status.js",
+    "agent-server-stop": "./dist/stop.js"
   },
   "files": [
     "dist",

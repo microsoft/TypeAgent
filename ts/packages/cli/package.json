@@ -34,8 +34,8 @@
   "oclif": {
     "bin": "agent-cli",
     "commands": "./dist/commands",
-    "dirname": "agent-cli",
     "default": "connect",
+    "dirname": "agent-cli",
     "plugins": [
       "@oclif/plugin-help"
     ],
