@@ -308,11 +308,8 @@ function spawnAgentServer(
                 // We wrap in `cmd /c start` to force CREATE_NEW_CONSOLE — without
                 // this, the child inherits the parent's console and no new window
                 // appears when the CLI is itself running inside a console host.
-                const psExe = fs.existsSync(
-                    "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
-                )
-                    ? "pwsh.exe"
-                    : "powershell.exe";
+                const pwsh7 = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
+                const psExe = fs.existsSync(pwsh7) ? pwsh7 : "powershell.exe";
                 const psCommand = `node "${serverPath}" --port ${port}${idleTimeout > 0 ? ` --idle-timeout ${idleTimeout}` : ""}`;
                 const psArgs = ["-NoExit", "-Command", psCommand];
                 const child = spawn(

@@ -44,7 +44,7 @@ await connection.close();
 
 Ensures the agentServer is running, spawning it if needed.
 
-1. Calls `isServerRunning(port)` to check whether a server is already listening.
+1. Calls `isServerRunning(url)` to check whether a server is already listening.
 2. If not, calls `spawnAgentServer(hidden, idleTimeout)` to start it as a detached child process.
 3. Polls until the server is ready (500 ms interval, 60 s timeout).
 
@@ -64,12 +64,12 @@ const connection = await connectAgentServer("ws://localhost:8999");
 | `hidden`      | `boolean` | `false` | When spawning, suppress the terminal/window (`true` = hidden)                        |
 | `idleTimeout` | `number`  | `0`     | Pass `--idle-timeout` to the spawned server; `0` disables (server runs indefinitely) |
 
-### `isServerRunning(port?)`
+### `isServerRunning(url)`
 
-Returns `true` if a server is already listening on `ws://localhost:<port>`.
+Returns `true` if a server is already listening at the given WebSocket URL.
 
 ```typescript
-if (await isServerRunning(8999)) {
+if (await isServerRunning("ws://localhost:8999")) {
   console.log("Server is up");
 }
 ```
