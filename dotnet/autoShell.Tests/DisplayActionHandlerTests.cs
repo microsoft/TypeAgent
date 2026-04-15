@@ -55,11 +55,11 @@ public class DisplayActionHandlerTests
     [Fact]
     public void SetScreenResolution_WithRefreshRate_CallsServiceWithRefresh()
     {
-        _displayMock.Setup(d => d.SetResolution(1920, 1080, (uint)60)).Returns("ok");
+        _displayMock.Setup(d => d.SetResolution(1920, 1080, 60)).Returns("ok");
 
         _handler.Handle("SetScreenResolution", JsonDocument.Parse("""{"width":1920,"height":1080,"refreshRate":60}""").RootElement);
 
-        _displayMock.Verify(d => d.SetResolution(1920, 1080, (uint)60), Times.Once);
+        _displayMock.Verify(d => d.SetResolution(1920, 1080, 60), Times.Once);
     }
 
     /// <summary>
@@ -189,10 +189,10 @@ public class DisplayActionHandlerTests
     [Fact]
     public void SetScreenResolution_ObjectFormatWithRefreshRate_CallsServiceWithRefresh()
     {
-        _displayMock.Setup(d => d.SetResolution(2560, 1440, (uint)144)).Returns("ok");
+        _displayMock.Setup(d => d.SetResolution(2560, 1440, 144)).Returns("ok");
 
         _handler.Handle("SetScreenResolution", JsonDocument.Parse("""{"width":2560,"height":1440,"refreshRate":144}""").RootElement);
 
-        _displayMock.Verify(d => d.SetResolution(2560, 1440, (uint)144), Times.Once);
+        _displayMock.Verify(d => d.SetResolution(2560, 1440, 144), Times.Once);
     }
 }

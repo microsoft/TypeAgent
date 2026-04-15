@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using autoShell.Handlers;
+using autoShell.Logging;
 using autoShell.Services;
 using Moq;
 
@@ -17,7 +18,7 @@ public class VirtualDesktopActionHandlerTests
 
     public VirtualDesktopActionHandlerTests()
     {
-        _handler = new VirtualDesktopActionHandler(_appRegistryMock.Object, _windowMock.Object, _virtualDesktopMock.Object, new Mock<autoShell.Logging.ILogger>().Object);
+        _handler = new VirtualDesktopActionHandler(_appRegistryMock.Object, _windowMock.Object, _virtualDesktopMock.Object, new Mock<ILogger>().Object);
     }
 
     // --- CreateDesktop ---

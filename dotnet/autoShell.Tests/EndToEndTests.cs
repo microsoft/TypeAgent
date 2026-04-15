@@ -117,7 +117,7 @@ public sealed class EndToEndTests : IDisposable
 
         // May produce an error message or status — just verify the process survives
         // and we can still send commands
-        await _process.ReadLineAsync(5000);
+        await _process.ReadLineAsync();
 
         _process.SendCommand("""{"actionName":"ListAppNames","parameters":{}}""");
         string? response = await _process.ReadLineAsync();
@@ -201,13 +201,13 @@ public sealed class EndToEndTests : IDisposable
         _process.SendCommand("");
         // Consume the error/status message that goes to stdout.
         // Allow extra time since empty-line handling may be slow.
-        string? errorLine = await _process.ReadLineAsync(5000);
+        string? errorLine = await _process.ReadLineAsync();
 
         // Ensure the first read completed before starting a second one
         Assert.False(_process.HasExited);
 
         _process.SendCommand("""{"actionName":"ListAppNames","parameters":{}}""");
-        string? response = await _process.ReadLineAsync(5000);
+        string? response = await _process.ReadLineAsync();
 
         Assert.False(_process.HasExited);
         Assert.NotNull(response);

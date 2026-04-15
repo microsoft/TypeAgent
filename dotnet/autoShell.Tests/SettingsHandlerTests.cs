@@ -470,7 +470,7 @@ public class MouseSettingsHandlerTests
         Handle("MouseCursorSpeed", """{"speedLevel":10}""");
 
         _systemParamsMock.Verify(s => s.SetParameter(
-            0x0071, 0, (IntPtr)10, 3), Times.Once);
+            0x0071, 0, 10, 3), Times.Once);
     }
 
     /// <summary>
@@ -925,7 +925,7 @@ public class DisplaySettingsHandlerTests
     [Fact]
     public void AdjustScreenBrightness_Decrease_SetsBrightnessMinus10()
     {
-        _brightnessMock.Setup(b => b.GetCurrentBrightness()).Returns((byte)50);
+        _brightnessMock.Setup(b => b.GetCurrentBrightness()).Returns(50);
 
         Handle("AdjustScreenBrightness", """{"brightnessLevel":"decrease"}""");
 
@@ -938,7 +938,7 @@ public class DisplaySettingsHandlerTests
     [Fact]
     public void AdjustScreenBrightness_Decrease_ClampsToZero()
     {
-        _brightnessMock.Setup(b => b.GetCurrentBrightness()).Returns((byte)5);
+        _brightnessMock.Setup(b => b.GetCurrentBrightness()).Returns(5);
 
         Handle("AdjustScreenBrightness", """{"brightnessLevel":"decrease"}""");
 
@@ -951,7 +951,7 @@ public class DisplaySettingsHandlerTests
     [Fact]
     public void AdjustScreenBrightness_Increase_ClampsTo100()
     {
-        _brightnessMock.Setup(b => b.GetCurrentBrightness()).Returns((byte)95);
+        _brightnessMock.Setup(b => b.GetCurrentBrightness()).Returns(95);
 
         Handle("AdjustScreenBrightness", """{"brightnessLevel":"increase"}""");
 

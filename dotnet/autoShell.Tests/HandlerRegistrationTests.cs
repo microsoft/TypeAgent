@@ -3,6 +3,9 @@
 
 using autoShell.Handlers;
 using autoShell.Handlers.Settings;
+using autoShell.Logging;
+using autoShell.Services;
+using Moq;
 
 namespace autoShell.Tests;
 
@@ -15,18 +18,18 @@ public class HandlerRegistrationTests
 
     public HandlerRegistrationTests()
     {
-        var audioMock = new Moq.Mock<Services.IAudioService>();
-        var registryMock = new Moq.Mock<Services.IRegistryService>();
-        var systemParamsMock = new Moq.Mock<Services.ISystemParametersService>();
-        var processMock = new Moq.Mock<Services.IProcessService>();
-        var appRegistryMock = new Moq.Mock<IAppRegistry>();
-        var debuggerMock = new Moq.Mock<Services.IDebuggerService>();
-        var brightnessMock = new Moq.Mock<Services.IBrightnessService>();
-        var displayMock = new Moq.Mock<Services.IDisplayService>();
-        var windowMock = new Moq.Mock<Services.IWindowService>();
-        var networkMock = new Moq.Mock<Services.INetworkService>();
-        var virtualDesktopMock = new Moq.Mock<Services.IVirtualDesktopService>();
-        var loggerMock = new Moq.Mock<Logging.ILogger>();
+        var audioMock = new Mock<IAudioService>();
+        var registryMock = new Mock<IRegistryService>();
+        var systemParamsMock = new Mock<ISystemParametersService>();
+        var processMock = new Mock<IProcessService>();
+        var appRegistryMock = new Mock<IAppRegistry>();
+        var debuggerMock = new Mock<IDebuggerService>();
+        var brightnessMock = new Mock<IBrightnessService>();
+        var displayMock = new Mock<IDisplayService>();
+        var windowMock = new Mock<IWindowService>();
+        var networkMock = new Mock<INetworkService>();
+        var virtualDesktopMock = new Mock<IVirtualDesktopService>();
+        var loggerMock = new Mock<ILogger>();
 
         _handlers =
         [
