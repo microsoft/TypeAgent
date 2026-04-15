@@ -61,13 +61,12 @@ jobs:
           node-version: 22
           cache: "pnpm"
           cache-dependency-path: ts/pnpm-lock.yaml
-      - name: Verify schemas are up-to-date
+      - name: Generate schemas
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
         working-directory: ts
         run: |
           pnpm install --frozen-lockfile --strict-peer-dependencies
           pnpm run -C packages/agents/desktop asc:all
-          git diff --exit-code -- packages/agents/desktop/dist/*.pas.json || (echo "ERROR: Committed .pas.json schemas are stale. Run 'pnpm run asc:all' in ts/packages/agents/desktop and commit the results." && exit 1)
       - name: Restore Packages (AutoShell)
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
         working-directory: dotnet

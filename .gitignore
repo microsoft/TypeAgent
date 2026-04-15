@@ -13,10 +13,6 @@
 # temp directories
 build/
 dist/
-# Track .pas.json schema files (cross-language contracts consumed by C# source generator)
-!ts/packages/agents/desktop/dist/
-ts/packages/agents/desktop/dist/*
-!ts/packages/agents/desktop/dist/*.pas.json
 out/
 node_modules/
 dist-pub/
