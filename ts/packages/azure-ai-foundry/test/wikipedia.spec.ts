@@ -101,8 +101,6 @@ describe("getPageMarkdown locale", () => {
     test("constructs correct URL shape for 'ja'", async () => {
         const config = makeConfig("https://api.example.com/");
         await getPageMarkdown("Tokyo", config, "ja");
-        expect(capturedUrl).toBe(
-            "https://api.example.com/ja/page/Tokyo",
-        );
+        expect(capturedUrl).toBe("https://api.example.com/ja/page/Tokyo");
     });
 });
