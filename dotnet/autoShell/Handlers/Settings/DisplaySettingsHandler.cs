@@ -2,11 +2,10 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Collections.Generic;
+using autoShell.Handlers.Generated;
 using autoShell.Logging;
 using autoShell.Services;
 using Microsoft.Win32;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers.Settings;
 
@@ -14,70 +13,36 @@ namespace autoShell.Handlers.Settings;
 /// Handles display settings: brightness, color temperature, orientation, resolution, scaling,
 /// blue light filter, and rotation lock.
 /// </summary>
-internal class DisplaySettingsHandler : ICommandHandler
+internal class DisplaySettingsHandler : SettingsHandlerBase
 {
-    private readonly IRegistryService _registry;
     private readonly IProcessService _process;
     private readonly IBrightnessService _brightness;
     private readonly ILogger _logger;
 
+    /// <summary>
+    /// Registers registered actions for color temperature, screen orientation, display resolution,
+    /// and rotation lock. Brightness, scaling, and blue light filter require custom logic.
+    /// </summary>
     public DisplaySettingsHandler(IRegistryService registry, IProcessService process, IBrightnessService brightness, ILogger logger)
+        : base(registry, process)
     {
-        _registry = registry;
         _process = process;
         _brightness = brightness;
         _logger = logger;
+
+        AddOpenSettingsAction("AdjustColorTemperature", new OpenSettingsConfig("ms-settings:nightlight", "night light settings"));
+        AddOpenSettingsAction("AdjustScreenOrientation", new OpenSettingsConfig("ms-settings:display", "display settings"));
+        AddOpenSettingsAction("DisplayResolutionAndAspectRatio", new OpenSettingsConfig("ms-settings:display", "display settings"));
+        AddRegistryToggleAction("RotationLock", new RegistryToggleConfig(
+            @"Software\Microsoft\Windows\CurrentVersion\ImmersiveShell", "RotationLockPreference", "enable", 1, 0));
+        AddAction<AdjustScreenBrightnessParams>("AdjustScreenBrightness", HandleAdjustScreenBrightness);
+        AddAction<DisplayScalingParams>("DisplayScaling", HandleDisplayScaling);
+        AddAction<EnableBlueLightFilterScheduleParams>("EnableBlueLightFilterSchedule", HandleBlueLightFilter);
     }
 
-    /// <inheritdoc/>
-    public IEnumerable<string> SupportedCommands { get; } =
-    [
-        "AdjustColorTemperature",
-        "AdjustScreenBrightness",
-        "AdjustScreenOrientation",
-        "DisplayResolutionAndAspectRatio",
-        "DisplayScaling",
-        "EnableBlueLightFilterSchedule",
-        "RotationLock",
-    ];
-
-    /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    private ActionResult HandleAdjustScreenBrightness(AdjustScreenBrightnessParams p)
     {
-        var param = JObject.Parse(value);
-
-        switch (key)
-        {
-            case "AdjustColorTemperature":
-                _process.StartShellExecute("ms-settings:nightlight");
-                break;
-
-            case "AdjustScreenBrightness":
-                HandleAdjustScreenBrightness(param);
-                break;
-
-            case "AdjustScreenOrientation":
-            case "DisplayResolutionAndAspectRatio":
-                _process.StartShellExecute("ms-settings:display");
-                break;
-
-            case "DisplayScaling":
-                HandleDisplayScaling(param);
-                break;
-
-            case "EnableBlueLightFilterSchedule":
-                HandleBlueLightFilter(param);
-                break;
-
-            case "RotationLock":
-                HandleRotationLock(param);
-                break;
-        }
-    }
-
-    private void HandleAdjustScreenBrightness(JObject param)
-    {
-        string level = param.Value<string>("brightnessLevel");
+        string level = p.BrightnessLevel;
         bool increase = level == "increase";
 
         byte currentBrightness = _brightness.GetCurrentBrightness();
@@ -87,11 +52,12 @@ internal class DisplaySettingsHandler : ICommandHandler
 
         _brightness.SetBrightness(newBrightness);
         _logger.Debug($"Brightness adjusted to: {newBrightness}%");
+        return ActionResult.Ok($"Brightness adjusted to {newBrightness}%");
     }
 
-    private void HandleDisplayScaling(JObject param)
+    private ActionResult HandleDisplayScaling(DisplayScalingParams p)
     {
-        string sizeStr = param.Value<string>("sizeOverride");
+        string sizeStr = p.SizeOverride;
 
         if (int.TryParse(sizeStr, out int percentage))
         {
@@ -108,30 +74,25 @@ internal class DisplaySettingsHandler : ICommandHandler
             // DPI scaling requires opening settings
             _process.StartShellExecute("ms-settings:display");
             _logger.Debug($"Display scaling target: {percentage}%");
+            return ActionResult.Ok($"Display scaling set to {percentage}%");
         }
+
+        return ActionResult.Fail("Invalid display scaling value");
     }
 
-    private void HandleBlueLightFilter(JObject param)
+    private ActionResult HandleBlueLightFilter(EnableBlueLightFilterScheduleParams p)
     {
-        bool disabled = param.Value<bool?>("nightLightScheduleDisabled") ?? false;
+        bool disabled = p.NightLightScheduleDisabled;
         byte[] data = disabled
             ? [0x02, 0x00, 0x00, 0x00]
             : [0x02, 0x00, 0x00, 0x01];
 
-        _registry.SetValue(
+        Registry.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\default$windows.data.bluelightreduction.settings\windows.data.bluelightreduction.settings",
             "Data",
             data,
             RegistryValueKind.Binary);
+        return ActionResult.Ok($"Night Light schedule {(disabled ? "disabled" : "enabled")}");
     }
 
-    private void HandleRotationLock(JObject param)
-    {
-        bool enable = param.Value<bool?>("enable") ?? true;
-        _registry.SetValue(
-            @"Software\Microsoft\Windows\CurrentVersion\ImmersiveShell",
-            "RotationLockPreference",
-            enable ? 1 : 0,
-            RegistryValueKind.DWord);
-    }
 }

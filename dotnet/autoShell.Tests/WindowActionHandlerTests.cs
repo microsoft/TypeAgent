@@ -1,22 +1,22 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.Json;
 using autoShell.Handlers;
 using autoShell.Services;
 using Moq;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Tests;
 
-public class WindowCommandHandlerTests
+public class WindowActionHandlerTests
 {
     private readonly Mock<IAppRegistry> _mockAppRegistry = new();
     private readonly Mock<IWindowService> _mockWindow = new();
-    private readonly WindowCommandHandler _handler;
+    private readonly WindowActionHandler _handler;
 
-    public WindowCommandHandlerTests()
+    public WindowActionHandlerTests()
     {
-        _handler = new WindowCommandHandler(_mockAppRegistry.Object, _mockWindow.Object);
+        _handler = new WindowActionHandler(_mockAppRegistry.Object, _mockWindow.Object);
     }
     // --- Maximize ---
 
@@ -28,7 +28,7 @@ public class WindowCommandHandlerTests
     {
         _mockAppRegistry.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
 
-        Handle("Maximize", "Notepad");
+        _handler.Handle("Maximize", JsonDocument.Parse("""{"name":"Notepad"}""").RootElement);
 
         _mockWindow.Verify(w => w.MaximizeWindow("notepad"), Times.Once);
     }
@@ -43,7 +43,7 @@ public class WindowCommandHandlerTests
     {
         _mockAppRegistry.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
 
-        Handle("Minimize", "Notepad");
+        _handler.Handle("Minimize", JsonDocument.Parse("""{"name":"Notepad"}""").RootElement);
 
         _mockWindow.Verify(w => w.MinimizeWindow("notepad"), Times.Once);
     }
@@ -59,7 +59,7 @@ public class WindowCommandHandlerTests
         _mockAppRegistry.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
         _mockAppRegistry.Setup(a => a.GetExecutablePath("Notepad")).Returns("C:\\Windows\\notepad.exe");
 
-        Handle("SwitchTo", "Notepad");
+        _handler.Handle("SwitchTo", JsonDocument.Parse("""{"name":"Notepad"}""").RootElement);
 
         _mockWindow.Verify(w => w.RaiseWindow("notepad", "C:\\Windows\\notepad.exe"), Times.Once);
     }
@@ -75,7 +75,7 @@ public class WindowCommandHandlerTests
         _mockAppRegistry.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
         _mockAppRegistry.Setup(a => a.ResolveProcessName("Calculator")).Returns("calc");
 
-        Handle("Tile", "Notepad,Calculator");
+        _handler.Handle("Tile", JsonDocument.Parse("""{"leftWindow":"Notepad","rightWindow":"Calculator"}""").RootElement);
 
         _mockWindow.Verify(w => w.TileWindows("notepad", "calc"), Times.Once);
     }
@@ -86,7 +86,18 @@ public class WindowCommandHandlerTests
     [Fact]
     public void Tile_SingleApp_DoesNotCallService()
     {
-        Handle("Tile", "Notepad");
+        _handler.Handle("Tile", JsonDocument.Parse("""{"leftWindow":"Notepad"}""").RootElement);
+
+        _mockWindow.Verify(w => w.TileWindows(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
+    }
+
+    /// <summary>
+    /// Verifies that Tile with only rightWindow (missing leftWindow) does not invoke the service.
+    /// </summary>
+    [Fact]
+    public void Tile_OnlyRightWindow_DoesNotCallService()
+    {
+        _handler.Handle("Tile", JsonDocument.Parse("""{"rightWindow":"Notepad"}""").RootElement);
 
         _mockWindow.Verify(w => w.TileWindows(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
     }
@@ -99,14 +110,9 @@ public class WindowCommandHandlerTests
     [Fact]
     public void Handle_UnknownKey_DoesNothing()
     {
-        Handle("UnknownWindowCmd", "value");
+        _handler.Handle("UnknownWindowCmd", JsonDocument.Parse("""{"name":"value"}""").RootElement);
 
         _mockAppRegistry.VerifyNoOtherCalls();
         _mockWindow.VerifyNoOtherCalls();
-    }
-
-    private void Handle(string key, string value)
-    {
-        _handler.Handle(key, value, JToken.FromObject(value));
     }
 }

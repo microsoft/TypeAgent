@@ -2,61 +2,39 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Collections.Generic;
+using autoShell.Handlers.Generated;
 using autoShell.Services;
 using Microsoft.Win32;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers.Settings;
 
 /// <summary>
-/// Handles power settings: battery saver threshold and power mode (on battery / plugged in).
+/// Handles power settings: battery saver threshold, power mode on battery, and power mode plugged in.
 /// </summary>
-internal class PowerSettingsHandler : ICommandHandler
+internal class PowerSettingsHandler : SettingsHandlerBase
 {
-    private readonly IRegistryService _registry;
-    private readonly IProcessService _process;
-
+    /// <summary>
+    /// Registers registered open-settings actions for power mode on battery and plugged in.
+    /// Battery saver threshold requires numeric clamping and is handled as a specialized action.
+    /// </summary>
     public PowerSettingsHandler(IRegistryService registry, IProcessService process)
+        : base(registry, process)
     {
-        _registry = registry;
-        _process = process;
+
+        AddOpenSettingsAction("SetPowerModeOnBattery", new OpenSettingsConfig("ms-settings:powersleep", "power settings"));
+        AddOpenSettingsAction("SetPowerModePluggedIn", new OpenSettingsConfig("ms-settings:powersleep", "power settings"));
+        AddAction<BatterySaverActivationLevelParams>("BatterySaverActivationLevel", HandleBatterySaverThreshold);
     }
 
-    /// <inheritdoc/>
-    public IEnumerable<string> SupportedCommands { get; } =
-    [
-        "BatterySaverActivationLevel",
-        "SetPowerModeOnBattery",
-        "SetPowerModePluggedIn",
-    ];
-
-    /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    private ActionResult HandleBatterySaverThreshold(BatterySaverActivationLevelParams p)
     {
-        var param = JObject.Parse(value);
-
-        switch (key)
-        {
-            case "BatterySaverActivationLevel":
-                HandleBatterySaverThreshold(param);
-                break;
-
-            case "SetPowerModeOnBattery":
-            case "SetPowerModePluggedIn":
-                _process.StartShellExecute("ms-settings:powersleep");
-                break;
-        }
-    }
-
-    private void HandleBatterySaverThreshold(JObject param)
-    {
-        int threshold = param.Value<int?>("thresholdValue") ?? 20;
+        int threshold = p.ThresholdValue > 0 ? p.ThresholdValue : 20;
         threshold = Math.Clamp(threshold, 0, 100);
-        _registry.SetValue(
+        Registry.SetValue(
             @"Software\Microsoft\Windows\CurrentVersion\Power\BatterySaver",
             "ActivationThreshold",
             threshold,
             RegistryValueKind.DWord);
+        return ActionResult.Ok($"Battery saver threshold set to {threshold}%");
     }
 }

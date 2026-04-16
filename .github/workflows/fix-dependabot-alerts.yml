@@ -14,8 +14,8 @@ name: fix-dependabot-alerts
 
 on:
   schedule:
-    # Run weekly on Monday at 9:00 UTC
-    - cron: "0 9 * * 1"
+    # Run daily at 9:00 UTC
+    - cron: "0 9 * * *"
   workflow_dispatch:
     inputs:
       dry-run:

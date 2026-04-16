@@ -25,10 +25,89 @@ export type DesktopActionContext = {
     abortRefresh: AbortController | undefined;
 };
 
-const autoShellPath = new URL(
-    "../../../../../dotnet/autoShell/bin/Debug/autoShell.exe",
-    import.meta.url,
-);
+interface ActionResult {
+    id?: string;
+    success: boolean;
+    message: string;
+    data?: unknown;
+}
+
+// Pending request map for correlating stdin writes with stdout responses
+const pendingRequests = new Map<
+    string,
+    { resolve: (result: ActionResult) => void; reject: (err: Error) => void }
+>();
+// Buffer for incomplete lines from stdout
+let stdoutBuffer = "";
+
+const autoShellPath = resolveAutoShellPath();
+
+function resolveAutoShellPath(): URL {
+    // Allow override via environment variable
+    const envPath = process.env.AUTOSHELL_PATH;
+    if (envPath) {
+        return new URL(`file://${path.resolve(envPath)}`);
+    }
+
+    // Search relative to the compiled JS output (dist/)
+    const baseDir = path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "../../../../../dotnet/autoShell/bin",
+    );
+    for (const config of ["Debug", "Release"]) {
+        const candidate = path.join(baseDir, config, "autoShell.exe");
+        if (fs.existsSync(candidate)) {
+            return new URL(`file://${candidate}`);
+        }
+    }
+
+    // Fallback to Debug path (will fail at spawn time with a clear error)
+    return new URL(
+        "../../../../../dotnet/autoShell/bin/Debug/autoShell.exe",
+        import.meta.url,
+    );
+}
+
+// Load known action names from .pas.json schema files for runtime validation.
+// The compiled JS and .pas.json files both live in dist/.
+const knownActionNames = loadKnownActionNames();
+
+function loadKnownActionNames(): Set<string> {
+    const names = new Set<string>();
+    try {
+        const distDir = path.dirname(fileURLToPath(import.meta.url));
+        const schemaFiles = fs
+            .readdirSync(distDir)
+            .filter((f) => f.endsWith(".pas.json"));
+
+        for (const file of schemaFiles) {
+            try {
+                const content = JSON.parse(
+                    fs.readFileSync(path.join(distDir, file), "utf-8"),
+                );
+                if (content.types) {
+                    for (const typeDef of Object.values(
+                        content.types,
+                    ) as any[]) {
+                        const actionField = typeDef?.type?.fields?.actionName;
+                        const typeEnum = actionField?.type?.typeEnum;
+                        if (Array.isArray(typeEnum)) {
+                            for (const name of typeEnum) {
+                                names.add(name);
+                            }
+                        }
+                    }
+                }
+            } catch {
+                // Skip malformed schema files
+            }
+        }
+    } catch {
+        debug("Could not load .pas.json schema files for validation.");
+    }
+    debug(`Loaded ${names.size} known action names from schemas.`);
+    return names;
+}
 
 async function spawnAutomationProcess() {
     return new Promise<child_process.ChildProcess>((resolve, reject) => {
@@ -51,19 +130,83 @@ async function ensureAutomationProcess(agentContext: DesktopActionContext) {
     child.on("exit", (code) => {
         debug(`Child exited with code ${code}`);
         agentContext.desktopProcess = undefined;
+        // Reject any pending requests
+        for (const [id, pending] of pendingRequests) {
+            pending.reject(new Error(`autoShell exited with code ${code}`));
+            pendingRequests.delete(id);
+        }
+        stdoutBuffer = "";
     });
 
-    // For tracing
+    // Route stdout lines to pending requests by id
     child.stdout?.on("data", (data) => {
-        debugData(`Process data: ${data.toString()}`);
+        stdoutBuffer += data.toString();
+        let newlineIndex: number;
+        while ((newlineIndex = stdoutBuffer.indexOf("\n")) !== -1) {
+            const line = stdoutBuffer.substring(0, newlineIndex).trim();
+            stdoutBuffer = stdoutBuffer.substring(newlineIndex + 1);
+            if (!line) continue;
+
+            try {
+                const response: ActionResult = JSON.parse(line);
+                debugData(`Response: ${line}`);
+
+                if (
+                    response.id !== undefined &&
+                    pendingRequests.has(response.id)
+                ) {
+                    const pending = pendingRequests.get(response.id)!;
+                    pendingRequests.delete(response.id);
+                    pending.resolve(response);
+                } else {
+                    debug(`Unmatched response (id=${response.id}): ${line}`);
+                }
+            } catch {
+                debug(`Non-JSON stdout: ${line}`);
+            }
+        }
     });
 
-    child.stderr?.on("error", (data) => {
+    child.stderr?.on("data", (data) => {
         debugError(`Process error: ${data.toString()}`);
     });
 
     agentContext.desktopProcess = child;
     return child;
+}
+
+const SEND_ACTION_TIMEOUT_MS = 30000;
+
+async function sendAction(
+    desktopProcess: child_process.ChildProcess,
+    action: object,
+): Promise<ActionResult> {
+    const id = randomUUID();
+    const payload = JSON.stringify({ ...action, id });
+
+    return new Promise<ActionResult>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            pendingRequests.delete(id);
+            reject(
+                new Error(
+                    `sendAction timed out after ${SEND_ACTION_TIMEOUT_MS}ms for: ${payload}`,
+                ),
+            );
+        }, SEND_ACTION_TIMEOUT_MS);
+
+        pendingRequests.set(id, {
+            resolve: (result) => {
+                clearTimeout(timeout);
+                resolve(result);
+            },
+            reject: (err) => {
+                clearTimeout(timeout);
+                reject(err);
+            },
+        });
+
+        desktopProcess.stdin?.write(payload + "\n");
+    });
 }
 
 export async function runDesktopActions(
@@ -72,14 +215,22 @@ export async function runDesktopActions(
     sessionStorage: Storage,
     schemaName?: string, // Schema name for disambiguation (e.g., "desktop-display", "desktop-taskbar")
 ) {
-    let confirmationMessage = "OK";
-    let actionData = "";
     const actionName = action.actionName;
 
     // Log schema name for debugging duplicate action resolution
     if (schemaName) {
         debug(`Executing action '${actionName}' from schema '${schemaName}'`);
     }
+
+    // Warn if an action name isn't in the known set (type system should prevent this,
+    // but guards against runtime mismatches or future schema drift)
+    if (!knownActionNames.has(actionName)) {
+        debugError(
+            `Unknown action '${actionName}' — not in known schema set. Forwarding to autoShell anyway.`,
+        );
+    }
+
+    // Preprocess actions that need TS-side work before sending to autoShell
     switch (actionName) {
         case "SetWallpaper": {
             let file = action.parameters.filePath;
@@ -109,9 +260,10 @@ export async function runDesktopActions(
                 ) {
                     file = file.substring(3);
                 } else {
-                    confirmationMessage =
-                        "Failed to download the requested image.";
-                    break;
+                    return {
+                        success: false,
+                        message: "Failed to download the requested image.",
+                    };
                 }
             }
 
@@ -121,7 +273,7 @@ export async function runDesktopActions(
                     file.indexOf(":") == 2 ||
                     fs.existsSync(file)
                 ) {
-                    actionData = file;
+                    action.parameters.filePath = file;
                 } else {
                     // if the file path is relative we'll have to search for the image since we don't have root storage dir
                     // TODO: add shared agent storage or known storage location (requires permissions, trusted agents, etc.)
@@ -134,593 +286,81 @@ export async function runDesktopActions(
                         );
 
                     if (files.length > 0) {
-                        actionData = path.join(
+                        action.parameters.filePath = path.join(
                             rootTypeAgentDir,
                             files[0] as string,
                         );
                     } else {
-                        actionData = file;
+                        action.parameters.filePath = file;
                     }
                 }
             } else {
-                confirmationMessage = "Unknown wallpaper location.";
-                break;
+                return {
+                    success: false,
+                    message: "Unknown wallpaper location.",
+                };
             }
-
-            confirmationMessage = "Set wallpaper to " + actionData;
             break;
         }
-        case "LaunchProgram": {
-            actionData = await mapInputToAppName(
+        case "LaunchProgram":
+        case "CloseProgram":
+        case "Maximize":
+        case "Minimize":
+        case "SwitchTo":
+        case "PinWindow":
+        case "MoveWindowToDesktop":
+            action.parameters.name = await mapInputToAppName(
                 action.parameters.name,
                 agentContext,
             );
-            confirmationMessage = "Launched " + action.parameters.name;
             break;
-        }
-        case "CloseProgram": {
-            actionData = await mapInputToAppName(
-                action.parameters.name,
-                agentContext,
-            );
-            confirmationMessage = "Closed " + action.parameters.name;
-            break;
-        }
-        case "Maximize": {
-            actionData = await mapInputToAppName(
-                action.parameters.name,
-                agentContext,
-            );
-            confirmationMessage = "Maximized " + action.parameters.name;
-            break;
-        }
-        case "Minimize": {
-            actionData = await mapInputToAppName(
-                action.parameters.name,
-                agentContext,
-            );
-            confirmationMessage = "Minimized " + action.parameters.name;
-            break;
-        }
-        case "SwitchTo": {
-            actionData = await mapInputToAppName(
-                action.parameters.name,
-                agentContext,
-            );
-            confirmationMessage = "Switched to " + action.parameters.name;
-            break;
-        }
-        case "Tile": {
-            const left = await mapInputToAppName(
+        case "Tile":
+            action.parameters.leftWindow = await mapInputToAppName(
                 action.parameters.leftWindow,
                 agentContext,
             );
-            const right = await mapInputToAppName(
+            action.parameters.rightWindow = await mapInputToAppName(
                 action.parameters.rightWindow,
                 agentContext,
             );
-            actionData = `${left},${right}`;
-            confirmationMessage = `Tiled ${left} on the left and ${right} on the right`;
             break;
-        }
-        case "Volume": {
-            actionData = action.parameters.targetVolume.toString();
-            break;
-        }
-        case "RestoreVolume": {
-            actionData = "";
-            break;
-        }
-        case "Mute": {
-            actionData = String(action.parameters.on);
-            break;
-        }
-        case "SetThemeMode": {
-            actionData = action.parameters!.mode;
-            confirmationMessage = `Changed theme to '${action.parameters.mode}'`;
-            break;
-        }
-        case "ConnectWifi": {
-            actionData = {
-                ssid: action.parameters.ssid,
-                password: action.parameters.password
-                    ? action.parameters.password
-                    : "",
-            } as unknown as string;
-            confirmationMessage = `Connecting to WiFi network '${action.parameters.ssid}'`;
-            break;
-        }
-        case "DisconnectWifi": {
-            actionData = "";
-            confirmationMessage = `Disconnecting from current WiFi network`;
-            break;
-        }
-        case "ToggleAirplaneMode": {
-            actionData = action.parameters.enable.toString();
-            confirmationMessage = `Turning airplane mode ${action.parameters.enable ? "on" : "off"}`;
-            break;
-        }
-        case "CreateDesktop": {
-            actionData =
-                action.parameters?.names !== undefined
-                    ? JSON.stringify(action.parameters.names)
-                    : JSON.stringify(["desktop 1"]);
-            confirmationMessage = `Creating new desktop`;
-            break;
-        }
-        case "MoveWindowToDesktop": {
-            const app = {
-                process: await mapInputToAppName(
-                    action.parameters.name,
-                    agentContext,
-                ),
-                desktop: action.parameters.desktopId,
-            };
-            actionData = JSON.stringify(app);
-            confirmationMessage = `Moving ${app.process} to desktop ${action.parameters.desktopId}`;
-            break;
-        }
-        case "PinWindow": {
-            actionData = action.parameters.name;
-            confirmationMessage = `Pinning '${action.parameters.name}' to all desktops`;
-            break;
-        }
-        case "SwitchDesktop": {
-            actionData = action.parameters.desktopId.toString();
-            confirmationMessage = `Switching to desktop ${action.parameters.desktopId}`;
-            break;
-        }
-        case "NextDesktop": {
-            actionData = "";
-            confirmationMessage = `Switching to next desktop`;
-            break;
-        }
-        case "PreviousDesktop": {
-            actionData = "";
-            confirmationMessage = `Switching to previous desktop`;
-            break;
-        }
-        case "ToggleNotifications": {
-            actionData = action.parameters.enable.toString();
-            confirmationMessage = `Toggling Action Center ${action.parameters.enable ? "on" : "off"}`;
-            break;
-        }
-        case "Debug": {
-            actionData = "";
-            confirmationMessage = `Debug action executed`;
-            break;
-        }
-        case "SetTextSize": {
-            actionData = action.parameters.size.toString();
-            confirmationMessage = `Set text size to ${action.parameters.size}%`;
-            break;
-        }
-        case "SetScreenResolution": {
-            actionData = {
-                width: action.parameters.width,
-                height: action.parameters.height,
-            } as unknown as string;
-            confirmationMessage = `Set screen resolution to ${action.parameters.width}x${action.parameters.height}`;
-            break;
-        }
-
-        // ===== New Settings Actions =====
-
-        // Network Settings
-        case "BluetoothToggle": {
-            actionData = JSON.stringify({
-                enableBluetooth: action.parameters.enableBluetooth ?? true,
-            });
-            confirmationMessage = `Bluetooth ${action.parameters.enableBluetooth !== false ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "EnableWifi": {
-            actionData = JSON.stringify({ enable: action.parameters.enable });
-            confirmationMessage = `WiFi ${action.parameters.enable ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "EnableMeteredConnections": {
-            actionData = JSON.stringify({ enable: action.parameters.enable });
-            confirmationMessage = `Metered connections ${action.parameters.enable ? "enabled" : "disabled"}`;
-            break;
-        }
-
-        // Display Settings
-        case "AdjustScreenBrightness": {
-            actionData = JSON.stringify({
-                brightnessLevel: action.parameters.brightnessLevel,
-            });
-            confirmationMessage = `Screen brightness ${action.parameters.brightnessLevel}d`;
-            break;
-        }
-        case "EnableBlueLightFilterSchedule": {
-            actionData = JSON.stringify({
-                schedule: action.parameters.schedule,
-                nightLightScheduleDisabled:
-                    action.parameters.nightLightScheduleDisabled,
-            });
-            confirmationMessage = `Night Light schedule ${action.parameters.nightLightScheduleDisabled ? "disabled" : "enabled"}`;
-            break;
-        }
-        case "AdjustColorTemperature": {
-            actionData = JSON.stringify({
-                filterEffect: action.parameters.filterEffect,
-            });
-            confirmationMessage = `Color temperature adjusted`;
-            break;
-        }
-        case "DisplayScaling": {
-            actionData = JSON.stringify({
-                sizeOverride: action.parameters.sizeOverride,
-            });
-            confirmationMessage = `Display scaling set to ${action.parameters.sizeOverride}%`;
-            break;
-        }
-        case "AdjustScreenOrientation": {
-            actionData = JSON.stringify({
-                orientation: action.parameters.orientation,
-            });
-            confirmationMessage = `Screen orientation set to ${action.parameters.orientation}`;
-            break;
-        }
-        case "RotationLock": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
-            confirmationMessage = `Rotation lock ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        }
-
-        // Personalization Settings
-        case "EnableTransparency": {
-            actionData = JSON.stringify({ enable: action.parameters.enable });
-            confirmationMessage = `Transparency effects ${action.parameters.enable ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "ApplyColorToTitleBar": {
-            actionData = JSON.stringify({
-                enableColor: action.parameters.enableColor,
-            });
-            confirmationMessage = `Title bar color ${action.parameters.enableColor ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "HighContrastTheme": {
-            actionData = JSON.stringify({});
-            confirmationMessage = `Opening high contrast theme settings`;
-            break;
-        }
-
-        // Taskbar Settings
-        case "AutoHideTaskbar": {
-            actionData = JSON.stringify({
-                hideWhenNotUsing: action.parameters.hideWhenNotUsing,
-                alwaysShow: action.parameters.alwaysShow,
-            });
-            confirmationMessage = `Taskbar auto-hide ${action.parameters.hideWhenNotUsing ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "TaskbarAlignment": {
-            actionData = JSON.stringify({
-                alignment: action.parameters.alignment,
-            });
-            confirmationMessage = `Taskbar aligned to ${action.parameters.alignment}`;
-            break;
-        }
-        case "TaskViewVisibility": {
-            actionData = JSON.stringify({
-                visibility: action.parameters.visibility,
-            });
-            confirmationMessage = `Task View button ${action.parameters.visibility ? "shown" : "hidden"}`;
-            break;
-        }
-        case "ToggleWidgetsButtonVisibility": {
-            actionData = JSON.stringify({
-                visibility: action.parameters.visibility,
-            });
-            confirmationMessage = `Widgets button ${action.parameters.visibility}`;
-            break;
-        }
-        case "ShowBadgesOnTaskbar": {
-            actionData = JSON.stringify({
-                enableBadging: action.parameters.enableBadging ?? true,
-            });
-            confirmationMessage = `Taskbar badges ${action.parameters.enableBadging !== false ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "DisplayTaskbarOnAllMonitors": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
-            confirmationMessage = `Taskbar on all monitors ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "DisplaySecondsInSystrayClock": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
-            confirmationMessage = `Seconds in clock ${action.parameters.enable !== false ? "shown" : "hidden"}`;
-            break;
-        }
-
-        // Mouse Settings
-        case "MouseCursorSpeed": {
-            actionData = JSON.stringify({
-                speedLevel: action.parameters.speedLevel,
-                reduceSpeed: action.parameters.reduceSpeed,
-            });
-            confirmationMessage = `Mouse cursor speed set to ${action.parameters.speedLevel}`;
-            break;
-        }
-        case "MouseWheelScrollLines": {
-            actionData = JSON.stringify({
-                scrollLines: action.parameters.scrollLines,
-            });
-            confirmationMessage = `Mouse wheel scroll lines set to ${action.parameters.scrollLines}`;
-            break;
-        }
-        case "SetPrimaryMouseButton": {
-            actionData = JSON.stringify({
-                primaryButton: action.parameters.primaryButton,
-            });
-            confirmationMessage = `Primary mouse button set to ${action.parameters.primaryButton}`;
-            break;
-        }
-        case "EnhancePointerPrecision": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
-            confirmationMessage = `Enhanced pointer precision ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "AdjustMousePointerSize": {
-            actionData = JSON.stringify({
-                sizeAdjustment: action.parameters.sizeAdjustment,
-            });
-            confirmationMessage = `Mouse pointer size adjusted`;
-            break;
-        }
-        case "MousePointerCustomization": {
-            actionData = JSON.stringify({
-                color: action.parameters.color,
-                style: action.parameters.style,
-            });
-            confirmationMessage = `Mouse pointer customized`;
-            break;
-        }
         case "CursorTrail": {
             const minTrail = 2;
             const maxTrail = 12;
             let trailLength = action.parameters.length;
-            let trailNote = "";
             if (trailLength !== undefined) {
                 if (trailLength < minTrail || trailLength > maxTrail) {
-                    const requested = trailLength;
                     trailLength = Math.max(
                         minTrail,
                         Math.min(maxTrail, trailLength),
                     );
-                    trailNote = ` (requested ${requested}, adjusted to ${trailLength} — valid range is ${minTrail}–${maxTrail})`;
+                    action.parameters.length = trailLength;
                 }
             }
-            actionData = JSON.stringify({
-                enable: action.parameters.enable,
-                length: trailLength,
-            });
-            confirmationMessage = action.parameters.enable
-                ? `Cursor trail enabled${trailNote || (trailLength ? ` with length ${trailLength}` : "")}`
-                : `Cursor trail disabled`;
             break;
         }
-
-        // Touchpad Settings
-        case "EnableTouchPad": {
-            actionData = JSON.stringify({ enable: action.parameters.enable });
-            confirmationMessage = `Touchpad ${action.parameters.enable ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "TouchpadCursorSpeed": {
-            actionData = JSON.stringify({ speed: action.parameters.speed });
-            confirmationMessage = `Touchpad cursor speed adjusted`;
-            break;
-        }
-
-        // Privacy Settings
-        case "ManageMicrophoneAccess": {
-            actionData = JSON.stringify({
-                accessSetting: action.parameters.accessSetting,
-            });
-            confirmationMessage = `Microphone access set to ${action.parameters.accessSetting}`;
-            break;
-        }
-        case "ManageCameraAccess": {
-            actionData = JSON.stringify({
-                accessSetting: action.parameters.accessSetting ?? "allow",
-            });
-            confirmationMessage = `Camera access set to ${action.parameters.accessSetting ?? "allow"}`;
-            break;
-        }
-        case "ManageLocationAccess": {
-            actionData = JSON.stringify({
-                accessSetting: action.parameters.accessSetting ?? "allow",
-            });
-            confirmationMessage = `Location access set to ${action.parameters.accessSetting ?? "allow"}`;
-            break;
-        }
-
-        // Power Settings
-        case "BatterySaverActivationLevel": {
-            actionData = JSON.stringify({
-                thresholdValue: action.parameters.thresholdValue,
-            });
-            confirmationMessage = `Battery saver threshold set to ${action.parameters.thresholdValue}%`;
-            break;
-        }
-        case "SetPowerModePluggedIn": {
-            actionData = JSON.stringify({
-                powerMode: action.parameters.powerMode,
-            });
-            confirmationMessage = `Power mode when plugged in set to ${action.parameters.powerMode}`;
-            break;
-        }
-        case "SetPowerModeOnBattery": {
-            actionData = JSON.stringify({ mode: action.parameters.mode });
-            confirmationMessage = `Power mode on battery adjusted`;
-            break;
-        }
-
-        // Gaming Settings
-        case "EnableGameMode": {
-            actionData = JSON.stringify({});
-            confirmationMessage = `Opening Game Mode settings`;
-            break;
-        }
-
-        // Accessibility Settings
-        case "EnableNarratorAction": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
-            confirmationMessage = `Narrator ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "EnableMagnifier": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
-            confirmationMessage = `Magnifier ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "EnableStickyKeys": {
-            actionData = JSON.stringify({ enable: action.parameters.enable });
-            confirmationMessage = `Sticky Keys ${action.parameters.enable ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "EnableFilterKeysAction": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
-            confirmationMessage = `Filter Keys ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "MonoAudioToggle": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
-            confirmationMessage = `Mono audio ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        }
-
-        // File Explorer Settings
-        case "ShowFileExtensions": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
-            confirmationMessage = `File extensions ${action.parameters.enable !== false ? "shown" : "hidden"}`;
-            break;
-        }
-        case "ShowHiddenAndSystemFiles": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
-            confirmationMessage = `Hidden files ${action.parameters.enable !== false ? "shown" : "hidden"}`;
-            break;
-        }
-
-        // Time & Region Settings
-        case "AutomaticTimeSettingAction": {
-            actionData = JSON.stringify({
-                enableAutoTimeSync: action.parameters.enableAutoTimeSync,
-            });
-            confirmationMessage = `Automatic time sync ${action.parameters.enableAutoTimeSync ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "AutomaticDSTAdjustment": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
-            confirmationMessage = `Automatic DST adjustment ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        }
-
-        // Focus Assist Settings
-        case "EnableQuietHours": {
-            actionData = JSON.stringify({
-                startHour: action.parameters.startHour,
-                endHour: action.parameters.endHour,
-            });
-            confirmationMessage = `Focus Assist settings opened`;
-            break;
-        }
-
-        // Multi-Monitor Settings
-        case "RememberWindowLocations": {
-            actionData = JSON.stringify({ enable: action.parameters.enable });
-            confirmationMessage = `Remember window locations ${action.parameters.enable ? "enabled" : "disabled"}`;
-            break;
-        }
-        case "MinimizeWindowsOnMonitorDisconnectAction": {
-            actionData = JSON.stringify({
-                enable: action.parameters.enable ?? true,
-            });
-            confirmationMessage = `Minimize windows on disconnect ${action.parameters.enable !== false ? "enabled" : "disabled"}`;
-            break;
-        }
-
-        default:
-            throw new Error(`Unknown action: ${actionName}`);
     }
 
-    // send message to child process
-    let message: Record<string, string> = {};
-    message[actionName] = actionData;
-
+    // Send to autoShell and return its response
     const desktopProcess = await ensureAutomationProcess(agentContext);
-    desktopProcess.stdin?.write(JSON.stringify(message) + "\r\n");
-
-    return confirmationMessage;
+    return sendAction(desktopProcess, action);
 }
 
 async function fetchInstalledApps(desktopProcess: child_process.ChildProcess) {
-    let timeoutHandle: NodeJS.Timeout;
-
-    const timeoutPromise = new Promise<undefined>((_resolve, reject) => {
-        timeoutHandle = setTimeout(() => {
-            debugError("Timeout while fetching installed apps");
-            reject(undefined);
-        }, 60000);
-    });
-
-    const appsPromise = new Promise<string[] | undefined>((resolve, reject) => {
-        let message: Record<string, string> = {};
-        message["ListAppNames"] = "";
-
-        let allOutput = "";
-        const dataCallBack = (data: any) => {
-            allOutput += data.toString();
-            try {
-                const programs = JSON.parse(allOutput);
-                desktopProcess.stdout?.off("data", dataCallBack);
-                desktopProcess.stderr?.off("error", errorCallback);
-                resolve(programs);
-            } catch {}
-        };
-
-        const errorCallback = (data: any) => {
-            desktopProcess.stdout?.off("data", dataCallBack);
-            desktopProcess.stderr?.off("error", errorCallback);
-            reject(data.toString());
-        };
-
-        desktopProcess.stdout?.on("data", dataCallBack);
-        desktopProcess.stderr?.on("error", errorCallback);
-
-        desktopProcess.stdin?.write(JSON.stringify(message) + "\r\n");
-    });
-
-    return Promise.race([appsPromise, timeoutPromise]).then((result) => {
-        clearTimeout(timeoutHandle);
-        return result;
-    });
+    try {
+        const result = await sendAction(desktopProcess, {
+            actionName: "ListAppNames",
+            parameters: {},
+        });
+        if (result.success && Array.isArray(result.data)) {
+            return result.data as string[];
+        }
+        debugError(`Failed to fetch installed apps: ${result.message}`);
+        return undefined;
+    } catch (e: any) {
+        debugError(`Error fetching installed apps: ${e.message}`);
+        return undefined;
+    }
 }
 
 async function finishRefresh(agentContext: DesktopActionContext) {
@@ -805,17 +445,20 @@ async function mapInputToAppName(
 ): Promise<string> {
     const programNameIndex = agentContext.programNameIndex;
     if (programNameIndex) {
-        let matchedNames = await mapInputToAppNameFromIndex(
+        let matchedName = await mapInputToAppNameFromIndex(
             input,
             programNameIndex,
             agentContext.backupProgramNameTable,
         );
-        if (matchedNames === undefined && (await finishRefresh(agentContext))) {
-            matchedNames = await mapInputToAppNameFromIndex(
+        if (matchedName === undefined && (await finishRefresh(agentContext))) {
+            matchedName = await mapInputToAppNameFromIndex(
                 input,
                 programNameIndex,
                 agentContext.backupProgramNameTable,
             );
+        }
+        if (matchedName !== undefined) {
+            return matchedName;
         }
     }
     return input;

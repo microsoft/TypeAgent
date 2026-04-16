@@ -10,7 +10,8 @@ export type DesktopInputActions =
     | MousePointerCustomizationAction
     | CursorTrailAction
     | EnableTouchPadAction
-    | TouchpadCursorSpeedAction;
+    | TouchpadCursorSpeedAction
+    | ToggleMouseSonarAction;
 
 // Adjusts mouse cursor speed
 export type MouseCursorSpeedAction = {
@@ -84,5 +85,13 @@ export type TouchpadCursorSpeedAction = {
     actionName: "TouchpadCursorSpeed";
     parameters: {
         speed?: number;
+    };
+};
+
+// Enables or disables the "Find my pointer" sonar ring when pressing Ctrl
+export type ToggleMouseSonarAction = {
+    actionName: "ToggleMouseSonar";
+    parameters: {
+        enable: boolean;
     };
 };

@@ -2,18 +2,17 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Collections.Generic;
+using autoShell.Handlers.Generated;
 using autoShell.Logging;
 using autoShell.Services;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers.Settings;
 
 /// <summary>
-/// Handles mouse and touchpad settings: pointer size, precision, cursor speed, scroll lines,
-/// primary button, customization, and touchpad.
+/// Handles mouse and touchpad settings: precision, cursor speed, scroll lines,
+/// primary button, cursor trail, pointer size, pointer customization, and touchpad.
 /// </summary>
-internal class MouseSettingsHandler : ICommandHandler
+internal class MouseSettingsHandler : SettingsHandlerBase
 {
     private const int SPI_GETMOUSE = 3;
     private const int SPI_SETMOUSE = 4;
@@ -25,97 +24,60 @@ internal class MouseSettingsHandler : ICommandHandler
     private const int SPIF_UPDATEINIFILE_SENDCHANGE = 3;
 
     private readonly ISystemParametersService _systemParams;
-    private readonly IProcessService _process;
     private readonly ILogger _logger;
 
-    public MouseSettingsHandler(ISystemParametersService systemParams, IProcessService process, ILogger logger)
+    /// <summary>
+    /// Registers registered open-settings actions for mouse pointer size, pointer customization,
+    /// touchpad enable, and touchpad cursor speed. SPI-based actions are handled as specialized actions.
+    /// </summary>
+    public MouseSettingsHandler(IRegistryService registry, IProcessService process, ISystemParametersService systemParams, ILogger logger)
+        : base(registry, process)
     {
         _systemParams = systemParams;
-        _process = process;
         _logger = logger;
+
+        AddOpenSettingsAction("AdjustMousePointerSize", new OpenSettingsConfig("ms-settings:easeofaccess-mouse", "mouse settings"));
+        AddOpenSettingsAction("MousePointerCustomization", new OpenSettingsConfig("ms-settings:easeofaccess-mouse", "mouse settings"));
+        AddOpenSettingsAction("EnableTouchPad", new OpenSettingsConfig("ms-settings:devices-touchpad", "touchpad settings"));
+        AddOpenSettingsAction("TouchpadCursorSpeed", new OpenSettingsConfig("ms-settings:devices-touchpad", "touchpad settings"));
+        AddRegistryToggleAction("ToggleMouseSonar", new RegistryToggleConfig(
+            @"Control Panel\Mouse", "MouseSonar", "enable",
+            OnValue: "1", OffValue: "0", ValueKind: Microsoft.Win32.RegistryValueKind.String, DisplayName: "Mouse Sonar"));
+        AddAction<CursorTrailParams>("CursorTrail", HandleMouseCursorTrail);
+        AddAction<EnhancePointerPrecisionParams>("EnhancePointerPrecision", HandleEnhancePointerPrecision);
+        AddAction<MouseCursorSpeedParams>("MouseCursorSpeed", HandleMouseCursorSpeed);
+        AddAction<MouseWheelScrollLinesParams>("MouseWheelScrollLines", HandleMouseWheelScrollLines);
+        AddAction<SetPrimaryMouseButtonParams>("SetPrimaryMouseButton", HandleSetPrimaryMouseButton);
     }
 
-    /// <inheritdoc/>
-    public IEnumerable<string> SupportedCommands { get; } =
-    [
-        "AdjustMousePointerSize",
-        "CursorTrail",
-        "EnableTouchPad",
-        "EnhancePointerPrecision",
-        "MouseCursorSpeed",
-        "MousePointerCustomization",
-        "MouseWheelScrollLines",
-        "SetPrimaryMouseButton",
-        "TouchpadCursorSpeed",
-    ];
-
-    /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    private ActionResult HandleEnhancePointerPrecision(EnhancePointerPrecisionParams p)
     {
-        var param = JObject.Parse(value);
-
-        switch (key)
-        {
-            case "AdjustMousePointerSize":
-            case "MousePointerCustomization":
-                _process.StartShellExecute("ms-settings:easeofaccess-mouse");
-                break;
-
-            case "CursorTrail":
-                HandleMouseCursorTrail(value);
-                break;
-
-            case "EnableTouchPad":
-            case "TouchpadCursorSpeed":
-                _process.StartShellExecute("ms-settings:devices-touchpad");
-                break;
-
-            case "EnhancePointerPrecision":
-                HandleEnhancePointerPrecision(param);
-                break;
-
-            case "MouseCursorSpeed":
-                HandleMouseCursorSpeed(param);
-                break;
-
-            case "MouseWheelScrollLines":
-                HandleMouseWheelScrollLines(param);
-                break;
-
-            case "SetPrimaryMouseButton":
-                HandleSetPrimaryMouseButton(param);
-                break;
-        }
-    }
-
-    private void HandleEnhancePointerPrecision(JObject param)
-    {
-        bool enable = param.Value<bool?>("enable") ?? true;
+        bool enable = p.Enable ?? true;
         int[] mouseParams = new int[3];
         _systemParams.GetParameter(SPI_GETMOUSE, 0, mouseParams, 0);
         // Set acceleration (third parameter): 1 = enhanced precision on, 0 = off
         mouseParams[2] = enable ? 1 : 0;
         _systemParams.SetParameter(SPI_SETMOUSE, 0, mouseParams, SPIF_UPDATEINIFILE_SENDCHANGE);
+        return ActionResult.Ok($"Enhanced pointer precision {(enable ? "enabled" : "disabled")}");
     }
 
-    private void HandleMouseCursorSpeed(JObject param)
+    private ActionResult HandleMouseCursorSpeed(MouseCursorSpeedParams p)
     {
         // Speed range: 1-20 (default 10)
-        int speed = param.Value<int?>("speedLevel") ?? 10;
+        int speed = p.SpeedLevel > 0 ? p.SpeedLevel : 10;
         speed = Math.Clamp(speed, 1, 20);
         _systemParams.SetParameter(SPI_SETMOUSESPEED, 0, (IntPtr)speed, SPIF_UPDATEINIFILE_SENDCHANGE);
+        return ActionResult.Ok($"Mouse cursor speed set to {speed}");
     }
 
     /// <summary>
     /// Enables or disables the mouse cursor trail and sets its length.
-    /// Command: {"CursorTrail": "{\"enable\":true,\"length\":7}"}
     /// SPI_SETMOUSETRAILS: 0 = off, 2-12 = trail length
     /// </summary>
-    private void HandleMouseCursorTrail(string jsonParams)
+    private ActionResult HandleMouseCursorTrail(CursorTrailParams p)
     {
-        var param = JObject.Parse(jsonParams);
-        var enable = param.Value<bool?>("enable") ?? true;
-        var length = param.Value<int?>("length") ?? 7;
+        var enable = p.Enable;
+        var length = p.Length ?? 7;
 
         // Clamp trail length to valid range
         length = Math.Max(2, Math.Min(12, length));
@@ -126,19 +88,27 @@ internal class MouseSettingsHandler : ICommandHandler
         _logger.Debug(enable
             ? $"Cursor trail enabled with length {length}"
             : "Cursor trail disabled");
+        return ActionResult.Ok($"Cursor trail {(enable ? $"enabled (length {length})" : "disabled")}");
     }
 
-    private void HandleMouseWheelScrollLines(JObject param)
+    private ActionResult HandleMouseWheelScrollLines(MouseWheelScrollLinesParams p)
     {
-        int lines = param.Value<int?>("scrollLines") ?? 3;
+        int lines = p.ScrollLines > 0 ? p.ScrollLines : 3;
         lines = Math.Clamp(lines, 1, 100);
         _systemParams.SetParameter(SPI_SETWHEELSCROLLLINES, lines, IntPtr.Zero, SPIF_UPDATEINIFILE_SENDCHANGE);
+        return ActionResult.Ok($"Mouse wheel scroll lines set to {lines}");
     }
 
-    private void HandleSetPrimaryMouseButton(JObject param)
+    private ActionResult HandleSetPrimaryMouseButton(SetPrimaryMouseButtonParams p)
     {
-        string button = param.Value<string>("primaryButton") ?? "left";
+        string button = p.PrimaryButton;
+        if (string.IsNullOrEmpty(button))
+        {
+            button = "left";
+        }
+
         bool leftPrimary = button.Equals("left", StringComparison.OrdinalIgnoreCase);
         _systemParams.SwapMouseButton(!leftPrimary);
+        return ActionResult.Ok($"Primary mouse button set to {button}");
     }
 }

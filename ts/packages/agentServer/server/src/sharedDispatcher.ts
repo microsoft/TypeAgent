@@ -419,6 +419,11 @@ export async function createSharedDispatcher(
             message: string,
             excludeConnectionId?: string,
         ): void {
+            // "system" is a reserved requestId sentinel used to identify
+            // server-broadcast messages (e.g. client join/leave notifications).
+            // It can never collide with a real UUID from randomUUID().
+            // The renderer (chatView.ts) checks for this sentinel to auto-create
+            // a notification MessageGroup — keep these two values in sync.
             const agentMessage = {
                 message: {
                     type: "text" as const,

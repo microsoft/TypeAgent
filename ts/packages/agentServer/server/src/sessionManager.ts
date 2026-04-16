@@ -237,8 +237,10 @@ export async function createSessionManager(
     }
 
     function getDefaultSessionId(): string | undefined {
+        // Case-insensitive match so "Default", "default", "DEFAULT" all work.
+        // The shell uses the same case-insensitive pattern when looking up "Shell".
         for (const [id, record] of sessions) {
-            if (record.name === "default") {
+            if (record.name.toLowerCase() === "default") {
                 return id;
             }
         }
@@ -373,6 +375,14 @@ export async function createSessionManager(
             debugSession(
                 `Client joined session "${record.name}" (${sessionId}), clients: ${sharedDispatcher.clientCount}`,
             );
+
+            // Notify existing clients that a new client has joined
+            if (sharedDispatcher.clientCount > 1 && dispatcher.connectionId) {
+                sharedDispatcher.broadcastSystemMessage(
+                    `[A new client has joined this conversation. You are connected to '${record.name}'.]`,
+                    dispatcher.connectionId,
+                );
+            }
 
             return {
                 dispatcher,
