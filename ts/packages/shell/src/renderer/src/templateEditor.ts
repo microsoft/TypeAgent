@@ -12,6 +12,7 @@ import { Dispatcher, TemplateData, TemplateEditConfig } from "agent-dispatcher";
 import { getObjectProperty, setObjectProperty } from "@typeagent/common-utils";
 import { SearchMenu } from "./search";
 import { SearchMenuItem } from "./searchMenuUI/searchMenuUI";
+import { TSTSearchMenuDataProvider } from "agent-dispatcher/helpers/completion";
 
 function cloneTemplateData(
     templateData: TemplateData | TemplateData[],
@@ -427,6 +428,7 @@ class FieldScalar extends FieldBase {
         div: HTMLDivElement;
         input: HTMLInputElement;
         searchMenu?: SearchMenu;
+        dataProvider?: TSTSearchMenuDataProvider;
     };
     constructor(
         data: FieldContainer,
@@ -488,11 +490,17 @@ class FieldScalar extends FieldBase {
         input: HTMLInputElement,
         choices: SearchMenuItem[],
     ) {
-        const searchMenu = new SearchMenu((item) => {
-            input.value = item.matchText;
-            this.data.setEditing(this.getNextScalarField());
-        }, false);
-        searchMenu.setChoices(choices);
+        const dataProvider = new TSTSearchMenuDataProvider();
+        dataProvider.setChoices(choices);
+        const searchMenu = new SearchMenu(
+            dataProvider,
+            (item) => {
+                input.value = item.matchText;
+                this.data.setEditing(this.getNextScalarField());
+            },
+            false,
+            () => this.getSearchMenuPosition(),
+        );
         input.addEventListener("input", () => {
             this.updateSearchMenu();
         });
@@ -508,7 +516,7 @@ class FieldScalar extends FieldBase {
         input.onwheel = (event) => {
             this.editUI?.searchMenu?.handleMouseWheel(event.deltaY);
         };
-        return searchMenu;
+        return { searchMenu, dataProvider };
     }
 
     public findPrefixField(propertyName: string) {
@@ -533,13 +541,7 @@ class FieldScalar extends FieldBase {
         }
 
         const value = this.editUI.input.value;
-
-        const position = this.getSearchMenuPosition();
-        if (position === undefined) {
-            searchMenu.hide();
-            return;
-        }
-        searchMenu.updatePrefix(value, position);
+        searchMenu.updatePrefix(value);
     }
     private handleSearchMenuKeys(event: KeyboardEvent): boolean {
         if (this.editUI === undefined) {
@@ -580,19 +582,24 @@ class FieldScalar extends FieldBase {
 
         const fieldType = this.fieldType;
         if (fieldType.type === "string-union") {
-            this.editUI.searchMenu = this.createSearchMenu(
+            const { searchMenu } = this.createSearchMenu(
                 input,
                 fieldType.typeEnum.map((e) => ({
                     matchText: e,
                     selectedText: e,
                 })),
             );
+            this.editUI.searchMenu = searchMenu;
             this.updateSearchMenu();
         } else if (fieldType.type === "string") {
             const templateConfig = this.data.actionTemplates;
             if (templateConfig.completion === true) {
-                const searchMenu = this.createSearchMenu(input, []);
+                const { searchMenu, dataProvider } = this.createSearchMenu(
+                    input,
+                    [],
+                );
                 this.editUI.searchMenu = searchMenu;
+                this.editUI.dataProvider = dataProvider;
                 dispatcher
                     .getTemplateCompletion(
                         this.data.actionTemplates.templateAgentName,
@@ -607,12 +614,13 @@ class FieldScalar extends FieldBase {
                         ) {
                             return;
                         }
-                        searchMenu.setChoices(
+                        dataProvider.setChoices(
                             items.map((e) => ({
                                 matchText: e,
                                 selectedText: e,
                             })),
                         );
+                        searchMenu.invalidate();
                         this.updateSearchMenu();
                     });
             }

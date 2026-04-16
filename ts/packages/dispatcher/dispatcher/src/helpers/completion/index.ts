@@ -6,9 +6,11 @@
 export {
     SearchMenuPosition,
     SearchMenuItem,
-    SearchMenuBase,
+    TSTSearchMenuDataProvider,
+    isUniquelySatisfied,
+    type SearchMenuDataProvider,
 } from "./searchMenu.js";
-export { ISearchMenu, CompletionState } from "./session.js";
+export { ISearchMenuControl, CompletionState } from "./session.js";
 export {
     CompletionController,
     CompletionControllerOptions,

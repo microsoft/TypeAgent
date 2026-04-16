@@ -2,13 +2,10 @@
 // Licensed under the MIT License.
 
 import { CompletionDirection } from "@typeagent/agent-sdk";
+import { SearchMenuItem, isUniquelySatisfied } from "./searchMenu.js";
+import { type SearchMenuDataProvider } from "./searchMenu.js";
 import {
-    SearchMenuBase,
-    SearchMenuPosition,
-    SearchMenuItem,
-} from "./searchMenu.js";
-import {
-    ISearchMenu,
+    ISearchMenuControl,
     ICompletionDispatcher,
     PartialCompletionSession,
     CompletionState,
@@ -17,104 +14,163 @@ import {
 export type { CompletionState };
 
 export type CompletionControllerOptions = {
-    /** Custom ISearchMenu implementation (e.g. Shell's SearchMenu for DOM rendering).
-     *  When omitted, an internal menu is created that fires onUpdate on show/hide. */
-    menu?: ISearchMenu;
-    /** Called whenever the completion list changes (items shown or hidden). */
+    /** Called whenever the completion list changes (items shown or hidden).
+     *  Used by the CLI to trigger re-render when completions arrive async. */
     onUpdate?: () => void;
 };
 
-// Default position callback for consumers without spatial positioning (CLI).
-const defaultPosition: SearchMenuPosition = { left: 0, bottom: 0 };
-const defaultGetPosition = () => defaultPosition;
-
 /**
- * Internal SearchMenu for the controller when no custom menu is provided.
- * Fires the onUpdate callback whenever items are shown or hidden.
+ * Headless ISearchMenuControl — no UI, no trie.
+ * Fires an onUpdate callback whenever the menu shows or hides.
+ * Used as the internal menu control for the CLI path.
  */
-class CallbackSearchMenu extends SearchMenuBase {
+export class HeadlessSearchMenu implements ISearchMenuControl {
     public onUpdate: () => void;
-    constructor(onUpdate: () => void) {
-        super();
+    private dataProvider: SearchMenuDataProvider<SearchMenuItem>;
+    private prefix: string | undefined;
+    private _active: boolean = false;
+    private _filteredItems: SearchMenuItem[] = [];
+
+    constructor(
+        onUpdate: () => void,
+        dataProvider: SearchMenuDataProvider<SearchMenuItem>,
+    ) {
         this.onUpdate = onUpdate;
+        this.dataProvider = dataProvider;
     }
 
-    protected override onShow(
-        _position: SearchMenuPosition,
-        _prefix: string,
-        _items: SearchMenuItem[],
-    ): void {
-        this.onUpdate();
+    public invalidate(): void {
+        this.prefix = undefined;
+        this._filteredItems = [];
     }
 
-    protected override onHide(): void {
-        this.onUpdate();
+    public updatePrefix(prefix: string): boolean {
+        if (this.dataProvider.numChoices() === 0) {
+            return false;
+        }
+
+        if (this.prefix === prefix && this._active) {
+            return false;
+        }
+
+        this.prefix = prefix;
+        const items = this.dataProvider.filterItems(prefix);
+        const uniquelySatisfied = isUniquelySatisfied(items, prefix);
+        const showMenu = items.length !== 0 && !uniquelySatisfied;
+
+        if (showMenu) {
+            const wasActive = this._active;
+            this._active = true;
+            this._filteredItems = items;
+            if (!wasActive) {
+                this.onUpdate();
+            }
+        } else {
+            this.hide();
+        }
+        return uniquelySatisfied;
+    }
+
+    public hide(): void {
+        if (this._active) {
+            this._active = false;
+            this._filteredItems = [];
+            this.onUpdate();
+        }
+    }
+
+    public isActive(): boolean {
+        return this._active;
+    }
+
+    public getFilteredItems(): SearchMenuItem[] {
+        return this._filteredItems;
     }
 }
 
 /**
- * High-level completion controller wrapping PartialCompletionSession + ISearchMenu.
+ * High-level completion controller wrapping PartialCompletionSession.
  *
- * Simplifies the completion API surface for consumers:
+ * Implements SearchMenuDataProvider so consumers can pass the controller
+ * directly to their SearchMenu as the data source.
+ *
+ * API surface:
  *   - update()  — called on each keystroke
  *   - accept()  — called on Tab/Enter
  *   - dismiss() — called on Escape
  *   - hide()    — called when cursor leaves valid position
  *   - getCompletionState() — returns current completions for rendering
+ *   - setMenu() — wire an external menu control (Shell's SearchMenu)
  *
- * CLI creates a controller without a custom menu (internal CallbackSearchMenu).
- * Shell creates a controller with its SearchMenu for DOM dropdown rendering.
+ * CLI creates a controller without a custom menu (internal HeadlessSearchMenu).
+ * Shell creates a controller, then passes it as data provider to SearchMenu,
+ * then calls setMenu() to wire the menu back.
  */
-export class CompletionController {
+export class CompletionController
+    implements SearchMenuDataProvider<SearchMenuItem>
+{
     private readonly session: PartialCompletionSession;
-    private readonly callbackMenu: CallbackSearchMenu | undefined;
+    private readonly headlessMenu: HeadlessSearchMenu | undefined;
 
     constructor(
         dispatcher: ICompletionDispatcher,
         options?: CompletionControllerOptions,
     ) {
         const onUpdate = options?.onUpdate ?? (() => {});
-        if (options?.menu) {
-            this.session = new PartialCompletionSession(
-                options.menu,
-                dispatcher,
-            );
-        } else {
-            this.callbackMenu = new CallbackSearchMenu(onUpdate);
-            this.session = new PartialCompletionSession(
-                this.callbackMenu,
-                dispatcher,
-            );
-        }
+        this.session = new PartialCompletionSession(dispatcher);
+        // Create a headless menu as the default control surface.
+        // Callers that supply their own menu via setMenu() override this.
+        const headless = new HeadlessSearchMenu(onUpdate, this);
+        this.headlessMenu = headless;
+        this.session.setMenu(headless);
+    }
+
+    // ── SearchMenuDataProvider implementation ─────────────────────────
+
+    public filterItems(prefix: string): SearchMenuItem[] {
+        return this.session.filterItems(prefix);
+    }
+
+    public hasExactMatch(text: string): boolean {
+        return this.session.hasExactMatch(text);
+    }
+
+    public numChoices(): number {
+        return this.session.numChoices();
+    }
+
+    // ── Menu wiring ──────────────────────────────────────────────────
+
+    /**
+     * Wire an external menu control (e.g. Shell's SearchMenu).
+     * Replaces the internal HeadlessSearchMenu.
+     */
+    public setMenu(menu: ISearchMenuControl): void {
+        this.session.setMenu(menu);
     }
 
     /**
      * Set or replace the callback invoked when completions change.
-     * Only effective when using the internal CallbackSearchMenu (CLI path).
+     * Only effective when using the internal HeadlessSearchMenu (CLI path).
      */
     public setOnUpdate(onUpdate: () => void): void {
-        if (this.callbackMenu) {
-            this.callbackMenu.onUpdate = onUpdate;
+        if (this.headlessMenu) {
+            this.headlessMenu.onUpdate = onUpdate;
         }
     }
+
+    // ── Completion lifecycle ─────────────────────────────────────────
 
     /**
      * Drive the completion state machine on each keystroke.
      * @param input   Current input text
      * @param direction  "forward" (typing) or "backward" (backspace)
-     * @param getPosition  Optional position callback for menu placement (Shell).
-     *                     Defaults to {left:0, bottom:0} for text-mode consumers.
      */
     public update(
         input: string,
         direction: CompletionDirection = "forward",
-        getPosition?: (prefix: string) => SearchMenuPosition | undefined,
     ): void {
-        this.session.update(
-            input,
-            getPosition ?? defaultGetPosition,
-            direction,
-        );
+        this.session.update(input, direction);
     }
 
     /** Accept the current completion (Tab/Enter). Resets session to idle. */
@@ -126,18 +182,12 @@ export class CompletionController {
      * Dismiss completions (Escape key). Performs smart level-shift or refetch.
      * @param input      Current input text
      * @param direction  Direction hint for the session
-     * @param getPosition  Optional position callback for menu placement
      */
     public dismiss(
         input: string,
         direction: CompletionDirection = "forward",
-        getPosition?: (prefix: string) => SearchMenuPosition | undefined,
     ): void {
-        this.session.explicitHide(
-            input,
-            getPosition ?? defaultGetPosition,
-            direction,
-        );
+        this.session.explicitHide(input, direction);
     }
 
     /** Hide the menu without clearing session state (e.g. cursor moved away). */

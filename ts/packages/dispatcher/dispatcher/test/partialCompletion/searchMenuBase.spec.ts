@@ -2,94 +2,92 @@
 // Licensed under the MIT License.
 
 import { describe, expect, it, jest } from "@jest/globals";
-import {
-    SearchMenuBase,
-    SearchMenuItem,
-    SearchMenuPosition,
-} from "../../src/helpers/completion/index.js";
+import { SearchMenuItem } from "../../src/helpers/completion/index.js";
+import { HeadlessSearchMenu } from "../../src/helpers/completion/controller.js";
+import { TSTSearchMenuDataProvider } from "../../src/helpers/completion/searchMenu.js";
 
-// Minimal adapter mirroring CliSearchMenu to verify SearchMenuBase behaviour.
-class TestAdapter extends SearchMenuBase {
-    public currentItems: SearchMenuItem[] = [];
-    public readonly onUpdate: jest.Mock;
-
-    constructor() {
-        super();
-        this.onUpdate = jest.fn();
-    }
-
-    protected override onShow(
-        _position: SearchMenuPosition,
-        _prefix: string,
-        items: SearchMenuItem[],
-    ): void {
-        this.currentItems = items;
-        this.onUpdate();
-    }
-
-    protected override onHide(): void {
-        this.currentItems = [];
-        this.onUpdate();
-    }
+// Minimal adapter using HeadlessSearchMenu to verify filtering behaviour.
+function makeTestMenu() {
+    let currentItems: SearchMenuItem[] = [];
+    const dataProvider = new TSTSearchMenuDataProvider();
+    const onUpdate = jest.fn(() => {
+        // Snapshot active state at callback time.
+        if (menu.isActive()) {
+            currentItems = menu.getFilteredItems();
+        } else {
+            currentItems = [];
+        }
+    });
+    const menu = new HeadlessSearchMenu(onUpdate, dataProvider);
+    return {
+        menu,
+        dataProvider,
+        onUpdate,
+        getCurrentItems: () => currentItems,
+    };
 }
-
-const pos: SearchMenuPosition = { left: 0, bottom: 0 };
 
 function makeItem(text: string): SearchMenuItem {
     return { matchText: text, selectedText: text };
 }
 
-describe("SearchMenuBase adapter", () => {
+describe("HeadlessSearchMenu", () => {
     it("getItems returns matching items after updatePrefix", () => {
-        const menu = new TestAdapter();
-        menu.setChoices([
+        const { menu, dataProvider, onUpdate, getCurrentItems } =
+            makeTestMenu();
+        dataProvider.setChoices([
             makeItem("apple"),
             makeItem("apricot"),
             makeItem("banana"),
         ]);
+        menu.invalidate();
 
-        menu.updatePrefix("ap", pos);
+        menu.updatePrefix("ap");
 
-        expect(menu.currentItems.map((i) => i.selectedText)).toEqual([
+        expect(getCurrentItems().map((i) => i.selectedText)).toEqual([
             "apple",
             "apricot",
         ]);
         expect(menu.isActive()).toBe(true);
-        expect(menu.onUpdate).toHaveBeenCalledTimes(1);
+        expect(onUpdate).toHaveBeenCalledTimes(1);
     });
 
     it("getItems is empty after hide", () => {
-        const menu = new TestAdapter();
-        menu.setChoices([makeItem("apple"), makeItem("banana")]);
-        menu.updatePrefix("a", pos);
+        const { menu, dataProvider, onUpdate, getCurrentItems } =
+            makeTestMenu();
+        dataProvider.setChoices([makeItem("apple"), makeItem("banana")]);
+        menu.invalidate();
+        menu.updatePrefix("a");
 
-        expect(menu.currentItems).toHaveLength(1);
+        expect(getCurrentItems()).toHaveLength(1);
 
         menu.hide();
 
-        expect(menu.currentItems).toEqual([]);
+        expect(getCurrentItems()).toEqual([]);
         expect(menu.isActive()).toBe(false);
         // onUpdate called once for show, once for hide
-        expect(menu.onUpdate).toHaveBeenCalledTimes(2);
+        expect(onUpdate).toHaveBeenCalledTimes(2);
     });
 
     it("updatePrefix hides when no matches", () => {
-        const menu = new TestAdapter();
-        menu.setChoices([makeItem("apple")]);
-        menu.updatePrefix("a", pos);
+        const { menu, dataProvider, getCurrentItems } = makeTestMenu();
+        dataProvider.setChoices([makeItem("apple")]);
+        menu.invalidate();
+        menu.updatePrefix("a");
         expect(menu.isActive()).toBe(true);
 
-        menu.updatePrefix("z", pos);
+        menu.updatePrefix("z");
         expect(menu.isActive()).toBe(false);
-        expect(menu.currentItems).toEqual([]);
+        expect(getCurrentItems()).toEqual([]);
     });
 
     it("updatePrefix hides on exact unique match", () => {
-        const menu = new TestAdapter();
-        menu.setChoices([makeItem("done")]);
+        const { menu, dataProvider } = makeTestMenu();
+        dataProvider.setChoices([makeItem("done")]);
+        menu.invalidate();
 
         // Exact match with no other prefix matches — uniquely satisfied
-        const result = menu.updatePrefix("done", pos);
+        const result = menu.updatePrefix("done");
         expect(result).toBe(true);
         expect(menu.isActive()).toBe(false);
     });

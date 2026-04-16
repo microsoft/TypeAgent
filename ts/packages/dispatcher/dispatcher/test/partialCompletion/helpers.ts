@@ -4,57 +4,61 @@
 import { jest, type jest as JestTypes } from "@jest/globals";
 import {
     ICompletionDispatcher,
-    ISearchMenu,
+    ISearchMenuControl,
     PartialCompletionSession,
 } from "../../src/helpers/completion/session.js";
-import {
-    SearchMenuBase,
-    SearchMenuPosition,
-} from "../../src/helpers/completion/searchMenu.js";
+import { HeadlessSearchMenu } from "../../src/helpers/completion/controller.js";
 import { CompletionGroup, SeparatorMode } from "@typeagent/agent-sdk";
 import { CommandCompletionResult } from "@typeagent/dispatcher-types";
 
 export { PartialCompletionSession };
-export type { ICompletionDispatcher, ISearchMenu };
+export type { ICompletionDispatcher, ISearchMenuControl };
 export type { CompletionGroup };
 export type { CommandCompletionResult };
-export type { SearchMenuPosition };
 
 type Mocked<T extends (...args: any[]) => any> = T &
     JestTypes.MockedFunction<T>;
 
-// Real trie-backed ISearchMenu backed by SearchMenuBase.
+// Real trie-backed ISearchMenuControl using HeadlessSearchMenu.
 // Every method is a jest.fn() wrapping the real implementation so tests can
 // assert on call counts and arguments.
-export class TestSearchMenu extends SearchMenuBase {
-    override setChoices: Mocked<SearchMenuBase["setChoices"]> = jest.fn(
-        (...args: Parameters<SearchMenuBase["setChoices"]>) =>
-            super.setChoices(...args),
+export class TestSearchMenu extends HeadlessSearchMenu {
+    override invalidate: Mocked<ISearchMenuControl["invalidate"]> = jest.fn(
+        () => super.invalidate(),
     ) as any;
 
-    override updatePrefix: Mocked<ISearchMenu["updatePrefix"]> = jest.fn(
-        (prefix: string, position: SearchMenuPosition): boolean =>
-            super.updatePrefix(prefix, position),
+    override updatePrefix: Mocked<ISearchMenuControl["updatePrefix"]> = jest.fn(
+        (prefix: string): boolean => super.updatePrefix(prefix),
     ) as any;
 
-    override hasExactMatch: Mocked<ISearchMenu["hasExactMatch"]> = jest.fn(
-        (text: string): boolean => super.hasExactMatch(text),
-    ) as any;
-
-    override hide: Mocked<ISearchMenu["hide"]> = jest.fn(() =>
+    override hide: Mocked<ISearchMenuControl["hide"]> = jest.fn(() =>
         super.hide(),
     ) as any;
 
-    override isActive: Mocked<ISearchMenu["isActive"]> = jest.fn(() =>
+    override isActive: Mocked<HeadlessSearchMenu["isActive"]> = jest.fn(() =>
         super.isActive(),
     ) as any;
 
-    override getFilteredItems: Mocked<ISearchMenu["getFilteredItems"]> =
-        jest.fn(() => super.getFilteredItems()) as any;
+    constructor(session: PartialCompletionSession) {
+        super(() => {}, session);
+    }
 }
 
-export function makeMenu(): TestSearchMenu {
-    return new TestSearchMenu();
+// Create a wired session + menu pair.
+export function makeSession(
+    dispatcher: ICompletionDispatcher | MockDispatcher,
+): { session: PartialCompletionSession; menu: TestSearchMenu } {
+    const session = new PartialCompletionSession(
+        dispatcher as ICompletionDispatcher,
+    );
+    const menu = new TestSearchMenu(session);
+    session.setMenu(menu);
+    return { session, menu };
+}
+
+// Legacy helper — creates a TestSearchMenu from a pre-existing session.
+export function makeMenu(session: PartialCompletionSession): TestSearchMenu {
+    return new TestSearchMenu(session);
 }
 
 export type MockDispatcher = {
@@ -78,9 +82,6 @@ export function makeDispatcher(
             .mockResolvedValue(result),
     };
 }
-
-export const anyPosition: SearchMenuPosition = { left: 0, bottom: 0 };
-export const getPos = (_prefix: string) => anyPosition;
 
 export function makeCompletionResult(
     completions: string[],
@@ -127,11 +128,8 @@ export function makeMultiGroupResult(
     };
 }
 
-// Returns the selectedText values from the last setChoices call on a
-// TestSearchMenu mock.  Avoids repeating the verbose mock.calls pattern.
-export function lastSetChoicesItems(menu: TestSearchMenu): string[] {
-    const calls = menu.setChoices.mock.calls;
-    return calls[calls.length - 1][0].map(
-        (i: { selectedText: string }) => i.selectedText,
-    );
+// Returns the selectedText values of items currently loaded in the
+// session's trie.  Replaces the old setChoices-based introspection.
+export function loadedItems(session: PartialCompletionSession): string[] {
+    return session.filterItems("").map((i) => i.selectedText);
 }

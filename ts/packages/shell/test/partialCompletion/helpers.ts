@@ -6,16 +6,13 @@
 // packages/dispatcher/dispatcher/test/partialCompletion/.
 
 import { jest } from "@jest/globals";
-import {
-    SearchMenuPosition,
-    createCompletionController,
-} from "agent-dispatcher/helpers/completion";
+import { createCompletionController } from "agent-dispatcher/helpers/completion";
 import type { CompletionController } from "agent-dispatcher/helpers/completion";
 import { CompletionGroup, SeparatorMode } from "@typeagent/agent-sdk";
 import { CommandCompletionResult } from "agent-dispatcher";
 
 export { createCompletionController };
-export type { CompletionController, SearchMenuPosition };
+export type { CompletionController };
 
 type GetCommandCompletion = (input: string) => Promise<CommandCompletionResult>;
 
@@ -38,9 +35,6 @@ export function makeDispatcher(
             .mockResolvedValue(result),
     };
 }
-
-export const anyPosition: SearchMenuPosition = { left: 0, bottom: 0 };
-export const getPos = (_prefix: string) => anyPosition;
 
 export function makeCompletionResult(
     completions: string[],

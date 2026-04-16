@@ -8,7 +8,6 @@ import { SearchMenuItem } from "./searchMenuUI/searchMenuUI";
 import {
     CompletionController,
     createCompletionController,
-    ISearchMenu,
 } from "agent-dispatcher/helpers/completion";
 
 import registerDebug from "debug";
@@ -66,21 +65,22 @@ export class PartialCompletion {
         inline: boolean = true,
         onToggleMode?: () => void,
     ) {
+        // Create controller first — it implements SearchMenuDataProvider.
+        this.controller = createCompletionController(dispatcher);
+
         this.searchMenu = new SearchMenu(
+            this.controller,
             (item) => {
                 this.handleSelect(item);
             },
             inline,
+            (prefix) => this.getSearchMenuPosition(prefix),
             this.input.getTextEntry(),
             onToggleMode,
         );
 
-        // Wrap SearchMenu to implement ISearchMenu (same shape, just typed).
-        const menuAdapter: ISearchMenu = this.searchMenu;
-
-        this.controller = createCompletionController(dispatcher, {
-            menu: menuAdapter,
-        });
+        // Wire the SearchMenu back as the controller's menu control.
+        this.controller.setMenu(this.searchMenu);
 
         const selectionChangeHandler = () => {
             debug("Partial completion update on selection changed");
@@ -124,9 +124,7 @@ export class PartialCompletion {
                 : "forward";
         this.previousInput = input;
 
-        this.controller.update(input, direction, (prefix) =>
-            this.getSearchMenuPosition(prefix),
-        );
+        this.controller.update(input, direction);
     }
 
     public hide() {
@@ -362,9 +360,7 @@ export class PartialCompletion {
             this.previousInput.startsWith(input)
                 ? "backward"
                 : "forward";
-        this.controller.dismiss(input, direction, (prefix) =>
-            this.getSearchMenuPosition(prefix),
-        );
+        this.controller.dismiss(input, direction);
     }
 
     public handleMouseWheel(event: WheelEvent) {

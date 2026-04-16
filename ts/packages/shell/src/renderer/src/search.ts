@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 import { isElectron } from "./main";
-import { SearchMenuBase } from "agent-dispatcher/helpers/completion";
+import {
+    isUniquelySatisfied,
+    type SearchMenuDataProvider,
+} from "agent-dispatcher/helpers/completion";
 import { CompletionToggle } from "./searchMenuUI/completionToggle";
 import { InlineSearchMenuUI } from "./searchMenuUI/inlineSearchMenuUI";
 import { LocalSearchMenuUI } from "./searchMenuUI/localSearchMenuUI";
@@ -14,20 +17,26 @@ import {
 } from "./searchMenuUI/searchMenuUI";
 
 // Architecture: docs/architecture/completion.md — §7 Shell — Search Menu
-export class SearchMenu extends SearchMenuBase {
+export class SearchMenu {
     private searchMenuUI: SearchMenuUI | undefined;
     private lastPosition: SearchMenuPosition | undefined;
     private lastPrefix: string | undefined;
     private lastItems: SearchMenuItem[] | undefined;
     private readonly toggle: CompletionToggle | undefined;
+    private prefix: string | undefined;
+    private _active: boolean = false;
+    private _filteredItems: SearchMenuItem[] = [];
 
     constructor(
+        private readonly dataProvider: SearchMenuDataProvider<SearchMenuItem>,
         private readonly onCompletion: (item: SearchMenuItem) => void,
         private inline: boolean,
+        private readonly getPosition: (
+            prefix: string,
+        ) => SearchMenuPosition | undefined,
         private readonly textEntry?: HTMLSpanElement,
         onToggleMode?: () => void,
     ) {
-        super();
         if (onToggleMode && textEntry && textEntry.parentElement) {
             this.toggle = new CompletionToggle(
                 inline ? "expand" : "collapse",
@@ -73,36 +82,82 @@ export class SearchMenu extends SearchMenuBase {
         }
     }
 
-    protected override onShow(
-        position: SearchMenuPosition,
-        prefix: string,
-        items: SearchMenuItem[],
-    ): void {
-        this.lastPosition = position;
-        this.lastPrefix = prefix;
-        this.lastItems = items;
-        if (this.searchMenuUI === undefined) {
-            this.searchMenuUI = this.createUI();
+    // ── ISearchMenuControl implementation ───────────────────────────────────────
+
+    public invalidate(): void {
+        this.prefix = undefined;
+        this._filteredItems = [];
+    }
+
+    public numChoices(): number {
+        return this.dataProvider.numChoices();
+    }
+
+    public updatePrefix(prefix: string): boolean {
+        if (this.dataProvider.numChoices() === 0) {
+            return false;
         }
-        this.searchMenuUI.update({ position, prefix, items });
-        this.toggle?.show();
-        this.updateToggleLayout();
+
+        const position = this.getPosition(prefix);
+        if (position === undefined) {
+            this.hide();
+            return false;
+        }
+
+        if (this.prefix === prefix && this._active) {
+            this.lastPosition = position;
+            this.searchMenuUI!.update({ position });
+            this.updateToggleLayout();
+            return false;
+        }
+
+        this.prefix = prefix;
+        const items = this.dataProvider.filterItems(prefix);
+        const uniquelySatisfied = isUniquelySatisfied(items, prefix);
+        const showMenu = items.length !== 0 && !uniquelySatisfied;
+
+        if (showMenu) {
+            this._active = true;
+            this._filteredItems = items;
+            // onShow
+            this.lastPosition = position;
+            this.lastPrefix = prefix;
+            this.lastItems = items;
+            if (this.searchMenuUI === undefined) {
+                this.searchMenuUI = this.createUI();
+            }
+            this.searchMenuUI.update({ position, prefix, items });
+            this.toggle?.show();
+            this.updateToggleLayout();
+        } else {
+            this.hide();
+        }
+        return uniquelySatisfied;
     }
 
-    protected override onUpdatePosition(position: SearchMenuPosition): void {
-        this.lastPosition = position;
-        this.searchMenuUI!.update({ position });
-        this.updateToggleLayout();
+    public hide(): void {
+        if (this._active) {
+            this._active = false;
+            this._filteredItems = [];
+            // onHide
+            this.lastPosition = undefined;
+            this.lastPrefix = undefined;
+            this.lastItems = undefined;
+            this.toggle?.hide();
+            this.searchMenuUI?.close();
+            this.searchMenuUI = undefined;
+        }
     }
 
-    protected override onHide(): void {
-        this.lastPosition = undefined;
-        this.lastPrefix = undefined;
-        this.lastItems = undefined;
-        this.toggle?.hide();
-        this.searchMenuUI?.close();
-        this.searchMenuUI = undefined;
+    public isActive(): boolean {
+        return this._active;
     }
+
+    public getFilteredItems(): SearchMenuItem[] {
+        return this._filteredItems;
+    }
+
+    // ── UI event handling ─────────────────────────────────────────────────────
 
     public handleMouseWheel(deltaY: number) {
         this.searchMenuUI?.adjustSelection(deltaY);

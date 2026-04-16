@@ -2,34 +2,29 @@
 // Licensed under the MIT License.
 
 import {
-    PartialCompletionSession,
     CommandCompletionResult,
     CompletionGroup,
-    makeMenu,
+    makeSession,
     makeDispatcher,
     makeCompletionResult,
-    getPos,
-    anyPosition,
 } from "./helpers.js";
 
 describe("PartialCompletionSession — result processing", () => {
     test("startIndex narrows the anchor (current) to input[0..startIndex]", async () => {
-        const menu = makeMenu();
         // startIndex=4 means grammar consumed "play" (4 chars); the
         // trailing space is the separator between anchor and completions.
         const result = makeCompletionResult(["song", "shuffle"], 4);
         const dispatcher = makeDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session, menu } = makeSession(dispatcher);
 
-        session.update("play song", getPos);
+        session.update("play song");
         await Promise.resolve();
 
         // prefix should be "song" (the text after anchor "play" + separator " ")
-        expect(menu.updatePrefix).toHaveBeenCalledWith("song", anyPosition);
+        expect(menu.updatePrefix).toHaveBeenCalledWith("song");
     });
 
     test("group order preserved: items appear in backend-provided group order", async () => {
-        const menu = makeMenu();
         const group1: CompletionGroup = {
             name: "grammar",
             completions: ["by"],
@@ -48,13 +43,12 @@ describe("PartialCompletionSession — result processing", () => {
             afterWildcard: "none",
         };
         const dispatcher = makeDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session } = makeSession(dispatcher);
 
-        session.update("play ", getPos);
+        session.update("play ");
         await Promise.resolve();
 
-        const calls = menu.setChoices.mock.calls;
-        const items = calls[calls.length - 1][0] as {
+        const items = session.filterItems("") as {
             sortIndex: number;
             selectedText: string;
         }[];
@@ -66,7 +60,6 @@ describe("PartialCompletionSession — result processing", () => {
     });
 
     test("needQuotes propagated from group to each SearchMenuItem", async () => {
-        const menu = makeMenu();
         const group: CompletionGroup = {
             name: "entities",
             completions: ["Bohemian Rhapsody"],
@@ -81,12 +74,12 @@ describe("PartialCompletionSession — result processing", () => {
             afterWildcard: "none",
         };
         const dispatcher = makeDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session } = makeSession(dispatcher);
 
-        session.update("play ", getPos);
+        session.update("play ");
         await Promise.resolve();
 
-        expect(menu.setChoices).toHaveBeenCalledWith(
+        expect(session.filterItems("")).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({
                     selectedText: "Bohemian Rhapsody",
@@ -97,7 +90,6 @@ describe("PartialCompletionSession — result processing", () => {
     });
 
     test("unsorted group items are sorted alphabetically", async () => {
-        const menu = makeMenu();
         const group: CompletionGroup = {
             name: "test",
             completions: ["zebra", "apple", "mango"],
@@ -112,19 +104,17 @@ describe("PartialCompletionSession — result processing", () => {
             afterWildcard: "none",
         };
         const dispatcher = makeDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session } = makeSession(dispatcher);
 
-        session.update("x", getPos);
+        session.update("x");
         await Promise.resolve();
 
-        const calls = menu.setChoices.mock.calls;
-        const items = calls[calls.length - 1][0] as { selectedText: string }[];
+        const items = session.filterItems("") as { selectedText: string }[];
         const texts = items.map((i) => i.selectedText);
         expect(texts).toEqual(["apple", "mango", "zebra"]);
     });
 
     test("empty completions list does not call setChoices with items", async () => {
-        const menu = makeMenu();
         const result: CommandCompletionResult = {
             startIndex: 0,
             completions: [{ name: "empty", completions: [] }],
@@ -133,18 +123,16 @@ describe("PartialCompletionSession — result processing", () => {
             afterWildcard: "none",
         };
         const dispatcher = makeDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session, menu } = makeSession(dispatcher);
 
-        session.update("play", getPos);
+        session.update("play");
         await Promise.resolve();
 
-        // Only the initial setChoices([]) call (cancel) should have been made
-        expect(menu.setChoices).toHaveBeenCalledTimes(1);
-        expect(menu.setChoices).toHaveBeenCalledWith([]);
+        // Only the initial invalidate call (cancel) should have been made
+        expect(menu.invalidate).toHaveBeenCalledTimes(1);
     });
 
     test("emojiChar from group is propagated to each SearchMenuItem", async () => {
-        const menu = makeMenu();
         const group: CompletionGroup = {
             name: "agents",
             completions: ["player", "calendar"],
@@ -160,12 +148,12 @@ describe("PartialCompletionSession — result processing", () => {
             afterWildcard: "none",
         };
         const dispatcher = makeDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session } = makeSession(dispatcher);
 
-        session.update("", getPos);
+        session.update("");
         await Promise.resolve();
 
-        expect(menu.setChoices).toHaveBeenCalledWith(
+        expect(session.filterItems("")).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({
                     selectedText: "player",
@@ -180,7 +168,6 @@ describe("PartialCompletionSession — result processing", () => {
     });
 
     test("emojiChar absent from group means no emojiChar on items", async () => {
-        const menu = makeMenu();
         const group: CompletionGroup = {
             name: "plain",
             completions: ["alpha"],
@@ -195,18 +182,16 @@ describe("PartialCompletionSession — result processing", () => {
             afterWildcard: "none",
         };
         const dispatcher = makeDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session } = makeSession(dispatcher);
 
-        session.update("", getPos);
+        session.update("");
         await Promise.resolve();
 
-        const calls = menu.setChoices.mock.calls;
-        const items = calls[calls.length - 1][0] as Record<string, unknown>[];
+        const items = session.filterItems("") as Record<string, unknown>[];
         expect(items[0].emojiChar).toBeUndefined();
     });
 
     test("sorted group preserves order while unsorted group is alphabetized", async () => {
-        const menu = makeMenu();
         const sortedGroup: CompletionGroup = {
             name: "grammar",
             completions: ["zebra", "apple"],
@@ -227,13 +212,12 @@ describe("PartialCompletionSession — result processing", () => {
             afterWildcard: "none",
         };
         const dispatcher = makeDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session } = makeSession(dispatcher);
 
-        session.update("x", getPos);
+        session.update("x");
         await Promise.resolve();
 
-        const calls = menu.setChoices.mock.calls;
-        const items = calls[calls.length - 1][0] as {
+        const items = session.filterItems("") as {
             selectedText: string;
             sortIndex: number;
         }[];
@@ -249,49 +233,46 @@ describe("PartialCompletionSession — result processing", () => {
     });
 
     test("negative startIndex falls back to full input as anchor", async () => {
-        const menu = makeMenu();
         const result = makeCompletionResult(["song"], -1, {
             separatorMode: "none",
         });
         const dispatcher = makeDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session, menu } = makeSession(dispatcher);
 
-        session.update("play", getPos);
+        session.update("play");
         await Promise.resolve();
 
         // Anchor is "play" (full input).  rawPrefix="" → updatePrefix("", ...)
-        expect(menu.updatePrefix).toHaveBeenCalledWith("", anyPosition);
+        expect(menu.updatePrefix).toHaveBeenCalledWith("");
     });
 
     test("startIndex=0 sets empty anchor", async () => {
-        const menu = makeMenu();
         const result = makeCompletionResult(["play"], 0, {
             separatorMode: "none",
         });
         const dispatcher = makeDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session, menu } = makeSession(dispatcher);
 
-        session.update("play", getPos);
+        session.update("play");
         await Promise.resolve();
 
         // Anchor is "" (empty).  rawPrefix="play" → updatePrefix("play", ...)
-        expect(menu.updatePrefix).toHaveBeenCalledWith("play", anyPosition);
+        expect(menu.updatePrefix).toHaveBeenCalledWith("play");
     });
 
     test("startIndex beyond input length falls back to full input as anchor", async () => {
-        const menu = makeMenu();
         // startIndex=99 is beyond "play" (length 4) — anchor falls back to "play"
         const result = makeCompletionResult(["song"], 99, {
             separatorMode: "none",
         });
         const dispatcher = makeDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session, menu } = makeSession(dispatcher);
 
-        session.update("play", getPos);
+        session.update("play");
         await Promise.resolve();
 
         // Anchor is "play" (full input).  reuseSession is called with the captured
         // input "play", so rawPrefix="" and updatePrefix is called with "".
-        expect(menu.updatePrefix).toHaveBeenCalledWith("", anyPosition);
+        expect(menu.updatePrefix).toHaveBeenCalledWith("");
     });
 });
