@@ -118,6 +118,7 @@ export async function createWebSocket(autoReconnect: boolean = true) {
     const endpoint = `${protocol}://${url.hostname}${port}`;
 
     return new Promise<WebSocket | undefined>((resolve) => {
+        let reconnecting = false;
         console.log(`opening web socket to ${endpoint} `);
         const webSocket = new WebSocket(endpoint);
 
@@ -181,8 +182,14 @@ export async function createWebSocket(autoReconnect: boolean = true) {
             resolve(undefined);
 
             // reconnect?
-            if (autoReconnect) {
-                createWebSocket().then((ws) => (globalThis.ws = ws));
+            if (autoReconnect && !reconnecting) {
+                reconnecting = true;
+                createWebSocket().then((ws) => {
+                    if (ws) {
+                        globalThis.ws = ws;
+                    }
+                    reconnecting = false;
+                });
             } else {
                 clientIOChannel.notifyDisconnected();
                 dispatcherChannel.notifyDisconnected();
