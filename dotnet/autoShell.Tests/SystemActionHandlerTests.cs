@@ -1,22 +1,22 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.Json;
 using autoShell.Handlers;
 using autoShell.Services;
 using Moq;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Tests;
 
-public class SystemCommandHandlerTests
+public class SystemActionHandlerTests
 {
     private readonly Mock<IProcessService> _processMock = new();
     private readonly Mock<IDebuggerService> _debuggerMock = new();
-    private readonly SystemCommandHandler _handler;
+    private readonly SystemActionHandler _handler;
 
-    public SystemCommandHandlerTests()
+    public SystemActionHandlerTests()
     {
-        _handler = new SystemCommandHandler(_processMock.Object, _debuggerMock.Object);
+        _handler = new SystemActionHandler(_processMock.Object, _debuggerMock.Object);
     }
 
     /// <summary>
@@ -25,7 +25,7 @@ public class SystemCommandHandlerTests
     [Fact]
     public void Debug_LaunchesDebugger()
     {
-        Handle("Debug", "");
+        _handler.Handle("Debug", JsonDocument.Parse("{}").RootElement);
 
         _debuggerMock.Verify(d => d.Launch(), Times.Once);
     }
@@ -36,13 +36,8 @@ public class SystemCommandHandlerTests
     [Fact]
     public void ToggleNotifications_OpensActionCenter()
     {
-        Handle("ToggleNotifications", "");
+        _handler.Handle("ToggleNotifications", JsonDocument.Parse("{}").RootElement);
 
         _processMock.Verify(p => p.StartShellExecute("ms-actioncenter:"), Times.Once);
-    }
-
-    private void Handle(string key, string value)
-    {
-        _handler.Handle(key, value, JToken.FromObject(value));
     }
 }

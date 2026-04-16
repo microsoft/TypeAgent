@@ -4,17 +4,16 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using autoShell.Logging;
 using autoShell.Services.Interop;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell;
 
 /// <summary>
 /// Entry point for the autoShell Windows automation console application.
 /// Reads JSON commands from stdin (interactive mode) or command-line arguments
-/// and dispatches them to the appropriate handler via <see cref="CommandDispatcher"/>.
+/// and dispatches them to the appropriate handler via <see cref="ActionDispatcher"/>.
 /// </summary>
 /// <remarks>
 /// Each JSON command is a single object where property names are command names
@@ -32,7 +31,7 @@ internal class AutoShell
     #endregion P/Invoke
 
     private static readonly ConsoleLogger s_logger = new();
-    private static readonly CommandDispatcher s_dispatcher = CommandDispatcher.Create(s_logger);
+    private static readonly ActionDispatcher s_dispatcher = ActionDispatcher.Create(s_logger);
 
     /// <summary>
     /// Program entry point. Runs in one of two modes:
@@ -69,17 +68,27 @@ internal class AutoShell
 
         try
         {
-            // Try parsing as a JSON array of commands
-            JArray commands = JArray.Parse(cmdLine);
-            foreach (JObject jo in commands.Children<JObject>())
+            using var doc = JsonDocument.Parse(cmdLine);
+            var root = doc.RootElement;
+
+            if (root.ValueKind == JsonValueKind.Array)
             {
-                ExecLine(jo);
+                foreach (var element in root.EnumerateArray())
+                {
+                    var result = ExecLine(element);
+                    Console.WriteLine(JsonSerializer.Serialize(result));
+                }
+            }
+            else
+            {
+                var result = ExecLine(root);
+                Console.WriteLine(JsonSerializer.Serialize(result));
             }
         }
-        catch (JsonReaderException)
+        catch (Exception ex)
         {
-            // Not an array — treat as a single JSON object
-            ExecLine(JObject.Parse(cmdLine));
+            var result = ActionResult.Fail($"Failed to parse command line: {ex.Message}");
+            Console.WriteLine(JsonSerializer.Serialize(result));
         }
     }
 
@@ -90,12 +99,12 @@ internal class AutoShell
     /// </summary>
     private static void RunInteractive()
     {
-        bool quit = false;
-        while (!quit)
+        while (true)
         {
+            string line = null;
             try
             {
-                string line = Console.ReadLine();
+                line = Console.ReadLine();
 
                 // Null means stdin was closed (e.g., parent process exited)
                 if (line == null)
@@ -104,11 +113,40 @@ internal class AutoShell
                 }
 
                 // Each line is a JSON object with one or more command keys
-                JObject root = JObject.Parse(line);
-                quit = ExecLine(root);
+                using var doc = JsonDocument.Parse(line);
+                var root = doc.RootElement;
+                ActionResult result = ExecLine(root);
+
+                // Pass through the request id if present
+                if (root.TryGetProperty("id", out JsonElement idElement))
+                {
+                    result.Id = idElement.ToString();
+                }
+                Console.WriteLine(JsonSerializer.Serialize(result));
+
+                if (result.IsQuit)
+                {
+                    break;
+                }
             }
             catch (Exception ex)
             {
+                // Always write a JSON failure to stdout so the TS sendAction
+                // correlation doesn't hang waiting for a response.
+                var errorResult = ActionResult.Fail($"Error: {ex.Message}");
+
+                // Try to extract the request id from the raw line for correlation
+                try
+                {
+                    using var errDoc = JsonDocument.Parse(line);
+                    if (errDoc.RootElement.TryGetProperty("id", out JsonElement errorId))
+                    {
+                        errorResult.Id = errorId.ToString();
+                    }
+                }
+                catch { /* line wasn't valid JSON — send response without id */ }
+
+                Console.WriteLine(JsonSerializer.Serialize(errorResult));
                 s_logger.Error(ex);
             }
         }
@@ -146,7 +184,6 @@ internal class AutoShell
     /// <summary>
     /// Dispatches a parsed JSON command object to the appropriate handler.
     /// </summary>
-    /// <returns><c>true</c> if the application should exit (quit command received).</returns>
-    private static bool ExecLine(JObject root)
+    private static ActionResult ExecLine(JsonElement root)
         => s_dispatcher.Dispatch(root);
 }

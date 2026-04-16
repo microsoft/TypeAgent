@@ -2,91 +2,50 @@
 // Licensed under the MIT License.
 
 using System;
-using System.Collections.Generic;
+using autoShell.Handlers.Generated;
 using autoShell.Services;
 using Microsoft.Win32;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers.Settings;
 
 /// <summary>
-/// Handles personalization settings: title bar color, transparency, high contrast, and theme mode.
+/// Handles personalization settings: theme mode, title bar color, transparency, and high contrast.
 /// </summary>
-internal class PersonalizationSettingsHandler : ICommandHandler
+internal class PersonalizationSettingsHandler : SettingsHandlerBase
 {
-    private readonly IRegistryService _registry;
-    private readonly IProcessService _process;
-
+    /// <summary>
+    /// Registers registered actions for title bar color, transparency, and high contrast.
+    /// System theme mode requires dual registry writes plus a broadcast and is handled as a specialized action.
+    /// </summary>
     public PersonalizationSettingsHandler(IRegistryService registry, IProcessService process)
+        : base(registry, process)
     {
-        _registry = registry;
-        _process = process;
+
+        AddRegistryToggleAction("ApplyColorToTitleBar", new RegistryToggleConfig(
+            @"Software\Microsoft\Windows\DWM", "ColorPrevalence", "enableColor", 1, 0));
+        AddRegistryToggleAction("EnableTransparency", new RegistryToggleConfig(
+            @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency", "enable", 1, 0));
+        AddOpenSettingsAction("HighContrastTheme", new OpenSettingsConfig(
+            "ms-settings:easeofaccess-highcontrast", "high contrast settings"));
+        AddAction<SystemThemeModeParams>("SystemThemeMode", HandleSystemThemeMode);
     }
 
-    /// <inheritdoc/>
-    public IEnumerable<string> SupportedCommands { get; } =
-    [
-        "ApplyColorToTitleBar",
-        "EnableTransparency",
-        "HighContrastTheme",
-        "SystemThemeMode",
-    ];
-
-    /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    private ActionResult HandleSystemThemeMode(SystemThemeModeParams p)
     {
-        var param = JObject.Parse(value);
-
-        switch (key)
+        string mode = p.Mode;
+        if (string.IsNullOrEmpty(mode))
         {
-            case "ApplyColorToTitleBar":
-                HandleApplyColorToTitleBar(param);
-                break;
-
-            case "EnableTransparency":
-                HandleEnableTransparency(param);
-                break;
-
-            case "HighContrastTheme":
-                _process.StartShellExecute("ms-settings:easeofaccess-highcontrast");
-                break;
-
-            case "SystemThemeMode":
-                HandleSystemThemeMode(param);
-                break;
+            mode = "dark";
         }
-    }
 
-    private void HandleApplyColorToTitleBar(JObject param)
-    {
-        bool enable = param.Value<bool?>("enableColor") ?? true;
-        _registry.SetValue(
-            @"Software\Microsoft\Windows\DWM",
-            "ColorPrevalence",
-            enable ? 1 : 0,
-            RegistryValueKind.DWord);
-    }
-
-    private void HandleEnableTransparency(JObject param)
-    {
-        bool enable = param.Value<bool?>("enable") ?? true;
-        _registry.SetValue(
-            @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
-            "EnableTransparency",
-            enable ? 1 : 0,
-            RegistryValueKind.DWord);
-    }
-
-    private void HandleSystemThemeMode(JObject param)
-    {
-        string mode = param.Value<string>("mode") ?? "dark";
         int value = mode.Equals("light", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
 
         const string PersonalizePath = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
         // Set apps theme (AppsUseLightTheme: 0 = dark, 1 = light)
-        _registry.SetValue(PersonalizePath, "AppsUseLightTheme", value, RegistryValueKind.DWord);
+        Registry.SetValue(PersonalizePath, "AppsUseLightTheme", value, RegistryValueKind.DWord);
         // Set system theme — taskbar, Start menu, etc.
-        _registry.SetValue(PersonalizePath, "SystemUsesLightTheme", value, RegistryValueKind.DWord);
-        _registry.BroadcastSettingChange("ImmersiveColorSet");
+        Registry.SetValue(PersonalizePath, "SystemUsesLightTheme", value, RegistryValueKind.DWord);
+        Registry.BroadcastSettingChange("ImmersiveColorSet");
+        return ActionResult.Ok($"System theme set to {mode}");
     }
 }

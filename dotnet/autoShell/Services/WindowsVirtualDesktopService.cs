@@ -3,10 +3,9 @@
 
 using System;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using System.Windows;
 using autoShell.Logging;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Services;
 
@@ -272,11 +271,14 @@ internal class WindowsVirtualDesktopService : IVirtualDesktopService
     {
         try
         {
-            JArray desktopNames = JArray.Parse(jsonDesktopNames);
+            using var doc = JsonDocument.Parse(jsonDesktopNames);
+            var desktopNames = doc.RootElement;
 
-            if (desktopNames.Count == 0)
+            if (desktopNames.GetArrayLength() == 0)
             {
-                desktopNames = ["desktop X"];
+                // Fall back to a default name
+                CreateDesktops("""["desktop X"]""");
+                return;
             }
 
             if (_virtualDesktopManagerInternal == null)
@@ -285,9 +287,9 @@ internal class WindowsVirtualDesktopService : IVirtualDesktopService
                 return;
             }
 
-            foreach (JToken desktopNameToken in desktopNames)
+            foreach (var desktopNameElement in desktopNames.EnumerateArray())
             {
-                string desktopName = desktopNameToken.ToString();
+                string desktopName = desktopNameElement.GetString() ?? $"Desktop {desktopNameElement}";
 
                 try
                 {

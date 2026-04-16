@@ -82,33 +82,34 @@ internal sealed class AutoShellProcess : IDisposable
     /// <summary>
     /// Reads a single line of stdout with a timeout.
     /// Returns null if the timeout expires before a line is available.
+    /// Uses a lock to prevent concurrent reads on the same stream.
     /// </summary>
+    private readonly SemaphoreSlim _readLock = new(1, 1);
+
     public async Task<string?> ReadLineAsync(int timeoutMs = 5000)
     {
-        using var cts = new CancellationTokenSource(timeoutMs);
+        await _readLock.WaitAsync();
         try
         {
-            var lineTask = _process.StandardOutput.ReadLineAsync(cts.Token).AsTask();
-            var completedTask = await Task.WhenAny(lineTask, Task.Delay(timeoutMs, cts.Token));
-            if (completedTask == lineTask)
-            {
-                await cts.CancelAsync();
-                return await lineTask;
-            }
-            return null;
+            using var cts = new CancellationTokenSource(timeoutMs);
+            return await _process.StandardOutput.ReadLineAsync(cts.Token).AsTask();
         }
         catch (OperationCanceledException)
         {
             return null;
         }
+        finally
+        {
+            _readLock.Release();
+        }
     }
 
     /// <summary>
-    /// Sends {"quit":""} and waits for the process to exit.
+    /// Sends a quit command and waits for the process to exit.
     /// </summary>
     public void SendQuit(int timeoutMs = 5000)
     {
-        SendCommand("""{"quit":""}""");
+        SendCommand("""{"actionName":"quit","parameters":{}}""");
         _process.WaitForExit(timeoutMs);
     }
 
