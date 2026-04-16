@@ -320,6 +320,7 @@ async function canExecute(
 export type ActionExecutionError = {
     error: string;
     failedAction: ExecutableAction;
+    fallbackToReasoning?: boolean;
 };
 
 export async function executeActions(

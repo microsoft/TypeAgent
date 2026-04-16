@@ -472,8 +472,8 @@ export class RequestCommandHandler implements CommandHandler {
                 // a second chance using the same reasoning loop as UnknownAction.
                 if (
                     !systemContext.noReasoning &&
-                    (execResult !== undefined ||
-                        execResult?.fallbackToReasoning)
+                    execResult !== undefined &&
+                    execResult.fallbackToReasoning
                 ) {
                     const needsErrorReasoning = requestAction.actions.some(
                         ({ action }) => {
