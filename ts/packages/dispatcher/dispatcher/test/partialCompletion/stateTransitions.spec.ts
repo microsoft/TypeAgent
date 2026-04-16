@@ -8,6 +8,7 @@ import {
     makeSession,
     makeDispatcher,
     makeCompletionResult,
+    isActive,
 } from "./helpers.js";
 
 describe("PartialCompletionSession — state transitions", () => {
@@ -39,18 +40,18 @@ describe("PartialCompletionSession — state transitions", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
-    test("PENDING → ACTIVE: completions returned → setChoices + updatePrefix called", async () => {
+    test("PENDING → ACTIVE: completions returned → state available", async () => {
         const result = makeCompletionResult(["song", "shuffle"], 4);
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session, onUpdate } = makeSession(dispatcher);
 
         session.update("play ");
         await Promise.resolve(); // flush microtask
 
-        expect(session.filterItems("").map(i => i.selectedText)).toEqual(
+        expect(session.filterItems("").map((i) => i.selectedText)).toEqual(
             expect.arrayContaining(["shuffle", "song"]),
         );
-        expect(menu.updatePrefix).toHaveBeenCalled();
+        expect(onUpdate).toHaveBeenCalled();
     });
 
     test("PENDING → ACTIVE: empty result (closedSet=true) suppresses re-fetch while input has same prefix", async () => {
@@ -88,7 +89,7 @@ describe("PartialCompletionSession — state transitions", () => {
             closedSet: true,
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play ");
         await Promise.resolve(); // → ACTIVE, anchor = "play"
@@ -98,7 +99,7 @@ describe("PartialCompletionSession — state transitions", () => {
         session.update("play xyz");
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-        expect(menu.hide).toHaveBeenCalled();
+        expect(isActive(session)).toBe(false);
     });
 
     test("ACTIVE → re-fetch: closedSet=false, trie has no matches — re-fetches", async () => {
@@ -125,32 +126,31 @@ describe("PartialCompletionSession — state transitions", () => {
             closedSet: true,
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play ");
         await Promise.resolve(); // → ACTIVE, anchor = "play"
 
         // User types non-matching text.  closedSet=true → no re-fetch.
         session.update("play xyz");
-        expect(menu.hide).toHaveBeenCalled();
+        expect(isActive(session)).toBe(false);
 
-        // User backspaces to matching prefix — menu reappears without re-fetch
-        menu.updatePrefix.mockClear();
+        // User backspaces to matching prefix — completions reappear without re-fetch
         session.update("play so");
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-        expect(menu.updatePrefix).toHaveBeenCalledWith("so");
+        expect(session.getCompletionState()?.prefix).toBe("so");
     });
 
     test("hide() preserves anchor so same input reuses session", async () => {
         const dispatcher = makeDispatcher(makeCompletionResult(["song"], 4));
-        const { session, menu } = makeSession(dispatcher);
+        const { session, onUpdate } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
 
         session.hide();
-        expect(menu.hide).toHaveBeenCalled();
+        expect(onUpdate).toHaveBeenCalled();
 
         // After hide, same input within anchor reuses session — no re-fetch
         session.update("play");
@@ -194,7 +194,7 @@ describe("PartialCompletionSession — state transitions", () => {
         resolve(makeCompletionResult(["song"], 4));
         await Promise.resolve();
 
-        expect(session.filterItems("").map(i => i.selectedText)).not.toEqual(
+        expect(session.filterItems("").map((i) => i.selectedText)).not.toEqual(
             expect.arrayContaining(["song"]),
         );
     });
@@ -213,7 +213,7 @@ describe("PartialCompletionSession — state transitions", () => {
             "",
             "forward",
         );
-        expect(session.filterItems("").map(i => i.selectedText)).toEqual(
+        expect(session.filterItems("").map((i) => i.selectedText)).toEqual(
             expect.arrayContaining(["@"]),
         );
     });
@@ -324,7 +324,7 @@ describe("PartialCompletionSession — afterWildcard anchor sliding", () => {
             separatorMode: "spacePunctuation",
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session, onUpdate } = makeSession(dispatcher);
 
         session.update("play my fav");
         await Promise.resolve();
@@ -334,10 +334,10 @@ describe("PartialCompletionSession — afterWildcard anchor sliding", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
 
         // Now type a space — separator present, completionPrefix=""
-        // Trie has "by", so the menu should show it.
+        // Trie has "by", so completions should be available.
         session.update("play my favorite ");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-        expect(menu.updatePrefix).toHaveBeenCalled();
+        expect(onUpdate).toHaveBeenCalled();
     });
 
     test('afterWildcard="all": typing the keyword triggers B4 unique match → re-fetch', async () => {

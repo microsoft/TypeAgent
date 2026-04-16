@@ -541,7 +541,7 @@ class FieldScalar extends FieldBase {
         }
 
         const value = this.editUI.input.value;
-        searchMenu.updatePrefix(value);
+        searchMenu.render(value);
     }
     private handleSearchMenuKeys(event: KeyboardEvent): boolean {
         if (this.editUI === undefined) {
@@ -620,7 +620,6 @@ class FieldScalar extends FieldBase {
                                 selectedText: e,
                             })),
                         );
-                        searchMenu.invalidate();
                         this.updateSearchMenu();
                     });
             }

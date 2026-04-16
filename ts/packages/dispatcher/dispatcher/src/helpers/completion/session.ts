@@ -12,6 +12,7 @@ import {
 import {
     SearchMenuItem,
     TSTSearchMenuDataProvider,
+    isUniquelySatisfied,
     type SearchMenuDataProvider,
 } from "./searchMenu.js";
 import registerDebug from "debug";
@@ -24,19 +25,6 @@ export type CompletionState = {
     prefix: string;
     anchorIndex: number;
 };
-
-// Control surface for the menu — the session drives when to show/hide
-// and what prefix to display.  Data comes from the
-// SearchMenuDataProvider (exposed by CompletionController), not from
-// the menu itself.
-export interface ISearchMenuControl {
-    updatePrefix(prefix: string): boolean;
-    hide(): void;
-    // Reset cached prefix so the next updatePrefix re-queries the data
-    // provider even if the prefix string hasn't changed.  Called when the
-    // underlying trie data changes (e.g. loadLevel).
-    invalidate(): void;
-}
 
 export interface ICompletionDispatcher {
     getCommandCompletion(
@@ -145,25 +133,35 @@ export class PartialCompletionSession
     // already dismissed them.
     private explicitCloseAnchor: string | undefined = undefined;
 
+    // The input text from the most recent update() or explicitHide() call.
+    // Used to compute the cached completionState.
+    private lastInput: string = "";
+
+    // Cached completion state, recomputed at every mutation point.
+    // Callers retrieve this via getCompletionState().
+    private completionState: CompletionState | undefined = undefined;
+
     // Internal trie backing the SearchMenuDataProvider interface.
     private readonly trieProvider = new TSTSearchMenuDataProvider();
 
-    private menu: ISearchMenuControl | undefined;
+    // Callback fired whenever completion state changes.
+    private onUpdate: () => void;
 
-    constructor(private readonly dispatcher: ICompletionDispatcher) {}
+    constructor(
+        private readonly dispatcher: ICompletionDispatcher,
+        onUpdate?: () => void,
+    ) {
+        this.onUpdate = onUpdate ?? (() => {});
+    }
 
-    public setMenu(menu: ISearchMenuControl): void {
-        this.menu = menu;
+    public setOnUpdate(onUpdate: () => void): void {
+        this.onUpdate = onUpdate;
     }
 
     // ── SearchMenuDataProvider implementation ─────────────────────────────────
 
     public filterItems(prefix: string): SearchMenuItem[] {
         return this.trieProvider.filterItems(prefix);
-    }
-
-    public hasExactMatch(text: string): boolean {
-        return this.trieProvider.hasExactMatch(text);
     }
 
     public numChoices(): number {
@@ -177,10 +175,6 @@ export class PartialCompletionSession
         this.menuSepLevel = level;
         const items = itemsAtLevel(this.partitions, level);
         this.trieProvider.setChoices(items);
-        this.menu?.invalidate();
-        if (items.length === 0) {
-            this.menu?.hide();
-        }
     }
 
     // Update partitions and recompute levelCounts.
@@ -189,10 +183,11 @@ export class PartialCompletionSession
         this.levelCounts = computeLevelCounts(partitions);
     }
 
-    // Update the menu with rawPrefix (input[menuAnchorIndex..]).
-    // Returns true when the prefix uniquely satisfies one entry.
-    private updateMenu(rawPrefix: string): boolean {
-        return this.menu?.updatePrefix(rawPrefix) ?? false;
+    // Recompute the cached completionState from current session fields,
+    // then fire the onUpdate callback.
+    private notifyUpdate(): void {
+        this.completionState = this.computeCompletionState();
+        this.onUpdate();
     }
 
     // Slide the anchor forward to the current input, clearing consumed
@@ -202,7 +197,7 @@ export class PartialCompletionSession
         this.anchor = input;
         this.menuAnchorIndex = input.length;
         this.consumedSep = "";
-        this.menu?.hide();
+        this.notifyUpdate();
     }
 
     // Shift the trie to the level implied by the leading separator chars
@@ -228,6 +223,7 @@ export class PartialCompletionSession
         input: string,
         direction: CompletionDirection = "forward",
     ): void {
+        this.lastInput = input;
         if (this.reuseSession(input, direction)) {
             return;
         }
@@ -242,7 +238,8 @@ export class PartialCompletionSession
         // Cancel any in-flight request but preserve anchor and config
         // so reuseSession() can still match on re-focus.
         this.completionP = undefined;
-        this.menu?.hide();
+        this.completionState = undefined;
+        this.onUpdate();
     }
 
     // Reset state to IDLE without hiding the menu (used after handleSelect inserts text).
@@ -254,6 +251,8 @@ export class PartialCompletionSession
         this.menuAnchorIndex = 0;
         this.consumedSep = "";
         this.explicitCloseAnchor = undefined;
+        this.lastInput = "";
+        this.completionState = undefined;
     }
 
     // Called when the user explicitly dismisses the menu (e.g. Escape key).
@@ -269,11 +268,13 @@ export class PartialCompletionSession
     //      and noMatchPolicy allows it.  When the backend returns the
     //      same anchor (startIndex unchanged), reopening is suppressed.
     public explicitHide(input: string, direction: CompletionDirection): void {
+        this.lastInput = input;
         this.completionP = undefined; // cancel any in-flight fetch
 
         // IDLE — no session data, nothing to shift or refetch.
         if (this.anchor === undefined) {
-            this.menu?.hide();
+            this.completionState = undefined;
+            this.onUpdate();
             return;
         }
 
@@ -286,7 +287,7 @@ export class PartialCompletionSession
                 const prevLevel = this.menuSepLevel;
                 const newLevel = this.shiftToSepLevel(rawPrefix);
                 if (newLevel !== undefined && newLevel !== prevLevel) {
-                    this.updateMenu(input.substring(this.menuAnchorIndex));
+                    this.notifyUpdate();
                     return;
                 }
             }
@@ -295,7 +296,8 @@ export class PartialCompletionSession
         // No level shift available.  If input hasn't advanced past
         // the anchor, a refetch would return identical results — just hide.
         if (input === this.anchor || this.noMatchPolicy !== "refetch") {
-            this.menu?.hide();
+            this.completionState = undefined;
+            this.onUpdate();
             return;
         }
 
@@ -304,9 +306,15 @@ export class PartialCompletionSession
         this.startNewSession(input, direction);
     }
 
-    // Returns the text typed after the menu anchor, or undefined when
-    // the input has diverged or no items are loaded.
-    public getCompletionPrefix(input: string): string | undefined {
+    // Returns the cached completion state, or undefined when there are
+    // no completions to show.  Recomputed at every mutation point.
+    public getCompletionState(): CompletionState | undefined {
+        return this.completionState;
+    }
+
+    // Compute the completion state from current session fields.
+    private computeCompletionState(): CompletionState | undefined {
+        const input = this.lastInput;
         const anchor = this.anchor;
         if (anchor === undefined || !input.startsWith(anchor)) {
             return undefined;
@@ -318,19 +326,9 @@ export class PartialCompletionSession
         if (this.menuSepLevel > 0 && this.consumedSep === "") {
             return undefined;
         }
-        return input.substring(this.menuAnchorIndex);
-    }
-
-    // Returns the current completion state: filtered items, the typed prefix
-    // after the menu anchor, and the anchor index.  Returns undefined when
-    // there are no completions to show.
-    public getCompletionState(input: string): CompletionState | undefined {
-        const prefix = this.getCompletionPrefix(input);
-        if (prefix === undefined) {
-            return undefined;
-        }
+        const prefix = input.substring(this.menuAnchorIndex);
         const items = this.filterItems(prefix);
-        if (items.length === 0) {
+        if (items.length === 0 || isUniquelySatisfied(items, prefix)) {
             return undefined;
         }
         return {
@@ -380,6 +378,7 @@ export class PartialCompletionSession
         // [A1] PENDING — a fetch is already in flight, wait.
         if (this.completionP !== undefined) {
             debug(`Partial completion pending: ${this.anchor}`);
+            this.notifyUpdate();
             return true;
         }
 
@@ -419,7 +418,7 @@ export class PartialCompletionSession
             debug(
                 `Partial completion deferred: no items at menuSepLevel=${this.menuSepLevel}`,
             );
-            this.menu?.hide();
+            this.notifyUpdate();
             return true;
         }
 
@@ -431,7 +430,7 @@ export class PartialCompletionSession
                 debug(
                     `Partial completion deferred: separator needed, menuSepLevel=${this.menuSepLevel}`,
                 );
-                this.menu?.hide();
+                this.notifyUpdate();
                 return true;
             }
 
@@ -507,17 +506,20 @@ export class PartialCompletionSession
     // session, false to trigger a re-fetch.
     private matchOrConsume(input: string, rawPrefix: string): boolean {
         for (;;) {
-            const uniquelySatisfied = this.updateMenu(rawPrefix);
+            const items = this.filterItems(rawPrefix);
 
             // [C1] UNIQUE — exactly one match, re-fetch for next level.
-            if (uniquelySatisfied) {
+            if (isUniquelySatisfied(items, rawPrefix)) {
                 debug(`Partial completion re-fetch: uniquely satisfied`);
                 return false;
             }
 
             // [C2] COMMITTED — separator after a valid match.
             const sepMatch = rawPrefix.match(/^(.+?)[\s\p{P}]/u);
-            if (sepMatch !== null && this.hasExactMatch(sepMatch[1])) {
+            if (
+                sepMatch !== null &&
+                this.trieProvider.hasExactMatch(sepMatch[1])
+            ) {
                 debug(
                     `Partial completion re-fetch: '${sepMatch[1]}' committed with separator`,
                 );
@@ -525,8 +527,9 @@ export class PartialCompletionSession
             }
 
             // [C3] ACTIVE — trie has matches for this prefix.
-            if (this.filterItems(rawPrefix).length > 0) {
+            if (items.length > 0) {
                 debug(`Partial completion reuse: trie has matches`);
+                this.notifyUpdate();
                 return true;
             }
 
@@ -575,6 +578,7 @@ export class PartialCompletionSession
 
         // [D4] ACCEPT — exhaustive set, nothing else to show.
         debug(`Partial completion reuse: noMatchPolicy=accept, menu exhausted`);
+        this.notifyUpdate();
         return true;
     }
 
@@ -584,15 +588,15 @@ export class PartialCompletionSession
         direction: CompletionDirection,
     ): void {
         debug(`Partial completion start: '${input}' direction=${direction}`);
-        this.menu?.hide();
         this.trieProvider.setChoices([]);
-        this.menu?.invalidate();
         this.anchor = input;
         this.menuAnchorIndex = input.length;
         this.consumedSep = "";
         this.setPartitions([]);
         this.menuSepLevel = 0;
         this.noMatchPolicy = "refetch";
+        // Notify renderer that completions are now empty (pending fetch).
+        this.notifyUpdate();
         const completionP = this.dispatcher.getCommandCompletion(
             input,
             direction,

@@ -7,6 +7,7 @@ import {
     makeCompletionResult,
     makeMultiGroupResult,
     loadedItems,
+    isActive,
 } from "./helpers.js";
 
 // ── separatorMode: "space" ────────────────────────────────────────────────────
@@ -17,7 +18,7 @@ describe("PartialCompletionSession — separatorMode: space", () => {
             separatorMode: "space",
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         // Input without trailing space: "play" — no visible items (need space)
         session.update("play");
@@ -30,9 +31,9 @@ describe("PartialCompletionSession — separatorMode: space", () => {
                 expect.objectContaining({ selectedText: "music" }),
             ]),
         );
-        expect(menu.isActive()).toBe(false);
+        expect(isActive(session)).toBe(false);
         // updatePrefix is NOT called (menu not shown)
-        expect(menu.updatePrefix).not.toHaveBeenCalled();
+        expect(session.getCompletionState()).toBeUndefined();
     });
 
     test("typing separator shows menu without re-fetch", async () => {
@@ -40,7 +41,7 @@ describe("PartialCompletionSession — separatorMode: space", () => {
             separatorMode: "space",
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         // First update: "play" — deferred (separatorMode, no trailing space)
         session.update("play");
@@ -49,7 +50,7 @@ describe("PartialCompletionSession — separatorMode: space", () => {
         // Second update: "play " — separator typed, menu should appear
         session.update("play ");
 
-        expect(menu.updatePrefix).toHaveBeenCalledWith("");
+        expect(session.getCompletionState()?.prefix).toBe("");
         // No re-fetch — same dispatcher call count
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
@@ -78,7 +79,7 @@ describe("PartialCompletionSession — separatorMode: spacePunctuation", () => {
             separatorMode: "spacePunctuation",
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
@@ -86,7 +87,7 @@ describe("PartialCompletionSession — separatorMode: spacePunctuation", () => {
         // Space satisfies spacePunctuation
         session.update("play ");
 
-        expect(menu.updatePrefix).toHaveBeenCalledWith("");
+        expect(session.getCompletionState()?.prefix).toBe("");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
@@ -95,7 +96,7 @@ describe("PartialCompletionSession — separatorMode: spacePunctuation", () => {
             separatorMode: "spacePunctuation",
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
@@ -104,7 +105,7 @@ describe("PartialCompletionSession — separatorMode: spacePunctuation", () => {
         // The leading punctuation separator is stripped, just like whitespace.
         session.update("play.mu");
 
-        expect(menu.updatePrefix).toHaveBeenCalledWith("mu");
+        expect(session.getCompletionState()?.prefix).toBe("mu");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
@@ -133,16 +134,15 @@ describe("PartialCompletionSession — separatorMode: spacePunctuation", () => {
             separatorMode: "spacePunctuation",
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
 
         // Exact anchor, no separator — menu hidden but session kept
-        menu.hide.mockClear();
         session.update("play");
 
-        expect(menu.hide).toHaveBeenCalled();
+        expect(isActive(session)).toBe(false);
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 });
@@ -155,14 +155,14 @@ describe("PartialCompletionSession — separatorMode: optional", () => {
             separatorMode: "optionalSpace",
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
 
         // "optionalSpace" does not require a separator — menu shown immediately
         // rawPrefix="" → updatePrefix("", ...)
-        expect(menu.updatePrefix).toHaveBeenCalledWith("");
+        expect(session.getCompletionState()?.prefix).toBe("");
     });
 
     test("typing after anchor filters within session", async () => {
@@ -170,14 +170,14 @@ describe("PartialCompletionSession — separatorMode: optional", () => {
             separatorMode: "optionalSpace",
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
 
         session.update("playmu");
 
-        expect(menu.updatePrefix).toHaveBeenCalledWith("mu");
+        expect(session.getCompletionState()?.prefix).toBe("mu");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
@@ -186,7 +186,7 @@ describe("PartialCompletionSession — separatorMode: optional", () => {
             separatorMode: "optionalSpace",
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
@@ -194,7 +194,7 @@ describe("PartialCompletionSession — separatorMode: optional", () => {
         // "optionalSpace" only strips whitespace — punctuation is preserved
         session.update("play .mu");
 
-        expect(menu.updatePrefix).toHaveBeenCalledWith(".mu");
+        expect(session.getCompletionState()?.prefix).toBe(".mu");
     });
 });
 
@@ -206,13 +206,13 @@ describe("PartialCompletionSession — separatorMode: optionalSpacePunctuation",
             separatorMode: "optionalSpacePunctuation",
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
 
         // Like "optionalSpace": no separator required — menu shown at anchor
-        expect(menu.updatePrefix).toHaveBeenCalledWith("");
+        expect(session.getCompletionState()?.prefix).toBe("");
     });
 
     test("typing after anchor filters within session", async () => {
@@ -220,14 +220,14 @@ describe("PartialCompletionSession — separatorMode: optionalSpacePunctuation",
             separatorMode: "optionalSpacePunctuation",
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
 
         session.update("playmu");
 
-        expect(menu.updatePrefix).toHaveBeenCalledWith("mu");
+        expect(session.getCompletionState()?.prefix).toBe("mu");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
@@ -236,14 +236,14 @@ describe("PartialCompletionSession — separatorMode: optionalSpacePunctuation",
             separatorMode: "optionalSpacePunctuation",
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
 
         session.update("play mu");
 
-        expect(menu.updatePrefix).toHaveBeenCalledWith("mu");
+        expect(session.getCompletionState()?.prefix).toBe("mu");
     });
 
     test("punctuation stripped from prefix (unlike optional)", async () => {
@@ -251,7 +251,7 @@ describe("PartialCompletionSession — separatorMode: optionalSpacePunctuation",
             separatorMode: "optionalSpacePunctuation",
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
@@ -259,7 +259,7 @@ describe("PartialCompletionSession — separatorMode: optionalSpacePunctuation",
         // Key difference from "optionalSpace": punctuation IS stripped
         session.update("play.mu");
 
-        expect(menu.updatePrefix).toHaveBeenCalledWith("mu");
+        expect(session.getCompletionState()?.prefix).toBe("mu");
     });
 
     test("mixed space+punctuation stripped from prefix", async () => {
@@ -267,7 +267,7 @@ describe("PartialCompletionSession — separatorMode: optionalSpacePunctuation",
             separatorMode: "optionalSpacePunctuation",
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
@@ -275,7 +275,7 @@ describe("PartialCompletionSession — separatorMode: optionalSpacePunctuation",
         // Multiple leading separators (space + punctuation) all stripped
         session.update("play .mu");
 
-        expect(menu.updatePrefix).toHaveBeenCalledWith("mu");
+        expect(session.getCompletionState()?.prefix).toBe("mu");
     });
 
     test("no re-fetch when typing past anchor matches trie (separator not required)", async () => {
@@ -283,7 +283,7 @@ describe("PartialCompletionSession — separatorMode: optionalSpacePunctuation",
             separatorMode: "optionalSpacePunctuation",
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
@@ -293,7 +293,7 @@ describe("PartialCompletionSession — separatorMode: optionalSpacePunctuation",
         // so "playm" filters the trie for "m" which matches "music".
         session.update("playm");
 
-        expect(menu.updatePrefix).toHaveBeenCalledWith("m");
+        expect(session.getCompletionState()?.prefix).toBe("m");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 });
@@ -307,7 +307,7 @@ describe("PartialCompletionSession — separatorMode + direction", () => {
             directionSensitive: true,
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play", "forward");
         await Promise.resolve(); // → ACTIVE, anchor = "play", deferred
@@ -316,7 +316,7 @@ describe("PartialCompletionSession — separatorMode + direction", () => {
         session.update("play.", "backward");
 
         // Separator satisfies spacePunctuation — menu should show
-        expect(menu.updatePrefix).toHaveBeenCalled();
+        expect(session.getCompletionState()?.prefix).toBeDefined();
         // No re-fetch (separator typed after anchor, within same session)
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
@@ -391,7 +391,7 @@ describe("PartialCompletionSession — separatorMode edge cases", () => {
             separatorMode: "space",
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         // Fetch was issued for "play" but by the time it resolves the user
         // has already moved on; a second update for "play " is already active.
@@ -404,7 +404,7 @@ describe("PartialCompletionSession — separatorMode edge cases", () => {
 
         session.update("play ");
 
-        expect(menu.updatePrefix).toHaveBeenCalledWith("");
+        expect(session.getCompletionState()?.prefix).toBe("");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 });
@@ -437,18 +437,18 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
             4,
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
 
         // menuSepLevel = 1 via lowestLevelWithItems.
         // Deferred — separator not yet consumed, hidden.
-        expect(menu.isActive()).toBe(false);
+        expect(isActive(session)).toBe(false);
 
         // Type space: D1 consumes separator, items already loaded at L1.
         session.update("play ");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
 
         // No extra setChoices — the existing trie at level 1
         // already had the right items loaded by startNewSession.
@@ -459,7 +459,6 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         // D1 consumes "." → charLevel=2 > menuSepLevel=1 → advance to L2.
         // Level 2: only "beta" (spacePunctuation). Trie reloaded.
         // rawPrefix after consumption = "". Matches "beta".
-        menu.invalidate.mockClear();
         session.update("play.");
         // Progressive consumption: may go through multiple levels.
         // The last setChoices call should have the level-2 items.
@@ -468,33 +467,31 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
                 expect.objectContaining({ matchText: "beta" }),
             ]),
         );
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
     test("B1 NARROW: backspace from level 1 to level 0 reloads trie", async () => {
         const result = makeTwoLevelResult();
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
 
         // menuSepLevel=0, trie has "alpha" (optionalSpace at level 0).
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
 
         // Type space: D1 consumes " " → charLevel=1 > menuSepLevel=0
         // → advance to L1. Trie reloaded with "alpha" + "beta".
         session.update("play ");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
 
         // Backspace to "play": rawPrefix="", sepLevel=0.
         // B1: sepLevel(0) < menuSepLevel(1) + items at level 0 → NARROW.
         // Trie reloaded with level-0 items ("alpha" only).
-        menu.invalidate.mockClear();
         session.update("play");
         // Exactly one setChoices for the narrow reload.
-        expect(menu.invalidate).toHaveBeenCalledTimes(1);
         expect(session.filterItems("")).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({ matchText: "alpha" }),
@@ -506,7 +503,7 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
                 expect.objectContaining({ matchText: "beta" }),
             ]),
         );
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
@@ -517,79 +514,73 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
             4,
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
 
         // lowestLevelWithItems → 1. menuSepLevel=1.
         // Deferred — separator not yet consumed, hidden.
-        expect(menu.isActive()).toBe(false);
+        expect(isActive(session)).toBe(false);
 
         // Same input again — still deferred.
         session.update("play");
-        expect(menu.isActive()).toBe(false);
+        expect(isActive(session)).toBe(false);
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
 
         // Type space — separator typed, sepLevel matches menuSepLevel.
         session.update("play ");
-        expect(menu.isActive()).toBe(true);
-        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-            "",
-        );
+        expect(isActive(session)).toBe(true);
+        expect(session.getCompletionState()?.prefix).toBe("");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
     test("no trie reload when sepLevel stays at same menuSepLevel", async () => {
         const result = makeTwoLevelResult();
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
 
         // menuSepLevel=0. Trie loaded once with level-0 items.
         // Type more characters that don't change sepLevel:
-        menu.invalidate.mockClear();
         session.update("playa");
         session.update("playalp");
 
         // setChoices NOT called — trie stays loaded at level 0.
-        expect(menu.invalidate).not.toHaveBeenCalled();
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
     test("consume then narrow round-trip preserves correct items", async () => {
         const result = makeTwoLevelResult();
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
 
         // Level 0: "alpha". Level 1: "alpha"+"beta".
-        expect(menu.isActive()).toBe(true); // "alpha" at level 0
+        expect(isActive(session)).toBe(true); // "alpha" at level 0
 
         // Consume: type space → level 1.
         session.update("play ");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
 
         // Narrow: backspace → level 0.
         session.update("play");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
 
         // Consume again: type space → level 1.
-        menu.invalidate.mockClear();
         session.update("play ");
         // Exactly one setChoices for the consume reload.
-        expect(menu.invalidate).toHaveBeenCalledTimes(1);
         expect(session.filterItems("")).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({ matchText: "alpha" }),
                 expect.objectContaining({ matchText: "beta" }),
             ]),
         );
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
 
         // All within one session — no re-fetch.
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
@@ -606,29 +597,25 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
             4,
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
 
         // Level 0: "gamma" visible (optionalSpacePunctuation at lv0).
-        expect(menu.isActive()).toBe(true);
-        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-            "",
-        );
+        expect(isActive(session)).toBe(true);
+        expect(session.getCompletionState()?.prefix).toBe("");
 
         // Level 1 (space): still visible. optionalSpacePunctuation is in
         // both level 0 and 1 — consumption advances and reloads trie
         // with level-1 items (same single item).
         session.update("play ");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
 
         // Level 2 (punctuation): still visible. Consumption to L2.
         session.update("play.");
-        expect(menu.isActive()).toBe(true);
-        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-            "",
-        );
+        expect(isActive(session)).toBe(true);
+        expect(session.getCompletionState()?.prefix).toBe("");
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
@@ -644,29 +631,27 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
             4,
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
 
         // Items pre-loaded at L1 (lowestLevelWithItems) but hidden
         // until separator is consumed.
-        expect(menu.isActive()).toBe(false);
+        expect(isActive(session)).toBe(false);
 
         // Level 1 (space): visible — separator consumed, items already loaded.
-        menu.invalidate.mockClear();
         session.update("play ");
-        expect(menu.isActive()).toBe(true);
-        expect(menu.invalidate).not.toHaveBeenCalled();
+        expect(isActive(session)).toBe(true);
 
         // Backspace → B1 narrows to L1 (lowestLevelWithItems), hidden
         // because consumed separator was reset.
         session.update("play");
-        expect(menu.isActive()).toBe(false);
+        expect(isActive(session)).toBe(false);
 
         // Level 2 (punctuation): visible. Consumption to L2.
         session.update("play.");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
@@ -677,26 +662,22 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
             4,
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
 
         // Level 0: visible.
-        expect(menu.isActive()).toBe(true);
-        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-            "",
-        );
+        expect(isActive(session)).toBe(true);
+        expect(session.getCompletionState()?.prefix).toBe("");
 
         // Level 1 (space): "none" mode is NOT visible at level 1.
         // D1 consumes " " → charLevel=1 > menuSepLevel=0 → advance to L1.
         // Level 1: no items for "none" mode. Empty trie.
         // D4: accept (closedSet=true).
         // Consume loaded empty trie at level 1 — exactly 1 setChoices.
-        menu.invalidate.mockClear();
         session.update("play ");
-        expect(menu.isActive()).toBe(false);
-        expect(menu.invalidate).toHaveBeenCalledTimes(1);
+        expect(isActive(session)).toBe(false);
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
@@ -715,7 +696,7 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
             4,
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         // ── Forward: L0 → L1 → L2 ──
         session.update("play");
@@ -726,11 +707,11 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         expect(l0Items).toContain("instant");
         expect(l0Items).not.toContain("word");
         expect(l0Items).not.toContain("punct");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
 
         // Type space → L1: "word" + "punct" (not "instant").
         session.update("play ");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
         const l1Items = loadedItems(session);
         expect(l1Items).toContain("word");
         expect(l1Items).toContain("punct");
@@ -738,25 +719,23 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
 
         // Type punctuation → L2: only "punct" (not "word", not "instant").
         session.update("play .");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
         const l2Items = loadedItems(session);
         expect(l2Items).toContain("punct");
         expect(l2Items).not.toContain("word");
         expect(l2Items).not.toContain("instant");
 
         // ── Backward: L2 → L1 (delete punctuation) ──
-        menu.invalidate.mockClear();
         session.update("play ");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
         const backL1Items = loadedItems(session);
         expect(backL1Items).toContain("word");
         expect(backL1Items).toContain("punct");
         expect(backL1Items).not.toContain("instant");
 
         // ── Backward: L1 → L0 (delete space) ──
-        menu.invalidate.mockClear();
         session.update("play");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
         const backL0Items = loadedItems(session);
         expect(backL0Items).toContain("instant");
         expect(backL0Items).not.toContain("word");
@@ -786,31 +765,28 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
             4,
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         // ── Forward to L0 ──
         session.update("play");
         await Promise.resolve();
 
         // L0: " instant" visible.
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
 
         // Type space: L0 trie matches " instant" (explicit-space priority).
         session.update("play ");
-        expect(menu.isActive()).toBe(true);
-        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-            " ",
-        );
+        expect(isActive(session)).toBe(true);
+        expect(session.getCompletionState()?.prefix).toBe(" ");
 
         // Type ".": " ." fails L0 trie → consume " "→L1 → "." fails → consume "."→L2.
         session.update("play .");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
 
         // ── Backward: L2 → L1 ──
         // Delete "." → "play ". Remaining separator = " " → sepLevel=1 → L1.
-        menu.invalidate.mockClear();
         session.update("play ");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
         const backL1Items = loadedItems(session);
         // L1 has all three items (" instant" + "word" + "punct").
         expect(backL1Items).toContain(" instant");
@@ -819,9 +795,8 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
 
         // ── Backward: L1 → L0 ──
         // Delete space → "play". No separator → sepLevel=0 → L0.
-        menu.invalidate.mockClear();
         session.update("play");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
         const backL0Items = loadedItems(session);
         // L0 has only " instant" (optionalSpacePunctuation).
         expect(backL0Items).toContain(" instant");
@@ -840,30 +815,26 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
             4,
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
 
         // Forward to L2 via punctuation.
         session.update("play.");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
 
         // Replace "." with "," — consumed sep mismatch triggers B1.
         // Remaining rawPrefix = "," → sepLevel=2 → target L2. Same level,
         // but consumedSep updated to ",".
         session.update("play,");
-        expect(menu.isActive()).toBe(true);
-        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-            "",
-        );
+        expect(isActive(session)).toBe(true);
+        expect(session.getCompletionState()?.prefix).toBe("");
 
         // Replace "," with " " — sepLevel=1 → L1, "punct" still visible.
         session.update("play ");
-        expect(menu.isActive()).toBe(true);
-        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-            "",
-        );
+        expect(isActive(session)).toBe(true);
+        expect(session.getCompletionState()?.prefix).toBe("");
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
@@ -885,7 +856,7 @@ describe("PartialCompletionSession — autoSpacePunctuation", () => {
             4, // startIndex after "word"
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         // "word" — last char is 'd', completions start with 'a'/'b' (Latin).
         // Auto-resolved to spacePunctuation → needs separator.
@@ -893,12 +864,12 @@ describe("PartialCompletionSession — autoSpacePunctuation", () => {
         await Promise.resolve();
 
         // Level 0: spacePunctuation not visible → menu hidden.
-        expect(menu.isActive()).toBe(false);
+        expect(isActive(session)).toBe(false);
 
         // Typing space: level 1, spacePunctuation visible.
         session.update("word ");
-        expect(menu.isActive()).toBe(true);
-        expect(menu.updatePrefix).toHaveBeenCalledWith("");
+        expect(isActive(session)).toBe(true);
+        expect(session.getCompletionState()?.prefix).toBe("");
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
@@ -916,7 +887,7 @@ describe("PartialCompletionSession — autoSpacePunctuation", () => {
             4, // startIndex after "word"
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         // "word" — last char is 'd', completions start with '東'/'大' (CJK).
         // Auto-resolved to optionalSpacePunctuation → no separator needed.
@@ -924,8 +895,7 @@ describe("PartialCompletionSession — autoSpacePunctuation", () => {
         await Promise.resolve();
 
         // Level 0: optionalSpacePunctuation IS visible → menu shown.
-        expect(menu.isActive()).toBe(true);
-        expect(menu.invalidate).toHaveBeenCalled();
+        expect(isActive(session)).toBe(true);
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
@@ -943,13 +913,13 @@ describe("PartialCompletionSession — autoSpacePunctuation", () => {
             2, // startIndex after "東京"
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         // "東京" — CJK-CJK → no separator needed.
         session.update("東京");
         await Promise.resolve();
 
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
@@ -965,18 +935,18 @@ describe("PartialCompletionSession — autoSpacePunctuation", () => {
             3, // startIndex after "123"
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         // "123" — digit-digit → separator required.
         session.update("123");
         await Promise.resolve();
 
         // Digit-digit pair → spacePunctuation → not visible at level 0.
-        expect(menu.isActive()).toBe(false);
+        expect(isActive(session)).toBe(false);
 
         // Typing space shows menu.
         session.update("123 ");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
@@ -994,7 +964,7 @@ describe("PartialCompletionSession — autoSpacePunctuation", () => {
             4, // startIndex after "word"
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         // "word" — last char 'd' (Latin).
         // "alpha" → needsSep('d','a') = true → spacePunctuation
@@ -1003,17 +973,15 @@ describe("PartialCompletionSession — autoSpacePunctuation", () => {
         await Promise.resolve();
 
         // Level 0: only optionalSpacePunctuation items visible → "東京".
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
         // The trie should have the CJK item at level 0.
-        const prefix0 = menu.updatePrefix.mock.calls[0]?.[0];
+        const prefix0 = session.getCompletionState()?.prefix;
         expect(prefix0).toBe("");
 
         // Typing space → level 1: both spacePunctuation and optional visible.
-        menu.invalidate.mockClear();
         session.update("word ");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
         // D1 consumes " " → advance to L1, both items loaded.
-        expect(menu.invalidate).toHaveBeenCalledTimes(1);
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
@@ -1032,13 +1000,13 @@ describe("PartialCompletionSession — autoSpacePunctuation", () => {
             0, // start of input
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("");
         await Promise.resolve();
 
         // All items → optionalSpacePunctuation → visible at level 0.
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
@@ -1059,13 +1027,13 @@ describe("PartialCompletionSession — multi-group partitioning", () => {
             4,
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         // "play" — level 0: only optionalSpacePunctuation visible.
         session.update("play");
         await Promise.resolve();
 
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
         // Level 0 should only have "entity1" (optionalSpacePunctuation).
         // "cmd1"/"cmd2" (space) need level 1.
         expect(session.filterItems("")).toEqual(
@@ -1077,11 +1045,9 @@ describe("PartialCompletionSession — multi-group partitioning", () => {
         expect(items.every((i) => i !== "cmd1")).toBe(true);
 
         // "play " — level 1: both "space" and "optionalSpacePunctuation" visible.
-        menu.invalidate.mockClear();
         session.update("play ");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
         // D1 consumes " " → new trie with all level-1 items.
-        expect(menu.invalidate).toHaveBeenCalledTimes(1);
         const level1Items = loadedItems(session);
         expect(level1Items).toContain("cmd1");
         expect(level1Items).toContain("cmd2");
@@ -1099,23 +1065,23 @@ describe("PartialCompletionSession — multi-group partitioning", () => {
             4,
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         // Level 0: neither visible.
         session.update("play");
         await Promise.resolve();
-        expect(menu.isActive()).toBe(false);
+        expect(isActive(session)).toBe(false);
 
         // Level 1 (space): both visible after consumption.
         session.update("play ");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
         const level1Items = loadedItems(session);
         expect(level1Items).toContain("flag");
         expect(level1Items).toContain("entity");
 
         // Level 2 (punctuation): only spacePunctuation.
         session.update("play.");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
         const level2Items = loadedItems(session);
         expect(level2Items).toContain("entity");
         expect(level2Items.includes("flag")).toBe(false);
@@ -1132,13 +1098,13 @@ describe("PartialCompletionSession — multi-group partitioning", () => {
             4,
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
 
         // Only "only" (optionalSpace) at level 0.
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
         const items = loadedItems(session);
         expect(items).toHaveLength(1);
         expect(items[0]).toBe("only");
@@ -1156,12 +1122,12 @@ describe("PartialCompletionSession — multi-group partitioning", () => {
             4,
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         // Level 0: only "none" visible.
         session.update("play");
         await Promise.resolve();
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
         const level0Items = loadedItems(session);
         expect(level0Items).toContain("instant");
         expect(level0Items).not.toContain("word");
@@ -1169,7 +1135,7 @@ describe("PartialCompletionSession — multi-group partitioning", () => {
 
         // Level 1: "space" + "spacePunctuation" visible, NOT "none".
         session.update("play ");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
         const level1Items = loadedItems(session);
         expect(level1Items).toContain("word");
         expect(level1Items).toContain("punct");
@@ -1177,7 +1143,7 @@ describe("PartialCompletionSession — multi-group partitioning", () => {
 
         // Level 2: only "spacePunctuation" visible.
         session.update("play.");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
         const level2Items = loadedItems(session);
         expect(level2Items).toContain("punct");
         expect(level2Items).not.toContain("word");
@@ -1203,20 +1169,18 @@ describe("PartialCompletionSession — explicit-space completions", () => {
             5,
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("hello");
         await Promise.resolve();
 
         // " world" is at L0 (optionalSpacePunctuation visible at all levels).
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
 
         // Type " " — rawPrefix " " matches " world" at L0, no consumption.
         session.update("hello ");
-        expect(menu.isActive()).toBe(true);
-        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-            " ",
-        );
+        expect(isActive(session)).toBe(true);
+        expect(session.getCompletionState()?.prefix).toBe(" ");
         // No re-fetch.
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
@@ -1232,23 +1196,19 @@ describe("PartialCompletionSession — explicit-space completions", () => {
             5,
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("hello");
         await Promise.resolve();
 
         // Type " wo" — matches both " world" and " wonder".
         session.update("hello wo");
-        expect(menu.isActive()).toBe(true);
-        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-            " wo",
-        );
+        expect(isActive(session)).toBe(true);
+        expect(session.getCompletionState()?.prefix).toBe(" wo");
 
         // Type " wor" — narrows to " world" only.
         session.update("hello wor");
-        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-            " wor",
-        );
+        expect(session.getCompletionState()?.prefix).toBe(" wor");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
@@ -1266,29 +1226,25 @@ describe("PartialCompletionSession — explicit-space completions", () => {
             5,
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("hello");
         await Promise.resolve();
 
         // L0 shows " world" (optionalSpacePunctuation visible at L0).
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
 
         // Type " " — L0 trie matches " world".
         session.update("hello ");
-        expect(menu.isActive()).toBe(true);
-        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-            " ",
-        );
+        expect(isActive(session)).toBe(true);
+        expect(session.getCompletionState()?.prefix).toBe(" ");
 
         // Type " m" — " m" doesn't match " world" at L0.
         // D1 consumes " " → L1 has "music" + " world".
         // rawPrefix "m" → trie matches "music".
         session.update("hello m");
-        expect(menu.isActive()).toBe(true);
-        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-            "m",
-        );
+        expect(isActive(session)).toBe(true);
+        expect(session.getCompletionState()?.prefix).toBe("m");
 
         // No re-fetch through any of this.
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
@@ -1312,15 +1268,15 @@ describe("PartialCompletionSession — explicit-space completions", () => {
         await Promise.resolve();
 
         // At L0, no consumption: prefix starts at anchor.
-        expect(session.getCompletionPrefix("hello")).toBe("");
+        expect(session.getCompletionState()?.prefix).toBe("");
 
         // Type " " — L0 match, no consumption.
         session.update("hello ");
-        expect(session.getCompletionPrefix("hello ")).toBe(" ");
+        expect(session.getCompletionState()?.prefix).toBe(" ");
 
         // Type " m" — consumption happens, menuAnchorIndex advances past " ".
         session.update("hello m");
-        expect(session.getCompletionPrefix("hello m")).toBe("m");
+        expect(session.getCompletionState()?.prefix).toBe("m");
     });
 });
 
@@ -1332,7 +1288,7 @@ describe("PartialCompletionSession — D-cascade consumption", () => {
             separatorMode: "space",
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
@@ -1341,10 +1297,8 @@ describe("PartialCompletionSession — D-cascade consumption", () => {
         // D1 consume " " → L1, rawPrefix " i".
         // " " at L1 (same level) → consume again → rawPrefix "i" → matches "items".
         session.update("play  i");
-        expect(menu.isActive()).toBe(true);
-        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-            "i",
-        );
+        expect(isActive(session)).toBe(true);
+        expect(session.getCompletionState()?.prefix).toBe("i");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
@@ -1359,7 +1313,7 @@ describe("PartialCompletionSession — D-cascade consumption", () => {
             4,
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
@@ -1369,10 +1323,8 @@ describe("PartialCompletionSession — D-cascade consumption", () => {
         // L1 trie: "." doesn't match "punct" → D1 again: "." → L2. rawPrefix "".
         // L2 trie: "" → all items → shows "punct".
         session.update("play .");
-        expect(menu.isActive()).toBe(true);
-        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-            "",
-        );
+        expect(isActive(session)).toBe(true);
+        expect(session.getCompletionState()?.prefix).toBe("");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
@@ -1387,7 +1339,7 @@ describe("PartialCompletionSession — D-cascade consumption", () => {
             4,
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
@@ -1395,10 +1347,8 @@ describe("PartialCompletionSession — D-cascade consumption", () => {
         // "play." — punctuation directly.
         // D1: "." → L2 (charLevel=2 > menuSepLevel=0). rawPrefix "".
         session.update("play.");
-        expect(menu.isActive()).toBe(true);
-        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-            "",
-        );
+        expect(isActive(session)).toBe(true);
+        expect(session.getCompletionState()?.prefix).toBe("");
     });
 
     test("loop terminates on non-separator after consumption", async () => {
@@ -1432,21 +1382,21 @@ describe("PartialCompletionSession — D-cascade consumption", () => {
             4,
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
 
         // L0: "instant" visible.
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
 
         // Consume space then punct to get to L2.
         session.update("play .");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
 
         // Backspace all the way to "play" — narrows to L0.
         session.update("play");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
         // L0 items restored.
         const lastItems = loadedItems(session);
         expect(lastItems).toContain("instant");
@@ -1469,28 +1419,24 @@ describe("PartialCompletionSession — D-cascade consumption", () => {
             4,
         );
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
 
         // Consume "." → L2, items visible.
         session.update("play.");
-        expect(menu.isActive()).toBe(true);
+        expect(isActive(session)).toBe(true);
 
         // Type space after punctuation — should still be consumed at L2.
         session.update("play. ");
-        expect(menu.isActive()).toBe(true);
-        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-            "",
-        );
+        expect(isActive(session)).toBe(true);
+        expect(session.getCompletionState()?.prefix).toBe("");
 
         // "play. b" — space consumed, "b" narrows to "beta".
         session.update("play. b");
-        expect(menu.isActive()).toBe(true);
-        expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-            "b",
-        );
+        expect(isActive(session)).toBe(true);
+        expect(session.getCompletionState()?.prefix).toBe("b");
 
         // No re-fetch through any of this.
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);

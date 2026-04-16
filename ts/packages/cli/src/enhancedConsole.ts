@@ -1077,7 +1077,7 @@ async function questionWithCompletion(
                     filterStartIndex = 0;
                     completionPrefix = "";
                 } else {
-                    const state = controller.getCompletionState(input);
+                    const state = controller.getCompletionState();
                     if (state) {
                         filteredCompletions = state.items.map(
                             (i) => i.selectedText,

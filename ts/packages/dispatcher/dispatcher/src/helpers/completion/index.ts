@@ -10,7 +10,7 @@ export {
     isUniquelySatisfied,
     type SearchMenuDataProvider,
 } from "./searchMenu.js";
-export { ISearchMenuControl, CompletionState } from "./session.js";
+export { CompletionState } from "./session.js";
 export {
     CompletionController,
     CompletionControllerOptions,

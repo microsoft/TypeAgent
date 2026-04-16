@@ -7,7 +7,7 @@ import {
     ICompletionDispatcher,
     CommandCompletionResult,
     makeSession,
-    TestSearchMenu,
+    isActive,
 } from "./helpers.js";
 import {
     loadGrammarRules,
@@ -139,13 +139,12 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
     // ── Music grammar: keyword → entity → keyword → entity ───────────
 
     describe("music grammar: keyword completions", () => {
-        let menu: TestSearchMenu;
         let dispatcher: ReturnType<typeof makeGrammarDispatcher>;
         let session: PartialCompletionSession;
 
         beforeEach(async () => {
             dispatcher = makeGrammarDispatcher(musicGrammar, musicEntities);
-            ({ session, menu } = makeSession(dispatcher));
+            ({ session } = makeSession(dispatcher));
         });
 
         test("empty input fetches and shows keyword completions", async () => {
@@ -160,7 +159,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                     expect.objectContaining({ matchText: "skip" }),
                 ]),
             );
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
         });
 
         test("typing 'p' reuses session and trie narrows to 'pause', 'play'", async () => {
@@ -171,10 +170,8 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // No new fetch — trie handles narrowing.
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "p",
-            );
-            expect(menu.isActive()).toBe(true);
+            expect(session.getCompletionState()?.prefix).toBe("p");
+            expect(isActive(session)).toBe(true);
         });
 
         test("typing 'sk' narrows to 'skip'", async () => {
@@ -184,11 +181,9 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             session.update("sk");
 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "sk",
-            );
+            expect(session.getCompletionState()?.prefix).toBe("sk");
             // "skip" matches prefix "sk" but is not uniquely satisfied (prefix ≠ full text)
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
         });
 
         test("typing 'skip' uniquely satisfies → re-fetches for next level", async () => {
@@ -205,18 +200,17 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 "forward",
             );
             // "skip" is terminal — no further completions, menu inactive.
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
         });
     });
 
     describe("music grammar: keyword → entity transition", () => {
-        let menu: TestSearchMenu;
         let dispatcher: ReturnType<typeof makeGrammarDispatcher>;
         let session: PartialCompletionSession;
 
         beforeEach(async () => {
             dispatcher = makeGrammarDispatcher(musicGrammar, musicEntities);
-            ({ session, menu } = makeSession(dispatcher));
+            ({ session } = makeSession(dispatcher));
         });
 
         test("'play' uniquely satisfies keyword → re-fetches with entity results", async () => {
@@ -240,7 +234,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 ]),
             );
             // Entities deferred — no separator typed.
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
         });
 
         test("'play' with separator deferred — menu hidden until space typed", async () => {
@@ -251,7 +245,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // separatorMode="spacePunctuation" and rawPrefix="" → HIDE+KEEP
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
         });
 
         test("'play ' (with space) shows entity completions", async () => {
@@ -260,18 +254,14 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             session.update("play");
             await flush();
 
-            menu.invalidate.mockClear();
             session.update("play ");
 
             // No new fetch — result cached at anchor "play".
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
             // Items already pre-loaded at target level — no setChoices on consume.
-            expect(menu.invalidate).not.toHaveBeenCalled();
             // Separator consumed → menu activated with entity items.
-            expect(menu.isActive()).toBe(true);
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "",
-            );
+            expect(isActive(session)).toBe(true);
+            expect(session.getCompletionState()?.prefix).toBe("");
         });
 
         test("'play sha' narrows entities via trie", async () => {
@@ -285,10 +275,8 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // No new fetch — trie handles narrowing.
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
             // Trie prefix "sha" matches "Shake It Off" and "Shape of You"
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "sha",
-            );
-            expect(menu.isActive()).toBe(true);
+            expect(session.getCompletionState()?.prefix).toBe("sha");
+            expect(isActive(session)).toBe(true);
         });
 
         test("'play Shake It Off' uniquely satisfies entity → re-fetches", async () => {
@@ -307,18 +295,17 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 "forward",
             );
             // Next-level "by" keyword deferred (separatorMode "spacePunctuation").
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
         });
     });
 
     describe("music grammar: multi-level hierarchy (entity → keyword → entity)", () => {
-        let menu: TestSearchMenu;
         let dispatcher: ReturnType<typeof makeGrammarDispatcher>;
         let session: PartialCompletionSession;
 
         beforeEach(async () => {
             dispatcher = makeGrammarDispatcher(musicGrammar, musicEntities);
-            ({ session, menu } = makeSession(dispatcher));
+            ({ session } = makeSession(dispatcher));
         });
 
         test("after entity match, 'by' keyword appears", async () => {
@@ -338,13 +325,11 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                     expect.objectContaining({ matchText: "by" }),
                 ]),
             );
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
 
             // Type space → D1 consumes separator, items already loaded.
-            menu.invalidate.mockClear();
             session.update("play Shake It Off ");
-            expect(menu.isActive()).toBe(true);
-            expect(menu.invalidate).not.toHaveBeenCalled();
+            expect(isActive(session)).toBe(true);
         });
 
         test("'by' keyword separator deferred, then shown with space", async () => {
@@ -357,14 +342,12 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // separatorMode="spacePunctuation", rawPrefix="" → deferred
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(3);
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
 
             // Type space → D1 consumes separator, items already loaded.
-            menu.invalidate.mockClear();
             session.update("play Shake It Off ");
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(3);
-            expect(menu.invalidate).not.toHaveBeenCalled();
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
         });
 
         test("typing 'by' uniquely satisfies → re-fetches for artist entities", async () => {
@@ -394,7 +377,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 ]),
             );
             // Entities deferred — separator needed.
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
         });
 
         test("artist entities narrowed by trie after typing prefix", async () => {
@@ -410,18 +393,15 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             session.update("play Shake It Off by T");
             // No new fetch — trie handles narrowing.
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(4);
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "T",
-            );
+            expect(session.getCompletionState()?.prefix).toBe("T");
             // "Taylor Swift" matches prefix "T"
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
         });
     });
 
     // ── Settings grammar: keyword → keyword alternatives → entity ────
 
     describe("settings grammar: keyword alternatives then entity", () => {
-        let menu: TestSearchMenu;
         let dispatcher: ReturnType<typeof makeGrammarDispatcher>;
         let session: PartialCompletionSession;
 
@@ -430,7 +410,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 settingsGrammar,
                 settingsEntities,
             );
-            ({ session, menu } = makeSession(dispatcher));
+            ({ session } = makeSession(dispatcher));
         });
 
         test("empty input shows 'set' keyword", async () => {
@@ -443,7 +423,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                     expect.objectContaining({ matchText: "set" }),
                 ]),
             );
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
         });
 
         test("'set' uniquely satisfies → re-fetch shows property alternatives", async () => {
@@ -464,7 +444,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 ]),
             );
             // Properties deferred — separator needed.
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
         });
 
         test("'set v' narrows property alternatives via trie", async () => {
@@ -478,10 +458,8 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // No new fetch — trie handles narrowing.
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
             // Trie prefix "v" → only "volume" matches
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "v",
-            );
-            expect(menu.isActive()).toBe(true);
+            expect(session.getCompletionState()?.prefix).toBe("v");
+            expect(isActive(session)).toBe(true);
         });
 
         test("'set volume' uniquely satisfies → re-fetch shows entity values", async () => {
@@ -506,7 +484,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 ]),
             );
             // Entities deferred — separator needed.
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
         });
 
         test("'set volume ' (with space) shows entity values in menu", async () => {
@@ -517,17 +495,13 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             session.update("set volume");
             await flush();
 
-            menu.invalidate.mockClear();
             session.update("set volume ");
 
             // No new fetch — result cached at anchor "set volume".
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(3);
             // Items already pre-loaded — no setChoices on consume.
-            expect(menu.invalidate).not.toHaveBeenCalled();
-            expect(menu.isActive()).toBe(true);
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "",
-            );
+            expect(isActive(session)).toBe(true);
+            expect(session.getCompletionState()?.prefix).toBe("");
         });
 
         test("'set volume m' narrows entity values to 'medium'", async () => {
@@ -542,23 +516,20 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // No new fetch — trie handles narrowing.
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(3);
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "m",
-            );
-            expect(menu.isActive()).toBe(true);
+            expect(session.getCompletionState()?.prefix).toBe("m");
+            expect(isActive(session)).toBe(true);
         });
     });
 
     // ── Open wildcard / anchor sliding ───────────────────────────────
 
     describe("music grammar: open wildcard behavior", () => {
-        let menu: TestSearchMenu;
         let dispatcher: ReturnType<typeof makeGrammarDispatcher>;
         let session: PartialCompletionSession;
 
         beforeEach(async () => {
             dispatcher = makeGrammarDispatcher(musicGrammar, musicEntities);
-            ({ session, menu } = makeSession(dispatcher));
+            ({ session } = makeSession(dispatcher));
         });
 
         // Prime the session through "play unknown" so the wildcard
@@ -587,7 +558,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 fetchCountBefore,
             );
             // Sliding hides the menu (no separator typed).
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
         });
 
         test("'by' keyword appears after wildcard text with space", async () => {
@@ -596,7 +567,6 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             const fetchCountAfterPrime =
                 dispatcher.getCommandCompletion.mock.calls.length;
 
-            menu.invalidate.mockClear();
             // After typing space, D1 consumes separator; items already loaded.
             session.update("play unknown ");
 
@@ -605,11 +575,8 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 fetchCountAfterPrime,
             );
             // Items already pre-loaded — no setChoices on consume.
-            expect(menu.invalidate).not.toHaveBeenCalled();
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "",
-            );
-            expect(menu.isActive()).toBe(true);
+            expect(session.getCompletionState()?.prefix).toBe("");
+            expect(isActive(session)).toBe(true);
         });
 
         test("'play unknown b' narrows keyword to 'by' via trie", async () => {
@@ -624,34 +591,32 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
                 fetchCountBefore,
             );
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "b",
-            );
+            expect(session.getCompletionState()?.prefix).toBe("b");
             // The trie should show "by" as a narrowed match.
             expect(session.filterItems("")).toEqual(
                 expect.arrayContaining([
                     expect.objectContaining({ matchText: "by" }),
                 ]),
             );
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
         });
 
         test("'play unknown ' → 'play unknown' → 'play unknown ' round-trip", async () => {
             await primeWildcard();
 
             session.update("play unknown ");
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
 
             // Backspace hides.
             session.update("play unknown");
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
 
             const fetchCountBefore =
                 dispatcher.getCommandCompletion.mock.calls.length;
 
             // Re-type space — menu reappears without re-fetch.
             session.update("play unknown ");
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
                 fetchCountBefore,
             );
@@ -670,7 +635,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 fetchCountAfterPrime,
             );
             // Extra space should not break the trie display.
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
         });
 
         test("wildcard extends across word boundaries — slide, show, slide, show", async () => {
@@ -681,7 +646,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // 1. Space after wildcard: separator satisfied, menu shows "by".
             session.update("play unknown ");
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
                 fetchCountAfterPrime,
             );
@@ -689,7 +654,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // 2. Non-separator 't' after separator: the trie has no match
             //    for "t" (only "by"), so noMatchPolicy="slide" slides anchor.
             session.update("play unknown t");
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
                 fetchCountAfterPrime,
             );
@@ -703,10 +668,8 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // 4. Another space: separator satisfied again, menu reappears
             //    with "by" from the cached trie.
             session.update("play unknown text ");
-            expect(menu.isActive()).toBe(true);
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "",
-            );
+            expect(isActive(session)).toBe(true);
+            expect(session.getCompletionState()?.prefix).toBe("");
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
                 fetchCountAfterPrime,
             );
@@ -734,7 +697,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 ]),
             );
             // Entities deferred — separator needed.
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
         });
     });
 
@@ -758,13 +721,12 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             ].join("\n"),
         );
 
-        let menu: TestSearchMenu;
         let dispatcher: ReturnType<typeof makeGrammarDispatcher>;
         let session: PartialCompletionSession;
 
         beforeEach(async () => {
             dispatcher = makeGrammarDispatcher(crossRuleGrammar);
-            ({ session, menu } = makeSession(dispatcher));
+            ({ session } = makeSession(dispatcher));
         });
 
         test("'play beautiful' has afterWildcard=\"some\" — mixed candidates deferred", async () => {
@@ -784,14 +746,12 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                     expect.objectContaining({ matchText: "by" }),
                 ]),
             );
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
 
             // Type space → D1 consumes separator, items already loaded.
-            menu.invalidate.mockClear();
             session.update("play beautiful ");
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-            expect(menu.isActive()).toBe(true);
-            expect(menu.invalidate).not.toHaveBeenCalled();
+            expect(isActive(session)).toBe(true);
         });
 
         test("typing into wildcard triggers re-fetch, not slide", async () => {
@@ -835,14 +795,12 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                     expect.objectContaining({ matchText: "music" }),
                 ]),
             );
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
 
             // Type space → D1 consumes separator, items already loaded.
-            menu.invalidate.mockClear();
             session.update("play beautifull ");
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
-            expect(menu.isActive()).toBe(true);
-            expect(menu.invalidate).not.toHaveBeenCalled();
+            expect(isActive(session)).toBe(true);
         });
 
         test("space then non-matching prefix triggers re-fetch (afterWildcard some)", async () => {
@@ -851,7 +809,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // Space satisfies the separator — menu shows both entries.
             session.update("play beautiful ");
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
 
             const fetchCountBefore =
                 dispatcher.getCommandCompletion.mock.calls.length;
@@ -871,17 +829,15 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // Space → menu shows "music" and "by".
             session.update("play beautiful ");
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
 
             // "b" matches "by" in the trie — no new fetch.
             session.update("play beautiful b");
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
 
             // Verify the trie filtered to only "by".
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "b",
-            );
+            expect(session.getCompletionState()?.prefix).toBe("b");
         });
 
         test('single-rule wildcard still slides (afterWildcard="all")', async () => {
@@ -899,14 +855,14 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 fetchCountAfterPrime,
             );
             // Sliding hides the menu (no separator typed).
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
 
             // After separator, "by" reappears from the cached trie.
             session.update("play hello world ");
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
                 fetchCountAfterPrime,
             );
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
         });
     });
 
@@ -918,7 +874,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 musicGrammar,
                 musicEntities,
             );
-            const { session, menu } = makeSession(dispatcher);
+            const { session } = makeSession(dispatcher);
 
             session.update("");
             await flush();
@@ -940,7 +896,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 "backward",
             );
             // Entities deferred after backward re-fetch.
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
         });
 
         test("backward past anchor (typing beyond) does not re-fetch", async () => {
@@ -948,7 +904,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 musicGrammar,
                 musicEntities,
             );
-            const { session, menu } = makeSession(dispatcher);
+            const { session } = makeSession(dispatcher);
 
             session.update("");
             await flush();
@@ -968,20 +924,19 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 fetchCountBefore,
             );
             // Menu still active — separator present, entity items visible.
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
         });
     });
 
     // ── Trailing-separator session behavior (keyword-only grammar) ───
 
     describe("keyword grammar: trailing-separator session behavior", () => {
-        let menu: TestSearchMenu;
         let dispatcher: ReturnType<typeof makeGrammarDispatcher>;
         let session: PartialCompletionSession;
 
         beforeEach(async () => {
             dispatcher = makeGrammarDispatcher(keywordGrammar, {});
-            ({ session, menu } = makeSession(dispatcher));
+            ({ session } = makeSession(dispatcher));
         });
 
         test("backspace from 'play ' to 'play' hides menu, no re-fetch", async () => {
@@ -996,7 +951,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // Backspace removes the space.
             session.update("play");
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
 
             // No re-fetch — previous result still valid at anchor "play".
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
@@ -1011,7 +966,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             await flush();
 
             session.update("play ");
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
             expect(session.filterItems("")).toEqual(
                 expect.arrayContaining([
                     expect.objectContaining({ matchText: "music" }),
@@ -1020,12 +975,12 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // Backspace to "play"
             session.update("play");
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
 
             // Re-type space — menu should reappear without re-fetch.
             session.update("play ");
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
         });
 
         test("'play ' → 'pla' diverges anchor → re-fetches", async () => {
@@ -1056,7 +1011,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
             // The extra space should not leak into the trie filter.
             // Menu should be active with "music" offered.
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
             expect(session.filterItems("")).toEqual(
                 expect.arrayContaining([
                     expect.objectContaining({ matchText: "music" }),
@@ -1068,13 +1023,12 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
     // ── Trailing-separator with entity transitions ───────────────────
 
     describe("music grammar: trailing-separator entity behavior", () => {
-        let menu: TestSearchMenu;
         let dispatcher: ReturnType<typeof makeGrammarDispatcher>;
         let session: PartialCompletionSession;
 
         beforeEach(async () => {
             dispatcher = makeGrammarDispatcher(musicGrammar, musicEntities);
-            ({ session, menu } = makeSession(dispatcher));
+            ({ session } = makeSession(dispatcher));
         });
 
         test("backspace from 'play ' to 'play' hides entity menu, no re-fetch", async () => {
@@ -1089,7 +1043,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // Backspace removes the space — entity menu should hide.
             session.update("play");
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
                 fetchCountBefore,
@@ -1107,7 +1061,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // No new fetch — double space does not trigger re-fetch.
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
             // Double space should not break entity display.
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
             expect(session.filterItems("")).toEqual(
                 expect.arrayContaining([
                     expect.objectContaining({ matchText: "Bohemian Rhapsody" }),
@@ -1144,7 +1098,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 musicGrammar,
                 musicEntities,
             );
-            const { session, menu } = makeSession(dispatcher);
+            const { session } = makeSession(dispatcher);
 
             session.update("");
             await flush();
@@ -1159,7 +1113,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // Backspace removes the space after wildcard text.
             session.update("play unknown");
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
                 fetchCountBefore,
@@ -1190,13 +1144,12 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             ].join("\n"),
         );
 
-        let menu: TestSearchMenu;
         let dispatcher: ReturnType<typeof makeGrammarDispatcher>;
         let session: PartialCompletionSession;
 
         beforeEach(async () => {
             dispatcher = makeGrammarDispatcher(conflictGrammar, {});
-            ({ session, menu } = makeSession(dispatcher));
+            ({ session } = makeSession(dispatcher));
         });
 
         test("'ab' no trailing sep: none-mode completions, closedSet=false", async () => {
@@ -1213,7 +1166,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             );
             // separatorMode="none" means menu is active immediately
             // (no separator needed).
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
         });
 
         test("'ab ' trailing sep: both groups visible, no re-fetch (closedSet=true)", async () => {
@@ -1222,13 +1175,12 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // "none" group is immediately visible — no preload.
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
 
             // Type space — in the per-group model, both groups are
             // preserved (closedSet=true). The "none" mode "cd" was already
             // visible; now the "spacePunctuation" mode "cd" also becomes
             // visible. Both groups are loaded at the same anchor — no re-fetch.
-            menu.invalidate.mockClear();
             session.update("ab ");
 
             // No new fetch — both groups already loaded at anchor "ab".
@@ -1239,10 +1191,8 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                     expect.objectContaining({ matchText: "cd" }),
                 ]),
             );
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "",
-            );
-            expect(menu.isActive()).toBe(true);
+            expect(session.getCompletionState()?.prefix).toBe("");
+            expect(isActive(session)).toBe(true);
         });
 
         test("backspace from 'ab ' to 'ab': reuses session (anchor unchanged)", async () => {
@@ -1259,7 +1209,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
             // "none" mode "cd" is still visible; "spacePunctuation" mode
             // "cd" is hidden (separator removed). Menu shows "cd".
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
         });
 
         test("double space 'ab  ': optional mode strips extra space, menu stays visible", async () => {
@@ -1277,10 +1227,8 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // No new fetch — both groups already loaded at anchor "ab".
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "",
-            );
-            expect(menu.isActive()).toBe(true);
+            expect(session.getCompletionState()?.prefix).toBe("");
+            expect(isActive(session)).toBe(true);
         });
 
         test("'ab c' partial match narrows trie to 'cd'", async () => {
@@ -1294,10 +1242,8 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // No new fetch — trie handles narrowing.
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "c",
-            );
-            expect(menu.isActive()).toBe(true);
+            expect(session.getCompletionState()?.prefix).toBe("c");
+            expect(isActive(session)).toBe(true);
         });
 
         test("'ab ' → 'ab c' narrows to 'cd' via trie", async () => {
@@ -1312,10 +1258,8 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // No new fetch — trie handles narrowing.
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "c",
-            );
-            expect(menu.isActive()).toBe(true);
+            expect(session.getCompletionState()?.prefix).toBe("c");
+            expect(isActive(session)).toBe(true);
         });
     });
 
@@ -1327,7 +1271,6 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
         //   AutoRule:                separatorMode="space" → level 1 only
         // This produces two groups at different SepLevels.
 
-        let menu: TestSearchMenu;
         let dispatcher: ReturnType<typeof makeGrammarDispatcher>;
         let session: PartialCompletionSession;
 
@@ -1342,7 +1285,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
         beforeEach(async () => {
             dispatcher = makeGrammarDispatcher(conflictGrammar2, {});
-            ({ session, menu } = makeSession(dispatcher));
+            ({ session } = makeSession(dispatcher));
         });
 
         test("widen: 'ab' at level 0, type space widens to level 1", async () => {
@@ -1350,20 +1293,16 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             await flush();
 
             // "ab" → none-mode "cd" at level 0. Menu active.
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
 
             // Type space: rawPrefix=" ", sepLevel=1, menuSepLevel=0.
             // " " doesn't match "cd" at level 0 → C3 fails.
             // D1: sepLevel(1) > menuSepLevel(0) → widen to 1.
             // Level 1: space-mode "cd". Trie reloaded.
-            menu.invalidate.mockClear();
             session.update("ab ");
             // Exactly one setChoices for the widen reload.
-            expect(menu.invalidate).toHaveBeenCalledTimes(1);
-            expect(menu.isActive()).toBe(true);
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "",
-            );
+            expect(isActive(session)).toBe(true);
+            expect(session.getCompletionState()?.prefix).toBe("");
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
         });
 
@@ -1373,15 +1312,13 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // Widen to level 1.
             session.update("ab ");
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
 
             // Backspace to "ab": sepLevel=0 < menuSepLevel=1.
             // B1: items at level 0 (none-mode "cd") → NARROW.
-            menu.invalidate.mockClear();
             session.update("ab");
             // Exactly one setChoices for the narrow reload.
-            expect(menu.invalidate).toHaveBeenCalledTimes(1);
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
         });
 
@@ -1394,10 +1331,8 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             session.update("ab"); // narrow to 0
             session.update("ab "); // widen to 1 again
 
-            expect(menu.isActive()).toBe(true);
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "",
-            );
+            expect(isActive(session)).toBe(true);
+            expect(session.getCompletionState()?.prefix).toBe("");
             // No re-fetches through the entire round-trip.
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
         });
@@ -1408,17 +1343,13 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // Widen to level 1.
             session.update("ab ");
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
 
             // Type "c": trie prefix "c" narrows to "cd".
             // No setChoices — trie already loaded at level 1.
-            menu.invalidate.mockClear();
             session.update("ab c");
-            expect(menu.isActive()).toBe(true);
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "c",
-            );
-            expect(menu.invalidate).not.toHaveBeenCalled();
+            expect(isActive(session)).toBe(true);
+            expect(session.getCompletionState()?.prefix).toBe("c");
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
         });
 
@@ -1429,13 +1360,9 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // At level 0, none-mode "cd" visible.
             // Type "c" without separator: trie prefix "c" → "cd".
             // No setChoices — trie already loaded at level 0.
-            menu.invalidate.mockClear();
             session.update("abc");
-            expect(menu.isActive()).toBe(true);
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "c",
-            );
-            expect(menu.invalidate).not.toHaveBeenCalled();
+            expect(isActive(session)).toBe(true);
+            expect(session.getCompletionState()?.prefix).toBe("c");
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
         });
 
@@ -1451,30 +1378,24 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // but inputSepLevel=1 → skip ahead to level 1 (space-mode "cd").
             // loadLevel loads level-1 items directly.  reuseSession runs
             // with rawPrefix=" ", sepLevel=1 = menuSepLevel(1) → C succeeds.
-            expect(menu.isActive()).toBe(true);
-            expect(menu.updatePrefix).toHaveBeenLastCalledWith(
-                "",
-            );
+            expect(isActive(session)).toBe(true);
+            expect(session.getCompletionState()?.prefix).toBe("");
             // Three setChoices: initial clear + loadLevel(0) + D1 consume loadLevel(1).
-            expect(menu.invalidate).toHaveBeenCalledTimes(3);
 
             // Narrow back to "ab": level 0 reloaded.
-            menu.invalidate.mockClear();
             session.update("ab");
-            expect(menu.invalidate).toHaveBeenCalledTimes(1);
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
         });
     });
 
     describe("SepLevel transitions with music grammar", () => {
-        let menu: TestSearchMenu;
         let dispatcher: ReturnType<typeof makeGrammarDispatcher>;
         let session: PartialCompletionSession;
 
         beforeEach(async () => {
             dispatcher = makeGrammarDispatcher(musicGrammar, musicEntities);
-            ({ session, menu } = makeSession(dispatcher));
+            ({ session } = makeSession(dispatcher));
         });
 
         test("entity level: skip-ahead to level 1, B2 hides at anchor", async () => {
@@ -1486,13 +1407,11 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // After 'play' uniquely satisfies, re-fetch returns entities
             // with separatorMode="spacePunctuation" → pre-loaded at L1, hidden.
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
 
             // Type space → D1 consumes separator, items already loaded.
-            menu.invalidate.mockClear();
             session.update("play ");
-            expect(menu.isActive()).toBe(true);
-            expect(menu.invalidate).not.toHaveBeenCalled();
+            expect(isActive(session)).toBe(true);
         });
 
         test("entity level: punctuation triggers re-fetch (entities are default/space mode)", async () => {
@@ -1521,19 +1440,17 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             session.update("play");
             await flush();
             session.update("play ");
-            expect(menu.isActive()).toBe(true); // entities shown
+            expect(isActive(session)).toBe(true); // entities shown
 
             // Backspace to "play" — separator removed.
             // rawPrefix="" → sepLevel=0 < menuSepLevel(1).
             // B1 NARROW: L1 reloaded (entities still there), hidden.
             session.update("play");
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
 
             // Re-type space → D1 consumes separator, items already loaded.
-            menu.invalidate.mockClear();
             session.update("play ");
-            expect(menu.isActive()).toBe(true);
-            expect(menu.invalidate).not.toHaveBeenCalled();
+            expect(isActive(session)).toBe(true);
         });
 
         test("getCompletionPrefix tracks menuSepLevel correctly", async () => {
@@ -1543,12 +1460,13 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             await flush();
 
             // At anchor "play", L0 empty → prefix undefined.
-            expect(session.getCompletionPrefix("play")).toBeUndefined();
+            expect(session.getCompletionState()?.prefix).toBeUndefined();
 
             // After consuming space via update, menuAnchorIndex advances.
             session.update("play ");
-            expect(session.getCompletionPrefix("play ")).toBe("");
-            expect(session.getCompletionPrefix("play sha")).toBe("sha");
+            expect(session.getCompletionState()?.prefix).toBe("");
+            session.update("play sha");
+            expect(session.getCompletionState()?.prefix).toBe("sha");
         });
     });
 
@@ -1570,8 +1488,9 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // anchor="play", separatorMode="spacePunctuation"
             // After consuming space via update, menuAnchorIndex advances.
             session.update("play ");
-            expect(session.getCompletionPrefix("play ")).toBe("");
-            expect(session.getCompletionPrefix("play sha")).toBe("sha");
+            expect(session.getCompletionState()?.prefix).toBe("");
+            session.update("play sha");
+            expect(session.getCompletionState()?.prefix).toBe("sha");
         });
 
         test("returns undefined before separator is typed", async () => {
@@ -1587,7 +1506,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             await flush();
 
             // No separator typed yet → prefix is undefined.
-            expect(session.getCompletionPrefix("play")).toBeUndefined();
+            expect(session.getCompletionState()?.prefix).toBeUndefined();
         });
 
         test("returns undefined when input diverged from anchor", async () => {
@@ -1602,8 +1521,11 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             session.update("play");
             await flush();
 
-            // Diverged — "pla" doesn't start with anchor "play"
-            expect(session.getCompletionPrefix("pla")).toBeUndefined();
+            // Diverge — "pla" doesn't start with anchor "play", triggers re-fetch.
+            // Diverge — "pla" doesn't start with anchor "play", triggers re-fetch.
+            // During the fetch the trie is empty, so completions are unavailable.
+            session.update("pla");
+            expect(session.getCompletionState()).toBeUndefined();
         });
     });
 
@@ -1615,7 +1537,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 musicGrammar,
                 musicEntities,
             );
-            const { session, menu } = makeSession(dispatcher);
+            const { session } = makeSession(dispatcher);
 
             // Establish keyword completions at anchor=""; closedSet=true.
             session.update("");
@@ -1623,7 +1545,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // Narrow to "p…" via trie — no re-fetch.
             session.update("p");
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
 
             const fetchCountBefore =
                 dispatcher.getCommandCompletion.mock.calls.length;
@@ -1636,11 +1558,11 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
                 fetchCountBefore,
             );
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
 
             // Session data preserved — typing more still works via reuseSession.
             session.update("pa");
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
         });
 
         test("no refetch when input equals anchor", async () => {
@@ -1648,7 +1570,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 musicGrammar,
                 musicEntities,
             );
-            const { session, menu } = makeSession(dispatcher);
+            const { session } = makeSession(dispatcher);
 
             // Establish anchor = "".
             session.update("");
@@ -1663,7 +1585,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
                 fetchCountBefore,
             );
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
         });
 
         test("same entity level + input past anchor → refetch, suppress reopen", async () => {
@@ -1671,7 +1593,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 musicGrammar,
                 musicEntities,
             );
-            const { session, menu } = makeSession(dispatcher);
+            const { session } = makeSession(dispatcher);
 
             // Navigate to entity completions at anchor="play".
             session.update("");
@@ -1679,7 +1601,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             session.update("play");
             await flush();
             session.update("play "); // separator → menu active
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
 
             const fetchCountBefore =
                 dispatcher.getCommandCompletion.mock.calls.length;
@@ -1697,11 +1619,11 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 "play ",
                 "forward",
             );
-            expect(menu.isActive()).toBe(false);
+            expect(isActive(session)).toBe(false);
 
             // Session data refreshed — typing more narrows without another refetch.
             session.update("play sha");
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
         });
 
         test("level change on explicitHide keeps menu visible (widen)", async () => {
@@ -1715,12 +1637,12 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 ].join("\n"),
             );
             const dispatcher = makeGrammarDispatcher(grammar, {});
-            const { session, menu } = makeSession(dispatcher);
+            const { session } = makeSession(dispatcher);
 
             // "ab" → level 0 (none-mode "cd"). Menu active.
             session.update("ab");
             await flush();
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
 
             const fetchCountBefore =
                 dispatcher.getCommandCompletion.mock.calls.length;
@@ -1733,7 +1655,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 fetchCountBefore,
             );
             // Menu stays visible — new items the user hasn't seen.
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
         });
 
         test("level change on explicitHide keeps menu visible (narrow)", async () => {
@@ -1746,13 +1668,13 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 ].join("\n"),
             );
             const dispatcher = makeGrammarDispatcher(grammar, {});
-            const { session, menu } = makeSession(dispatcher);
+            const { session } = makeSession(dispatcher);
 
             // "ab" at level 0, then widen to level 1.
             session.update("ab");
             await flush();
             session.update("ab ");
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
 
             const fetchCountBefore =
                 dispatcher.getCommandCompletion.mock.calls.length;
@@ -1765,7 +1687,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 fetchCountBefore,
             );
             // Menu stays visible — different level items.
-            expect(menu.isActive()).toBe(true);
+            expect(isActive(session)).toBe(true);
         });
 
         test("refetch triggered; anchor advances → session moves to next level", async () => {
@@ -1773,7 +1695,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 musicGrammar,
                 musicEntities,
             );
-            const { session, menu } = makeSession(dispatcher);
+            const { session } = makeSession(dispatcher);
 
             // Navigate to entity completions at anchor="play".
             session.update("");
@@ -1805,10 +1727,8 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             );
 
             // Type separator → D1 consumes, items already loaded.
-            menu.invalidate.mockClear();
             session.update("play Shake It Off ");
-            expect(menu.isActive()).toBe(true);
-            expect(menu.invalidate).not.toHaveBeenCalled();
+            expect(isActive(session)).toBe(true);
         });
     });
 });

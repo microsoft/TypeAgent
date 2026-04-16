@@ -79,8 +79,15 @@ export class PartialCompletion {
             onToggleMode,
         );
 
-        // Wire the SearchMenu back as the controller's menu control.
-        this.controller.setMenu(this.searchMenu);
+        // When completion state changes, re-render the search menu.
+        this.controller.setOnUpdate(() => {
+            const state = this.controller.getCompletionState();
+            if (state) {
+                this.searchMenu.render(state.prefix);
+            } else {
+                this.searchMenu.hide();
+            }
+        });
 
         const selectionChangeHandler = () => {
             debug("Partial completion update on selection changed");
@@ -271,9 +278,7 @@ export class PartialCompletion {
 
         // Compute the filter prefix relative to the current anchor.
         // Must be read before resetToIdle() clears the session's anchor.
-        const currentInput = this.getCurrentInputForCompletion();
-        const completionPrefix =
-            this.controller.getCompletionPrefix(currentInput);
+        const completionPrefix = this.controller.getCompletionState()?.prefix;
         if (completionPrefix === undefined) {
             debugError(`Partial completion abort select: prefix not found`);
             return;

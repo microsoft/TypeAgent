@@ -7,24 +7,25 @@ import {
     makeSession,
     makeDispatcher,
     makeCompletionResult,
+    isActive,
 } from "./helpers.js";
 
-// ── getCompletionPrefix ───────────────────────────────────────────────────────
+// ── getCompletionState — prefix field ─────────────────────────────────────────
 
-describe("PartialCompletionSession — getCompletionPrefix", () => {
+describe("PartialCompletionSession — getCompletionState prefix", () => {
     test("returns undefined when session is IDLE", () => {
         const { session } = makeSession(makeDispatcher());
-        expect(session.getCompletionPrefix("anything")).toBeUndefined();
+        expect(session.getCompletionState()).toBeUndefined();
     });
 
-    test("returns suffix after anchor when input starts with anchor", async () => {
-        const result = makeCompletionResult(["song"], 4);
+    test("returns prefix from completion state", async () => {
+        const result = makeCompletionResult(["song", "sonata"], 4);
         const { session } = makeSession(makeDispatcher(result));
 
-        session.update("play song");
+        session.update("play son");
         await Promise.resolve();
 
-        expect(session.getCompletionPrefix("play song")).toBe("song");
+        expect(session.getCompletionState()?.prefix).toBe("son");
     });
 
     test("returns undefined when input diverges from anchor", async () => {
@@ -34,8 +35,10 @@ describe("PartialCompletionSession — getCompletionPrefix", () => {
         session.update("play song");
         await Promise.resolve();
 
-        // Input no longer starts with anchor "play"
-        expect(session.getCompletionPrefix("stop")).toBeUndefined();
+        // Diverge — "stop" doesn't start with anchor "play", triggers re-fetch.
+        // During the fetch the trie is empty, so completions are unavailable.
+        session.update("stop");
+        expect(session.getCompletionState()).toBeUndefined();
     });
 
     test("separatorMode: returns stripped prefix when separator is present", async () => {
@@ -52,7 +55,7 @@ describe("PartialCompletionSession — getCompletionPrefix", () => {
         session.update("play mu");
 
         // After consumption: menuAnchorIndex past the space, prefix = "mu".
-        expect(session.getCompletionPrefix("play mu")).toBe("mu");
+        expect(session.getCompletionState()?.prefix).toBe("mu");
     });
 
     test("separatorMode: returns undefined when separator is absent", async () => {
@@ -64,8 +67,8 @@ describe("PartialCompletionSession — getCompletionPrefix", () => {
         session.update("play");
         await Promise.resolve();
 
-        // No separator yet — undefined means no replacement should happen
-        expect(session.getCompletionPrefix("play")).toBeUndefined();
+        // No separator yet — state is undefined (deferred)
+        expect(session.getCompletionState()).toBeUndefined();
     });
 });
 
@@ -86,17 +89,17 @@ describe("PartialCompletionSession — resetToIdle", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
     });
 
-    test("does not hide the menu (caller is responsible for that)", async () => {
+    test("does not notify the renderer (caller is responsible for that)", async () => {
         const dispatcher = makeDispatcher(makeCompletionResult(["song"], 4));
-        const { session, menu } = makeSession(dispatcher);
+        const { session, onUpdate } = makeSession(dispatcher);
 
         session.update("play song");
         await Promise.resolve();
 
-        menu.hide.mockClear();
+        onUpdate.mockClear();
         session.resetToIdle();
 
-        expect(menu.hide).not.toHaveBeenCalled();
+        expect(onUpdate).not.toHaveBeenCalled();
     });
 });
 
@@ -162,7 +165,7 @@ describe("PartialCompletionSession — @command routing", () => {
             separatorMode: "space",
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         // User types "@config" → completions loaded, deferred (no separator yet)
         session.update("@config");
@@ -170,14 +173,13 @@ describe("PartialCompletionSession — @command routing", () => {
 
         // Items pre-loaded at lowest non-empty level (L1) but hidden
         // until separator is consumed.
-        expect(menu.isActive()).toBe(false);
-        expect(menu.updatePrefix).not.toHaveBeenCalled();
+        expect(isActive(session)).toBe(false);
 
         // User types space → separator present, consumption advances to L1.
         session.update("@config ");
 
-        expect(menu.isActive()).toBe(true);
-        expect(menu.updatePrefix).toHaveBeenCalledWith("");
+        expect(isActive(session)).toBe(true);
+        expect(session.getCompletionState()?.prefix).toBe("");
         // No re-fetch — same session handles both states
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
@@ -188,7 +190,7 @@ describe("PartialCompletionSession — @command routing", () => {
             separatorMode: "space",
         });
         const dispatcher = makeDispatcher(result);
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("@config");
         await Promise.resolve();
@@ -196,7 +198,7 @@ describe("PartialCompletionSession — @command routing", () => {
         // Type space + partial subcommand
         session.update("@config cl");
 
-        expect(menu.updatePrefix).toHaveBeenCalledWith("cl");
+        expect(session.getCompletionState()?.prefix).toBe("cl");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 

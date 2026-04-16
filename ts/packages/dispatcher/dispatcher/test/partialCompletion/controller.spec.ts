@@ -7,28 +7,20 @@ import {
     createCompletionController,
 } from "../../src/helpers/completion/index.js";
 import {
-    TestSearchMenu,
     makeDispatcher,
     makeCompletionResult,
     MockDispatcher,
 } from "./helpers.js";
 
-// Create a TestSearchMenu using the controller as data provider.
-// This mirrors the Shell pattern: Shell's SearchMenu wraps the controller.
-function makeControllerMenu(controller: CompletionController): TestSearchMenu {
-    return new TestSearchMenu(controller as any);
-}
-
 describe("CompletionController", () => {
-    let menu: TestSearchMenu;
     let dispatcher: MockDispatcher;
 
     beforeEach(() => {
         dispatcher = makeDispatcher();
     });
 
-    describe("with internal menu (CLI path)", () => {
-        it("should create without a custom menu", () => {
+    describe("basic lifecycle", () => {
+        it("should create without options", () => {
             const controller = createCompletionController(dispatcher);
             expect(controller).toBeInstanceOf(CompletionController);
         });
@@ -42,16 +34,15 @@ describe("CompletionController", () => {
             const controller = createCompletionController(dispatcher);
             controller.update("a");
 
-            // Wait for the async completion fetch
             await flushPromises();
 
-            const state = controller.getCompletionState("a");
+            const state = controller.getCompletionState();
             expect(state).toBeDefined();
             expect(state!.items.length).toBeGreaterThan(0);
             expect(state!.items.map((i) => i.selectedText)).toContain("alpha");
         });
 
-        it("should call onUpdate callback on completion show", async () => {
+        it("should call onUpdate callback on completion change", async () => {
             const onUpdate = jest.fn();
             const result = makeCompletionResult(["alpha", "beta"], 0, {
                 separatorMode: "none",
@@ -78,34 +69,15 @@ describe("CompletionController", () => {
             controller.update("a");
             await flushPromises();
 
-            expect(controller.getCompletionState("a")).toBeDefined();
+            expect(controller.getCompletionState()).toBeDefined();
 
             controller.accept();
-            expect(controller.getCompletionState("a")).toBeUndefined();
+            expect(controller.getCompletionState()).toBeUndefined();
         });
 
         it("should return undefined state when idle", () => {
             const controller = createCompletionController(dispatcher);
-            expect(controller.getCompletionState("hello")).toBeUndefined();
-        });
-    });
-
-    describe("with custom menu (Shell path)", () => {
-        it("should use the provided menu", async () => {
-            const result = makeCompletionResult(["alpha", "beta"], 0, {
-                separatorMode: "none",
-            });
-            dispatcher.getCommandCompletion.mockResolvedValue(result);
-
-            const controller = createCompletionController(dispatcher);
-            menu = makeControllerMenu(controller);
-            controller.setMenu(menu);
-            controller.update("a", "forward");
-
-            await flushPromises();
-
-            // The custom menu should have received setChoices
-            expect(menu.invalidate).toHaveBeenCalled();
+            expect(controller.getCompletionState()).toBeUndefined();
         });
 
         it("should call dismiss for escape handling", async () => {
@@ -115,8 +87,6 @@ describe("CompletionController", () => {
             dispatcher.getCommandCompletion.mockResolvedValue(result);
 
             const controller = createCompletionController(dispatcher);
-            menu = makeControllerMenu(controller);
-            controller.setMenu(menu);
             controller.update("a", "forward");
             await flushPromises();
 
@@ -125,52 +95,47 @@ describe("CompletionController", () => {
         });
 
         it("should hide without clearing session state", async () => {
+            const onUpdate = jest.fn();
             const result = makeCompletionResult(["alpha", "beta"], 0, {
                 separatorMode: "none",
             });
             dispatcher.getCommandCompletion.mockResolvedValue(result);
 
-            const controller = createCompletionController(dispatcher);
-            menu = makeControllerMenu(controller);
-            controller.setMenu(menu);
+            const controller = createCompletionController(dispatcher, {
+                onUpdate,
+            });
             controller.update("a", "forward");
             await flushPromises();
 
+            onUpdate.mockClear();
             controller.hide();
-            expect(menu.hide).toHaveBeenCalled();
+            expect(onUpdate).toHaveBeenCalled();
         });
     });
 
-    describe("getCompletionPrefix", () => {
-        it("should return prefix after update", async () => {
-            const result = makeCompletionResult(["alpha", "beta"], 0, {
+    describe("setOnUpdate", () => {
+        it("should replace the onUpdate callback", async () => {
+            const onUpdate1 = jest.fn();
+            const onUpdate2 = jest.fn();
+            const result = makeCompletionResult(["alpha"], 0, {
                 separatorMode: "none",
             });
             dispatcher.getCommandCompletion.mockResolvedValue(result);
 
-            const controller = createCompletionController(dispatcher);
-            menu = makeControllerMenu(controller);
-            controller.setMenu(menu);
-            controller.update("a", "forward");
+            const controller = createCompletionController(dispatcher, {
+                onUpdate: onUpdate1,
+            });
+            controller.setOnUpdate(onUpdate2);
+            controller.update("a");
             await flushPromises();
 
-            const prefix = controller.getCompletionPrefix("a");
-            expect(prefix).toBeDefined();
-        });
-
-        it("should return undefined when idle", () => {
-            const controller = createCompletionController(dispatcher);
-            menu = makeControllerMenu(controller);
-            controller.setMenu(menu);
-            expect(controller.getCompletionPrefix("hello")).toBeUndefined();
+            expect(onUpdate1).not.toHaveBeenCalled();
+            expect(onUpdate2).toHaveBeenCalled();
         });
     });
 });
 
 function flushPromises(): Promise<void> {
-    // The session's completion chain has .then() handlers after
-    // the dispatcher promise resolves. Multiple microtask flushes
-    // ensure they all settle.
     return Promise.resolve()
         .then(() => Promise.resolve())
         .then(() => Promise.resolve());

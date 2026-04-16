@@ -9,7 +9,6 @@ export interface SearchMenuDataProvider<
     TItem extends BaseTSTData = BaseTSTData,
 > {
     filterItems(prefix: string): TItem[];
-    hasExactMatch(text: string): boolean;
     numChoices(): number;
 }
 

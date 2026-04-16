@@ -25,7 +25,6 @@ export class SearchMenu {
     private readonly toggle: CompletionToggle | undefined;
     private prefix: string | undefined;
     private _active: boolean = false;
-    private _filteredItems: SearchMenuItem[] = [];
 
     constructor(
         private readonly dataProvider: SearchMenuDataProvider<SearchMenuItem>,
@@ -82,43 +81,42 @@ export class SearchMenu {
         }
     }
 
-    // ── ISearchMenuControl implementation ───────────────────────────────────────
+    // ── Rendering ───────────────────────────────────────────────────────────────
 
-    public invalidate(): void {
-        this.prefix = undefined;
-        this._filteredItems = [];
-    }
-
-    public numChoices(): number {
-        return this.dataProvider.numChoices();
-    }
-
-    public updatePrefix(prefix: string): boolean {
+    /**
+     * Render completions for the given prefix.  Queries the data provider
+     * for matching items, resolves the menu position, and shows or hides
+     * the UI accordingly.
+     *
+     * Called by the shell in response to onUpdate (partial.ts) or
+     * on input events (templateEditor.ts).
+     */
+    public render(prefix: string): void {
         if (this.dataProvider.numChoices() === 0) {
-            return false;
+            this.hide();
+            return;
         }
 
         const position = this.getPosition(prefix);
         if (position === undefined) {
             this.hide();
-            return false;
+            return;
         }
 
         if (this.prefix === prefix && this._active) {
             this.lastPosition = position;
             this.searchMenuUI!.update({ position });
             this.updateToggleLayout();
-            return false;
+            return;
         }
 
         this.prefix = prefix;
         const items = this.dataProvider.filterItems(prefix);
-        const uniquelySatisfied = isUniquelySatisfied(items, prefix);
-        const showMenu = items.length !== 0 && !uniquelySatisfied;
+        const showMenu =
+            items.length !== 0 && !isUniquelySatisfied(items, prefix);
 
         if (showMenu) {
             this._active = true;
-            this._filteredItems = items;
             // onShow
             this.lastPosition = position;
             this.lastPrefix = prefix;
@@ -132,13 +130,11 @@ export class SearchMenu {
         } else {
             this.hide();
         }
-        return uniquelySatisfied;
     }
 
     public hide(): void {
         if (this._active) {
             this._active = false;
-            this._filteredItems = [];
             // onHide
             this.lastPosition = undefined;
             this.lastPrefix = undefined;
@@ -151,10 +147,6 @@ export class SearchMenu {
 
     public isActive(): boolean {
         return this._active;
-    }
-
-    public getFilteredItems(): SearchMenuItem[] {
-        return this._filteredItems;
     }
 
     // ── UI event handling ─────────────────────────────────────────────────────

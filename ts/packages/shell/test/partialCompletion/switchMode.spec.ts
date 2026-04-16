@@ -77,7 +77,7 @@ class TestableSearchMenu {
         };
     }
 
-    // ── ISearchMenuControl implementation (mirrors production SearchMenu) ─
+    // ── SearchMenu methods (mirrors production SearchMenu) ─────────────
 
     // Populate the internal trie for standalone tests (not needed when
     // using an external data provider like CompletionController).
@@ -371,10 +371,19 @@ describe("switchMode integration with CompletionController", () => {
         const dispatcher = makeDispatcher(result);
         const controller = createCompletionController(dispatcher);
         const menu = new TestableSearchMenu(true, controller, anyPos);
-        controller.setMenu(menu);
+        let lastInput = "";
+        controller.setOnUpdate(() => {
+            const state = controller.getCompletionState();
+            if (state) {
+                menu.updatePrefix(state.prefix);
+            } else {
+                menu.hide();
+            }
+        });
 
         // Trigger initial completion — "play " is anchor, "s" is prefix
-        controller.update("play s", "forward");
+        lastInput = "play s";
+        controller.update(lastInput, "forward");
         await Promise.resolve();
 
         expect(menu.isActive()).toBe(true);
@@ -394,9 +403,18 @@ describe("switchMode integration with CompletionController", () => {
         const dispatcher = makeDispatcher(result);
         const controller = createCompletionController(dispatcher);
         const menu = new TestableSearchMenu(true, controller, anyPos);
-        controller.setMenu(menu);
+        let lastInput = "";
+        controller.setOnUpdate(() => {
+            const state = controller.getCompletionState();
+            if (state) {
+                menu.updatePrefix(state.prefix);
+            } else {
+                menu.hide();
+            }
+        });
 
-        controller.update("a", "forward");
+        lastInput = "a";
+        controller.update(lastInput, "forward");
         await Promise.resolve();
 
         menu.switchMode(false);

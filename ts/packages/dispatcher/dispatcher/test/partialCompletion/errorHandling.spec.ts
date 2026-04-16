@@ -83,19 +83,20 @@ describe("PartialCompletionSession — backend error handling", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
     });
 
-    test("rejected promise does not populate menu", async () => {
+    test("rejected promise does not populate completions", async () => {
         const dispatcher: ICompletionDispatcher = {
             getCommandCompletion: jest
                 .fn<ICompletionDispatcher["getCommandCompletion"]>()
                 .mockRejectedValue(new Error("timeout")),
         };
-        const { session, menu } = makeSession(dispatcher);
+        const { session } = makeSession(dispatcher);
 
         session.update("play");
         await Promise.resolve();
         await Promise.resolve();
 
-        // setChoices should only have the initial empty-array call, not real items
-        expect(menu.invalidate).toHaveBeenCalledTimes(1);
+        // After rejection, no completions should be available.
+        // The initial startNewSession fires one onUpdate (clearing state).
+        expect(session.getCompletionState()).toBeUndefined();
     });
 });

@@ -2,10 +2,9 @@
 // Licensed under the MIT License.
 
 import { CompletionDirection } from "@typeagent/agent-sdk";
-import { SearchMenuItem, isUniquelySatisfied } from "./searchMenu.js";
+import { SearchMenuItem } from "./searchMenu.js";
 import { type SearchMenuDataProvider } from "./searchMenu.js";
 import {
-    ISearchMenuControl,
     ICompletionDispatcher,
     PartialCompletionSession,
     CompletionState,
@@ -20,75 +19,6 @@ export type CompletionControllerOptions = {
 };
 
 /**
- * Headless ISearchMenuControl — no UI, no trie.
- * Fires an onUpdate callback whenever the menu shows or hides.
- * Used as the internal menu control for the CLI path.
- */
-export class HeadlessSearchMenu implements ISearchMenuControl {
-    public onUpdate: () => void;
-    private dataProvider: SearchMenuDataProvider<SearchMenuItem>;
-    private prefix: string | undefined;
-    private _active: boolean = false;
-    private _filteredItems: SearchMenuItem[] = [];
-
-    constructor(
-        onUpdate: () => void,
-        dataProvider: SearchMenuDataProvider<SearchMenuItem>,
-    ) {
-        this.onUpdate = onUpdate;
-        this.dataProvider = dataProvider;
-    }
-
-    public invalidate(): void {
-        this.prefix = undefined;
-        this._filteredItems = [];
-    }
-
-    public updatePrefix(prefix: string): boolean {
-        if (this.dataProvider.numChoices() === 0) {
-            return false;
-        }
-
-        if (this.prefix === prefix && this._active) {
-            return false;
-        }
-
-        this.prefix = prefix;
-        const items = this.dataProvider.filterItems(prefix);
-        const uniquelySatisfied = isUniquelySatisfied(items, prefix);
-        const showMenu = items.length !== 0 && !uniquelySatisfied;
-
-        if (showMenu) {
-            const wasActive = this._active;
-            this._active = true;
-            this._filteredItems = items;
-            if (!wasActive) {
-                this.onUpdate();
-            }
-        } else {
-            this.hide();
-        }
-        return uniquelySatisfied;
-    }
-
-    public hide(): void {
-        if (this._active) {
-            this._active = false;
-            this._filteredItems = [];
-            this.onUpdate();
-        }
-    }
-
-    public isActive(): boolean {
-        return this._active;
-    }
-
-    public getFilteredItems(): SearchMenuItem[] {
-        return this._filteredItems;
-    }
-}
-
-/**
  * High-level completion controller wrapping PartialCompletionSession.
  *
  * Implements SearchMenuDataProvider so consumers can pass the controller
@@ -100,29 +30,23 @@ export class HeadlessSearchMenu implements ISearchMenuControl {
  *   - dismiss() — called on Escape
  *   - hide()    — called when cursor leaves valid position
  *   - getCompletionState() — returns current completions for rendering
- *   - setMenu() — wire an external menu control (Shell's SearchMenu)
+ *   - setOnUpdate() — set/replace the onUpdate callback
  *
- * CLI creates a controller without a custom menu (internal HeadlessSearchMenu).
- * Shell creates a controller, then passes it as data provider to SearchMenu,
- * then calls setMenu() to wire the menu back.
+ * Both CLI and Shell create a controller. The onUpdate callback fires
+ * whenever completion state changes.  Renderers query
+ * getCompletionState() in the callback to get the current items.
  */
 export class CompletionController
     implements SearchMenuDataProvider<SearchMenuItem>
 {
     private readonly session: PartialCompletionSession;
-    private readonly headlessMenu: HeadlessSearchMenu | undefined;
 
     constructor(
         dispatcher: ICompletionDispatcher,
         options?: CompletionControllerOptions,
     ) {
         const onUpdate = options?.onUpdate ?? (() => {});
-        this.session = new PartialCompletionSession(dispatcher);
-        // Create a headless menu as the default control surface.
-        // Callers that supply their own menu via setMenu() override this.
-        const headless = new HeadlessSearchMenu(onUpdate, this);
-        this.headlessMenu = headless;
-        this.session.setMenu(headless);
+        this.session = new PartialCompletionSession(dispatcher, onUpdate);
     }
 
     // ── SearchMenuDataProvider implementation ─────────────────────────
@@ -131,32 +55,17 @@ export class CompletionController
         return this.session.filterItems(prefix);
     }
 
-    public hasExactMatch(text: string): boolean {
-        return this.session.hasExactMatch(text);
-    }
-
     public numChoices(): number {
         return this.session.numChoices();
     }
 
-    // ── Menu wiring ──────────────────────────────────────────────────
-
-    /**
-     * Wire an external menu control (e.g. Shell's SearchMenu).
-     * Replaces the internal HeadlessSearchMenu.
-     */
-    public setMenu(menu: ISearchMenuControl): void {
-        this.session.setMenu(menu);
-    }
+    // ── Callback wiring ──────────────────────────────────────────────
 
     /**
      * Set or replace the callback invoked when completions change.
-     * Only effective when using the internal HeadlessSearchMenu (CLI path).
      */
     public setOnUpdate(onUpdate: () => void): void {
-        if (this.headlessMenu) {
-            this.headlessMenu.onUpdate = onUpdate;
-        }
+        this.session.setOnUpdate(onUpdate);
     }
 
     // ── Completion lifecycle ─────────────────────────────────────────
@@ -199,17 +108,8 @@ export class CompletionController
      * Returns the current completion state for rendering, or undefined
      * when there are no completions to show.
      */
-    public getCompletionState(input: string): CompletionState | undefined {
-        return this.session.getCompletionState(input);
-    }
-
-    /**
-     * Returns the completion prefix (text typed after the anchor), or
-     * undefined when no completions are active.  Useful for Shell's
-     * handleSelect which needs the prefix before calling accept().
-     */
-    public getCompletionPrefix(input: string): string | undefined {
-        return this.session.getCompletionPrefix(input);
+    public getCompletionState(): CompletionState | undefined {
+        return this.session.getCompletionState();
     }
 }
 

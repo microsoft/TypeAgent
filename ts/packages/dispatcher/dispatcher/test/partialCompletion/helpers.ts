@@ -1,64 +1,43 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { jest, type jest as JestTypes } from "@jest/globals";
+import { jest } from "@jest/globals";
 import {
     ICompletionDispatcher,
-    ISearchMenuControl,
     PartialCompletionSession,
 } from "../../src/helpers/completion/session.js";
-import { HeadlessSearchMenu } from "../../src/helpers/completion/controller.js";
 import { CompletionGroup, SeparatorMode } from "@typeagent/agent-sdk";
 import { CommandCompletionResult } from "@typeagent/dispatcher-types";
 
 export { PartialCompletionSession };
-export type { ICompletionDispatcher, ISearchMenuControl };
+export type { ICompletionDispatcher };
 export type { CompletionGroup };
 export type { CommandCompletionResult };
 
-type Mocked<T extends (...args: any[]) => any> = T &
-    JestTypes.MockedFunction<T>;
-
-// Real trie-backed ISearchMenuControl using HeadlessSearchMenu.
-// Every method is a jest.fn() wrapping the real implementation so tests can
-// assert on call counts and arguments.
-export class TestSearchMenu extends HeadlessSearchMenu {
-    override invalidate: Mocked<ISearchMenuControl["invalidate"]> = jest.fn(
-        () => super.invalidate(),
-    ) as any;
-
-    override updatePrefix: Mocked<ISearchMenuControl["updatePrefix"]> = jest.fn(
-        (prefix: string): boolean => super.updatePrefix(prefix),
-    ) as any;
-
-    override hide: Mocked<ISearchMenuControl["hide"]> = jest.fn(() =>
-        super.hide(),
-    ) as any;
-
-    override isActive: Mocked<HeadlessSearchMenu["isActive"]> = jest.fn(() =>
-        super.isActive(),
-    ) as any;
-
-    constructor(session: PartialCompletionSession) {
-        super(() => {}, session);
-    }
-}
-
-// Create a wired session + menu pair.
+// Create a session with a mock onUpdate callback.
 export function makeSession(
     dispatcher: ICompletionDispatcher | MockDispatcher,
-): { session: PartialCompletionSession; menu: TestSearchMenu } {
+): {
+    session: PartialCompletionSession;
+    onUpdate: jest.Mock;
+} {
+    const onUpdate = jest.fn();
     const session = new PartialCompletionSession(
         dispatcher as ICompletionDispatcher,
+        onUpdate,
     );
-    const menu = new TestSearchMenu(session);
-    session.setMenu(menu);
-    return { session, menu };
+    return { session, onUpdate };
 }
 
-// Legacy helper — creates a TestSearchMenu from a pre-existing session.
-export function makeMenu(session: PartialCompletionSession): TestSearchMenu {
-    return new TestSearchMenu(session);
+// Convenience: check whether the session considers completions active.
+export function isActive(session: PartialCompletionSession): boolean {
+    return session.getCompletionState() !== undefined;
+}
+
+// Convenience: get the filtered item texts, or [].
+export function getItemTexts(session: PartialCompletionSession): string[] {
+    const state = session.getCompletionState();
+    return state ? state.items.map((i) => i.selectedText) : [];
 }
 
 export type MockDispatcher = {
