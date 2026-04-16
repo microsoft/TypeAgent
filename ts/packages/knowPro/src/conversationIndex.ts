@@ -745,4 +745,3 @@ function filterKnowledge(
     }
     return knowledge;
 }
-

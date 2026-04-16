@@ -247,9 +247,9 @@ describe("MatchAccumulator", () => {
 
     test("getWithHitCount with minHitCount 1 returns all matches (all have hitCount >= 1)", () => {
         const acc = new MatchAccumulator<string>();
-        acc.add("a", 1.0, true);
-        acc.add("b", 0.5, true);
-        acc.add("c", 0.3, false);
+        acc.addExact("a", 1.0);
+        acc.addExact("b", 0.5);
+        acc.addRelated("c", 0.3);
         // minHitCount=1 is a no-op since all matches have hitCount >= 1 by design
         const results = acc.getWithHitCount(1);
         expect(results).toHaveLength(3);
@@ -257,9 +257,9 @@ describe("MatchAccumulator", () => {
 
     test("getWithHitCount with minHitCount 2 filters out single-hit matches", () => {
         const acc = new MatchAccumulator<string>();
-        acc.add("a", 1.0, true);
-        acc.add("a", 0.5, true); // hitCount becomes 2
-        acc.add("b", 0.8, true); // hitCount stays at 1
+        acc.addExact("a", 1.0);
+        acc.addExact("a", 0.5); // hitCount becomes 2
+        acc.addExact("b", 0.8); // hitCount stays at 1
         const results = acc.getWithHitCount(2);
         expect(results).toHaveLength(1);
         expect(results[0].value).toBe("a");

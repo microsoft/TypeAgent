@@ -52,9 +52,7 @@ describe("intersectMultiple", () => {
     });
 
     test("no common elements returns empty", () => {
-        const result = [
-            ...intersectMultiple(["a", "b"], ["c", "d"]),
-        ];
+        const result = [...intersectMultiple(["a", "b"], ["c", "d"])];
         expect(result).toEqual([]);
     });
 

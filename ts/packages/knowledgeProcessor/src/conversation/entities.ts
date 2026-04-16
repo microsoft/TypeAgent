@@ -270,8 +270,10 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
         if (ids && ids.length !== entities.length) {
             throw Error("Id length mismatch");
         }
-        return asyncArray.mapAsync(entities, settings.concurrency, (entity, i) =>
-            add(entity, ids ? ids[i] : undefined),
+        return asyncArray.mapAsync(
+            entities,
+            settings.concurrency,
+            (entity, i) => add(entity, ids ? ids[i] : undefined),
         );
     }
 

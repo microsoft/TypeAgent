@@ -240,23 +240,31 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/dispatcher/dispatcher/src/utils/test/explanationTestData.ts` | 49 | Test data only support a single schema name for now. | Medium | Medium | Component | Fix | No |
 | `ts/packages/dispatcher/types/src/clientIO.ts` | 92 | turn these in to dispatcher events | Medium | Medium | Cross-cutting | Fix | Yes |
 | `ts/packages/dispatcher/types/src/clientIO.ts` | 121 | Formalize the API | High | Medium | Cross-cutting | Fix | Yes |
+| `ts/packages/knowPro/src/collections.ts` | 94 | make this 2 methods: addExact and addRelated | Low | High | Component | Fix | No |
+| `ts/packages/knowPro/src/collections.ts` | 260 | this should be minHitCount > 1 | Low | High | Local | Fix | No |
 | `ts/packages/knowPro/src/conversationIndex.ts` | 269 | update: pass in TextLocation instead of messageOrdinal + chunkOrdinal | Medium | Medium | Component | Fix | No |
+| `ts/packages/knowPro/src/conversationIndex.ts` | 409 | Should rename this to TermToSemanticRefIndex | Low | High | Component | Fix | No |
 | `ts/packages/knowPro/src/index.ts` | 23 | mergeConcreteEntitiesEx avoids forcing the data to be lower case. | Medium | Medium | Component | Fix | Yes |
+| `ts/packages/knowPro/src/interfaces.ts` | 671 | Move to dataFormats.ts | Low | High | Component | Fix | No |
 | `ts/packages/knowPro/src/query.ts` | 66 | also require secondary indices, once we have removed non-index based retrieval to test | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/knowPro/src/query.ts` | 464 | Make property and timestamp indexes NON-OPTIONAL | Medium | Medium | Component | Fix | No |
 | `ts/packages/knowPro/src/query.ts` | 465 | Move non-index based code to test | Medium | Medium | Component | Fix | No |
 | `ts/packages/knowPro/src/searchLang.ts` | 907 | move hardcoded to a user configurable table | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/knowPro/src/serialization.ts` | 225 | Remove this temporary backward compat. All future files should have proper headers | Low | High | Local | Fix | No |
+| `ts/packages/knowProTest/src/searchTest.ts` | 46 | convert this to use runBatch from common.ts | Low | High | Local | Fix | No |
+| `ts/packages/knowledgeProcessor/src/conversation/actions.ts` | 223 | parallelize | Medium | High | Local | Fix | No |
 | `ts/packages/knowledgeProcessor/src/conversation/answerContext.ts` | 101 | split entities, topics, actions | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/conversation/conversation.ts` | 407 | Migrate to file system storage provider | High | Medium | Cross-cutting | Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/conversation/conversation.ts` | 411 | what about topics at other levels? | Medium | Low | Component | No Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/conversation/entities.ts` | 273 | parallelize | Medium | High | Local | Fix | No |
 | `ts/packages/knowledgeProcessor/src/conversation/topics.ts` | 638 | use aliases here for better matching | Medium | Medium | Component | Fix | Yes |
+| `ts/packages/knowledgeProcessor/src/conversation/topics.ts` | 683 | combine this and the one below | Low | High | Local | Fix | No |
 | `ts/packages/knowledgeProcessor/src/images/image.ts` | 147 | add actions for all extracted entities being photographed/contained by image | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/images/image.ts` | 195 | logged in user for now? | Low | Low | Local | No Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/setOperations.ts` | 587 | Optimize. | Medium | Medium | Local | Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/setOperations.ts` | 606 | Optimize. | Medium | Medium | Local | Fix | No |
 | `ts/packages/knowledgeProcessor/src/storageProvider.ts` | 131 | implement this once conversation is cleaned up and message Index is also backed by storageProvider | High | Low | Cross-cutting | No Fix | Yes |
+| `ts/packages/knowledgeProcessor/src/temporal.ts` | 187 | cache the time range. | Low | High | Local | Fix | No |
 | `ts/packages/knowledgeProcessor/src/textIndex.ts` | 80 | rename to addUpdate | Low | High | Component | Fix | No |
 | `ts/packages/knowledgeProcessor/src/textIndex.ts` | 86 | rename to addUpdateMultiple | Low | High | Component | Fix | No |
 | `ts/packages/knowledgeProcessor/src/textIndex.ts` | 92 | rename to addUpdateSources | Low | High | Component | Fix | No |
