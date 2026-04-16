@@ -415,6 +415,32 @@ export async function createSharedDispatcher(
                 );
             });
         },
+        broadcastSystemMessage(
+            message: string,
+            excludeConnectionId?: string,
+        ): void {
+            const agentMessage = {
+                message: {
+                    type: "text" as const,
+                    content: message,
+                    kind: "status" as const,
+                },
+                requestId: { requestId: "system" },
+                source: "system",
+            };
+            for (const [connectionId, clientRecord] of clients) {
+                if (connectionId === excludeConnectionId) {
+                    continue;
+                }
+                try {
+                    clientRecord.clientIO.appendDisplay(agentMessage, "block");
+                } catch (error) {
+                    debugClientIOError(
+                        `ClientIO error on broadcastSystemMessage for client ${connectionId}: ${error}`,
+                    );
+                }
+            }
+        },
         async leave(connectionId: string) {
             const dispatcher = dispatchers.get(connectionId);
             if (dispatcher) {
@@ -455,6 +481,7 @@ export type SharedDispatcher = {
         filter: boolean,
     ): PendingInteractionRequest[];
     leave(connectionId: string): Promise<void>;
+    broadcastSystemMessage(message: string, excludeConnectionId?: string): void;
     closeAllClients(): Promise<void>;
     close(): Promise<void>;
 };

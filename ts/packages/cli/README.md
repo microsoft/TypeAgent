@@ -172,6 +172,36 @@ agent-cli connect --hidden               # start the server hidden (no visible w
 - Pass `--session` / `-s <id>` to connect to any specific session by its UUID. Takes priority over `--resume` if both are provided.
 - The server is started automatically if it is not already running. By default it starts in a visible window; pass `--hidden` to suppress the window.
 
+### `@conversation` Commands (Connect Mode)
+
+While in connect mode, you can manage conversations interactively using `@conversation` commands. These commands use conversation names (not UUIDs) everywhere.
+
+| Command                          | Description                                                          |
+| -------------------------------- | -------------------------------------------------------------------- |
+| `@conversation new <name>`       | Create a new conversation. Prompts to switch to it after creation.   |
+| `@conversation switch <name>`    | Switch to an existing conversation by name (case-insensitive).       |
+| `@conversation list [<filter>]`  | List all conversations. The current conversation is marked with `▸`. |
+| `@conversation rename <newName>` | Rename the current conversation.                                     |
+| `@conversation delete <name>`    | Delete a conversation by name (prompts for confirmation).            |
+
+Example:
+
+```
+[player]🤖> @conversation new music-chat
+Created conversation 'music-chat'. Switch to 'music-chat' now? [y/N] y
+[player]🤖> @conversation list
+  ▸ music-chat
+    CLI
+[player]🤖> @conversation rename playlist-session
+Renamed to 'playlist-session'.
+```
+
+When multiple clients are connected and one switches conversations, the remaining clients in the old conversation see a status message:
+
+```
+[A client has left this conversation. You remain connected to 'playlist-session'.]
+```
+
 ### `agent-cli server`
 
 `agent-cli server` provides commands to manage the agent server process.

@@ -15,6 +15,8 @@ import {
     withEnhancedConsoleClientIO,
 } from "../enhancedConsole.js";
 import { isSlashCommand, getSlashCompletions } from "../slashCommands.js";
+import { setConversationCommandContext } from "../slashCommands.js";
+import type { ConversationCommandContext } from "../conversationCommands.js";
 import {
     connectAgentServer,
     ensureAgentServer,
@@ -340,39 +342,85 @@ export default class Connect extends Command {
                 connection = result.connection;
             }
 
-            const { dispatcher, name, sessionId: connectedSessionId } = session;
+            const {
+                dispatcher: initialDispatcher,
+                name: initialName,
+                sessionId: initialSessionId,
+            } = session;
+
+            // Mutable session state — updated by switchSession callback
+            let activeDispatcher = initialDispatcher;
+            let activeSessionId = initialSessionId;
+            let activeName = initialName;
+
             if (!isEphemeral) {
-                saveLastSessionId(connectedSessionId);
+                saveLastSessionId(activeSessionId);
             }
-            console.log(`Connected to session '${name}'.`);
-            bindDispatcher(dispatcher);
-            await replayDisplayHistory(dispatcher, clientIO);
+            console.log(`Connected to session '${activeName}'.`);
+            bindDispatcher(activeDispatcher);
+            await replayDisplayHistory(activeDispatcher, clientIO);
+
+            // Set up ConversationCommandContext for @conversation commands.
+            // Only available when we have a connection (non-ephemeral or
+            // ephemeral — both have a connection object at this point).
+            let convCtx: ConversationCommandContext | undefined;
+            if (connection !== undefined) {
+                convCtx = {
+                    connection,
+                    getCurrentSessionId: () => activeSessionId,
+                    getCurrentSessionName: () => activeName,
+                    switchSession: async (newSessionId: string) => {
+                        await connection.leaveSession(activeSessionId);
+                        const newSession = await connection.joinSession(
+                            clientIO,
+                            { sessionId: newSessionId },
+                        );
+                        newSession.dispatcher.close = async () => {
+                            await connection.close();
+                        };
+                        activeDispatcher = newSession.dispatcher;
+                        activeSessionId = newSession.sessionId;
+                        activeName = newSession.name;
+                        bindDispatcher(activeDispatcher);
+                        if (!isEphemeral) {
+                            saveLastSessionId(activeSessionId);
+                        }
+                        await replayDisplayHistory(activeDispatcher, clientIO);
+                        return newSession;
+                    },
+                };
+                setConversationCommandContext(convCtx);
+            }
+
             try {
                 let processed = false;
                 if (flags.request) {
-                    await dispatcher.processCommand(flags.request);
+                    await activeDispatcher.processCommand(flags.request);
                     processed = true;
                 }
                 if (args.input) {
-                    await dispatcher.processCommand(`@run ${args.input}`);
+                    await activeDispatcher.processCommand(`@run ${args.input}`);
                     processed = true;
                 }
                 if (processed && flags.exit) {
                     return;
                 }
                 await processCommandsEnhanced(
-                    async (dispatcher: Dispatcher) =>
+                    async (_dispatcher: Dispatcher) =>
                         getEnhancedConsolePrompt(
-                            getStatusSummary(await dispatcher.getStatus(), {
-                                showPrimaryName: false,
-                            }),
+                            getStatusSummary(
+                                await activeDispatcher.getStatus(),
+                                { showPrimaryName: false },
+                            ),
                         ),
-                    (command: string, dispatcher: Dispatcher) =>
-                        dispatcher.processCommand(command),
-                    dispatcher,
+                    async (command: string, _dispatcher: Dispatcher) => {
+                        return activeDispatcher.processCommand(command);
+                    },
+                    activeDispatcher,
                     undefined,
-                    (line: string) => getCompletionsData(line, dispatcher),
-                    dispatcher,
+                    (line: string) =>
+                        getCompletionsData(line, activeDispatcher),
+                    activeDispatcher,
                 );
             } finally {
                 if (
@@ -385,8 +433,8 @@ export default class Connect extends Command {
                         // Best effort cleanup of ephemeral session
                     }
                 }
-                if (dispatcher) {
-                    await dispatcher.close();
+                if (activeDispatcher) {
+                    await activeDispatcher.close();
                 }
             }
         });

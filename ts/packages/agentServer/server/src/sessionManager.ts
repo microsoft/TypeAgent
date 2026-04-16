@@ -396,6 +396,15 @@ export async function createSessionManager(
             if (record.sharedDispatcher === undefined) {
                 return; // Session not active
             }
+
+            // Notify remaining clients before this client leaves
+            if (record.sharedDispatcher.clientCount > 1) {
+                record.sharedDispatcher.broadcastSystemMessage(
+                    `[A client has left this conversation. You remain connected to '${record.name}'.]`,
+                    connectionId,
+                );
+            }
+
             await record.sharedDispatcher.leave(connectionId);
             debugSession(
                 `Client ${connectionId} left session "${record.name}" (${sessionId}), clients: ${record.sharedDispatcher.clientCount}`,
