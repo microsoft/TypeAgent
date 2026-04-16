@@ -135,7 +135,10 @@ export const systemManifest: AppAgentManifest = {
         },
         session: {
             schema: {
-                description: "System agent that helps you manage your session.",
+                description:
+                    "System agent that helps you manage your sessions/conversations. " +
+                    "Create new sessions, list all sessions, switch to a different session, " +
+                    "delete sessions, or show information about the current session.",
                 schemaFile:
                     "./src/context/system/schema/sessionActionSchema.ts",
                 schemaType: "SessionAction",

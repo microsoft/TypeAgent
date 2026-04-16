@@ -29,6 +29,18 @@ export async function executeSessionAction(
                 context.sessionContext.agentContext,
             );
             break;
+        case "switchSession":
+            await processCommandNoLock(
+                `@session open ${action.parameters.name}`,
+                context.sessionContext.agentContext,
+            );
+            break;
+        case "deleteSession":
+            await processCommandNoLock(
+                `@session delete ${action.parameters.name}`,
+                context.sessionContext.agentContext,
+            );
+            break;
         default:
             throw new Error(
                 `Invalid action name: ${(action as TypeAgentAction).actionName}`,
