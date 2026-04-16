@@ -40,7 +40,10 @@ import { MatchCommandHandler } from "./handlers/matchCommandHandler.js";
 import { DispatcherEmoji } from "./dispatcherUtils.js";
 import { getHistoryContext } from "../../translation/interpretRequest.js";
 import { ReasoningAction } from "./schema/reasoningActionSchema.js";
-import { executeReasoningAction as executeClaudeReasoning } from "../../reasoning/claude.js";
+import {
+    executeReasoningAction as executeClaudeReasoning,
+    executeReasoning,
+} from "../../reasoning/claude.js";
 import { executeReasoningAction as executeCopilotReasoning } from "../../reasoning/copilot.js";
 import { ReasonCommandHandler } from "./handlers/reasonCommandHandler.js";
 
@@ -83,8 +86,21 @@ async function executeDispatcherAction(
             break;
         case "dispatcher.lookup":
             switch (action.actionName) {
-                case "lookupAndAnswerConversation":
-                    return lookupAndAnswer(action, context);
+                case "lookupAndAnswerConversation": {
+                    const lookupResult = await lookupAndAnswer(action, context);
+                    if (lookupResult.error !== undefined) {
+                        // Conversation lookup found nothing — fall back to reasoning
+                        const systemContext =
+                            context.sessionContext.agentContext;
+                        if (!systemContext.noReasoning) {
+                            return executeReasoning(
+                                action.parameters.originalRequest,
+                                context,
+                            );
+                        }
+                    }
+                    return lookupResult;
+                }
                 case "startLookup":
                     const location =
                         action.parameters.lookup.source === "internet"

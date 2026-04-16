@@ -38,7 +38,7 @@ import {
 } from "./reasoningLoopBase.js";
 const debug = registerDebug("typeagent:dispatcher:reasoning:messages");
 
-const model = "claude-sonnet-4-5-20250929";
+const model = "claude-opus-4-6";
 
 const mcpServerName = "action-executor";
 const allowedTools = [
@@ -81,6 +81,15 @@ function setSessionId(
     sessionId: string,
 ): void {
     reasoningSessionIds.set(context.sessionContext.agentContext, sessionId);
+}
+
+/**
+ * Clear the stored Claude reasoning session ID for the given agent context.
+ * Call this before starting a new reasoning loop to avoid topic pollution
+ * from prior sessions. Exported so @history clear can invoke it.
+ */
+export function clearReasoningSession(agentContext: object): void {
+    reasoningSessionIds.delete(agentContext);
 }
 
 /**
@@ -322,6 +331,7 @@ function getClaudeOptions(
                 },
             };
             const savedClientIO = systemContext.clientIO;
+            systemContext.isInsideReasoningLoop = true;
             try {
                 systemContext.clientIO = capturingClientIO;
                 await executeAction(
@@ -336,6 +346,7 @@ function getClaudeOptions(
                 );
             } finally {
                 systemContext.clientIO = savedClientIO;
+                systemContext.isInsideReasoningLoop = false;
             }
             return {
                 content: [{ type: "text", text: JSON.stringify(result) }],
@@ -353,7 +364,7 @@ function getClaudeOptions(
         cwd: getRepoRoot(),
         settingSources: [],
         maxTurns: 20,
-        maxThinkingTokens: 10000,
+        thinking: { type: "adaptive" },
         systemPrompt: {
             type: "preset",
             preset: "claude_code",
@@ -365,10 +376,30 @@ function getClaudeOptions(
                 "- `discover_actions`: Find available actions by schema name",
                 "- `execute_action`: Execute actions conforming to discovered schemas",
                 "",
-                "You also have full code tools (Read, Glob, Grep, Edit, Bash) for investigating and modifying the codebase.",
-                "",
                 "When the user asks about agent capabilities, use discover_actions first.",
                 "When the user asks to perform an action, discover the schema then execute_action.",
+                "",
+                ...(config.promptAppend
+                    ? [
+                          "# TypeAgent Configuration/Context",
+                          "",
+                          config.promptAppend,
+                          "",
+                      ]
+                    : []),
+                "# Autonomous Execution Policy",
+                "",
+                "NEVER ask the user clarifying questions mid-task.",
+                "This reasoning loop runs without an interactive user present.",
+                "When information is ambiguous or missing, make a reasonable safe default choice and proceed.",
+                "Prefer non-destructive defaults: add rather than replace, use conservative values.",
+                "Only stop if you are truly unable to proceed — in that case, emit a clear error message explaining what is missing.",
+                "",
+                "# File Placement Policy",
+                "",
+                "ALL temporary scripts, scratch files, and one-off code MUST go in the `tmp/` folder at the TypeAgent repo root.",
+                "NEVER create temporary files inside package source directories (e.g. `packages/`, `examples/`), agent directories, or the workspace root.",
+                "If it is not production code that belongs in a specific package, it goes in `tmp/`. No exceptions.",
                 "",
                 "# TaskFlow Recording",
                 "",
@@ -1085,7 +1116,58 @@ export async function executeReasoningAction(
     const planReuseEnabled = config.execution.planReuse === "enabled";
     const scriptReuseEnabled = config.execution.scriptReuse === "enabled";
 
-    return executeReasoning(request, context, {
+    // If an agent intercepted a translated action and redirected here, embed that
+    // action's parameters into the prompt so the reasoning loop knows exactly what
+    // was intended and can inspect entities rather than retranslating from scratch.
+    const attemptedActionRaw = action.parameters.attemptedAction;
+    const contextEntitiesRaw = action.parameters.contextEntities;
+    const attemptedAction = attemptedActionRaw
+        ? (() => {
+              try {
+                  return JSON.parse(attemptedActionRaw);
+              } catch {
+                  return undefined;
+              }
+          })()
+        : undefined;
+    const contextEntities = contextEntitiesRaw
+        ? (() => {
+              try {
+                  return JSON.parse(contextEntitiesRaw);
+              } catch {
+                  return undefined;
+              }
+          })()
+        : undefined;
+    let enrichedRequest = request;
+    if (attemptedAction !== undefined || contextEntities !== undefined) {
+        const parts: string[] = [request, ""];
+        if (attemptedAction !== undefined) {
+            parts.push(
+                "[Attempted Action]",
+                "The translator produced this action (intercepted for workbook inspection before execution):",
+                "```json",
+                JSON.stringify(attemptedAction, null, 2),
+                "```",
+                "Use the formula and address above as your starting point. Inspect the workbook " +
+                    "to verify they are correct, then call execute_action(setFormula) with the " +
+                    "confirmed (or corrected) parameters.",
+                "",
+            );
+        }
+        if (contextEntities !== undefined) {
+            parts.push(
+                "[Context Entities]",
+                "```json",
+                JSON.stringify(contextEntities, null, 2),
+                "```",
+                "",
+            );
+        }
+        enrichedRequest = parts.join("\n");
+    }
+
+    return executeReasoning(enrichedRequest, context, {
         planReuseEnabled: planReuseEnabled || scriptReuseEnabled,
         engine: "claude",
     });
