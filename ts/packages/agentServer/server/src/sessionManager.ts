@@ -394,6 +394,9 @@ export async function createSessionManager(
                 throw new Error(`Session not found: ${sessionId}`);
             }
             if (record.sharedDispatcher === undefined) {
+                debugSession(
+                    `leaveSession: dispatcher not active for session "${record.name}" (${sessionId}), ignoring connectionId ${connectionId}`,
+                );
                 return; // Session not active
             }
 

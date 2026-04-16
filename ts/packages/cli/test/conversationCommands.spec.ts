@@ -13,6 +13,10 @@
  *
  * The tests mock AgentServerConnection methods and readline to verify
  * routing, argument validation, and interactive confirmation flows.
+ *
+ * Because the module under test (conversationCommands.ts) imports `readline`
+ * and `chalk` which are ESM-only, we use `jest.unstable_mockModule` to mock
+ * readline *before* the dynamic import of the module under test.
  */
 
 import {
@@ -23,16 +27,34 @@ import {
     afterEach,
     jest,
 } from "@jest/globals";
-import * as readline from "readline";
 import type {
     AgentServerConnection,
     SessionDispatcher,
     SessionInfo,
 } from "@typeagent/agent-server-client";
-import {
-    handleConversationCommand,
-    type ConversationCommandContext,
-} from "../src/conversationCommands.js";
+
+// ── readline mock (must be installed before importing the module under test) ─
+
+type QuestionCallback = (answer: string) => void;
+
+let questionCallbacks: QuestionCallback[];
+
+jest.unstable_mockModule("readline", () => ({
+    createInterface: jest.fn(() => ({
+        question: jest.fn((_prompt: string, cb: QuestionCallback) => {
+            questionCallbacks.push(cb);
+        }),
+        close: jest.fn(),
+    })),
+}));
+
+// ── Dynamic import of the module under test (after the mock is installed) ──
+
+const { handleConversationCommand } = await import(
+    "../src/conversationCommands.js"
+);
+type ConversationCommandContext =
+    import("../src/conversationCommands.js").ConversationCommandContext;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -48,61 +70,34 @@ function makeSession(
 }
 
 /** Build mock AgentServerConnection with jest.fn() stubs. */
-function makeConnection(): jest.Mocked<
-    Pick<
-        AgentServerConnection,
-        "listSessions" | "createSession" | "renameSession" | "deleteSession"
-    >
-> &
-    AgentServerConnection {
+function makeConnection() {
     return {
         listSessions: jest.fn<AgentServerConnection["listSessions"]>(),
         createSession: jest.fn<AgentServerConnection["createSession"]>(),
         renameSession: jest.fn<AgentServerConnection["renameSession"]>(),
         deleteSession: jest.fn<AgentServerConnection["deleteSession"]>(),
-        // Unused stubs
+        // Unused stubs required by the interface
         joinSession: jest.fn(),
         leaveSession: jest.fn(),
         close: jest.fn(),
-    } as unknown as jest.Mocked<
-        Pick<
-            AgentServerConnection,
-            "listSessions" | "createSession" | "renameSession" | "deleteSession"
-        >
-    > &
-        AgentServerConnection;
-}
-
-type FakeRl = {
-    question: jest.Mock;
-    close: jest.Mock;
-};
-
-let fakeRl: FakeRl;
-let createInterfaceSpy: ReturnType<typeof jest.spyOn>;
-
-/**
- * Install a spy on readline.createInterface that returns a fake rl object.
- * Call `answerPrompt(text)` to simulate the user typing a response.
- */
-function installReadlineSpy() {
-    fakeRl = {
-        question: jest.fn(),
-        close: jest.fn(),
+    } as unknown as AgentServerConnection & {
+        listSessions: jest.Mock;
+        createSession: jest.Mock;
+        renameSession: jest.Mock;
+        deleteSession: jest.Mock;
     };
-    createInterfaceSpy = jest
-        .spyOn(readline, "createInterface")
-        .mockReturnValue(fakeRl as unknown as readline.Interface);
 }
 
 /** Simulate the user answering the outstanding readline question. */
 function answerPrompt(answer: string) {
-    const calls = fakeRl.question.mock.calls;
-    expect(calls.length).toBeGreaterThan(0);
-    // rl.question(prompt, callback) — invoke the callback
-    const lastCall = calls[calls.length - 1];
-    const callback = lastCall[1] as (answer: string) => void;
-    callback(answer);
+    expect(questionCallbacks.length).toBeGreaterThan(0);
+    const cb = questionCallbacks.shift()!;
+    cb(answer);
+}
+
+/** Wait for microtasks + setImmediate so async code can progress. */
+function flushAsync() {
+    return new Promise<void>((resolve) => setImmediate(resolve));
 }
 
 // ── Spying on console.log ──────────────────────────────────────────────────
@@ -117,18 +112,17 @@ function capturedLog(): string {
 // ── Setup / teardown ───────────────────────────────────────────────────────
 
 beforeEach(() => {
+    questionCallbacks = [];
     logOutput = [];
     logSpy = jest
         .spyOn(console, "log")
         .mockImplementation((...args: unknown[]) => {
             logOutput.push(args.map(String).join(" "));
         });
-    installReadlineSpy();
 });
 
 afterEach(() => {
     logSpy.mockRestore();
-    createInterfaceSpy.mockRestore();
 });
 
 // ── Context factory ────────────────────────────────────────────────────────
@@ -187,17 +181,14 @@ describe("@conversation new", () => {
 
     it("creates session and does NOT switch when user answers 'n'", async () => {
         const ctx = makeCtx();
-        (ctx.connection.createSession as jest.Mock).mockResolvedValue(
+        ctx.connection.createSession.mockResolvedValue(
             makeSession({ sessionId: "new-id", name: "MyChat" }),
         );
-        (ctx.connection.listSessions as jest.Mock).mockResolvedValue([
-            makeSession({ sessionId: "new-id", name: "MyChat" }),
-        ]);
 
         const promise = handleConversationCommand(ctx, "new MyChat");
 
-        // Wait for the readline question to be called
-        await new Promise<void>((r) => setImmediate(r));
+        // Wait for the readline question callback to be queued
+        await flushAsync();
         answerPrompt("n");
         await promise;
 
@@ -208,66 +199,37 @@ describe("@conversation new", () => {
 
     it("creates session and switches when user answers 'y'", async () => {
         const ctx = makeCtx();
-        (ctx.connection.createSession as jest.Mock).mockResolvedValue(
+        ctx.connection.createSession.mockResolvedValue(
             makeSession({ sessionId: "new-id", name: "MyChat" }),
         );
-        (ctx.connection.listSessions as jest.Mock).mockResolvedValue([
-            makeSession({ sessionId: "new-id", name: "MyChat" }),
-        ]);
 
         const promise = handleConversationCommand(ctx, "new MyChat");
 
-        await new Promise<void>((r) => setImmediate(r));
+        await flushAsync();
         answerPrompt("y");
         await promise;
 
         expect(ctx.connection.createSession).toHaveBeenCalledWith("MyChat");
+        // switchSession called with the sessionId from createSession's return value
         expect(ctx.switchSession).toHaveBeenCalledWith("new-id");
         expect(capturedLog()).toContain("Switched to conversation");
     });
 
     it("handles quoted name argument", async () => {
         const ctx = makeCtx();
-        (ctx.connection.createSession as jest.Mock).mockResolvedValue(
-            makeSession({
-                sessionId: "new-id",
-                name: "My Chat Room",
-            }),
+        ctx.connection.createSession.mockResolvedValue(
+            makeSession({ sessionId: "new-id", name: "My Chat Room" }),
         );
-        (ctx.connection.listSessions as jest.Mock).mockResolvedValue([
-            makeSession({
-                sessionId: "new-id",
-                name: "My Chat Room",
-            }),
-        ]);
 
         const promise = handleConversationCommand(ctx, 'new "My Chat Room"');
 
-        await new Promise<void>((r) => setImmediate(r));
+        await flushAsync();
         answerPrompt("n");
         await promise;
 
         expect(ctx.connection.createSession).toHaveBeenCalledWith(
             "My Chat Room",
         );
-    });
-
-    it("does not switch if the created session is not found in listSessions", async () => {
-        const ctx = makeCtx();
-        (ctx.connection.createSession as jest.Mock).mockResolvedValue(
-            makeSession({ sessionId: "new-id", name: "Ephemeral" }),
-        );
-        // listSessions returns empty — session disappeared
-        (ctx.connection.listSessions as jest.Mock).mockResolvedValue([]);
-
-        const promise = handleConversationCommand(ctx, "new Ephemeral");
-
-        await new Promise<void>((r) => setImmediate(r));
-        answerPrompt("y");
-        await promise;
-
-        // Even though user said yes, there is no target to switch to
-        expect(ctx.switchSession).not.toHaveBeenCalled();
     });
 });
 
@@ -279,24 +241,22 @@ describe("@conversation switch", () => {
         expect(capturedLog()).toContain("@conversation switch");
     });
 
-    it("throws/prints error when name is not found", async () => {
+    it("prints error when name is not found", async () => {
         const ctx = makeCtx();
-        (ctx.connection.listSessions as jest.Mock).mockResolvedValue([]);
+        ctx.connection.listSessions.mockResolvedValue([]);
 
-        await expect(
-            handleConversationCommand(ctx, "switch ghost"),
-        ).rejects.toThrow("No conversation named 'ghost' found");
+        await handleConversationCommand(ctx, "switch ghost");
+
+        expect(capturedLog()).toContain("No conversation named 'ghost' found");
+        expect(ctx.switchSession).not.toHaveBeenCalled();
     });
 
     it("prints message when already in that session", async () => {
         const ctx = makeCtx({
             getCurrentSessionId: () => "already-here",
         });
-        (ctx.connection.listSessions as jest.Mock).mockResolvedValue([
-            makeSession({
-                sessionId: "already-here",
-                name: "Current",
-            }),
+        ctx.connection.listSessions.mockResolvedValue([
+            makeSession({ sessionId: "already-here", name: "Current" }),
         ]);
 
         await handleConversationCommand(ctx, "switch Current");
@@ -309,11 +269,8 @@ describe("@conversation switch", () => {
         const ctx = makeCtx({
             getCurrentSessionId: () => "old-id",
         });
-        (ctx.connection.listSessions as jest.Mock).mockResolvedValue([
-            makeSession({
-                sessionId: "target-id",
-                name: "MyChat",
-            }),
+        ctx.connection.listSessions.mockResolvedValue([
+            makeSession({ sessionId: "target-id", name: "MyChat" }),
         ]);
 
         await handleConversationCommand(ctx, "switch mychat");
@@ -322,34 +279,37 @@ describe("@conversation switch", () => {
         expect(capturedLog()).toContain("Switched to conversation");
     });
 
-    it("throws error when multiple sessions match", async () => {
+    it("prints error when multiple sessions match", async () => {
         const ctx = makeCtx();
-        (ctx.connection.listSessions as jest.Mock).mockResolvedValue([
+        ctx.connection.listSessions.mockResolvedValue([
             makeSession({ sessionId: "id-1", name: "dup" }),
             makeSession({ sessionId: "id-2", name: "Dup" }),
         ]);
 
-        await expect(
-            handleConversationCommand(ctx, "switch dup"),
-        ).rejects.toThrow("Multiple conversations named 'dup' found");
+        await handleConversationCommand(ctx, "switch dup");
+
+        expect(capturedLog()).toContain(
+            "Multiple conversations named 'dup' found",
+        );
+        expect(ctx.switchSession).not.toHaveBeenCalled();
     });
 });
 
 describe("@conversation list", () => {
     it("prints 'No conversations found.' for empty list", async () => {
         const ctx = makeCtx();
-        (ctx.connection.listSessions as jest.Mock).mockResolvedValue([]);
+        ctx.connection.listSessions.mockResolvedValue([]);
 
         await handleConversationCommand(ctx, "list");
 
         expect(capturedLog()).toContain("No conversations found.");
     });
 
-    it("shows single session with current marker '▸'", async () => {
+    it("shows single session with current marker", async () => {
         const ctx = makeCtx({
             getCurrentSessionId: () => "sess-1",
         });
-        (ctx.connection.listSessions as jest.Mock).mockResolvedValue([
+        ctx.connection.listSessions.mockResolvedValue([
             makeSession({
                 sessionId: "sess-1",
                 name: "OnlySession",
@@ -370,7 +330,7 @@ describe("@conversation list", () => {
         const ctx = makeCtx({
             getCurrentSessionId: () => "sess-2",
         });
-        (ctx.connection.listSessions as jest.Mock).mockResolvedValue([
+        ctx.connection.listSessions.mockResolvedValue([
             makeSession({
                 sessionId: "sess-1",
                 name: "Older",
@@ -395,7 +355,7 @@ describe("@conversation list", () => {
 
         const output = capturedLog();
 
-        // Newest should appear before Older in the output
+        // Newest should appear before Older in the output (descending sort)
         const newestIdx = output.indexOf("Newest");
         const middleIdx = output.indexOf("Middle");
         const olderIdx = output.indexOf("Older");
@@ -403,7 +363,6 @@ describe("@conversation list", () => {
         expect(middleIdx).toBeLessThan(olderIdx);
 
         // "▸" appears on the current session line (Middle)
-        // The current marker line also contains "(current)"
         const lines = output.split("\n");
         const currentLine = lines.find((l) => l.includes("Middle"));
         expect(currentLine).toBeDefined();
@@ -420,7 +379,7 @@ describe("@conversation list", () => {
 
     it("passes filter to listSessions", async () => {
         const ctx = makeCtx();
-        (ctx.connection.listSessions as jest.Mock).mockResolvedValue([]);
+        ctx.connection.listSessions.mockResolvedValue([]);
 
         await handleConversationCommand(ctx, "list myFilter");
 
@@ -429,7 +388,7 @@ describe("@conversation list", () => {
 
     it("passes undefined filter when no filter given", async () => {
         const ctx = makeCtx();
-        (ctx.connection.listSessions as jest.Mock).mockResolvedValue([]);
+        ctx.connection.listSessions.mockResolvedValue([]);
 
         await handleConversationCommand(ctx, "list");
 
@@ -440,7 +399,7 @@ describe("@conversation list", () => {
         const ctx = makeCtx({
             getCurrentSessionId: () => "sess-1",
         });
-        (ctx.connection.listSessions as jest.Mock).mockResolvedValue([
+        ctx.connection.listSessions.mockResolvedValue([
             makeSession({
                 sessionId: "sess-1",
                 name: "Chat",
@@ -467,9 +426,7 @@ describe("@conversation rename", () => {
         const ctx = makeCtx({
             getCurrentSessionId: () => "my-session-id",
         });
-        (ctx.connection.renameSession as jest.Mock).mockResolvedValue(
-            undefined,
-        );
+        ctx.connection.renameSession.mockResolvedValue(undefined);
 
         await handleConversationCommand(ctx, "rename NewName");
 
@@ -485,9 +442,7 @@ describe("@conversation rename", () => {
         const ctx = makeCtx({
             getCurrentSessionId: () => "my-session-id",
         });
-        (ctx.connection.renameSession as jest.Mock).mockResolvedValue(
-            undefined,
-        );
+        ctx.connection.renameSession.mockResolvedValue(undefined);
 
         await handleConversationCommand(ctx, 'rename "New Name With Spaces"');
 
@@ -510,11 +465,8 @@ describe("@conversation delete", () => {
         const ctx = makeCtx({
             getCurrentSessionId: () => "current-id",
         });
-        (ctx.connection.listSessions as jest.Mock).mockResolvedValue([
-            makeSession({
-                sessionId: "current-id",
-                name: "ActiveChat",
-            }),
+        ctx.connection.listSessions.mockResolvedValue([
+            makeSession({ sessionId: "current-id", name: "ActiveChat" }),
         ]);
 
         await handleConversationCommand(ctx, "delete ActiveChat");
@@ -529,16 +481,13 @@ describe("@conversation delete", () => {
         const ctx = makeCtx({
             getCurrentSessionId: () => "other-id",
         });
-        (ctx.connection.listSessions as jest.Mock).mockResolvedValue([
-            makeSession({
-                sessionId: "target-id",
-                name: "OldChat",
-            }),
+        ctx.connection.listSessions.mockResolvedValue([
+            makeSession({ sessionId: "target-id", name: "OldChat" }),
         ]);
 
         const promise = handleConversationCommand(ctx, "delete OldChat");
 
-        await new Promise<void>((r) => setImmediate(r));
+        await flushAsync();
         answerPrompt("n");
         await promise;
 
@@ -550,19 +499,14 @@ describe("@conversation delete", () => {
         const ctx = makeCtx({
             getCurrentSessionId: () => "other-id",
         });
-        (ctx.connection.listSessions as jest.Mock).mockResolvedValue([
-            makeSession({
-                sessionId: "target-id",
-                name: "OldChat",
-            }),
+        ctx.connection.listSessions.mockResolvedValue([
+            makeSession({ sessionId: "target-id", name: "OldChat" }),
         ]);
-        (ctx.connection.deleteSession as jest.Mock).mockResolvedValue(
-            undefined,
-        );
+        ctx.connection.deleteSession.mockResolvedValue(undefined);
 
         const promise = handleConversationCommand(ctx, "delete OldChat");
 
-        await new Promise<void>((r) => setImmediate(r));
+        await flushAsync();
         answerPrompt("y");
         await promise;
 
@@ -570,14 +514,15 @@ describe("@conversation delete", () => {
         expect(capturedLog()).toContain("Deleted conversation");
     });
 
-    it("throws error when session name is not found", async () => {
+    it("prints error when session name is not found", async () => {
         const ctx = makeCtx({
             getCurrentSessionId: () => "other-id",
         });
-        (ctx.connection.listSessions as jest.Mock).mockResolvedValue([]);
+        ctx.connection.listSessions.mockResolvedValue([]);
 
-        await expect(
-            handleConversationCommand(ctx, "delete ghost"),
-        ).rejects.toThrow("No conversation named 'ghost' found");
+        await handleConversationCommand(ctx, "delete ghost");
+
+        expect(capturedLog()).toContain("No conversation named 'ghost' found");
+        expect(ctx.connection.deleteSession).not.toHaveBeenCalled();
     });
 });

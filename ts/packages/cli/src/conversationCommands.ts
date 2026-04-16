@@ -89,20 +89,12 @@ async function handleNew(
         console.log(chalk.yellow("Usage: @conversation new <name>"));
         return;
     }
-    await ctx.connection.createSession(name);
+    const created = await ctx.connection.createSession(name);
     console.log(`Created conversation '${chalk.green(name)}'.`);
     const switchNow = await promptYesNo(`Switch to '${name}' now?`);
     if (switchNow) {
-        const all = await ctx.connection.listSessions();
-        const target = all.find(
-            (s) => s.name.toLowerCase() === name.toLowerCase(),
-        );
-        if (target !== undefined) {
-            console.log(
-                `Switched to conversation '${chalk.green(target.name)}'.`,
-            );
-            await ctx.switchSession(target.sessionId);
-        }
+        await ctx.switchSession(created.sessionId);
+        console.log(`Switched to conversation '${chalk.green(name)}'.`);
     }
 }
 
@@ -120,8 +112,8 @@ async function handleSwitch(
         console.log(chalk.yellow(`Already in conversation '${target.name}'.`));
         return;
     }
-    console.log(`Switched to conversation '${chalk.green(target.name)}'.`);
     await ctx.switchSession(target.sessionId);
+    console.log(`Switched to conversation '${chalk.green(target.name)}'.`);
 }
 
 async function handleList(
@@ -280,5 +272,9 @@ export async function handleConversationCommand(
         return;
     }
 
-    await handler(ctx, subArgs);
+    try {
+        await handler(ctx, subArgs);
+    } catch (err: any) {
+        console.log(chalk.red(`Error: ${err?.message ?? String(err)}`));
+    }
 }

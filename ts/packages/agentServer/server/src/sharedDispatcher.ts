@@ -444,6 +444,11 @@ export async function createSharedDispatcher(
         async leave(connectionId: string) {
             const dispatcher = dispatchers.get(connectionId);
             if (dispatcher) {
+                // Remove from clients synchronously so clientCount reflects the
+                // post-leave state before any async close work completes.
+                // The close callback also calls clients.delete, but that is
+                // idempotent so the double-delete is harmless.
+                clients.delete(connectionId);
                 await dispatcher.close();
             }
         },

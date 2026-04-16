@@ -165,12 +165,15 @@ agent-cli connect --resume               # resume the last used session
 agent-cli connect --session <id>         # connect to a specific session by ID
 agent-cli connect --port <port>          # connect to a server on a non-default port (default: 8999)
 agent-cli connect --hidden               # start the server hidden (no visible window)
+agent-cli connect --memory               # use an ephemeral session (deleted on exit)
 ```
 
 - By default, `connect` targets a session named `"CLI"`. If no such session exists on the server it is created automatically.
 - Pass `--resume` / `-r` to instead resume the last used session (persisted client-side in `~/.typeagent/cli-state.json`). If that session no longer exists, you will be prompted to join the `"CLI"` session.
 - Pass `--session` / `-s <id>` to connect to any specific session by its UUID. Takes priority over `--resume` if both are provided.
+- Pass `--memory` to use an ephemeral session that is created fresh and automatically deleted when you exit. Cannot be combined with `--session` or `--resume`.
 - The server is started automatically if it is not already running. By default it starts in a visible window; pass `--hidden` to suppress the window.
+- On connect (and on every conversation switch), the session name is printed after any replayed history, just below the `─── now ─────` separator.
 
 ### `@conversation` Commands (Connect Mode)
 
@@ -188,12 +191,19 @@ Example:
 
 ```
 [player]🤖> @conversation new music-chat
-Created conversation 'music-chat'. Switch to 'music-chat' now? [y/N] y
+Created conversation 'music-chat'.
+Switch to 'music-chat' now? [y/N] y
+─── now ──────────────────────────────────────────────────────────────────────
+Connected to conversation 'music-chat'.
 [player]🤖> @conversation list
-  ▸ music-chat
-    CLI
+
+Conversations:
+  NAME            CREATED           CLIENTS
+  ──────────────────────────────────────────────────────
+▸ music-chat      2026-01-15 10:01  1  (current)
+  CLI             2026-01-14 09:00  0
 [player]🤖> @conversation rename playlist-session
-Renamed to 'playlist-session'.
+Renamed current conversation to 'playlist-session'.
 ```
 
 When multiple clients are connected and one switches conversations, the remaining clients in the old conversation see a status message:

@@ -14,8 +14,11 @@ import {
     replayDisplayHistory,
     withEnhancedConsoleClientIO,
 } from "../enhancedConsole.js";
-import { isSlashCommand, getSlashCompletions } from "../slashCommands.js";
-import { setConversationCommandContext } from "../slashCommands.js";
+import {
+    isSlashCommand,
+    getSlashCompletions,
+    setConversationCommandContext,
+} from "../slashCommands.js";
 import type { ConversationCommandContext } from "../conversationCommands.js";
 import {
     connectAgentServer,
@@ -356,13 +359,14 @@ export default class Connect extends Command {
             if (!isEphemeral) {
                 saveLastSessionId(activeSessionId);
             }
-            console.log(`Connected to session '${activeName}'.`);
             bindDispatcher(activeDispatcher);
-            await replayDisplayHistory(activeDispatcher, clientIO);
+            await replayDisplayHistory(activeDispatcher, clientIO, activeName);
 
             // Set up ConversationCommandContext for @conversation commands.
-            // Only available when we have a connection (non-ephemeral or
-            // ephemeral — both have a connection object at this point).
+            // Only available when the AgentServerConnection is accessible
+            // (connectToCliSession / connectToEphemeralSession paths).
+            // The ensureAndConnectSession path (--session / --resume flags)
+            // does not expose the connection, so convCtx stays undefined there.
             let convCtx: ConversationCommandContext | undefined;
             if (connection !== undefined) {
                 convCtx = {
@@ -370,7 +374,8 @@ export default class Connect extends Command {
                     getCurrentSessionId: () => activeSessionId,
                     getCurrentSessionName: () => activeName,
                     switchSession: async (newSessionId: string) => {
-                        await connection.leaveSession(activeSessionId);
+                        // Join the new session first so that if it fails we
+                        // haven't already left the old one (avoids stranded state).
                         const newSession = await connection.joinSession(
                             clientIO,
                             { sessionId: newSessionId },
@@ -378,6 +383,7 @@ export default class Connect extends Command {
                         newSession.dispatcher.close = async () => {
                             await connection.close();
                         };
+                        await connection.leaveSession(activeSessionId);
                         activeDispatcher = newSession.dispatcher;
                         activeSessionId = newSession.sessionId;
                         activeName = newSession.name;
@@ -385,7 +391,11 @@ export default class Connect extends Command {
                         if (!isEphemeral) {
                             saveLastSessionId(activeSessionId);
                         }
-                        await replayDisplayHistory(activeDispatcher, clientIO);
+                        await replayDisplayHistory(
+                            activeDispatcher,
+                            clientIO,
+                            activeName,
+                        );
                         return newSession;
                     },
                 };

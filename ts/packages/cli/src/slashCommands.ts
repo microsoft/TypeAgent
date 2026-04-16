@@ -171,7 +171,24 @@ export function isSlashCommand(input: string): boolean {
     );
 }
 
+const conversationSubcommands = ["new", "switch", "list", "rename", "delete"];
+
 export function getSlashCompletions(input: string): string[] {
+    // Handle @conversation <partial-subcommand> completions
+    if (input.startsWith("@conversation")) {
+        const after = input.slice("@conversation".length);
+        // "@conversation" with no space yet — offer all subcommands
+        if (after === "") {
+            return conversationSubcommands.map((s) => `@conversation ${s}`);
+        }
+        if (after.startsWith(" ")) {
+            const partial = after.slice(1).toLowerCase();
+            return conversationSubcommands
+                .filter((s) => s.startsWith(partial))
+                .map((s) => `@conversation ${s}`);
+        }
+        return [];
+    }
     const prefix = input.substring(1).toLowerCase();
     return slashCommands
         .filter((cmd) => cmd.name.startsWith(prefix))
