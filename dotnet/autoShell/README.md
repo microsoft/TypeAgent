@@ -109,6 +109,7 @@ Each command returns a JSON `ActionResult` on stdout:
 | `ToggleAirplaneMode` | `true`/`false` | Enables or disables Windows airplane mode |
 | `ToggleNotifications` | (none) | Toggles the Windows notification center |
 | `Volume` | `0-100` | Sets system volume percentage |
+| `AdjustVolume` | `{"direction": "up"/"down", "amount": 10}` | Adjusts volume relatively (default ±10%) |
 
 #### Settings Commands
 
@@ -165,6 +166,7 @@ Each command returns a JSON `ActionResult` on stdout:
 | `MousePointerCustomization` | (none) | Opens mouse pointer settings |
 | `MouseWheelScrollLines` | `{"scrollLines": 1-100}` | Sets mouse wheel scroll lines (default 3) |
 | `SetPrimaryMouseButton` | `{"primaryButton": "left"/"right"}` | Sets primary mouse button |
+| `ToggleMouseSonar` | `{"enable": true/false}` | Enables/disables "Find my pointer" Ctrl ring |
 | `TouchpadCursorSpeed` | (none) | Opens touchpad settings |
 
 ##### Privacy Settings
