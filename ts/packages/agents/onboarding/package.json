@@ -34,6 +34,7 @@
     "asc:schemagen": "asc -i ./src/schemaGen/schemaGenSchema.ts -o ./dist/schemaGenSchema.pas.json -t SchemaGenActions",
     "asc:testing": "asc -i ./src/testing/testingSchema.ts -o ./dist/testingSchema.pas.json -t TestingActions",
     "build": "concurrently npm:tsc npm:asc:* npm:agc:*",
+    "postbuild": "copyfiles -u 1 \"src/**/discoveryLlmSchema.ts\" dist",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
@@ -44,13 +45,17 @@
     "@typeagent/dispatcher-types": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "aiclient": "workspace:*",
+    "debug": "^4.3.4",
     "dispatcher-node-providers": "workspace:*",
+    "typeagent": "workspace:*",
     "typechat": "^0.1.1"
   },
   "devDependencies": {
     "@typeagent/action-schema-compiler": "workspace:*",
+    "@types/debug": "^4.1.12",
     "action-grammar-compiler": "workspace:*",
     "concurrently": "^9.1.2",
+    "copyfiles": "^2.4.1",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",
     "typescript": "~5.4.5"

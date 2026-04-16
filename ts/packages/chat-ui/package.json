@@ -23,7 +23,7 @@
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
     "ansi_up": "^6.0.2",
-    "dompurify": "^3.3.2",
+    "dompurify": "^3.4.0",
     "markdown-it": "^14.1.0"
   },
   "devDependencies": {

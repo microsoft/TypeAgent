@@ -28,6 +28,8 @@ export type ScaffoldAgentAction = {
         pattern?: AgentPattern;
         // Target directory for the agent package (defaults to ts/packages/agents/<name>)
         outputDir?: string;
+        // Emoji character for the agent icon (defaults to "🔎")
+        emojiChar?: string;
     };
 };
 

@@ -1,0 +1,335 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+<AuthLogin> = log me into GitHub -> {
+    actionName: "authLogin",
+    parameters: {}
+};
+
+<AuthLogout> = log me out of GitHub -> {
+    actionName: "authLogout",
+    parameters: {}
+};
+
+<AuthStatus> = check my GitHub authentication -> {
+    actionName: "authStatus",
+    parameters: {}
+};
+
+<IssueCreate> = create issue $(title:wildcard) -> {
+    actionName: "issueCreate",
+    parameters: {
+        title
+    }
+}
+  | file an issue about $(title:wildcard) -> {
+    actionName: "issueCreate",
+    parameters: {
+        title
+    }
+};
+
+<IssueClose> = close issue $(number:number) -> {
+    actionName: "issueClose",
+    parameters: {
+        number
+    }
+};
+
+<IssueReopen> = reopen issue $(number:number) -> {
+    actionName: "issueReopen",
+    parameters: {
+        number
+    }
+};
+
+<IssueList> = show open issues in $(repo:wildcard) -> {
+    actionName: "issueList",
+    parameters: {
+        repo,
+        state: "open"
+    }
+}
+  | list issues in $(repo:wildcard) -> {
+    actionName: "issueList",
+    parameters: {
+        repo
+    }
+}
+  | get latest $(limit:number) issues in $(repo:wildcard) -> {
+    actionName: "issueList",
+    parameters: {
+        repo,
+        limit
+    }
+};
+
+<IssueView> = show issue $(number:number) -> {
+    actionName: "issueView",
+    parameters: {
+        number
+    }
+}
+  | show issue $(number:number) in $(repo:wildcard) -> {
+    actionName: "issueView",
+    parameters: {
+        number,
+        repo
+    }
+};
+
+<PrCreate> = create a pull request titled $(title:wildcard) -> {
+    actionName: "prCreate",
+    parameters: {
+        title
+    }
+}
+  | open a draft PR for branch $(head:word) -> {
+    actionName: "prCreate",
+    parameters: {
+        head,
+        draft: true
+    }
+}
+  | create a PR from $(head:word) to $(base:word) -> {
+    actionName: "prCreate",
+    parameters: {
+        head,
+        base
+    }
+};
+
+<PrClose> = close PR $(number:number) -> {
+    actionName: "prClose",
+    parameters: {
+        number
+    }
+};
+
+<PrMerge> = merge PR $(number:number) -> {
+    actionName: "prMerge",
+    parameters: {
+        number
+    }
+};
+
+<PrList> = list open PRs in $(repo:wildcard) -> {
+    actionName: "prList",
+    parameters: {
+        repo,
+        state: "open"
+    }
+}
+  | list PRs in $(repo:wildcard) -> {
+    actionName: "prList",
+    parameters: {
+        repo
+    }
+}
+  | get latest $(limit:number) PRs in $(repo:wildcard) -> {
+    actionName: "prList",
+    parameters: {
+        repo,
+        limit
+    }
+};
+
+<PrView> = show PR $(number:number) -> {
+    actionName: "prView",
+    parameters: {
+        number
+    }
+}
+  | show PR $(number:number) in $(repo:wildcard) -> {
+    actionName: "prView",
+    parameters: {
+        number,
+        repo
+    }
+};
+
+<PrCheckout> = checkout PR $(number:number) -> {
+    actionName: "prCheckout",
+    parameters: {
+        number
+    }
+};
+
+<RepoCreate> = create a new repository named $(name:wildcard) -> {
+    actionName: "repoCreate",
+    parameters: {
+        name
+    }
+};
+
+<RepoClone> = clone repository $(repo:wildcard) -> {
+    actionName: "repoClone",
+    parameters: {
+        repo
+    }
+};
+
+<RepoView> = show repository $(repo:wildcard) -> {
+    actionName: "repoView",
+    parameters: {
+        repo
+    }
+}
+  | how many stars does $(repo:wildcard) have -> {
+    actionName: "repoView",
+    parameters: {
+        repo,
+        field: "stars"
+    }
+};
+
+<RepoFork> = fork $(repo:wildcard) -> {
+    actionName: "repoFork",
+    parameters: {
+        repo
+    }
+};
+
+<StarRepo> = star $(repo:wildcard) -> {
+    actionName: "starRepo",
+    parameters: {
+        repo
+    }
+}
+  | unstar $(repo:wildcard) -> {
+    actionName: "starRepo",
+    parameters: {
+        repo,
+        unstar: true
+    }
+};
+
+<ApiRequest> = list contributors to $(endpoint:wildcard) -> {
+    actionName: "apiRequest",
+    parameters: {
+        endpoint
+    }
+}
+  | top $(limit:number) contributors to $(endpoint:wildcard) -> {
+    actionName: "apiRequest",
+    parameters: {
+        endpoint,
+        limit
+    }
+};
+
+<SearchRepos> = search repositories for $(query:wildcard) -> {
+    actionName: "searchRepos",
+    parameters: {
+        query
+    }
+};
+
+<StatusPrint> = show my GitHub status -> {
+    actionName: "statusPrint",
+    parameters: {}
+}
+  | (show | give | what's) (me)? (the)? (current)? status of (my)? (issues and pull requests | issues and PRs | notifications and PRs | notifications) -> {
+    actionName: "statusPrint",
+    parameters: {}
+}
+  | (print | show) (the)? latest updates on my repositories -> {
+    actionName: "statusPrint",
+    parameters: {}
+}
+  | (give me)? (a)? summary of (relevant | my)? issues and (pull requests | PRs | notifications) -> {
+    actionName: "statusPrint",
+    parameters: {}
+};
+
+<RunView> = view workflow run $(id:word) -> {
+    actionName: "runView",
+    parameters: {
+        id
+    }
+};
+
+<WorkflowView> = show me workflow $(id:word) -> {
+    actionName: "workflowView",
+    parameters: {
+        id
+    }
+};
+
+<ConfigSet> = set the GitHub CLI configuration for $(name:word) to $(value:word) -> {
+    actionName: "configSet",
+    parameters: {
+        name,
+        value
+    }
+};
+
+<SshKeyAdd> = add an SSH key for me -> {
+    actionName: "sshKeyAdd",
+    parameters: {}
+};
+
+<GistList> = list my gists -> {
+    actionName: "gistList",
+    parameters: {}
+};
+
+<ReleaseList> = list releases in $(repo:wildcard) -> {
+    actionName: "releaseList",
+    parameters: {
+        repo
+    }
+};
+
+<DependabotAlerts> = show dependabot alerts in $(repo:wildcard) -> {
+    actionName: "dependabotAlerts",
+    parameters: {
+        repo
+    }
+}
+  | show high severity dependabot alerts in $(repo:wildcard) -> {
+    actionName: "dependabotAlerts",
+    parameters: {
+        repo,
+        severity: "high"
+    }
+}
+  | show critical dependabot alerts in $(repo:wildcard) -> {
+    actionName: "dependabotAlerts",
+    parameters: {
+        repo,
+        severity: "critical"
+    }
+};
+
+import { GithubCliActions } from "./github-cliSchema.ts";
+
+<Start> : GithubCliActions = <AuthLogin>
+  | <AuthLogout>
+  | <AuthStatus>
+  | <IssueCreate>
+  | <IssueClose>
+  | <IssueReopen>
+  | <IssueList>
+  | <IssueView>
+  | <PrCreate>
+  | <PrClose>
+  | <PrMerge>
+  | <PrList>
+  | <PrView>
+  | <PrCheckout>
+  | <RepoCreate>
+  | <RepoClone>
+  | <RepoView>
+  | <RepoFork>
+  | <StarRepo>
+  | <SearchRepos>
+  | <StatusPrint>
+  | <RunView>
+  | <WorkflowView>
+  | <ConfigSet>
+  | <SshKeyAdd>
+  | <GistList>
+  | <ReleaseList>
+  | <DependabotAlerts>
+  | <ApiRequest>;

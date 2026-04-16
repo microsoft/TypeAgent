@@ -63,9 +63,26 @@
     }
 };
 
+// crawlCliHelp - discover actions by crawling a CLI binary's help output
+<CrawlCliHelp> = crawl (cli | command) (help | usage) (for | of)? $(command:wildcard) (as | for) $(integrationName:wildcard) -> {
+    actionName: "crawlCliHelp",
+    parameters: {
+        command,
+        integrationName
+    }
+}
+  | (discover | scan | explore) (the)? $(command:wildcard) (cli | command) (help)? (as | for) $(integrationName:wildcard) -> {
+    actionName: "crawlCliHelp",
+    parameters: {
+        command,
+        integrationName
+    }
+};
+
 import { DiscoveryActions } from "./discoverySchema.ts";
 
 <Start> : DiscoveryActions = <CrawlDocUrl>
   | <ParseOpenApiSpec>
+  | <CrawlCliHelp>
   | <ListDiscoveredActions>
   | <ApproveApiSurface>;

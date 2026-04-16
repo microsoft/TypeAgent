@@ -3,6 +3,7 @@
 
 export type DiscoveryActions =
     | CrawlDocUrlAction
+    | CrawlCliHelpAction
     | ParseOpenApiSpecAction
     | ListDiscoveredActionsAction
     | ApproveApiSurfaceAction;
@@ -26,6 +27,18 @@ export type ParseOpenApiSpecAction = {
         integrationName: string;
         // URL or absolute file path to the OpenAPI 3.x or Swagger 2.x spec
         specSource: string;
+    };
+};
+
+export type CrawlCliHelpAction = {
+    actionName: "crawlCliHelp";
+    parameters: {
+        // Name of the integration being onboarded
+        integrationName: string;
+        // The CLI command to crawl (e.g. "gh", "az", "kubectl")
+        command: string;
+        // Maximum recursion depth into subcommands (default: 4)
+        maxDepth?: number;
     };
 };
 

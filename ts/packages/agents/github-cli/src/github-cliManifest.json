@@ -1,0 +1,12 @@
+{
+  "emojiChar": "🐙",
+  "description": "Agent for github-cli",
+  "defaultEnabled": true,
+  "schema": {
+    "description": "GithubCli agent actions",
+    "originalSchemaFile": "./github-cliSchema.ts",
+    "schemaFile": "../dist/github-cliSchema.pas.json",
+    "grammarFile": "../dist/github-cliSchema.ag.json",
+    "schemaType": "GithubCliActions"
+  }
+}

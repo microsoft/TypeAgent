@@ -28,7 +28,7 @@ import type {
     PendingInteractionRequest,
     PendingInteractionResponse,
     PendingInteractionEntry,
-} from "agent-dispatcher";
+} from "@typeagent/dispatcher-types";
 import chalk from "chalk";
 import fs from "fs";
 import path from "path";

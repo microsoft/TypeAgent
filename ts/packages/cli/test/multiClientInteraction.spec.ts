@@ -23,7 +23,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import { EventEmitter } from "node:events";
 import { createEnhancedClientIO } from "../src/enhancedConsole.js";
-import type { PendingInteractionRequest, Dispatcher } from "agent-dispatcher";
+import type {
+    PendingInteractionRequest,
+    Dispatcher,
+} from "@typeagent/dispatcher-types";
 
 // ── Stdin/stdout stubs ───────────────────────────────────────────────────────
 

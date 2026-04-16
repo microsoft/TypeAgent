@@ -19,6 +19,8 @@ import {
     readArtifact,
     readArtifactJson,
 } from "../lib/workspace.js";
+import type { ApiSurface } from "../discovery/discoveryHandler.js";
+import { buildCliHandler } from "./cliHandlerTemplate.js";
 import fs from "fs/promises";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -51,6 +53,7 @@ export async function executeScaffolderAction(
                 action.parameters.integrationName,
                 action.parameters.pattern,
                 action.parameters.outputDir,
+                action.parameters.emojiChar,
             );
         case "scaffoldPlugin":
             return handleScaffoldPlugin(
@@ -69,6 +72,7 @@ async function handleScaffoldAgent(
     integrationName: string,
     pattern: AgentPattern = "schema-grammar",
     outputDir?: string,
+    emojiChar?: string,
 ): Promise<ActionResult> {
     const state = await loadState(integrationName);
     if (!state) return { error: `Integration "${integrationName}" not found.` };
@@ -93,6 +97,13 @@ async function handleScaffoldAgent(
             error: `Missing schema or grammar artifacts for "${integrationName}".`,
         };
     }
+
+    // Load discovery data to determine handler strategy (CLI vs stub)
+    const apiSurface = await readArtifactJson<ApiSurface>(
+        integrationName,
+        "discovery",
+        "api-surface.json",
+    );
 
     await updatePhase(integrationName, "scaffolder", { status: "in-progress" });
 
@@ -179,6 +190,7 @@ async function handleScaffoldAgent(
                 state.config.description ?? "",
                 pattern,
                 subGroups,
+                emojiChar,
             ),
             null,
             2,
@@ -189,7 +201,7 @@ async function handleScaffoldAgent(
     // Stamp out handler
     await writeFile(
         path.join(srcDir, `${integrationName}ActionHandler.ts`),
-        buildHandler(integrationName, pascalName, pattern),
+        await buildHandler(integrationName, pascalName, pattern, apiSurface),
     );
     files.push(`src/${integrationName}ActionHandler.ts`);
 
@@ -412,11 +424,12 @@ function buildManifest(
     description: string,
     pattern: AgentPattern = "schema-grammar",
     subGroups?: SubSchemaGroup[],
+    emojiChar?: string,
 ) {
     const manifest: Record<string, unknown> = {
-        emojiChar: "🔌",
+        emojiChar: emojiChar || "🔎",
         description: description || `Agent for ${name}`,
-        defaultEnabled: false,
+        defaultEnabled: true,
         schema: {
             description: `${pascalName} agent actions`,
             originalSchemaFile: `./${name}Schema.ts`,
@@ -455,11 +468,21 @@ function buildManifest(
     return manifest;
 }
 
-function buildHandler(
+async function buildHandler(
     name: string,
     pascalName: string,
     pattern: AgentPattern = "schema-grammar",
-): string {
+    apiSurface?: ApiSurface,
+): Promise<string> {
+    // If discovery data contains CLI actions, generate a CLI handler
+    const cliActions = apiSurface?.actions?.filter((a) =>
+        a.sourceUrl?.startsWith("cli:"),
+    );
+    if (cliActions && cliActions.length > 0) {
+        const cliCommand = cliActions[0].sourceUrl!.split(":")[1];
+        return await buildCliHandler(name, pascalName, cliCommand, cliActions);
+    }
+
     switch (pattern) {
         case "external-api":
             return buildExternalApiHandler(name, pascalName);

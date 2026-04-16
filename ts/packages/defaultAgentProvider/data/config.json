@@ -70,6 +70,9 @@
     },
     "onboarding": {
       "name": "onboarding-agent"
+    },
+    "github-cli": {
+      "name": "github-cli-agent"
     }
   },
   "mcpServers": {
