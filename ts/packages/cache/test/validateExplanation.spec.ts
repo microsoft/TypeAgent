@@ -5,7 +5,10 @@ import {
     getActionProperty,
     ensureProperties,
 } from "../src/explanation/validateExplanation.js";
-import { JSONAction, ParamObjectType } from "../src/explanation/requestAction.js";
+import {
+    JSONAction,
+    ParamObjectType,
+} from "../src/explanation/requestAction.js";
 
 describe("validateExplanation", () => {
     describe("getActionProperty", () => {

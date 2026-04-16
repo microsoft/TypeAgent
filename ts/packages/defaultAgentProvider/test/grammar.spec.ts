@@ -10,11 +10,7 @@ import {
     readExplanationTestData,
     getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
-import {
-    fromJsonActions,
-    RequestAction,
-    toJsonActions,
-} from "agent-cache";
+import { fromJsonActions, RequestAction, toJsonActions } from "agent-cache";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 import { glob } from "glob";
 import { loadGrammarRules, matchGrammar } from "action-grammar";
