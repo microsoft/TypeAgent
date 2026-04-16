@@ -237,8 +237,10 @@ export async function createSessionManager(
     }
 
     function getDefaultSessionId(): string | undefined {
+        // Case-insensitive match so "Default", "default", "DEFAULT" all work.
+        // The shell uses the same case-insensitive pattern when looking up "Shell".
         for (const [id, record] of sessions) {
-            if (record.name === "default") {
+            if (record.name.toLowerCase() === "default") {
                 return id;
             }
         }
@@ -374,6 +376,14 @@ export async function createSessionManager(
                 `Client joined session "${record.name}" (${sessionId}), clients: ${sharedDispatcher.clientCount}`,
             );
 
+            // Notify existing clients that a new client has joined
+            if (sharedDispatcher.clientCount > 1 && dispatcher.connectionId) {
+                sharedDispatcher.broadcastSystemMessage(
+                    `[A new client has joined this conversation. You are connected to '${record.name}'.]`,
+                    dispatcher.connectionId,
+                );
+            }
+
             return {
                 dispatcher,
                 connectionId: dispatcher.connectionId!,
@@ -394,8 +404,20 @@ export async function createSessionManager(
                 throw new Error(`Session not found: ${sessionId}`);
             }
             if (record.sharedDispatcher === undefined) {
+                debugSession(
+                    `leaveSession: dispatcher not active for session "${record.name}" (${sessionId}), ignoring connectionId ${connectionId}`,
+                );
                 return; // Session not active
             }
+
+            // Notify remaining clients before this client leaves
+            if (record.sharedDispatcher.clientCount > 1) {
+                record.sharedDispatcher.broadcastSystemMessage(
+                    `[A client has left this conversation. You remain connected to '${record.name}'.]`,
+                    connectionId,
+                );
+            }
+
             await record.sharedDispatcher.leave(connectionId);
             debugSession(
                 `Client ${connectionId} left session "${record.name}" (${sessionId}), clients: ${record.sharedDispatcher.clientCount}`,

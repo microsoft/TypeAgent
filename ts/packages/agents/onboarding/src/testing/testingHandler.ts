@@ -30,8 +30,8 @@ import {
     createNpmAppAgentProvider,
     getFsStorageProvider,
 } from "dispatcher-node-providers";
-import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { getInstanceDir } from "agent-dispatcher/helpers/data";
 import type {
     ClientIO,
@@ -192,7 +192,7 @@ async function handleRunTests(
         | Awaited<ReturnType<typeof createTestDispatcher>>
         | undefined;
     try {
-        dispatcherSession = await createTestDispatcher();
+        dispatcherSession = await createTestDispatcher(integrationName);
     } catch (err: any) {
         return {
             error:
@@ -531,37 +531,49 @@ function createCapturingClientIO(buffer: string[]): ClientIO {
     } satisfies ClientIO;
 }
 
-// Build a provider containing only the externally-registered agents.
-// The scaffolded agent must be registered in the TypeAgent config before
-// running tests (use `packageAgent --register` or add manually to config.json).
-function getExternalAppAgentProviders(instanceDir: string) {
-    const configPath = path.join(instanceDir, "externalAgentsConfig.json");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const agents = fs.existsSync(configPath)
-        ? ((JSON.parse(fs.readFileSync(configPath, "utf8")) as any).agents ??
-          {})
-        : {};
-    return [
-        createNpmAppAgentProvider(
-            agents,
-            path.join(instanceDir, "externalagents/package.json"),
-        ),
-    ];
+// Build an agent provider for the scaffolded agent under test.
+// Uses path-based resolution so we don't need a direct npm dependency on
+// the generated agent (which would create a circular dependency via
+// default-agent-provider).
+const AGENTS_DIR = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../../../../packages/agents",
+);
+
+function getTestAgentProvider(integrationName: string) {
+    const packageName = `${integrationName}-agent`;
+    const agentDir = path.resolve(AGENTS_DIR, integrationName);
+    const configs: Record<string, { name: string; path: string }> = {
+        [integrationName]: { name: packageName, path: agentDir },
+    };
+    // requirePath is only used when info.path is NOT set; with an absolute
+    // path the provider resolves the agent directory directly.
+    return createNpmAppAgentProvider(configs, import.meta.url);
 }
 
-async function createTestDispatcher() {
+async function createTestDispatcher(integrationName: string) {
     const instanceDir = getInstanceDir();
-    const appAgentProviders = getExternalAppAgentProviders(instanceDir);
+    const appAgentProviders = [getTestAgentProvider(integrationName)];
     const buffer: string[] = [];
     const clientIO = createCapturingClientIO(buffer);
 
+    // Use a temp directory for the test dispatcher so it starts with a
+    // fresh cache on every run — stale wildcard entries from prior runs
+    // can override newly-added grammar rules.
+    const tmpDir = path.join(instanceDir, "onboarding-test-tmp-" + Date.now());
+
     const dispatcher = await createDispatcher("onboarding-test-runner", {
         appAgentProviders,
-        agents: { commands: ["dispatcher"] },
+        agents: {
+            schemas: [integrationName],
+            actions: [integrationName],
+            commands: ["dispatcher", integrationName],
+        },
         explainer: { enabled: false },
-        cache: { enabled: false },
+        // Cache must be enabled for grammar matching to work.
+        cache: { enabled: true },
         collectCommandResult: true,
-        persistDir: instanceDir,
+        persistDir: tmpDir,
         storageProvider: getFsStorageProvider(),
         clientIO,
         dblogging: false,
@@ -575,8 +587,10 @@ async function runSingleTest(
     integrationName: string,
     dispatcher: Awaited<ReturnType<typeof createTestDispatcher>>["dispatcher"],
 ): Promise<TestResult> {
-    // Route to the specific integration agent: "@<agentName> <phrase>"
-    const command = `@${integrationName} ${tc.phrase}`;
+    // Send the phrase directly — the dispatcher grammar-matches it to the
+    // agent's action schema.  Do NOT use the "@agent" prefix because that
+    // enters the command-handler path and requires executeCommand().
+    const command = tc.phrase;
 
     let result: CommandResult | undefined;
     try {
@@ -591,6 +605,23 @@ async function runSingleTest(
     }
 
     if (result?.lastError) {
+        // If an action was dispatched, check the action name first — the test
+        // validates phrase→action routing, not execution of the stub handler.
+        const actualActionName = result?.actions?.[0]?.actionName;
+        if (actualActionName !== undefined) {
+            const passed = actualActionName === tc.expectedActionName;
+            return {
+                phrase: tc.phrase,
+                expectedActionName: tc.expectedActionName,
+                actualActionName,
+                passed,
+                ...(passed
+                    ? undefined
+                    : {
+                          error: `Expected "${tc.expectedActionName}", got "${actualActionName}"`,
+                      }),
+            };
+        }
         return {
             phrase: tc.phrase,
             expectedActionName: tc.expectedActionName,

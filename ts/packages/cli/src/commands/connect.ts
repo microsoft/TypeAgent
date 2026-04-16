@@ -9,7 +9,12 @@ import {
     replayDisplayHistory,
     withEnhancedConsoleClientIO,
 } from "../enhancedConsole.js";
-import { isSlashCommand, getSlashCompletions } from "../slashCommands.js";
+import {
+    isSlashCommand,
+    getSlashCompletions,
+    setConversationCommandContext,
+} from "../slashCommands.js";
+import type { ConversationCommandContext } from "../conversationCommands.js";
 import {
     connectAgentServer,
     ensureAgentServer,
@@ -335,39 +340,92 @@ export default class Connect extends Command {
                 connection = result.connection;
             }
 
-            const { dispatcher, name, sessionId: connectedSessionId } = session;
+            const {
+                dispatcher: initialDispatcher,
+                name: initialName,
+                sessionId: initialSessionId,
+            } = session;
+
+            // Mutable session state — updated by switchSession callback
+            let activeDispatcher = initialDispatcher;
+            let activeSessionId = initialSessionId;
+            let activeName = initialName;
+
             if (!isEphemeral) {
-                saveLastSessionId(connectedSessionId);
+                saveLastSessionId(activeSessionId);
             }
-            console.log(`Connected to session '${name}'.`);
-            bindDispatcher(dispatcher);
-            await replayDisplayHistory(dispatcher, clientIO);
+            bindDispatcher(activeDispatcher);
+            await replayDisplayHistory(activeDispatcher, clientIO, activeName);
+
+            // Set up ConversationCommandContext for @conversation commands.
+            // Only available when the AgentServerConnection is accessible
+            // (connectToCliSession / connectToEphemeralSession paths).
+            // The ensureAndConnectSession path (--session / --resume flags)
+            // does not expose the connection, so convCtx stays undefined there.
+            let convCtx: ConversationCommandContext | undefined;
+            if (connection !== undefined) {
+                convCtx = {
+                    connection,
+                    getCurrentSessionId: () => activeSessionId,
+                    getCurrentSessionName: () => activeName,
+                    switchSession: async (newSessionId: string) => {
+                        // Join the new session first so that if it fails we
+                        // haven't already left the old one (avoids stranded state).
+                        const newSession = await connection.joinSession(
+                            clientIO,
+                            { sessionId: newSessionId },
+                        );
+                        newSession.dispatcher.close = async () => {
+                            await connection.close();
+                        };
+                        await connection.leaveSession(activeSessionId);
+                        activeDispatcher = newSession.dispatcher;
+                        activeSessionId = newSession.sessionId;
+                        activeName = newSession.name;
+                        bindDispatcher(activeDispatcher);
+                        if (!isEphemeral) {
+                            saveLastSessionId(activeSessionId);
+                        }
+                        await replayDisplayHistory(
+                            activeDispatcher,
+                            clientIO,
+                            activeName,
+                        );
+                        return newSession;
+                    },
+                };
+                setConversationCommandContext(convCtx);
+            }
+
             try {
                 let processed = false;
                 if (flags.request) {
-                    await dispatcher.processCommand(flags.request);
+                    await activeDispatcher.processCommand(flags.request);
                     processed = true;
                 }
                 if (args.input) {
-                    await dispatcher.processCommand(`@run ${args.input}`);
+                    await activeDispatcher.processCommand(`@run ${args.input}`);
                     processed = true;
                 }
                 if (processed && flags.exit) {
                     return;
                 }
                 await processCommandsEnhanced(
-                    async (dispatcher: Dispatcher) =>
+                    async (_dispatcher: Dispatcher) =>
                         getEnhancedConsolePrompt(
-                            getStatusSummary(await dispatcher.getStatus(), {
-                                showPrimaryName: false,
-                            }),
+                            getStatusSummary(
+                                await activeDispatcher.getStatus(),
+                                { showPrimaryName: false },
+                            ),
                         ),
-                    (command: string, dispatcher: Dispatcher) =>
-                        dispatcher.processCommand(command),
-                    dispatcher,
+                    async (command: string, _dispatcher: Dispatcher) => {
+                        return activeDispatcher.processCommand(command);
+                    },
+                    activeDispatcher,
                     undefined,
-                    (line: string) => getCompletionsData(line, dispatcher),
-                    dispatcher,
+                    (line: string) =>
+                        getCompletionsData(line, activeDispatcher),
+                    activeDispatcher,
                 );
             } finally {
                 if (
@@ -380,8 +438,8 @@ export default class Connect extends Command {
                         // Best effort cleanup of ephemeral session
                     }
                 }
-                if (dispatcher) {
-                    await dispatcher.close();
+                if (activeDispatcher) {
+                    await activeDispatcher.close();
                 }
             }
         });

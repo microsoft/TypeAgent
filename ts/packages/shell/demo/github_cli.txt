@@ -1,0 +1,94 @@
+# ====== Init =======
+@config action -* github-cli
+@config schema -* github-cli
+
+# =============================================
+# GitHub CLI Agent Demo
+# Natural language → real gh CLI execution
+# =============================================
+
+# -------------------------------------
+# Authentication & config
+# -------------------------------------
+
+# Verify we're logged in
+check my GitHub authentication
+
+# -------------------------------------
+# Start with your personal GitHub status
+# -------------------------------------
+
+# What's happening across my repos?
+show my GitHub status
+
+# -------------------------------------
+# Explore a repository
+# -------------------------------------
+
+# Get an overview of a project
+how many stars does microsoft/TypeAgent have
+
+# What issues are being tracked?
+show open issues in microsoft/TypeAgent
+
+# Who built this thing?
+show top 10 contributors to microsoft/TypeAgent
+
+# -------------------------------------
+# Pull request workflows
+# -------------------------------------
+
+# See what's in flight
+list open PRs in microsoft/TypeAgent
+
+# Just the most recent ones
+get latest 5 PRs in microsoft/TypeAgent
+
+# Drill into a specific PR
+show PR 2180 in microsoft/TypeAgent
+
+# -------------------------------------
+# Issue management
+# -------------------------------------
+
+# Get the latest issues
+get latest 5 issues in microsoft/TypeAgent
+
+# Drill into a specific issue
+show issue 2170 in microsoft/TypeAgent
+
+# -------------------------------------
+# Security
+# -------------------------------------
+
+# Check for vulnerabilities
+show dependabot alerts in microsoft/TypeAgent
+
+# Filter by severity
+show high severity dependabot alerts in microsoft/TypeAgent
+
+# -------------------------------------
+# Write actions
+# -------------------------------------
+
+# Star a repo you like
+star microsoft/TypeAgent
+
+# Unstar it
+unstar microsoft/TypeAgent
+
+# Create an issue
+create issue "Demo test - safe to ignore"
+
+# Close it (presenter: update number from the output above)
+close issue 2186
+
+# -------------------------------------
+# Repository discovery
+# -------------------------------------
+
+# Find interesting projects
+search repositories for TypeScript agent framework
+
+# Full repo overview
+show repository microsoft/TypeAgent

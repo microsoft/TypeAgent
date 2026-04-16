@@ -2011,9 +2011,15 @@ export function getEnhancedConsolePrompt(_text: string): string {
 export async function replayDisplayHistory(
     dispatcher: Dispatcher,
     clientIO: ClientIO,
+    sessionName?: string,
 ): Promise<void> {
     const entries = await dispatcher.getDisplayHistory();
     if (entries.length === 0) {
+        if (sessionName !== undefined) {
+            console.log(
+                chalk.dim(`Connected to conversation '${sessionName}'.`),
+            );
+        }
         return;
     }
 
@@ -2084,4 +2090,7 @@ export async function replayDisplayHistory(
     process.stdout.write(
         chalk.dim("─── now " + "─".repeat(Math.max(0, width - 8))) + "\n",
     );
+    if (sessionName !== undefined) {
+        console.log(chalk.dim(`Connected to conversation '${sessionName}'.`));
+    }
 }

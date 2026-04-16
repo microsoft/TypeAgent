@@ -2,11 +2,11 @@
 // Licensed under the MIT License.
 
 /**
- * Session command handler — intercepts `/session` slash commands in the
- * renderer process and executes them via the preload API, displaying
- * results in the chat view.
+ * Conversation command handler — intercepts `/conversation` (and its
+ * `@conversation` alias) in the renderer process and executes them via
+ * the preload API, displaying results in the chat view.
  *
- * Returns `true` if the text was a session command (handled), `false` otherwise.
+ * Returns `true` if the text was a conversation command (handled), `false` otherwise.
  */
 
 import type {
@@ -21,26 +21,37 @@ export type SessionMessageSink = {
 };
 
 /**
- * Try to handle a `/session` command.  Returns true if the command was
- * recognized and handled (caller should not forward it to the dispatcher).
+ * Try to handle a `/conversation` (or `@conversation`) command.  Returns true
+ * if the command was recognized and handled (caller should not forward it to
+ * the dispatcher).
+ *
+ * `@conversation` is accepted as an alias and normalized to `/conversation`
+ * before parsing, matching the CLI's behaviour.
  */
-export async function handleSessionCommand(
+export async function handleConversationCommand(
     text: string,
     sink: SessionMessageSink,
 ): Promise<boolean> {
     const trimmed = text.trim();
-    if (!trimmed.startsWith("/session")) {
+
+    // Accept both /conversation and @conversation
+    let normalized: string;
+    if (trimmed.startsWith("@conversation")) {
+        normalized = "/conversation" + trimmed.slice("@conversation".length);
+    } else if (trimmed.startsWith("/conversation")) {
+        normalized = trimmed;
+    } else {
         return false;
     }
 
-    const parts = trimmed.split(/\s+/);
+    const parts = normalized.split(/\s+/);
     const subcommand = parts[1]?.toLowerCase();
 
     const api = getClientAPI();
 
     try {
         if (!subcommand || subcommand === "help") {
-            showSessionHelp(sink);
+            showConversationHelp(sink);
             return true;
         }
 
@@ -54,10 +65,10 @@ export async function handleSessionCommand(
 
             case "new":
             case "create": {
-                const name = parts.slice(2).join(" ") || "New Session";
+                const name = parts.slice(2).join(" ") || "New Conversation";
                 const session = await api.sessionCreate(name);
                 sink.addSystemMessage(
-                    `✅ Created session "<b>${escapeHtml(session.name)}</b>" (${session.sessionId})`,
+                    `✅ Created conversation "<b>${escapeHtml(session.name)}</b>" (${session.sessionId})`,
                 );
                 return true;
             }
@@ -66,7 +77,7 @@ export async function handleSessionCommand(
                 const target = parts.slice(2).join(" ");
                 if (!target) {
                     sink.addSystemMessage(
-                        "Usage: <code>/session switch &lt;sessionId|name&gt;</code>",
+                        "Usage: <code>/conversation switch &lt;id|name&gt;</code>",
                     );
                     return true;
                 }
@@ -75,31 +86,30 @@ export async function handleSessionCommand(
                 const result: SessionSwitchResult =
                     await api.sessionSwitch(sessionId);
                 if (result.success) {
-                    sink.clear();
                     sink.addSystemMessage(
-                        `🔄 Switched to session "<b>${escapeHtml(result.name ?? sessionId)}</b>"`,
+                        `🔄 Switched to conversation "<b>${escapeHtml(result.name ?? sessionId)}</b>"`,
                     );
                 } else {
                     sink.addSystemMessage(
-                        `❌ ${escapeHtml(result.error ?? "Failed to switch session")}`,
+                        `❌ ${escapeHtml(result.error ?? "Failed to switch conversation")}`,
                     );
                 }
                 return true;
             }
 
             case "rename": {
-                // /session rename <sessionId> <new name>
+                // /conversation rename <id> <new name>
                 const sessionId = parts[2];
                 const newName = parts.slice(3).join(" ");
                 if (!sessionId || !newName) {
                     sink.addSystemMessage(
-                        "Usage: <code>/session rename &lt;sessionId&gt; &lt;newName&gt;</code>",
+                        "Usage: <code>/conversation rename &lt;id&gt; &lt;newName&gt;</code>",
                     );
                     return true;
                 }
                 await api.sessionRename(sessionId, newName);
                 sink.addSystemMessage(
-                    `✅ Renamed session ${escapeHtml(sessionId)} to "<b>${escapeHtml(newName)}</b>"`,
+                    `✅ Renamed conversation ${escapeHtml(sessionId)} to "<b>${escapeHtml(newName)}</b>"`,
                 );
                 return true;
             }
@@ -108,42 +118,44 @@ export async function handleSessionCommand(
                 const target = parts.slice(2).join(" ");
                 if (!target) {
                     sink.addSystemMessage(
-                        "Usage: <code>/session delete &lt;sessionId|name&gt;</code>",
+                        "Usage: <code>/conversation delete &lt;id|name&gt;</code>",
                     );
                     return true;
                 }
                 const sessionId = await resolveSessionTarget(target);
                 await api.sessionDelete(sessionId);
                 sink.addSystemMessage(
-                    `🗑️ Deleted session ${escapeHtml(target)}`,
+                    `🗑️ Deleted conversation ${escapeHtml(target)}`,
                 );
                 return true;
             }
 
             default:
                 sink.addSystemMessage(
-                    `Unknown session command: <code>${escapeHtml(subcommand)}</code>`,
+                    `Unknown conversation command: <code>${escapeHtml(subcommand)}</code>`,
                 );
-                showSessionHelp(sink);
+                showConversationHelp(sink);
                 return true;
         }
     } catch (e: any) {
         sink.addSystemMessage(
-            `❌ Session command failed: ${escapeHtml(e.message ?? String(e))}`,
+            `❌ Conversation command failed: ${escapeHtml(e.message ?? String(e))}`,
         );
         return true;
     }
 }
 
-function showSessionHelp(sink: SessionMessageSink): void {
+function showConversationHelp(sink: SessionMessageSink): void {
     sink.addSystemMessage(
         [
-            "<b>Session Commands</b>",
-            "<code>/session list</code> — List all sessions",
-            "<code>/session new [name]</code> — Create a new session",
-            "<code>/session switch &lt;id|name&gt;</code> — Switch to a session",
-            "<code>/session rename &lt;id&gt; &lt;name&gt;</code> — Rename a session",
-            "<code>/session delete &lt;id|name&gt;</code> — Delete a session",
+            "<b>Conversation Commands</b>",
+            "<code>/conversation list</code> — List all conversations",
+            "<code>/conversation new [name]</code> — Create a new conversation",
+            "<code>/conversation switch &lt;id|name&gt;</code> — Switch to a conversation",
+            "<code>/conversation rename &lt;id&gt; &lt;name&gt;</code> — Rename a conversation",
+            "<code>/conversation delete &lt;id|name&gt;</code> — Delete a conversation",
+            "",
+            "Tip: <code>@conversation</code> is accepted as an alias for <code>/conversation</code>.",
         ].join("<br>"),
     );
 }
@@ -154,7 +166,7 @@ function formatSessionList(
     sink: SessionMessageSink,
 ): void {
     if (sessions.length === 0) {
-        sink.addSystemMessage("No sessions found.");
+        sink.addSystemMessage("No conversations found.");
         return;
     }
 
@@ -165,7 +177,7 @@ function formatSessionList(
     });
 
     sink.addSystemMessage(
-        `<b>Sessions (${sessions.length})</b><br>${lines.join("<br>")}`,
+        `<b>Conversations (${sessions.length})</b><br>${lines.join("<br>")}`,
     );
 }
 

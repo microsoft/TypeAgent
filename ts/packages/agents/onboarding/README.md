@@ -6,15 +6,15 @@ A TypeAgent agent that automates the end-to-end process of integrating a new app
 
 Integrating a new application into TypeAgent involves 7 phases:
 
-| Phase | Sub-agent               | What it does                                                       |
-| ----- | ----------------------- | ------------------------------------------------------------------ |
-| 1     | `onboarding-discovery`  | Crawls docs or parses an OpenAPI spec to enumerate the API surface |
-| 2     | `onboarding-phrasegen`  | Generates natural language sample phrases for each action          |
-| 3     | `onboarding-schemagen`  | Generates TypeScript action schemas from the API surface           |
-| 4     | `onboarding-grammargen` | Generates `.agr` grammar files from schemas and phrases            |
-| 5     | `onboarding-scaffolder` | Stamps out the agent package infrastructure                        |
-| 6     | `onboarding-testing`    | Generates test cases and runs a phrase→action validation loop      |
-| 7     | `onboarding-packaging`  | Packages the agent for distribution and registration               |
+| Phase | Sub-agent               | What it does                                                                                    |
+| ----- | ----------------------- | ----------------------------------------------------------------------------------------------- |
+| 1     | `onboarding-discovery`  | Crawls docs, parses an OpenAPI spec, or crawls CLI `--help` output to enumerate the API surface |
+| 2     | `onboarding-phrasegen`  | Generates natural language sample phrases for each action                                       |
+| 3     | `onboarding-schemagen`  | Generates TypeScript action schemas from the API surface                                        |
+| 4     | `onboarding-grammargen` | Generates `.agr` grammar files from schemas and phrases                                         |
+| 5     | `onboarding-scaffolder` | Stamps out the agent package infrastructure                                                     |
+| 6     | `onboarding-testing`    | Generates test cases and runs a phrase→action validation loop                                   |
+| 7     | `onboarding-packaging`  | Packages the agent for distribution and registration                                            |
 
 Each phase produces **artifacts saved to disk** at `~/.typeagent/onboarding/<integration-name>/`, so work can be resumed across sessions.
 
@@ -42,10 +42,28 @@ resume onboarding for slack
 
 ```
 crawl docs at https://api.slack.com/docs for slack
+crawl CLI help for gh as github-cli
 generate phrases for slack
 generate schema for slack
 run tests for slack
 ```
+
+### CLI help discovery
+
+The discovery phase can recursively crawl a CLI binary's `--help` output to discover all subcommands and their flags:
+
+```
+crawl CLI help for gh as github-cli
+crawl CLI help for az as azure-cli
+```
+
+This spawns the binary with `--help` (falling back to `-h`), parses subcommands, and recursively discovers the full command tree. Each subcommand becomes a `DiscoveredAction` with:
+
+- `path`: the full command (e.g., `gh issue create`)
+- `method`: `"CLI"`
+- `parameters`: parsed `--flags` with types
+
+When the scaffolder detects CLI-sourced actions, it auto-generates a working handler with `buildArgs()` and `runCli()` functions instead of a stub.
 
 ## Workspace layout
 
@@ -132,13 +150,16 @@ pnpm install
 pnpm run build
 ```
 
+## Architecture
+
+See [AGENTS.md](./AGENTS.md) for details on the agent structure, how to extend it, and how each phase's LLM prompting works.
+
 ## TODO
 
 ### Additional discovery crawlers
 
-The discovery phase currently supports web docs and OpenAPI specs. Planned crawlers:
+The discovery phase currently supports web docs, OpenAPI specs, and CLI `--help` scraping. Planned crawlers:
 
-- **CLI `--help` scraping** — invoke a command-line tool with `--help` / `--help <subcommand>` and parse the output to enumerate commands, flags, and arguments
 - **`dumpbin` / PE inspection** — extract exported function names and signatures from Windows DLLs for native library integration
 - **.NET reflection** — load a managed assembly and enumerate public types, methods, and parameters via `System.Reflection`
 - **Man pages** — parse `man` output for POSIX CLI tools
@@ -147,10 +168,6 @@ The discovery phase currently supports web docs and OpenAPI specs. Planned crawl
 - **gRPC / Protobuf** — parse `.proto` files or use server reflection to enumerate services and RPC methods
 
 Each new crawler should implement the same `DiscoveryResult` contract so downstream phases (phrase gen, schema gen) remain crawler-agnostic.
-
-## Architecture
-
-See [AGENTS.md](./AGENTS.md) for details on the agent structure, how to extend it, and how each phase's LLM prompting works.
 
 ## Trademarks
 

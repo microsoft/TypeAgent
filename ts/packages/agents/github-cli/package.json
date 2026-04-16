@@ -1,0 +1,36 @@
+{
+  "name": "github-cli-agent",
+  "version": "0.0.1",
+  "private": true,
+  "description": "TypeAgent agent for github-cli",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/agents/github-cli"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/github-cliManifest.json",
+    "./agent/handlers": "./dist/github-cliActionHandler.js"
+  },
+  "scripts": {
+    "agc": "agc -i ./src/github-cliSchema.agr -o ./dist/github-cliSchema.ag.json",
+    "asc": "asc -i ./src/github-cliSchema.ts -o ./dist/github-cliSchema.pas.json -t GithubCliActions",
+    "build": "concurrently npm:tsc npm:asc npm:agc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
+    "action-grammar-compiler": "workspace:*",
+    "concurrently": "^9.1.2",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  }
+}
