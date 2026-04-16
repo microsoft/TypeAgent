@@ -103,13 +103,21 @@ function toExecutableAction(
 // ── Implementation ───────────────────────────────────────────────────────────
 
 export class TaskFlowScriptAPIImpl implements TaskFlowScriptAPI {
-    private stepIndex: number;
+    // Use a mutable container to allow stepIndex to be modified even when the object is frozen
+    private stepIndexContainer: { value: number };
+    // Store the RequestId from when this API was created, for use in nested action calls
+    private parentRequestId: unknown;
 
     constructor(
         private context: ActionContext<any>,
         initialStepIndex: number = 1,
     ) {
-        this.stepIndex = initialStepIndex;
+        this.stepIndexContainer = { value: initialStepIndex };
+        // Capture the current RequestId so we can restore it for nested calls
+        // Access _systemContext (CommandHandlerContext) exposed by sessionContext
+        const systemContext = (this.context.sessionContext as any)
+            ._systemContext;
+        this.parentRequestId = systemContext?.currentRequestId;
     }
 
     async callAction(
@@ -117,8 +125,16 @@ export class TaskFlowScriptAPIImpl implements TaskFlowScriptAPI {
         actionName: string,
         params: Record<string, unknown>,
     ): Promise<ActionStepResult> {
-        const systemContext = this.context.sessionContext.agentContext as any;
-        systemContext.currentAbortSignal?.throwIfAborted();
+        // Access _systemContext (CommandHandlerContext) exposed by sessionContext
+        const systemContext = (this.context.sessionContext as any)
+            ._systemContext;
+        systemContext?.currentAbortSignal?.throwIfAborted();
+
+        // Ensure RequestId is set for nested action execution
+        const savedRequestId = systemContext?.currentRequestId;
+        if (systemContext && !savedRequestId && this.parentRequestId) {
+            systemContext.currentRequestId = this.parentRequestId;
+        }
 
         const { executeAction } = await getDispatcherModule();
 
@@ -127,19 +143,27 @@ export class TaskFlowScriptAPIImpl implements TaskFlowScriptAPI {
             actionName,
             params,
         );
-        const result = await executeAction(
-            executableAction,
-            this.context,
-            this.stepIndex++,
-        );
 
-        const text = extractText(result);
-        const data = tryParseJson(text) ?? text;
+        try {
+            const result = await executeAction(
+                executableAction,
+                this.context,
+                this.stepIndexContainer.value++,
+            );
 
-        if (result.error) {
-            return { text, data, error: result.error };
+            const text = extractText(result);
+            const data = tryParseJson(text) ?? text;
+
+            if (result.error) {
+                return { text, data, error: result.error };
+            }
+            return { text, data };
+        } finally {
+            // Restore the original RequestId state
+            if (systemContext) {
+                systemContext.currentRequestId = savedRequestId;
+            }
         }
-        return { text, data };
     }
 
     async queryLLM(

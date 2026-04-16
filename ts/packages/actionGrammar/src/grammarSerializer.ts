@@ -19,6 +19,7 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
     function grammarPartToJson(p: GrammarPart): GrammarPartJson {
         switch (p.type) {
             case "string":
+                return { type: "string", value: p.value };
             case "wildcard":
             case "number":
                 return p;

@@ -1,0 +1,63 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Grammar for Phase 7 — Packaging actions.
+
+<PackageAgent> = package (the)? $(integrationName:wildcard) agent -> {
+    actionName: "packageAgent",
+    parameters: {
+        integrationName
+    }
+}
+  | (build | bundle | prepare) (the)? $(integrationName:wildcard) (agent)? (package)? (for distribution)? -> {
+    actionName: "packageAgent",
+    parameters: {
+        integrationName
+    }
+};
+
+<ValidatePackage> = validate (the)? $(integrationName:wildcard) (agent)? package -> {
+    actionName: "validatePackage",
+    parameters: {
+        integrationName
+    }
+}
+  | (check | verify) (the)? $(integrationName:wildcard) (agent)? package -> {
+    actionName: "validatePackage",
+    parameters: {
+        integrationName
+    }
+};
+
+<GenerateDemo> = generate (a)? demo (script)? for $(integrationName:wildcard) -> {
+    actionName: "generateDemo",
+    parameters: {
+        integrationName
+    }
+}
+  | create (a)? demo for $(integrationName:wildcard) -> {
+    actionName: "generateDemo",
+    parameters: {
+        integrationName
+    }
+};
+
+<GenerateReadme> = generate (a)? readme for $(integrationName:wildcard) -> {
+    actionName: "generateReadme",
+    parameters: {
+        integrationName
+    }
+}
+  | create (a)? readme for (the)? $(integrationName:wildcard) (agent)? -> {
+    actionName: "generateReadme",
+    parameters: {
+        integrationName
+    }
+};
+
+import { PackagingActions } from "./packagingSchema.ts";
+
+<Start> : PackagingActions = <PackageAgent>
+  | <ValidatePackage>
+  | <GenerateDemo>
+  | <GenerateReadme>;

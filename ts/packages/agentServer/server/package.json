@@ -15,6 +15,10 @@
   "exports": {
     ".": "./dist/server.js"
   },
+  "bin": {
+    "agent-server-status": "./dist/status.js",
+    "agent-server-stop": "./dist/stop.js"
+  },
   "files": [
     "dist",
     "!dist/test"

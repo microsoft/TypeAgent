@@ -1,0 +1,54 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+//
+// Auto-generated CLI handler for {{NAME}}
+
+import { execFile } from "child_process";
+import { promisify } from "util";
+import {
+    ActionContext,
+    AppAgent,
+    TypeAgentAction,
+} from "@typeagent/agent-sdk";
+import {
+    createActionResultFromTextDisplay,
+} from "@typeagent/agent-sdk/helpers/action";
+import { {{PASCAL_NAME}}Actions } from "./{{NAME}}Schema.js";
+
+const execFileAsync = promisify(execFile);
+
+async function runCli(...cliArgs: string[]): Promise<string> {
+    const { stdout, stderr } = await execFileAsync("{{CLI_COMMAND}}", cliArgs, {
+        timeout: 30_000,
+    });
+    return (stdout || stderr).trim();
+}
+
+function buildArgs(action: TypeAgentAction<{{PASCAL_NAME}}Actions>): string[] {
+    const args: string[] = [];
+    const params = action.parameters as Record<string, unknown>;
+    switch (action.actionName) {
+{{SWITCH_CASES}}
+        default:
+            throw new Error(`Unknown action: ${action.actionName}`);
+    }
+    return args;
+}
+
+export function instantiate(): AppAgent {
+    return {
+        executeAction: async (
+            action: TypeAgentAction<{{PASCAL_NAME}}Actions>,
+            context: ActionContext<{{PASCAL_NAME}}Actions>,
+        ) => {
+            try {
+                const args = buildArgs(action);
+                const output = await runCli(...args);
+                return createActionResultFromTextDisplay(output);
+            } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : String(e);
+                return createActionResultFromTextDisplay(`Error: ${msg}`);
+            }
+        },
+    };
+}

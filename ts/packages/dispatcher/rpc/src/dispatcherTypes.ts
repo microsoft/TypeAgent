@@ -68,4 +68,5 @@ export type DispatcherInvokeFunctions = {
 
 export type DispatcherCallFunctions = {
     cancelCommand(requestId: string): void;
+    cancelInteraction(interactionId: string): void;
 };

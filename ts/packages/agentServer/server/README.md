@@ -14,7 +14,8 @@ pnpm --filter agent-server start
 pnpm --filter agent-server start -- --config test
 
 # Stop (sends shutdown via RPC)
-pnpm --filter agent-server stop
+agent-cli server stop              # Client Side command
+pnpm --filter agent-server stop    # Server Side command
 ```
 
 ### With node directly
@@ -26,7 +27,15 @@ node --disable-warning=DEP0190 packages/agentServer/server/dist/server.js
 node --disable-warning=DEP0190 packages/agentServer/server/dist/server.js --config test
 ```
 
-Listens on `ws://localhost:8999`. The server also starts automatically when clients call `ensureAndConnectDispatcher()`.
+Listens on `ws://localhost:8999`. The server also starts automatically when clients call `ensureAgentServer()`.
+
+### Server flags
+
+| Flag                       | Description                                                                                                                             |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `--port <port>`            | Port to listen on (default: 8999)                                                                                                       |
+| `--config <name>`          | Load `config.<name>.json` instead of the default config                                                                                 |
+| `--idle-timeout <seconds>` | Exit after this many seconds with no connected clients (default: disabled). The CLI passes 600 (10 min) when it auto-spawns the server. |
 
 ---
 
@@ -48,6 +57,8 @@ Maintains a pool of per-session `SharedDispatcher` instances. Key behaviors:
 - **Persistence:** session metadata stored in `~/.typeagent/server-sessions/sessions.json`; each session's data in `~/.typeagent/server-sessions/<sessionId>/`
 - **Lazy init:** each session's `SharedDispatcher` is created on first `joinSession()` and torn down after 5 minutes of inactivity
 - **Auto-create:** if no session exists and no `sessionId` is provided, a `"default"` session is created automatically
+- **Startup sweep:** on server start, sessions prefixed `cli-ephemeral-` or `cli-replay-` are automatically deleted to reclaim any orphaned ephemeral sessions left over from crashed CLI processes
+- **Idle shutdown:** when `--idle-timeout <seconds>` is passed, the server calls `process.exit(0)` after that many seconds with no WebSocket connections. The timer resets whenever a new client connects.
 
 ### `sharedDispatcher.ts` — Routing layer
 

@@ -4,13 +4,14 @@
 import type { PendingInteractionRequest } from "@typeagent/dispatcher-types";
 import { PendingInteractionManager } from "../src/context/pendingInteractionManager.js";
 
-function makeAskYesNoRequest(
-    overrides: Partial<PendingInteractionRequest & { type: "askYesNo" }> = {},
-): PendingInteractionRequest & { type: "askYesNo" } {
+function makeQuestionRequest(
+    overrides: Partial<PendingInteractionRequest & { type: "question" }> = {},
+): PendingInteractionRequest & { type: "question" } {
     return {
         interactionId: overrides.interactionId ?? `ask-${Date.now()}`,
-        type: "askYesNo",
+        type: "question",
         message: "Continue?",
+        choices: ["Yes", "No"],
         source: "test",
         timestamp: Date.now(),
         ...overrides,
@@ -37,22 +38,6 @@ function makeProposeActionRequest(
     };
 }
 
-function makePopupQuestionRequest(
-    overrides: Partial<
-        PendingInteractionRequest & { type: "popupQuestion" }
-    > = {},
-): PendingInteractionRequest & { type: "popupQuestion" } {
-    return {
-        interactionId: overrides.interactionId ?? `popup-${Date.now()}`,
-        type: "popupQuestion",
-        message: "Pick one",
-        choices: ["A", "B", "C"],
-        source: "test",
-        timestamp: Date.now(),
-        ...overrides,
-    };
-}
-
 function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -69,18 +54,18 @@ describe("PendingInteractionManager", () => {
     // ---------------------------------------------------------------
     describe("create + resolve", () => {
         it("resolves the promise with the given value and removes the entry", async () => {
-            const request = makeAskYesNoRequest({
+            const request = makeQuestionRequest({
                 interactionId: "id-1",
             });
-            const promise = manager.create<boolean>(request, "conn-1");
+            const promise = manager.create<number>(request);
 
             expect(manager.has("id-1")).toBe(true);
             expect(manager.size).toBe(1);
 
-            const resolved = manager.resolve("id-1", true);
+            const resolved = manager.resolve("id-1", 0);
 
             expect(resolved).toBe(true);
-            await expect(promise).resolves.toBe(true);
+            await expect(promise).resolves.toBe(0);
             expect(manager.has("id-1")).toBe(false);
             expect(manager.size).toBe(0);
         });
@@ -101,7 +86,7 @@ describe("PendingInteractionManager", () => {
             const request = makeProposeActionRequest({
                 interactionId: "id-2",
             });
-            const promise = manager.create<unknown>(request, "conn-1");
+            const promise = manager.create<unknown>(request);
 
             const cancelled = manager.cancel(
                 "id-2",
@@ -124,31 +109,30 @@ describe("PendingInteractionManager", () => {
         });
 
         // ---------------------------------------------------------------
-        // 5. cancel: all three types behave correctly
-        //    - askYesNo resolves with defaultValue if explicitly set, rejects otherwise
+        // 5. cancel: both types behave correctly
+        //    - question resolves with defaultId if explicitly set, rejects otherwise
         //    - proposeAction rejects
-        //    - popupQuestion rejects
         // ---------------------------------------------------------------
-        it("askYesNo cancel resolves with defaultValue instead of rejecting", async () => {
-            const request = makeAskYesNoRequest({
-                interactionId: "yn-default-true",
-                defaultValue: true,
+        it("question cancel resolves with defaultId instead of rejecting", async () => {
+            const request = makeQuestionRequest({
+                interactionId: "q-default-1",
+                defaultId: 1,
             });
-            const promise = manager.create<boolean>(request, undefined);
+            const promise = manager.create<number>(request);
 
-            manager.cancel("yn-default-true", new Error("disconnected"));
+            manager.cancel("q-default-1", new Error("disconnected"));
 
-            // askYesNo resolves with the stored defaultValue
-            await expect(promise).resolves.toBe(true);
+            // question resolves with the stored defaultId
+            await expect(promise).resolves.toBe(1);
         });
 
-        it("askYesNo cancel rejects with the error when no defaultValue is set", async () => {
-            const request = makeAskYesNoRequest({
-                interactionId: "yn-no-default",
+        it("question cancel rejects with the error when no defaultId is set", async () => {
+            const request = makeQuestionRequest({
+                interactionId: "q-no-default",
             });
-            const promise = manager.create<boolean>(request, undefined);
+            const promise = manager.create<number>(request);
 
-            manager.cancel("yn-no-default", new Error("disconnected"));
+            manager.cancel("q-no-default", new Error("disconnected"));
 
             await expect(promise).rejects.toThrow("disconnected");
         });
@@ -157,22 +141,11 @@ describe("PendingInteractionManager", () => {
             const request = makeProposeActionRequest({
                 interactionId: "pa-cancel",
             });
-            const promise = manager.create<unknown>(request, undefined);
+            const promise = manager.create<unknown>(request);
 
             manager.cancel("pa-cancel", new Error("aborted"));
 
             await expect(promise).rejects.toThrow("aborted");
-        });
-
-        it("popupQuestion cancel rejects with the error", async () => {
-            const request = makePopupQuestionRequest({
-                interactionId: "pq-cancel",
-            });
-            const promise = manager.create<number>(request, undefined);
-
-            manager.cancel("pq-cancel", new Error("timeout"));
-
-            await expect(promise).rejects.toThrow("timeout");
         });
     });
 
@@ -184,7 +157,7 @@ describe("PendingInteractionManager", () => {
             const request = makeProposeActionRequest({
                 interactionId: "timeout-1",
             });
-            const promise = manager.create<unknown>(request, undefined, 10);
+            const promise = manager.create<unknown>(request, 10);
 
             expect(manager.has("timeout-1")).toBe(true);
 
@@ -192,14 +165,14 @@ describe("PendingInteractionManager", () => {
             expect(manager.has("timeout-1")).toBe(false);
         });
 
-        it("resolves askYesNo with default on timeout instead of rejecting", async () => {
-            const request = makeAskYesNoRequest({
-                interactionId: "timeout-yn",
-                defaultValue: true,
+        it("resolves question with defaultId on timeout instead of rejecting", async () => {
+            const request = makeQuestionRequest({
+                interactionId: "timeout-q",
+                defaultId: 0,
             });
-            const promise = manager.create<boolean>(request, undefined, 10);
+            const promise = manager.create<number>(request, 10);
 
-            await expect(promise).resolves.toBe(true);
+            await expect(promise).resolves.toBe(0);
         });
 
         // ---------------------------------------------------------------
@@ -209,7 +182,7 @@ describe("PendingInteractionManager", () => {
             const request = makeProposeActionRequest({
                 interactionId: "no-spurious",
             });
-            const promise = manager.create<unknown>(request, undefined, 50);
+            const promise = manager.create<unknown>(request, 50);
 
             // Resolve before the timer fires
             manager.resolve("no-spurious", { action: "done" });
@@ -227,7 +200,7 @@ describe("PendingInteractionManager", () => {
             const request = makeProposeActionRequest({
                 interactionId: "cancel-before-timeout",
             });
-            const promise = manager.create<unknown>(request, undefined, 50);
+            const promise = manager.create<unknown>(request, 50);
 
             manager.cancel("cancel-before-timeout", new Error("early cancel"));
 
@@ -241,72 +214,24 @@ describe("PendingInteractionManager", () => {
     });
 
     // ---------------------------------------------------------------
-    // 8. cancelByConnection: cancels only matching connectionId
-    // ---------------------------------------------------------------
-    describe("cancelByConnection", () => {
-        it("cancels only interactions matching the connectionId", async () => {
-            const req1 = makeProposeActionRequest({
-                interactionId: "conn-a-1",
-            });
-            const req2 = makeProposeActionRequest({
-                interactionId: "conn-a-2",
-            });
-            const req3 = makeProposeActionRequest({
-                interactionId: "conn-b-1",
-            });
-
-            const p1 = manager.create<unknown>(req1, "conn-a");
-            const p2 = manager.create<unknown>(req2, "conn-a");
-            const p3 = manager.create<unknown>(req3, "conn-b");
-
-            expect(manager.size).toBe(3);
-
-            manager.cancelByConnection("conn-a", new Error("connection lost"));
-
-            // conn-a interactions are cancelled
-            await expect(p1).rejects.toThrow("connection lost");
-            await expect(p2).rejects.toThrow("connection lost");
-
-            // conn-b interaction is still pending
-            expect(manager.has("conn-b-1")).toBe(true);
-            expect(manager.size).toBe(1);
-
-            // Clean up
-            manager.resolve("conn-b-1", "ok");
-            await expect(p3).resolves.toBe("ok");
-        });
-
-        it("does nothing when no interactions match the connectionId", () => {
-            const request = makeProposeActionRequest({
-                interactionId: "solo",
-            });
-            manager.create<unknown>(request, "conn-x");
-
-            manager.cancelByConnection("conn-y", new Error("no match"));
-
-            expect(manager.size).toBe(1);
-            expect(manager.has("solo")).toBe(true);
-        });
-    });
-
-    // ---------------------------------------------------------------
-    // 9. getPending: returns all current pending requests
+    // 8. getPending: returns all current pending requests
     // ---------------------------------------------------------------
     describe("getPending", () => {
         it("returns all current pending requests", () => {
-            const req1 = makeAskYesNoRequest({
+            const req1 = makeQuestionRequest({
                 interactionId: "pending-1",
             });
             const req2 = makeProposeActionRequest({
                 interactionId: "pending-2",
             });
-            const req3 = makePopupQuestionRequest({
+            const req3 = makeQuestionRequest({
                 interactionId: "pending-3",
+                choices: ["A", "B", "C"],
             });
 
-            manager.create<boolean>(req1, undefined);
-            manager.create<unknown>(req2, "conn-1");
-            manager.create<number>(req3, "conn-2");
+            manager.create<number>(req1);
+            manager.create<unknown>(req2);
+            manager.create<number>(req3);
 
             const pending = manager.getPending();
 
@@ -317,25 +242,25 @@ describe("PendingInteractionManager", () => {
 
             // Verify the full request objects are returned
             const askReq = pending.find((r) => r.interactionId === "pending-1");
-            expect(askReq?.type).toBe("askYesNo");
+            expect(askReq?.type).toBe("question");
             expect(askReq?.source).toBe("test");
         });
 
         // ---------------------------------------------------------------
-        // 10. getPending: returns empty after all resolved
+        // 9. getPending: returns empty after all resolved
         // ---------------------------------------------------------------
         it("returns empty array after all interactions are resolved", () => {
-            const req1 = makeAskYesNoRequest({
+            const req1 = makeQuestionRequest({
                 interactionId: "r-1",
             });
             const req2 = makeProposeActionRequest({
                 interactionId: "r-2",
             });
 
-            manager.create<boolean>(req1, undefined);
-            manager.create<unknown>(req2, undefined);
+            manager.create<number>(req1);
+            manager.create<unknown>(req2);
 
-            manager.resolve("r-1", true);
+            manager.resolve("r-1", 0);
             manager.resolve("r-2", {});
 
             expect(manager.getPending()).toEqual([]);
@@ -343,19 +268,19 @@ describe("PendingInteractionManager", () => {
     });
 
     // ---------------------------------------------------------------
-    // 11. has / size: reflect current state correctly
+    // 10. has / size: reflect current state correctly
     // ---------------------------------------------------------------
     describe("has and size", () => {
         it("has returns true for pending and false after resolution", () => {
-            const request = makeAskYesNoRequest({
+            const request = makeQuestionRequest({
                 interactionId: "check-has",
             });
-            manager.create<boolean>(request, undefined);
+            manager.create<number>(request);
 
             expect(manager.has("check-has")).toBe(true);
             expect(manager.has("other")).toBe(false);
 
-            manager.resolve("check-has", false);
+            manager.resolve("check-has", 1);
 
             expect(manager.has("check-has")).toBe(false);
         });
@@ -363,26 +288,27 @@ describe("PendingInteractionManager", () => {
         it("size tracks additions and removals accurately", async () => {
             expect(manager.size).toBe(0);
 
-            const req1 = makeAskYesNoRequest({
+            const req1 = makeQuestionRequest({
                 interactionId: "s-1",
             });
             const req2 = makeProposeActionRequest({
                 interactionId: "s-2",
             });
-            const req3 = makePopupQuestionRequest({
+            const req3 = makeQuestionRequest({
                 interactionId: "s-3",
+                choices: ["A", "B", "C"],
             });
 
-            const p1 = manager.create<boolean>(req1, undefined);
+            const p1 = manager.create<number>(req1);
             expect(manager.size).toBe(1);
 
-            const p2 = manager.create<unknown>(req2, undefined);
-            const p3 = manager.create<number>(req3, undefined);
+            const p2 = manager.create<unknown>(req2);
+            const p3 = manager.create<number>(req3);
             expect(manager.size).toBe(3);
 
-            manager.resolve("s-1", true);
+            manager.resolve("s-1", 0);
             expect(manager.size).toBe(2);
-            await expect(p1).resolves.toBe(true);
+            await expect(p1).resolves.toBe(0);
 
             manager.cancel("s-2", new Error("cancelled"));
             expect(manager.size).toBe(1);
@@ -395,24 +321,25 @@ describe("PendingInteractionManager", () => {
     });
 
     // ---------------------------------------------------------------
-    // 12. cancelAll: rejects all pending interactions
+    // 11. cancelAll: rejects all pending interactions
     // ---------------------------------------------------------------
     describe("cancelAll", () => {
         it("rejects all pending interactions and empties the manager", async () => {
             const req1 = makeProposeActionRequest({
                 interactionId: "all-1",
             });
-            const req2 = makePopupQuestionRequest({
+            const req2 = makeQuestionRequest({
                 interactionId: "all-2",
+                choices: ["A", "B", "C"],
             });
-            const req3 = makeAskYesNoRequest({
+            const req3 = makeQuestionRequest({
                 interactionId: "all-3",
-                defaultValue: true,
+                defaultId: 0,
             });
 
-            const p1 = manager.create<unknown>(req1, "c1");
-            const p2 = manager.create<number>(req2, "c2");
-            const p3 = manager.create<boolean>(req3, "c3");
+            const p1 = manager.create<unknown>(req1);
+            const p2 = manager.create<number>(req2);
+            const p3 = manager.create<number>(req3);
 
             expect(manager.size).toBe(3);
 
@@ -420,12 +347,12 @@ describe("PendingInteractionManager", () => {
 
             expect(manager.size).toBe(0);
 
-            // proposeAction and popupQuestion reject
+            // proposeAction and question without defaultId reject
             await expect(p1).rejects.toThrow("shutting down");
             await expect(p2).rejects.toThrow("shutting down");
 
-            // askYesNo resolves with defaultValue
-            await expect(p3).resolves.toBe(true);
+            // question with defaultId resolves with it
+            await expect(p3).resolves.toBe(0);
         });
 
         it("is a no-op when there are no pending interactions", () => {
@@ -440,37 +367,22 @@ describe("PendingInteractionManager", () => {
     // ---------------------------------------------------------------
     describe("edge cases", () => {
         it("stores requestId from the request", () => {
-            const request = makeAskYesNoRequest({
+            const request = makeQuestionRequest({
                 interactionId: "with-rid",
                 requestId: "req-42" as any,
             });
 
-            manager.create<boolean>(request, undefined);
+            manager.create<number>(request);
 
             const pending = manager.getPending();
             expect(pending[0].requestId).toBe("req-42");
-        });
-
-        it("handles create with no connectionId", async () => {
-            const request = makeAskYesNoRequest({
-                interactionId: "no-conn",
-            });
-
-            const promise = manager.create<boolean>(request, undefined);
-
-            // cancelByConnection should not affect entries without connectionId
-            manager.cancelByConnection("any-conn", new Error("nope"));
-            expect(manager.has("no-conn")).toBe(true);
-
-            manager.resolve("no-conn", true);
-            await expect(promise).resolves.toBe(true);
         });
 
         it("does not set timeout when timeoutMs is 0", async () => {
             const request = makeProposeActionRequest({
                 interactionId: "no-timeout",
             });
-            manager.create<unknown>(request, undefined, 0);
+            manager.create<unknown>(request, 0);
 
             // Wait long enough that any real timeout would have fired
             await delay(20);
@@ -483,7 +395,7 @@ describe("PendingInteractionManager", () => {
             const request = makeProposeActionRequest({
                 interactionId: "undef-timeout",
             });
-            manager.create<unknown>(request, undefined, undefined);
+            manager.create<unknown>(request, undefined);
 
             // Wait long enough that any real timeout would have fired
             await delay(20);

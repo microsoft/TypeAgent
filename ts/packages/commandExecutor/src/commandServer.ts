@@ -229,16 +229,30 @@ function createMcpClientIO(
             );
         },
         setDynamicDisplay(): void {},
-        async askYesNo(
-            _requestId: RequestId,
+        async question(
+            _requestId: RequestId | undefined,
             message: string,
-            defaultValue?: boolean,
-        ): Promise<boolean> {
-            if (getConfirmedFlag()) {
-                logger.log(`ClientIO: askYesNo - "${message}" (auto-approved)`);
-                return true;
+            choices: string[],
+            defaultId?: number,
+        ): Promise<number> {
+            // For Yes/No, check the auto-confirm flag (backward compat with askYesNo).
+            if (
+                choices.length === 2 &&
+                choices[0] === "Yes" &&
+                choices[1] === "No"
+            ) {
+                if (getConfirmedFlag()) {
+                    logger.log(
+                        `ClientIO: question - "${message}" (auto-approved)`,
+                    );
+                    return 0; // "Yes"
+                }
+                throw new Error(`USER_CONFIRMATION_REQUIRED: ${message}`);
             }
-            throw new Error(`USER_CONFIRMATION_REQUIRED: ${message}`);
+            logger.log(
+                `ClientIO: question - "${message}" choices=[${choices.join(", ")}] (defaulting to ${defaultId ?? 0})`,
+            );
+            return defaultId ?? 0;
         },
         async proposeAction(
             _requestId: RequestId,
@@ -249,17 +263,6 @@ function createMcpClientIO(
                 `ClientIO: proposeAction(source=${source}) - ${JSON.stringify(actionTemplates)}`,
             );
             return undefined;
-        },
-        async popupQuestion(
-            message: string,
-            choices: string[],
-            defaultId: number | undefined,
-            source: string,
-        ): Promise<number> {
-            logger.log(
-                `ClientIO: popupQuestion(source=${source}) - "${message}" choices=[${choices.join(", ")}] (defaulting to ${defaultId ?? 0})`,
-            );
-            return defaultId ?? 0;
         },
         notify(
             _requestId: RequestId,
@@ -298,8 +301,6 @@ function createMcpClientIO(
  *   execute_command   — natural-language pass-through to dispatcher
  *   discover_agents   — list agents or fetch a specific agent's schema
  *   execute_action    — call any agent action directly by schema/action name
- *
- * Plus browser automation tools registered via registerBrowserActionTools().
  *
  * Lifecycle: spawned fresh per Claude Code session; connects to the persistent
  * TypeAgent agentServer via WebSocket.
@@ -531,6 +532,59 @@ export class CommandServer {
                     request.message ? "PONG: " + request.message : "pong",
                 ),
         );
+
+        this.server.registerTool(
+            "restart",
+            {
+                inputSchema: {
+                    mode: z
+                        .enum(["reconnect", "full"])
+                        .optional()
+                        .describe(
+                            "reconnect: disconnect and reconnect to the agent server (default). full: exit the MCP server process so the client can restart it (picks up new MCP server code).",
+                        ),
+                },
+                description:
+                    "Restart the MCP server connection. Use 'reconnect' mode (default) to reconnect to the agent server after it has been restarted. Use 'full' mode to exit the MCP server process entirely so the MCP client can restart it with updated code.",
+            },
+            async (request: { mode?: "reconnect" | "full" | undefined }) =>
+                this.restart(request.mode ?? "reconnect"),
+        );
+    }
+
+    private async restart(mode: "reconnect" | "full"): Promise<CallToolResult> {
+        if (mode === "full") {
+            this.logger.log("Full restart requested — exiting process.");
+            // Give time for the response to be sent before exiting
+            setTimeout(() => process.exit(0), 500);
+            return toolResult(
+                "MCP server is shutting down. The MCP client should restart it automatically.",
+            );
+        }
+
+        // Reconnect mode: disconnect and reconnect to the agent server
+        this.logger.log("Reconnect requested — disconnecting from dispatcher.");
+        if (this.dispatcher) {
+            try {
+                await this.dispatcher.close();
+            } catch (error) {
+                this.logger.error("Error closing dispatcher", error);
+            }
+            this.dispatcher = null;
+        }
+
+        this.logger.log("Reconnecting to dispatcher...");
+        await this.connectToDispatcher();
+
+        if (this.dispatcher) {
+            return toolResult(
+                `Reconnected to agent server at ${this.agentServerUrl}.`,
+            );
+        } else {
+            return toolResult(
+                `Failed to reconnect to agent server at ${this.agentServerUrl}. Will retry automatically.`,
+            );
+        }
     }
 
     // ── Tool implementations ─────────────────────────────────────────────────

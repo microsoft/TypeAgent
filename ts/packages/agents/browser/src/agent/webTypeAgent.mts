@@ -38,20 +38,6 @@ const BUILTIN_WEBAGENT_URL_PATTERNS = [
     /bestcrosswords\.com\/bestcrosswords\/guestconstructor/,
     // PaleoBioDb
     /paleobiodb\.org/,
-    // Commerce sites
-    /amazon\.(com|co\.uk|de|fr|es|it|nl|in|ca|com\.mx|com\.br|com\.au)/,
-    /target\.com/,
-    /walmart\.com/,
-    /bestbuy\.com/,
-    /homedepot\.com/,
-    /lowes\.com/,
-    /costco\.com/,
-    /ebay\.com/,
-    // Restaurant reservations
-    /opentable\.com/,
-    /resy\.com/,
-    // Grocery
-    /instacart\.com/,
 ];
 
 function isBuiltInWebAgentUrl(url: string): boolean {
@@ -161,6 +147,8 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
         return undefined;
     }
 
+    const sessionId = context.agentContext.sessionId;
+
     const channelProvider = createChannelProviderAdapter(
         "webAgent:server",
         (message) => {
@@ -170,7 +158,7 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
                 );
                 return;
             }
-            const client = agentServer.getActiveClient();
+            const client = agentServer.getActiveClient(sessionId);
             if (client) {
                 client.socket.send(
                     JSON.stringify({
@@ -190,7 +178,7 @@ function ensureWebAgentChannels(context: SessionContext<BrowserActionContext>) {
             );
             return;
         }
-        const client = agentServer.getActiveClient();
+        const client = agentServer.getActiveClient(sessionId);
         if (client) {
             client.socket.send(
                 JSON.stringify({

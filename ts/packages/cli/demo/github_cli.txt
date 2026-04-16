@@ -1,0 +1,48 @@
+# =============================================
+# GitHub CLI Agent Demo (CLI version)
+# =============================================
+
+@config action -* github-cli
+@config schema -* github-cli
+
+# My GitHub status at a glance
+show my GitHub status
+
+# How popular is TypeAgent?
+how many stars does microsoft/TypeAgent have
+
+# Who are the top contributors?
+show top 10 contributors to microsoft/TypeAgent
+
+# What PRs are open?
+list open PRs in microsoft/TypeAgent
+
+# Just the latest
+get latest 5 PRs in microsoft/TypeAgent
+
+# Drill into a PR
+show PR 2180 in microsoft/TypeAgent
+
+# What issues need attention?
+get latest 5 issues in microsoft/TypeAgent
+
+# Drill into a specific issue
+show issue 2170 in microsoft/TypeAgent
+
+# Check for security vulnerabilities
+show high severity dependabot alerts in microsoft/TypeAgent
+
+# Star a repo
+star microsoft/TypeAgent
+
+# Create an issue and close it
+create issue "Demo test - safe to ignore"
+
+# Close it (presenter: update number from the output above)
+close issue 2186
+
+# Full repo overview
+show repository microsoft/TypeAgent
+
+# Am I authenticated?
+check my GitHub authentication

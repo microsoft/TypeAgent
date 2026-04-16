@@ -14,14 +14,11 @@ export function createClientIORpcServer(
     channel: RpcChannel,
 ) {
     const clientIOInvokeFunctions: ClientIOInvokeFunctions = {
-        askYesNo: async (...args) => {
-            return clientIO.askYesNo(...args);
+        question: async (...args) => {
+            return clientIO.question(...args);
         },
         proposeAction: async (...args) => {
             return clientIO.proposeAction(...args);
-        },
-        popupQuestion: async (...args) => {
-            return clientIO.popupQuestion(...args);
         },
         openLocalView: async (...args) => {
             return clientIO.openLocalView(...args);

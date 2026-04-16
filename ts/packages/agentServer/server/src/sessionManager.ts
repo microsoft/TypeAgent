@@ -52,11 +52,11 @@ export type SessionManager = {
      */
     resolveSessionId(sessionId: string | undefined): Promise<string>;
     /**
-     * Pre-initialize the default session's dispatcher so it is ready before
-     * the first client connects. If no sessions exist, a "default" session is
-     * created. Safe to call multiple times.
+     * Pre-initialize the most recently active session's dispatcher so it is
+     * ready before the first client connects. If no sessions exist, a "default"
+     * session is created. Safe to call multiple times.
      */
-    prewarmDefaultSession(): Promise<void>;
+    prewarmMostRecentSession(): Promise<void>;
     joinSession(
         sessionId: string,
         clientIO: ClientIO,
@@ -173,7 +173,6 @@ export async function createSessionManager(
                     createSharedDispatcher(hostName, {
                         ...baseOptions,
                         persistDir,
-                        instanceDir: baseDir, // global instance root — shared across all server sessions
                         persistSession: true,
                     }),
                 )
@@ -238,8 +237,10 @@ export async function createSessionManager(
     }
 
     function getDefaultSessionId(): string | undefined {
+        // Case-insensitive match so "Default", "default", "DEFAULT" all work.
+        // The shell uses the same case-insensitive pattern when looking up "Shell".
         for (const [id, record] of sessions) {
-            if (record.name === "default") {
+            if (record.name.toLowerCase() === "default") {
                 return id;
             }
         }
@@ -258,6 +259,38 @@ export async function createSessionManager(
             throw new Error(
                 "Session name must be between 1 and 256 characters",
             );
+        }
+    }
+
+    // Sweep orphaned ephemeral sessions left behind by unclean CLI exits
+    {
+        const toSweep: string[] = [];
+        for (const [id, record] of sessions) {
+            if (
+                record.name.startsWith("cli-ephemeral-") ||
+                record.name.startsWith("cli-replay-")
+            ) {
+                toSweep.push(id);
+            }
+        }
+        for (const id of toSweep) {
+            const record = sessions.get(id)!;
+            debugSession(
+                `Sweeping orphaned ephemeral session "${record.name}" (${id})`,
+            );
+            sessions.delete(id);
+            const persistDir = getSessionPersistDir(id);
+            try {
+                await fs.promises.rm(persistDir, {
+                    recursive: true,
+                    force: true,
+                });
+            } catch {
+                // Best effort — dir may not exist
+            }
+        }
+        if (toSweep.length > 0) {
+            await saveMetadata();
         }
     }
 
@@ -303,7 +336,7 @@ export async function createSessionManager(
             return info.sessionId;
         },
 
-        async prewarmDefaultSession(): Promise<void> {
+        async prewarmMostRecentSession(): Promise<void> {
             const sessionId = await manager.resolveSessionId(undefined);
             const record = sessions.get(sessionId)!;
             cancelIdleTimer(record);
@@ -343,6 +376,14 @@ export async function createSessionManager(
                 `Client joined session "${record.name}" (${sessionId}), clients: ${sharedDispatcher.clientCount}`,
             );
 
+            // Notify existing clients that a new client has joined
+            if (sharedDispatcher.clientCount > 1 && dispatcher.connectionId) {
+                sharedDispatcher.broadcastSystemMessage(
+                    `[A new client has joined this conversation. You are connected to '${record.name}'.]`,
+                    dispatcher.connectionId,
+                );
+            }
+
             return {
                 dispatcher,
                 connectionId: dispatcher.connectionId!,
@@ -363,8 +404,20 @@ export async function createSessionManager(
                 throw new Error(`Session not found: ${sessionId}`);
             }
             if (record.sharedDispatcher === undefined) {
+                debugSession(
+                    `leaveSession: dispatcher not active for session "${record.name}" (${sessionId}), ignoring connectionId ${connectionId}`,
+                );
                 return; // Session not active
             }
+
+            // Notify remaining clients before this client leaves
+            if (record.sharedDispatcher.clientCount > 1) {
+                record.sharedDispatcher.broadcastSystemMessage(
+                    `[A client has left this conversation. You remain connected to '${record.name}'.]`,
+                    connectionId,
+                );
+            }
+
             await record.sharedDispatcher.leave(connectionId);
             debugSession(
                 `Client ${connectionId} left session "${record.name}" (${sessionId}), clients: ${record.sharedDispatcher.clientCount}`,

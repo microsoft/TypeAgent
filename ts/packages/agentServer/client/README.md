@@ -40,32 +40,71 @@ await connection.close();
 | `deleteSession(sessionId)`          | Delete a session and its persisted data              |
 | `close()`                           | Close the WebSocket connection                       |
 
-### `ensureAndConnectDispatcher(clientIO, port?, options?, onDisconnect?)`
+### `ensureAgentServer(port?, hidden?, idleTimeout?)`
 
-Convenience wrapper that auto-spawns the server if needed and joins a session, returning a `Dispatcher` directly. Used by Shell and CLI.
+Ensures the agentServer is running, spawning it if needed.
 
-1. Checks whether a server is already listening on `ws://localhost:<port>` (default 8999).
-2. If not, calls `spawnAgentServer()` to start it as a detached child process.
+1. Calls `isServerRunning(url)` to check whether a server is already listening.
+2. If not, calls `spawnAgentServer(hidden, idleTimeout)` to start it as a detached child process.
 3. Polls until the server is ready (500 ms interval, 60 s timeout).
-4. Calls `connectDispatcher()` and returns the `Dispatcher` proxy.
 
 ```typescript
-const dispatcher = await ensureAndConnectDispatcher(
-  clientIO,
-  8999,
-  { clientType: "shell" },
-  () => {
-    console.error("Disconnected");
-    process.exit(1);
-  },
-);
+// Start hidden with 10-minute idle shutdown — used by non-interactive CLI commands
+await ensureAgentServer(8999, true, 600);
 
-await dispatcher.processCommand("help");
+// Start in a visible window, no idle shutdown — used by interactive connect
+await ensureAgentServer(8999, false);
+
+const connection = await connectAgentServer("ws://localhost:8999");
+```
+
+| Parameter     | Type      | Default | Description                                                                          |
+| ------------- | --------- | ------- | ------------------------------------------------------------------------------------ |
+| `port`        | `number`  | `8999`  | Port to check and spawn on                                                           |
+| `hidden`      | `boolean` | `false` | When spawning, suppress the terminal/window (`true` = hidden)                        |
+| `idleTimeout` | `number`  | `0`     | Pass `--idle-timeout` to the spawned server; `0` disables (server runs indefinitely) |
+
+### `isServerRunning(url)`
+
+Returns `true` if a server is already listening at the given WebSocket URL.
+
+```typescript
+if (await isServerRunning("ws://localhost:8999")) {
+  console.log("Server is up");
+}
 ```
 
 ### `stopAgentServer(port?)`
 
 Connects to the running server on the given port and sends a `shutdown()` RPC.
+
+### `ensureAndConnectSession(clientIO, port?, options?, onDisconnect?, hidden?, idleTimeout?)`
+
+Convenience wrapper: ensures the server is running, connects, and joins a session in one call. Returns a `SessionDispatcher` directly.
+
+```typescript
+const session = await ensureAndConnectSession(
+  clientIO,
+  8999,
+  { sessionId },
+  onDisconnect,
+  true,
+  600,
+);
+```
+
+| Parameter      | Type                       | Default      | Description                                           |
+| -------------- | -------------------------- | ------------ | ----------------------------------------------------- |
+| `clientIO`     | `ClientIO`                 | _(required)_ | Client IO implementation                              |
+| `port`         | `number`                   | `8999`       | Port to connect to                                    |
+| `options`      | `DispatcherConnectOptions` | `undefined`  | Session join options (e.g. `sessionId`)               |
+| `onDisconnect` | `() => void`               | `undefined`  | Called when the WebSocket disconnects                 |
+| `hidden`       | `boolean`                  | `false`      | Suppress terminal/window when spawning                |
+| `idleTimeout`  | `number`                   | `0`          | Pass `--idle-timeout` to spawned server; `0` disables |
+
+### `ensureAndConnectDispatcher(clientIO, port?, options?, onDisconnect?)` _(deprecated)_
+
+Convenience wrapper that auto-spawns the server if needed and joins a session, returning a `Dispatcher` directly. Prefer calling `ensureAgentServer()` + `connectAgentServer()` + `joinSession()` separately for full control.
 
 ### `connectDispatcher(clientIO, url, options?, onDisconnect?)` _(deprecated)_
 

@@ -363,6 +363,14 @@ export function createDispatcherFromContext(
                 "respondToInteraction is not supported on this dispatcher instance",
             );
         },
+        cancelInteraction(_interactionId: string): void {
+            // Base dispatcher does not manage pending interactions.
+            // The server's SharedDispatcher overrides this method on the
+            // per-connection dispatcher instance.
+            throw new Error(
+                "cancelInteraction is not supported on this dispatcher instance",
+            );
+        },
     };
     return dispatcher;
 }

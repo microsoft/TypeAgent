@@ -79,7 +79,8 @@ export async function createWebSocket(): Promise<WebSocket | undefined> {
 
     let socketEndpoint = settings.websocketHost ?? "ws://localhost:8081/";
 
-    socketEndpoint += `?channel=browser&role=client&clientId=${chrome.runtime.id}`;
+    const sessionId = settings.sessionId ?? "default";
+    socketEndpoint += `?channel=browser&role=client&clientId=${chrome.runtime.id}&sessionId=${sessionId}`;
     return new Promise<WebSocket | undefined>((resolve, reject) => {
         const webSocket = new WebSocket(socketEndpoint);
         debugWebSocket("Connected to: " + socketEndpoint);

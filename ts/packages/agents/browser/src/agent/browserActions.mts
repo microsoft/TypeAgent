@@ -17,6 +17,7 @@ import {
 import { getClientType } from "@typeagent/agent-server-protocol";
 
 export type BrowserActionContext = {
+    sessionId: string;
     clientBrowserControl?: BrowserControl | undefined;
     externalBrowserControl?: ExternalBrowserClient | undefined;
     useExternalBrowserControl: boolean;
@@ -78,32 +79,25 @@ export function getBrowserControlForRequest(
         if (clientType === "extension" && agentContext.externalBrowserControl) {
             return agentContext.externalBrowserControl.control;
         }
+
         if (clientType === "shell" && agentContext.clientBrowserControl) {
             return agentContext.clientBrowserControl;
         }
     }
-    // Fallback to session-wide default
+
     return getBrowserControl(agentContext);
 }
 
-export async function saveSettings(
-    context: SessionContext<BrowserActionContext>,
-) {
-    await context.sessionStorage?.write(
-        "settings.json",
-        JSON.stringify({
-            resolverSettings: context.agentContext.resolverSettings,
-            searchProviders: context.agentContext.searchProviders,
-            activeSearchProvider: context.agentContext.activeSearchProvider,
-        }),
-    );
+export function getActionBrowserControl(
+    context: ActionContext<BrowserActionContext>,
+): BrowserControl {
+    const browserControl = context.sessionContext.agentContext.browserControl;
+    if (!browserControl) {
+        throw new Error("Browser control is not available.");
+    }
+    return browserControl;
 }
 
-export function getActionBrowserControl(
-    actionContext: ActionContext<BrowserActionContext>,
-) {
-    return getBrowserControl(actionContext.sessionContext.agentContext);
-}
 export function getSessionBrowserControl(
     sessionContext: SessionContext<BrowserActionContext>,
 ) {
@@ -137,4 +131,20 @@ export async function getCurrentPageScreenshot(
             ),
         ),
     ]);
+}
+
+export async function saveSettings(
+    context: SessionContext<BrowserActionContext>,
+) {
+    const agentContext = context.agentContext;
+    const settings = {
+        resolverSettings: agentContext.resolverSettings,
+        searchProviders: agentContext.searchProviders,
+        activeSearchProvider: agentContext.activeSearchProvider,
+    };
+
+    await context.sessionStorage?.write(
+        "settings.json",
+        JSON.stringify(settings),
+    );
 }

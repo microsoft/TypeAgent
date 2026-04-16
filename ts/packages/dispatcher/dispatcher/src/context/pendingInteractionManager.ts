@@ -2,19 +2,18 @@
 // Licensed under the MIT License.
 
 import type {
-    PendingInteractionType,
     PendingInteractionRequest,
+    PendingInteractionType,
     RequestId,
 } from "@typeagent/dispatcher-types";
 
 type PendingEntry = {
     type: PendingInteractionType;
     requestId?: RequestId;
-    connectionId?: string;
     resolve: (value: any) => void;
     reject: (error: Error) => void;
     timeoutTimer?: ReturnType<typeof setTimeout>;
-    defaultValue?: boolean; // askYesNo default
+    defaultId?: number; // question default choice index
     // Full request data for replay
     request: PendingInteractionRequest;
 };
@@ -33,7 +32,6 @@ export class PendingInteractionManager {
      */
     create<T>(
         request: PendingInteractionRequest,
-        connectionId: string | undefined,
         timeoutMs?: number,
     ): Promise<T> {
         return new Promise<T>((resolve, reject) => {
@@ -44,23 +42,15 @@ export class PendingInteractionManager {
                 request,
             };
 
-            if (connectionId !== undefined) {
-                entry.connectionId = connectionId;
-            }
-
             if (request.requestId !== undefined) {
                 entry.requestId = request.requestId;
             }
 
-            // Store default value for askYesNo timeout fallback
-            if (request.type === "askYesNo") {
-                const askYesNoDefault = (
-                    request as PendingInteractionRequest & {
-                        type: "askYesNo";
-                    }
-                ).defaultValue;
-                if (askYesNoDefault !== undefined) {
-                    entry.defaultValue = askYesNoDefault;
+            // Store defaultId for question timeout fallback
+            if (request.type === "question") {
+                const q = request as { type: "question"; defaultId?: number };
+                if (q.defaultId !== undefined) {
+                    entry.defaultId = q.defaultId;
                 }
             }
 
@@ -94,7 +84,7 @@ export class PendingInteractionManager {
 
     /**
      * Reject/cancel a pending interaction (e.g., client disconnected, timeout).
-     * For askYesNo with an explicit defaultValue, resolves with that value;
+     * For a `question` with an explicit defaultId, resolves with that index;
      * otherwise rejects. Returns true if the interaction was found and cancelled.
      */
     cancel(interactionId: string, error: Error): boolean {
@@ -105,36 +95,20 @@ export class PendingInteractionManager {
             clearTimeout(entry.timeoutTimer);
         }
 
-        // For askYesNo, resolve with default if one was explicitly provided;
+        // For question, resolve with defaultId if one was explicitly provided;
         // otherwise reject — no declared safe fallback exists.
-        if (entry.type === "askYesNo") {
-            if (entry.defaultValue !== undefined) {
-                entry.resolve(entry.defaultValue);
+        if (entry.type === "question") {
+            if (entry.defaultId !== undefined) {
+                entry.resolve(entry.defaultId);
             } else {
                 entry.reject(error);
             }
             return true;
         }
 
-        // For proposeAction and popupQuestion, reject
+        // For proposeAction, reject
         entry.reject(error);
         return true;
-    }
-
-    /**
-     * Cancel all pending interactions for a specific connectionId.
-     * Called when a client disconnects.
-     * Returns the interactionIds that were cancelled.
-     */
-    cancelByConnection(connectionId: string, error: Error): string[] {
-        const cancelled: string[] = [];
-        for (const [interactionId, entry] of this.pending) {
-            if (entry.connectionId === connectionId) {
-                this.cancel(interactionId, error);
-                cancelled.push(interactionId);
-            }
-        }
-        return cancelled;
     }
 
     /**

@@ -4,6 +4,7 @@
 import { IdGenerator } from "../main";
 import { ChatInput } from "./chatInput";
 import { ExpandableTextArea } from "./expandableTextArea";
+import { handleConversationCommand } from "./sessionCommands";
 import { iconCheckMarkCircle, iconX } from "../icon";
 import {
     DisplayAppendMode,
@@ -402,6 +403,26 @@ export class ChatView {
                 }
             }
 
+            // "system" is a reserved sentinel set by broadcastSystemMessage on
+            // the server (sharedDispatcher.ts).  It can never collide with a
+            // real UUID (randomUUID() produces RFC 4122 format).  Auto-create a
+            // notification group so join/leave messages are displayed.
+            if (id === "system") {
+                const mgId = `notification-system-${this.notificationCount++}`;
+                const mg: MessageGroup = new MessageGroup(
+                    this,
+                    this.settingsView!,
+                    "",
+                    this.messageDiv,
+                    undefined,
+                    this.agents,
+                    this.hideMetrics,
+                );
+                this.clientMessageGroups.set(mgId, mg);
+                mg.hideUserMessage();
+                return mg;
+            }
+
             console.error(`Invalid requestId ${id}`);
             return undefined;
         }
@@ -459,12 +480,42 @@ export class ChatView {
         request: string | { type: "html"; content: string },
         hidden: boolean = false,
     ) {
-        const localId = this.idGenerator.genId();
-
-        let images: string[] = [];
         let requestText: string;
         if (typeof request === "string") {
             requestText = request;
+        } else if (request.type === "html") {
+            let tempDiv: HTMLDivElement = document.createElement("div");
+            tempDiv.innerHTML = request.content;
+            requestText = tempDiv.innerText;
+        } else {
+            requestText = request.content;
+        }
+
+        // Intercept /conversation (and @conversation alias) before sending to dispatcher
+        const t = requestText.trim();
+        if (t.startsWith("/conversation") || t.startsWith("@conversation")) {
+            const handled = await handleConversationCommand(requestText, {
+                addSystemMessage: (content: string) => {
+                    this.addNotificationMessage(
+                        { type: "html", content, kind: "info" },
+                        "session",
+                        undefined,
+                    );
+                },
+                clear: () => {
+                    this.clear();
+                },
+            });
+            if (handled) {
+                return;
+            }
+        }
+
+        const localId = this.idGenerator.genId();
+
+        let images: string[] = [];
+        if (typeof request === "string") {
+            // requestText already set above
         } else if (request.type === "html") {
             let tempDiv: HTMLDivElement = document.createElement("div");
             tempDiv.innerHTML = request.content;

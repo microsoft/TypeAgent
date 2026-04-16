@@ -33,7 +33,7 @@ function makeContext(overrides: {
             },
             clientIO: {
                 notify: () => {},
-                popupQuestion: async () => 0,
+                question: async () => 0,
             },
             translatorCache: { clear: () => {} },
             lastActionSchemaName: undefined,
