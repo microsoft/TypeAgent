@@ -113,7 +113,6 @@ async function handleSwitch(
     }
     await ctx.switchSession(target.sessionId);
 }
-}
 
 async function handleList(
     ctx: ConversationCommandContext,
