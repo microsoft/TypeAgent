@@ -67,6 +67,9 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/examples/chat/src/codeChat/commandTransformer.ts` | 170 | the same for args (currently not used by code chat) | Low | Medium | Local | No Fix | Yes |
 | `ts/examples/docuProc/src/pdfImporter.ts` | 210 | Try pre-computing embeddings in parallel to fill the embeddings cache (is that cache safe?) | Medium | Medium | Local | Fix | Yes |
 | `ts/examples/docuProc/src/pdfQNAInteractiveApp.ts` | 1024 | Allow for multiple concurrent sessions. | High | Medium | Component | No Fix | Yes |
+| `ts/examples/docuProc/src/pdfQNAInteractiveApp.ts` | 1031 | Cut off by total size, not count. | Low | High | Local | Fix | No |
+| `ts/examples/docuProc/src/pdfQNAInteractiveApp.ts` | 1151 | limit how much we write per blob too (if there are multiple). | Low | High | Local | Fix | No |
+| `ts/examples/docuProc/src/pdfQNAInteractiveApp.ts` | 1178 | Colorize code blocks. | Low | High | Local | Fix | No |
 | `ts/examples/memoryProviders/src/sqlite/keyValueTable.ts` | 195 | support | Medium | Medium | Component | Fix | Yes |
 | `ts/examples/memoryProviders/src/sqlite/textTable.ts` | 511 | optimize by lowering into DB if possible | Medium | Medium | Local | Fix | Yes |
 | `ts/examples/memoryProviders/src/sqlite/textTable.ts` | 613 | Optimize | Medium | Medium | Local | Fix | Yes |
@@ -74,6 +77,9 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/examples/spelunker/src/pythonImporter.ts` | 4 | Most of this is not Python specific; generalize to other languages. | High | Medium | Component | Fix | Yes |
 | `ts/examples/spelunker/src/pythonImporter.ts` | 181 | Try pre-computing embeddings in parallel to fill the embeddings cache (is that cache safe?) | Medium | Medium | Local | Fix | Yes |
 | `ts/examples/spelunker/src/queryInterface.ts` | 905 | Allow for multiple concurrent sessions. | High | Medium | Component | Fix | No |
+| `ts/examples/spelunker/src/queryInterface.ts` | 912 | Cut off by total size, not count. | Low | High | Local | Fix | No |
+| `ts/examples/spelunker/src/queryInterface.ts` | 1035 | limit how much we write per blob too (if there are multiple). | Low | High | Local | Fix | No |
+| `ts/examples/spelunker/src/queryInterface.ts` | 1056 | Colorize code blocks. | Low | High | Local | Fix | No |
 | `ts/examples/websiteAliases/src/pageContentKeywords.ts` | 284 | handle multi-modal content | High | Low | Component | No Fix | Yes |
 | `ts/examples/websiteAliases/src/searchEngineKeywords.ts` | 284 | handle multi-modal content | High | Low | Component | No Fix | Yes |
 | `ts/packages/actionGrammar/src/agentGrammarRegistry.ts` | 552 | Implement async DFA compilation | High | Medium | Component | Fix | No |
@@ -123,11 +129,15 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/agents/player/src/client.ts` | 702 | Might want to use fuzzy matching here. | Medium | Medium | Component | Fix | No |
 | `ts/packages/agents/player/src/client.ts` | 1318 | add filter validation to overall instance validation | Medium | Medium | Component | Fix | No |
 | `ts/packages/agents/player/src/search.ts` | 253 | Might want to use fuzzy matching here. | Medium | Medium | Component | Fix | No |
+| `ts/packages/agents/player/src/search.ts` | 561 | cache this. | Low | High | Component | Fix | No |
+| `ts/packages/agents/player/src/trackFilter.ts` | 326 | year ranges | Medium | High | Local | Fix | No |
+| `ts/packages/agents/player/src/userData.ts` | 301 | return names of playlists, sorted by timestamp | Low | High | Local | Fix | No |
 | `ts/packages/agents/settings/src/settingsCommandHandler.ts` | 53 | apply this setting to the local system. '${action.parameters.originalRequest} | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/agents/spelunker/src/chunker.py` | 61 | dotted names | Medium | Medium | Local | Fix | No |
 | `ts/packages/agents/spelunker/src/embeddings.ts` | 37 | Fix this | Medium | Medium | Local | Fix | Yes |
 | `ts/packages/agents/spelunker/src/embeddings.ts` | 47 | tune | Medium | Medium | Local | No Fix | Yes |
 | `ts/packages/agents/spelunker/src/embeddings.ts` | 186 | Fix this | Medium | Medium | Local | Fix | Yes |
+| `ts/packages/agents/spelunker/src/eval.ts` | 27 | Read this from a file that can be edited before each run | Low | High | Local | Fix | No |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 237 | tune | Medium | Medium | Local | No Fix | Yes |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 238 | tune | Medium | Medium | Local | Fix | Yes |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 268 | tune | Medium | Medium | Local | Fix | Yes |

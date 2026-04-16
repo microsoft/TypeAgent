@@ -7,7 +7,10 @@ import {
     parseFilter,
 } from "../src/trackFilter.js";
 
-function fakeTrack(id: string, releaseDate: string): SpotifyApi.TrackObjectFull {
+function fakeTrack(
+    id: string,
+    releaseDate: string,
+): SpotifyApi.TrackObjectFull {
     return {
         id,
         name: `Track ${id}`,
