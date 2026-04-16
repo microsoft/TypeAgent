@@ -554,7 +554,7 @@ importers:
         version: 24.37.5(typescript@5.4.5)
       ts-node:
         specifier: ^10.9.1
-        version: 10.9.2(@types/node@20.19.39)(typescript@5.4.5)
+        version: 10.9.2(@types/node@25.5.2)(typescript@5.4.5)
       xml2js:
         specifier: ^0.6.2
         version: 0.6.2
@@ -3138,7 +3138,7 @@ importers:
         version: link:../telemetry
       ts-node:
         specifier: ^10.9.1
-        version: 10.9.2(@types/node@20.19.39)(typescript@5.4.5)
+        version: 10.9.2(@types/node@25.5.2)(typescript@5.4.5)
       typechat-utils:
         specifier: workspace:*
         version: link:../utils/typechatUtils
@@ -3157,7 +3157,7 @@ importers:
         version: 29.5.14
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@20.19.39)(ts-node@10.9.2(@types/node@20.19.39)(typescript@5.4.5))
+        version: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -3166,7 +3166,7 @@ importers:
         version: 6.0.1
       ts-jest:
         specifier: ^29.4.9
-        version: 29.4.9(@babel/core@7.28.4)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.28.4))(jest-util@29.7.0)(jest@29.7.0(@types/node@20.19.39)(ts-node@10.9.2(@types/node@20.19.39)(typescript@5.4.5)))(typescript@5.4.5)
+        version: 29.4.9(@babel/core@7.28.4)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.28.4))(jest-util@29.7.0)(jest@29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5)))(typescript@5.4.5)
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
@@ -4433,7 +4433,7 @@ importers:
     devDependencies:
       '@electron-toolkit/tsconfig':
         specifier: ^1.0.1
-        version: 1.0.1(@types/node@20.19.39)
+        version: 1.0.1(@types/node@25.5.2)
       '@fontsource/lato':
         specifier: ^5.2.5
         version: 5.2.5
@@ -4469,10 +4469,10 @@ importers:
         version: 26.8.1(dmg-builder@26.8.1)
       electron-vite:
         specifier: ^4.0.1
-        version: 4.0.1(vite@6.4.2(@types/node@20.19.39)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.8.3))
+        version: 4.0.1(vite@6.4.2(@types/node@25.5.2)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.8.3))
       jest:
         specifier: ^29.7.0
-        version: 29.7.0(@types/node@20.19.39)(ts-node@10.9.2(@types/node@20.19.39)(typescript@5.4.5))
+        version: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
       less:
         specifier: ^4.2.0
         version: 4.3.0
@@ -4490,7 +4490,7 @@ importers:
         version: 5.4.5
       vite:
         specifier: ^6.4.2
-        version: 6.4.2(@types/node@20.19.39)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.8.3)
+        version: 6.4.2(@types/node@25.5.2)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.8.3)
 
   packages/telemetry:
     dependencies:
@@ -8229,16 +8229,6 @@ packages:
   acorn-walk@8.3.0:
     resolution: {integrity: sha512-FS7hV565M5l1R08MXqo8odwMTB02C2UqzB17RVgu9EyuYFBqJZ3/ZY97sQD5FewVu1UyDFc1yztUDrAwT0EypA==}
     engines: {node: '>=0.4.0'}
-
-  acorn@8.11.1:
-    resolution: {integrity: sha512-IJTNCJMRHfRfb8un89z1QtS0x890C2QUrUxFMK8zy+RizcId6mfnqOf68Bu9YkDgpLYuvCm6aYbwDatXVZPjMQ==}
-    engines: {node: '>=0.4.0'}
-    hasBin: true
-
-  acorn@8.14.1:
-    resolution: {integrity: sha512-OvQ/2pUDKmgfCg++xsTX1wGxfTaszcHVcTctW4UJB4hibJx2HXxxO5UmVgyjMa+ZDsiaf5wWLXYpRWMmBI0QHg==}
-    engines: {node: '>=0.4.0'}
-    hasBin: true
 
   acorn@8.15.0:
     resolution: {integrity: sha512-NZyJarBfL7nWwIq+FDL6Zp/yHEhePMNnnJ0y3qfieCrmNvYct8uvtiV41UvlSe6apAfk0fY1FbWx+NwfmpvtTg==}
@@ -16167,9 +16157,9 @@ snapshots:
     dependencies:
       electron: 40.8.5
 
-  '@electron-toolkit/tsconfig@1.0.1(@types/node@20.19.39)':
+  '@electron-toolkit/tsconfig@1.0.1(@types/node@25.5.2)':
     dependencies:
-      '@types/node': 20.19.39
+      '@types/node': 25.5.2
 
   '@electron/asar@3.4.1':
     dependencies:
@@ -19152,7 +19142,6 @@ snapshots:
   '@types/node@25.5.2':
     dependencies:
       undici-types: 7.18.2
-    optional: true
 
   '@types/normalize-package-data@2.4.4': {}
 
@@ -19562,22 +19551,18 @@ snapshots:
 
   acorn-globals@7.0.1:
     dependencies:
-      acorn: 8.14.1
+      acorn: 8.15.0
       acorn-walk: 8.3.0
 
-  acorn-import-attributes@1.9.5(acorn@8.14.1):
+  acorn-import-attributes@1.9.5(acorn@8.15.0):
     dependencies:
-      acorn: 8.14.1
+      acorn: 8.15.0
 
   acorn-import-phases@1.0.4(acorn@8.15.0):
     dependencies:
       acorn: 8.15.0
 
   acorn-walk@8.3.0: {}
-
-  acorn@8.11.1: {}
-
-  acorn@8.14.1: {}
 
   acorn@8.15.0: {}
 
@@ -21287,7 +21272,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron-vite@4.0.1(vite@6.4.2(@types/node@20.19.39)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.8.3)):
+  electron-vite@4.0.1(vite@6.4.2(@types/node@25.5.2)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.8.3)):
     dependencies:
       '@babel/core': 7.28.4
       '@babel/plugin-transform-arrow-functions': 7.27.1(@babel/core@7.28.4)
@@ -21295,7 +21280,7 @@ snapshots:
       esbuild: 0.25.11
       magic-string: 0.30.17
       picocolors: 1.1.1
-      vite: 6.4.2(@types/node@20.19.39)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.8.3)
+      vite: 6.4.2(@types/node@25.5.2)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.8.3)
     transitivePeerDependencies:
       - supports-color
 
@@ -22529,8 +22514,8 @@ snapshots:
 
   import-in-the-middle@1.13.2:
     dependencies:
-      acorn: 8.14.1
-      acorn-import-attributes: 1.9.5(acorn@8.14.1)
+      acorn: 8.15.0
+      acorn-import-attributes: 1.9.5(acorn@8.15.0)
       cjs-module-lexer: 1.2.3
       module-details-from-path: 1.0.4
 
@@ -23535,7 +23520,7 @@ snapshots:
   jsdom@20.0.3:
     dependencies:
       abab: 2.0.6
-      acorn: 8.14.1
+      acorn: 8.15.0
       acorn-globals: 7.0.1
       cssom: 0.5.0
       cssstyle: 2.3.0
@@ -26556,7 +26541,7 @@ snapshots:
   terser@5.27.0:
     dependencies:
       '@jridgewell/source-map': 0.3.5
-      acorn: 8.14.1
+      acorn: 8.15.0
       commander: 2.20.3
       source-map-support: 0.5.21
 
@@ -26745,12 +26730,12 @@ snapshots:
       '@jest/types': 29.6.3
       babel-jest: 29.7.0(@babel/core@7.28.4)
 
-  ts-jest@29.4.9(@babel/core@7.28.4)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.28.4))(jest-util@29.7.0)(jest@29.7.0(@types/node@20.19.39)(ts-node@10.9.2(@types/node@20.19.39)(typescript@5.4.5)))(typescript@5.4.5):
+  ts-jest@29.4.9(@babel/core@7.28.4)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.28.4))(jest-util@29.7.0)(jest@29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5)))(typescript@5.4.5):
     dependencies:
       bs-logger: 0.2.6
       fast-json-stable-stringify: 2.1.0
       handlebars: 4.7.9
-      jest: 29.7.0(@types/node@20.19.39)(ts-node@10.9.2(@types/node@20.19.39)(typescript@5.4.5))
+      jest: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
       json5: 2.2.3
       lodash.memoize: 4.1.2
       make-error: 1.3.6
@@ -26793,7 +26778,7 @@ snapshots:
       '@tsconfig/node14': 1.0.3
       '@tsconfig/node16': 1.0.4
       '@types/node': 20.19.23
-      acorn: 8.11.1
+      acorn: 8.15.0
       acorn-walk: 8.3.0
       arg: 4.1.3
       create-require: 1.1.1
@@ -26812,7 +26797,7 @@ snapshots:
       '@tsconfig/node14': 1.0.3
       '@tsconfig/node16': 1.0.4
       '@types/node': 20.19.25
-      acorn: 8.11.1
+      acorn: 8.15.0
       acorn-walk: 8.3.0
       arg: 4.1.3
       create-require: 1.1.1
@@ -26821,6 +26806,7 @@ snapshots:
       typescript: 5.4.5
       v8-compile-cache-lib: 3.0.1
       yn: 3.1.1
+    optional: true
 
   ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5):
     dependencies:
@@ -26830,7 +26816,7 @@ snapshots:
       '@tsconfig/node14': 1.0.3
       '@tsconfig/node16': 1.0.4
       '@types/node': 22.15.18
-      acorn: 8.11.1
+      acorn: 8.15.0
       acorn-walk: 8.3.0
       arg: 4.1.3
       create-require: 1.1.1
@@ -26849,7 +26835,7 @@ snapshots:
       '@tsconfig/node14': 1.0.3
       '@tsconfig/node16': 1.0.4
       '@types/node': 25.5.2
-      acorn: 8.11.1
+      acorn: 8.15.0
       acorn-walk: 8.3.0
       arg: 4.1.3
       create-require: 1.1.1
@@ -26858,7 +26844,6 @@ snapshots:
       typescript: 5.4.5
       v8-compile-cache-lib: 3.0.1
       yn: 3.1.1
-    optional: true
 
   tslib@2.6.2: {}
 
@@ -26982,8 +26967,7 @@ snapshots:
 
   undici-types@7.16.0: {}
 
-  undici-types@7.18.2:
-    optional: true
+  undici-types@7.18.2: {}
 
   undici-types@7.24.4: {}
 
@@ -27151,22 +27135,6 @@ snapshots:
       tinyglobby: 0.2.15
     optionalDependencies:
       '@types/node': 20.19.23
-      fsevents: 2.3.3
-      jiti: 2.5.1
-      less: 4.3.0
-      terser: 5.39.2
-      yaml: 2.8.3
-
-  vite@6.4.2(@types/node@20.19.39)(jiti@2.5.1)(less@4.3.0)(terser@5.39.2)(yaml@2.8.3):
-    dependencies:
-      esbuild: 0.25.12
-      fdir: 6.5.0(picomatch@4.0.4)
-      picomatch: 4.0.4
-      postcss: 8.5.8
-      rollup: 4.60.1
-      tinyglobby: 0.2.15
-    optionalDependencies:
-      '@types/node': 20.19.39
       fsevents: 2.3.3
       jiti: 2.5.1
       less: 4.3.0
