@@ -4,7 +4,7 @@
 import { IdGenerator } from "../main";
 import { ChatInput } from "./chatInput";
 import { ExpandableTextArea } from "./expandableTextArea";
-import { handleSessionCommand } from "./sessionCommands";
+import { handleConversationCommand } from "./sessionCommands";
 import { iconCheckMarkCircle, iconX } from "../icon";
 import {
     DisplayAppendMode,
@@ -403,6 +403,25 @@ export class ChatView {
                 }
             }
 
+            // "system" is a sentinel requestId used by broadcastSystemMessage
+            // on the server.  Auto-create a notification group so these
+            // messages (e.g. client join/leave) are displayed.
+            if (id === "system") {
+                const mgId = `notification-system-${this.notificationCount++}`;
+                const mg: MessageGroup = new MessageGroup(
+                    this,
+                    this.settingsView!,
+                    "",
+                    this.messageDiv,
+                    undefined,
+                    this.agents,
+                    this.hideMetrics,
+                );
+                this.clientMessageGroups.set(mgId, mg);
+                mg.hideUserMessage();
+                return mg;
+            }
+
             console.error(`Invalid requestId ${id}`);
             return undefined;
         }
@@ -471,9 +490,10 @@ export class ChatView {
             requestText = request.content;
         }
 
-        // Intercept /session commands before sending to dispatcher
-        if (requestText.trim().startsWith("/session")) {
-            const handled = await handleSessionCommand(requestText, {
+        // Intercept /conversation (and @conversation alias) before sending to dispatcher
+        const t = requestText.trim();
+        if (t.startsWith("/conversation") || t.startsWith("@conversation")) {
+            const handled = await handleConversationCommand(requestText, {
                 addSystemMessage: (content: string) => {
                     this.addNotificationMessage(
                         { type: "html", content, kind: "info" },

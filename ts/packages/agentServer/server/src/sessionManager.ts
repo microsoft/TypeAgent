@@ -374,6 +374,14 @@ export async function createSessionManager(
                 `Client joined session "${record.name}" (${sessionId}), clients: ${sharedDispatcher.clientCount}`,
             );
 
+            // Notify existing clients that a new client has joined
+            if (sharedDispatcher.clientCount > 1) {
+                sharedDispatcher.broadcastSystemMessage(
+                    `[A new client has joined this conversation. You are connected to '${record.name}'.]`,
+                    dispatcher.connectionId!,
+                );
+            }
+
             return {
                 dispatcher,
                 connectionId: dispatcher.connectionId!,

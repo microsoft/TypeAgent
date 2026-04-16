@@ -212,6 +212,12 @@ When multiple clients are connected and one switches conversations, the remainin
 [A client has left this conversation. You remain connected to 'playlist-session'.]
 ```
 
+When a new client joins a conversation that already has connected clients, the existing clients are notified:
+
+```
+[A new client has joined this conversation. You are connected to 'playlist-session'.]
+```
+
 ### `agent-cli server`
 
 `agent-cli server` provides commands to manage the agent server process.

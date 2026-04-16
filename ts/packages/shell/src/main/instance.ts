@@ -25,6 +25,7 @@ import { createInlineBrowserControl } from "./inlineBrowserControl.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
 import {
     createLocalSessionBackend,
+    createRemoteSessionBackend,
     registerSessionIpcHandlers,
 } from "./sessionManager.js";
 import {
@@ -38,16 +39,29 @@ import { setPendingUpdateCallback } from "./commands/update.js";
 import { createClientIORpcClient } from "@typeagent/dispatcher-rpc/clientio/client";
 import { isTest } from "./index.js";
 import { getFsStorageProvider } from "dispatcher-node-providers";
-import { ensureAndConnectDispatcher } from "@typeagent/agent-server-client";
+import {
+    ensureAgentServer,
+    connectAgentServer,
+} from "@typeagent/agent-server-client";
+import type { AgentServerConnection } from "@typeagent/agent-server-client";
 
 type ShellInstance = {
     shellWindow: ShellWindow;
-    dispatcherP: Promise<Dispatcher | undefined>;
+    dispatcherP: Promise<InitResult | undefined>;
 };
 
 let instance: ShellInstance | undefined;
 let cleanupP: Promise<void> | undefined;
 let quitting: boolean = false;
+
+type InitResult = {
+    dispatcher: Dispatcher;
+    clientIO: ClientIO;
+    connection?: AgentServerConnection;
+    initialSessionId?: string;
+    initialSessionName?: string;
+    rebindDispatcher?: (freshDispatcher: Dispatcher) => void;
+};
 
 async function initializeDispatcher(
     instanceDir: string | undefined,
@@ -55,7 +69,7 @@ async function initializeDispatcher(
     updateSummary: (dispatcher: Dispatcher) => Promise<string>,
     startTime: number,
     connect?: number,
-): Promise<Dispatcher | undefined> {
+): Promise<InitResult | undefined> {
     if (cleanupP !== undefined) {
         // Make sure the previous cleanup is done.
         await cleanupP;
@@ -139,23 +153,49 @@ async function initializeDispatcher(
         const browserControl = createInlineBrowserControl(shellWindow);
 
         // Set up dispatcher
+        // Use 'let' so that session switches can rebind the active dispatcher.
         let newDispatcher: Dispatcher;
+        let connection: AgentServerConnection | undefined;
+        let initialSessionId: string | undefined;
+        let initialSessionName: string | undefined;
         if (connect !== undefined) {
-            // Connect to remote dispatcher instead of creating one
-            newDispatcher = await ensureAndConnectDispatcher(
-                clientIO,
-                connect,
-                undefined,
-                () => {
-                    if (!quitting) {
-                        dialog.showErrorBox(
-                            "Disconnected",
-                            "The connection to the dispatcher was lost.",
-                        );
-                        app.quit();
-                    }
-                },
+            // Connect to remote dispatcher — use connectAgentServer directly
+            // so we retain the connection reference for multi-session support.
+            await ensureAgentServer(connect, true);
+            const url = `ws://localhost:${connect}`;
+            connection = await connectAgentServer(url, () => {
+                if (!quitting) {
+                    dialog.showErrorBox(
+                        "Disconnected",
+                        "The connection to the dispatcher was lost.",
+                    );
+                    app.quit();
+                }
+            });
+            // Find-or-create the default "Shell" session, matching CLI behavior.
+            const SHELL_SESSION_NAME = "Shell";
+            const existing = await connection.listSessions(SHELL_SESSION_NAME);
+            const match = existing.find(
+                (s) =>
+                    s.name.toLowerCase() === SHELL_SESSION_NAME.toLowerCase(),
             );
+            const shellSessionId =
+                match !== undefined
+                    ? match.sessionId
+                    : (await connection.createSession(SHELL_SESSION_NAME))
+                          .sessionId;
+            const session = await connection.joinSession(clientIO, {
+                sessionId: shellSessionId,
+            });
+            newDispatcher = session.dispatcher;
+            initialSessionId = session.sessionId;
+            initialSessionName = session.name;
+
+            // Override close to close the connection
+            newDispatcher.close = async () => {
+                await connection!.close();
+            };
+
             debugShellInit(
                 "Connected to remote dispatcher",
                 performance.now() - startTime,
@@ -228,24 +268,41 @@ async function initializeDispatcher(
             return commandResult;
         }
 
+        // Shared close handler — tears down RPC channels and releases resources.
+        // Uses late-bound references so it always closes the current newDispatcher.
+        async function closeDispatcher(): Promise<void> {
+            ipcMain.removeListener("dispatcher-rpc-call", onDispatcherRpcCall);
+            dispatcherChannel.notifyDisconnected();
+            await newDispatcher.close();
+            clientIOChannel.notifyDisconnected();
+            ipcMain.removeListener("clientio-rpc-reply", onClientIORpcReply);
+            browserControl.close();
+        }
+
         const dispatcher = {
             ...newDispatcher,
             processCommand: processShellRequest,
-            close: async () => {
-                ipcMain.removeListener(
-                    "dispatcher-rpc-call",
-                    onDispatcherRpcCall,
-                );
-                dispatcherChannel.notifyDisconnected();
-                await newDispatcher.close();
-                clientIOChannel.notifyDisconnected();
-                ipcMain.removeListener(
-                    "clientio-rpc-reply",
-                    onClientIORpcReply,
-                );
-                browserControl.close();
-            },
+            close: closeDispatcher,
         };
+
+        /**
+         * Rebind the dispatcher object in-place after a session switch.
+         * The RPC server and processShellRequest closure both reference
+         * `dispatcher` and `newDispatcher`, so we must update both.
+         * We copy every enumerable property from the fresh dispatcher onto
+         * the existing `dispatcher` object (which the RPC server holds)
+         * while preserving our custom `processCommand` and `close` overrides.
+         */
+        function rebindDispatcher(freshDispatcher: Dispatcher): void {
+            newDispatcher = freshDispatcher;
+            // Copy all properties from the new dispatcher onto the existing
+            // object so the RPC server sees updated method implementations.
+            Object.assign(dispatcher, freshDispatcher);
+            // Re-apply shell-specific overrides that must wrap the dispatcher.
+            dispatcher.processCommand = processShellRequest;
+            dispatcher.close = closeDispatcher;
+            debugShell("Dispatcher rebound after session switch");
+        }
 
         // Set up the RPC
         const dispatcherChannel = createChannelAdapter((message: any) => {
@@ -265,7 +322,14 @@ async function initializeDispatcher(
 
         debugShellInit("Dispatcher initialized", performance.now() - startTime);
 
-        return dispatcher;
+        return {
+            dispatcher,
+            clientIO,
+            connection,
+            initialSessionId,
+            initialSessionName,
+            rebindDispatcher,
+        };
     } catch (e: any) {
         if (isTest) {
             // In test mode, avoid blocking dialogs so the process can exit cleanly
@@ -299,7 +363,7 @@ export function initializeInstance(
     // Register session management IPC handlers (local-only backend for now;
     // remote backend would be wired in when connect mode gains multi-session).
     const sessionBackend = createLocalSessionBackend();
-    const cleanupSessionIpc = registerSessionIpcHandlers(sessionBackend);
+    let cleanupSessionIpc = registerSessionIpcHandlers(sessionBackend);
 
     // Set up notification callback for browser agent IPC early,
     // so messages queued during tab restoration can trigger notifications
@@ -346,11 +410,51 @@ export function initializeInstance(
         debugShellInit("Showing window", performance.now() - startTime);
 
         // The dispatcher can be use now that dom is ready and the client is ready to receive messages
-        const dispatcher = await dispatcherP;
-        if (dispatcher === undefined) {
+        const result = await dispatcherP;
+        if (result === undefined) {
             app.quit();
             return;
         }
+        const {
+            dispatcher,
+            clientIO,
+            connection,
+            initialSessionId,
+            initialSessionName,
+            rebindDispatcher,
+        } = result;
+
+        // If connected to a remote server, wire up the remote session backend
+        // and replace the local-only IPC handlers.
+        if (
+            connection !== undefined &&
+            initialSessionId !== undefined &&
+            initialSessionName !== undefined
+        ) {
+            cleanupSessionIpc();
+            const remoteBackend = createRemoteSessionBackend(
+                connection,
+                clientIO,
+                initialSessionId,
+                initialSessionName,
+                (sessionId, name) => {
+                    shellWindow.sendSessionChanged(sessionId, name);
+                },
+                rebindDispatcher,
+                () => shellWindow.sendMarkHistory(),
+            );
+            cleanupSessionIpc = registerSessionIpcHandlers(remoteBackend);
+
+            // Notify renderer of the initial session
+            shellWindow.sendSessionChanged(
+                initialSessionId,
+                initialSessionName,
+            );
+            shellWindow.sendSystemNotification(
+                `Connected to conversation '${initialSessionName}'`,
+            );
+        }
+
         updateTitle(dispatcher);
         setPendingUpdateCallback((version, background) => {
             updateTitle(dispatcher);
@@ -404,9 +508,9 @@ async function cleanupInstance() {
     try {
         const { dispatcherP } = instance;
         instance = undefined;
-        const dispatcher = await dispatcherP;
-        if (dispatcher) {
-            await dispatcher.close();
+        const result = await dispatcherP;
+        if (result) {
+            await result.dispatcher.close();
         }
         cleanupP = undefined;
 

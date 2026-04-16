@@ -107,6 +107,10 @@ function registerClient(client: Client) {
         client.sessionChanged?.(sessionId, name);
     });
 
+    ipcRenderer.on("mark-history", () => {
+        client.markHistoryEntries?.();
+    });
+
     // Signal the main process that the client has been registered
     ipcRenderer.send("chat-view-ready");
 

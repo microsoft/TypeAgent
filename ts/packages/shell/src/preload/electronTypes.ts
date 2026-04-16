@@ -108,6 +108,7 @@ export interface Client {
     tabRestoreStatus(count: number): void;
     systemNotification?(message: string, id: string, timestamp: number): void;
     sessionChanged?(sessionId: string, name: string): void;
+    markHistoryEntries?(): void;
 }
 
 export interface ElectronWindowFields {
