@@ -1,0 +1,77 @@
+{
+  "emojiChar": "🛠️",
+  "description": "Agent for onboarding new applications and APIs into TypeAgent",
+  "defaultEnabled": true,
+  "schema": {
+    "description": "Top-level onboarding coordination: start, resume, and check status of integration onboarding workflows",
+    "originalSchemaFile": "./onboardingSchema.ts",
+    "schemaFile": "../dist/onboardingSchema.pas.json",
+    "grammarFile": "../dist/onboardingSchema.ag.json",
+    "schemaType": "OnboardingActions"
+  },
+  "subActionManifests": {
+    "onboarding-discovery": {
+      "schema": {
+        "description": "Phase 1: Enumerate the API surface of the target application by crawling documentation or parsing an OpenAPI spec",
+        "originalSchemaFile": "./discovery/discoverySchema.ts",
+        "schemaFile": "../dist/discoverySchema.pas.json",
+        "grammarFile": "../dist/discoverySchema.ag.json",
+        "schemaType": "DiscoveryActions"
+      }
+    },
+    "onboarding-phrasegen": {
+      "schema": {
+        "description": "Phase 2: Generate natural language sample phrases that users would say to invoke each discovered action",
+        "originalSchemaFile": "./phraseGen/phraseGenSchema.ts",
+        "schemaFile": "../dist/phraseGenSchema.pas.json",
+        "grammarFile": "../dist/phraseGenSchema.ag.json",
+        "schemaType": "PhraseGenActions"
+      }
+    },
+    "onboarding-schemagen": {
+      "schema": {
+        "description": "Phase 3: Generate TypeScript action schema types with comments that map user requests to the target API surface",
+        "originalSchemaFile": "./schemaGen/schemaGenSchema.ts",
+        "schemaFile": "../dist/schemaGenSchema.pas.json",
+        "grammarFile": "../dist/schemaGenSchema.ag.json",
+        "schemaType": "SchemaGenActions"
+      }
+    },
+    "onboarding-grammargen": {
+      "schema": {
+        "description": "Phase 4: Generate .agr grammar files from action schemas and sample phrases, then compile and validate them",
+        "originalSchemaFile": "./grammarGen/grammarGenSchema.ts",
+        "schemaFile": "../dist/grammarGenSchema.pas.json",
+        "grammarFile": "../dist/grammarGenSchema.ag.json",
+        "schemaType": "GrammarGenActions"
+      }
+    },
+    "onboarding-scaffolder": {
+      "schema": {
+        "description": "Phase 5: Scaffold the complete TypeAgent agent package infrastructure including manifest, handler, package.json, and any required plugins",
+        "originalSchemaFile": "./scaffolder/scaffolderSchema.ts",
+        "schemaFile": "../dist/scaffolderSchema.pas.json",
+        "grammarFile": "../dist/scaffolderSchema.ag.json",
+        "schemaType": "ScaffolderActions"
+      }
+    },
+    "onboarding-testing": {
+      "schema": {
+        "description": "Phase 6: Generate test cases from sample phrases and run a phrase-to-action validation loop, proposing schema and grammar repairs for failures",
+        "originalSchemaFile": "./testing/testingSchema.ts",
+        "schemaFile": "../dist/testingSchema.pas.json",
+        "grammarFile": "../dist/testingSchema.ag.json",
+        "schemaType": "TestingActions"
+      }
+    },
+    "onboarding-packaging": {
+      "schema": {
+        "description": "Phase 7: Package the completed agent for distribution and register it with the TypeAgent dispatcher",
+        "originalSchemaFile": "./packaging/packagingSchema.ts",
+        "schemaFile": "../dist/packagingSchema.pas.json",
+        "grammarFile": "../dist/packagingSchema.ag.json",
+        "schemaType": "PackagingActions"
+      }
+    }
+  }
+}

@@ -888,7 +888,7 @@ needs shadow candidates".
 
 ## CLI integration
 
-The CLI (`packages/cli/src/commands/interactive.ts`) follows the same
+The CLI (`packages/cli/src/commands/connect.ts`) follows the same
 contract but with simpler plumbing:
 
 1. Sends full input and a `direction` (always `"forward"` for tab-completion,

@@ -3,6 +3,8 @@
 
 import registerDebug from "debug";
 import chalk from "chalk";
+import type { ConversationCommandContext } from "./conversationCommands.js";
+import { handleConversationCommand } from "./conversationCommands.js";
 
 export type SlashCommandHandler = (
     args: string,
@@ -26,6 +28,16 @@ export function isVerboseEnabled(): boolean {
 export function enableVerboseFromFlag(namespaces: string): void {
     verboseEnabled = true;
     activeNamespaces = namespaces;
+}
+
+// Late-binding context for conversation commands.
+// Set from connect.ts after the AgentServerConnection is established.
+let conversationContext: ConversationCommandContext | undefined;
+
+export function setConversationCommandContext(
+    ctx: ConversationCommandContext,
+): void {
+    conversationContext = ctx;
 }
 
 export function getVerboseIndicator(): string {
@@ -65,7 +77,7 @@ const slashCommands: SlashCommand[] = [
             console.log(chalk.bold("\nSlash Commands:"));
             for (const cmd of slashCommands) {
                 console.log(
-                    `  ${chalk.cyanBright("/" + cmd.name.padEnd(12))} ${chalk.dim(cmd.description)}`,
+                    `  ${chalk.cyanBright("/" + cmd.name.padEnd(16))} ${chalk.dim(cmd.description)}`,
                 );
             }
             console.log("");
@@ -122,6 +134,21 @@ const slashCommands: SlashCommand[] = [
         },
     },
     {
+        name: "conversation",
+        description: "Manage conversations (new, switch, list, rename, delete)",
+        handler: async (args) => {
+            if (conversationContext === undefined) {
+                console.log(
+                    chalk.red(
+                        "Conversation commands are not available (no server connection).",
+                    ),
+                );
+                return;
+            }
+            return handleConversationCommand(conversationContext, args);
+        },
+    },
+    {
         name: "exit",
         description: "Exit the CLI",
         handler: async () => {
@@ -137,10 +164,31 @@ for (const cmd of slashCommands) {
 }
 
 export function isSlashCommand(input: string): boolean {
-    return input.startsWith("/");
+    return (
+        input.startsWith("/") ||
+        input.startsWith("@conversation ") ||
+        input === "@conversation"
+    );
 }
 
+const conversationSubcommands = ["new", "switch", "list", "rename", "delete"];
+
 export function getSlashCompletions(input: string): string[] {
+    // Handle @conversation <partial-subcommand> completions
+    if (input.startsWith("@conversation")) {
+        const after = input.slice("@conversation".length);
+        // "@conversation" with no space yet — offer all subcommands
+        if (after === "") {
+            return conversationSubcommands.map((s) => `@conversation ${s}`);
+        }
+        if (after.startsWith(" ")) {
+            const partial = after.slice(1).toLowerCase();
+            return conversationSubcommands
+                .filter((s) => s.startsWith(partial))
+                .map((s) => `@conversation ${s}`);
+        }
+        return [];
+    }
     const prefix = input.substring(1).toLowerCase();
     return slashCommands
         .filter((cmd) => cmd.name.startsWith(prefix))
@@ -157,7 +205,14 @@ export async function handleSlashCommand(
     input: string,
     processCommand: (command: string) => Promise<any>,
 ): Promise<SlashCommandResult> {
-    const trimmed = input.substring(1).trim();
+    // Rewrite @conversation to /conversation so it routes through the
+    // slash command system (avoids the spinner path in processCommandsEnhanced)
+    let normalized = input;
+    if (input.startsWith("@conversation")) {
+        normalized = "/conversation" + input.substring("@conversation".length);
+    }
+
+    const trimmed = normalized.substring(1).trim();
     const spaceIdx = trimmed.indexOf(" ");
     const name =
         spaceIdx === -1

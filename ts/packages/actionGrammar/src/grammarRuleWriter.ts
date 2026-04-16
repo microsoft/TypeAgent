@@ -11,6 +11,7 @@ import {
     isWhitespace,
     Rule,
     RuleDefinition,
+    SpacingAnnotationComments,
     ValueNode,
 } from "./grammarRuleParser.js";
 import { writeValueExprNode } from "./grammarValueExprWriter.js";
@@ -624,6 +625,26 @@ function writeInlineComments(
     }
 }
 
+// Writes a [spacing=<mode>] annotation with its interleaved comments.
+// When leadingSpace is true, an extra space is written before the opening "[".
+function writeSpacingAnnotation(
+    result: GrammarWriter,
+    spacingMode: string,
+    comments: SpacingAnnotationComments | undefined,
+    leadingSpace: boolean = false,
+): void {
+    writeInlineComments(result, comments?.beforeAnnotation, true);
+    result.write(leadingSpace ? " [" : "[");
+    writeInlineComments(result, comments?.afterBracket);
+    result.write("spacing");
+    writeInlineComments(result, comments?.afterKey);
+    result.write("=");
+    writeInlineComments(result, comments?.afterEquals);
+    result.write(spacingMode);
+    writeInlineComments(result, comments?.afterValue);
+    result.write("]");
+}
+
 // Formats trailing comments as a single string for use as item trailing text
 // in blocks (e.g. " // note" or " /* c */").
 function trailingCommentText(
@@ -744,17 +765,13 @@ function writeRuleDefinition(result: GrammarWriter, def: RuleDefinition) {
         result.write(" ");
     }
     writeBracketedName(result, def.definitionName);
-    writeInlineComments(result, def.beforeAnnotationComments, true);
     if (def.spacingMode !== undefined) {
-        result.write(" [");
-        writeInlineComments(result, def.annotationAfterBracketComments);
-        result.write("spacing");
-        writeInlineComments(result, def.annotationAfterKeyComments);
-        result.write("=");
-        writeInlineComments(result, def.annotationAfterEqualsComments);
-        result.write(def.spacingMode);
-        writeInlineComments(result, def.annotationAfterValueComments);
-        result.write("]");
+        writeSpacingAnnotation(
+            result,
+            def.spacingMode,
+            def.spacingAnnotationComments,
+            true,
+        );
     }
     if (def.valueType !== undefined) {
         writeInlineComments(result, def.beforeValueTypeComments, true);
@@ -779,6 +796,15 @@ function writeRuleDefinition(result: GrammarWriter, def: RuleDefinition) {
 }
 
 function writeRule(result: GrammarWriter, rule: Rule, col: number) {
+    // Per-alternate spacing annotation: [spacing=mode]
+    if (rule.spacingMode !== undefined) {
+        writeSpacingAnnotation(
+            result,
+            rule.spacingMode,
+            rule.spacingAnnotationComments,
+        );
+        result.write(" ");
+    }
     if (rule.value === undefined) {
         writeExpression(result, rule.expressions, col);
         writeTrailingComments(result, rule.trailingComments, true);

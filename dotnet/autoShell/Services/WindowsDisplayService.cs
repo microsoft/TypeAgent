@@ -6,9 +6,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using autoShell.Logging;
 using autoShell.Services.Interop;
-using Newtonsoft.Json;
 
 namespace autoShell.Services;
 
@@ -113,7 +113,7 @@ internal class WindowsDisplayService : IDisplayService
             .ThenByDescending(r => r.RefreshRate)
             .ToList();
 
-        return JsonConvert.SerializeObject(uniqueResolutions);
+        return JsonSerializer.Serialize(uniqueResolutions);
     }
 
     /// <inheritdoc/>

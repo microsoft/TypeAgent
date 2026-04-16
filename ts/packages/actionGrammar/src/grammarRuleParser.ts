@@ -43,7 +43,7 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   // Currently the only supported annotation key is "spacing":
  *   //   [spacing=required], [spacing=optional], [spacing=auto], [spacing=none]
  *   <Rules> ::= <Rule> ( "|" <Rule> )*
- *   <Rule> ::= <Expression> ( "->" <Value> )?
+ *   <Rule> ::= <RuleAnnotation>? <Expression> ( "->" <Value> )?
  *
  *   <Expression> ::= ( <StringExpr> | <VariableExpr> | <RuleRefExpr> | <GroupExpr> )+
  *
@@ -57,6 +57,8 @@ const debugParse = registerDebug("typeagent:grammar:parse");
  *   //
  *   // The spacing mode is set per-rule via a [spacing=<mode>] annotation immediately
  *   // after the rule name: <rule> [spacing=required] = ...;
+ *   // It can also be set per-alternate: ... | [spacing=none] $(h:number) : $(m:number) -> ...
+ *   // Per-alternate annotations override the definition-level setting.
  *   // Omitting the annotation is equivalent to [spacing=auto].
  *   //
  *   // An escaped space (e.g. "\ ") is treated as a literal character, not a flex space.
@@ -331,9 +333,21 @@ type ArrayValueNode = Omit<CompiledArrayValueNode, "value"> & {
     closingComments?: Comment[] | undefined;
 };
 
+// Comments attached to a [spacing=...] annotation.
+// Shared between Rule (per-alternate) and RuleDefinition (definition-level).
+export type SpacingAnnotationComments = {
+    beforeAnnotation?: Comment[] | undefined; // comments before [
+    afterBracket?: Comment[] | undefined; // after [
+    afterKey?: Comment[] | undefined; // after "spacing" keyword, before =
+    afterEquals?: Comment[] | undefined; // after =, before value
+    afterValue?: Comment[] | undefined; // after value, before ]
+};
+
 // Rule
 export type Rule = {
     expressions: Expr[];
+    spacingMode?: SpacingMode | undefined; // per-alternate [spacing=...] override
+    spacingAnnotationComments?: SpacingAnnotationComments | undefined;
     trailingComments?: Comment[] | undefined; // comments after expressions, before | or ;
     value?: ValueNode | undefined;
     valueLeadingComments?: Comment[] | undefined; // comments between -> and value
@@ -348,11 +362,7 @@ export type RuleDefinition = {
     pos?: number | undefined;
     leadingComments?: Comment[] | undefined; // comments before "export" or <Name>
     afterExportComments?: Comment[] | undefined; // comments between "export" keyword and <Name>
-    beforeAnnotationComments?: Comment[] | undefined; // comments between <Name> and [annotation]
-    annotationAfterBracketComments?: Comment[] | undefined; // after [
-    annotationAfterKeyComments?: Comment[] | undefined; // after "spacing" keyword, before =
-    annotationAfterEqualsComments?: Comment[] | undefined; // after =, before value
-    annotationAfterValueComments?: Comment[] | undefined; // after value, before ]
+    spacingAnnotationComments?: SpacingAnnotationComments | undefined;
     valueType?: CommentedName[] | undefined; // type names after ":" (e.g. <Rule> : A | B = ...)
     beforeValueTypeComments?: Comment[] | undefined; // comments before ":" in value type
     beforeEqualsComments?: Comment[] | undefined; // comments between <Name>/[annotation]/valueType and =
@@ -758,12 +768,12 @@ class GrammarRuleParser implements ValueExprParserContext {
         };
     }
 
-    private parseExpression(): {
+    private parseExpression(initialComments?: Comment[]): {
         expressions: Expr[];
         trailingComments?: Comment[];
     } {
         const expNodes: Expr[] = [];
-        let pending: Comment[] | undefined;
+        let pending: Comment[] | undefined = initialComments;
 
         const attach = (node: Expr): void => {
             if (pending) {
@@ -1083,7 +1093,30 @@ class GrammarRuleParser implements ValueExprParserContext {
 
     private parseRule(): Rule {
         const start = this.curr;
-        const { expressions, trailingComments } = this.parseExpression();
+        // Parse optional per-alternate spacing annotation: [spacing=mode]
+        // The annotation may follow comments (e.g. after | on a new line),
+        // so we need to look past any leading comments to detect it.
+        let spacingMode: SpacingMode | undefined;
+        let spacingAnnotationComments: Rule["spacingAnnotationComments"];
+        // Parse any leading comments, then check for [spacing=...]
+        const pendingComments = this.parseComments();
+        if (this.isAt("[")) {
+            // Found annotation — comments before it belong to the annotation.
+            const ann = this.parseSpacingAnnotation();
+            spacingMode = ann.spacingMode;
+            spacingAnnotationComments = {
+                beforeAnnotation: pendingComments,
+                afterBracket: ann.afterBracketComments,
+                afterKey: ann.afterKeyComments,
+                afterEquals: ann.afterEqualsComments,
+                afterValue: ann.afterValueComments,
+            };
+        }
+        // If no annotation was found, forward the already-parsed comments
+        // to parseExpression so they attach to the first expression node.
+        const { expressions, trailingComments } = this.parseExpression(
+            spacingMode === undefined ? pendingComments : undefined,
+        );
         let value: ValueNode | undefined;
         let valueLeadingComments: Comment[] | undefined;
         let valueTrailingComments: Comment[] | undefined;
@@ -1120,6 +1153,8 @@ class GrammarRuleParser implements ValueExprParserContext {
 
         return {
             expressions,
+            spacingMode,
+            spacingAnnotationComments,
             trailingComments,
             value,
             valueLeadingComments,
@@ -1204,23 +1239,21 @@ class GrammarRuleParser implements ValueExprParserContext {
         const pos = this.pos;
         const rn = this.parseRuleName();
         let spacingMode: SpacingMode;
-        let beforeAnnotationComments: Comment[] | undefined;
+        let spacingAnnotationComments: SpacingAnnotationComments | undefined;
         let beforeEqualsComments: Comment[] | undefined;
-        let annotationAfterBracketComments: Comment[] | undefined;
-        let annotationAfterKeyComments: Comment[] | undefined;
-        let annotationAfterEqualsComments: Comment[] | undefined;
-        let annotationAfterValueComments: Comment[] | undefined;
         let valueType: CommentedName[] | undefined;
         let beforeValueTypeComments: Comment[] | undefined;
         const maybePreComments = this.parseComments();
         if (this.isAt("[")) {
-            beforeAnnotationComments = maybePreComments;
             const ann = this.parseSpacingAnnotation();
             spacingMode = ann.spacingMode;
-            annotationAfterBracketComments = ann.afterBracketComments;
-            annotationAfterKeyComments = ann.afterKeyComments;
-            annotationAfterEqualsComments = ann.afterEqualsComments;
-            annotationAfterValueComments = ann.afterValueComments;
+            spacingAnnotationComments = {
+                beforeAnnotation: maybePreComments,
+                afterBracket: ann.afterBracketComments,
+                afterKey: ann.afterKeyComments,
+                afterEquals: ann.afterEqualsComments,
+                afterValue: ann.afterValueComments,
+            };
             beforeEqualsComments = this.parseComments();
         } else {
             beforeEqualsComments = maybePreComments;
@@ -1273,11 +1306,7 @@ class GrammarRuleParser implements ValueExprParserContext {
             pos,
             leadingComments,
             afterExportComments,
-            beforeAnnotationComments,
-            annotationAfterBracketComments,
-            annotationAfterKeyComments,
-            annotationAfterEqualsComments,
-            annotationAfterValueComments,
+            spacingAnnotationComments,
             beforeValueTypeComments,
             beforeEqualsComments,
             trailingComments,

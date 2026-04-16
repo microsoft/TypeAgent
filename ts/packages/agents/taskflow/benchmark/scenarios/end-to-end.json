@@ -1,0 +1,74 @@
+[
+  {
+    "id": "e2e-01",
+    "category": "end-to-end",
+    "description": "Record billboard jazz playlist flow - tests RequestId during create and test phases",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "learn: find the top jazz songs on billboard and create a playlist",
+        "expected": {
+          "routedTo": "reasoning",
+          "execution": {
+            "shouldSucceed": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "e2e-02",
+    "category": "end-to-end",
+    "description": "Execute the newly recorded flow (validates nested action RequestId)",
+    "setup": { "requiredFlows": [] },
+    "utterances": [
+      {
+        "text": "list task flows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listTaskFlows",
+          "execution": {
+            "shouldSucceed": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "e2e-03",
+    "category": "end-to-end",
+    "description": "Edit an existing flow's description",
+    "setup": { "requiredFlows": ["createTopSongsPlaylist"] },
+    "utterances": [
+      {
+        "text": "edit task flow createTopSongsPlaylist",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "editTaskFlow",
+          "execution": {
+            "shouldSucceed": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "e2e-04",
+    "category": "end-to-end",
+    "description": "Execute seeded flow with nested actions (webSearch -> queryLLM -> player)",
+    "setup": { "requiredFlows": ["createTopSongsPlaylist"] },
+    "utterances": [
+      {
+        "text": "create 10 rock songs playlist",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "createTopSongsPlaylist",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["playlist"]
+          }
+        }
+      }
+    ]
+  }
+]

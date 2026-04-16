@@ -357,6 +357,7 @@ agent-cli connect                        # connect to the 'CLI' session (created
 agent-cli connect --resume               # resume the last used session
 agent-cli connect --session <id>         # connect to a specific session by ID
 agent-cli connect --port <port>          # connect to a server on a non-default port (default: 8999)
+agent-cli connect --hidden               # start the server hidden (no visible window)
 ```
 
 By default (no flags), `connect` targets a session named `"CLI"`. It calls `listSessions("CLI")` and joins the first match, or calls `createSession("CLI")` if none exists.
@@ -365,7 +366,20 @@ Pass `--resume` / `-r` to instead resume the last used session, whose ID is pers
 
 Pass `--session` / `-s <id>` to connect to a specific session by UUID. This takes priority over `--resume` if both are provided; errors propagate as-is without the recovery prompt.
 
+Pass `--hidden` to start the agent server without a visible window. Default is a visible window for interactive use.
+
 On every successful connection the connected session ID is written to `~/.typeagent/cli-state.json` for use by future `--resume` invocations.
+
+#### `run` — non-interactive commands
+
+`agent-cli run request`, `run translate`, and `run explain` each accept `--session <id>` / `-s` to target a specific session. If omitted, they use the find-or-create `"CLI"` session. The server is started hidden by default for non-interactive commands; use `--show` to get a visible window.
+
+#### `server` — manage the server process
+
+```bash
+agent-cli server status                  # show whether the server is running
+agent-cli server stop                    # send a graceful shutdown to the running server
+```
 
 #### `sessions` topic — session CRUD
 

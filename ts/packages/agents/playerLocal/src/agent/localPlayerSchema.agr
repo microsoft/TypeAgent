@@ -35,13 +35,13 @@ import { LocalPlayerActions } from "./localPlayerSchema.ts";
 <PlayCommand> = <PlayTrackNumberCommand>;
 
 <PlayTrackNumberCommand> =
-    play (the)? $(n:Ordinal) (track | song)? -> {
+    play (the)? $(n:<Ordinal>) (track | song)? -> {
         actionName: "playFromQueue",
         parameters: {
             trackNumber: n
         }
     }
-| play track $(n:Cardinal) -> {
+| play track $(n:<Cardinal>) -> {
         actionName: "playFromQueue",
         parameters: {
             trackNumber: n

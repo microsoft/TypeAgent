@@ -489,6 +489,17 @@ export class ShellWindow {
         });
     }
 
+    /**
+     * Notify the renderer that the active session has changed.
+     */
+    public sendSessionChanged(sessionId: string, name: string): void {
+        this.chatView.webContents.send("session-changed", sessionId, name);
+    }
+
+    public sendMarkHistory(): void {
+        this.chatView.webContents.send("mark-history");
+    }
+
     public runDemo(interactive: boolean = false) {
         runDemo(this.mainWindow, this.chatView, interactive);
     }

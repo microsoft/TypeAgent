@@ -27,7 +27,9 @@ export class ImportWebSocketHandler {
         try {
             // Get client from agentWebSocketServer instead of currentClient
             const agentServer = this.context.agentContext.agentWebSocketServer;
-            const client = agentServer?.getActiveClient();
+            const client = agentServer?.getActiveClient(
+                this.context.agentContext.sessionId,
+            );
 
             if (client && client.socket.readyState === WebSocket.OPEN) {
                 const websocketProgress = {

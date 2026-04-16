@@ -2,32 +2,21 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import { ClientIO, createDispatcher } from "agent-dispatcher";
 import {
-    getDefaultAppAgentProviders,
-    getIndexingServiceRegistry,
-} from "default-agent-provider";
-import { getChatModelNames } from "aiclient";
+    connectAgentServer,
+    ensureAgentServer,
+} from "@typeagent/agent-server-client";
 import {
     ChatHistoryInput,
     isChatHistoryInput,
-    getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
-import { getTraceId, getInstanceDir } from "agent-dispatcher/helpers/data";
+import * as crypto from "crypto";
 import fs from "node:fs";
 import type {
     TranslateTestFile,
     TranslateTestStep,
 } from "default-agent-provider/test";
-import { getFsStorageProvider } from "dispatcher-node-providers";
-
-const modelNames = await getChatModelNames();
-const instanceDir = getInstanceDir();
-const defaultAppAgentProviders = getDefaultAppAgentProviders(instanceDir);
-const { schemaNames } = await getAllActionConfigProvider(
-    defaultAppAgentProviders,
-);
 
 async function readHistoryFile(filePath: string): Promise<ChatHistoryInput> {
     if (!fs.existsSync(filePath)) {
@@ -35,17 +24,18 @@ async function readHistoryFile(filePath: string): Promise<ChatHistoryInput> {
     }
 
     const history = await fs.promises.readFile(filePath, "utf8");
+    let data: unknown;
     try {
-        const data = JSON.parse(history);
-        if (isChatHistoryInput(data)) {
-            return data;
-        }
-        throw new Error(`Invalid history file format: ${filePath}.`);
+        data = JSON.parse(history);
     } catch (e) {
         throw new Error(
             `Failed to parse history file: ${filePath}. Error: ${e}`,
         );
     }
+    if (isChatHistoryInput(data)) {
+        return data;
+    }
+    throw new Error(`Invalid history file format: ${filePath}.`);
 }
 
 export default class ReplayCommand extends Command {
@@ -61,112 +51,49 @@ export default class ReplayCommand extends Command {
             description: "Translate only, do not execute actions",
             default: false,
         }),
-        schema: Flags.string({
-            description: "Translator name",
-            options: schemaNames,
-            multiple: true,
-        }),
-        multiple: Flags.boolean({
-            description: "Include multiple action schema",
-            default: true, // follow DispatcherOptions default
-            allowNo: true,
-        }),
-        model: Flags.string({
-            description: "Translation model to use",
-            options: modelNames,
-        }),
-        jsonSchema: Flags.boolean({
-            description: "Output JSON schema",
-            default: false, // follow DispatcherOptions default
-        }),
-        jsonSchemaFunction: Flags.boolean({
-            description: "Output JSON schema function",
-            default: false, // follow DispatcherOptions default
-            exclusive: ["jsonSchema"],
-        }),
-        jsonSchemaValidate: Flags.boolean({
-            description: "Validate the output when JSON schema is enabled",
-            default: true, // follow DispatcherOptions default
-            allowNo: true,
-        }),
-        schemaOptimization: Flags.boolean({
-            description: "Enable schema optimization",
-        }),
-        switchEmbedding: Flags.boolean({
-            description: "Use embedding to determine the first schema to use",
-            default: true, // follow DispatcherOptions default
-            allowNo: true,
-        }),
-        switchInline: Flags.boolean({
-            description: "Use inline switch schema to select schema group",
-            default: true, // follow DispatcherOptions default
-            allowNo: true,
-        }),
-        switchSearch: Flags.boolean({
-            description:
-                "Enable second chance full switch schema to find schema group",
-            default: true, // follow DispatcherOptions default
-            allowNo: true,
-        }),
         generateTest: Flags.string({
             description: "Record action to generate test file",
         }),
+        port: Flags.integer({
+            char: "p",
+            description: "Port for type agent server",
+            default: 8999,
+        }),
+        show: Flags.boolean({
+            description:
+                "Start the agent server in a visible window if it is not already running. Default is to start it hidden.",
+            default: false,
+        }),
     };
 
-    static description = "Translate a request into action";
-    static example = [
-        `$ <%= config.bin %> <%= command.id %> 'play me some bach'`,
-    ];
+    static description = "Replay a chat history file";
+    static example = [`$ <%= config.bin %> <%= command.id %> history.json`];
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(ReplayCommand);
 
         const history = await readHistoryFile(args.history);
-        await withConsoleClientIO(async (clientIO: ClientIO) => {
-            const dispatcher = await createDispatcher("cli run translate", {
-                appAgentProviders: defaultAppAgentProviders,
-                agents: {
-                    schemas: flags.schema,
-                    actions: !flags.translate,
-                    commands: ["dispatcher"],
-                },
-                translation: {
-                    model: flags.model,
-                    multiple: { enabled: flags.multiple },
-                    schema: {
-                        generation: {
-                            jsonSchema: flags.jsonSchema,
-                            jsonSchemaFunction: flags.jsonSchemaFunction,
-                            jsonSchemaValidate: flags.jsonSchemaValidate,
-                        },
-                        optimize: {
-                            enabled: flags.schemaOptimization,
-                        },
-                    },
-                    switch: {
-                        embedding: flags.switchEmbedding,
-                        inline: flags.switchInline,
-                        search: flags.switchSearch,
-                    },
-                },
-                execution: { history: !flags.translate }, // don't generate chat history, the test manually imports them
-                explainer: { enabled: false },
-                cache: { enabled: false },
-                clientIO,
-                persistDir: instanceDir,
-                storageProvider: getFsStorageProvider(),
-                dblogging: true,
-                traceId: getTraceId(),
-                indexingServiceRegistry:
-                    await getIndexingServiceRegistry(instanceDir),
-                collectCommandResult: flags.generateTest !== undefined,
-            });
+        const url = `ws://localhost:${flags.port}`;
 
-            const entries = Array.isArray(history) ? history : [history];
-            const steps: TranslateTestStep[] = [];
-            try {
+        await ensureAgentServer(flags.port, !flags.show, 600);
+        const connection = await connectAgentServer(url);
+
+        // Create an ephemeral session for replay isolation
+        const ephemeralName = `cli-replay-${crypto.randomUUID()}`;
+        const created = await connection.createSession(ephemeralName);
+
+        try {
+            await withConsoleClientIO(async (clientIO) => {
+                const session = await connection.joinSession(clientIO, {
+                    sessionId: created.sessionId,
+                });
+
+                const entries = Array.isArray(history) ? history : [history];
+                const steps: TranslateTestStep[] = [];
                 for (const entry of entries) {
-                    const result = await dispatcher.processCommand(entry.user);
+                    const result = await session.dispatcher.processCommand(
+                        entry.user,
+                    );
                     steps.push({
                         request: entry.user,
                         expected: result?.actions,
@@ -174,7 +101,7 @@ export default class ReplayCommand extends Command {
                     });
 
                     if (flags.translate) {
-                        await dispatcher.processCommand(
+                        await session.dispatcher.processCommand(
                             `@history insert ${JSON.stringify(entry)}`,
                         );
                     }
@@ -191,9 +118,17 @@ export default class ReplayCommand extends Command {
                         `Generated test file '${fileName}' with a test with ${steps.length} steps`,
                     );
                 }
-            } finally {
-                await dispatcher.close();
+            });
+        } finally {
+            // Delete the ephemeral session on exit for isolation
+            try {
+                await connection.deleteSession(created.sessionId);
+            } catch {
+                // Best effort cleanup
             }
-        });
+            await connection.close();
+        }
+
+        process.exit(0);
     }
 }

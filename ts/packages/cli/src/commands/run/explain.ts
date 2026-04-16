@@ -5,17 +5,11 @@ import { Args, Command, Flags } from "@oclif/core";
 import chalk from "chalk";
 import { RequestAction, fromJsonActions } from "agent-cache";
 import {
-    getCacheFactory,
-    getAllActionConfigProvider,
-} from "agent-dispatcher/internal";
-import { getTraceId, getInstanceDir } from "agent-dispatcher/helpers/data";
-import {
-    getDefaultAppAgentProviders,
-    getIndexingServiceRegistry,
-} from "default-agent-provider";
+    connectAgentServer,
+    ensureAgentServer,
+    AgentServerConnection,
+} from "@typeagent/agent-server-client";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
-import { ClientIO, createDispatcher } from "agent-dispatcher";
-import { getFsStorageProvider } from "dispatcher-node-providers";
 
 // Default test case, that include multiple phrase action name (out of order) and implicit parameters (context)
 const testRequest = new RequestAction(
@@ -29,9 +23,7 @@ const testRequest = new RequestAction(
     }),
 );
 
-const instanceDir = getInstanceDir();
-const defaultAgentProviders = getDefaultAppAgentProviders(instanceDir);
-const { schemaNames } = await getAllActionConfigProvider(defaultAgentProviders);
+const CLI_SESSION_NAME = "CLI";
 
 export default class ExplainCommand extends Command {
     static args = {
@@ -41,16 +33,6 @@ export default class ExplainCommand extends Command {
     };
 
     static flags = {
-        schema: Flags.string({
-            description: "Translator names",
-            options: schemaNames,
-            multiple: true,
-        }),
-        explainer: Flags.string({
-            description:
-                "Explainer name (defaults to the explainer associated with the translator)",
-            options: getCacheFactory().getExplainerNames(),
-        }),
         repeat: Flags.integer({
             description: "Number of times to repeat the explanation",
             default: 1,
@@ -65,6 +47,22 @@ export default class ExplainCommand extends Command {
             multiple: true,
             required: false,
         }),
+        port: Flags.integer({
+            char: "p",
+            description: "Port for type agent server",
+            default: 8999,
+        }),
+        show: Flags.boolean({
+            description:
+                "Start the agent server in a visible window if it is not already running. Default is to start it hidden.",
+            default: false,
+        }),
+        session: Flags.string({
+            char: "s",
+            description:
+                "Session ID to use. Defaults to the 'CLI' session if not specified.",
+            required: false,
+        }),
     };
 
     static description = "Explain a request and action";
@@ -76,10 +74,10 @@ export default class ExplainCommand extends Command {
         const { args, flags } = await this.parse(ExplainCommand);
 
         const command = ["@dispatcher explain"];
-        if (flags.filter?.includes("refValue")) {
+        if (flags.filter?.some((f) => f.toLowerCase() === "refvalue")) {
             command.push("--filterValueInRequest");
         }
-        if (flags.filter?.includes("refList")) {
+        if (flags.filter?.some((f) => f.toLowerCase() === "reflist")) {
             command.push("--filterReference");
         }
         if (flags.repeat > 1) {
@@ -94,31 +92,41 @@ export default class ExplainCommand extends Command {
             command.push(testRequest.toString());
         }
 
-        await withConsoleClientIO(async (clientIO: ClientIO) => {
-            const dispatcher = await createDispatcher("cli run explain", {
-                appAgentProviders: defaultAgentProviders,
-                agents: {
-                    schemas: flags.schema,
-                    actions: false, // We don't need any actions
-                    commands: ["dispatcher"],
-                },
-                explainer: {
-                    name: flags.explainer,
-                },
-                cache: { enabled: false },
-                clientIO,
-                indexingServiceRegistry:
-                    await getIndexingServiceRegistry(instanceDir),
-                persistDir: instanceDir,
-                storageProvider: getFsStorageProvider(),
-                dblogging: true,
-                traceId: getTraceId(),
-            });
-            try {
-                await dispatcher.processCommand(command.join(" "));
-            } finally {
-                await dispatcher.close();
+        const url = `ws://localhost:${flags.port}`;
+
+        await ensureAgentServer(flags.port, !flags.show, 600);
+        let connection: AgentServerConnection | undefined;
+        try {
+            connection = await connectAgentServer(url);
+
+            // Use --session directly if provided, otherwise find-or-create the "CLI" session
+            let sessionId: string;
+            if (flags.session !== undefined) {
+                sessionId = flags.session;
+            } else {
+                const existing =
+                    await connection.listSessions(CLI_SESSION_NAME);
+                const match = existing.find(
+                    (s) =>
+                        s.name.toLowerCase() === CLI_SESSION_NAME.toLowerCase(),
+                );
+                sessionId =
+                    match !== undefined
+                        ? match.sessionId
+                        : (await connection.createSession(CLI_SESSION_NAME))
+                              .sessionId;
             }
-        });
+
+            await withConsoleClientIO(async (clientIO) => {
+                const session = await connection!.joinSession(clientIO, {
+                    sessionId,
+                });
+                await session.dispatcher.processCommand(command.join(" "));
+            });
+        } finally {
+            await connection?.close();
+        }
+
+        process.exit(0);
     }
 }

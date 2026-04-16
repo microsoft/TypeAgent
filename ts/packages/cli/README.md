@@ -4,7 +4,7 @@
 
 TypeAgent CLI is a command line entry point to **TypeAgent sample code** that explores architectures for building _interactive agents_ with _natural language interfaces_ using structured prompting and LLM.
 
-TypeAgent CLI host multiple subcommands, including the [interactive mode](#interactive-mode), a **personal agent** that takes user request and use an extensible set of agents to perform actions, answer questions, and carry a conversation. [TypeAgent Shell](../shell/) is the UI version of the interactive mode, and both shared the core [dispatcher](../dispatcher/) component. Please read dispatcher's [README.md](../dispatcher/README.md) on example requests and usage.
+TypeAgent CLI hosts multiple subcommands, including the [connect mode](#connect-mode) (the default), a **personal agent** that takes user request and use an extensible set of agents to perform actions, answer questions, and carry a conversation. All CLI commands route through the agent server via WebSocket RPC. [TypeAgent Shell](../shell/) is the UI version, and both shared the core [dispatcher](../dispatcher/) component. Please read dispatcher's [README.md](../dispatcher/README.md) on example requests and usage.
 
 TypeAgent CLI includes addition commands to help with development.
 
@@ -49,12 +49,12 @@ Other more convenient ways to start the CLI with slightly more overhead:
 
 ## Using the CLI
 
-The CLI hosts multiple subcommands. The main one is **_interactive_**
+The CLI hosts multiple subcommands. The main one is **_connect_** (and is the default when no subcommand is specified).
 
-### Interactive Mode
+### Connect Mode
 
-The **_interactive_** CLI subcommand is a front end to the TypeAgent Dispatcher that takes user request and commands on the console
-and send to to the [dispatcher](../dispatcher/). The dispatcher processes user requests and asks LLM to translate
+The **_connect_** CLI subcommand is a front end to the TypeAgent Dispatcher that takes user request and commands on the console
+and sends them to the [dispatcher](../dispatcher/) via the agent server. The dispatcher processes user requests and asks LLM to translate
 it into an action. If the user accepts the translation, LLM is asked to **explain** it, i.e. how it transformed the user request
 into the action, and constructions - parsing grammar/rule - is created and cached so that it can perform the user request
 translation locally bypassing the LLM. See [dispatcher's README](../dispatcher/README.md) for a list of commands.
@@ -62,7 +62,7 @@ translation locally bypassing the LLM. See [dispatcher's README](../dispatcher/R
 For example:
 
 ```bash
-$ agent-cli interactive
+$ agent-cli
 [player]🤖> can you play some bach
 Generating translation using GPT for 'can you play some bach'
 🤖: can you play some bach => play({"query":"bach"}) [3.003s]
@@ -128,29 +128,106 @@ Explanation:
 
 ### `agent-cli run`
 
-`agent-cli run` can be use to run TypeAgent dispatcher without user interactive on the command line.
+`agent-cli run` can be used to run TypeAgent dispatcher commands non-interactively on the command line. The agent server is started automatically if it is not already running, hidden by default (no visible window). Use `--show` to start it in a visible window.
 
-There are 3 command under `agent-cli run`:
+There are 3 commands under `agent-cli run`:
 
-- `agent-cli run request <request>` - same with sending a request in the interactive mode, except doesn't ask for confirmation
-- `agent-cli run translate <request>` - only do translation. Same as `@translate` in interactive mode.
-- `agent-cli run explain <request> => <action>` - only do explanation. Same as `@explain` in interactive mode.
+- `agent-cli run request <request>` - same as sending a request in connect mode, except doesn't ask for confirmation
+- `agent-cli run translate <request>` - only do translation. Same as `@translate` in connect mode.
+- `agent-cli run explain <request> => <action>` - only do explanation. Same as `@explain` in connect mode.
+
+All three commands support the following flags:
+
+| Flag             | Short | Description                                                                         |
+| ---------------- | ----- | ----------------------------------------------------------------------------------- |
+| `--port <port>`  | `-p`  | Port for the agent server (default: 8999)                                           |
+| `--session <id>` | `-s`  | Session ID to use. Defaults to the `'CLI'` session if not specified.                |
+| `--show`         |       | Start the server in a visible window if it is not already running (default: hidden) |
+
+### `agent-cli replay`
+
+`agent-cli replay <history.json>` replays a chat history file against an isolated ephemeral session. Useful for regression testing and generating test files. The ephemeral session is deleted on exit.
+
+| Flag                    | Short | Description                                                                         |
+| ----------------------- | ----- | ----------------------------------------------------------------------------------- |
+| `--port <port>`         | `-p`  | Port for the agent server (default: 8999)                                           |
+| `--translate`           |       | Translate only, do not execute actions                                              |
+| `--generateTest <file>` |       | Record actions to generate a test file                                              |
+| `--show`                |       | Start the server in a visible window if it is not already running (default: hidden) |
 
 ### `agent-cli connect`
 
-`agent-cli connect` starts the interactive agent in connected mode, attaching to a running (or auto-started) agent server.
+`agent-cli connect` is the default command. It starts the interactive agent, attaching to a running (or auto-started) agent server.
 
 ```bash
 agent-cli connect                        # connect to the 'CLI' session (created if absent)
 agent-cli connect --resume               # resume the last used session
 agent-cli connect --session <id>         # connect to a specific session by ID
 agent-cli connect --port <port>          # connect to a server on a non-default port (default: 8999)
+agent-cli connect --hidden               # start the server hidden (no visible window)
+agent-cli connect --memory               # use an ephemeral session (deleted on exit)
 ```
 
 - By default, `connect` targets a session named `"CLI"`. If no such session exists on the server it is created automatically.
 - Pass `--resume` / `-r` to instead resume the last used session (persisted client-side in `~/.typeagent/cli-state.json`). If that session no longer exists, you will be prompted to join the `"CLI"` session.
 - Pass `--session` / `-s <id>` to connect to any specific session by its UUID. Takes priority over `--resume` if both are provided.
-- The server is started automatically if it is not already running.
+- Pass `--memory` to use an ephemeral session that is created fresh and automatically deleted when you exit. Cannot be combined with `--session` or `--resume`.
+- The server is started automatically if it is not already running. By default it starts in a visible window; pass `--hidden` to suppress the window.
+- On connect (and on every conversation switch), the session name is printed after any replayed history, just below the `─── now ─────` separator.
+
+### `@conversation` Commands (Connect Mode)
+
+While in connect mode, you can manage conversations interactively using `@conversation` commands. These commands use conversation names (not UUIDs) everywhere.
+
+| Command                          | Description                                                          |
+| -------------------------------- | -------------------------------------------------------------------- |
+| `@conversation new <name>`       | Create a new conversation. Prompts to switch to it after creation.   |
+| `@conversation switch <name>`    | Switch to an existing conversation by name (case-insensitive).       |
+| `@conversation list [<filter>]`  | List all conversations. The current conversation is marked with `▸`. |
+| `@conversation rename <newName>` | Rename the current conversation.                                     |
+| `@conversation delete <name>`    | Delete a conversation by name (prompts for confirmation).            |
+
+Example:
+
+```
+[player]🤖> @conversation new music-chat
+Created conversation 'music-chat'.
+Switch to 'music-chat' now? [y/N] y
+─── now ──────────────────────────────────────────────────────────────────────
+Connected to conversation 'music-chat'.
+[player]🤖> @conversation list
+
+Conversations:
+  NAME            CREATED           CLIENTS
+  ──────────────────────────────────────────────────────
+▸ music-chat      2026-01-15 10:01  1  (current)
+  CLI             2026-01-14 09:00  0
+[player]🤖> @conversation rename playlist-session
+Renamed current conversation to 'playlist-session'.
+```
+
+When multiple clients are connected and one switches conversations, the remaining clients in the old conversation see a status message:
+
+```
+[A client has left this conversation. You remain connected to 'playlist-session'.]
+```
+
+When a new client joins a conversation that already has connected clients, the existing clients are notified:
+
+```
+[A new client has joined this conversation. You are connected to 'playlist-session'.]
+```
+
+### `agent-cli server`
+
+`agent-cli server` provides commands to manage the agent server process.
+
+```bash
+agent-cli server status                  # show whether the server is running
+agent-cli server stop                    # send a graceful shutdown to the server
+agent-cli server status --port <port>    # check a non-default port
+agent-cli server stop --port <port>      # stop a server on a non-default port
+```
 
 ### `agent-cli sessions`
 
@@ -250,10 +327,12 @@ Examples:
    Total Elapsed Time: 23.304s
    ```
 
-### Switching Translator and Explainer on command Line
+### Switching Translator and Explainer
 
-Most command on the CLI accept the `--schema` option to select the schema and `--explainer` option to select
-the explainer.
+The translator and explainer models can be changed at runtime using the `@config` command in connect mode:
+
+- `@config translation model <name>`
+- `@config explainer model <name>`
 
 ## Trademarks
 

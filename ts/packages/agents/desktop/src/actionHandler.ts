@@ -49,11 +49,14 @@ async function executeDesktopAction(
     action: AppAction,
     context: ActionContext<DesktopActionContext>,
 ) {
-    const message = await runDesktopActions(
+    const result = await runDesktopActions(
         action as AllDesktopActions,
         context.sessionContext.agentContext,
         context.sessionContext.sessionStorage!,
         action.schemaName, // Pass schema name for disambiguation
     );
-    return createActionResult(message);
+    if (result.success) {
+        return createActionResult(result.message);
+    }
+    return { error: result.message };
 }

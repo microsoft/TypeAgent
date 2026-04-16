@@ -1442,6 +1442,24 @@ describe("Grammar Rule Parser", () => {
                 testParamGrammarRules("test.agr", `<A> = /* never closed`),
             ).toThrow("Unterminated");
         });
+
+        it("throws on invalid per-alternate spacing value", () => {
+            expect(() =>
+                testParamGrammarRules(
+                    "test.agr",
+                    `<Rule> = hello | [spacing=never] world;`,
+                ),
+            ).toThrow("Invalid value");
+        });
+
+        it("throws on unknown per-alternate annotation key", () => {
+            expect(() =>
+                testParamGrammarRules(
+                    "test.agr",
+                    `<Rule> = hello | [unknown=auto] world;`,
+                ),
+            ).toThrow("Unknown rule annotation");
+        });
     });
 
     describe("Value Type Annotation", () => {
@@ -1804,16 +1822,16 @@ describe("Grammar Rule Parser", () => {
             );
             const def = result.definitions[0];
             expect(def.spacingMode).toBe("required");
-            expect(def.annotationAfterBracketComments).toEqual([
+            expect(def.spacingAnnotationComments?.afterBracket).toEqual([
                 { style: "block", text: "a" },
             ]);
-            expect(def.annotationAfterKeyComments).toEqual([
+            expect(def.spacingAnnotationComments?.afterKey).toEqual([
                 { style: "block", text: "b" },
             ]);
-            expect(def.annotationAfterEqualsComments).toEqual([
+            expect(def.spacingAnnotationComments?.afterEquals).toEqual([
                 { style: "block", text: "c" },
             ]);
-            expect(def.annotationAfterValueComments).toEqual([
+            expect(def.spacingAnnotationComments?.afterValue).toEqual([
                 { style: "block", text: "d" },
             ]);
         });

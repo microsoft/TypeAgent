@@ -82,6 +82,81 @@ describe("sqlite.vectorTable", () => {
         testTimeout,
     );
 
+    test(
+        "auto_id_integer",
+        async () => {
+            // Test that put() without an id auto-generates an integer id
+            const index = createVectorTable<number>(
+                db!,
+                "auto_id_integer",
+                "INTEGER",
+            );
+            const embeddings = generateRandomTestEmbeddings(embeddingLength, 3);
+
+            const id1 = await index.put(embeddings[0]);
+            const id2 = await index.put(embeddings[1]);
+            const id3 = await index.put(embeddings[2]);
+
+            // Should get distinct integer ids
+            expect(typeof id1).toBe("number");
+            expect(typeof id2).toBe("number");
+            expect(typeof id3).toBe("number");
+            expect(id1).not.toEqual(id2);
+            expect(id2).not.toEqual(id3);
+
+            // Should be able to retrieve by auto-generated id
+            const retrieved1 = await index.get(id1);
+            const retrieved2 = await index.get(id2);
+            expect(retrieved1).toBeDefined();
+            expect(retrieved2).toBeDefined();
+            expect(retrieved1).toEqual(embeddings[0]);
+            expect(retrieved2).toEqual(embeddings[1]);
+
+            // Should register as existing
+            expect(index.exists(id1)).toBe(true);
+            expect(index.exists(id2)).toBe(true);
+            expect(index.exists(9999999)).toBe(false);
+        },
+        testTimeout,
+    );
+
+    test(
+        "auto_id_string",
+        async () => {
+            // Test that put() without an id auto-generates a UUID string id
+            const index = createVectorTable<string>(
+                db!,
+                "auto_id_string",
+                "TEXT",
+            );
+            const embeddings = generateRandomTestEmbeddings(embeddingLength, 2);
+
+            const id1 = await index.put(embeddings[0]);
+            const id2 = await index.put(embeddings[1]);
+
+            // Should get distinct string (UUID) ids
+            expect(typeof id1).toBe("string");
+            expect(typeof id2).toBe("string");
+            expect(id1).not.toEqual(id2);
+            // UUID format: 8-4-4-4-12 hex chars
+            expect(id1).toMatch(
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+            );
+            expect(id2).toMatch(
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+            );
+
+            // Should be able to retrieve by auto-generated UUID
+            const retrieved1 = await index.get(id1);
+            expect(retrieved1).toBeDefined();
+            expect(retrieved1).toEqual(embeddings[0]);
+
+            expect(index.exists(id1)).toBe(true);
+            expect(index.exists("non-existent-uuid")).toBe(false);
+        },
+        testTimeout,
+    );
+
     testIf(
         "number_id_perf",
         () => false,

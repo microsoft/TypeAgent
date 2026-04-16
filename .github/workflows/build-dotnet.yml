@@ -41,6 +41,7 @@ jobs:
           filters: |
             dotnet:
               - "dotnet/**"
+              - "ts/packages/agents/desktop/src/**Schema.ts"
               - ".github/workflows/build-dotnet.yml"
       - name: Setup MSBuild
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
@@ -48,6 +49,25 @@ jobs:
       - name: Setup NuGet
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
         uses: NuGet/setup-nuget@v2.0.0
+      - name: Install pnpm
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ts/package.json
+      - name: Setup Node.js
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+          cache-dependency-path: ts/pnpm-lock.yaml
+      - name: Install TS dependencies and generate schemas
+        if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
+        working-directory: ts
+        run: |
+          pnpm install --frozen-lockfile --strict-peer-dependencies
+          pnpm run --filter @typeagent/action-schema-compiler... build
+          pnpm run -C packages/agents/desktop asc:all
       - name: Restore Packages (AutoShell)
         if: ${{ github.event_name != 'pull_request' || steps.filter.outputs.dotnet != 'false' }}
         working-directory: dotnet

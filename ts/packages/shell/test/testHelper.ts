@@ -249,7 +249,7 @@ export async function sendUserRequestFast(prompt: string, page: Page) {
     const locator: Locator = page.locator(`#${inputDivId}`);
     await locator.waitFor({ timeout: 5000, state: "visible" });
     await locator.fill(prompt, { timeout: 5000 });
-    page.keyboard.down("Enter");
+    await page.keyboard.down("Enter");
 }
 
 async function getAgentMessageLocators(page: Page): Promise<Locator[]> {

@@ -22,6 +22,7 @@ import {
 import type { ParsedCommandParams } from "@typeagent/agent-sdk";
 import { existsSync, readFileSync, readdirSync } from "fs";
 import { join, dirname, isAbsolute, resolve, extname } from "path";
+import { homedir } from "os";
 import { ScriptAnalyzer } from "./analysis/scriptAnalyzer.mjs";
 import { fileURLToPath } from "url";
 import { ScriptFlowStore } from "./store/scriptFlowStore.mjs";
@@ -97,6 +98,8 @@ async function executeFlowScript(
             maxExecutionTime: flow.sandbox.maxExecutionTime,
             networkAccess: flow.sandbox.networkAccess,
         },
+        // Use user's home directory as working directory for consistent path resolution
+        workingDirectory: homedir(),
     };
 
     const result = await executeScript(request);
@@ -375,6 +378,65 @@ async function handleScriptFlowAction(
             );
             return createActionResultFromTextDisplay(
                 `Updated script flow '${editFlowName}'`,
+            );
+        }
+
+        case "testScriptFlow": {
+            // Execute a script without registering it (test-then-register pattern)
+            const params = action.parameters as Record<string, unknown>;
+            const scriptBody = params.script as string;
+            if (!scriptBody) {
+                return createActionResultFromError(
+                    "Missing required parameter: script",
+                );
+            }
+
+            const allowedCmdlets = (params.allowedCmdlets as string[]) ?? [];
+            const allowedModules = (params.allowedModules as string[]) ?? [
+                "Microsoft.PowerShell.Management",
+            ];
+            const networkAccess = (params.networkAccess as boolean) ?? false;
+
+            // Parse test parameters if provided
+            let testParams: Record<string, unknown> = {};
+            const testParamsJson = params.testParameters as string | undefined;
+            if (testParamsJson) {
+                try {
+                    testParams = JSON.parse(testParamsJson);
+                } catch {
+                    return createActionResultFromError(
+                        `Invalid JSON in testParameters: ${testParamsJson}`,
+                    );
+                }
+            }
+
+            // Execute the script in sandbox without saving
+            const request: ScriptExecutionRequest = {
+                script: scriptBody,
+                parameters: testParams,
+                sandbox: {
+                    allowedCmdlets,
+                    allowedPaths: ["$env:USERPROFILE", "$PWD", "$env:TEMP"],
+                    allowedModules,
+                    maxExecutionTime: 30,
+                    networkAccess,
+                },
+                workingDirectory: homedir(),
+            };
+
+            const result = await executeScript(request);
+
+            if (result.success) {
+                const output = result.stdout.trim() || "(no output)";
+                return createActionResultFromTextDisplay(
+                    `Script test PASSED:\n${output}\n\nTo register this script, use createScriptFlow with the same script.`,
+                );
+            }
+
+            const errorMsg =
+                result.stderr || `Script exited with code ${result.exitCode}`;
+            return createActionResultFromError(
+                `Script test FAILED: ${errorMsg}\n\nFix the script and try testScriptFlow again.`,
             );
         }
 

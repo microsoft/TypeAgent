@@ -14,14 +14,11 @@ export function createClientIORpcServer(
     channel: RpcChannel,
 ) {
     const clientIOInvokeFunctions: ClientIOInvokeFunctions = {
-        askYesNo: async (...args) => {
-            return clientIO.askYesNo(...args);
+        question: async (...args) => {
+            return clientIO.question(...args);
         },
         proposeAction: async (...args) => {
             return clientIO.proposeAction(...args);
-        },
-        popupQuestion: async (...args) => {
-            return clientIO.popupQuestion(...args);
         },
         openLocalView: async (...args) => {
             return clientIO.openLocalView(...args);
@@ -44,6 +41,10 @@ export function createClientIORpcServer(
         setDynamicDisplay: (...args) => clientIO.setDynamicDisplay(...args),
         notify: (...args) => clientIO.notify(...args),
         requestChoice: (...args) => clientIO.requestChoice(...args),
+        requestInteraction: (...args) => clientIO.requestInteraction(...args),
+        interactionResolved: (...args) => clientIO.interactionResolved(...args),
+        interactionCancelled: (...args) =>
+            clientIO.interactionCancelled(...args),
         takeAction: (...args) => clientIO.takeAction(...args),
     };
     createRpc(

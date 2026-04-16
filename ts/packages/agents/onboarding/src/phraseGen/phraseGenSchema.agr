@@ -1,0 +1,66 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Grammar for Phase 2 — Phrase Generation actions.
+
+// generatePhrases - generate natural language phrases for all or specific actions
+<GeneratePhrases> = generate phrases for $(integrationName:wildcard) -> {
+    actionName: "generatePhrases",
+    parameters: {
+        integrationName
+    }
+}
+  | (create | produce | write) (sample | example | natural language)? phrases for $(integrationName:wildcard) -> {
+    actionName: "generatePhrases",
+    parameters: {
+        integrationName
+    }
+}
+  | generate $(phrasesPerAction:number) phrases (per action)? for $(integrationName:wildcard) -> {
+    actionName: "generatePhrases",
+    parameters: {
+        integrationName,
+        phrasesPerAction: phrasesPerAction
+    }
+};
+
+// addPhrase - manually add a phrase for a specific action
+<AddPhrase> = add phrase $(phrase:wildcard) for (action)? $(actionName:wildcard) in $(integrationName:wildcard) -> {
+    actionName: "addPhrase",
+    parameters: {
+        phrase,
+        actionName,
+        integrationName
+    }
+};
+
+// removePhrase - remove a phrase from an action
+<RemovePhrase> = remove phrase $(phrase:wildcard) from (action)? $(actionName:wildcard) in $(integrationName:wildcard) -> {
+    actionName: "removePhrase",
+    parameters: {
+        phrase,
+        actionName,
+        integrationName
+    }
+};
+
+// approvePhrases - lock in the phrase set
+<ApprovePhrases> = approve phrases for $(integrationName:wildcard) -> {
+    actionName: "approvePhrases",
+    parameters: {
+        integrationName
+    }
+}
+  | (confirm | finalize) (the)? $(integrationName:wildcard) phrases -> {
+    actionName: "approvePhrases",
+    parameters: {
+        integrationName
+    }
+};
+
+import { PhraseGenActions } from "./phraseGenSchema.ts";
+
+<Start> : PhraseGenActions = <GeneratePhrases>
+  | <AddPhrase>
+  | <RemovePhrase>
+  | <ApprovePhrases>;

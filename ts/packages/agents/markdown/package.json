@@ -42,7 +42,7 @@
     "@typeagent/agent-sdk": "workspace:*",
     "aiclient": "workspace:*",
     "debug": "^4.3.4",
-    "dompurify": "^3.3.2",
+    "dompurify": "^3.4.0",
     "express": "^4.22.0",
     "express-rate-limit": "^7.5.0",
     "katex": "^0.16.21",

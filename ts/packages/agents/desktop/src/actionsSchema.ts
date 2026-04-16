@@ -9,10 +9,12 @@ export type DesktopActions =
     | MinimizeWindowAction
     | SwitchToWindowAction
     | SetVolumeAction
+    | AdjustVolumeAction
     | RestoreVolumeAction
     | MuteVolumeAction
     | SetWallpaperAction
     | ChangeThemeModeAction
+    | ApplyThemeAction
     | ConnectWifiAction
     | DisconnectWifiAction
     | ToggleAirplaneModeAction
@@ -95,6 +97,15 @@ export type SetVolumeAction = {
     };
 };
 
+// Adjusts system volume up or down by a relative amount
+export type AdjustVolumeAction = {
+    actionName: "AdjustVolume";
+    parameters: {
+        direction: "up" | "down"; // whether to increase or decrease volume
+        amount?: number; // percentage to adjust by (default 10)
+    };
+};
+
 export type RestoreVolumeAction = {
     actionName: "RestoreVolume";
 };
@@ -119,6 +130,14 @@ export type ChangeThemeModeAction = {
     actionName: "SetThemeMode";
     parameters: {
         mode: "light" | "dark" | "toggle"; // the theme mode
+    };
+};
+
+// Applies a Windows theme by name or file path
+export type ApplyThemeAction = {
+    actionName: "ApplyTheme";
+    parameters: {
+        filePath: string; // The theme name or file path to apply (use "previous" to revert)
     };
 };
 
@@ -220,6 +239,7 @@ export type SetScreenResolutionAction = {
     parameters: {
         width: number; // width in pixels
         height: number; // height in pixels
+        refreshRate?: number; // refresh rate in Hz (e.g. 60, 144)
     };
 };
 

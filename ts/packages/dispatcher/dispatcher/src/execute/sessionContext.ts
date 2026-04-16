@@ -159,7 +159,8 @@ export function createSessionContext<T = unknown>(
             choices: string[] = ["Yes", "No"], // default choices
             defaultId?: number,
         ): Promise<number> {
-            return context.clientIO.popupQuestion(
+            return context.clientIO.question(
+                undefined,
                 message,
                 choices,
                 defaultId,
@@ -172,5 +173,7 @@ export function createSessionContext<T = unknown>(
     };
 
     (sessionContext as any).conversationManager = context.conversationManager;
+    // Expose CommandHandlerContext for agents that need to execute nested actions
+    (sessionContext as any)._systemContext = context;
     return sessionContext;
 }

@@ -11,7 +11,13 @@ import {
 import { existsSync } from "fs";
 import path from "path";
 import { NodeType, SchemaParser } from "@typeagent/action-schema";
-import { NameValue } from "typeagent";
+
+type SchemaEntry = {
+    name: string;
+    camelCaseName: string;
+    value: string;
+    id?: string;
+};
 
 // Create an instance of an Express application
 const app = express();
@@ -26,7 +32,7 @@ const cacheFile = "data/v5_sample.json";
 let agentCache: AgentCache;
 
 // load the schema
-let schemas: NameValue[] = [];
+let schemas: SchemaEntry[] = [];
 const schemaFile: string = `../../packages/agents/settings/src/settingsActionSchema.ts`;
 
 // Set up a route for the root URL ('/')
@@ -48,17 +54,11 @@ app.get("/", async (req: Request, res: Response) => {
             matches.forEach((construction) => {
                 // add the id of the schema (if it exists) to the action
                 construction.match.actions.forEach((a) => {
-                    // TODO: actionName should match interface name
-                    const schema = schemas.find((s) =>
-                        s.name.startsWith(a.action.actionName),
+                    const schema = schemas.find(
+                        (s) => s.camelCaseName === a.action.actionName,
                     );
                     if (schema) {
-                        // TODO: actually parse the schema instead of using regex
-                        const idMatch = schema.value.match(/id:\s*([^;]+);/);
-                        const idValue = idMatch
-                            ? idMatch[1].trim().replaceAll('"', "")
-                            : undefined;
-                        (a.action as any).id = idValue;
+                        (a.action as any).id = schema.id;
                     }
                 });
 
@@ -100,11 +100,11 @@ app.listen(port, async () => {
     }
 });
 
-function getActionSchema(filePath: string): NameValue[] {
+function getActionSchema(filePath: string): SchemaEntry[] {
     const schema = new SchemaParser();
     schema.loadSchema(filePath);
     const types = schema.actionTypeNames();
-    const schemas: NameValue[] = [];
+    const result: SchemaEntry[] = [];
     for (const type of types) {
         const node = schema.openActionNode(type);
         let schemaText = node?.symbol.value!;
@@ -113,7 +113,18 @@ function getActionSchema(filePath: string): NameValue[] {
                 schemaText += "\n\n" + subType.symbol.value;
             }
         }
-        schemas.push({ name: node?.symbol.name!, value: schemaText });
+        const idChild = node!.children.find((c) => c.symbol.name === "id");
+        const rawId = idChild?.symbol.value ?? "";
+        const idValue = rawId ? JSON.parse(rawId.trim()) : undefined;
+        const interfaceName = node?.symbol.name!;
+        const camelCaseName =
+            interfaceName.charAt(0).toLowerCase() + interfaceName.slice(1);
+        result.push({
+            name: interfaceName,
+            camelCaseName,
+            value: schemaText,
+            id: idValue,
+        });
     }
-    return schemas;
+    return result;
 }
