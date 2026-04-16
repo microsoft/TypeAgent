@@ -19,7 +19,6 @@
     "./helpers/config": "./dist/helpers/config.js",
     "./helpers/status": "./dist/helpers/status.js",
     "./helpers/command": "./dist/helpers/command.js",
-    "./helpers/completion": "./dist/helpers/completion.js",
     "./internal": "./dist/internal.js",
     "./explorer": "./dist/explorer.js"
   },
@@ -40,14 +39,14 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.92",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.101",
     "@azure/ai-agents": "^1.0.0-beta.3",
     "@azure/ai-projects": "^1.0.0-beta.8",
     "@azure/core-client": "^1.10.0",
     "@azure/core-rest-pipeline": "^1.22.0",
     "@azure/cosmos": "^4.2.1",
     "@azure/identity": "^4.10.0",
-    "@github/copilot-sdk": "0.2.0",
+    "@github/copilot-sdk": "^0.1.26",
     "@typeagent/action-schema": "workspace:*",
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-sdk": "workspace:*",
@@ -70,7 +69,6 @@
     "open": "^10.1.0",
     "proper-lockfile": "^4.1.2",
     "string-width": "^7.2.0",
-    "taskflow-typeagent": "workspace:*",
     "telemetry": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
