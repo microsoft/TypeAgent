@@ -86,7 +86,6 @@ export async function handleConversationCommand(
                 const result: SessionSwitchResult =
                     await api.sessionSwitch(sessionId);
                 if (result.success) {
-                    sink.clear();
                     sink.addSystemMessage(
                         `🔄 Switched to conversation "<b>${escapeHtml(result.name ?? sessionId)}</b>"`,
                     );

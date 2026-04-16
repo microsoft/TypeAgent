@@ -27,6 +27,7 @@ import {
     createLocalSessionBackend,
     createRemoteSessionBackend,
     registerSessionIpcHandlers,
+    replayDisplayHistory,
 } from "./sessionManager.js";
 import {
     ClientIO,
@@ -450,9 +451,46 @@ export function initializeInstance(
                 initialSessionId,
                 initialSessionName,
             );
-            shellWindow.sendSystemNotification(
-                `Connected to conversation '${initialSessionName}'`,
+
+            updateTitle(dispatcher);
+            setPendingUpdateCallback((version, background) => {
+                updateTitle(dispatcher);
+                if (background) {
+                    new Notification({
+                        title: `New version ${version.version} available`,
+                        body: `Restart to install the update.`,
+                    }).show();
+                }
+            });
+
+            // Notify the renderer process that the dispatcher is initialized
+            chatView.webContents.send("dispatcher-initialized");
+
+            // Give focus to the chat view once initialization is done.
+            chatView.webContents.focus();
+
+            // Clear the stale local HTML snapshot and replay the server's
+            // authoritative display history, just as switchSession does.
+            clientIO.clear({
+                requestId: "",
+                clientRequestId: "initial-connect",
+            });
+            await replayDisplayHistory(
+                dispatcher,
+                clientIO,
+                initialSessionName,
+                () => shellWindow.sendMarkHistory(),
             );
+
+            // send the agent greeting if it's turned on
+            if (shellSettings.user.agentGreeting) {
+                dispatcher.processCommand(
+                    `@greeting${mockGreetings ? " --mock" : ""}`,
+                    "agent-0",
+                    [],
+                );
+            }
+            return;
         }
 
         updateTitle(dispatcher);

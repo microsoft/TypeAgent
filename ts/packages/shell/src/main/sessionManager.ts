@@ -26,7 +26,7 @@ import { debugShell } from "./debug.js";
  * through the same IPC pipeline that live messages use, so the renderer
  * displays them identically without needing any special handling.
  */
-async function replayDisplayHistory(
+export async function replayDisplayHistory(
     dispatcher: Dispatcher,
     clientIO: ClientIO,
     sessionName?: string,

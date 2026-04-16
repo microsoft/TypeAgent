@@ -238,7 +238,7 @@ export async function createSessionManager(
 
     function getDefaultSessionId(): string | undefined {
         for (const [id, record] of sessions) {
-            if (record.name === "default") {
+            if (record.name.toLowerCase() === "default") {
                 return id;
             }
         }
