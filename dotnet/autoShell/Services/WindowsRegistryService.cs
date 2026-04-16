@@ -72,7 +72,7 @@ internal class WindowsRegistryService : IRegistryService
             {
                 cbSize = Marshal.SizeOf<APPBARDATA>(),
                 hWnd = taskbarHwnd,
-                lParam = (IntPtr)(autoHide ? ABS_AUTOHIDE : ABS_ALWAYSONTOP)
+                lParam = (IntPtr)(autoHide ? (ABS_AUTOHIDE | ABS_ALWAYSONTOP) : ABS_ALWAYSONTOP)
             };
             SHAppBarMessage(ABM_SETSTATE, ref abd);
         }

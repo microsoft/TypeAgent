@@ -22,7 +22,7 @@ internal class FileExplorerSettingsHandler : SettingsHandlerBase
         : base(registry)
     {
         AddRegistryToggleAction("ShowFileExtensions", new RegistryToggleConfig(
-            ExplorerAdvanced, "HideFileExt", "enable", OnValue: 0, OffValue: 1));
+            ExplorerAdvanced, "HideFileExt", "enable", OnValue: 0, OffValue: 1, NotifyShell: true));
         AddAction<ShowHiddenAndSystemFilesParams>("ShowHiddenAndSystemFiles", HandleShowHiddenAndSystemFiles);
     }
 

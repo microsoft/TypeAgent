@@ -26,14 +26,14 @@ internal class TaskbarSettingsHandler : SettingsHandlerBase
         : base(registry, process)
     {
 
-        AddRegistryToggleAction("DisplaySecondsInSystrayClock", new RegistryToggleConfig(ExplorerAdvanced, "ShowSecondsInSystemClock", "enable", 1, 0));
-        AddRegistryToggleAction("DisplayTaskbarOnAllMonitors", new RegistryToggleConfig(ExplorerAdvanced, "MMTaskbarEnabled", "enable", 1, 0));
-        AddRegistryToggleAction("ShowBadgesOnTaskbar", new RegistryToggleConfig(ExplorerAdvanced, "TaskbarBadges", "enableBadging", 1, 0));
-        AddRegistryToggleAction("TaskViewVisibility", new RegistryToggleConfig(ExplorerAdvanced, "ShowTaskViewButton", "visibility", 1, 0));
+        AddRegistryToggleAction("DisplaySecondsInSystrayClock", new RegistryToggleConfig(ExplorerAdvanced, "ShowSecondsInSystemClock", "enable", 1, 0, NotifyShell: true));
+        AddRegistryToggleAction("DisplayTaskbarOnAllMonitors", new RegistryToggleConfig(ExplorerAdvanced, "MMTaskbarEnabled", "enable", 1, 0, NotifyShell: true));
+        AddRegistryToggleAction("ShowBadgesOnTaskbar", new RegistryToggleConfig(ExplorerAdvanced, "TaskbarBadges", "enableBadging", 1, 0, NotifyShell: true));
+        AddRegistryToggleAction("TaskViewVisibility", new RegistryToggleConfig(ExplorerAdvanced, "ShowTaskViewButton", "visibility", 1, 0, NotifyShell: true));
         AddRegistryMapAction("TaskbarAlignment", new RegistryMapConfig(ExplorerAdvanced, "TaskbarAl", "alignment",
-            new Dictionary<string, object> { ["left"] = 0, ["center"] = 1 }, DefaultValue: 1));
+            new Dictionary<string, object> { ["left"] = 0, ["center"] = 1 }, DefaultValue: 1, NotifyShell: true));
         AddRegistryMapAction("ToggleWidgetsButtonVisibility", new RegistryMapConfig(ExplorerAdvanced, "TaskbarDa", "visibility",
-            new Dictionary<string, object> { ["show"] = 1 }, DefaultValue: 0));
+            new Dictionary<string, object> { ["show"] = 1 }, DefaultValue: 0, NotifyShell: true));
         AddAction<AutoHideTaskbarParams>("AutoHideTaskbar", HandleAutoHideTaskbar);
     }
 

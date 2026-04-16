@@ -71,7 +71,11 @@ internal partial class WindowsSystemParametersService : ISystemParametersService
         try
         {
             Marshal.StructureToPtr(fk, ptr, false);
-            SystemParametersInfo(SPI_GETFILTERKEYS, cbSize, ptr, 0);
+            if (!SystemParametersInfo(SPI_GETFILTERKEYS, cbSize, ptr, 0))
+            {
+                return false;
+            }
+
             fk = Marshal.PtrToStructure<FilterKeysNative>(ptr);
 
             if (enable)
@@ -103,7 +107,11 @@ internal partial class WindowsSystemParametersService : ISystemParametersService
         try
         {
             Marshal.StructureToPtr(sk, ptr, false);
-            SystemParametersInfo(SPI_GETSTICKYKEYS, cbSize, ptr, 0);
+            if (!SystemParametersInfo(SPI_GETSTICKYKEYS, cbSize, ptr, 0))
+            {
+                return false;
+            }
+
             sk = Marshal.PtrToStructure<StickyKeysNative>(ptr);
 
             if (enable)
@@ -126,14 +134,14 @@ internal partial class WindowsSystemParametersService : ISystemParametersService
 
     private const uint LOAD_LIBRARY_AS_DATAFILE = 0x00000002;
 
-    [LibraryImport(NativeDlls.Kernel32, SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    [LibraryImport(NativeDlls.Kernel32, EntryPoint = "LoadLibraryExW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     private static partial IntPtr LoadLibraryEx(string lpFileName, IntPtr hFile, uint dwFlags);
 
     [LibraryImport(NativeDlls.Kernel32, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool FreeLibrary(IntPtr hModule);
 
-    [LibraryImport(NativeDlls.User32, StringMarshalling = StringMarshalling.Utf16)]
+    [LibraryImport(NativeDlls.User32, EntryPoint = "LoadStringW", StringMarshalling = StringMarshalling.Utf16)]
     private static partial int LoadStringNative(IntPtr hInstance, uint uID, [Out] char[] lpBuffer, int nBufferMax);
 
     /// <inheritdoc/>
