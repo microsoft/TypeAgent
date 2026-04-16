@@ -67,7 +67,11 @@ async function main() {
 
     const portIdx = process.argv.indexOf("--port");
     const port =
-        portIdx !== -1 ? parseInt(process.argv[portIdx + 1], 10) : 8999;
+        portIdx !== -1
+            ? parseInt(process.argv[portIdx + 1], 10)
+            : process.env.AGENT_SERVER_PORT
+              ? parseInt(process.env.AGENT_SERVER_PORT, 10)
+              : 8999;
 
     const idleShutdownIdx = process.argv.indexOf("--idle-timeout");
     const idleShutdownMs =
