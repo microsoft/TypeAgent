@@ -174,6 +174,7 @@ async function initializeDispatcher(
                 }
             });
             // Find-or-create the default "Shell" session, matching CLI behavior.
+            // Case-insensitive match mirrors the server's getDefaultSessionId().
             const SHELL_SESSION_NAME = "Shell";
             const existing = await connection.listSessions(SHELL_SESSION_NAME);
             const match = existing.find(
@@ -185,17 +186,29 @@ async function initializeDispatcher(
                     ? match.sessionId
                     : (await connection.createSession(SHELL_SESSION_NAME))
                           .sessionId;
-            const session = await connection.joinSession(clientIO, {
-                sessionId: shellSessionId,
-            });
+            let session: Awaited<ReturnType<typeof connection.joinSession>>;
+            try {
+                session = await connection.joinSession(clientIO, {
+                    sessionId: shellSessionId,
+                });
+            } catch (e: any) {
+                // The session may have been deleted between listSessions and
+                // joinSession (race condition). Fall back to creating a fresh one.
+                debugShellInit(
+                    "joinSession failed for Shell session, creating new one:",
+                    e.message,
+                );
+                const fresh =
+                    await connection.createSession(SHELL_SESSION_NAME);
+                session = await connection.joinSession(clientIO, {
+                    sessionId: fresh.sessionId,
+                });
+            }
             newDispatcher = session.dispatcher;
             initialSessionId = session.sessionId;
             initialSessionName = session.name;
-
-            // Override close to close the connection
-            newDispatcher.close = async () => {
-                await connection!.close();
-            };
+            // Note: connection.close() is called by closeDispatcher() on
+            // shutdown, so no override here — it would double-close the WebSocket.
 
             debugShellInit(
                 "Connected to remote dispatcher",
@@ -275,6 +288,13 @@ async function initializeDispatcher(
             ipcMain.removeListener("dispatcher-rpc-call", onDispatcherRpcCall);
             dispatcherChannel.notifyDisconnected();
             await newDispatcher.close();
+            // In remote mode, newDispatcher.close() only calls leaveSession()
+            // after a session switch (the override set in rebindDispatcher's
+            // caller). The underlying WebSocket connection must be closed
+            // explicitly here so the process doesn't leak it on shutdown.
+            if (connection !== undefined) {
+                await connection.close();
+            }
             clientIOChannel.notifyDisconnected();
             ipcMain.removeListener("clientio-rpc-reply", onClientIORpcReply);
             browserControl.close();
@@ -288,11 +308,20 @@ async function initializeDispatcher(
 
         /**
          * Rebind the dispatcher object in-place after a session switch.
-         * The RPC server and processShellRequest closure both reference
-         * `dispatcher` and `newDispatcher`, so we must update both.
-         * We copy every enumerable property from the fresh dispatcher onto
-         * the existing `dispatcher` object (which the RPC server holds)
-         * while preserving our custom `processCommand` and `close` overrides.
+         *
+         * WHY IN-PLACE: The RPC server (createDispatcherRpcServer) captures a
+         * reference to `dispatcher` at startup and routes all renderer calls
+         * through it.  Replacing `dispatcher` with a new object would leave the
+         * RPC server pointing at the old, stale instance.  Instead we mutate the
+         * existing object so the RPC server always sees the current session's
+         * methods without needing to restart or be re-initialised.
+         *
+         * LIMITATION: Object.assign() only copies own, enumerable properties.
+         * If the Dispatcher interface ever gains non-enumerable or Symbol-keyed
+         * members, those won't be copied and the rebind will silently skip them.
+         * If the RPC server is ever changed to hold a copy of the dispatcher
+         * rather than a live reference, this pattern will break — update both
+         * together.
          */
         function rebindDispatcher(freshDispatcher: Dispatcher): void {
             newDispatcher = freshDispatcher;
@@ -432,6 +461,9 @@ export function initializeInstance(
             initialSessionId !== undefined &&
             initialSessionName !== undefined
         ) {
+            // Remove local handlers first — ipcMain.handle() throws if a
+            // channel already has a handler, and both operations are synchronous
+            // so there is no async gap between remove and re-register.
             cleanupSessionIpc();
             const remoteBackend = createRemoteSessionBackend(
                 connection,

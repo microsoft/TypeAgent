@@ -46,7 +46,7 @@ export async function replayDisplayHistory(
                 },
                 requestId: {
                     requestId: "",
-                    clientRequestId: `session-info-${ts}`,
+                    clientRequestId: `notification-session-info-${ts}`,
                 },
                 source: "session",
             });
@@ -67,7 +67,7 @@ export async function replayDisplayHistory(
         },
         requestId: {
             requestId: "",
-            clientRequestId: `session-history-start-${ts}`,
+            clientRequestId: `notification-session-history-start-${ts}`,
         },
         source: "session",
     });
@@ -112,7 +112,7 @@ export async function replayDisplayHistory(
         },
         requestId: {
             requestId: "",
-            clientRequestId: `session-history-end-${ts}`,
+            clientRequestId: `notification-session-history-end-${ts}`,
         },
         source: "session",
     });
@@ -126,7 +126,7 @@ export async function replayDisplayHistory(
             },
             requestId: {
                 requestId: "",
-                clientRequestId: `session-connected-${ts}`,
+                clientRequestId: `notification-session-connected-${ts}`,
             },
             source: "session",
         });
@@ -297,51 +297,17 @@ export function createRemoteSessionBackend(
             }
 
             const oldSessionId = currentSessionId;
+
+            // Phase 1: join new session. If this fails we haven't left the old
+            // one, so fall through to the catch and report failure cleanly.
+            let newSession: Awaited<ReturnType<typeof connection.joinSession>>;
             try {
-                // Join-before-leave: join new session first so that if it
-                // fails we haven't left the old one (no stranded state).
-                const newSession = await connection.joinSession(clientIO, {
+                newSession = await connection.joinSession(clientIO, {
                     sessionId,
                 });
-
-                // Override close so it doesn't close the shared WebSocket
-                newSession.dispatcher.close = async () => {
-                    await connection.leaveSession(newSession.sessionId);
-                };
-
-                await connection.leaveSession(oldSessionId);
-
-                currentSessionId = newSession.sessionId;
-                currentName = newSession.name;
-
-                // Notify the shell that the dispatcher has changed so it can
-                // rebind its command-processing pipeline to the new instance.
-                onDispatcherSwitch?.(newSession.dispatcher);
-
-                // Clear the renderer and replay the new session's display
-                // history through clientIO (same IPC path as live messages).
-                clientIO.clear({
-                    requestId: "",
-                    clientRequestId: "session-switch",
-                });
-                await replayDisplayHistory(
-                    newSession.dispatcher,
-                    clientIO,
-                    newSession.name,
-                    markHistoryFn,
-                );
-
-                sendSessionChanged(currentSessionId, currentName);
-
-                return {
-                    success: true,
-                    sessionId: currentSessionId,
-                    name: currentName,
-                };
             } catch (e: any) {
-                // Old session state is preserved on failure
                 debugShell(
-                    "Failed to switch session to %s: %s",
+                    "Failed to join session %s: %s",
                     sessionId,
                     e.message,
                 );
@@ -350,6 +316,62 @@ export function createRemoteSessionBackend(
                     error: e.message ?? String(e),
                 };
             }
+
+            // Override close so it doesn't close the shared WebSocket
+            newSession.dispatcher.close = async () => {
+                await connection.leaveSession(newSession.sessionId);
+            };
+
+            // Phase 2: commit the switch. We are now joined to the new session,
+            // so tracked state must be updated regardless of what happens next.
+            currentSessionId = newSession.sessionId;
+            currentName = newSession.name;
+
+            // Best-effort leave of the old session — a failure here does not
+            // undo the switch; the client is already on the new session.
+            try {
+                await connection.leaveSession(oldSessionId);
+            } catch (e: any) {
+                debugShell(
+                    "Failed to leave old session %s (best-effort, ignoring): %s",
+                    oldSessionId,
+                    e.message,
+                );
+            }
+
+            // Notify the shell that the dispatcher has changed so it can
+            // rebind its command-processing pipeline to the new instance.
+            onDispatcherSwitch?.(newSession.dispatcher);
+
+            // Clear the renderer and replay the new session's display
+            // history through clientIO (same IPC path as live messages).
+            clientIO.clear({
+                requestId: "",
+                clientRequestId: "session-switch",
+            });
+            try {
+                await replayDisplayHistory(
+                    newSession.dispatcher,
+                    clientIO,
+                    newSession.name,
+                    markHistoryFn,
+                );
+            } catch (e: any) {
+                // History replay is best-effort — the switch itself succeeded.
+                debugShell(
+                    "Failed to replay display history for session %s: %s",
+                    newSession.name,
+                    e.message,
+                );
+            }
+
+            sendSessionChanged(currentSessionId, currentName);
+
+            return {
+                success: true,
+                sessionId: currentSessionId,
+                name: currentName,
+            };
         },
 
         async renameSession(sessionId: string, newName: string): Promise<void> {

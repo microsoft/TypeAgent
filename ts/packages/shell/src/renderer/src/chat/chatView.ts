@@ -403,9 +403,10 @@ export class ChatView {
                 }
             }
 
-            // "system" is a sentinel requestId used by broadcastSystemMessage
-            // on the server.  Auto-create a notification group so these
-            // messages (e.g. client join/leave) are displayed.
+            // "system" is a reserved sentinel set by broadcastSystemMessage on
+            // the server (sharedDispatcher.ts).  It can never collide with a
+            // real UUID (randomUUID() produces RFC 4122 format).  Auto-create a
+            // notification group so join/leave messages are displayed.
             if (id === "system") {
                 const mgId = `notification-system-${this.notificationCount++}`;
                 const mg: MessageGroup = new MessageGroup(
