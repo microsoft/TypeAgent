@@ -478,6 +478,15 @@ Handles `@`-prefixed system commands:
 Each command has a `CommandDescriptor` that defines expected parameters,
 subcommands, and help text.
 
+The system agent also has sub-agents with LLM-translated action schemas:
+
+- **`system.config`** — Natural language configuration changes.
+- **`system.session`** — Natural language session management. Supports
+  five action types: `newSession`, `listSession`, `showSessionInfo`,
+  `switchSession`, and `deleteSession`. These let users say things like
+  "switch to my work conversation" or "delete the old project session"
+  instead of using `@session` commands directly.
+
 ### Dispatcher agent
 
 Handles meta-actions that the dispatcher itself fulfills:

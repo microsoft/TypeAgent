@@ -430,6 +430,10 @@ When connected to the agentServer:
 
 ---
 
+## Natural Language Session Management
+
+In addition to the `@session` commands and the RPC/CLI surface described above, users can manage sessions via natural language through the `system.session` sub-agent. The dispatcher translates requests like "switch to my work conversation", "create a new conversation called research", or "delete the old project session" into the corresponding session operations. See the [dispatcher README](../../packages/dispatcher/dispatcher/README.md#sessions) for the full list of supported phrases.
+
 ## Summary
 
 This design adds explicit session management to the agentServer without fundamentally restructuring its architecture. The core additions are:

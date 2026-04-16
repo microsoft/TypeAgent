@@ -119,6 +119,16 @@ There are other short cut commands to exercise specify part of the TypeAgent Dis
 
 ### Sessions
 
+Session management commands can also be invoked via natural language through the `system.session` agent. Examples:
+
+- "create a new conversation called research" → `@session new`
+- "switch to my work conversation" → `@session open <name>`
+- "delete the old project session" → `@session delete <name>`
+- "list my conversations" → `@session list`
+- "show session info" → `@session info`
+
+The dispatcher translates these requests into the corresponding `@session` commands automatically.
+
 TypeAgent dispatcher settings, such as translator, explainer, etc., are stored in sessions, and sessions can be persisted across activation on a per user basis and restored when the app restarts. Use `@session <args>` command to do run operations. Additionally data such as construction store are saved in the sessions as well by default unless an explicit path are provided. The last cache file used is preserved thru reload.
 
 For dispatcher configured to persist sessions (i.e. [CLI](../cli) and [shell](../shell)) the session settings and data are stored in `<home>/.typeagent/profiles/<profile>/sessions/<name>`. (`<home>` is the user profile directory. `~` in Linux, `%USERPROFILE%` in Windows. `<profile>` set for the enlistment, the mapping from enlistment to `<profile>` can be found in `<home>/.typeagent/global.json`).

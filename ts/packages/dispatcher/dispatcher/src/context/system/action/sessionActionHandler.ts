@@ -11,12 +11,14 @@ export async function executeSessionAction(
     context: ActionContext<CommandHandlerContext>,
 ) {
     switch (action.actionName) {
-        case "newSession":
+        case "newSession": {
+            const name = action.parameters.name;
             await processCommandNoLock(
-                `@session new ${action.parameters.name ?? ""}`,
+                name ? `@session new ${name}` : "@session new",
                 context.sessionContext.agentContext,
             );
             break;
+        }
         case "listSession":
             await processCommandNoLock(
                 "@session list",
@@ -43,7 +45,7 @@ export async function executeSessionAction(
             break;
         default:
             throw new Error(
-                `Invalid action name: ${(action as TypeAgentAction).actionName}`,
+                `Invalid action name: ${(action as { actionName: string }).actionName}`,
             );
     }
     return undefined;
