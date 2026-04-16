@@ -44,7 +44,7 @@ public class HandlerRegistrationTests
             new DisplaySettingsHandler(registryMock.Object, processMock.Object, brightnessMock.Object, loggerMock.Object),
             new PersonalizationSettingsHandler(registryMock.Object, processMock.Object),
             new MouseSettingsHandler(registryMock.Object, processMock.Object, systemParamsMock.Object, loggerMock.Object),
-            new AccessibilitySettingsHandler(registryMock.Object, processMock.Object),
+            new AccessibilitySettingsHandler(registryMock.Object, processMock.Object, systemParamsMock.Object),
             new PowerSettingsHandler(registryMock.Object, processMock.Object),
             new FileExplorerSettingsHandler(registryMock.Object),
             new PrivacySettingsHandler(registryMock.Object),

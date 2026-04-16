@@ -15,6 +15,7 @@ export type DesktopActions =
     | SetWallpaperAction
     | ChangeThemeModeAction
     | ApplyThemeAction
+    | ListThemesAction
     | ConnectWifiAction
     | DisconnectWifiAction
     | ToggleAirplaneModeAction
@@ -139,6 +140,12 @@ export type ApplyThemeAction = {
     parameters: {
         filePath: string; // The theme name or file path to apply (use "previous" to revert)
     };
+};
+
+// Lists all installed Windows themes
+export type ListThemesAction = {
+    actionName: "ListThemes";
+    parameters: {};
 };
 
 export type ConnectWifiAction = {

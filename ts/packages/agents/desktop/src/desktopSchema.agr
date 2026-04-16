@@ -90,6 +90,11 @@ import { DesktopActions } from "./actionsSchema.ts";
               | switch to dark (mode)? -> { actionName: "SetThemeMode", parameters: { mode: "dark" } }
               | switch to light (mode)? -> { actionName: "SetThemeMode", parameters: { mode: "light" } };
 
+// ===== List Themes =====
+<ListThemes> = list (my)? (desktop)? themes -> { actionName: "ListThemes", parameters: {} }
+               | show (available)? themes -> { actionName: "ListThemes", parameters: {} }
+               | what themes (do I have|are installed|are available)? -> { actionName: "ListThemes", parameters: {} };
+
 // ===== WiFi Control =====
 <WifiControl> = connect to $(ssid:wildcard) wifi -> { actionName: "ConnectWifi", parameters: { ssid } }
                 | connect to wifi $(ssid:wildcard) -> { actionName: "ConnectWifi", parameters: { ssid } }

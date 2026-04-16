@@ -5,6 +5,7 @@ using System.Text.Json;
 using autoShell.Logging;
 using autoShell.Services;
 using Moq;
+using static autoShell.Services.Interop.SpiConstants;
 
 namespace autoShell.Tests;
 
@@ -92,7 +93,7 @@ public class ActionDispatcherIntegrationTests
     {
         Dispatch("""{"actionName":"SetWallpaper","parameters":{"filePath":"C:\\wallpaper.jpg"}}""");
 
-        _systemParamsMock.Verify(s => s.SetParameter(0x0014, 0, @"C:\wallpaper.jpg", 3), Times.Once);
+        _systemParamsMock.Verify(s => s.SetParameter(SPI_SETDESKWALLPAPER, 0, @"C:\wallpaper.jpg", SPIF_UPDATEINIFILE_SENDCHANGE), Times.Once);
     }
 
     /// <summary>

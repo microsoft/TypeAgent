@@ -33,7 +33,8 @@ internal record RegistryToggleConfig(
     object OffValue,
     RegistryValueKind ValueKind = RegistryValueKind.DWord,
     bool UseLocalMachine = false,
-    string? DisplayName = null);
+    string? DisplayName = null,
+    string? BroadcastSetting = null);
 
 /// <summary>
 /// Configuration for a registry map action: reads a string parameter and maps it to a registry value.
@@ -141,6 +142,9 @@ internal abstract class SettingsHandlerBase : ActionHandlerBase
             {
                 Registry.SetValue(config.KeyPath, config.ValueName, value, config.ValueKind);
             }
+
+            Registry.BroadcastSettingChange(config.BroadcastSetting);
+            Registry.NotifyShellChange();
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or SecurityException or IOException)
         {
@@ -162,6 +166,8 @@ internal abstract class SettingsHandlerBase : ActionHandlerBase
         try
         {
             Registry.SetValue(config.KeyPath, config.ValueName, regValue, config.ValueKind);
+            Registry.BroadcastSettingChange();
+            Registry.NotifyShellChange();
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or SecurityException or IOException)
         {

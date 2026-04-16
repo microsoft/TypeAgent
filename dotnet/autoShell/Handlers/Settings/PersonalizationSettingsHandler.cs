@@ -22,9 +22,11 @@ internal class PersonalizationSettingsHandler : SettingsHandlerBase
     {
 
         AddRegistryToggleAction("ApplyColorToTitleBar", new RegistryToggleConfig(
-            @"Software\Microsoft\Windows\DWM", "ColorPrevalence", "enableColor", 1, 0));
+            @"Software\Microsoft\Windows\DWM", "ColorPrevalence", "enableColor", 1, 0,
+            BroadcastSetting: "ImmersiveColorSet"));
         AddRegistryToggleAction("EnableTransparency", new RegistryToggleConfig(
-            @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency", "enable", 1, 0));
+            @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency", "enable", 1, 0,
+            BroadcastSetting: "ImmersiveColorSet"));
         AddOpenSettingsAction("HighContrastTheme", new OpenSettingsConfig(
             "ms-settings:easeofaccess-highcontrast", "high contrast settings"));
         AddAction<SystemThemeModeParams>("SystemThemeMode", HandleSystemThemeMode);

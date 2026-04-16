@@ -6,7 +6,8 @@ export type DesktopDisplayActions =
     | AdjustColorTemperatureAction
     | DisplayScalingAction
     | AdjustScreenOrientationAction
-    | RotationLockAction;
+    | RotationLockAction
+    | DisplayResolutionAndAspectRatioAction;
 
 // Enables or disables blue light filter schedule (Night Light)
 export type EnableBlueLightFilterScheduleAction = {
@@ -47,4 +48,10 @@ export type RotationLockAction = {
     parameters: {
         enable?: boolean;
     };
+};
+
+// Opens display settings to adjust resolution and aspect ratio
+export type DisplayResolutionAndAspectRatioAction = {
+    actionName: "DisplayResolutionAndAspectRatio";
+    parameters: {};
 };
