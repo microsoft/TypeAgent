@@ -175,7 +175,7 @@ function createVideoPlaceHolder(
 
             if (status === "completed") {
                 console.log("✅ Video generation succeeded.");
-                const video_url = '${videoJob.endpoint.origin}/openai/v1/videos/${videoJob.id}/content?variant=video&authorization=' + encodeURIComponent("${videoJob.headers?.Authorization}");
+                const video_url = '${videoJob.endpoint.origin}/openai/v1/videos/${videoJob.id}/content?variant=video';
                 const videoResponse = await fetch(video_url, { headers: ${JSON.stringify(videoJob.headers)} });
                 if (videoResponse.ok) {
                     container.innerText = '';
@@ -198,7 +198,9 @@ function createVideoPlaceHolder(
                     container.innerText = "❌ Failed to retrieve video content.";
                 }
             } else {
-                container.innerHTML = "<div>❌ Video generation failed: " + (statusData.failure_reason ?? "") + "</div>";
+                const div = document.createElement('div');
+                div.textContent = "❌ Video generation failed: " + (statusData.failure_reason ?? "");
+                container.appendChild(div);
                 console.log(JSON.stringify(statusData, null, 2));
             }
         }

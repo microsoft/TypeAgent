@@ -78,6 +78,25 @@ export const webapi: ClientAPI = {
     continuousSpeechProcessing: async (_) => {
         throw new Error("Not implemented");
     },
+    sessionList: async () => {
+        // Not supported on mobile
+        return [];
+    },
+    sessionCreate: async (_name: string) => {
+        throw new Error("Session management not supported on mobile");
+    },
+    sessionSwitch: async (_sessionId: string) => {
+        throw new Error("Session management not supported on mobile");
+    },
+    sessionRename: async (_sessionId: string, _newName: string) => {
+        throw new Error("Session management not supported on mobile");
+    },
+    sessionDelete: async (_sessionId: string) => {
+        throw new Error("Session management not supported on mobile");
+    },
+    sessionGetCurrent: async () => {
+        return undefined;
+    },
 };
 
 const dispatcherChannel = createChannelAdapter((message: any) =>
