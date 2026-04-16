@@ -325,9 +325,7 @@ export async function applyFilterExpr(
                     // Check for year range (e.g. "1990 - 2000", produced by the
                     // tokenizer from input like "year:1990-2000")
                     const rangeMatch =
-                        filterExpr.constraintValue.match(
-                            /^(\d{4}) - (\d{4})$/,
-                        );
+                        filterExpr.constraintValue.match(/^(\d{4}) - (\d{4})$/);
                     for (const track of tracks) {
                         if (filterDiag) {
                             console.log(

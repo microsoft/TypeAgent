@@ -48,7 +48,9 @@ describe("IndexData.tokenStats", () => {
             completionTokens: completion,
             totalTokens: prompt + completion,
         };
-        expect(stats.totalTokens).toBe(stats.promptTokens + stats.completionTokens);
+        expect(stats.totalTokens).toBe(
+            stats.promptTokens + stats.completionTokens,
+        );
     });
 
     test("IndexData state transitions are type-safe", () => {

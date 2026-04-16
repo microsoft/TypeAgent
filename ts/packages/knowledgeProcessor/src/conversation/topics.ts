@@ -629,7 +629,10 @@ export async function createTopicIndexOnStorage<
                     await topicIndex.addUpdateSources(topicId, topic.sourceIds);
                 }
             } else {
-                topicId = await topicIndex.addUpdate(topic.value, topic.sourceIds);
+                topicId = await topicIndex.addUpdate(
+                    topic.value,
+                    topic.sourceIds,
+                );
             }
         }
 

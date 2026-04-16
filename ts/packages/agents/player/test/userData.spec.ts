@@ -29,7 +29,10 @@ describe("getUserDataCompletions — playlists", () => {
     test("returns empty array when playlist flag is false", () => {
         const data = emptyUserData();
         data.playlists = [
-            { id: "1", name: "Chill Mix" } as SpotifyApi.PlaylistObjectSimplified,
+            {
+                id: "1",
+                name: "Chill Mix",
+            } as SpotifyApi.PlaylistObjectSimplified,
         ];
         const result = getUserDataCompletions(data, false, false, false, false);
         expect(result).toHaveLength(0);
@@ -44,9 +47,18 @@ describe("getUserDataCompletions — playlists", () => {
     test("returns playlist names when playlist flag is true", () => {
         const data = emptyUserData();
         data.playlists = [
-            { id: "1", name: "Chill Mix" } as SpotifyApi.PlaylistObjectSimplified,
-            { id: "2", name: "Workout Beats" } as SpotifyApi.PlaylistObjectSimplified,
-            { id: "3", name: "Jazz Night" } as SpotifyApi.PlaylistObjectSimplified,
+            {
+                id: "1",
+                name: "Chill Mix",
+            } as SpotifyApi.PlaylistObjectSimplified,
+            {
+                id: "2",
+                name: "Workout Beats",
+            } as SpotifyApi.PlaylistObjectSimplified,
+            {
+                id: "3",
+                name: "Jazz Night",
+            } as SpotifyApi.PlaylistObjectSimplified,
         ];
         const result = getUserDataCompletions(data, false, false, false, true);
         expect(result).toEqual(["Chill Mix", "Workout Beats", "Jazz Night"]);
@@ -56,7 +68,10 @@ describe("getUserDataCompletions — playlists", () => {
         const data = emptyUserData();
         data.tracks.set("t1", makeItem("Song A", "2024-01-01T00:00:00Z"));
         data.playlists = [
-            { id: "p1", name: "My Playlist" } as SpotifyApi.PlaylistObjectSimplified,
+            {
+                id: "p1",
+                name: "My Playlist",
+            } as SpotifyApi.PlaylistObjectSimplified,
         ];
         const result = getUserDataCompletions(data, true, false, false, true);
         expect(result).toContain("Song A");
