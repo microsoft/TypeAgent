@@ -212,7 +212,6 @@ describe("@conversation new", () => {
         expect(ctx.connection.createSession).toHaveBeenCalledWith("MyChat");
         // switchSession called with the sessionId from createSession's return value
         expect(ctx.switchSession).toHaveBeenCalledWith("new-id");
-        expect(capturedLog()).toContain("Switched to conversation");
     });
 
     it("handles quoted name argument", async () => {
@@ -276,7 +275,6 @@ describe("@conversation switch", () => {
         await handleConversationCommand(ctx, "switch mychat");
 
         expect(ctx.switchSession).toHaveBeenCalledWith("target-id");
-        expect(capturedLog()).toContain("Switched to conversation");
     });
 
     it("prints error when multiple sessions match", async () => {

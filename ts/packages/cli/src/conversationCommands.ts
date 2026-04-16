@@ -94,7 +94,6 @@ async function handleNew(
     const switchNow = await promptYesNo(`Switch to '${name}' now?`);
     if (switchNow) {
         await ctx.switchSession(created.sessionId);
-        console.log(`Switched to conversation '${chalk.green(name)}'.`);
     }
 }
 
@@ -113,7 +112,7 @@ async function handleSwitch(
         return;
     }
     await ctx.switchSession(target.sessionId);
-    console.log(`Switched to conversation '${chalk.green(target.name)}'.`);
+}
 }
 
 async function handleList(
