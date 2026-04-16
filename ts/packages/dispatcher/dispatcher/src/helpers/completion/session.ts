@@ -137,6 +137,10 @@ export class PartialCompletionSession
     // Used to compute the cached completionState.
     private lastInput: string = "";
 
+    // The direction from the most recent update() or explicitHide() call.
+    // Used by async callbacks to reconcile with the latest user intent.
+    private lastDirection: CompletionDirection = "forward";
+
     // Cached completion state, recomputed at every mutation point.
     // Callers retrieve this via getCompletionState().
     private completionState: CompletionState | undefined = undefined;
@@ -224,6 +228,7 @@ export class PartialCompletionSession
         direction: CompletionDirection = "forward",
     ): void {
         this.lastInput = input;
+        this.lastDirection = direction;
         if (this.reuseSession(input, direction)) {
             return;
         }
@@ -252,6 +257,7 @@ export class PartialCompletionSession
         this.consumedSep = "";
         this.explicitCloseAnchor = undefined;
         this.lastInput = "";
+        this.lastDirection = "forward";
         this.completionState = undefined;
     }
 
@@ -269,6 +275,7 @@ export class PartialCompletionSession
     //      same anchor (startIndex unchanged), reopening is suppressed.
     public explicitHide(input: string, direction: CompletionDirection): void {
         this.lastInput = input;
+        this.lastDirection = direction;
         this.completionP = undefined; // cancel any in-flight fetch
 
         // IDLE — no session data, nothing to shift or refetch.
@@ -582,6 +589,29 @@ export class PartialCompletionSession
         return true;
     }
 
+    // After a fetch completes (success or error), check whether the user
+    // typed ahead or changed direction while the request was in flight.
+    // If so, try to service the latest input with the current session
+    // state (reuseSession).  Only issue a new fetch when the session
+    // cannot handle it AND the input/direction actually changed — this
+    // avoids infinite re-fetch loops when reuseSession legitimately
+    // returns false for the same input (e.g. C1 UNIQUE).
+    private reconcileTypeAhead(
+        fetchInput: string,
+        fetchDirection: CompletionDirection,
+    ): void {
+        const currentInput = this.lastInput;
+        const currentDirection = this.lastDirection;
+        if (!this.reuseSession(currentInput, currentDirection)) {
+            if (
+                currentInput !== fetchInput ||
+                currentDirection !== fetchDirection
+            ) {
+                this.startNewSession(currentInput, currentDirection);
+            }
+        }
+    }
+
     // Start a new completion session: issue backend request and process result.
     private startNewSession(
         input: string,
@@ -629,6 +659,7 @@ export class PartialCompletionSession
                         `Partial completion skipped: No completions for '${input}'`,
                     );
                     this.setPartitions([]);
+                    this.reconcileTypeAhead(input, direction);
                     return;
                 }
 
@@ -655,7 +686,9 @@ export class PartialCompletionSession
                 this.explicitCloseAnchor = undefined;
                 if (
                     explicitCloseAnchor !== undefined &&
-                    partial === explicitCloseAnchor
+                    partial === explicitCloseAnchor &&
+                    this.lastInput === input &&
+                    this.lastDirection === direction
                 ) {
                     debug(
                         `Partial completion explicit-hide: anchor unchanged ('${partial}'), suppressing reopen`,
@@ -663,9 +696,9 @@ export class PartialCompletionSession
                     return;
                 }
 
-                // Re-run update with captured input to show the menu (or defer
-                // if no items are visible yet).
-                this.reuseSession(input, direction);
+                // Use the latest input/direction — the user may have typed
+                // ahead while the fetch was in flight.
+                this.reconcileTypeAhead(input, direction);
             })
             .catch((e) => {
                 debugError(`Partial completion error: '${input}' ${e}`);
@@ -674,6 +707,7 @@ export class PartialCompletionSession
                 // re-fetch) while diverged input still triggers a new fetch.
                 this.completionP = undefined;
                 this.explicitCloseAnchor = undefined;
+                this.reconcileTypeAhead(input, direction);
             });
     }
 }
