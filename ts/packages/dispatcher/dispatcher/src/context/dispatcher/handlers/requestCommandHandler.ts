@@ -470,7 +470,11 @@ export class RequestCommandHandler implements CommandHandler {
                 // Error-triggered reasoning: if an action failed and at least one
                 // schema in the request opts in via errorReasoning: true, give Claude
                 // a second chance using the same reasoning loop as UnknownAction.
-                if (!systemContext.noReasoning && (execResult !== undefined || execResult?.fallbackToReasoning)) {
+                if (
+                    !systemContext.noReasoning &&
+                    (execResult !== undefined ||
+                        execResult?.fallbackToReasoning)
+                ) {
                     const needsErrorReasoning = requestAction.actions.some(
                         ({ action }) => {
                             try {

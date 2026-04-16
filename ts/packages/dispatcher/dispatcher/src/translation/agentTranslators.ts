@@ -307,9 +307,7 @@ function buildInjectedSchemaNameMap(
     actionConfigs: ActionConfig[],
     provider: ActionConfigProvider,
 ): Map<string, string> {
-    const primarySchemaNames = new Set(
-        actionConfigs.map((c) => c.schemaName),
-    );
+    const primarySchemaNames = new Set(actionConfigs.map((c) => c.schemaName));
     const map = new Map<string, string>();
     for (const config of provider.getActionConfigs()) {
         if (!config.injected || primarySchemaNames.has(config.schemaName)) {

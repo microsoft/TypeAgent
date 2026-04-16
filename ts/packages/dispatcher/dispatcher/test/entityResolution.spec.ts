@@ -4,9 +4,7 @@
 import { resolveEntityPlaceholders } from "../src/execute/pendingActions.js";
 import { PromptEntity } from "agent-cache";
 
-function makeMap(
-    entries: Array<[string, string]>,
-): Map<string, PromptEntity> {
+function makeMap(entries: Array<[string, string]>): Map<string, PromptEntity> {
     return new Map(
         entries.map(([key, name]) => [
             key,
@@ -63,12 +61,12 @@ describe("resolveEntityPlaceholders", () => {
     it("throws when a placeholder index is not in the map", () => {
         expect(() =>
             resolveEntityPlaceholders("${entity-99}[Revenue]", map),
-        ).toThrow('Entity reference not found: ${entity-99}');
+        ).toThrow("Entity reference not found: ${entity-99}");
     });
 
     it("throws when the map is undefined", () => {
         expect(() =>
             resolveEntityPlaceholders("${entity-0}", undefined),
-        ).toThrow('Entity reference not found: ${entity-0}');
+        ).toThrow("Entity reference not found: ${entity-0}");
     });
 });

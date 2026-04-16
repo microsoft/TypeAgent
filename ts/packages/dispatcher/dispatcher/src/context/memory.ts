@@ -144,7 +144,9 @@ export function addResultToMemory(
                     {
                         text: message,
                         // knowledge-processor might modify the entities. clone it so it doesn't impact other usage.
-                        knowledge: structuredClone(newEntities) as conversation.ConcreteEntity[],
+                        knowledge: structuredClone(
+                            newEntities,
+                        ) as conversation.ConcreteEntity[],
                         timestamp: new Date(),
                     },
                     false,

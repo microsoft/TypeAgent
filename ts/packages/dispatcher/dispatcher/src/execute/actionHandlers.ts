@@ -396,7 +396,10 @@ export async function executeActions(
         );
 
         // add the action result to memory whether it has error or not.
-        if (systemContext.actionResultEntityStorage || systemContext.actionResultKnowledgeExtraction) {
+        if (
+            systemContext.actionResultEntityStorage ||
+            systemContext.actionResultKnowledgeExtraction
+        ) {
             addActionResultToMemory(
                 systemContext,
                 executableAction,

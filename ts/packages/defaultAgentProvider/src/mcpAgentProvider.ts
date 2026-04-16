@@ -71,8 +71,7 @@ function isPortOccupied(url: string): Promise<boolean> {
         try {
             const parsed = new URL(url);
             const port = parseInt(
-                parsed.port ||
-                    (parsed.protocol === "https:" ? "443" : "80"),
+                parsed.port || (parsed.protocol === "https:" ? "443" : "80"),
             );
             const socket = net.createConnection(port, parsed.hostname);
             socket.once("connect", () => {
@@ -102,7 +101,9 @@ function launchHttpServer(
         const timeout = setTimeout(() => {
             if (!started) {
                 proc.kill();
-                reject(new Error(`HTTP MCP server failed to start within 180s`));
+                reject(
+                    new Error(`HTTP MCP server failed to start within 180s`),
+                );
             }
         }, 180000);
         const onData = (data: Buffer) => {
@@ -124,7 +125,9 @@ function launchHttpServer(
             clearTimeout(timeout);
             if (!started) {
                 reject(
-                    new Error(`HTTP MCP server exited with code ${code} before starting`),
+                    new Error(
+                        `HTTP MCP server exited with code ${code} before starting`,
+                    ),
                 );
             }
         });
@@ -279,9 +282,7 @@ function createMcpAppAgentRecord(
             }
             const transportUrl =
                 info.serverUrl ?? info.serverScript ?? "(stdio)";
-            debug(
-                `[${appAgentName}] connecting transport to ${transportUrl}`,
-            );
+            debug(`[${appAgentName}] connecting transport to ${transportUrl}`);
             transport = createMcpAppAgentTransport(
                 appAgentName,
                 info,

@@ -222,12 +222,30 @@ export class ConsoleWriter {
             let value = record[key];
             let strValues = stringifyValue ? stringifyValue(value) : value;
             if (Array.isArray(strValues) && strValues.length > 0) {
-                this.writeNameValue(key, strValues[0], maxLength, indent, colorName);
+                this.writeNameValue(
+                    key,
+                    strValues[0],
+                    maxLength,
+                    indent,
+                    colorName,
+                );
                 for (let i = 1; i < strValues.length; ++i) {
-                    this.writeNameValue("", strValues[i], maxLength, indent, colorName);
+                    this.writeNameValue(
+                        "",
+                        strValues[i],
+                        maxLength,
+                        indent,
+                        colorName,
+                    );
                 }
             } else {
-                this.writeNameValue(key, strValues, maxLength, indent, colorName);
+                this.writeNameValue(
+                    key,
+                    strValues,
+                    maxLength,
+                    indent,
+                    colorName,
+                );
             }
         }
         return maxLength;

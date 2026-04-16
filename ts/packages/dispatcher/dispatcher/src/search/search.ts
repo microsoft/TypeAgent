@@ -132,7 +132,10 @@ export async function lookupAndAnswer(
             const entities = termFilterEntities(
                 lookupAction.parameters.conversationLookupFilters,
             );
-            return createActionResultNoDisplay(historyText.join("\n"), entities);
+            return createActionResultNoDisplay(
+                historyText.join("\n"),
+                entities,
+            );
         }
         default:
             throw new Error(`Unknown lookup source: ${source}`);
