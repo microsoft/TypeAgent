@@ -112,6 +112,7 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/agents/calendar/src/calendarActionHandlerV3.ts` | 1120 | Implement sophisticated date parsing | Medium | High | Local | Fix | No |
 | `ts/packages/agents/calendar/src/calendarActionHandlerV3.ts` | 1126 | Implement sophisticated time parsing | Medium | High | Local | Fix | No |
 | `ts/packages/agents/desktop/src/connector.ts` | 127 | add shared agent storage or known storage location (requires permissions, trusted agents, etc.) | High | Low | Cross-cutting | No Fix | Yes |
+| `ts/packages/agents/desktop/src/programNameIndex.ts` | 96 | Retry with back-off for 429 responses | Low | High | Local | Fix | No |
 | `ts/packages/agents/greeting/src/greetingCommandHandler.ts` | 292 | personalize list based on user preferences | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/agents/list/src/listActionHandler.ts` | 386 | formalize the schema for activityContext | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/agents/montage/src/agent/montageActionHandler.ts` | 187 | tune? | Medium | Medium | Component | No Fix | Yes |

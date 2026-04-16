@@ -54,13 +54,15 @@ export function createProgramNameIndex(
     let programEmbeddings: Record<string, NormalizedEmbedding> =
         initialEmbeddings ?? {};
 
-    const embeddingModel: TextEmbeddingModel = modelOverride ?? (() => {
-        const aiSettings = openai.apiSettingsFromEnv(
-            openai.ModelType.Embedding,
-            vals,
-        );
-        return openai.createEmbeddingModel(aiSettings);
-    })();
+    const embeddingModel: TextEmbeddingModel =
+        modelOverride ??
+        (() => {
+            const aiSettings = openai.apiSettingsFromEnv(
+                openai.ModelType.Embedding,
+                vals,
+            );
+            return openai.createEmbeddingModel(aiSettings);
+        })();
 
     return {
         addOrUpdate,
