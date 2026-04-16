@@ -394,8 +394,20 @@ export async function createSessionManager(
                 throw new Error(`Session not found: ${sessionId}`);
             }
             if (record.sharedDispatcher === undefined) {
+                debugSession(
+                    `leaveSession: dispatcher not active for session "${record.name}" (${sessionId}), ignoring connectionId ${connectionId}`,
+                );
                 return; // Session not active
             }
+
+            // Notify remaining clients before this client leaves
+            if (record.sharedDispatcher.clientCount > 1) {
+                record.sharedDispatcher.broadcastSystemMessage(
+                    `[A client has left this conversation. You remain connected to '${record.name}'.]`,
+                    connectionId,
+                );
+            }
+
             await record.sharedDispatcher.leave(connectionId);
             debugSession(
                 `Client ${connectionId} left session "${record.name}" (${sessionId}), clients: ${record.sharedDispatcher.clientCount}`,
