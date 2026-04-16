@@ -13,6 +13,9 @@ import {
 import type { DisplayLogEntry } from "./displayLogEntry.js";
 import type { PendingInteractionResponse } from "./pendingInteraction.js";
 
+export const DispatcherName = "dispatcher";
+export const DispatcherEmoji = "🤖";
+
 /**
  * Identifies a command request across the dispatcher and all connected clients.
  *
