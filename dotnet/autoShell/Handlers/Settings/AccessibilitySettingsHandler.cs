@@ -1,100 +1,42 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System.Collections.Generic;
+using autoShell.Handlers.Generated;
 using autoShell.Services;
 using Microsoft.Win32;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers.Settings;
 
 /// <summary>
 /// Handles accessibility settings: filter keys, magnifier, narrator, sticky keys, and mono audio.
 /// </summary>
-internal class AccessibilitySettingsHandler : ICommandHandler
+internal class AccessibilitySettingsHandler : SettingsHandlerBase
 {
-    private readonly IRegistryService _registry;
     private readonly IProcessService _process;
 
+    /// <summary>
+    /// Registers registered actions for mono audio, filter keys, and sticky keys.
+    /// Magnifier and Narrator require process start/kill and are handled as specialized actions.
+    /// </summary>
     public AccessibilitySettingsHandler(IRegistryService registry, IProcessService process)
+        : base(registry, process)
     {
-        _registry = registry;
         _process = process;
+
+        AddRegistryToggleAction("MonoAudioToggle", new RegistryToggleConfig(
+            @"Software\Microsoft\Multimedia\Audio", "AccessibilityMonoMixState", "enable", 1, 0));
+        AddRegistryToggleAction("EnableFilterKeysAction", new RegistryToggleConfig(
+            @"Control Panel\Accessibility\Keyboard Response", "Flags", "enable",
+            OnValue: "2", OffValue: "126", ValueKind: RegistryValueKind.String, DisplayName: "Filter Keys"));
+        AddRegistryToggleAction("EnableStickyKeys", new RegistryToggleConfig(
+            @"Control Panel\Accessibility\StickyKeys", "Flags", "enable",
+            OnValue: "510", OffValue: "506", ValueKind: RegistryValueKind.String, DisplayName: "Sticky Keys"));
+        AddAction<EnableMagnifierParams>("EnableMagnifier", p => HandleToggleProcess(p.Enable ?? true, "magnify.exe", "Magnify", "Magnifier"));
+        AddAction<EnableNarratorActionParams>("EnableNarratorAction", p => HandleToggleProcess(p.Enable ?? true, "narrator.exe", "Narrator", "Narrator"));
     }
 
-    /// <inheritdoc/>
-    public IEnumerable<string> SupportedCommands { get; } =
-    [
-        "EnableFilterKeysAction",
-        "EnableMagnifier",
-        "EnableNarratorAction",
-        "EnableStickyKeys",
-        "MonoAudioToggle",
-    ];
-
-    /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    private ActionResult HandleToggleProcess(bool enable, string exeName, string processName, string displayName)
     {
-        var param = JObject.Parse(value);
-
-        switch (key)
-        {
-            case "EnableFilterKeysAction":
-                HandleFilterKeys(param);
-                break;
-
-            case "EnableMagnifier":
-                HandleToggleProcess(param, "magnify.exe", "Magnify");
-                break;
-
-            case "EnableNarratorAction":
-                HandleToggleProcess(param, "narrator.exe", "Narrator");
-                break;
-
-            case "EnableStickyKeys":
-                HandleStickyKeys(param);
-                break;
-
-            case "MonoAudioToggle":
-                HandleMonoAudio(param);
-                break;
-        }
-    }
-
-    private void HandleFilterKeys(JObject param)
-    {
-        bool enable = param.Value<bool?>("enable") ?? true;
-        _registry.SetValue(
-            @"Control Panel\Accessibility\Keyboard Response",
-            "Flags",
-            enable ? "2" : "126",
-            RegistryValueKind.String);
-    }
-
-    private void HandleStickyKeys(JObject param)
-    {
-        bool enable = param.Value<bool?>("enable") ?? true;
-        _registry.SetValue(
-            @"Control Panel\Accessibility\StickyKeys",
-            "Flags",
-            enable ? "510" : "506",
-            RegistryValueKind.String);
-    }
-
-    private void HandleMonoAudio(JObject param)
-    {
-        bool enable = param.Value<bool?>("enable") ?? true;
-        _registry.SetValue(
-            @"Software\Microsoft\Multimedia\Audio",
-            "AccessibilityMonoMixState",
-            enable ? 1 : 0,
-            RegistryValueKind.DWord);
-    }
-
-    private void HandleToggleProcess(JObject param, string exeName, string processName)
-    {
-        bool enable = param.Value<bool?>("enable") ?? true;
-
         if (enable)
         {
             _process.Start(new System.Diagnostics.ProcessStartInfo { FileName = exeName });
@@ -106,5 +48,7 @@ internal class AccessibilitySettingsHandler : ICommandHandler
                 p.Kill();
             }
         }
+
+        return ActionResult.Ok($"{displayName} {(enable ? "enabled" : "disabled")}");
     }
 }

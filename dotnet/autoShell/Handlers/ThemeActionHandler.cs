@@ -5,11 +5,11 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text.Json;
+using autoShell.Handlers.Generated;
 using autoShell.Services;
 using autoShell.Services.Interop;
 using Microsoft.Win32;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers;
 
@@ -18,7 +18,7 @@ namespace autoShell.Handlers;
 /// Contains all Windows theme management logic including discovery, application,
 /// and light/dark mode toggling.
 /// </summary>
-internal partial class ThemeCommandHandler : ICommandHandler
+internal partial class ThemeActionHandler : ActionHandlerBase
 {
     #region P/Invoke
 
@@ -46,46 +46,47 @@ internal partial class ThemeCommandHandler : ICommandHandler
     private Dictionary<string, string> _themeDictionary;
     private Dictionary<string, string> _themeDisplayNameDictionary;
 
-    public ThemeCommandHandler(IRegistryService registry, IProcessService process, ISystemParametersService systemParams)
+    public ThemeActionHandler(IRegistryService registry, IProcessService process, ISystemParametersService systemParams)
     {
         _registry = registry;
         _process = process;
         _systemParams = systemParams;
 
         LoadThemes();
+
+        AddAction<ApplyThemeParams>("ApplyTheme", HandleApplyTheme);
+        AddAction("ListThemes", HandleListThemes);
+        AddAction<SetThemeModeParams>("SetThemeMode", HandleSetThemeModeCommand);
+        AddAction<SetWallpaperParams>("SetWallpaper", HandleSetWallpaper);
     }
 
-    /// <inheritdoc/>
-    public IEnumerable<string> SupportedCommands { get; } =
-    [
-        "ApplyTheme",
-        "ListThemes",
-        "SetThemeMode",
-        "SetWallpaper",
-    ];
-
-    /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    private ActionResult HandleApplyTheme(ApplyThemeParams p)
     {
-        switch (key)
-        {
-            case "ApplyTheme":
-                ApplyTheme(value);
-                break;
+        string themeName = p.FilePath;
+        bool success = ApplyTheme(themeName);
+        return success
+            ? ActionResult.Ok($"Applied theme '{themeName}'")
+            : ActionResult.Fail($"Failed to apply theme '{themeName}'");
+    }
 
-            case "ListThemes":
-                var themes = GetInstalledThemes();
-                Console.WriteLine(JsonConvert.SerializeObject(themes));
-                break;
+    private ActionResult HandleListThemes(JsonElement parameters)
+    {
+        var themes = GetInstalledThemes();
+        return ActionResult.Ok("Listed themes", JsonSerializer.SerializeToElement(themes));
+    }
 
-            case "SetThemeMode":
-                HandleSetThemeMode(value);
-                break;
+    private ActionResult HandleSetThemeModeCommand(SetThemeModeParams p)
+    {
+        string mode = p.Mode;
+        HandleSetThemeMode(mode);
+        return ActionResult.Ok($"Theme mode set to '{mode}'");
+    }
 
-            case "SetWallpaper":
-                _systemParams.SetParameter(SPI_SETDESKWALLPAPER, 0, value, SPIF_UPDATEINIFILE_SENDCHANGE);
-                break;
-        }
+    private ActionResult HandleSetWallpaper(SetWallpaperParams p)
+    {
+        string filePath = p.FilePath;
+        _systemParams.SetParameter(SPI_SETDESKWALLPAPER, 0, filePath, SPIF_UPDATEINIFILE_SENDCHANGE);
+        return ActionResult.Ok($"Wallpaper set to '{filePath}'");
     }
 
     #region Theme Management
@@ -245,6 +246,11 @@ internal partial class ThemeCommandHandler : ICommandHandler
     /// </summary>
     private void HandleSetThemeMode(string value)
     {
+        if (string.IsNullOrEmpty(value))
+        {
+            return;
+        }
+
         if (value.Equals("toggle", StringComparison.OrdinalIgnoreCase))
         {
             ToggleLightDarkMode();

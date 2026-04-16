@@ -1,24 +1,23 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.Json;
 using autoShell.Handlers;
 using autoShell.Logging;
 using autoShell.Services;
 using Moq;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Tests;
 
-public class NetworkCommandHandlerTests
+public class NetworkActionHandlerTests
 {
     private readonly Mock<INetworkService> _networkMock = new();
-    private readonly Mock<IProcessService> _processMock = new();
     private readonly Mock<ILogger> _loggerMock = new();
-    private readonly NetworkCommandHandler _handler;
+    private readonly NetworkActionHandler _handler;
 
-    public NetworkCommandHandlerTests()
+    public NetworkActionHandlerTests()
     {
-        _handler = new NetworkCommandHandler(_networkMock.Object, _processMock.Object, _loggerMock.Object);
+        _handler = new NetworkActionHandler(_networkMock.Object, new Mock<IProcessService>().Object, _loggerMock.Object);
     }
 
     // --- ConnectWifi ---
@@ -29,8 +28,8 @@ public class NetworkCommandHandlerTests
     [Fact]
     public void ConnectWifi_WithSsidAndPassword_CallsService()
     {
-        var json = JToken.Parse("""{"ssid":"TestNetwork","password":"pass123"}""");
-        _handler.Handle("ConnectWifi", json.ToString(), json);
+        var json = JsonDocument.Parse("""{"ssid":"TestNetwork","password":"pass123"}""").RootElement;
+        _handler.Handle("ConnectWifi", json);
 
         _networkMock.Verify(n => n.ConnectToWifi("TestNetwork", "pass123"), Times.Once);
     }
@@ -41,10 +40,25 @@ public class NetworkCommandHandlerTests
     [Fact]
     public void ConnectWifi_WithoutPassword_CallsServiceWithEmptyPassword()
     {
-        var json = JToken.Parse("""{"ssid":"OpenNetwork"}""");
-        _handler.Handle("ConnectWifi", json.ToString(), json);
+        var json = JsonDocument.Parse("""{"ssid":"OpenNetwork"}""").RootElement;
+        _handler.Handle("ConnectWifi", json);
 
         _networkMock.Verify(n => n.ConnectToWifi("OpenNetwork", ""), Times.Once);
+    }
+
+    /// <summary>
+    /// Verifies that ConnectWifi without an ssid returns a failure.
+    /// The schema defines ssid as required, so the LLM always sends it.
+    /// When missing, the typed parameter defaults to an empty string which is rejected.
+    /// </summary>
+    [Fact]
+    public void ConnectWifi_WithoutSsid_ReturnsFailure()
+    {
+        var json = JsonDocument.Parse("""{"password":"pass123"}""").RootElement;
+        var result = _handler.Handle("ConnectWifi", json);
+
+        Assert.False(result.Success);
+        _networkMock.Verify(n => n.ConnectToWifi(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
     }
 
     // --- DisconnectWifi ---
@@ -55,8 +69,8 @@ public class NetworkCommandHandlerTests
     [Fact]
     public void DisconnectWifi_CallsService()
     {
-        var json = JToken.Parse("{}");
-        _handler.Handle("DisconnectWifi", json.ToString(), json);
+        var json = JsonDocument.Parse("{}").RootElement;
+        _handler.Handle("DisconnectWifi", json);
 
         _networkMock.Verify(n => n.DisconnectFromWifi(), Times.Once);
     }
@@ -71,8 +85,8 @@ public class NetworkCommandHandlerTests
     {
         _networkMock.Setup(n => n.ListWifiNetworks()).Returns("[]");
 
-        var json = JToken.Parse("{}");
-        _handler.Handle("ListWifiNetworks", json.ToString(), json);
+        var json = JsonDocument.Parse("{}").RootElement;
+        _handler.Handle("ListWifiNetworks", json);
 
         _networkMock.Verify(n => n.ListWifiNetworks(), Times.Once);
     }
@@ -83,12 +97,12 @@ public class NetworkCommandHandlerTests
     /// Verifies that valid boolean values are forwarded to <see cref="INetworkService.SetAirplaneMode"/>.
     /// </summary>
     [Theory]
-    [InlineData("true", true)]
-    [InlineData("false", false)]
-    public void ToggleAirplaneMode_ValidBool_CallsService(string input, bool expected)
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ToggleAirplaneMode_ValidBool_CallsService(bool expected)
     {
-        var json = JToken.Parse(input);
-        _handler.Handle("ToggleAirplaneMode", input, json);
+        var json = JsonDocument.Parse($$"""{"enable":{{expected.ToString().ToLowerInvariant()}}}""").RootElement;
+        _handler.Handle("ToggleAirplaneMode", json);
 
         _networkMock.Verify(n => n.SetAirplaneMode(expected), Times.Once);
     }
@@ -101,8 +115,8 @@ public class NetworkCommandHandlerTests
     [Fact]
     public void BluetoothToggle_Enable_CallsToggleBluetooth()
     {
-        var json = JToken.Parse("""{"enableBluetooth":true}""");
-        _handler.Handle("BluetoothToggle", json.ToString(), json);
+        var json = JsonDocument.Parse("""{"enableBluetooth":true}""").RootElement;
+        _handler.Handle("BluetoothToggle", json);
 
         _networkMock.Verify(n => n.ToggleBluetooth(true), Times.Once);
     }
@@ -113,8 +127,8 @@ public class NetworkCommandHandlerTests
     [Fact]
     public void BluetoothToggle_DefaultsToTrue()
     {
-        var json = JToken.Parse("{}");
-        _handler.Handle("BluetoothToggle", json.ToString(), json);
+        var json = JsonDocument.Parse("{}").RootElement;
+        _handler.Handle("BluetoothToggle", json);
 
         _networkMock.Verify(n => n.ToggleBluetooth(true), Times.Once);
     }
@@ -127,8 +141,8 @@ public class NetworkCommandHandlerTests
     [Fact]
     public void EnableWifi_Enable_CallsService()
     {
-        var json = JToken.Parse("""{"enable":true}""");
-        _handler.Handle("EnableWifi", json.ToString(), json);
+        var json = JsonDocument.Parse("""{"enable":true}""").RootElement;
+        _handler.Handle("EnableWifi", json);
 
         _networkMock.Verify(n => n.EnableWifi(true), Times.Once);
     }
@@ -139,22 +153,9 @@ public class NetworkCommandHandlerTests
     [Fact]
     public void EnableWifi_Disable_CallsService()
     {
-        var json = JToken.Parse("""{"enable":false}""");
-        _handler.Handle("EnableWifi", json.ToString(), json);
+        var json = JsonDocument.Parse("""{"enable":false}""").RootElement;
+        _handler.Handle("EnableWifi", json);
 
         _networkMock.Verify(n => n.EnableWifi(false), Times.Once);
-    }
-
-    // --- EnableMeteredConnections ---
-
-    /// <summary>
-    /// Verifies that EnableMeteredConnections opens the network settings URI.
-    /// </summary>
-    [Fact]
-    public void EnableMeteredConnections_OpensSettingsUri()
-    {
-        _handler.Handle("EnableMeteredConnections", "true", JToken.FromObject("true"));
-
-        _processMock.Verify(p => p.StartShellExecute("ms-settings:network-status"), Times.Once);
     }
 }

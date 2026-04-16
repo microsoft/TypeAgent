@@ -7,9 +7,9 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Text;
+using System.Text.Json;
 using autoShell.Logging;
 using autoShell.Services.Interop;
-using Newtonsoft.Json;
 
 namespace autoShell.Services;
 
@@ -394,7 +394,7 @@ internal class WindowsNetworkService : INetworkService
                 .OrderByDescending(n => ((dynamic)n).SignalQuality)
                 .ToList();
 
-            return JsonConvert.SerializeObject(uniqueNetworks);
+            return JsonSerializer.Serialize(uniqueNetworks);
         }
         catch (Exception ex)
         {

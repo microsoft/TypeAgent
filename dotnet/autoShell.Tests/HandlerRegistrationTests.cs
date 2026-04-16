@@ -3,6 +3,9 @@
 
 using autoShell.Handlers;
 using autoShell.Handlers.Settings;
+using autoShell.Logging;
+using autoShell.Services;
+using Moq;
 
 namespace autoShell.Tests;
 
@@ -11,42 +14,42 @@ namespace autoShell.Tests;
 /// </summary>
 public class HandlerRegistrationTests
 {
-    private readonly List<ICommandHandler> _handlers;
+    private readonly List<IActionHandler> _handlers;
 
     public HandlerRegistrationTests()
     {
-        var audioMock = new Moq.Mock<Services.IAudioService>();
-        var registryMock = new Moq.Mock<Services.IRegistryService>();
-        var systemParamsMock = new Moq.Mock<Services.ISystemParametersService>();
-        var processMock = new Moq.Mock<Services.IProcessService>();
-        var appRegistryMock = new Moq.Mock<IAppRegistry>();
-        var debuggerMock = new Moq.Mock<Services.IDebuggerService>();
-        var brightnessMock = new Moq.Mock<Services.IBrightnessService>();
-        var displayMock = new Moq.Mock<Services.IDisplayService>();
-        var windowMock = new Moq.Mock<Services.IWindowService>();
-        var networkMock = new Moq.Mock<Services.INetworkService>();
-        var virtualDesktopMock = new Moq.Mock<Services.IVirtualDesktopService>();
-        var loggerMock = new Moq.Mock<Logging.ILogger>();
+        var audioMock = new Mock<IAudioService>();
+        var registryMock = new Mock<IRegistryService>();
+        var systemParamsMock = new Mock<ISystemParametersService>();
+        var processMock = new Mock<IProcessService>();
+        var appRegistryMock = new Mock<IAppRegistry>();
+        var debuggerMock = new Mock<IDebuggerService>();
+        var brightnessMock = new Mock<IBrightnessService>();
+        var displayMock = new Mock<IDisplayService>();
+        var windowMock = new Mock<IWindowService>();
+        var networkMock = new Mock<INetworkService>();
+        var virtualDesktopMock = new Mock<IVirtualDesktopService>();
+        var loggerMock = new Mock<ILogger>();
 
         _handlers =
         [
-            new AudioCommandHandler(audioMock.Object),
-            new AppCommandHandler(appRegistryMock.Object, processMock.Object, windowMock.Object, loggerMock.Object),
-            new WindowCommandHandler(appRegistryMock.Object, windowMock.Object),
-            new ThemeCommandHandler(registryMock.Object, processMock.Object, systemParamsMock.Object),
-            new VirtualDesktopCommandHandler(appRegistryMock.Object, windowMock.Object, virtualDesktopMock.Object, loggerMock.Object),
-            new NetworkCommandHandler(networkMock.Object, processMock.Object, loggerMock.Object),
-            new DisplayCommandHandler(displayMock.Object, loggerMock.Object),
-            new TaskbarSettingsHandler(registryMock.Object),
+            new AudioActionHandler(audioMock.Object),
+            new AppActionHandler(appRegistryMock.Object, processMock.Object, windowMock.Object, loggerMock.Object),
+            new WindowActionHandler(appRegistryMock.Object, windowMock.Object),
+            new ThemeActionHandler(registryMock.Object, processMock.Object, systemParamsMock.Object),
+            new VirtualDesktopActionHandler(appRegistryMock.Object, windowMock.Object, virtualDesktopMock.Object, loggerMock.Object),
+            new NetworkActionHandler(networkMock.Object, processMock.Object, loggerMock.Object),
+            new DisplayActionHandler(displayMock.Object, loggerMock.Object),
+            new TaskbarSettingsHandler(registryMock.Object, processMock.Object),
             new DisplaySettingsHandler(registryMock.Object, processMock.Object, brightnessMock.Object, loggerMock.Object),
             new PersonalizationSettingsHandler(registryMock.Object, processMock.Object),
-            new MouseSettingsHandler(systemParamsMock.Object, processMock.Object, loggerMock.Object),
+            new MouseSettingsHandler(registryMock.Object, processMock.Object, systemParamsMock.Object, loggerMock.Object),
             new AccessibilitySettingsHandler(registryMock.Object, processMock.Object),
-            new PrivacySettingsHandler(registryMock.Object),
             new PowerSettingsHandler(registryMock.Object, processMock.Object),
             new FileExplorerSettingsHandler(registryMock.Object),
-            new SystemSettingsHandler(registryMock.Object, processMock.Object, loggerMock.Object),
-            new SystemCommandHandler(processMock.Object, debuggerMock.Object),
+            new PrivacySettingsHandler(registryMock.Object),
+            new SystemSettingsHandler(registryMock.Object, processMock.Object),
+            new SystemActionHandler(processMock.Object, debuggerMock.Object),
         ];
     }
 
@@ -58,7 +61,7 @@ public class HandlerRegistrationTests
     {
         foreach (var handler in _handlers)
         {
-            var commands = handler.SupportedCommands.ToList();
+            var commands = handler.SupportedActions.ToList();
             var duplicates = commands.GroupBy(c => c).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
 
             Assert.Empty(duplicates);
@@ -77,7 +80,7 @@ public class HandlerRegistrationTests
         foreach (var handler in _handlers)
         {
             string handlerName = handler.GetType().Name;
-            foreach (string cmd in handler.SupportedCommands)
+            foreach (string cmd in handler.SupportedActions)
             {
                 if (seen.TryGetValue(cmd, out string? existingHandler))
                 {

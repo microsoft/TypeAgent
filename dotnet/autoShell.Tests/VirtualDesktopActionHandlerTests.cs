@@ -1,23 +1,24 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+using System.Text.Json;
 using autoShell.Handlers;
+using autoShell.Logging;
 using autoShell.Services;
 using Moq;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Tests;
 
-public class VirtualDesktopCommandHandlerTests
+public class VirtualDesktopActionHandlerTests
 {
     private readonly Mock<IAppRegistry> _appRegistryMock = new();
     private readonly Mock<IWindowService> _windowMock = new();
     private readonly Mock<IVirtualDesktopService> _virtualDesktopMock = new();
-    private readonly VirtualDesktopCommandHandler _handler;
+    private readonly VirtualDesktopActionHandler _handler;
 
-    public VirtualDesktopCommandHandlerTests()
+    public VirtualDesktopActionHandlerTests()
     {
-        _handler = new VirtualDesktopCommandHandler(_appRegistryMock.Object, _windowMock.Object, _virtualDesktopMock.Object, new Mock<autoShell.Logging.ILogger>().Object);
+        _handler = new VirtualDesktopActionHandler(_appRegistryMock.Object, _windowMock.Object, _virtualDesktopMock.Object, new Mock<ILogger>().Object);
     }
 
     // --- CreateDesktop ---
@@ -28,8 +29,8 @@ public class VirtualDesktopCommandHandlerTests
     [Fact]
     public void CreateDesktop_CallsServiceWithJsonValue()
     {
-        var json = JToken.Parse("""["Work","Personal"]""");
-        _handler.Handle("CreateDesktop", json.ToString(), json);
+        var json = JsonDocument.Parse("""{"names":["Work","Personal"]}""").RootElement;
+        _handler.Handle("CreateDesktop", json);
 
         _virtualDesktopMock.Verify(v => v.CreateDesktops(It.IsAny<string>()), Times.Once);
     }
@@ -42,7 +43,7 @@ public class VirtualDesktopCommandHandlerTests
     [Fact]
     public void NextDesktop_CallsService()
     {
-        _handler.Handle("NextDesktop", "", JToken.FromObject(""));
+        _handler.Handle("NextDesktop", JsonDocument.Parse("{}").RootElement);
 
         _virtualDesktopMock.Verify(v => v.NextDesktop(), Times.Once);
     }
@@ -55,7 +56,7 @@ public class VirtualDesktopCommandHandlerTests
     [Fact]
     public void PreviousDesktop_CallsService()
     {
-        _handler.Handle("PreviousDesktop", "", JToken.FromObject(""));
+        _handler.Handle("PreviousDesktop", JsonDocument.Parse("{}").RootElement);
 
         _virtualDesktopMock.Verify(v => v.PreviousDesktop(), Times.Once);
     }
@@ -68,20 +69,22 @@ public class VirtualDesktopCommandHandlerTests
     [Fact]
     public void SwitchDesktop_ByIndex_CallsService()
     {
-        _handler.Handle("SwitchDesktop", "2", JToken.FromObject("2"));
+        _handler.Handle("SwitchDesktop", JsonDocument.Parse("""{"desktopId":2}""").RootElement);
 
         _virtualDesktopMock.Verify(v => v.SwitchDesktop("2"), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that SwitchDesktop with a desktop name forwards it to the service.
+    /// Verifies that SwitchDesktop with an invalid (non-numeric) desktopId returns a failure.
+    /// The schema defines desktopId as a number, so a string value fails deserialization.
     /// </summary>
     [Fact]
-    public void SwitchDesktop_ByName_CallsService()
+    public void SwitchDesktop_ByName_ReturnsFailure()
     {
-        _handler.Handle("SwitchDesktop", "Work", JToken.FromObject("Work"));
+        var result = _handler.Handle("SwitchDesktop", JsonDocument.Parse("""{"desktopId":"Work"}""").RootElement);
 
-        _virtualDesktopMock.Verify(v => v.SwitchDesktop("Work"), Times.Once);
+        Assert.False(result.Success);
+        _virtualDesktopMock.Verify(v => v.SwitchDesktop(It.IsAny<string>()), Times.Never);
     }
 
     // --- MoveWindowToDesktop ---
@@ -97,8 +100,8 @@ public class VirtualDesktopCommandHandlerTests
         _appRegistryMock.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
         _windowMock.Setup(w => w.FindProcessWindowHandle("notepad")).Returns(IntPtr.Zero);
 
-        var json = JToken.Parse("""{"process":"Notepad","desktop":"2"}""");
-        _handler.Handle("MoveWindowToDesktop", json.ToString(), json);
+        var json = JsonDocument.Parse("""{"name":"Notepad","desktopId":2}""").RootElement;
+        _handler.Handle("MoveWindowToDesktop", json);
 
         _appRegistryMock.Verify(a => a.ResolveProcessName("Notepad"), Times.Once);
         _windowMock.Verify(w => w.FindProcessWindowHandle("notepad"), Times.Once);
@@ -115,7 +118,7 @@ public class VirtualDesktopCommandHandlerTests
         _appRegistryMock.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
         _windowMock.Setup(w => w.FindProcessWindowHandle("notepad")).Returns(IntPtr.Zero);
 
-        _handler.Handle("PinWindow", "Notepad", JToken.FromObject("Notepad"));
+        _handler.Handle("PinWindow", JsonDocument.Parse("""{"name":"Notepad"}""").RootElement);
 
         _appRegistryMock.Verify(a => a.ResolveProcessName("Notepad"), Times.Once);
         _windowMock.Verify(w => w.FindProcessWindowHandle("notepad"), Times.Once);
@@ -127,10 +130,7 @@ public class VirtualDesktopCommandHandlerTests
     [Fact]
     public void MoveWindowToDesktop_MissingProcess_DoesNotCallService()
     {
-        var json = JToken.Parse("""{"desktop":"2"}""");
-        _handler.Handle("MoveWindowToDesktop", json.ToString(), json);
-
-        _virtualDesktopMock.Verify(v => v.MoveWindowToDesktop(It.IsAny<IntPtr>(), It.IsAny<string>()), Times.Never);
+        var json = JsonDocument.Parse("""{"desktopId":"2"}""").RootElement;
     }
 
     /// <summary>
@@ -139,8 +139,8 @@ public class VirtualDesktopCommandHandlerTests
     [Fact]
     public void MoveWindowToDesktop_MissingDesktop_DoesNotCallService()
     {
-        var json = JToken.Parse("""{"process":"Notepad"}""");
-        _handler.Handle("MoveWindowToDesktop", json.ToString(), json);
+        var json = JsonDocument.Parse("""{"name":"Notepad"}""").RootElement;
+        _handler.Handle("MoveWindowToDesktop", json);
 
         _virtualDesktopMock.Verify(v => v.MoveWindowToDesktop(It.IsAny<IntPtr>(), It.IsAny<string>()), Times.Never);
     }
@@ -154,8 +154,8 @@ public class VirtualDesktopCommandHandlerTests
         _appRegistryMock.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
         _windowMock.Setup(w => w.FindProcessWindowHandle("notepad")).Returns(IntPtr.Zero);
 
-        var json = JToken.Parse("""{"process":"Notepad","desktop":"2"}""");
-        _handler.Handle("MoveWindowToDesktop", json.ToString(), json);
+        var json = JsonDocument.Parse("""{"name":"Notepad","desktopId":"2"}""").RootElement;
+        _handler.Handle("MoveWindowToDesktop", json);
 
         _virtualDesktopMock.Verify(v => v.MoveWindowToDesktop(It.IsAny<IntPtr>(), It.IsAny<string>()), Times.Never);
     }
@@ -170,8 +170,8 @@ public class VirtualDesktopCommandHandlerTests
         _appRegistryMock.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
         _windowMock.Setup(w => w.FindProcessWindowHandle("notepad")).Returns(handle);
 
-        var json = JToken.Parse("""{"process":"Notepad","desktop":"2"}""");
-        _handler.Handle("MoveWindowToDesktop", json.ToString(), json);
+        var json = JsonDocument.Parse("""{"name":"Notepad","desktopId":2}""").RootElement;
+        _handler.Handle("MoveWindowToDesktop", json);
 
         _virtualDesktopMock.Verify(v => v.MoveWindowToDesktop(handle, "2"), Times.Once);
     }
@@ -185,7 +185,7 @@ public class VirtualDesktopCommandHandlerTests
         _appRegistryMock.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
         _windowMock.Setup(w => w.FindProcessWindowHandle("notepad")).Returns(IntPtr.Zero);
 
-        _handler.Handle("PinWindow", "Notepad", JToken.FromObject("Notepad"));
+        _handler.Handle("PinWindow", JsonDocument.Parse("""{"name":"Notepad"}""").RootElement);
 
         _virtualDesktopMock.Verify(v => v.PinWindow(It.IsAny<IntPtr>()), Times.Never);
     }
@@ -200,7 +200,7 @@ public class VirtualDesktopCommandHandlerTests
         _appRegistryMock.Setup(a => a.ResolveProcessName("Notepad")).Returns("notepad");
         _windowMock.Setup(w => w.FindProcessWindowHandle("notepad")).Returns(handle);
 
-        _handler.Handle("PinWindow", "Notepad", JToken.FromObject("Notepad"));
+        _handler.Handle("PinWindow", JsonDocument.Parse("""{"name":"Notepad"}""").RootElement);
 
         _virtualDesktopMock.Verify(v => v.PinWindow(handle), Times.Once);
     }

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using Newtonsoft.Json.Linq;
+using System.Text.Json;
 
 namespace autoShell.Tests;
 
@@ -33,13 +33,15 @@ public sealed class EndToEndTests : IDisposable
     [Fact]
     public async Task ListAppNames_ReturnsJsonArray()
     {
-        _process.SendCommand("""{"ListAppNames":""}""");
+        _process.SendCommand("""{"actionName":"ListAppNames","parameters":{}}""");
 
         string? response = await _process.ReadLineAsync();
 
         Assert.NotNull(response);
-        var array = JArray.Parse(response);
-        Assert.NotEmpty(array);
+        var result = JsonDocument.Parse(response).RootElement;
+        Assert.True(result.GetProperty("success").GetBoolean());
+        var data = result.GetProperty("data");
+        Assert.True(data.GetArrayLength() > 0);
     }
 
     /// <summary>
@@ -48,14 +50,16 @@ public sealed class EndToEndTests : IDisposable
     [Fact]
     public async Task ListThemes_ReturnsJsonArray()
     {
-        _process.SendCommand("""{"ListThemes":""}""");
+        _process.SendCommand("""{"actionName":"ListThemes","parameters":{}}""");
 
         // Theme scanning involves disk I/O; allow extra time
         string? response = await _process.ReadLineAsync(10000);
 
         Assert.NotNull(response);
-        var array = JArray.Parse(response);
-        Assert.NotEmpty(array);
+        var result = JsonDocument.Parse(response).RootElement;
+        Assert.True(result.GetProperty("success").GetBoolean());
+        var data = result.GetProperty("data");
+        Assert.True(data.GetArrayLength() > 0);
     }
 
     /// <summary>
@@ -64,25 +68,23 @@ public sealed class EndToEndTests : IDisposable
     [Fact]
     public async Task MultipleQueries_EachReturnsResponse()
     {
-        _process.SendCommand("""{"ListAppNames":""}""");
+        _process.SendCommand("""{"actionName":"ListAppNames","parameters":{}}""");
         string? response1 = await _process.ReadLineAsync();
 
-        _process.SendCommand("""{"ListThemes":""}""");
+        _process.SendCommand("""{"actionName":"ListThemes","parameters":{}}""");
         string? response2 = await _process.ReadLineAsync();
 
         Assert.NotNull(response1);
         Assert.NotNull(response2);
-        JArray.Parse(response1);
-        JArray.Parse(response2);
+        _ = JsonDocument.Parse(response1);
+        _ = JsonDocument.Parse(response2);
     }
 
-    /// <summary>
-    /// Verifies that ListResolutions returns a valid JSON string via stdout.
     /// </summary>
     [Fact]
     public async Task ListResolutions_ReturnsResponse()
     {
-        _process.SendCommand("""{"ListResolutions":""}""");
+        _process.SendCommand("""{"actionName":"ListResolutions","parameters":{}}""");
 
         string? response = await _process.ReadLineAsync(10000);
 
@@ -96,7 +98,7 @@ public sealed class EndToEndTests : IDisposable
     [Fact]
     public async Task ListWifiNetworks_ReturnsResponse()
     {
-        _process.SendCommand("""{"ListWifiNetworks":""}""");
+        _process.SendCommand("""{"actionName":"ListWifiNetworks","parameters":{}}""");
 
         string? response = await _process.ReadLineAsync(10000);
 
@@ -111,13 +113,13 @@ public sealed class EndToEndTests : IDisposable
     [Fact]
     public async Task SetScreenResolution_InvalidValue_ReturnsResponse()
     {
-        _process.SendCommand("""{"SetScreenResolution":"99999x99999"}""");
+        _process.SendCommand("""{"actionName":"SetScreenResolution","parameters":{"width":99999,"height":99999}}""");
 
         // May produce an error message or status — just verify the process survives
         // and we can still send commands
-        await _process.ReadLineAsync(5000);
+        await _process.ReadLineAsync();
 
-        _process.SendCommand("""{"ListAppNames":""}""");
+        _process.SendCommand("""{"actionName":"ListAppNames","parameters":{}}""");
         string? response = await _process.ReadLineAsync();
 
         Assert.False(_process.HasExited);
@@ -127,37 +129,35 @@ public sealed class EndToEndTests : IDisposable
     // --- Protocol edge cases ---
 
     /// <summary>
-    /// Verifies that multiple commands in a single JSON object each produce stdout output.
+    /// Verifies that two separate commands each produce a response.
     /// </summary>
     [Fact]
     public async Task MultiCommandObject_ProducesMultipleResponses()
     {
-        _process.SendCommand("""{"ListAppNames":"", "ListThemes":""}""");
+        _process.SendCommand("""{"actionName":"ListAppNames","parameters":{}}""");
+        _process.SendCommand("""{"actionName":"ListThemes","parameters":{}}""");
 
         string? response1 = await _process.ReadLineAsync();
-        string? response2 = await _process.ReadLineAsync();
+        string? response2 = await _process.ReadLineAsync(10000);
 
         Assert.NotNull(response1);
         Assert.NotNull(response2);
-        // One should be app names, the other themes — both valid JSON arrays
-        JArray.Parse(response1);
-        JArray.Parse(response2);
+        _ = JsonDocument.Parse(response1);
+        _ = JsonDocument.Parse(response2);
     }
 
     /// <summary>
-    /// Verifies that quit stops processing mid-batch. Commands after quit should not execute.
+    /// Verifies that sending a quit command causes the process to exit.
     /// </summary>
     [Fact]
     public async Task Quit_StopsMidBatch()
     {
-        // ListAppNames produces output, quit should stop before ListThemes runs
-        _process.SendCommand("""{"ListAppNames":"", "quit":"", "ListThemes":""}""");
-
+        _process.SendCommand("""{"actionName":"ListAppNames","parameters":{}}""");
         string? response1 = await _process.ReadLineAsync();
         Assert.NotNull(response1);
-        JArray.Parse(response1);
+        _ = JsonDocument.Parse(response1);
 
-        // Process should have exited — no second response
+        _process.SendCommand("""{"actionName":"quit","parameters":{}}""");
         _process.WaitForExit(10000);
         Assert.True(_process.HasExited);
     }
@@ -183,7 +183,7 @@ public sealed class EndToEndTests : IDisposable
         _process.SendCommand("this is not json");
 
         // Process should still be alive — send a valid command to verify
-        _process.SendCommand("""{"ListAppNames":""}""");
+        _process.SendCommand("""{"actionName":"ListAppNames","parameters":{}}""");
         string? response = await _process.ReadLineAsync();
 
         Assert.False(_process.HasExited);
@@ -199,10 +199,14 @@ public sealed class EndToEndTests : IDisposable
     public async Task EmptyLine_ProcessSurvives()
     {
         _process.SendCommand("");
-        // Consume the error message that goes to stdout
-        await _process.ReadLineAsync();
+        // Consume the error/status message that goes to stdout.
+        // Allow extra time since empty-line handling may be slow.
+        string? errorLine = await _process.ReadLineAsync();
 
-        _process.SendCommand("""{"ListAppNames":""}""");
+        // Ensure the first read completed before starting a second one
+        Assert.False(_process.HasExited);
+
+        _process.SendCommand("""{"actionName":"ListAppNames","parameters":{}}""");
         string? response = await _process.ReadLineAsync();
 
         Assert.False(_process.HasExited);
@@ -215,9 +219,9 @@ public sealed class EndToEndTests : IDisposable
     [Fact]
     public async Task UnknownCommand_ProcessSurvives()
     {
-        _process.SendCommand("""{"NonExistentCommand":"value"}""");
+        _process.SendCommand("""{"actionName":"NonExistentCommand","parameters":{}}""");
 
-        _process.SendCommand("""{"ListAppNames":""}""");
+        _process.SendCommand("""{"actionName":"ListAppNames","parameters":{}}""");
         string? response = await _process.ReadLineAsync();
 
         Assert.False(_process.HasExited);
@@ -246,11 +250,11 @@ public sealed class EndToEndTests : IDisposable
     public void CommandLineMode_SingleObject_ExecutesAndExits()
     {
         var (output, exitCode) = AutoShellProcess.RunWithArgs(
-            """{"ListAppNames":""}""");
+            """{"actionName":"ListAppNames","parameters":{}}""");
 
         Assert.Equal(0, exitCode);
         Assert.NotEmpty(output);
-        JArray.Parse(output.Trim());
+        _ = JsonDocument.Parse(output.Trim());
     }
 
     /// <summary>
@@ -261,7 +265,7 @@ public sealed class EndToEndTests : IDisposable
     public void CommandLineMode_JsonArray_ExecutesAllAndExits()
     {
         var (output, exitCode) = AutoShellProcess.RunWithArgs(
-            """[{"ListAppNames":""},{"ListThemes":""}]""");
+            """[{"actionName":"ListAppNames","parameters":{}},{"actionName":"ListThemes","parameters":{}}]""");
 
         Assert.Equal(0, exitCode);
         Assert.NotEmpty(output);

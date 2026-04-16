@@ -4,7 +4,8 @@
 export type DesktopPersonalizationActions =
     | EnableTransparencyAction
     | ApplyColorToTitleBarAction
-    | HighContrastThemeAction;
+    | HighContrastThemeAction
+    | SystemThemeModeAction;
 
 // Enables or disables transparency effects
 export type EnableTransparencyAction = {
@@ -26,4 +27,12 @@ export type ApplyColorToTitleBarAction = {
 export type HighContrastThemeAction = {
     actionName: "HighContrastTheme";
     parameters: {};
+};
+
+// Sets the system-wide theme mode (affects apps, taskbar, and Start menu)
+export type SystemThemeModeAction = {
+    actionName: "SystemThemeMode";
+    parameters: {
+        mode: "light" | "dark"; // the system theme mode
+    };
 };
