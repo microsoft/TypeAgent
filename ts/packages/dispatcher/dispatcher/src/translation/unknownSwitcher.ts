@@ -129,7 +129,9 @@ export type AssistantSelection = {
 
 type TranslatorPartition = {
     names: string[];
-    translator: { translate: (request: string) => Promise<Result<AssistantSelection>> };
+    translator: {
+        translate: (request: string) => Promise<Result<AssistantSelection>>;
+    };
 };
 
 /**

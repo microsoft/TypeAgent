@@ -7,7 +7,11 @@ import { ActionConfig } from "../src/translation/actionConfig.js";
 import { SchemaContent } from "@typeagent/agent-sdk";
 
 function makePasActionConfig(content: string): ActionConfig {
-    const schemaFile: SchemaContent = { format: "pas", content, config: undefined };
+    const schemaFile: SchemaContent = {
+        format: "pas",
+        content,
+        config: undefined,
+    };
     return {
         emojiChar: "🔧",
         cachedActivities: undefined,
@@ -36,7 +40,11 @@ describe("ActionSchemaFileCache", () => {
 
         it("throws for JSON with non-number version", () => {
             const cache = new ActionSchemaFileCache();
-            const content = JSON.stringify({ version: "1", entry: {}, types: {} });
+            const content = JSON.stringify({
+                version: "1",
+                entry: {},
+                types: {},
+            });
             expect(() =>
                 cache.getActionSchemaFile(makePasActionConfig(content)),
             ).toThrow("malformed JSON structure");
@@ -61,7 +69,11 @@ describe("ActionSchemaFileCache", () => {
         it("passes structure validation for valid JSON (fails on type name mismatch)", () => {
             const cache = new ActionSchemaFileCache();
             // Valid structure but wrong version — will fail at fromJSONParsedActionSchema
-            const content = JSON.stringify({ version: 99, entry: {}, types: {} });
+            const content = JSON.stringify({
+                version: 99,
+                entry: {},
+                types: {},
+            });
             expect(() =>
                 cache.getActionSchemaFile(makePasActionConfig(content)),
             ).toThrow("Unsupported ParsedActionSchema version");
