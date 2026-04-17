@@ -90,6 +90,17 @@ function lockUserData<T>(fn: () => T) {
     }
 }
 
+async function lockUserDataAsync<T>(fn: () => T | Promise<T>): Promise<T> {
+    const release = await lockfile.lock(ensureUserDataDir(), {
+        retries: { retries: 10, minTimeout: 500, maxTimeout: 1000 },
+    });
+    try {
+        return await fn();
+    } finally {
+        await release();
+    }
+}
+
 function getInstancesDir() {
     return path.join(ensureUserDataDir(), "profiles");
 }
@@ -144,6 +155,31 @@ export function getInstanceDir() {
     return instanceDir;
 }
 
+let instanceDirPromise: Promise<string> | undefined;
+export function getInstanceDirAsync(): Promise<string> {
+    if (instanceDirPromise === undefined) {
+        instanceDirPromise = resolveInstanceDir();
+    }
+    return instanceDirPromise;
+}
+
+async function resolveInstanceDir(): Promise<string> {
+    const instanceName = getInstanceName();
+    const currentConfig = readGlobalUserConfig();
+    const existing = currentConfig?.instances?.[instanceName];
+    if (existing !== undefined) {
+        const dir = path.join(getInstancesDir(), existing);
+        instanceDir = dir;
+        return dir;
+    }
+    const dirName = await lockUserDataAsync(() =>
+        ensureInstanceDirName(instanceName),
+    );
+    const dir = path.join(getInstancesDir(), dirName);
+    instanceDir = dir;
+    return dir;
+}
+
 let traceId: string | undefined;
 export function getTraceId(): string {
     if (traceId !== undefined) {
@@ -157,5 +193,28 @@ export function getTraceId(): string {
     return lockUserData(() => {
         traceId = ensureGlobalUserConfig().traceId;
         return traceId;
+    });
+}
+
+let traceIdPromise: Promise<string> | undefined;
+export function getTraceIdAsync(): Promise<string> {
+    if (traceIdPromise === undefined) {
+        traceIdPromise = resolveTraceId();
+    }
+    return traceIdPromise;
+}
+
+async function resolveTraceId(): Promise<string> {
+    if (traceId !== undefined) {
+        return traceId;
+    }
+    const currentConfig = readGlobalUserConfig();
+    if (currentConfig?.traceId !== undefined) {
+        traceId = currentConfig.traceId;
+        return traceId;
+    }
+    return lockUserDataAsync(() => {
+        traceId = ensureGlobalUserConfig().traceId;
+        return traceId!;
     });
 }

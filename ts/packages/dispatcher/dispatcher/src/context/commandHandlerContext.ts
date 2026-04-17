@@ -166,6 +166,7 @@ export type CommandHandlerContext = {
     currentAbortSignal: AbortSignal | undefined;
     activeRequests: Map<string, AbortController>;
     noReasoning: boolean;
+    isInsideReasoningLoop: boolean; // true while the MCP execute_action handler is dispatching a sub-action
     commandResult?: CommandResult | undefined;
     chatHistory: ChatHistory;
     constructionProvider?: ConstructionProvider | undefined;
@@ -188,7 +189,8 @@ export type CommandHandlerContext = {
     instanceDirLock: (() => Promise<void>) | undefined;
 
     userRequestKnowledgeExtraction: boolean;
-    actionResultKnowledgeExtraction: boolean;
+    actionResultEntityStorage: boolean; // store entities in chat history (fast)
+    actionResultKnowledgeExtraction: boolean; // also push to conversationManager/conversationMemory (slow LLM)
 };
 
 export function getRequestId(context: CommandHandlerContext): RequestId {
@@ -287,6 +289,7 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
 
     conversationMemorySettings?: {
         requestKnowledgeExtraction?: boolean;
+        actionResultEntityStorage?: boolean;
         actionResultKnowledgeExtraction?: boolean;
     };
 };
@@ -595,6 +598,7 @@ export async function initializeCommandHandlerContext(
             currentAbortSignal: undefined,
             activeRequests: new Map<string, AbortController>(),
             noReasoning: false,
+            isInsideReasoningLoop: false,
             pendingToggleTransientAgents: [],
             agentCache: await getAgentCache(
                 session,
@@ -627,6 +631,9 @@ export async function initializeCommandHandlerContext(
             userRequestKnowledgeExtraction:
                 options?.conversationMemorySettings
                     ?.requestKnowledgeExtraction ?? true,
+            actionResultEntityStorage:
+                options?.conversationMemorySettings
+                    ?.actionResultEntityStorage ?? true,
             actionResultKnowledgeExtraction:
                 options?.conversationMemorySettings
                     ?.actionResultKnowledgeExtraction ?? true,

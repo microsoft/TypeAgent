@@ -4,6 +4,7 @@
 export {
     getDefaultAppAgentProviders,
     getDefaultAppAgentInstaller,
+    getDefaultDispatcherOptions,
     getIndexingServiceRegistry,
 } from "./defaultAgentProviders.js";
 export { getDefaultConstructionProvider } from "./defaultConstructionProvider.js";

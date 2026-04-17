@@ -403,6 +403,12 @@ export function createChatModel(
             ? endpoint
             : getChatModelSettings(endpoint);
 
+    // GPT-5 models only support temperature=1; 0 is rejected by the API.
+    if (typeof endpoint === "string" && /gpt.?5/i.test(endpoint)) {
+        completionSettings ??= {};
+        completionSettings.temperature ??= 1;
+    }
+
     if (settings.provider === "ollama") {
         return createOllamaChatModel(
             settings,

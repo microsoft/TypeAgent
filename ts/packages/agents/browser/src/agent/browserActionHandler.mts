@@ -2173,6 +2173,7 @@ export async function handleWebsiteAction(
                     } as any,
                     streamingContext: undefined,
                     activityContext: undefined,
+                    isFromReasoningLoop: false,
                     queueToggleTransientAgent: async () => {},
                 };
             const statsResult = await getWebsiteStats(
@@ -2272,6 +2273,7 @@ export async function handleWebsiteLibraryStats(
             } as any,
             streamingContext: undefined,
             activityContext: undefined,
+            isFromReasoningLoop: false,
             queueToggleTransientAgent: async () => {},
         };
 

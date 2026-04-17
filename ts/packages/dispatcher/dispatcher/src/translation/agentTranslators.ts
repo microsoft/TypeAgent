@@ -284,6 +284,7 @@ function createTypeAgentValidator<T extends TranslatedAction>(
                   composeOptions,
               ),
               generateOptions,
+              buildInjectedSchemaNameMap(actionConfigs, provider),
           )
         : createTypeScriptJsonValidator<T>(
               composeTranslatorSchemas(
@@ -296,6 +297,28 @@ function createTypeAgentValidator<T extends TranslatedAction>(
               ),
               "AllActions",
           );
+}
+
+// Build a fallback map: actionName → schemaName for injected sub-schemas that
+// are not already captured in the primary actionConfigs.  The LLM sees these
+// actions in its prompt (because they are injected) but they may not be in the
+// primary validation schema group, causing spurious "Unknown action name" errors.
+function buildInjectedSchemaNameMap(
+    actionConfigs: ActionConfig[],
+    provider: ActionConfigProvider,
+): Map<string, string> {
+    const primarySchemaNames = new Set(actionConfigs.map((c) => c.schemaName));
+    const map = new Map<string, string>();
+    for (const config of provider.getActionConfigs()) {
+        if (!config.injected || primarySchemaNames.has(config.schemaName)) {
+            continue;
+        }
+        const schemaFile = provider.getActionSchemaFileForConfig(config);
+        for (const actionName of schemaFile.parsedActionSchema.actionSchemas.keys()) {
+            map.set(actionName, config.schemaName);
+        }
+    }
+    return map;
 }
 
 function collectSchemaName(

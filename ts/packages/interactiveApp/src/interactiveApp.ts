@@ -177,8 +177,18 @@ class InteractiveApp {
                     let shouldContinue = false;
                     try {
                         this.lineReader.pause();
+                        // Turn off raw mode so the OS terminal driver converts
+                        // Ctrl+C into a real SIGINT signal while the command runs.
+                        // In raw mode with stdin paused, Ctrl+C is undetectable.
+                        if (process.stdin.isTTY) {
+                            process.stdin.setRawMode(false);
+                        }
                         shouldContinue = await this.processInput(line);
                     } finally {
+                        // Restore raw mode for escape-key and readline keypress handling.
+                        if (process.stdin.isTTY) {
+                            process.stdin.setRawMode(true);
+                        }
                         this.lineReader.resume();
                     }
 
@@ -197,6 +207,18 @@ class InteractiveApp {
                         }),
                     );
                     resolve();
+                })
+                .on("SIGINT", () => {
+                    // setRawMode(true) prevents the OS from delivering a real SIGINT
+                    // signal, so Ctrl+C only fires this readline-level event.
+                    // Forward it to the process so that any registered process.on("SIGINT")
+                    // handlers (e.g. in the batch test runner) can react and exit.
+                    // If nothing is listening at the process level, exit directly.
+                    if (process.listenerCount("SIGINT") > 0) {
+                        process.emit("SIGINT", "SIGINT");
+                    } else {
+                        process.exit(0);
+                    }
                 });
         });
         return promise;
@@ -494,7 +516,7 @@ export function createNamedArgs(): NamedArgs {
                 case "boolean":
                     return typeof value === "boolean"
                         ? value
-                        : value.toLowerCase() === "true";
+                        : value === "" || value.toLowerCase() === "true";
                 case "path":
                     value = typeof value === "string" ? value : String(value);
                     checkPath(value);
@@ -995,6 +1017,7 @@ export function displayCommands(
         true,
         (v: CommandHandler) => getDescription(v) ?? "",
         indent,
+        true, // colorName
     );
 }
 

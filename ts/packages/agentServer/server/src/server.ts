@@ -4,7 +4,10 @@
 import { createWebSocketChannelServer } from "websocket-channel-server";
 import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/server";
 import { createSessionManager, SessionManager } from "./sessionManager.js";
-import { getInstanceDir, getTraceId } from "agent-dispatcher/helpers/data";
+import {
+    getInstanceDirAsync,
+    getTraceIdAsync,
+} from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
     getIndexingServiceRegistry,
@@ -27,7 +30,10 @@ const envPath = new URL("../../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
 
 async function main() {
-    const instanceDir = getInstanceDir();
+    const [instanceDir, traceId] = await Promise.all([
+        getInstanceDirAsync(),
+        getTraceIdAsync(),
+    ]);
 
     // did the launch request a specific config? (e.g. "test" to load "config.test.json")
     const configIdx = process.argv.indexOf("--config");
@@ -45,7 +51,7 @@ async function main() {
             storageProvider: getFsStorageProvider(),
             metrics: true,
             dblogging: false,
-            traceId: getTraceId(),
+            traceId,
             indexingServiceRegistry: await getIndexingServiceRegistry(
                 instanceDir,
                 configName,
@@ -67,7 +73,11 @@ async function main() {
 
     const portIdx = process.argv.indexOf("--port");
     const port =
-        portIdx !== -1 ? parseInt(process.argv[portIdx + 1], 10) : 8999;
+        portIdx !== -1
+            ? parseInt(process.argv[portIdx + 1], 10)
+            : process.env.AGENT_SERVER_PORT
+              ? parseInt(process.env.AGENT_SERVER_PORT, 10)
+              : 8999;
 
     const idleShutdownIdx = process.argv.indexOf("--idle-timeout");
     const idleShutdownMs =

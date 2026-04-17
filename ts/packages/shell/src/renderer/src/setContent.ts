@@ -288,18 +288,24 @@ export function setContent(
         }
 
         // after all stylesheets have been loaded craft the iframe source document
-        Promise.all(promises).then(() => {
-            iframe.srcdoc = `<html>
+        Promise.all(promises)
+            .then(() => {
+                iframe.srcdoc = `<html>
             <head>
             ${css}
             </head>
             <body style="height: auto; overflow: hidden; background: transparent;">${message}</body></html>`;
-        });
+            })
+            .catch((err) => {
+                console.error(`Failed to load CSS for iframe: ${err}`);
+                iframe.srcdoc = `<html>
+            <body style="height: auto; overflow: hidden; background: transparent;">${message}</body></html>`;
+            });
 
         contentElm.appendChild(iframe);
     } else {
         // vanilla, sanitized HTML only
-        contentElm.innerHTML += contentHtml;
+        contentElm.insertAdjacentHTML("beforeend", contentHtml);
 
         // Add click handlers for all links to open in browser tabs
         const allLinks = contentElm.querySelectorAll("a[href]");

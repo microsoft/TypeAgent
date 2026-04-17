@@ -118,16 +118,34 @@ export async function lookupAndAnswer(
                     lookupAction.parameters.conversationLookupFilters,
                 );
             }
-            const historyText = await lookupAndAnswerFromMemory(
+            const { historyText, answered } = await lookupAndAnswerFromMemory(
                 context,
                 lookupAction.parameters.question,
             );
-            // TODO: how about entities?
-            return createActionResultNoDisplay(historyText.join("\n"));
+            if (!answered) {
+                const reason =
+                    historyText.length > 0
+                        ? historyText.join("\n")
+                        : "no information found in conversation history";
+                return createActionResultFromError(`Not Answered - ${reason}`);
+            }
+            const entities = termFilterEntities(
+                lookupAction.parameters.conversationLookupFilters,
+            );
+            return createActionResultNoDisplay(
+                historyText.join("\n"),
+                entities,
+            );
         }
         default:
             throw new Error(`Unknown lookup source: ${source}`);
     }
+}
+
+function termFilterEntities(filters: TermFilter[]): Entity[] {
+    return filters.flatMap((filter) =>
+        filter.terms.map((term) => ({ name: term, type: ["term"] })),
+    );
 }
 
 function matchedEntities(response: conversation.SearchResponse): Entity[] {

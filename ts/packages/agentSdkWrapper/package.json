@@ -30,7 +30,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.92",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.101",
     "@anthropic-ai/sdk": "^0.82.0",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@typeagent/action-schema": "workspace:*",
