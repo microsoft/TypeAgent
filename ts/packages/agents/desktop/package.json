@@ -60,13 +60,13 @@
     "ws": "^8.17.1"
   },
   "devDependencies": {
+    "@jest/globals": "^29.7.0",
     "@typeagent/action-schema-compiler": "workspace:*",
     "@types/body-parser": "^1.19.5",
     "@types/cors": "^2.8.17",
     "@types/debug": "^4.1.12",
     "@types/express": "^4.17.17",
     "@types/find-config": "1.0.4",
-    "@jest/globals": "^29.7.0",
     "@types/jest": "^29.5.7",
     "@types/ws": "^8.5.10",
     "action-grammar-compiler": "workspace:*",
