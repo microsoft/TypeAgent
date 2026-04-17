@@ -394,7 +394,7 @@ internal class WindowsNetworkService : INetworkService
                 .OrderByDescending(n => ((dynamic)n).SignalQuality)
                 .ToList();
 
-            return JsonSerializer.Serialize(uniqueNetworks);
+            return JsonSerializer.Serialize(uniqueNetworks, JsonOptions.CamelCase);
         }
         catch (Exception ex)
         {

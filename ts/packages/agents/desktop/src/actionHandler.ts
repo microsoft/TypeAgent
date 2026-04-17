@@ -98,13 +98,13 @@ function defaultItemFormatter(item: unknown): string {
 const itemFormatters: Record<string, (item: unknown) => string> = {
     ListWifiNetworks: (item) => {
         const n = item as Record<string, unknown>;
-        const signal = n.SignalQuality ?? n.signalQuality ?? "?";
-        const secured = (n.Secured ?? n.secured) ? "🔒" : "🔓";
-        const connected = (n.Connected ?? n.connected) ? " (connected)" : "";
-        return `${n.SSID ?? n.ssid ?? n.Ssid} — ${signal}% ${secured}${connected}`;
+        const signal = n.signalQuality ?? "?";
+        const secured = n.secured ? "🔒" : "🔓";
+        const connected = n.connected ? " (connected)" : "";
+        return `${n.ssid} — ${signal}% ${secured}${connected}`;
     },
     ListResolutions: (item) => {
         const r = item as Record<string, unknown>;
-        return `${r.Width ?? r.width}x${r.Height ?? r.height} @ ${r.RefreshRate ?? r.refreshRate}Hz`;
+        return `${r.width}x${r.height} @ ${r.refreshRate}Hz`;
     },
 };
