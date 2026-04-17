@@ -189,16 +189,9 @@ export class PartialCompletionSession {
         this.levelCounts = computeLevelCounts(partitions);
     }
 
-    // Clear completionState (hide the menu) and fire the onUpdate callback.
-    private notifyHide(): void {
-        this.completionState = undefined;
-        this.onUpdate();
-    }
-
-    // Recompute the cached completionState from current session fields,
-    // then fire the onUpdate callback.
-    private notifyUpdate(): void {
-        this.completionState = this.computeCompletionState();
+    // Update the cached completionState and fire the onUpdate callback.
+    private setCompletionState(state: CompletionState | undefined): void {
+        this.completionState = state;
         this.onUpdate();
     }
 
@@ -209,7 +202,14 @@ export class PartialCompletionSession {
         this.anchor = input;
         this.menuAnchorIndex = input.length;
         this.consumedSep = "";
-        this.notifyUpdate();
+        // After sliding, prefix is "".  If the trie is loaded at a
+        // level that requires separator (menuSepLevel > 0), items must
+        // stay hidden until a separator char is typed (deferred state).
+        this.setCompletionState(
+            this.menuSepLevel > 0
+                ? undefined
+                : this.filterForState("", input.length),
+        );
     }
 
     // Shift the trie to the level implied by the leading separator chars
@@ -251,7 +251,7 @@ export class PartialCompletionSession {
         // Cancel any in-flight request but preserve anchor and config
         // so reuseSession() can still match on re-focus.
         this.completionP = undefined;
-        this.notifyHide();
+        this.setCompletionState(undefined);
     }
 
     /** Accept the current completion (Tab/Enter). Resets session to idle. */
@@ -295,7 +295,7 @@ export class PartialCompletionSession {
 
         // IDLE — no session data, nothing to shift or refetch.
         if (this.anchor === undefined) {
-            this.notifyHide();
+            this.setCompletionState(undefined);
             return;
         }
 
@@ -308,7 +308,15 @@ export class PartialCompletionSession {
                 const prevLevel = this.menuSepLevel;
                 const newLevel = this.shiftToSepLevel(rawPrefix);
                 if (newLevel !== undefined && newLevel !== prevLevel) {
-                    this.notifyUpdate();
+                    // shiftToSepLevel loaded a new trie; filter with
+                    // the post-separator prefix.
+                    const prefix = input.substring(this.menuAnchorIndex);
+                    this.setCompletionState(
+                        this.filterForState(
+                            prefix,
+                            input.length - prefix.length,
+                        ),
+                    );
                     return;
                 }
             }
@@ -317,7 +325,7 @@ export class PartialCompletionSession {
         // No level shift available.  If input hasn't advanced past
         // the anchor, a refetch would return identical results — just hide.
         if (input === this.anchor || this.noMatchPolicy !== "refetch") {
-            this.notifyHide();
+            this.setCompletionState(undefined);
             return;
         }
 
@@ -338,21 +346,15 @@ export class PartialCompletionSession {
         return this.searchMenuIndex.filterItems("");
     }
 
-    // Compute the completion state from current session fields.
-    private computeCompletionState(): CompletionState | undefined {
-        const input = this.lastInput;
-        const anchor = this.anchor;
-        if (anchor === undefined || !input.startsWith(anchor)) {
-            return undefined;
-        }
-        if (input.length < this.menuAnchorIndex) {
-            return undefined;
-        }
-        // Deferred — separator not yet consumed; no valid prefix.
-        if (this.menuSepLevel > 0 && this.consumedSep === "") {
-            return undefined;
-        }
-        const prefix = input.substring(this.menuAnchorIndex);
+    // Filter the trie and build a CompletionState, or return undefined
+    // when items are empty or uniquely satisfied.  Used by cold paths
+    // (slideAnchor, dismiss level-shift) where the caller knows the
+    // prefix and anchorIndex but hasn't filtered yet.  The hot path
+    // (C3 in matchOrConsume) inlines this to avoid a redundant filter.
+    private filterForState(
+        prefix: string,
+        anchorIndex: number,
+    ): CompletionState | undefined {
         const items = this.searchMenuIndex.filterItems(prefix);
         if (items.length === 0 || isUniquelySatisfied(items, prefix)) {
             return undefined;
@@ -360,7 +362,7 @@ export class PartialCompletionSession {
         return {
             items,
             prefix,
-            anchorIndex: input.length - prefix.length,
+            anchorIndex,
             generation: this.generation,
         };
     }
@@ -405,7 +407,10 @@ export class PartialCompletionSession {
         // [A1] PENDING — a fetch is already in flight, wait.
         if (this.completionP !== undefined) {
             debug(`Partial completion pending: ${this.anchor}`);
-            this.notifyUpdate();
+            // Trie is empty (startNewSession clears it before setting
+            // completionP), so computeCompletionState would return
+            // undefined — skip the redundant trie filter.
+            this.setCompletionState(undefined);
             return true;
         }
 
@@ -445,7 +450,9 @@ export class PartialCompletionSession {
             debug(
                 `Partial completion deferred: no items at menuSepLevel=${this.menuSepLevel}`,
             );
-            this.notifyUpdate();
+            // Trie is empty at this level — filterItems would return []
+            // and computeCompletionState would return undefined.
+            this.setCompletionState(undefined);
             return true;
         }
 
@@ -457,7 +464,10 @@ export class PartialCompletionSession {
                 debug(
                     `Partial completion deferred: separator needed, menuSepLevel=${this.menuSepLevel}`,
                 );
-                this.notifyUpdate();
+                // computeCompletionState has the same guard
+                // (menuSepLevel > 0 && consumedSep === "") and
+                // would return undefined.
+                this.setCompletionState(undefined);
                 return true;
             }
 
@@ -554,9 +564,18 @@ export class PartialCompletionSession {
             }
 
             // [C3] ACTIVE — trie has matches for this prefix.
+            // Build CompletionState inline — items and rawPrefix are
+            // already computed, and all computeCompletionState guards
+            // (anchor, startsWith, menuAnchorIndex, deferred) are
+            // satisfied by A/B/deferred checks above.
             if (items.length > 0) {
                 debug(`Partial completion reuse: trie has matches`);
-                this.notifyUpdate();
+                this.setCompletionState({
+                    items,
+                    prefix: rawPrefix,
+                    anchorIndex: input.length - rawPrefix.length,
+                    generation: this.generation,
+                });
                 return true;
             }
 
@@ -604,8 +623,10 @@ export class PartialCompletionSession {
         }
 
         // [D4] ACCEPT — exhaustive set, nothing else to show.
+        // Items are empty (loop exited on items.length===0), so
+        // computeCompletionState would return undefined — hide directly.
         debug(`Partial completion reuse: noMatchPolicy=accept, menu exhausted`);
-        this.notifyUpdate();
+        this.setCompletionState(undefined);
         return true;
     }
 
@@ -636,9 +657,10 @@ export class PartialCompletionSession {
                 this.startNewSession(currentInput, currentDirection);
             } else {
                 // reuseSession returned false for the same input (e.g. C1
-                // UNIQUE).  No re-fetch, but ensure the renderer sees the
-                // latest state.
-                this.notifyUpdate();
+                // UNIQUE, C2 COMMITTED, D3 REFETCH).  In all cases items
+                // are empty or uniquely satisfied — computeCompletionState
+                // would return undefined.
+                this.setCompletionState(undefined);
             }
         }
     }
@@ -656,8 +678,9 @@ export class PartialCompletionSession {
         this.setPartitions([]);
         this.menuSepLevel = 0;
         this.noMatchPolicy = "refetch";
-        // Notify renderer that completions are now empty (pending fetch).
-        this.notifyUpdate();
+        // Trie just cleared via setItems([]) — filterItems returns []
+        // and computeCompletionState would return undefined.
+        this.setCompletionState(undefined);
         const completionP = this.dispatcher.getCommandCompletion(
             input,
             direction,
