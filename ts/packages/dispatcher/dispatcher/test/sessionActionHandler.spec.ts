@@ -113,11 +113,14 @@ describe("executeSessionAction — listSession", () => {
     });
 });
 
-describe("executeSessionAction — showSessionInfo", () => {
+describe("executeSessionAction — showConversationInfo", () => {
     it("sends manage-conversation with subcommand info", async () => {
         const ctx = makeContext();
         await executeSessionAction(
-            { schemaName: "system.session", actionName: "showSessionInfo" },
+            {
+                schemaName: "system.session",
+                actionName: "showConversationInfo",
+            },
             ctx,
         );
         expect(mockTakeAction).toHaveBeenCalledWith(

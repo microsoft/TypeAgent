@@ -2,12 +2,12 @@
 // Licensed under the MIT License.
 
 import chalk from "chalk";
-import * as readline from "readline";
 import type {
     AgentServerConnection,
     SessionDispatcher,
     SessionInfo,
 } from "@typeagent/agent-server-client";
+import { confirmYesNo } from "./enhancedConsole.js";
 
 /**
  * Context required by conversation commands. Created in connect.ts after
@@ -49,19 +49,6 @@ async function resolveByName(
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
-function promptYesNo(question: string): Promise<boolean> {
-    const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-    });
-    return new Promise((resolve) => {
-        rl.question(`${question} [y/N] `, (answer) => {
-            rl.close();
-            resolve(answer.trim().toLowerCase() === "y");
-        });
-    });
-}
-
 /**
  * Parse the argument string, respecting double-quoted names.
  * Returns the trimmed argument (without surrounding quotes).
@@ -90,11 +77,24 @@ async function handleNew(
         return;
     }
     const created = await ctx.connection.createSession(name);
-    console.log(`Created conversation '${chalk.green(name)}'.`);
-    const switchNow = await promptYesNo(`Switch to '${name}' now?`);
+    const switchNow = await confirmYesNo(`Switch to '${name}' now?`);
     if (switchNow) {
         await ctx.switchSession(created.sessionId);
+    } else {
+        console.log(`Created conversation '${chalk.green(name)}'.`);
     }
+}
+
+async function handleInfo(
+    ctx: ConversationCommandContext,
+    _args: string,
+): Promise<void> {
+    const name = ctx.getCurrentSessionName();
+    const id = ctx.getCurrentSessionId();
+    console.log(chalk.bold("\nCurrent conversation:"));
+    console.log(`  ${chalk.dim("Name:")}  ${chalk.green(name)}`);
+    console.log(`  ${chalk.dim("ID:")}    ${chalk.dim(id)}`);
+    console.log("");
 }
 
 async function handleSwitch(
@@ -194,7 +194,7 @@ async function handleDelete(
         );
         return;
     }
-    const confirmed = await promptYesNo(
+    const confirmed = await confirmYesNo(
         `Delete conversation '${target.name}'?`,
     );
     if (!confirmed) {
@@ -213,6 +213,7 @@ function printHelp(): void {
         ["new <name>", "Create a new conversation"],
         ["switch <name>", "Switch to a conversation by name"],
         ["list [<filter>]", "List all conversations"],
+        ["info", "Show info about the current conversation"],
         ["rename <newName>", "Rename the current conversation"],
         ["delete <name>", "Delete a conversation by name"],
     ];
@@ -235,6 +236,7 @@ const subcommands: Record<
     list: handleList,
     rename: handleRename,
     delete: handleDelete,
+    info: handleInfo,
 };
 
 /**
@@ -264,7 +266,7 @@ export async function handleConversationCommand(
     if (!handler) {
         console.log(
             chalk.yellow(
-                `Unknown subcommand '${sub}'. Available: new, switch, list, rename, delete`,
+                `Unknown subcommand '${sub}'. Available: new, switch, list, info, rename, delete`,
             ),
         );
         return;

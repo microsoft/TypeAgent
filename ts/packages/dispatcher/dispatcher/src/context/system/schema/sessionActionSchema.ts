@@ -4,11 +4,15 @@
 export type SessionAction =
     | NewSessionAction
     | ListSessionAction
-    | ShowSessionInfoAction
+    | ShowConversationInfoAction
     | SwitchSessionAction
     | DeleteSessionAction;
 
-// Create a new session/conversation.
+// Create a new session/conversation and optionally give it a name.
+// Use this when the user wants to create, start, make, or open a brand-new conversation.
+// Examples: "create a new conversation", "start a new conversation called test",
+// "make a new session", "new conversation named work", "open a new conversation test".
+// IMPORTANT: use this only when the user is creating something new, not switching to an existing one.
 export type NewSessionAction = {
     actionName: "newSession";
     parameters: {
@@ -18,17 +22,25 @@ export type NewSessionAction = {
 };
 
 // List all sessions/conversations.
+// Use this when the user wants to see, show, or list their conversations or sessions.
+// Examples: "list our conversations", "show all conversations", "what conversations do I have",
+// "show me my sessions".
 export type ListSessionAction = {
     actionName: "listSession";
 };
 
-// Show information about the current session/conversation.
-export type ShowSessionInfoAction = {
-    actionName: "showSessionInfo";
+// Show information about the current conversation.
+// Use this when the user asks about the current conversation or session info.
+// Examples: "show conversation info", "what conversation am I in", "current session info".
+export type ShowConversationInfoAction = {
+    actionName: "showConversationInfo";
 };
 
 // Switch to an existing session/conversation by name.
-// Use this when the user wants to open, switch to, or go to a different conversation.
+// Use this when the user wants to switch to, go to, open, or change to an EXISTING conversation.
+// Examples: "switch to conversation test", "go to my work conversation",
+// "switch to test", "open conversation named work", "change to the test session".
+// IMPORTANT: use this only when switching to an already-existing conversation, not creating a new one.
 export type SwitchSessionAction = {
     actionName: "switchSession";
     parameters: {
@@ -38,7 +50,8 @@ export type SwitchSessionAction = {
 };
 
 // Delete a session/conversation by name.
-// Use this when the user wants to remove or delete a conversation.
+// Use this when the user wants to remove, delete, or destroy a conversation.
+// Examples: "delete conversation test", "remove the work session", "delete test2".
 export type DeleteSessionAction = {
     actionName: "deleteSession";
     parameters: {

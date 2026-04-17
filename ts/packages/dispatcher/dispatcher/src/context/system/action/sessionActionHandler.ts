@@ -14,18 +14,24 @@ export async function executeSessionAction(
     const requestId = getRequestId(agentContext);
     let payload: { subcommand: string; name?: string };
 
+    let resultEntity: { name: string; type: string[] } | undefined;
+
     switch (action.actionName) {
         case "newSession": {
             const name = action.parameters.name;
             payload = name
                 ? { subcommand: "new", name }
                 : { subcommand: "new" };
+            resultEntity = {
+                name: name ?? "new conversation",
+                type: ["conversation", "session"],
+            };
             break;
         }
         case "listSession":
             payload = { subcommand: "list" };
             break;
-        case "showSessionInfo":
+        case "showConversationInfo":
             payload = { subcommand: "info" };
             break;
         case "switchSession":
@@ -41,5 +47,5 @@ export async function executeSessionAction(
     }
 
     agentContext.clientIO.takeAction(requestId, "manage-conversation", payload);
-    return undefined;
+    return { entities: [], resultEntity };
 }
