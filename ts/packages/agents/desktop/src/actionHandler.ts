@@ -56,7 +56,23 @@ async function executeDesktopAction(
         action.schemaName, // Pass schema name for disambiguation
     );
     if (result.success) {
-        return createActionResult(result.message);
+        const displayText = formatResultDisplay(result.message, result.data);
+        return createActionResult(displayText);
     }
     return { error: result.message };
+}
+
+function formatResultDisplay(message: string, data?: unknown): string {
+    if (data === undefined || data === null) {
+        return message;
+    }
+    if (Array.isArray(data)) {
+        return data.length > 0
+            ? `${message}:\n${data.map((item) => `  - ${item}`).join("\n")}`
+            : message;
+    }
+    if (typeof data === "object") {
+        return `${message}:\n${JSON.stringify(data, null, 2)}`;
+    }
+    return `${message}: ${data}`;
 }
