@@ -18,6 +18,7 @@ export type DesktopActions =
     | ListThemesAction
     | ConnectWifiAction
     | DisconnectWifiAction
+    | ListWifiNetworksAction
     | ToggleAirplaneModeAction
     | CreateDesktopAction
     | MoveWindowToDesktopAction
@@ -162,6 +163,12 @@ export type DisconnectWifiAction = {
     parameters: {
         // No parameters required
     };
+};
+
+// Lists available WiFi networks
+export type ListWifiNetworksAction = {
+    actionName: "ListWifiNetworks";
+    parameters: {};
 };
 
 export type ToggleAirplaneModeAction = {

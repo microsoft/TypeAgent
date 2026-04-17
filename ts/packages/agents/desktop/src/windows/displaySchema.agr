@@ -11,6 +11,7 @@ import { DesktopDisplayActions } from "./displayActionsSchema.ts";
           | <DisplayScaling>
           | <AdjustScreenOrientation>
           | <RotationLock>
+          | <ListResolutions>
           | <DisplayResolution>;
 
 <EnableBlueLightFilter> =
@@ -44,6 +45,11 @@ import { DesktopDisplayActions } from "./displayActionsSchema.ts";
   | unlock (screen)? rotation -> { actionName: "RotationLock", parameters: { enable: false } }
   | enable rotation lock -> { actionName: "RotationLock", parameters: { enable: true } }
   | disable rotation lock -> { actionName: "RotationLock", parameters: { enable: false } };
+
+<ListResolutions> =
+    list (display|screen|available)? resolutions -> { actionName: "ListResolutions", parameters: {} }
+  | show (display|screen|available)? resolutions -> { actionName: "ListResolutions", parameters: {} }
+  | what resolutions (are available|are supported|can I use)? -> { actionName: "ListResolutions", parameters: {} };
 
 <DisplayResolution> =
     change (display|screen)? resolution -> { actionName: "DisplayResolutionAndAspectRatio", parameters: {} }

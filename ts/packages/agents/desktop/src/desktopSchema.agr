@@ -99,6 +99,9 @@ import { DesktopActions } from "./actionsSchema.ts";
 <WifiControl> = connect to $(ssid:wildcard) wifi -> { actionName: "ConnectWifi", parameters: { ssid } }
                 | connect to wifi $(ssid:wildcard) -> { actionName: "ConnectWifi", parameters: { ssid } }
                 | disconnect (from)? wifi -> { actionName: "DisconnectWifi", parameters: {} }
+                | list (available)? wifi networks -> { actionName: "ListWifiNetworks", parameters: {} }
+                | show (available)? wifi networks -> { actionName: "ListWifiNetworks", parameters: {} }
+                | what wifi networks (are available|can I see)? -> { actionName: "ListWifiNetworks", parameters: {} }
                 | enable airplane mode -> { actionName: "ToggleAirplaneMode", parameters: { enable: true } }
                 | disable airplane mode -> { actionName: "ToggleAirplaneMode", parameters: { enable: false } }
                 | turn on airplane mode -> { actionName: "ToggleAirplaneMode", parameters: { enable: true } }
