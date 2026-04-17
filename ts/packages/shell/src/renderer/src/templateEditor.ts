@@ -13,9 +13,9 @@ import { getObjectProperty, setObjectProperty } from "@typeagent/common-utils";
 import { SearchMenu } from "./search";
 import { SearchMenuItem } from "./searchMenuUI/searchMenuUI";
 import {
-    createSearchMenuDataProvider,
+    createSearchMenuIndex,
     isUniquelySatisfied,
-    type MutableSearchMenuDataProvider,
+    type SearchMenuIndex,
 } from "agent-dispatcher/helpers/completion";
 
 function cloneTemplateData(
@@ -433,7 +433,7 @@ class FieldScalar extends FieldBase {
         input: HTMLInputElement;
         searchMenuData?: {
             searchMenu: SearchMenu;
-            dataProvider: MutableSearchMenuDataProvider;
+            dataProvider: SearchMenuIndex;
         };
     };
     constructor(
@@ -495,8 +495,8 @@ class FieldScalar extends FieldBase {
     private createSearchMenu(
         input: HTMLInputElement,
         choices: SearchMenuItem[],
-    ): { searchMenu: SearchMenu; dataProvider: MutableSearchMenuDataProvider } {
-        const dataProvider = createSearchMenuDataProvider();
+    ): { searchMenu: SearchMenu; dataProvider: SearchMenuIndex } {
+        const dataProvider = createSearchMenuIndex();
         dataProvider.setChoices(choices);
         const searchMenu = new SearchMenu(
             (item) => {

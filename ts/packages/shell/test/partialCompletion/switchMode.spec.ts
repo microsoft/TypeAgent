@@ -9,7 +9,7 @@ import {
 } from "./helpers.js";
 import {
     isUniquelySatisfied,
-    createSearchMenuDataProvider,
+    createSearchMenuIndex,
 } from "agent-dispatcher/helpers/completion";
 import type {
     SearchMenuItem,
@@ -41,7 +41,7 @@ function makeMockUI(): MockSearchMenuUI {
 // and switchMode logic that runs in the real shell.
 
 class TestableSearchMenu {
-    private readonly dataProvider = createSearchMenuDataProvider();
+    private readonly dataProvider = createSearchMenuIndex();
     private searchMenuUI: MockSearchMenuUI | undefined;
     private lastPosition: SearchMenuPosition | undefined;
     private lastPrefix: string | undefined;

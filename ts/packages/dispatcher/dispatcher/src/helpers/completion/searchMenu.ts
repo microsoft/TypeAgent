@@ -28,16 +28,14 @@ export function isUniquelySatisfied(
 // ── TST-backed data provider ──────────────────────────────────────────────────
 
 // Interface for data providers that support imperative setChoices loading.
-export interface MutableSearchMenuDataProvider {
+export interface SearchMenuIndex {
     filterItems(prefix: string): SearchMenuItem[];
     numChoices(): number;
     setChoices(choices: SearchMenuItem[]): void;
     hasExactMatch(text: string): boolean;
 }
 
-export class TSTSearchMenuDataProvider
-    implements MutableSearchMenuDataProvider
-{
+export class TSTSearchMenuDataProvider implements SearchMenuIndex {
     private trie: TST<SearchMenuItem> = new TST<SearchMenuItem>();
 
     public setChoices(choices: SearchMenuItem[]): void {
@@ -65,6 +63,6 @@ export class TSTSearchMenuDataProvider
 }
 
 /** Create a mutable SearchMenuDataProvider backed by a prefix tree. */
-export function createSearchMenuDataProvider(): MutableSearchMenuDataProvider {
+export function createSearchMenuIndex(): SearchMenuIndex {
     return new TSTSearchMenuDataProvider();
 }
