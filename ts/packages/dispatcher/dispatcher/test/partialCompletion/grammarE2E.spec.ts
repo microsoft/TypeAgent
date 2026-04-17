@@ -259,7 +259,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // No new fetch — result cached at anchor "play".
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
-            // Items already pre-loaded at target level — no setChoices on consume.
+            // Items already pre-loaded at target level — no loadLevel on consume.
             // Separator consumed → menu activated with entity items.
             expect(isActive(session)).toBe(true);
             expect(session.getCompletionState()?.prefix).toBe("");
@@ -487,7 +487,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // No new fetch — result cached at anchor "set volume".
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(3);
-            // Items already pre-loaded — no setChoices on consume.
+            // Items already pre-loaded — no loadLevel on consume.
             expect(isActive(session)).toBe(true);
             expect(session.getCompletionState()?.prefix).toBe("");
         });
@@ -562,7 +562,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
                 fetchCountAfterPrime,
             );
-            // Items already pre-loaded — no setChoices on consume.
+            // Items already pre-loaded — no loadLevel on consume.
             expect(session.getCompletionState()?.prefix).toBe("");
             expect(isActive(session)).toBe(true);
         });
@@ -1162,7 +1162,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // No new fetch — both groups already loaded at anchor "ab".
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-            // setChoices IS called again (visibility changed — more items now visible).
+            // loadLevel IS called again (visibility changed — more items now visible).
             expect(session.getCompletionState()!.items).toEqual(
                 expect.arrayContaining([
                     expect.objectContaining({ matchText: "cd" }),
@@ -1277,7 +1277,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // D1: sepLevel(1) > menuSepLevel(0) → widen to 1.
             // Level 1: space-mode "cd". Trie reloaded.
             session.update("ab ");
-            // Exactly one setChoices for the widen reload.
+            // Exactly one loadLevel for the widen reload.
             expect(isActive(session)).toBe(true);
             expect(session.getCompletionState()?.prefix).toBe("");
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
@@ -1294,7 +1294,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // Backspace to "ab": sepLevel=0 < menuSepLevel=1.
             // B1: items at level 0 (none-mode "cd") → NARROW.
             session.update("ab");
-            // Exactly one setChoices for the narrow reload.
+            // Exactly one loadLevel for the narrow reload.
             expect(isActive(session)).toBe(true);
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
         });
@@ -1323,7 +1323,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             expect(isActive(session)).toBe(true);
 
             // Type "c": trie prefix "c" narrows to "cd".
-            // No setChoices — trie already loaded at level 1.
+            // No loadLevel — trie already loaded at level 1.
             session.update("ab c");
             expect(isActive(session)).toBe(true);
             expect(session.getCompletionState()?.prefix).toBe("c");
@@ -1336,7 +1336,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // At level 0, none-mode "cd" visible.
             // Type "c" without separator: trie prefix "c" → "cd".
-            // No setChoices — trie already loaded at level 0.
+            // No loadLevel — trie already loaded at level 0.
             session.update("abc");
             expect(isActive(session)).toBe(true);
             expect(session.getCompletionState()?.prefix).toBe("c");
@@ -1357,7 +1357,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // with rawPrefix=" ", sepLevel=1 = menuSepLevel(1) → C succeeds.
             expect(isActive(session)).toBe(true);
             expect(session.getCompletionState()?.prefix).toBe("");
-            // Three setChoices: initial clear + loadLevel(0) + D1 consume loadLevel(1).
+            // Three loadLevel calls: initial clear + loadLevel(0) + D1 consume loadLevel(1).
 
             // Narrow back to "ab": level 0 reloaded.
             session.update("ab");

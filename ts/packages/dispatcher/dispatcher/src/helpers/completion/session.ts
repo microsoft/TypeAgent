@@ -41,7 +41,7 @@ export interface ICompletionDispatcher {
     ): Promise<CommandCompletionResult>;
 }
 
-// Describes what the shell should do when the local trie has no matches
+// Describes what the host should do when the local trie has no matches
 // for the user's typed prefix.  Computed once from the backend's
 // descriptive fields (closedSet, afterWildcard) when a result arrives,
 // then used in reuseSession() decisions.
@@ -133,11 +133,11 @@ export class PartialCompletionSession implements CompletionController {
     // The in-flight completion request, or undefined when settled.
     private completionP: Promise<CommandCompletionResult> | undefined;
 
-    // Set when the user explicitly closes the menu (e.g. Escape).
+    // Set when the user dismisses completions (e.g. Escape).
     // startNewSession uses this to suppress reopening if the refetch returns
     // the same anchor — meaning the completions are unchanged and the user
     // already dismissed them.
-    private explicitCloseAnchor: string | undefined = undefined;
+    private dismissAnchor: string | undefined = undefined;
 
     // The input text from the most recent update() or dismiss() call.
     // Used to compute the cached completionState.
@@ -254,7 +254,7 @@ export class PartialCompletionSession implements CompletionController {
         this.fetchNewSession(input, direction);
     }
 
-    // Hide the menu and cancel any in-flight fetch, but preserve session
+    // Hide completions and cancel any in-flight fetch, but preserve session
     // state so reuseSession() can still match the anchor if the user
     // returns (e.g. cursor moved away then back without typing).
     public hide(): void {
@@ -272,7 +272,7 @@ export class PartialCompletionSession implements CompletionController {
         this.menuSepLevel = 0;
         this.menuAnchorIndex = 0;
         this.consumedSep = "";
-        this.explicitCloseAnchor = undefined;
+        this.dismissAnchor = undefined;
         this.lastInput = "";
         this.lastDirection = "forward";
         this.setCompletionState(undefined);
@@ -350,7 +350,7 @@ export class PartialCompletionSession implements CompletionController {
         }
 
         // Save anchor so fetchNewSession can compare after the result arrives.
-        this.explicitCloseAnchor = this.anchor;
+        this.dismissAnchor = this.anchor;
         this.fetchNewSession(input, direction);
     }
 
@@ -430,7 +430,7 @@ export class PartialCompletionSession implements CompletionController {
         if (this.completionP !== undefined) {
             debug(`Partial completion pending: ${this.anchor}`);
             // Trie is empty (startNewSession clears it before setting
-            // completionP), so computeCompletionState would return
+            // completionP), so filterForState would return
             // undefined — skip the redundant trie filter.
             this.setCompletionState(undefined);
             return true;
@@ -473,7 +473,7 @@ export class PartialCompletionSession implements CompletionController {
                 `Partial completion deferred: no items at menuSepLevel=${this.menuSepLevel}`,
             );
             // Trie is empty at this level — filterItems would return []
-            // and computeCompletionState would return undefined.
+            // and filterForState would return undefined.
             this.setCompletionState(undefined);
             return true;
         }
@@ -486,9 +486,8 @@ export class PartialCompletionSession implements CompletionController {
                 debug(
                     `Partial completion deferred: separator needed, menuSepLevel=${this.menuSepLevel}`,
                 );
-                // computeCompletionState has the same guard
-                // (menuSepLevel > 0 && consumedSep === "") and
-                // would return undefined.
+                // filterForState would return undefined
+                // (menuSepLevel > 0 with no separator consumed).
                 this.setCompletionState(undefined);
                 return true;
             }
@@ -587,7 +586,7 @@ export class PartialCompletionSession implements CompletionController {
 
             // [C3] ACTIVE — trie has matches for this prefix.
             // Build CompletionState inline — items and rawPrefix are
-            // already computed, and all computeCompletionState guards
+            // already computed, and all filterForState guards
             // (anchor, startsWith, menuAnchorIndex, deferred) are
             // satisfied by A/B/deferred checks above.
             if (items.length > 0) {
@@ -646,7 +645,7 @@ export class PartialCompletionSession implements CompletionController {
 
         // [D4] ACCEPT — exhaustive set, nothing else to show.
         // Items are empty (loop exited on items.length===0), so
-        // computeCompletionState would return undefined — hide directly.
+        // filterForState would return undefined — hide directly.
         debug(`Partial completion reuse: noMatchPolicy=accept, menu exhausted`);
         this.setCompletionState(undefined);
         return true;
@@ -715,7 +714,7 @@ export class PartialCompletionSession implements CompletionController {
         this.menuSepLevel = 0;
         this.noMatchPolicy = "refetch";
         // Trie just cleared via setItems([]) — filterItems returns []
-        // and computeCompletionState would return undefined.
+        // and filterForState would return undefined.
         this.setCompletionState(undefined);
         const completionP = this.dispatcher.getCommandCompletion(
             input,
@@ -770,19 +769,19 @@ export class PartialCompletionSession implements CompletionController {
             const lowest = lowestLevelWithItems(this.levelCounts);
             this.loadLevel(lowest ?? 0);
 
-            // If triggered by an explicit close, only reopen when the
+            // If triggered by a dismiss, only reopen when the
             // anchor advanced.  Same anchor means the same completions at
             // the same position — the user already dismissed them.
-            const explicitCloseAnchor = this.explicitCloseAnchor;
-            this.explicitCloseAnchor = undefined;
+            const dismissAnchor = this.dismissAnchor;
+            this.dismissAnchor = undefined;
             if (
-                explicitCloseAnchor !== undefined &&
-                partial === explicitCloseAnchor &&
+                dismissAnchor !== undefined &&
+                partial === dismissAnchor &&
                 this.lastInput === input &&
                 this.lastDirection === direction
             ) {
                 debug(
-                    `Partial completion explicit-hide: anchor unchanged ('${partial}'), suppressing reopen`,
+                    `Partial completion dismiss: anchor unchanged ('${partial}'), suppressing reopen`,
                 );
                 return;
             }
@@ -796,7 +795,7 @@ export class PartialCompletionSession implements CompletionController {
             // anchor so that identical input reuses the session (no
             // re-fetch) while diverged input still triggers a new fetch.
             this.completionP = undefined;
-            this.explicitCloseAnchor = undefined;
+            this.dismissAnchor = undefined;
             this.reconcileTypeAhead(input, direction);
         }
     }
@@ -814,7 +813,7 @@ export class PartialCompletionSession implements CompletionController {
 
 // SeparatorMode after "autoSpacePunctuation" has been resolved per-item
 // and undefined has been defaulted to "space".  Partitions always use
-// this type — no deferred or missing modes at the shell level.
+// this type — no deferred or missing modes at the session level.
 type ResolvedSeparatorMode = Exclude<SeparatorMode, "autoSpacePunctuation">;
 
 // Visibility matrix (non-cumulative, per-level):

@@ -89,13 +89,35 @@ describe("PartialCompletionSession — accept", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
     });
 
-    test("does not notify the renderer (caller is responsible for that)", async () => {
+    test("fires onUpdate when completions were visible", async () => {
+        const dispatcher = makeDispatcher(
+            makeCompletionResult(["song", "sonata"], 4, {
+                separatorMode: "optionalSpace",
+            }),
+        );
+        const { session, onUpdate } = makeSession(dispatcher);
+
+        session.update("play son");
+        await Promise.resolve();
+
+        // Completions are visible (not uniquely satisfied).
+        expect(session.getCompletionState()).toBeDefined();
+        onUpdate.mockClear();
+        session.accept();
+
+        // accept() transitions from defined → undefined, so onUpdate fires.
+        expect(onUpdate).toHaveBeenCalled();
+    });
+
+    test("skips onUpdate when completions were already hidden", async () => {
         const dispatcher = makeDispatcher(makeCompletionResult(["song"], 4));
         const { session, onUpdate } = makeSession(dispatcher);
 
         session.update("play song");
         await Promise.resolve();
 
+        // "song" uniquely satisfied → completionState already undefined.
+        expect(session.getCompletionState()).toBeUndefined();
         onUpdate.mockClear();
         session.accept();
 

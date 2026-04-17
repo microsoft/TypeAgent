@@ -113,7 +113,7 @@ describe("PartialCompletionSession — result processing", () => {
         expect(loadedItems(session)).toEqual(["apple", "mango", "zebra"]);
     });
 
-    test("empty completions list does not call setChoices with items", async () => {
+    test("empty completions list does not load items into the trie", async () => {
         const result: CommandCompletionResult = {
             startIndex: 0,
             completions: [{ name: "empty", completions: [] }],

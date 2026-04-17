@@ -446,10 +446,10 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         session.update("play ");
         expect(isActive(session)).toBe(true);
 
-        // No extra setChoices — the existing trie at level 1
+        // No extra loadLevel — the existing trie at level 1
         // already had the right items loaded by startNewSession.
         // (startNewSession calls loadLevel once; the space update just
-        // runs updatePrefix on the already-loaded trie.)
+        // filters on the already-loaded trie.)
 
         // Type "play.": anchor "play", rawPrefix=".".
         // D1 consumes "." → charLevel=2 > menuSepLevel=1 → advance to L2.
@@ -457,7 +457,7 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         // rawPrefix after consumption = "". Matches "beta".
         session.update("play.");
         // Progressive consumption: may go through multiple levels.
-        // The last setChoices call should have the level-2 items.
+        // The last loadLevel call should have the level-2 items.
         expect(session.getCompletionState()!.items).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({ matchText: "beta" }),
@@ -487,7 +487,7 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         // B1: sepLevel(0) < menuSepLevel(1) + items at level 0 → NARROW.
         // Trie reloaded with level-0 items ("alpha" only).
         session.update("play");
-        // Exactly one setChoices for the narrow reload.
+        // Exactly one loadLevel for the narrow reload.
         expect(session.getCompletionState()!.items).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({ matchText: "alpha" }),
@@ -544,7 +544,7 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         session.update("playa");
         session.update("playalp");
 
-        // setChoices NOT called — trie stays loaded at level 0.
+        // loadLevel NOT called — trie stays loaded at level 0.
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
@@ -569,7 +569,7 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
 
         // Consume again: type space → level 1.
         session.update("play ");
-        // Exactly one setChoices for the consume reload.
+        // Exactly one loadLevel for the consume reload.
         expect(session.getCompletionState()!.items).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({ matchText: "alpha" }),
@@ -671,7 +671,7 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         // D1 consumes " " → charLevel=1 > menuSepLevel=0 → advance to L1.
         // Level 1: no items for "none" mode. Empty trie.
         // D4: accept (closedSet=true).
-        // Consume loaded empty trie at level 1 — exactly 1 setChoices.
+        // Consume loaded empty trie at level 1 — exactly 1 loadLevel.
         session.update("play ");
         expect(isActive(session)).toBe(false);
 
