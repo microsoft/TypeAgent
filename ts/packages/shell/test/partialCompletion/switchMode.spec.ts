@@ -43,9 +43,6 @@ function makeMockUI(): MockSearchMenuUI {
 class TestableSearchMenu {
     private readonly dataProvider = createSearchMenuIndex();
     private searchMenuUI: MockSearchMenuUI | undefined;
-    private lastPosition: SearchMenuPosition | undefined;
-    private lastPrefix: string | undefined;
-    private lastItems: SearchMenuItem[] | undefined;
     private prefix: string | undefined;
     private _active: boolean = false;
     public uiFactory: () => MockSearchMenuUI = makeMockUI;
@@ -64,14 +61,6 @@ class TestableSearchMenu {
 
     public getUI(): MockSearchMenuUI | undefined {
         return this.searchMenuUI;
-    }
-
-    public getLastState() {
-        return {
-            position: this.lastPosition,
-            prefix: this.lastPrefix,
-            items: this.lastItems,
-        };
     }
 
     // ── SearchMenu methods (mirrors production SearchMenu) ─────────────
@@ -108,7 +97,6 @@ class TestableSearchMenu {
         }
 
         if (this.prefix === prefix && this._active) {
-            this.lastPosition = position;
             this.searchMenuUI!.update({ position });
             return;
         }
@@ -117,9 +105,6 @@ class TestableSearchMenu {
 
         if (items.length > 0) {
             this._active = true;
-            this.lastPosition = position;
-            this.lastPrefix = prefix;
-            this.lastItems = items;
             if (this.searchMenuUI === undefined) {
                 this.searchMenuUI = this.uiFactory();
             }
@@ -132,9 +117,6 @@ class TestableSearchMenu {
     public hide(): void {
         if (this._active) {
             this._active = false;
-            this.lastPosition = undefined;
-            this.lastPrefix = undefined;
-            this.lastItems = undefined;
             this.searchMenuUI?.close();
             this.searchMenuUI = undefined;
         }
@@ -150,25 +132,12 @@ class TestableSearchMenu {
         if (this.inline === newInline) {
             return;
         }
-        const wasActive = this.isActive();
         if (this.searchMenuUI) {
             this.searchMenuUI.close();
             this.searchMenuUI = undefined;
         }
         this.inline = newInline;
-        if (
-            wasActive &&
-            this.lastPosition &&
-            this.lastPrefix !== undefined &&
-            this.lastItems
-        ) {
-            this.searchMenuUI = this.uiFactory();
-            this.searchMenuUI.update({
-                position: this.lastPosition,
-                prefix: this.lastPrefix,
-                items: this.lastItems,
-            });
-        }
+        this.prefix = undefined;
     }
 }
 
@@ -177,12 +146,13 @@ class TestableSearchMenu {
 const defaultPos: SearchMenuPosition = { left: 10, bottom: 20 };
 
 describe("SearchMenu switchMode", () => {
+    const items: SearchMenuItem[] = [
+        { matchText: "alpha", selectedText: "alpha" },
+        { matchText: "beta", selectedText: "beta" },
+    ];
+
     function setupActiveMenu(): TestableSearchMenu {
         const menu = new TestableSearchMenu(true, () => defaultPos);
-        const items: SearchMenuItem[] = [
-            { matchText: "alpha", selectedText: "alpha" },
-            { matchText: "beta", selectedText: "beta" },
-        ];
         menu.setChoicesOnProvider(items);
         menu.updatePrefix("a");
         return menu;
@@ -197,33 +167,36 @@ describe("SearchMenu switchMode", () => {
         expect(menu.getUI()).toBe(ui);
     });
 
-    test("closes old UI and creates new UI when switching mode while active", () => {
+    test("closes old UI on switchMode", () => {
         const menu = setupActiveMenu();
         const oldUI = menu.getUI()!;
-
-        const newUI = makeMockUI();
-        menu.uiFactory = () => newUI;
 
         menu.switchMode(false);
 
         expect(oldUI.close).toHaveBeenCalledTimes(1);
-        expect(menu.getUI()).toBe(newUI);
+        // switchMode no longer creates the new UI — caller re-renders.
+        expect(menu.getUI()).toBeUndefined();
     });
 
-    test("new UI receives the same items, prefix, and position", () => {
+    test("caller re-render after switchMode creates new UI with same data", () => {
         const menu = setupActiveMenu();
         const newUI = makeMockUI();
         menu.uiFactory = () => newUI;
 
         menu.switchMode(false);
+        // Caller re-renders (mirrors partial.ts behavior).
+        menu.updatePrefix("a");
 
-        expect(newUI.update).toHaveBeenCalledWith({
-            position: defaultPos,
-            prefix: "a",
-            items: expect.arrayContaining([
-                expect.objectContaining({ matchText: "alpha" }),
-            ]),
-        });
+        expect(menu.getUI()).toBe(newUI);
+        expect(newUI.update).toHaveBeenCalledWith(
+            expect.objectContaining({
+                position: defaultPos,
+                prefix: "a",
+                items: expect.arrayContaining([
+                    expect.objectContaining({ matchText: "alpha" }),
+                ]),
+            }),
+        );
     });
 
     test("does not create UI when switching while inactive", () => {
@@ -260,37 +233,27 @@ describe("SearchMenu switchMode", () => {
         expect(menu.inline).toBe(true);
     });
 
-    test("menu stays active after switchMode", () => {
-        const menu = setupActiveMenu();
-        expect(menu.isActive()).toBe(true);
-
-        menu.switchMode(false);
-
-        // switchMode doesn't call hide(), so active state is preserved.
-        expect(menu.isActive()).toBe(true);
-    });
-
-    test("hide after switchMode closes the new UI", () => {
+    test("hide after switchMode+re-render closes the new UI", () => {
         const menu = setupActiveMenu();
         const newUI = makeMockUI();
         menu.uiFactory = () => newUI;
 
         menu.switchMode(false);
+        menu.updatePrefix("a"); // caller re-renders
         menu.hide();
 
         expect(newUI.close).toHaveBeenCalled();
         expect(menu.getUI()).toBeUndefined();
     });
 
-    test("onShow after switchMode uses the new mode's UI factory", () => {
+    test("render after switchMode uses the new mode's UI factory", () => {
         const menu = setupActiveMenu();
         menu.switchMode(false);
+        menu.hide(); // reset
 
-        // Now set new choices and update — should create a new UI
         const anotherUI = makeMockUI();
         menu.uiFactory = () => anotherUI;
 
-        menu.hide(); // reset
         menu.setChoicesOnProvider([
             { matchText: "gamma", selectedText: "gamma" },
             { matchText: "delta", selectedText: "delta" },
@@ -301,59 +264,6 @@ describe("SearchMenu switchMode", () => {
         expect(anotherUI.update).toHaveBeenCalledWith(
             expect.objectContaining({ prefix: "g" }),
         );
-    });
-});
-
-// ── onShow / onHide state tracking ────────────────────────────────────────────
-
-describe("SearchMenu state tracking", () => {
-    test("onShow stores position, prefix, and items", () => {
-        const pos = { left: 5, bottom: 15 };
-        const menu = new TestableSearchMenu(true, () => pos);
-        menu.setChoicesOnProvider([
-            { matchText: "foo", selectedText: "foo" },
-            { matchText: "foobar", selectedText: "foobar" },
-        ]);
-        menu.updatePrefix("foo");
-
-        const state = menu.getLastState();
-        expect(state.position).toEqual({ left: 5, bottom: 15 });
-        expect(state.prefix).toBe("foo");
-        expect(state.items).toHaveLength(2);
-    });
-
-    test("onHide clears stored state", () => {
-        const pos = { left: 1, bottom: 2 };
-        const menu = new TestableSearchMenu(true, () => pos);
-        menu.setChoicesOnProvider([
-            { matchText: "abc", selectedText: "abc" },
-            { matchText: "abd", selectedText: "abd" },
-        ]);
-        menu.updatePrefix("ab");
-        expect(menu.getLastState().position).toBeDefined();
-
-        menu.hide();
-
-        const state = menu.getLastState();
-        expect(state.position).toBeUndefined();
-        expect(state.prefix).toBeUndefined();
-        expect(state.items).toBeUndefined();
-    });
-
-    test("onUpdatePosition updates stored position", () => {
-        let pos: SearchMenuPosition = { left: 10, bottom: 20 };
-        const menu = new TestableSearchMenu(true, () => pos);
-        menu.setChoicesOnProvider([
-            { matchText: "xyz", selectedText: "xyz" },
-            { matchText: "xyw", selectedText: "xyw" },
-        ]);
-        menu.updatePrefix("xy");
-        // Same prefix again triggers onUpdatePosition with new position
-        pos = { left: 30, bottom: 40 };
-        menu.invalidate(); // force re-query since prefix unchanged
-        menu.updatePrefix("xy");
-
-        expect(menu.getLastState().position).toEqual({ left: 30, bottom: 40 });
     });
 });
 
@@ -384,12 +294,16 @@ describe("switchMode integration with CompletionController", () => {
 
         expect(menu.isActive()).toBe(true);
 
-        // Switch mode — controller state should be preserved
+        // Switch mode — caller re-renders (mirrors partial.ts behavior)
         const newUI = makeMockUI();
         menu.uiFactory = () => newUI;
         menu.switchMode(false);
+        const state = controller.getCompletionState();
+        if (state) {
+            menu.render(state.prefix, state.items);
+        }
 
-        // Controller is still active — new UI should have been created
+        // New UI should have been created with same data
         expect(menu.isActive()).toBe(true);
         expect(newUI.update).toHaveBeenCalled();
     });

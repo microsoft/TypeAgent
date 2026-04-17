@@ -141,6 +141,11 @@ export class PartialCompletion {
 
     public switchMode(newInline: boolean) {
         this.searchMenu.switchMode(newInline);
+        // Re-render with the current completion state in the new UI mode.
+        const state = this.controller.getCompletionState();
+        if (state) {
+            this.searchMenu.render(state.prefix, state.items);
+        }
     }
 
     public close() {

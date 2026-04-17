@@ -15,12 +15,6 @@ import {
 // Architecture: docs/architecture/completion.md — §7 Shell — Search Menu
 export class SearchMenu {
     private searchMenuUI: SearchMenuUI | undefined;
-    // lastPosition/lastPrefix/lastItems are retained solely for switchMode():
-    // when the user toggles inline↔popup, the menu must be re-created with
-    // the same data.  These are cleared on hide() and set on render().
-    private lastPosition: SearchMenuPosition | undefined;
-    private lastPrefix: string | undefined;
-    private lastItems: SearchMenuItem[] | undefined;
     private readonly toggle: CompletionToggle | undefined;
     private prefix: string | undefined;
     private _active: boolean = false;
@@ -56,27 +50,16 @@ export class SearchMenu {
         if (this.inline === newInline) {
             return;
         }
-        const wasActive = this.isActive();
         if (this.searchMenuUI) {
             this.searchMenuUI.close();
             this.searchMenuUI = undefined;
         }
         this.inline = newInline;
         this.toggle?.setDirection(newInline ? "expand" : "collapse");
-        if (
-            wasActive &&
-            this.lastPosition &&
-            this.lastPrefix !== undefined &&
-            this.lastItems
-        ) {
-            this.searchMenuUI = this.createUI();
-            this.searchMenuUI.update({
-                position: this.lastPosition,
-                prefix: this.lastPrefix,
-                items: this.lastItems,
-            });
-            this.updateToggleLayout();
-        }
+        // Reset prefix so the next render() performs a full update
+        // (not the position-only shortcut).  The caller is responsible
+        // for triggering a re-render with the current completion state.
+        this.prefix = undefined;
     }
 
     // ── Rendering ───────────────────────────────────────────────────────────────
@@ -98,9 +81,8 @@ export class SearchMenu {
         }
 
         if (this.prefix === prefix && this._active) {
-            this.lastPosition = position;
             this.searchMenuUI!.update({ position });
-            this.updateToggleLayout();
+            this.updateToggleLayout(position);
             return;
         }
 
@@ -108,16 +90,12 @@ export class SearchMenu {
 
         if (items.length > 0) {
             this._active = true;
-            // onShow
-            this.lastPosition = position;
-            this.lastPrefix = prefix;
-            this.lastItems = items;
             if (this.searchMenuUI === undefined) {
                 this.searchMenuUI = this.createUI();
             }
             this.searchMenuUI.update({ position, prefix, items });
             this.toggle?.show();
-            this.updateToggleLayout();
+            this.updateToggleLayout(position);
         } else {
             this.hide();
         }
@@ -126,10 +104,6 @@ export class SearchMenu {
     public hide(): void {
         if (this._active) {
             this._active = false;
-            // onHide
-            this.lastPosition = undefined;
-            this.lastPrefix = undefined;
-            this.lastItems = undefined;
             this.toggle?.hide();
             this.searchMenuUI?.close();
             this.searchMenuUI = undefined;
@@ -170,7 +144,7 @@ export class SearchMenu {
         return false;
     }
 
-    private updateToggleLayout(): void {
+    private updateToggleLayout(position: SearchMenuPosition): void {
         if (!this.toggle || !this.textEntry?.parentElement) {
             return;
         }
@@ -178,9 +152,7 @@ export class SearchMenu {
         const chatInputRect =
             this.textEntry.parentElement.getBoundingClientRect();
 
-        if (this.lastPosition) {
-            toggleEl.style.left = `${this.lastPosition.left - chatInputRect.left}px`;
-        }
+        toggleEl.style.left = `${position.left - chatInputRect.left}px`;
         toggleEl.style.width = "";
     }
 }
