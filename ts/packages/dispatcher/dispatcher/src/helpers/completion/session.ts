@@ -15,9 +15,14 @@ import {
     isUniquelySatisfied,
 } from "./searchMenu.js";
 import registerDebug from "debug";
+import type { CompletionController } from "./controller.js";
 
 const debug = registerDebug("typeagent:completion:session");
 const debugError = registerDebug("typeagent:completion:session:error");
+
+// C2 COMMITTED: matches a trie-entry followed by a separator character.
+// Cached at module scope to avoid per-keystroke regex allocation.
+const committedSepRe = /^(.+?)[\s\p{P}]/u;
 
 export type CompletionState = {
     items: SearchMenuItem[];
@@ -94,7 +99,7 @@ function computeNoMatchPolicy(
 //
 // Architecture: docs/architecture/completion.md — §5 Completion Session
 // This class has no DOM dependencies and is fully unit-testable with Jest.
-export class PartialCompletionSession {
+export class PartialCompletionSession implements CompletionController {
     // The "anchor" prefix for the current session.  Set to the full input
     // when the request is issued, then narrowed to input[0..startIndex] when
     // the backend reports how much the grammar consumed.  `undefined` = IDLE.
@@ -190,7 +195,12 @@ export class PartialCompletionSession {
     }
 
     // Update the cached completionState and fire the onUpdate callback.
+    // Skips firing when transitioning from undefined to undefined (no
+    // visible change — avoids redundant hide() calls in the renderer).
     private setCompletionState(state: CompletionState | undefined): void {
+        if (state === undefined && this.completionState === undefined) {
+            return;
+        }
         this.completionState = state;
         this.onUpdate();
     }
@@ -265,7 +275,7 @@ export class PartialCompletionSession {
         this.explicitCloseAnchor = undefined;
         this.lastInput = "";
         this.lastDirection = "forward";
-        this.completionState = undefined;
+        this.setCompletionState(undefined);
     }
 
     /**
@@ -340,8 +350,10 @@ export class PartialCompletionSession {
         return this.completionState;
     }
 
-    // @internal — Test-only: returns all items currently loaded in the trie.
-    // Avoids unsafe casts in test code.  Not part of the public API.
+    /**
+     * @internal Test-only — returns all items currently loaded in the trie.
+     * Not part of the {@link CompletionController} public API.
+     */
     public getLoadedItems(): SearchMenuItem[] {
         return this.searchMenuIndex.filterItems("");
     }
@@ -552,7 +564,7 @@ export class PartialCompletionSession {
             }
 
             // [C2] COMMITTED — separator after a valid match.
-            const sepMatch = rawPrefix.match(/^(.+?)[\s\p{P}]/u);
+            const sepMatch = rawPrefix.match(committedSepRe);
             if (
                 sepMatch !== null &&
                 this.searchMenuIndex.hasExactMatch(sepMatch[1])
@@ -658,8 +670,11 @@ export class PartialCompletionSession {
             } else {
                 // reuseSession returned false for the same input (e.g. C1
                 // UNIQUE, C2 COMMITTED, D3 REFETCH).  In all cases items
-                // are empty or uniquely satisfied — computeCompletionState
-                // would return undefined.
+                // are empty or uniquely satisfied — completionState is
+                // undefined.
+                debug(
+                    `Partial completion reconcile: reuseSession=false for same input, suppressing re-fetch`,
+                );
                 this.setCompletionState(undefined);
             }
         }

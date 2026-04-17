@@ -166,7 +166,28 @@ describe("render vs updatePosition dispatch", () => {
         expect(texts).toContain("beta");
     });
 
-    test("hide called when completionState is undefined", async () => {
+    test("hide called when completionState transitions to undefined", async () => {
+        const result = makeCompletionResult(["song", "shuffle"], 4, {
+            separatorMode: "optionalSpace",
+        });
+        const dispatcher = makeDispatcher(result);
+        const controller = createCompletionController(dispatcher);
+        const menu = new MockSearchMenu();
+        wireController(controller, menu);
+
+        // First update shows completions (optionalSpace → visible at L0).
+        controller.update("play", "forward");
+        await Promise.resolve();
+        expect(menu.renderCalls.length).toBeGreaterThan(0);
+
+        const hidesBefore = menu.hideCalls;
+
+        // Diverge from anchor → re-fetch clears state → hide.
+        controller.update("stop", "forward");
+        expect(menu.hideCalls).toBeGreaterThan(hidesBefore);
+    });
+
+    test("no redundant hide when state is already undefined", async () => {
         const result = makeCompletionResult(["song"], 4, {
             separatorMode: "space",
         });
@@ -179,6 +200,8 @@ describe("render vs updatePosition dispatch", () => {
         await Promise.resolve();
 
         // "play" with separatorMode "space" → deferred (state undefined).
-        expect(menu.hideCalls).toBeGreaterThan(0);
+        // State was never non-undefined, so onUpdate should not fire
+        // redundantly — no hide calls.
+        expect(menu.hideCalls).toBe(0);
     });
 });

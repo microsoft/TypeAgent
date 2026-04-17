@@ -149,11 +149,14 @@ describe("PartialCompletionSession — state transitions", () => {
 
         session.update("play");
         await Promise.resolve();
+        onUpdate.mockClear();
 
         session.hide();
-        expect(onUpdate).toHaveBeenCalled();
+        // State was already undefined → no-op, onUpdate should not fire.
+        expect(onUpdate).not.toHaveBeenCalled();
 
-        // After hide, same input within anchor reuses session — no re-fetch
+        // The important contract: anchor is preserved so the same input
+        // reuses the session below.
         session.update("play");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
