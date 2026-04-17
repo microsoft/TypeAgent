@@ -681,10 +681,11 @@ export class PartialCompletionSession implements CompletionController {
     }
 
     // Start a new completion session: issue backend request and process result.
-    private startNewSession(
+    // Fire-and-forget — callers do not await the returned promise.
+    private async startNewSession(
         input: string,
         direction: CompletionDirection,
-    ): void {
+    ): Promise<void> {
         debug(`Partial completion start: '${input}' direction=${direction}`);
         this.searchMenuIndex.setItems([]);
         this.anchor = input;
@@ -701,83 +702,83 @@ export class PartialCompletionSession implements CompletionController {
             direction,
         );
         this.completionP = completionP;
-        completionP
-            .then((result) => {
-                if (this.completionP !== completionP) {
-                    debug(`Partial completion canceled: '${input}'`);
-                    return;
-                }
+        try {
+            const result = await completionP;
 
-                this.completionP = undefined;
-                debug(`Partial completion result: `, result);
+            if (this.completionP !== completionP) {
+                debug(`Partial completion canceled: '${input}'`);
+                return;
+            }
 
-                this.noMatchPolicy = computeNoMatchPolicy(
-                    result.closedSet,
-                    result.afterWildcard,
+            this.completionP = undefined;
+            debug(`Partial completion result: `, result);
+
+            this.noMatchPolicy = computeNoMatchPolicy(
+                result.closedSet,
+                result.afterWildcard,
+            );
+            this.directionSensitive = result.directionSensitive;
+
+            const partitions = toPartitions(
+                result.completions,
+                input,
+                result.startIndex,
+            );
+
+            if (partitions.length === 0) {
+                debug(
+                    `Partial completion skipped: No completions for '${input}'`,
                 );
-                this.directionSensitive = result.directionSensitive;
+                this.setPartitions([]);
+                this.reconcileTypeAhead(input, direction);
+                return;
+            }
 
-                const partitions = toPartitions(
-                    result.completions,
-                    input,
-                    result.startIndex,
+            // Anchor the session at the resolved prefix so
+            // subsequent keystrokes filter within the trie.
+            const partial =
+                result.startIndex >= 0 && result.startIndex <= input.length
+                    ? input.substring(0, result.startIndex)
+                    : input;
+            this.anchor = partial;
+            this.menuAnchorIndex = partial.length;
+            this.consumedSep = "";
+            this.setPartitions(partitions);
+
+            // Start at the lowest non-empty level to avoid
+            // parking at an empty L0 that requires consumption.
+            const lowest = lowestLevelWithItems(this.levelCounts);
+            this.loadLevel(lowest ?? 0);
+
+            // If triggered by an explicit close, only reopen when the
+            // anchor advanced.  Same anchor means the same completions at
+            // the same position — the user already dismissed them.
+            const explicitCloseAnchor = this.explicitCloseAnchor;
+            this.explicitCloseAnchor = undefined;
+            if (
+                explicitCloseAnchor !== undefined &&
+                partial === explicitCloseAnchor &&
+                this.lastInput === input &&
+                this.lastDirection === direction
+            ) {
+                debug(
+                    `Partial completion explicit-hide: anchor unchanged ('${partial}'), suppressing reopen`,
                 );
+                return;
+            }
 
-                if (partitions.length === 0) {
-                    debug(
-                        `Partial completion skipped: No completions for '${input}'`,
-                    );
-                    this.setPartitions([]);
-                    this.reconcileTypeAhead(input, direction);
-                    return;
-                }
-
-                // Anchor the session at the resolved prefix so
-                // subsequent keystrokes filter within the trie.
-                const partial =
-                    result.startIndex >= 0 && result.startIndex <= input.length
-                        ? input.substring(0, result.startIndex)
-                        : input;
-                this.anchor = partial;
-                this.menuAnchorIndex = partial.length;
-                this.consumedSep = "";
-                this.setPartitions(partitions);
-
-                // Start at the lowest non-empty level to avoid
-                // parking at an empty L0 that requires consumption.
-                const lowest = lowestLevelWithItems(this.levelCounts);
-                this.loadLevel(lowest ?? 0);
-
-                // If triggered by an explicit close, only reopen when the
-                // anchor advanced.  Same anchor means the same completions at
-                // the same position — the user already dismissed them.
-                const explicitCloseAnchor = this.explicitCloseAnchor;
-                this.explicitCloseAnchor = undefined;
-                if (
-                    explicitCloseAnchor !== undefined &&
-                    partial === explicitCloseAnchor &&
-                    this.lastInput === input &&
-                    this.lastDirection === direction
-                ) {
-                    debug(
-                        `Partial completion explicit-hide: anchor unchanged ('${partial}'), suppressing reopen`,
-                    );
-                    return;
-                }
-
-                // Use the latest input/direction — the user may have typed
-                // ahead while the fetch was in flight.
-                this.reconcileTypeAhead(input, direction);
-            })
-            .catch((e) => {
-                debugError(`Partial completion error: '${input}' ${e}`);
-                // On error, clear the in-flight promise but preserve the
-                // anchor so that identical input reuses the session (no
-                // re-fetch) while diverged input still triggers a new fetch.
-                this.completionP = undefined;
-                this.explicitCloseAnchor = undefined;
-                this.reconcileTypeAhead(input, direction);
-            });
+            // Use the latest input/direction — the user may have typed
+            // ahead while the fetch was in flight.
+            this.reconcileTypeAhead(input, direction);
+        } catch (e) {
+            debugError(`Partial completion error: '${input}' ${e}`);
+            // On error, clear the in-flight promise but preserve the
+            // anchor so that identical input reuses the session (no
+            // re-fetch) while diverged input still triggers a new fetch.
+            this.completionP = undefined;
+            this.explicitCloseAnchor = undefined;
+            this.reconcileTypeAhead(input, direction);
+        }
     }
 }
 

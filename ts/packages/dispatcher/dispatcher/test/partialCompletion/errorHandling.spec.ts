@@ -7,6 +7,7 @@ import {
     CommandCompletionResult,
     makeSession,
     makeCompletionResult,
+    flushPromises,
 } from "./helpers.js";
 
 describe("PartialCompletionSession — backend error handling", () => {
@@ -21,8 +22,7 @@ describe("PartialCompletionSession — backend error handling", () => {
 
         session.update("play");
         // Flush rejected promise + catch handler
-        await Promise.resolve();
-        await Promise.resolve();
+        await flushPromises();
 
         // After rejection, anchor is still "play" with separatorMode="space".
         // Diverged input triggers a re-fetch (anchor no longer matches).
@@ -45,8 +45,7 @@ describe("PartialCompletionSession — backend error handling", () => {
         const { session } = makeSession(dispatcher);
 
         session.update("play");
-        await Promise.resolve();
-        await Promise.resolve();
+        await flushPromises();
 
         // Same input — anchor still matches, reuse session (no re-fetch)
         session.update("play");
@@ -75,12 +74,17 @@ describe("PartialCompletionSession — backend error handling", () => {
 
         // Now reject
         rejectFn(new Error("timeout"));
-        await Promise.resolve();
-        await Promise.resolve();
+        await flushPromises();
 
-        // Session is no longer PENDING — diverged input triggers re-fetch
+        // Session is no longer PENDING — diverged input triggers re-fetch.
+        // Call count: (1) original "play", (2) reconcile re-fetches
+        // "play more" (type-ahead while pending), (3) "stop" diverges.
         session.update("stop");
-        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
+        expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(3);
+        expect(dispatcher.getCommandCompletion).toHaveBeenLastCalledWith(
+            "stop",
+            "forward",
+        );
     });
 
     test("rejected promise does not populate completions", async () => {
@@ -92,8 +96,7 @@ describe("PartialCompletionSession — backend error handling", () => {
         const { session } = makeSession(dispatcher);
 
         session.update("play");
-        await Promise.resolve();
-        await Promise.resolve();
+        await flushPromises();
 
         // After rejection, no completions should be available.
         // The initial startNewSession fires one onUpdate (clearing state).

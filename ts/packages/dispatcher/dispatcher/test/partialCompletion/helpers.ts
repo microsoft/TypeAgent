@@ -113,8 +113,9 @@ export function loadedItems(session: PartialCompletionSession): string[] {
     return session.getLoadedItems().map((i) => i.selectedText);
 }
 
-// Flush microtask queue.  Use after resolving/rejecting deferred promises
-// to allow .then/.catch handlers to execute.
+// Flush microtask queue.  setTimeout schedules a macrotask that runs
+// only after all pending microtasks (including nested async/await
+// continuations) have drained.
 export function flushPromises(): Promise<void> {
-    return Promise.resolve().then(() => Promise.resolve());
+    return new Promise((resolve) => setTimeout(resolve, 0));
 }
