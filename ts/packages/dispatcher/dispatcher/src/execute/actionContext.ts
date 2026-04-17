@@ -70,6 +70,7 @@ export function getActionContext(
     };
     const actionContext: ActionContext<unknown> = {
         streamingContext: undefined,
+        isFromReasoningLoop: context.isInsideReasoningLoop,
         activityContext:
             // Only make activityContext available if the action is from the same agent.
             context.activityContext?.appAgentName === appAgentName

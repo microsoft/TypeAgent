@@ -32,6 +32,7 @@ export type ActionConfig = {
     schemaDefaultEnabled: boolean;
     actionDefaultEnabled: boolean;
     transient: boolean;
+    errorReasoning: boolean;
     schemaName: string;
 
     // Schema file path string (the main schema, .pas.json or .ts)
@@ -97,6 +98,7 @@ function collectActionConfigs(
     transient: boolean,
     schemaDefaultEnabled: boolean,
     actionDefaultEnabled: boolean,
+    errorReasoning: boolean,
 ) {
     transient = manifest.transient ?? transient; // inherit from parent if not specified
     schemaDefaultEnabled =
@@ -107,6 +109,7 @@ function collectActionConfigs(
         manifest.actionDefaultEnabled ??
         manifest.defaultEnabled ??
         actionDefaultEnabled; // inherit from parent if not specified
+    errorReasoning = manifest.errorReasoning ?? errorReasoning; // inherit from parent if not specified
 
     if (manifest.schema) {
         const originalSchemaFile = manifest.schema.schemaFile;
@@ -136,6 +139,7 @@ function collectActionConfigs(
             transient,
             schemaDefaultEnabled,
             actionDefaultEnabled,
+            errorReasoning,
         };
     }
 
@@ -154,6 +158,7 @@ function collectActionConfigs(
                 transient, // propagate default transient
                 schemaDefaultEnabled, // propagate default schemaDefaultEnabled
                 actionDefaultEnabled, // propagate default actionDefaultEnabled
+                errorReasoning, // propagate default errorReasoning
             );
         }
     }
@@ -184,6 +189,7 @@ export function convertToActionConfig(
         false, // transient default to false if not specified
         true, // translationDefaultEnable default to true if not specified
         true, // actionDefaultEnabled default to true if not specified
+        false, // errorReasoning default to false if not specified
     );
     return actionConfigs;
 }

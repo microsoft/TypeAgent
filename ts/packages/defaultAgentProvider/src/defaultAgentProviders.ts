@@ -6,6 +6,7 @@ import {
     AppAgentInstaller,
     IndexingServiceRegistry,
     DefaultIndexingServiceRegistry,
+    DispatcherOptions,
 } from "agent-dispatcher";
 import { createNpmAppAgentProvider } from "dispatcher-node-providers";
 
@@ -74,6 +75,22 @@ export function getDefaultAppAgentProviders(
         providers.push(getExternalAppAgentProvider(instanceDir));
     }
     return providers;
+}
+
+/**
+ * Return dispatcher-level options derived from the provider config.json.
+ * Spread the result into DispatcherOptions alongside appAgentProviders so
+ * config.json fields like `promptAppend` reach the Claude reasoning prompt.
+ */
+export function getDefaultDispatcherOptions(
+    configName?: string,
+): Pick<DispatcherOptions, "promptAppend"> {
+    const cfg = getProviderConfig(configName);
+    const options: Pick<DispatcherOptions, "promptAppend"> = {};
+    if (cfg.promptAppend) {
+        options.promptAppend = cfg.promptAppend;
+    }
+    return options;
 }
 
 // Return installer for external app agent provider

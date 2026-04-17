@@ -165,6 +165,10 @@ export type DispatcherConfig = {
         matchWildcard: boolean;
         matchEntityWildcard: boolean;
     };
+
+    // Additional instructions appended to the reasoning system prompt.
+    // Set this in the session config to inject dispatcher-level guidance without modifying source.
+    promptAppend?: string;
 };
 
 export type SessionConfig = AppAgentStateConfig & DispatcherConfig;

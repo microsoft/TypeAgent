@@ -16,7 +16,6 @@ import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import {
     ActionResult,
-    ActionResultError,
     ActionContext,
     ParsedCommandParams,
     ParameterDefinitions,
@@ -318,11 +317,17 @@ async function canExecute(
     return true;
 }
 
+export type ActionExecutionError = {
+    error: string;
+    failedAction: ExecutableAction;
+    fallbackToReasoning?: boolean;
+};
+
 export async function executeActions(
     actions: ExecutableAction[],
     entities: PromptEntity[] | undefined,
     context: ActionContext<CommandHandlerContext>,
-): Promise<ActionResultError | undefined> {
+): Promise<ActionExecutionError | undefined> {
     const sessionCtx = context.sessionContext as any;
     const systemContext: CommandHandlerContext =
         sessionCtx._systemContext ?? sessionCtx.agentContext;
@@ -392,7 +397,10 @@ export async function executeActions(
         );
 
         // add the action result to memory whether it has error or not.
-        if (systemContext.actionResultKnowledgeExtraction === true) {
+        if (
+            systemContext.actionResultEntityStorage ||
+            systemContext.actionResultKnowledgeExtraction
+        ) {
             addActionResultToMemory(
                 systemContext,
                 executableAction,
@@ -404,7 +412,7 @@ export async function executeActions(
 
         if (result.error !== undefined) {
             // Stop executing further action on error.
-            return result as ActionResultError;
+            return { error: result.error, failedAction: executableAction };
         }
 
         const resultEntityId = executableAction.resultEntityId;
@@ -520,9 +528,14 @@ function getAdditionalExecutableActions(
         ) as FullAction;
 
         if (appAgentName !== DispatcherName) {
-            // For non-dispatcher, action can only be trigger within the same agent.
+            // For non-dispatcher, action can only be triggered within the same agent,
+            // with the exception of the reasoning action which is a meta-action that
+            // any agent may request to hand off complex tasks to the reasoning loop.
             const actionAppAgentName = getAppAgentName(fullAction.schemaName);
-            if (actionAppAgentName !== appAgentName) {
+            const isReasoningAction =
+                actionAppAgentName === DispatcherName &&
+                fullAction.actionName === "reasoningAction";
+            if (actionAppAgentName !== appAgentName && !isReasoningAction) {
                 throw new Error(
                     `Cannot invoke actions from other agent '${actionAppAgentName}'.`,
                 );

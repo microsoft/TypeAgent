@@ -55,6 +55,7 @@ import {
     interpretRequest,
     InterpretResult,
 } from "../../../translation/interpretRequest.js";
+import { displayStatus } from "@typeagent/agent-sdk/helpers/display";
 
 const debugExplain = registerDebug("typeagent:explain");
 const debugRequest = registerDebug("typeagent:request");
@@ -396,6 +397,11 @@ export class RequestCommandHandler implements CommandHandler {
 
             // Get the history context before adding the request to memory
             const history = getHistoryContext(systemContext);
+            context.actionIO.appendDiagnosticData({
+                type: "translationContext",
+                entities: history?.entities ?? [],
+                activityContext: history?.activityContext,
+            });
             if (systemContext.userRequestKnowledgeExtraction === true) {
                 addRequestToMemory(systemContext, request, cachedAttachments);
             }
@@ -460,30 +466,49 @@ export class RequestCommandHandler implements CommandHandler {
                     requestAction.history?.entities,
                     context,
                 );
+
+                // Error-triggered reasoning: if an action failed and at least one
+                // schema in the request opts in via errorReasoning: true, give Claude
+                // a second chance using the same reasoning loop as UnknownAction.
                 if (
-                    execResult?.fallbackToReasoning &&
-                    !systemContext.noReasoning
+                    !systemContext.noReasoning &&
+                    execResult !== undefined &&
+                    execResult.fallbackToReasoning
                 ) {
-                    const failedAction = requestAction.actions[0]?.action;
-                    const failedParams = failedAction?.parameters as
-                        | Record<string, unknown>
-                        | undefined;
-                    try {
-                        await executeReasoning(request, context, {
-                            engine: "claude",
-                            fallbackContext: {
-                                failedAction: failedAction?.actionName,
-                                failedSchema: failedAction?.schemaName,
-                                failedFlowName: failedParams?.flowName as
-                                    | string
-                                    | undefined,
-                                error: execResult.error,
-                            },
-                        });
-                    } catch (e: any) {
-                        debugRequest(
-                            `Reasoning fallback after execution failure: ${e.message}`,
-                        );
+                    const needsErrorReasoning = requestAction.actions.some(
+                        ({ action }) => {
+                            try {
+                                return (
+                                    systemContext.agents.getActionConfig(
+                                        action.schemaName,
+                                    ).errorReasoning === true
+                                );
+                            } catch {
+                                return false;
+                            }
+                        },
+                    );
+                    if (needsErrorReasoning) {
+                        const { error, failedAction } = execResult;
+                        const augmentedRequest =
+                            `[Context: A direct action dispatch failed.\n` +
+                            `Action: ${JSON.stringify(failedAction.action, undefined, 2)}\n` +
+                            `Error: "${error}"\n` +
+                            `Please handle the following request using the available tools.]\n\n` +
+                            request;
+                        try {
+                            displayStatus(
+                                "Action failed — retrying with reasoning...",
+                                context,
+                            );
+                            await executeReasoning(augmentedRequest, context, {
+                                engine: "claude",
+                            });
+                        } catch (e: any) {
+                            debugRequest(
+                                `Error-triggered reasoning failed, keeping original error: ${e.message}`,
+                            );
+                        }
                     }
                 }
             }

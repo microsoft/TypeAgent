@@ -248,6 +248,7 @@ export type ContextParams = {
 export type ActionContextParams = ContextParams & {
     actionContextId: number;
     activityContext: ActivityContext | undefined;
+    isFromReasoningLoop: boolean;
 };
 
 export type OptionsFunctionCallBack = {
