@@ -8,6 +8,8 @@ import { TabTitleIndex } from "./tabTitleIndex.mjs";
 import { TextEmbeddingModel } from "aiclient";
 import type { WebsiteCollection, IndexData } from "website-memory";
 import { ActionContext, SessionContext } from "@typeagent/agent-sdk";
+import { ChoiceManager } from "@typeagent/agent-sdk/helpers/action";
+
 import { WebFlowStore } from "./webFlows/store/webFlowStore.mjs";
 import { WebAgentChannels } from "./webTypeAgent.mjs";
 import {
@@ -37,6 +39,10 @@ export type BrowserActionContext = {
     viewProcess?: ChildProcess | undefined;
     localHostPort: number;
     webFlowStore?: WebFlowStore | undefined;
+    choiceManager?: ChoiceManager | undefined;
+    lastInferredActions?: any[] | undefined;
+    lastInferredActionsPageUrl?: string | undefined;
+    pendingInferChoiceId?: string | undefined;
     currentWebSearchResults?: Map<string, any[]> | undefined; // Store search results for follow-up actions
     resolverSettings: {
         searchResolver?: boolean | undefined;
