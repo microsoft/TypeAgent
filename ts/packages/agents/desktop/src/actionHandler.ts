@@ -85,17 +85,21 @@ function formatItem(item: unknown): string {
     }
     const obj = item as Record<string, unknown>;
 
-    // WiFi network: { Ssid, SignalQuality, Secured, Connected }
-    if ("Ssid" in obj) {
-        const signal = obj.SignalQuality ?? "?";
-        const secured = obj.Secured ? "🔒" : "🔓";
-        const connected = obj.Connected ? " (connected)" : "";
-        return `${obj.Ssid} — ${signal}% ${secured}${connected}`;
+    // WiFi network: { ssid, signalQuality, secured, connected }
+    if ("ssid" in obj || "Ssid" in obj) {
+        const ssid = obj.ssid ?? obj.Ssid;
+        const signal = obj.signalQuality ?? obj.SignalQuality ?? "?";
+        const secured = (obj.secured ?? obj.Secured) ? "🔒" : "🔓";
+        const connected = (obj.connected ?? obj.Connected) ? " (connected)" : "";
+        return `${ssid} — ${signal}% ${secured}${connected}`;
     }
 
-    // Display resolution: { Width, Height, BitsPerPixel, RefreshRate }
-    if ("Width" in obj && "Height" in obj && "RefreshRate" in obj) {
-        return `${obj.Width}x${obj.Height} @ ${obj.RefreshRate}Hz`;
+    // Display resolution: { width, height, bitsPerPixel, refreshRate }
+    if (("width" in obj || "Width" in obj) && ("refreshRate" in obj || "RefreshRate" in obj)) {
+        const w = obj.width ?? obj.Width;
+        const h = obj.height ?? obj.Height;
+        const hz = obj.refreshRate ?? obj.RefreshRate;
+        return `${w}x${h} @ ${hz}Hz`;
     }
 
     return Object.values(obj).join(", ");
