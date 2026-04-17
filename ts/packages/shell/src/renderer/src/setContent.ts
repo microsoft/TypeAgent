@@ -295,11 +295,12 @@ export function setContent(
             ${css}
             </head>
             <body style="height: auto; overflow: hidden; background: transparent;">${message}</body></html>`;
-        }).catch((err) => {
-            console.error(`Failed to load CSS for iframe: ${err}`);
-            iframe.srcdoc = `<html>
+            })
+            .catch((err) => {
+                console.error(`Failed to load CSS for iframe: ${err}`);
+                iframe.srcdoc = `<html>
             <body style="height: auto; overflow: hidden; background: transparent;">${message}</body></html>`;
-        });
+            });
 
         contentElm.appendChild(iframe);
     } else {
