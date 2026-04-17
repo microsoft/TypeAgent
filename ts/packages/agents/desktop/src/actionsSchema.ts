@@ -134,11 +134,11 @@ export type ChangeThemeModeAction = {
     };
 };
 
-// Applies a Windows theme by name or file path
+// Applies a Windows theme by name (e.g. "Captured Motion", "Glow", "Sunrise") or file path. Use this when the user wants to switch to a specific named theme.
 export type ApplyThemeAction = {
     actionName: "ApplyTheme";
     parameters: {
-        filePath: string; // The theme name or file path to apply (use "previous" to revert)
+        filePath: string; // The theme name or .theme file path to apply (use "previous" to revert)
     };
 };
 
