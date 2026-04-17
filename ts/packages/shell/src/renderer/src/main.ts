@@ -383,39 +383,87 @@ function registerClient(
                             switch (payload.subcommand) {
                                 case "new": {
                                     if (!payload.name) {
-                                        console.error(
-                                            "Session name is required for new session.",
+                                        chatView.addNotificationMessage(
+                                            {
+                                                type: "html",
+                                                content:
+                                                    "A name is required to create a new conversation.",
+                                                kind: "warning",
+                                            },
+                                            "session",
+                                            undefined,
                                         );
                                         break;
                                     }
-                                    await api.sessionCreate(payload.name);
+                                    const created = await api.sessionCreate(
+                                        payload.name,
+                                    );
+                                    const switchResult =
+                                        await api.sessionSwitch(
+                                            created.sessionId,
+                                        );
+                                    const msg = switchResult.success
+                                        ? `✅ Created and switched to conversation "<b>${escapeHtml(created.name)}</b>"`
+                                        : `✅ Created conversation "<b>${escapeHtml(created.name)}</b>" but could not switch: ${escapeHtml(switchResult.error ?? "unknown error")}`;
+                                    chatView.addNotificationMessage(
+                                        {
+                                            type: "html",
+                                            content: msg,
+                                            kind: "info",
+                                        },
+                                        "session",
+                                        undefined,
+                                    );
                                     break;
                                 }
                                 case "list": {
                                     const sessions = await api.sessionList();
                                     const current =
                                         await api.sessionGetCurrent();
-                                    for (const s of sessions) {
-                                        const marker =
-                                            current &&
-                                            s.sessionId === current.sessionId
-                                                ? " ▸"
+                                    let html: string;
+                                    if (sessions.length === 0) {
+                                        html = "No conversations found.";
+                                    } else {
+                                        const lines = sessions.map((s) => {
+                                            const isCurrent =
+                                                current &&
+                                                s.sessionId ===
+                                                    current.sessionId;
+                                            const marker = isCurrent
+                                                ? " ← <b>current</b>"
                                                 : "";
-                                        console.log(
-                                            `${s.name} (${s.sessionId})${marker}`,
-                                        );
+                                            const date = new Date(
+                                                s.createdAt,
+                                            ).toLocaleDateString();
+                                            return `• <b>${escapeHtml(s.name)}</b> (${escapeHtml(s.sessionId)}) — ${s.clientCount} client(s), created ${date}${marker}`;
+                                        });
+                                        html = `<b>Conversations (${sessions.length})</b><br>${lines.join("<br>")}`;
                                     }
+                                    chatView.addNotificationMessage(
+                                        {
+                                            type: "html",
+                                            content: html,
+                                            kind: "info",
+                                        },
+                                        "session",
+                                        undefined,
+                                    );
                                     break;
                                 }
                                 case "info": {
                                     const cur = await api.sessionGetCurrent();
-                                    if (cur) {
-                                        console.log(
-                                            `Current session: ${cur.name} (${cur.sessionId})`,
-                                        );
-                                    } else {
-                                        console.log("No active session.");
-                                    }
+                                    const html = cur
+                                        ? `Current conversation: <b>${escapeHtml(cur.name)}</b> (${escapeHtml(cur.sessionId)})`
+                                        : "No active conversation.";
+                                    chatView.addNotificationMessage(
+                                        {
+                                            type: "html",
+                                            content: html,
+                                            kind: "info",
+                                        },
+                                        "session",
+                                        undefined,
+                                    );
                                     break;
                                 }
                                 case "switch": {
@@ -425,13 +473,53 @@ function registerClient(
                                             s.name.toLowerCase() ===
                                             payload.name?.toLowerCase(),
                                     );
+                                    let switchId: string;
+                                    let switchName: string;
+                                    let created = false;
                                     if (!match) {
-                                        console.error(
-                                            `Session "${payload.name}" not found.`,
-                                        );
-                                        break;
+                                        // Session not found — create it so that "switch to
+                                        // new conversation X" works even when intermediate
+                                        // translation drops the word "new".
+                                        if (!payload.name) {
+                                            chatView.addNotificationMessage(
+                                                {
+                                                    type: "html",
+                                                    content:
+                                                        "A conversation name is required.",
+                                                    kind: "warning",
+                                                },
+                                                "session",
+                                                undefined,
+                                            );
+                                            break;
+                                        }
+                                        const newSession =
+                                            await api.sessionCreate(
+                                                payload.name,
+                                            );
+                                        switchId = newSession.sessionId;
+                                        switchName = newSession.name;
+                                        created = true;
+                                    } else {
+                                        switchId = match.sessionId;
+                                        switchName = match.name;
                                     }
-                                    await api.sessionSwitch(match.sessionId);
+                                    const result =
+                                        await api.sessionSwitch(switchId);
+                                    const msg = result.success
+                                        ? created
+                                            ? `✅ Created and switched to conversation "<b>${escapeHtml(result.name ?? switchName)}</b>"`
+                                            : `🔄 Switched to conversation "<b>${escapeHtml(result.name ?? switchName)}</b>"`
+                                        : `❌ ${escapeHtml(result.error ?? "Failed to switch conversation")}`;
+                                    chatView.addNotificationMessage(
+                                        {
+                                            type: "html",
+                                            content: msg,
+                                            kind: "info",
+                                        },
+                                        "session",
+                                        undefined,
+                                    );
                                     break;
                                 }
                                 case "delete": {
@@ -442,12 +530,27 @@ function registerClient(
                                             payload.name?.toLowerCase(),
                                     );
                                     if (!match) {
-                                        console.error(
-                                            `Session "${payload.name}" not found.`,
+                                        chatView.addNotificationMessage(
+                                            {
+                                                type: "html",
+                                                content: `❌ Conversation "<b>${escapeHtml(payload.name ?? "")}</b>" not found.`,
+                                                kind: "warning",
+                                            },
+                                            "session",
+                                            undefined,
                                         );
                                         break;
                                     }
                                     await api.sessionDelete(match.sessionId);
+                                    chatView.addNotificationMessage(
+                                        {
+                                            type: "html",
+                                            content: `🗑️ Deleted conversation "<b>${escapeHtml(match.name)}</b>"`,
+                                            kind: "info",
+                                        },
+                                        "session",
+                                        undefined,
+                                    );
                                     break;
                                 }
                             }
@@ -812,4 +915,12 @@ function getDateDifferenceDescription(date1: Date, date2: Date): string {
     } else {
         return date1.toLocaleDateString("en-US", { weekday: "long" });
     }
+}
+
+function escapeHtml(str: string): string {
+    return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
 }
