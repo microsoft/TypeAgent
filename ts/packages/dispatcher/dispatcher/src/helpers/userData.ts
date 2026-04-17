@@ -10,7 +10,10 @@ import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { ensureDirectory, getUniqueFileName } from "../utils/fsUtils.js";
 
 export function getUserDataDir() {
-    return process.env.TYPEAGENT_USER_DATA_DIR ?? path.join(os.homedir(), ".typeagent");
+    return (
+        process.env.TYPEAGENT_USER_DATA_DIR ??
+        path.join(os.homedir(), ".typeagent")
+    );
 }
 
 export function _resetCacheForTest() {
