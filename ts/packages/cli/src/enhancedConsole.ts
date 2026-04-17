@@ -29,6 +29,7 @@ import type {
     PendingInteractionResponse,
     PendingInteractionEntry,
 } from "@typeagent/dispatcher-types";
+import type { CompletionController } from "agent-dispatcher/helpers/completion";
 import chalk from "chalk";
 import fs from "fs";
 import path from "path";
@@ -42,6 +43,7 @@ import {
     isSlashCommand,
     handleSlashCommand,
     getVerboseIndicator,
+    getSlashCompletions,
 } from "./slashCommands.js";
 import {
     setSpinnerAccessor,
@@ -1128,20 +1130,18 @@ function formatDisplayContent(content: string | DisplayContent): string {
  */
 async function questionWithCompletion(
     message: string,
-    getCompletions: (input: string) => Promise<any>,
+    controller: CompletionController | undefined,
     history: string[] = [],
 ): Promise<string> {
     return new Promise<string>((resolve) => {
         let input = "";
         let cursorPos = 0; // Position within input string (0 = before first char)
-        let allCompletions: string[] = []; // All available completions
-        let filteredCompletions: string[] = []; // Filtered based on user typing
+        let filteredCompletions: string[] = []; // Render-cache populated from controller
         let completionIndex = 0;
         let historyIndex = history.length; // Start past the end (current empty input)
         let savedInput = ""; // Saves current input when navigating history
-        let filterStartIndex = -1; // Where filtering begins
-        let completionPrefix = ""; // Fixed prefix before completions
-        let updatingCompletions = false;
+        let filterStartIndex = -1; // Where filtering begins (render-cache)
+        let completionPrefix = ""; // Fixed prefix before completions (render-cache)
         const stdin = process.stdin;
         const stdout = process.stdout;
 
@@ -1152,32 +1152,6 @@ async function questionWithCompletion(
         }
         stdin.resume();
         stdin.setEncoding("utf8");
-
-        // Filter completions based on what user typed after the trigger point
-        const filterCompletions = () => {
-            if (allCompletions.length === 0 || filterStartIndex < 0) {
-                filteredCompletions = [];
-                return;
-            }
-
-            // Get the filter text (what user typed after the space/trigger)
-            const filterText = input.substring(filterStartIndex).toLowerCase();
-
-            if (filterText === "") {
-                // No filter text, show all
-                filteredCompletions = allCompletions;
-            } else {
-                // Filter completions that start with the filter text
-                filteredCompletions = allCompletions.filter((comp) =>
-                    comp.toLowerCase().startsWith(filterText),
-                );
-            }
-
-            // Reset index if out of bounds
-            if (completionIndex >= filteredCompletions.length) {
-                completionIndex = 0;
-            }
-        };
 
         let prevInputRows = 1;
         const layout = new TerminalLayout();
@@ -1191,6 +1165,34 @@ async function questionWithCompletion(
         const EXTRA_ROWS = 3; // separator + bottom rule + hint
 
         const render = () => {
+            // Recompute completions from controller state each frame.
+            if (controller) {
+                if (isSlashCommand(input)) {
+                    filteredCompletions = getSlashCompletions(input);
+                    filterStartIndex = 0;
+                    completionPrefix = "";
+                } else {
+                    const state = controller.getCompletionState();
+                    if (state) {
+                        filteredCompletions = state.items.map(
+                            (i) => i.selectedText,
+                        );
+                        filterStartIndex = state.anchorIndex;
+                        completionPrefix = input.substring(
+                            0,
+                            state.anchorIndex,
+                        );
+                    } else {
+                        filteredCompletions = [];
+                        filterStartIndex = -1;
+                        completionPrefix = "";
+                    }
+                }
+                if (completionIndex >= filteredCompletions.length) {
+                    completionIndex = 0;
+                }
+            }
+
             const promptText = chalk.cyanBright(message);
             const width = process.stdout.columns || 80;
 
@@ -1264,39 +1266,12 @@ async function questionWithCompletion(
             prevInputRows = inputRows;
         };
 
-        // Fetch completions for current input
-        const updateCompletions = async () => {
-            if (updatingCompletions) {
-                return; // Skip if already updating
-            }
-            updatingCompletions = true;
-            try {
-                const result = await getCompletions(input);
-                if (result) {
-                    allCompletions = result.allCompletions || [];
-                    filterStartIndex = result.filterStartIndex;
-                    completionPrefix = result.prefix;
-                    filterCompletions();
-                } else {
-                    allCompletions = [];
-                    filteredCompletions = [];
-                    filterStartIndex = -1;
-                    completionPrefix = "";
-                }
-                completionIndex = 0;
-            } catch (e) {
-                allCompletions = [];
-                filteredCompletions = [];
-                filterStartIndex = -1;
-                completionPrefix = "";
-                completionIndex = 0;
-            }
-            updatingCompletions = false;
-            render();
-        };
-
         // Activate the scroll region and draw initial prompt
         layout.setup(prevInputRows + EXTRA_ROWS);
+        // Re-render when completions arrive asynchronously from the dispatcher.
+        if (controller) {
+            controller.setOnUpdate(() => render());
+        }
         render();
 
         const panel = getDebugPanel();
@@ -1374,13 +1349,13 @@ async function questionWithCompletion(
             }
 
             if (data === "\x1b") {
-                if (filteredCompletions.length > 0) {
-                    // Esc with completions showing — clear completions
-                    allCompletions = [];
-                    filteredCompletions = [];
-                    filterStartIndex = -1;
+                if (controller && filteredCompletions.length > 0) {
+                    controller.dismiss(input, "forward");
                 } else {
-                    // Esc with no completions — clear input
+                    // Esc with no completions — clear input.
+                    // Also hide the controller in case a fetch is in-flight
+                    // that would otherwise resolve and show stale completions.
+                    controller?.hide();
                     input = "";
                     cursorPos = 0;
                     historyIndex = history.length;
@@ -1436,6 +1411,9 @@ async function questionWithCompletion(
                             : "") +
                         completion;
                 }
+                if (controller) {
+                    controller.accept();
+                }
                 // Tear down the scroll region and write the finalized input
                 // into the normal terminal flow so it appears in scrollback.
                 cleanup();
@@ -1465,9 +1443,9 @@ async function questionWithCompletion(
                             : "") +
                         completion;
                     cursorPos = input.length; // Move cursor to end
-                    allCompletions = [];
-                    filteredCompletions = [];
-                    filterStartIndex = -1;
+                    if (controller) {
+                        controller.accept();
+                    }
                     render();
                 }
             } else if (code === 127 || code === 8) {
@@ -1476,18 +1454,9 @@ async function questionWithCompletion(
                     input =
                         input.slice(0, cursorPos - 1) + input.slice(cursorPos);
                     cursorPos--;
-                    // Update completions state
-                    if (
-                        filterStartIndex < 0 ||
-                        input.length < filterStartIndex
-                    ) {
-                        filteredCompletions = [];
-                        allCompletions = [];
-                        filterStartIndex = -1;
-                    } else {
-                        filterCompletions();
+                    if (controller) {
+                        controller.update(input, "backward");
                     }
-                    // Just render - skip async updateCompletions to avoid double render/flash
                     render();
                 }
             } else if (code >= 32 && code < 127) {
@@ -1495,25 +1464,10 @@ async function questionWithCompletion(
                 input =
                     input.slice(0, cursorPos) + data + input.slice(cursorPos);
                 cursorPos++;
-                // If typing a space, always fetch new completions (new context)
-                if (data === " ") {
-                    // Clear completions and render immediately to prevent flashing
-                    filteredCompletions = [];
-                    render();
-                    await updateCompletions();
-                } else if (
-                    filterStartIndex >= 0 &&
-                    input.length > filterStartIndex
-                ) {
-                    // If we have completions and are within filter range, just refilter
-                    filterCompletions();
-                    render();
-                } else {
-                    // Clear completions and render immediately to prevent flashing
-                    filteredCompletions = [];
-                    render();
-                    await updateCompletions();
+                if (controller) {
+                    controller.update(input, "forward");
                 }
+                render();
             }
         };
 
@@ -1522,6 +1476,9 @@ async function questionWithCompletion(
             terminalLayout = null;
             panel?.setPromptRenderer(null);
             activePromptRenderer = null;
+            if (controller) {
+                controller.setOnUpdate(() => {});
+            }
             stdin.removeListener("data", onData);
             if (stdin.isTTY) {
                 stdin.setRawMode(wasRaw || false);
@@ -1815,7 +1772,7 @@ export async function processCommandsEnhanced<T>(
     processCommand: (request: string, context: T) => Promise<any>,
     context: T,
     inputs?: string[],
-    getCompletions?: (line: string, context: T) => Promise<any>,
+    completionController?: CompletionController,
     dispatcherForCancel?: Dispatcher,
 ) {
     const fs = await import("node:fs");
@@ -1830,7 +1787,7 @@ export async function processCommandsEnhanced<T>(
     // Only create readline when not using inline completions.
     // questionWithCompletion manages stdin directly; a readline attached
     // to the same stdin would consume events and break input.
-    const rl = getCompletions
+    const rl = completionController
         ? undefined
         : createInterface({
               input: process.stdin,
@@ -1855,11 +1812,10 @@ export async function processCommandsEnhanced<T>(
                 ANSI.dim + "─".repeat(width) + ANSI.reset + "\n",
             );
             request = getNextInput(prompt, inputs, promptColor);
-        } else if (getCompletions) {
-            // Use inline completion system with scroll region anchored prompt
+        } else if (completionController) {
             request = await questionWithCompletion(
                 promptColor(prompt),
-                (line: string) => getCompletions(line, context),
+                completionController,
                 history,
             );
         } else {

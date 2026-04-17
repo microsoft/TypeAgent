@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// ── Prefix tree (ternary search tree) ────────────────────────────────────────
+
 export class TSTNode<TData> {
     constructor(public c: string) {
         this.count = 0;
@@ -304,4 +306,15 @@ export class TST<TData extends BaseTSTData> {
             this.collectPattern(x.right, prefix, pattern, keys, data);
         }
     }
+}
+
+// ── Normalization ─────────────────────────────────────────────────────────────
+
+export function normalizeMatchText(text: string): string {
+    // Remove diacritical marks, and replace any space characters with normalized ' '.
+    return text
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "") // Remove combining diacritical marks
+        .replace(/\s/g, " ")
+        .toLowerCase();
 }

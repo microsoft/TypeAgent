@@ -3644,6 +3644,9 @@ importers:
         specifier: ^4.1.13
         version: 4.1.13
     devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
@@ -4452,9 +4455,6 @@ importers:
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
-      action-grammar:
-        specifier: workspace:*
-        version: link:../actionGrammar
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
