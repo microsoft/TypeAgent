@@ -56,13 +56,21 @@ async function executeDesktopAction(
         action.schemaName, // Pass schema name for disambiguation
     );
     if (result.success) {
-        const displayText = formatResultDisplay(result.message, result.data);
+        const displayText = formatResultDisplay(
+            action.actionName,
+            result.message,
+            result.data,
+        );
         return createActionResult(displayText);
     }
     return { error: result.message };
 }
 
-function formatResultDisplay(message: string, data?: unknown): string {
+function formatResultDisplay(
+    actionName: string,
+    message: string,
+    data?: unknown,
+): string {
     if (data === undefined || data === null) {
         return message;
     }
@@ -70,7 +78,8 @@ function formatResultDisplay(message: string, data?: unknown): string {
         if (data.length === 0) {
             return message;
         }
-        const lines = data.map((item) => `  - ${formatItem(item)}`);
+        const formatter = itemFormatters[actionName] ?? defaultItemFormatter;
+        const lines = data.map((item) => `  - ${formatter(item)}`);
         return `${message}:\n${lines.join("\n")}`;
     }
     if (typeof data === "object") {
@@ -79,28 +88,23 @@ function formatResultDisplay(message: string, data?: unknown): string {
     return `${message}: ${data}`;
 }
 
-function formatItem(item: unknown): string {
+function defaultItemFormatter(item: unknown): string {
     if (typeof item !== "object" || item === null) {
         return String(item);
     }
-    const obj = item as Record<string, unknown>;
-
-    // WiFi network: { ssid, signalQuality, secured, connected }
-    if ("ssid" in obj || "Ssid" in obj) {
-        const ssid = obj.ssid ?? obj.Ssid;
-        const signal = obj.signalQuality ?? obj.SignalQuality ?? "?";
-        const secured = (obj.secured ?? obj.Secured) ? "🔒" : "🔓";
-        const connected = (obj.connected ?? obj.Connected) ? " (connected)" : "";
-        return `${ssid} — ${signal}% ${secured}${connected}`;
-    }
-
-    // Display resolution: { width, height, bitsPerPixel, refreshRate }
-    if (("width" in obj || "Width" in obj) && ("refreshRate" in obj || "RefreshRate" in obj)) {
-        const w = obj.width ?? obj.Width;
-        const h = obj.height ?? obj.Height;
-        const hz = obj.refreshRate ?? obj.RefreshRate;
-        return `${w}x${h} @ ${hz}Hz`;
-    }
-
-    return Object.values(obj).join(", ");
+    return Object.values(item).join(", ");
 }
+
+const itemFormatters: Record<string, (item: unknown) => string> = {
+    ListWifiNetworks: (item) => {
+        const n = item as Record<string, unknown>;
+        const signal = n.signalQuality ?? "?";
+        const secured = n.secured ? "🔒" : "🔓";
+        const connected = n.connected ? " (connected)" : "";
+        return `${n.ssid} — ${signal}% ${secured}${connected}`;
+    },
+    ListResolutions: (item) => {
+        const r = item as Record<string, unknown>;
+        return `${r.width}x${r.height} @ ${r.refreshRate}Hz`;
+    },
+};
