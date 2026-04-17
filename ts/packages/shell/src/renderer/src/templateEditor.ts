@@ -497,7 +497,7 @@ class FieldScalar extends FieldBase {
         choices: SearchMenuItem[],
     ): { searchMenu: SearchMenu; dataProvider: SearchMenuIndex } {
         const dataProvider = createSearchMenuIndex();
-        dataProvider.setChoices(choices);
+        dataProvider.setItems(choices);
         const searchMenu = new SearchMenu(
             (item) => {
                 input.value = item.matchText;
@@ -623,7 +623,7 @@ class FieldScalar extends FieldBase {
                         ) {
                             return;
                         }
-                        dataProvider.setChoices(
+                        dataProvider.setItems(
                             items.map((e) => ({
                                 matchText: e,
                                 selectedText: e,

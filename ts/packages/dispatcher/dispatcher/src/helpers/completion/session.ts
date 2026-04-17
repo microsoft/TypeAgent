@@ -11,7 +11,7 @@ import {
 } from "@typeagent/agent-sdk";
 import {
     SearchMenuItem,
-    TSTSearchMenuDataProvider,
+    TSTSearchMenuIndex,
     isUniquelySatisfied,
 } from "./searchMenu.js";
 import registerDebug from "debug";
@@ -88,7 +88,7 @@ function computeNoMatchPolicy(
 //       "refetch" → open-ended, backend may know more
 //       "slide"   → wildcard boundary, slide anchor forward
 //
-// Architecture: docs/architecture/completion.md — §5 Shell — Completion Session
+// Architecture: docs/architecture/completion.md — §5 Completion Session
 // This class has no DOM dependencies and is fully unit-testable with Jest.
 export class PartialCompletionSession {
     // The "anchor" prefix for the current session.  Set to the full input
@@ -99,7 +99,7 @@ export class PartialCompletionSession {
     // Items partitioned by separatorMode from the last result.
     private partitions: ItemPartition[] = [];
     // Precomputed item counts per SepLevel.  Updated whenever
-    // partitions change (setPartitions / resetToIdle).
+    // partitions change (setPartitions / accept).
     private levelCounts: LevelCounts = [0, 0, 0];
     // The SepLevel at which the trie is currently loaded.
     // Items in the trie correspond to itemsAtLevel(partitions, menuSepLevel).
@@ -130,7 +130,7 @@ export class PartialCompletionSession {
     // already dismissed them.
     private explicitCloseAnchor: string | undefined = undefined;
 
-    // The input text from the most recent update() or explicitHide() call.
+    // The input text from the most recent update() or dismiss() call.
     // Used to compute the cached completionState.
     // Safe to read in async callbacks (.then/.catch) without synchronization
     // because JavaScript is single-threaded — the value is always set
@@ -138,7 +138,7 @@ export class PartialCompletionSession {
     // callbacks see the latest value.
     private lastInput: string = "";
 
-    // The direction from the most recent update() or explicitHide() call.
+    // The direction from the most recent update() or dismiss() call.
     // Used by async callbacks to reconcile with the latest user intent.
     // Same single-threaded safety guarantee as lastInput.
     private lastDirection: CompletionDirection = "forward";
@@ -147,8 +147,8 @@ export class PartialCompletionSession {
     // Callers retrieve this via getCompletionState().
     private completionState: CompletionState | undefined = undefined;
 
-    // Internal trie backing the SearchMenuDataProvider interface.
-    private readonly trieProvider = new TSTSearchMenuDataProvider();
+    // Internal trie backing the SearchMenuIndex interface.
+    private readonly searchMenuIndex = new TSTSearchMenuIndex();
 
     // Callback fired whenever completion state changes.
     private onUpdate: () => void;
@@ -166,17 +166,23 @@ export class PartialCompletionSession {
 
     // Load the trie with items for the given level and set menuSepLevel.
     // Shared by reuseSession (narrow/consume), startNewSession (initial load),
-    // and explicitHide (level change on dismiss).
+    // and dismiss (level change on dismiss).
     private loadLevel(level: SepLevel): void {
         this.menuSepLevel = level;
         const items = itemsAtLevel(this.partitions, level);
-        this.trieProvider.setChoices(items);
+        this.searchMenuIndex.setItems(items);
     }
 
     // Update partitions and recompute levelCounts.
     private setPartitions(partitions: ItemPartition[]): void {
         this.partitions = partitions;
         this.levelCounts = computeLevelCounts(partitions);
+    }
+
+    // Clear completionState (hide the menu) and fire the onUpdate callback.
+    private notifyHide(): void {
+        this.completionState = undefined;
+        this.onUpdate();
     }
 
     // Recompute the cached completionState from current session fields,
@@ -201,7 +207,7 @@ export class PartialCompletionSession {
     // target level.  Returns the new SepLevel, or undefined when no level
     // has items at all.
     // Shared by B1 NARROW (backspace or separator text change) and
-    // explicitHide (Escape).
+    // dismiss (Escape).
     private shiftToSepLevel(rawPrefix: string): SepLevel | undefined {
         const sepLevel = computeSepLevel(rawPrefix);
         const newLevel = targetLevel(this.levelCounts, sepLevel);
@@ -214,7 +220,7 @@ export class PartialCompletionSession {
         return newLevel;
     }
 
-    // Main entry point.  Called by PartialCompletion.update() after DOM checks pass.
+    // Main entry point.  Called on each keystroke after the host validates cursor position.
     public update(
         input: string,
         direction: CompletionDirection = "forward",
@@ -235,12 +241,11 @@ export class PartialCompletionSession {
         // Cancel any in-flight request but preserve anchor and config
         // so reuseSession() can still match on re-focus.
         this.completionP = undefined;
-        this.completionState = undefined;
-        this.onUpdate();
+        this.notifyHide();
     }
 
-    // Reset state to IDLE without hiding the menu (used after handleSelect inserts text).
-    public resetToIdle(): void {
+    /** Accept the current completion (Tab/Enter). Resets session to idle. */
+    public accept(): void {
         this.anchor = undefined;
         this.completionP = undefined;
         this.setPartitions([]);
@@ -253,13 +258,20 @@ export class PartialCompletionSession {
         this.completionState = undefined;
     }
 
-    /** Accept the current completion (Tab/Enter). Resets session to idle. */
-    public accept(): void {
-        this.resetToIdle();
-    }
-
     /**
      * Dismiss completions (Escape key). Performs smart level-shift or refetch.
+     *
+     * Four outcomes:
+     *   1. Level shift — a different SepLevel has items the user hasn't
+     *      seen.  Shift the trie and show the new items (no backend call).
+     *   2. No advance — IDLE or input equals anchor.  A refetch would
+     *      return identical data.  Just hide the menu.
+     *   3. Hide/slide — noMatchPolicy is "accept" or "slide" and the
+     *      input still extends the anchor.  No refetch can help.
+     *   4. Refetch — input advanced past the anchor at the same level
+     *      and noMatchPolicy allows it.  When the backend returns the
+     *      same anchor (startIndex unchanged), reopening is suppressed.
+     *
      * @param input      Current input text
      * @param direction  Direction hint for the session
      */
@@ -267,30 +279,13 @@ export class PartialCompletionSession {
         input: string,
         direction: CompletionDirection = "forward",
     ): void {
-        this.explicitHide(input, direction);
-    }
-
-    // Called when the user explicitly dismisses the menu (e.g. Escape key).
-    //
-    // Four outcomes:
-    //   1. Level shift — a different SepLevel has items the user hasn't
-    //      seen.  Shift the trie and show the new items (no backend call).
-    //   2. No advance — IDLE or input equals anchor.  A refetch would
-    //      return identical data.  Just hide the menu.
-    //   3. Hide/slide — noMatchPolicy is "accept" or "slide" and the
-    //      input still extends the anchor.  No refetch can help.
-    //   4. Refetch — input advanced past the anchor at the same level
-    //      and noMatchPolicy allows it.  When the backend returns the
-    //      same anchor (startIndex unchanged), reopening is suppressed.
-    public explicitHide(input: string, direction: CompletionDirection): void {
         this.lastInput = input;
         this.lastDirection = direction;
         this.completionP = undefined; // cancel any in-flight fetch
 
         // IDLE — no session data, nothing to shift or refetch.
         if (this.anchor === undefined) {
-            this.completionState = undefined;
-            this.onUpdate();
+            this.notifyHide();
             return;
         }
 
@@ -312,8 +307,7 @@ export class PartialCompletionSession {
         // No level shift available.  If input hasn't advanced past
         // the anchor, a refetch would return identical results — just hide.
         if (input === this.anchor || this.noMatchPolicy !== "refetch") {
-            this.completionState = undefined;
-            this.onUpdate();
+            this.notifyHide();
             return;
         }
 
@@ -331,7 +325,7 @@ export class PartialCompletionSession {
     // @internal — Test-only: returns all items currently loaded in the trie.
     // Avoids unsafe casts in test code.  Not part of the public API.
     public getLoadedItems(): SearchMenuItem[] {
-        return this.trieProvider.filterItems("");
+        return this.searchMenuIndex.filterItems("");
     }
 
     // Compute the completion state from current session fields.
@@ -349,7 +343,7 @@ export class PartialCompletionSession {
             return undefined;
         }
         const prefix = input.substring(this.menuAnchorIndex);
-        const items = this.trieProvider.filterItems(prefix);
+        const items = this.searchMenuIndex.filterItems(prefix);
         if (items.length === 0 || isUniquelySatisfied(items, prefix)) {
             return undefined;
         }
@@ -528,7 +522,7 @@ export class PartialCompletionSession {
     // session, false to trigger a re-fetch.
     private matchOrConsume(input: string, rawPrefix: string): boolean {
         for (;;) {
-            const items = this.trieProvider.filterItems(rawPrefix);
+            const items = this.searchMenuIndex.filterItems(rawPrefix);
 
             // [C1] UNIQUE — exactly one match, re-fetch for next level.
             if (isUniquelySatisfied(items, rawPrefix)) {
@@ -540,7 +534,7 @@ export class PartialCompletionSession {
             const sepMatch = rawPrefix.match(/^(.+?)[\s\p{P}]/u);
             if (
                 sepMatch !== null &&
-                this.trieProvider.hasExactMatch(sepMatch[1])
+                this.searchMenuIndex.hasExactMatch(sepMatch[1])
             ) {
                 debug(
                     `Partial completion re-fetch: '${sepMatch[1]}' committed with separator`,
@@ -644,7 +638,7 @@ export class PartialCompletionSession {
         direction: CompletionDirection,
     ): void {
         debug(`Partial completion start: '${input}' direction=${direction}`);
-        this.trieProvider.setChoices([]);
+        this.searchMenuIndex.setItems([]);
         this.anchor = input;
         this.menuAnchorIndex = input.length;
         this.consumedSep = "";

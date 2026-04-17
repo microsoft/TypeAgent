@@ -72,9 +72,9 @@ describe("PartialCompletionSession — getCompletionState prefix", () => {
     });
 });
 
-// ── resetToIdle ───────────────────────────────────────────────────────────────
+// ── accept ────────────────────────────────────────────────────────────────────
 
-describe("PartialCompletionSession — resetToIdle", () => {
+describe("PartialCompletionSession — accept", () => {
     test("clears session so next update re-fetches", async () => {
         const dispatcher = makeDispatcher(makeCompletionResult(["song"], 4));
         const { session } = makeSession(dispatcher);
@@ -82,9 +82,9 @@ describe("PartialCompletionSession — resetToIdle", () => {
         session.update("play song");
         await Promise.resolve(); // → ACTIVE
 
-        session.resetToIdle();
+        session.accept();
 
-        // After reset, next update should fetch fresh completions
+        // After accept, next update should fetch fresh completions
         session.update("play song");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
     });
@@ -97,7 +97,7 @@ describe("PartialCompletionSession — resetToIdle", () => {
         await Promise.resolve();
 
         onUpdate.mockClear();
-        session.resetToIdle();
+        session.accept();
 
         expect(onUpdate).not.toHaveBeenCalled();
     });

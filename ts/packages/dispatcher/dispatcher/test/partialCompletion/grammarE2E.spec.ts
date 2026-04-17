@@ -1506,9 +1506,9 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
         });
     });
 
-    // ── explicitHide() — level shift, hide, or refetch ───────────────────
+    // ── dismiss() — level shift, hide, or refetch ─────────────────────
 
-    describe("explicitHide() — level shift, hide, or refetch", () => {
+    describe("dismiss() — level shift, hide, or refetch", () => {
         test("same level + input past anchor, accept policy → hide (no refetch)", async () => {
             const dispatcher = makeGrammarDispatcher(
                 musicGrammar,
@@ -1530,7 +1530,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // Escape at "p": same sepLevel(0), input "p" ≠ anchor "" but
             // noMatchPolicy="accept" (closedSet=true, afterWildcard="none")
             // → refetch can't help, just hide.
-            session.explicitHide("p", "forward");
+            session.dismiss("p", "forward");
 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
                 fetchCountBefore,
@@ -1557,7 +1557,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
                 dispatcher.getCommandCompletion.mock.calls.length;
 
             // input === anchor → no level shift, no advance → just hide.
-            session.explicitHide("", "forward");
+            session.dismiss("", "forward");
 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
                 fetchCountBefore,
@@ -1586,7 +1586,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // Escape at "play ": same sepLevel(1), input ≠ anchor → refetch.
             // Backend returns startIndex=4 → anchor "play" unchanged →
             // explicitCloseAnchor matches → suppress reopen.
-            session.explicitHide("play ", "forward");
+            session.dismiss("play ", "forward");
             await flush();
 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
@@ -1603,7 +1603,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             expect(isActive(session)).toBe(true);
         });
 
-        test("level change on explicitHide keeps menu visible (widen)", async () => {
+        test("level change on dismiss keeps menu visible (widen)", async () => {
             // Conflict grammar: NoneRule at level 0, AutoRule at level 1.
             const grammar = loadGrammarRules(
                 "explicithide-conflict.grammar",
@@ -1624,9 +1624,9 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             const fetchCountBefore =
                 dispatcher.getCommandCompletion.mock.calls.length;
 
-            // explicitHide with "ab " → level shift widens to level 1.
+            // dismiss with "ab " → level shift widens to level 1.
             // Level changed → menu stays visible with level-1 items.
-            session.explicitHide("ab ", "forward");
+            session.dismiss("ab ", "forward");
 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
                 fetchCountBefore,
@@ -1635,7 +1635,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             expect(isActive(session)).toBe(true);
         });
 
-        test("level change on explicitHide keeps menu visible (narrow)", async () => {
+        test("level change on dismiss keeps menu visible (narrow)", async () => {
             const grammar = loadGrammarRules(
                 "explicithide-conflict2.grammar",
                 [
@@ -1656,9 +1656,9 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             const fetchCountBefore =
                 dispatcher.getCommandCompletion.mock.calls.length;
 
-            // explicitHide with "ab" → level shift narrows to level 0.
+            // dismiss with "ab" → level shift narrows to level 0.
             // Level changed → menu stays visible with level-0 items.
-            session.explicitHide("ab", "forward");
+            session.dismiss("ab", "forward");
 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(
                 fetchCountBefore,
@@ -1685,7 +1685,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // No level shift: same sepLevel(1).
             // input ≠ anchor → refetch.
             // Grammar advances startIndex past 4 → new anchor → reopen.
-            session.explicitHide("play Shake It Off", "forward");
+            session.dismiss("play Shake It Off", "forward");
             await flush();
 
             // Refetch was issued with the full entity string.

@@ -25,26 +25,26 @@ export function isUniquelySatisfied(
     );
 }
 
-// ── TST-backed data provider ──────────────────────────────────────────────────
+// ── TST-backed search menu index ──────────────────────────────────────────────
 
-// Interface for data providers that support imperative setChoices loading.
+// Interface for search menu indices that support imperative setItems loading.
 export interface SearchMenuIndex {
     filterItems(prefix: string): SearchMenuItem[];
-    numChoices(): number;
-    setChoices(choices: SearchMenuItem[]): void;
+    numItems(): number;
+    setItems(items: SearchMenuItem[]): void;
     hasExactMatch(text: string): boolean;
 }
 
-export class TSTSearchMenuDataProvider implements SearchMenuIndex {
+export class TSTSearchMenuIndex implements SearchMenuIndex {
     private trie: TST<SearchMenuItem> = new TST<SearchMenuItem>();
 
-    public setChoices(choices: SearchMenuItem[]): void {
+    public setItems(items: SearchMenuItem[]): void {
         this.trie.init();
-        for (const choice of choices) {
-            // choices are sorted in priority order so prefer first norm text
-            const normText = normalizeMatchText(choice.matchText);
+        for (const item of items) {
+            // items are sorted in priority order so prefer first norm text
+            const normText = normalizeMatchText(item.matchText);
             if (!this.trie.get(normText)) {
-                this.trie.insert(normText, choice);
+                this.trie.insert(normText, item);
             }
         }
     }
@@ -57,12 +57,12 @@ export class TSTSearchMenuDataProvider implements SearchMenuIndex {
         return this.trie.contains(normalizeMatchText(text));
     }
 
-    public numChoices(): number {
+    public numItems(): number {
         return this.trie.size();
     }
 }
 
-/** Create a mutable SearchMenuDataProvider backed by a prefix tree. */
+/** Create a SearchMenuIndex backed by a prefix tree. */
 export function createSearchMenuIndex(): SearchMenuIndex {
-    return new TSTSearchMenuDataProvider();
+    return new TSTSearchMenuIndex();
 }

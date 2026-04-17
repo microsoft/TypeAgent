@@ -307,7 +307,7 @@ describe("PartialCompletionSession — type-ahead during pending fetch", () => {
         expect(isActive(session)).toBe(true);
 
         // User dismisses at "play so" — input ≠ anchor → refetch
-        session.explicitHide("play so", "forward");
+        session.dismiss("play so", "forward");
         await Promise.resolve();
 
         // Refetch returns startIndex=5 → anchor="play " = explicitCloseAnchor
@@ -343,7 +343,7 @@ describe("PartialCompletionSession — type-ahead during pending fetch", () => {
         );
 
         // User dismisses at "play so" — starts refetch
-        session.explicitHide("play so", "forward");
+        session.dismiss("play so", "forward");
 
         // User types "play son" while refetch is pending
         session.update("play son");

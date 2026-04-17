@@ -67,8 +67,8 @@ class TestableSearchMenu {
 
     // Populate the internal trie for standalone tests (not needed when
     // using an external data provider like CompletionController).
-    public setChoicesOnProvider(choices: SearchMenuItem[]): void {
-        this.dataProvider.setChoices(choices);
+    public setItemsOnProvider(items: SearchMenuItem[]): void {
+        this.dataProvider.setItems(items);
         this.invalidate();
     }
 
@@ -77,7 +77,7 @@ class TestableSearchMenu {
     }
 
     public updatePrefix(prefix: string): boolean {
-        if (this.dataProvider.numChoices() === 0) {
+        if (this.dataProvider.numItems() === 0) {
             return false;
         }
 
@@ -153,7 +153,7 @@ describe("SearchMenu switchMode", () => {
 
     function setupActiveMenu(): TestableSearchMenu {
         const menu = new TestableSearchMenu(true, () => defaultPos);
-        menu.setChoicesOnProvider(items);
+        menu.setItemsOnProvider(items);
         menu.updatePrefix("a");
         return menu;
     }
@@ -254,7 +254,7 @@ describe("SearchMenu switchMode", () => {
         const anotherUI = makeMockUI();
         menu.uiFactory = () => anotherUI;
 
-        menu.setChoicesOnProvider([
+        menu.setItemsOnProvider([
             { matchText: "gamma", selectedText: "gamma" },
             { matchText: "delta", selectedText: "delta" },
         ]);

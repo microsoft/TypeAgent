@@ -283,7 +283,7 @@ export class PartialCompletion {
         this.searchMenu.hide();
 
         // Compute the filter prefix relative to the current anchor.
-        // Must be read before resetToIdle() clears the session's anchor.
+        // Must be read before accept() clears the session's anchor.
         const completionPrefix = this.controller.getCompletionState()?.prefix;
         if (completionPrefix === undefined) {
             debugError(`Partial completion abort select: prefix not found`);
