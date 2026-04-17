@@ -43,14 +43,17 @@ function getDefaultActionTemplate(
     return template;
 }
 
-function toTemplateTypeObject(type: ActionParamObject) {
+function toTemplateTypeObject(
+    type: ActionParamObject,
+    visited: ReadonlySet<string>,
+) {
     const templateType: TemplateFieldObject = {
         type: "object",
         fields: {},
     };
 
     for (const [key, field] of Object.entries(type.fields)) {
-        const type = toTemplateType(field.type);
+        const type = toTemplateType(field.type, visited);
         if (type === undefined) {
             // Skip undefined fields.
             continue;
@@ -60,8 +63,11 @@ function toTemplateTypeObject(type: ActionParamObject) {
     return templateType;
 }
 
-function toTemplateTypeArray(type: ActionParamArray) {
-    const elementType = toTemplateType(type.elementType);
+function toTemplateTypeArray(
+    type: ActionParamArray,
+    visited: ReadonlySet<string>,
+) {
+    const elementType = toTemplateType(type.elementType, visited);
     if (elementType === undefined) {
         // Skip undefined fields.
         return undefined;
@@ -73,21 +79,30 @@ function toTemplateTypeArray(type: ActionParamArray) {
     return templateType;
 }
 
-function toTemplateType(type: ActionParamType): TemplateType | undefined {
+function toTemplateType(
+    type: ActionParamType,
+    visited: ReadonlySet<string> = new Set<string>(),
+): TemplateType | undefined {
     switch (type.type) {
         case "type-union":
             // TODO: smarter about type unions.
-            return toTemplateType(type.types[0]);
+            return toTemplateType(type.types[0], visited);
         case "type-reference":
-            // TODO: need to handle circular references (or error on circular references)
             if (type.definition === undefined) {
                 throw new Error(`Unresolved type reference: ${type.name}`);
             }
-            return toTemplateType(type.definition.type);
+            if (visited.has(type.name)) {
+                // Circular reference — skip to avoid infinite recursion.
+                return undefined;
+            }
+            return toTemplateType(
+                type.definition.type,
+                new Set([...visited, type.name]),
+            );
         case "object":
-            return toTemplateTypeObject(type);
+            return toTemplateTypeObject(type, visited);
         case "array":
-            return toTemplateTypeArray(type);
+            return toTemplateTypeArray(type, visited);
         case "undefined":
             return undefined;
         case "string":
