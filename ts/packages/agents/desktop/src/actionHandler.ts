@@ -70,16 +70,33 @@ function formatResultDisplay(message: string, data?: unknown): string {
         if (data.length === 0) {
             return message;
         }
-        const lines = data.map((item) => {
-            if (typeof item === "object" && item !== null) {
-                return `  - ${Object.values(item).join(", ")}`;
-            }
-            return `  - ${item}`;
-        });
+        const lines = data.map((item) => `  - ${formatItem(item)}`);
         return `${message}:\n${lines.join("\n")}`;
     }
     if (typeof data === "object") {
         return `${message}:\n${JSON.stringify(data, null, 2)}`;
     }
     return `${message}: ${data}`;
+}
+
+function formatItem(item: unknown): string {
+    if (typeof item !== "object" || item === null) {
+        return String(item);
+    }
+    const obj = item as Record<string, unknown>;
+
+    // WiFi network: { Ssid, SignalQuality, Secured, Connected }
+    if ("Ssid" in obj) {
+        const signal = obj.SignalQuality ?? "?";
+        const secured = obj.Secured ? "🔒" : "🔓";
+        const connected = obj.Connected ? " (connected)" : "";
+        return `${obj.Ssid} — ${signal}% ${secured}${connected}`;
+    }
+
+    // Display resolution: { Width, Height, BitsPerPixel, RefreshRate }
+    if ("Width" in obj && "Height" in obj && "RefreshRate" in obj) {
+        return `${obj.Width}x${obj.Height} @ ${obj.RefreshRate}Hz`;
+    }
+
+    return Object.values(obj).join(", ");
 }
