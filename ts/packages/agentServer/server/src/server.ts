@@ -4,7 +4,10 @@
 import { createWebSocketChannelServer } from "websocket-channel-server";
 import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/server";
 import { createSessionManager, SessionManager } from "./sessionManager.js";
-import { getInstanceDirAsync, getTraceIdAsync } from "agent-dispatcher/helpers/data";
+import {
+    getInstanceDirAsync,
+    getTraceIdAsync,
+} from "agent-dispatcher/helpers/data";
 import {
     getDefaultAppAgentProviders,
     getIndexingServiceRegistry,
