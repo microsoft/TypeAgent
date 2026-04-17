@@ -47,7 +47,9 @@ function getActionCompleteEvent(awaitKeyboardInput: boolean) {
 }
 
 function sendChatInputText(message: string, chatView: WebContentsView) {
-    const timeoutPromise = new Promise((f) => setTimeout(f, 2000));
+    const timeoutPromise = new Promise((f) =>
+        setTimeout(f, Math.max(2000, message.length * 50)),
+    );
 
     const actionPromise = new Promise<string | undefined>((resolve) => {
         const callback = (_event: Electron.IpcMainEvent) => {

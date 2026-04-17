@@ -39,7 +39,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.92",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.101",
     "@typeagent/action-schema": "workspace:*",
     "chalk": "^5.4.1",
     "debug": "^4.4.0",

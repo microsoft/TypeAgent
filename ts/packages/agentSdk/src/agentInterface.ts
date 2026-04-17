@@ -76,6 +76,7 @@ export type ActionManifest = {
     schemaDefaultEnabled?: boolean;
     actionDefaultEnabled?: boolean;
     transient?: boolean; // whether the translator is transient, default is false
+    errorReasoning?: boolean; // invoke reasoning on action error, default is false
 
     schema?: SchemaManifest;
     subActionManifests?: { [key: string]: ActionManifest };
@@ -281,6 +282,11 @@ export interface ActionContext<T = void> {
     readonly actionIO: ActionIO;
     readonly sessionContext: SessionContext<T>;
     readonly abortSignal?: AbortSignal | undefined;
+
+    // true when this action was dispatched from within the reasoning loop (via MCP execute_action),
+    // false when dispatched directly from the translator. Agents can use this to decide whether
+    // to execute immediately or redirect back to the reasoning loop.
+    readonly isFromReasoningLoop: boolean;
 
     // queue up toggle transient agent to be executed at the end of the commands
     queueToggleTransientAgent(

@@ -58,15 +58,21 @@ export function createTypeAgentRequestPrompt(
                 if (promptEntities.length > 0) {
                     prompts.push("###");
                     prompts.push(
-                        "Recent entities found in chat history, in order, oldest first:",
+                        "Recent entities found in chat history, in order, oldest first.",
                     );
                     prompts.push(
                         JSON.stringify(
-                            promptEntities.map((entity, i) => ({
-                                id: `\${entity-${i}}`,
-                                name: entity.name,
-                                type: entity.type,
-                            })),
+                            promptEntities.map((entity, i) => {
+                                const e: Record<string, unknown> = {
+                                    id: `\${entity-${i}}`,
+                                    name: entity.name,
+                                    type: entity.type,
+                                };
+                                if (entity.facets && entity.facets.length > 0) {
+                                    e.facets = entity.facets;
+                                }
+                                return e;
+                            }),
                             undefined,
                             2,
                         ),
@@ -115,6 +121,7 @@ export function createTypeAgentRequestPrompt(
             "Resolve pronouns and references in the current user request with the recent entities in the chat history.",
             "Determine the entities implicitly referred in the current user request based on the recent chat history.",
             "If parameter value refers to an entity, use entities' id as parameter values when referring to entities instead of the entities' name. Do not use entity ids that do not exist in the chat history.",
+            "Entity facets provide structured properties about the entity. Use facet values directly when filling action parameters — prefer them over guessing or calling additional lookup actions.",
             "If there are multiple possible resolution, choose the most likely resolution based on conversation context, bias toward the newest.",
             "Avoid clarifying unless absolutely necessary. Infer the user's intent based on conversation context.",
             `Based primarily on the current user request with references and pronouns resolved with recent entities in the chat history, but considering the context of the whole chat history, the following is the current user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:`,

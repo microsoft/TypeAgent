@@ -275,7 +275,9 @@ export class BrowserViewManager {
                             err,
                         );
 
-                        const safeUrl = escapeHtml(webContentsView.webContents.getURL());
+                        const safeUrl = escapeHtml(
+                            webContentsView.webContents.getURL(),
+                        );
                         const safeErr = escapeHtml(String(err));
                         webContentsView.webContents.executeJavaScript(
                             `document.body.innerHTML = "There was an error loading '${safeUrl}'.<br />: ${safeErr}"`,
@@ -289,7 +291,9 @@ export class BrowserViewManager {
                             `Error loading URL ${webContentsView.webContents.getURL()} in tab ${tabId}:`,
                             err,
                         );
-                        const safeUrl = escapeHtml(webContentsView.webContents.getURL());
+                        const safeUrl = escapeHtml(
+                            webContentsView.webContents.getURL(),
+                        );
                         const safeErr = escapeHtml(String(err));
                         webContentsView.webContents.executeJavaScript(
                             `document.body.innerHTML = "There was an error loading '${safeUrl}'.<br />: ${safeErr}"`,

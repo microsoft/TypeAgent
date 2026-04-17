@@ -149,15 +149,60 @@ export class ConsoleWriter {
         value: any,
         paddedNameLength?: number,
         indent?: string,
+        colorName?: boolean,
     ): ConsoleWriter {
-        if (indent) {
-            this.write(indent);
-        }
         if (Array.isArray(value)) {
             value = value.join("; ");
         }
-        const line = `${paddedNameLength ? name.padEnd(paddedNameLength) : name}  ${value}`;
-        this.writeLine(line);
+        const nameColWidth = paddedNameLength ?? name.length;
+        const nameDisplay = name.padEnd(nameColWidth);
+        const colored =
+            colorName && name
+                ? `\x1b[36m${name}\x1b[0m${" ".repeat(nameColWidth - name.length)}`
+                : nameDisplay;
+        const separator = "  ";
+        const valueStr = String(value ?? "");
+
+        // Word-wrap the description to fit the terminal width
+        const termWidth = this.stdout.columns ?? 120;
+        const indentLen = indent ? indent.length : 0;
+        const prefixLen = indentLen + nameColWidth + separator.length;
+        const descWidth = termWidth - prefixLen;
+        const continuationPrefix = " ".repeat(nameColWidth) + separator;
+
+        if (descWidth > 20 && valueStr.length > descWidth) {
+            const words = valueStr.split(" ");
+            let line = "";
+            let firstLine = true;
+            for (const word of words) {
+                if (line.length === 0) {
+                    line = word;
+                } else if (line.length + 1 + word.length <= descWidth) {
+                    line += " " + word;
+                } else {
+                    if (indent) this.write(indent);
+                    if (firstLine) {
+                        this.writeLine(`${colored}${separator}${line}`);
+                        firstLine = false;
+                    } else {
+                        this.writeLine(`${continuationPrefix}${line}`);
+                    }
+                    line = word;
+                }
+            }
+            if (line) {
+                if (firstLine) {
+                    if (indent) this.write(indent);
+                    this.writeLine(`${colored}${separator}${line}`);
+                } else {
+                    if (indent) this.write(indent);
+                    this.writeLine(`${continuationPrefix}${line}`);
+                }
+            }
+        } else {
+            if (indent) this.write(indent);
+            this.writeLine(`${colored}${separator}${valueStr}`);
+        }
         return this;
     }
 
@@ -166,6 +211,7 @@ export class ConsoleWriter {
         sort: boolean = false,
         stringifyValue?: (value: T) => string | string[],
         indent?: string,
+        colorName?: boolean,
     ): number {
         const keys = Object.keys(record);
         if (sort) {
@@ -176,12 +222,30 @@ export class ConsoleWriter {
             let value = record[key];
             let strValues = stringifyValue ? stringifyValue(value) : value;
             if (Array.isArray(strValues) && strValues.length > 0) {
-                this.writeNameValue(key, strValues[0], maxLength, indent);
+                this.writeNameValue(
+                    key,
+                    strValues[0],
+                    maxLength,
+                    indent,
+                    colorName,
+                );
                 for (let i = 1; i < strValues.length; ++i) {
-                    this.writeNameValue("", strValues[i], maxLength, indent);
+                    this.writeNameValue(
+                        "",
+                        strValues[i],
+                        maxLength,
+                        indent,
+                        colorName,
+                    );
                 }
             } else {
-                this.writeNameValue(key, strValues, maxLength, indent);
+                this.writeNameValue(
+                    key,
+                    strValues,
+                    maxLength,
+                    indent,
+                    colorName,
+                );
             }
         }
         return maxLength;

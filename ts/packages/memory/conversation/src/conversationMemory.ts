@@ -298,7 +298,14 @@ export class ConversationMemory
                 .embeddingIndexSettings?.embeddingSize,
         );
         if (data) {
-            memory.deserialize(data);
+            try {
+                memory.deserialize(data);
+            } catch (e) {
+                console.warn(
+                    `[ConversationMemory] Failed to deserialize saved data (${e}). Starting with fresh memory.`,
+                );
+                return undefined;
+            }
         }
         return memory;
     }

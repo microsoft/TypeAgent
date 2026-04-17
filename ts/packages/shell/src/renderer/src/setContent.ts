@@ -288,8 +288,9 @@ export function setContent(
         }
 
         // after all stylesheets have been loaded craft the iframe source document
-        Promise.all(promises).then(() => {
-            iframe.srcdoc = `<html>
+        Promise.all(promises)
+            .then(() => {
+                iframe.srcdoc = `<html>
             <head>
             ${css}
             </head>
