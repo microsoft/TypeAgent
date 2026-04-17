@@ -164,7 +164,7 @@ export class PartialCompletion {
 
     public close() {
         this.closed = true;
-        this.controller.hide();
+        this.controller.dispose();
         this.cleanupEventListeners();
     }
 

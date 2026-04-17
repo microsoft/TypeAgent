@@ -1246,7 +1246,7 @@ describe("PartialCompletionSession — explicit-space completions", () => {
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
-    test("getCompletionPrefix reflects menuAnchorIndex after consumption", async () => {
+    test("completionState.prefix reflects menuAnchorIndex after consumption", async () => {
         const result = makeMultiGroupResult(
             [
                 {

@@ -31,6 +31,7 @@ export type CompletionControllerOptions = {
  *   - hide()    — called when cursor leaves valid position
  *   - getCompletionState() — returns current completions for rendering
  *   - setOnUpdate() — set/replace the onUpdate callback
+ *   - dispose() — permanently shut down; clears state and detaches callbacks
  *
  * Both CLI and Shell create a controller via createCompletionController().
  * The onUpdate callback fires whenever completion state changes.  Renderers
@@ -43,6 +44,7 @@ export interface CompletionController {
     hide(): void;
     getCompletionState(): CompletionState | undefined;
     setOnUpdate(onUpdate: () => void): void;
+    dispose(): void;
 }
 
 /** Factory function for creating a CompletionController. */

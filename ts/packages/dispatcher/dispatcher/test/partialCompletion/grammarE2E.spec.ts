@@ -1430,7 +1430,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             expect(isActive(session)).toBe(true);
         });
 
-        test("getCompletionPrefix tracks menuSepLevel correctly", async () => {
+        test("completionState.prefix tracks menuSepLevel correctly", async () => {
             session.update("");
             await flush();
             session.update("play");
@@ -1447,9 +1447,9 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
         });
     });
 
-    // ── getCompletionPrefix public API ───────────────────────────────
+    // ── completionState.prefix public API ───────────────────────────────
 
-    describe("getCompletionPrefix with grammar results", () => {
+    describe("completionState.prefix with grammar results", () => {
         test("returns correct prefix after separator", async () => {
             const dispatcher = makeGrammarDispatcher(
                 musicGrammar,

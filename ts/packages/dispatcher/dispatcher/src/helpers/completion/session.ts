@@ -251,7 +251,7 @@ export class PartialCompletionSession implements CompletionController {
             return;
         }
 
-        this.startNewSession(input, direction);
+        this.fetchNewSession(input, direction);
     }
 
     // Hide the menu and cancel any in-flight fetch, but preserve session
@@ -276,6 +276,16 @@ export class PartialCompletionSession implements CompletionController {
         this.lastInput = "";
         this.lastDirection = "forward";
         this.setCompletionState(undefined);
+    }
+
+    /**
+     * Permanently shut down this session.  Clears all state, detaches
+     * the onUpdate callback, and prevents further fetches.  After
+     * dispose() the instance should not be reused.
+     */
+    public dispose(): void {
+        this.accept();
+        this.onUpdate = () => {};
     }
 
     /**
@@ -339,9 +349,9 @@ export class PartialCompletionSession implements CompletionController {
             return;
         }
 
-        // Save anchor so startNewSession can compare after the result arrives.
+        // Save anchor so fetchNewSession can compare after the result arrives.
         this.explicitCloseAnchor = this.anchor;
-        this.startNewSession(input, direction);
+        this.fetchNewSession(input, direction);
     }
 
     // Returns the cached completion state, or undefined when there are
@@ -666,7 +676,7 @@ export class PartialCompletionSession implements CompletionController {
                 currentInput !== fetchInput ||
                 currentDirection !== fetchDirection
             ) {
-                this.startNewSession(currentInput, currentDirection);
+                this.fetchNewSession(currentInput, currentDirection);
             } else {
                 // reuseSession returned false for the same input (e.g. C1
                 // UNIQUE, C2 COMMITTED, D3 REFETCH).  In all cases items
@@ -680,8 +690,18 @@ export class PartialCompletionSession implements CompletionController {
         }
     }
 
+    // Sync entry point: fires the async session and attaches a terminal
+    // .catch() so unhandled rejections never escape.
+    private fetchNewSession(
+        input: string,
+        direction: CompletionDirection,
+    ): void {
+        this.startNewSession(input, direction).catch((e) =>
+            debugError(`Unhandled error in startNewSession: '${input}' ${e}`),
+        );
+    }
+
     // Start a new completion session: issue backend request and process result.
-    // Fire-and-forget — callers do not await the returned promise.
     private async startNewSession(
         input: string,
         direction: CompletionDirection,
