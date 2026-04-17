@@ -152,7 +152,7 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/agents/spelunker/src/summarizing.ts` | 42 | Prompt engineering | High | Medium | Local | Fix | Yes |
 | `ts/packages/agents/spelunker/src/typescriptChunker.ts` | 198 | Move to caller? | Low | High | Local | Fix | No |
 | `ts/packages/agents/video/src/videoActionHandler.ts` | 54 | dynamic duration | Medium | Medium | Local | Fix | Yes |
-| `ts/packages/agents/weather/src/weatherActionHandler.ts` | 227 | Add more sophisticated validation: | Medium | High | Local | Fix | No |
+| ~~`ts/packages/agents/weather/src/weatherActionHandler.ts`~~ | ~~227~~ | ~~Add more sophisticated validation:~~ | ~~Medium~~ | ~~High~~ | ~~Local~~ | ~~Fix~~ | ~~No~~ | ✅ Fixed: now uses geocoding API |
 | `ts/packages/aiclient/src/models.ts` | 31 | JsonSchemaType | Low | High | Local | Fix | No |
 | `ts/packages/aiclient/src/models.ts` | 39 | JsonSchemaType | Low | High | Local | Fix | No |
 | `ts/packages/aiclient/src/models.ts` | 176 | add support for videos | High | Medium | Component | Fix | Yes |
@@ -286,9 +286,9 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/memory/website/src/websiteCollection.ts` | 2646 | If we have access to Graphology graphs, compute more advanced metrics | High | Low | Component | No Fix | Yes |
 | `ts/packages/memory/website/src/websiteCollection.ts` | 2709 | In a full implementation, this would: | High | Low | Component | No Fix | Yes |
 | `ts/packages/shell/src/main/index.ts` | 143 | connected mode only needs the speech key. | Low | Medium | Component | Fix | Yes |
-| `ts/packages/shell/src/main/shellWindow.ts` | 1260 | add logic for opening in external browser if a modifier key is pressed | Low | High | Local | Fix | No |
+| ~~`ts/packages/shell/src/main/shellWindow.ts`~~ | ~~1260~~ | ~~add logic for opening in external browser if a modifier key is pressed~~ | ~~Low~~ | ~~High~~ | ~~Local~~ | ~~Fix~~ | ~~No~~ | ✅ Fixed: tracks modifier key via before-input-event |
 | `ts/packages/shell/src/renderer/src/main.ts` | 128 | wire up any other functionality (player agent?) | High | Low | Cross-cutting | No Fix | Yes |
-| `ts/packages/shell/src/renderer/src/main.ts` | 196 | append data instead of replace | Low | High | Local | Fix | No |
+| ~~`ts/packages/shell/src/renderer/src/main.ts`~~ | ~~196~~ | ~~append data instead of replace~~ | ~~Low~~ | ~~High~~ | ~~Local~~ | ~~Fix~~ | ~~No~~ | ✅ Fixed: appendDiagnosticData now accumulates into an array |
 | `ts/packages/shell/src/renderer/src/main.ts` | 311 | Design for toast notifications in shell | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/shell/src/renderer/src/messageContainer.ts` | 506 | Adjust this value. | Low | High | Local | Fix | Yes |
 | `ts/packages/shell/src/renderer/src/webSocketAPI.ts` | 128 | Not implemented yet. | Medium | Medium | Component | Fix | Yes |
