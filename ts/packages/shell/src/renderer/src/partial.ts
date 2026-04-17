@@ -56,6 +56,11 @@ export class PartialCompletion {
     // Track previous input to determine direction: shorter = backspace
     // ("backward"), longer/same = forward action.
     private previousInput: string = "";
+    // Tracks the last generation and prefix seen from CompletionState to
+    // decide whether render() (items changed) or updatePosition() (same
+    // items) should be called on the SearchMenu.
+    private lastGeneration: number = -1;
+    private lastPrefix: string = "";
 
     private readonly cleanupEventListeners: () => void;
     constructor(
@@ -84,7 +89,16 @@ export class PartialCompletion {
         this.controller.setOnUpdate(() => {
             const state = this.controller.getCompletionState();
             if (state) {
-                this.searchMenu.render(state.prefix, state.items);
+                if (
+                    state.generation !== this.lastGeneration ||
+                    state.prefix !== this.lastPrefix
+                ) {
+                    this.lastGeneration = state.generation;
+                    this.lastPrefix = state.prefix;
+                    this.searchMenu.render(state.prefix, state.items);
+                } else {
+                    this.searchMenu.updatePosition(state.prefix);
+                }
             } else {
                 this.searchMenu.hide();
             }
@@ -141,7 +155,7 @@ export class PartialCompletion {
 
     public switchMode(newInline: boolean) {
         this.searchMenu.switchMode(newInline);
-        // Re-render with the current completion state in the new UI mode.
+        // Always full render after mode switch (new UI instance).
         const state = this.controller.getCompletionState();
         if (state) {
             this.searchMenu.render(state.prefix, state.items);

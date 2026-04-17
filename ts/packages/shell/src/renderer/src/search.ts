@@ -16,7 +16,6 @@ import {
 export class SearchMenu {
     private searchMenuUI: SearchMenuUI | undefined;
     private readonly toggle: CompletionToggle | undefined;
-    private prefix: string | undefined;
     private _active: boolean = false;
 
     constructor(
@@ -56,19 +55,33 @@ export class SearchMenu {
         }
         this.inline = newInline;
         this.toggle?.setDirection(newInline ? "expand" : "collapse");
-        // Reset prefix so the next render() performs a full update
-        // (not the position-only shortcut).  The caller is responsible
-        // for triggering a re-render with the current completion state.
-        this.prefix = undefined;
     }
 
     // ── Rendering ───────────────────────────────────────────────────────────────
 
     /**
+     * Update only the popup position without re-rendering items.
+     * Called by the host when the completion generation has not changed
+     * (same items, same prefix) but the cursor may have moved.
+     */
+    public updatePosition(prefix: string): void {
+        if (!this._active || this.searchMenuUI === undefined) {
+            return;
+        }
+        const position = this.getPosition(prefix);
+        if (position === undefined) {
+            this.hide();
+            return;
+        }
+        this.searchMenuUI.update({ position });
+        this.updateToggleLayout(position);
+    }
+
+    /**
      * Render completions for the given prefix and pre-computed items.
-     * The caller (partial.ts onUpdate, templateEditor.ts) is responsible
-     * for filtering and uniqueness checks — this method is purely
-     * presentational.
+     * Always performs a full item update on the underlying UI.  The
+     * caller decides whether to call this (items changed) or
+     * updatePosition() (position only).
      *
      * Called by the shell in response to onUpdate (partial.ts) or
      * on input events (templateEditor.ts).
@@ -79,14 +92,6 @@ export class SearchMenu {
             this.hide();
             return;
         }
-
-        if (this.prefix === prefix && this._active) {
-            this.searchMenuUI!.update({ position });
-            this.updateToggleLayout(position);
-            return;
-        }
-
-        this.prefix = prefix;
 
         if (items.length > 0) {
             this._active = true;

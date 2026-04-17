@@ -7,10 +7,6 @@ import {
     makeCompletionResult,
     createCompletionController,
 } from "./helpers.js";
-import {
-    isUniquelySatisfied,
-    createSearchMenuIndex,
-} from "agent-dispatcher/helpers/completion";
 import type {
     SearchMenuItem,
     SearchMenuPosition,
@@ -41,9 +37,7 @@ function makeMockUI(): MockSearchMenuUI {
 // and switchMode logic that runs in the real shell.
 
 class TestableSearchMenu {
-    private readonly dataProvider = createSearchMenuIndex();
     private searchMenuUI: MockSearchMenuUI | undefined;
-    private prefix: string | undefined;
     private _active: boolean = false;
     public uiFactory: () => MockSearchMenuUI = makeMockUI;
     public inline: boolean;
@@ -65,43 +59,26 @@ class TestableSearchMenu {
 
     // ── SearchMenu methods (mirrors production SearchMenu) ─────────────
 
-    // Populate the internal trie for standalone tests (not needed when
-    // using an external data provider like CompletionController).
-    public setItemsOnProvider(items: SearchMenuItem[]): void {
-        this.dataProvider.setItems(items);
-        this.invalidate();
-    }
-
-    public invalidate(): void {
-        this.prefix = undefined;
-    }
-
-    public updatePrefix(prefix: string): boolean {
-        if (this.dataProvider.numItems() === 0) {
-            return false;
+    public updatePosition(prefix: string): void {
+        if (!this._active || this.searchMenuUI === undefined) {
+            return;
         }
-
-        const items = this.dataProvider.filterItems(prefix);
-        const uniquelySatisfied = isUniquelySatisfied(items, prefix);
-        const showMenu = items.length !== 0 && !uniquelySatisfied;
-        this.render(prefix, showMenu ? items : []);
-        return uniquelySatisfied;
+        const position = this.getPosition(prefix);
+        if (position === undefined) {
+            this.hide();
+            return;
+        }
+        this.searchMenuUI.update({ position });
     }
 
-    // Mirrors production SearchMenu.render() — accepts pre-computed items.
+    // Mirrors production SearchMenu.render() — always performs a full
+    // item update.  The caller decides render() vs updatePosition().
     public render(prefix: string, items: SearchMenuItem[]): void {
         const position = this.getPosition(prefix);
         if (position === undefined) {
             this.hide();
             return;
         }
-
-        if (this.prefix === prefix && this._active) {
-            this.searchMenuUI!.update({ position });
-            return;
-        }
-
-        this.prefix = prefix;
 
         if (items.length > 0) {
             this._active = true;
@@ -137,7 +114,6 @@ class TestableSearchMenu {
             this.searchMenuUI = undefined;
         }
         this.inline = newInline;
-        this.prefix = undefined;
     }
 }
 
@@ -153,8 +129,7 @@ describe("SearchMenu switchMode", () => {
 
     function setupActiveMenu(): TestableSearchMenu {
         const menu = new TestableSearchMenu(true, () => defaultPos);
-        menu.setItemsOnProvider(items);
-        menu.updatePrefix("a");
+        menu.render("a", items);
         return menu;
     }
 
@@ -185,7 +160,7 @@ describe("SearchMenu switchMode", () => {
 
         menu.switchMode(false);
         // Caller re-renders (mirrors partial.ts behavior).
-        menu.updatePrefix("a");
+        menu.render("a", items);
 
         expect(menu.getUI()).toBe(newUI);
         expect(newUI.update).toHaveBeenCalledWith(
@@ -239,7 +214,7 @@ describe("SearchMenu switchMode", () => {
         menu.uiFactory = () => newUI;
 
         menu.switchMode(false);
-        menu.updatePrefix("a"); // caller re-renders
+        menu.render("a", items); // caller re-renders
         menu.hide();
 
         expect(newUI.close).toHaveBeenCalled();
@@ -254,11 +229,11 @@ describe("SearchMenu switchMode", () => {
         const anotherUI = makeMockUI();
         menu.uiFactory = () => anotherUI;
 
-        menu.setItemsOnProvider([
+        const newItems: SearchMenuItem[] = [
             { matchText: "gamma", selectedText: "gamma" },
             { matchText: "delta", selectedText: "delta" },
-        ]);
-        menu.updatePrefix("g");
+        ];
+        menu.render("g", newItems);
 
         expect(menu.getUI()).toBe(anotherUI);
         expect(anotherUI.update).toHaveBeenCalledWith(

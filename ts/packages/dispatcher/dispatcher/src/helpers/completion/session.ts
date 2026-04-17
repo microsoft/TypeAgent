@@ -23,6 +23,10 @@ export type CompletionState = {
     items: SearchMenuItem[];
     prefix: string;
     anchorIndex: number;
+    // Monotonically increasing counter, bumped whenever the trie is
+    // reloaded (level change, new session result).  Lets callers detect
+    // item-set changes even when prefix and anchorIndex are unchanged.
+    generation: number;
 };
 
 export interface ICompletionDispatcher {
@@ -150,6 +154,11 @@ export class PartialCompletionSession {
     // Internal trie backing the SearchMenuIndex interface.
     private readonly searchMenuIndex = new TSTSearchMenuIndex();
 
+    // Monotonically increasing counter, bumped on every loadLevel() call.
+    // Exposed via CompletionState.generation so callers can detect
+    // item-set changes without comparing items by reference.
+    private generation: number = 0;
+
     // Callback fired whenever completion state changes.
     private onUpdate: () => void;
 
@@ -171,6 +180,7 @@ export class PartialCompletionSession {
         this.menuSepLevel = level;
         const items = itemsAtLevel(this.partitions, level);
         this.searchMenuIndex.setItems(items);
+        this.generation++;
     }
 
     // Update partitions and recompute levelCounts.
@@ -351,6 +361,7 @@ export class PartialCompletionSession {
             items,
             prefix,
             anchorIndex: input.length - prefix.length,
+            generation: this.generation,
         };
     }
 
