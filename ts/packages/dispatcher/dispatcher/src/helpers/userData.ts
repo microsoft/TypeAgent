@@ -91,9 +91,17 @@ function lockUserData<T>(fn: () => T) {
 }
 
 async function lockUserDataAsync<T>(fn: () => T | Promise<T>): Promise<T> {
-    const release = await lockfile.lock(ensureUserDataDir(), {
-        retries: { retries: 10, minTimeout: 500, maxTimeout: 1000 },
-    });
+    let release: () => Promise<void>;
+    try {
+        release = await lockfile.lock(ensureUserDataDir(), {
+            retries: { retries: 10, minTimeout: 500, maxTimeout: 1000 },
+        });
+    } catch (error: any) {
+        console.error(
+            `ERROR: Unable to lock user data directory: ${error.message}. Exiting.`,
+        );
+        process.exit(-1);
+    }
     try {
         return await fn();
     } finally {
