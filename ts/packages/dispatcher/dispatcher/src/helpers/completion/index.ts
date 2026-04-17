@@ -4,11 +4,10 @@
 // Re-export completion utilities for consumers that import through the dispatcher.
 
 export {
-    SearchMenuPosition,
     SearchMenuItem,
-    TSTSearchMenuDataProvider,
     isUniquelySatisfied,
-    type SearchMenuDataProvider,
+    createSearchMenuDataProvider,
+    type MutableSearchMenuDataProvider,
 } from "./searchMenu.js";
 export { CompletionState } from "./session.js";
 export {

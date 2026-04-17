@@ -65,11 +65,10 @@ export class PartialCompletion {
         inline: boolean = true,
         onToggleMode?: () => void,
     ) {
-        // Create controller first — it implements SearchMenuDataProvider.
+        // Create controller first.
         this.controller = createCompletionController(dispatcher);
 
         this.searchMenu = new SearchMenu(
-            this.controller,
             (item) => {
                 this.handleSelect(item);
             },
@@ -80,10 +79,12 @@ export class PartialCompletion {
         );
 
         // When completion state changes, re-render the search menu.
+        // CompletionState already contains filtered items and prefix —
+        // pass them directly to avoid a redundant trie query in render().
         this.controller.setOnUpdate(() => {
             const state = this.controller.getCompletionState();
             if (state) {
-                this.searchMenu.render(state.prefix);
+                this.searchMenu.render(state.prefix, state.items);
             } else {
                 this.searchMenu.hide();
             }

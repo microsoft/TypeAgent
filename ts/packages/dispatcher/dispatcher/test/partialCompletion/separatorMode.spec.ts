@@ -26,11 +26,7 @@ describe("PartialCompletionSession — separatorMode: space", () => {
 
         // Items pre-loaded at L1 (lowestLevelWithItems) but hidden
         // until separator is consumed.
-        expect(session.filterItems("")).toEqual(
-            expect.arrayContaining([
-                expect.objectContaining({ selectedText: "music" }),
-            ]),
-        );
+        expect(loadedItems(session)).toEqual(expect.arrayContaining(["music"]));
         expect(isActive(session)).toBe(false);
         // updatePrefix is NOT called (menu not shown)
         expect(session.getCompletionState()).toBeUndefined();
@@ -63,7 +59,7 @@ describe("PartialCompletionSession — separatorMode: space", () => {
         session.update("play ");
         await Promise.resolve();
 
-        expect(session.filterItems("")).toEqual(
+        expect(session.getCompletionState()!.items).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({ selectedText: "music" }),
             ]),
@@ -462,7 +458,7 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         session.update("play.");
         // Progressive consumption: may go through multiple levels.
         // The last setChoices call should have the level-2 items.
-        expect(session.filterItems("")).toEqual(
+        expect(session.getCompletionState()!.items).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({ matchText: "beta" }),
             ]),
@@ -492,13 +488,13 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         // Trie reloaded with level-0 items ("alpha" only).
         session.update("play");
         // Exactly one setChoices for the narrow reload.
-        expect(session.filterItems("")).toEqual(
+        expect(session.getCompletionState()!.items).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({ matchText: "alpha" }),
             ]),
         );
         // Only "alpha" — "beta" (space mode) not visible at level 0.
-        expect(session.filterItems("")).not.toEqual(
+        expect(session.getCompletionState()!.items).not.toEqual(
             expect.arrayContaining([
                 expect.objectContaining({ matchText: "beta" }),
             ]),
@@ -574,7 +570,7 @@ describe("PartialCompletionSession — SepLevel transitions", () => {
         // Consume again: type space → level 1.
         session.update("play ");
         // Exactly one setChoices for the consume reload.
-        expect(session.filterItems("")).toEqual(
+        expect(session.getCompletionState()!.items).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({ matchText: "alpha" }),
                 expect.objectContaining({ matchText: "beta" }),
@@ -1036,7 +1032,7 @@ describe("PartialCompletionSession — multi-group partitioning", () => {
         expect(isActive(session)).toBe(true);
         // Level 0 should only have "entity1" (optionalSpacePunctuation).
         // "cmd1"/"cmd2" (space) need level 1.
-        expect(session.filterItems("")).toEqual(
+        expect(session.getCompletionState()!.items).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({ selectedText: "entity1" }),
             ]),

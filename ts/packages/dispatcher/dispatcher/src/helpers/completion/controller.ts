@@ -2,8 +2,6 @@
 // Licensed under the MIT License.
 
 import { CompletionDirection } from "@typeagent/agent-sdk";
-import { SearchMenuItem } from "./searchMenu.js";
-import { type SearchMenuDataProvider } from "./searchMenu.js";
 import {
     ICompletionDispatcher,
     PartialCompletionSession,
@@ -21,9 +19,6 @@ export type CompletionControllerOptions = {
 /**
  * High-level completion controller wrapping PartialCompletionSession.
  *
- * Implements SearchMenuDataProvider so consumers can pass the controller
- * directly to their SearchMenu as the data source.
- *
  * API surface:
  *   - update()  — called on each keystroke
  *   - accept()  — called on Tab/Enter
@@ -36,9 +31,7 @@ export type CompletionControllerOptions = {
  * whenever completion state changes.  Renderers query
  * getCompletionState() in the callback to get the current items.
  */
-export class CompletionController
-    implements SearchMenuDataProvider<SearchMenuItem>
-{
+export class CompletionController {
     private readonly session: PartialCompletionSession;
 
     constructor(
@@ -47,16 +40,6 @@ export class CompletionController
     ) {
         const onUpdate = options?.onUpdate ?? (() => {});
         this.session = new PartialCompletionSession(dispatcher, onUpdate);
-    }
-
-    // ── SearchMenuDataProvider implementation ─────────────────────────
-
-    public filterItems(prefix: string): SearchMenuItem[] {
-        return this.session.filterItems(prefix);
-    }
-
-    public numChoices(): number {
-        return this.session.numChoices();
     }
 
     // ── Callback wiring ──────────────────────────────────────────────

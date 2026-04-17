@@ -2,10 +2,6 @@
 // Licensed under the MIT License.
 
 import { isElectron } from "./main";
-import {
-    isUniquelySatisfied,
-    type SearchMenuDataProvider,
-} from "agent-dispatcher/helpers/completion";
 import { CompletionToggle } from "./searchMenuUI/completionToggle";
 import { InlineSearchMenuUI } from "./searchMenuUI/inlineSearchMenuUI";
 import { LocalSearchMenuUI } from "./searchMenuUI/localSearchMenuUI";
@@ -27,7 +23,6 @@ export class SearchMenu {
     private _active: boolean = false;
 
     constructor(
-        private readonly dataProvider: SearchMenuDataProvider<SearchMenuItem>,
         private readonly onCompletion: (item: SearchMenuItem) => void,
         private inline: boolean,
         private readonly getPosition: (
@@ -84,19 +79,15 @@ export class SearchMenu {
     // ── Rendering ───────────────────────────────────────────────────────────────
 
     /**
-     * Render completions for the given prefix.  Queries the data provider
-     * for matching items, resolves the menu position, and shows or hides
-     * the UI accordingly.
+     * Render completions for the given prefix and pre-computed items.
+     * The caller (partial.ts onUpdate, templateEditor.ts) is responsible
+     * for filtering and uniqueness checks — this method is purely
+     * presentational.
      *
      * Called by the shell in response to onUpdate (partial.ts) or
      * on input events (templateEditor.ts).
      */
-    public render(prefix: string): void {
-        if (this.dataProvider.numChoices() === 0) {
-            this.hide();
-            return;
-        }
-
+    public render(prefix: string, items: SearchMenuItem[]): void {
         const position = this.getPosition(prefix);
         if (position === undefined) {
             this.hide();
@@ -111,11 +102,8 @@ export class SearchMenu {
         }
 
         this.prefix = prefix;
-        const items = this.dataProvider.filterItems(prefix);
-        const showMenu =
-            items.length !== 0 && !isUniquelySatisfied(items, prefix);
 
-        if (showMenu) {
+        if (items.length > 0) {
             this._active = true;
             // onShow
             this.lastPosition = position;

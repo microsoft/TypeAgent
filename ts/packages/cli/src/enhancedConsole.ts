@@ -1257,7 +1257,10 @@ async function questionWithCompletion(
                 if (controller && filteredCompletions.length > 0) {
                     controller.dismiss(input, "forward");
                 } else {
-                    // Esc with no completions — clear input
+                    // Esc with no completions — clear input.
+                    // Also hide the controller in case a fetch is in-flight
+                    // that would otherwise resolve and show stale completions.
+                    controller?.hide();
                     input = "";
                     cursorPos = 0;
                     historyIndex = history.length;

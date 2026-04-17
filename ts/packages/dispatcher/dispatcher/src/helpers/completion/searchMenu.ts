@@ -1,23 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { TST, BaseTSTData, normalizeMatchText } from "./trie.js";
-
-// ── Data provider interface ───────────────────────────────────────────────────
-
-export interface SearchMenuDataProvider<
-    TItem extends BaseTSTData = BaseTSTData,
-> {
-    filterItems(prefix: string): TItem[];
-    numChoices(): number;
-}
+import { TST, normalizeMatchText } from "./trie.js";
 
 // ── Search menu types ─────────────────────────────────────────────────────────
-
-export type SearchMenuPosition = {
-    left: number;
-    bottom: number;
-};
 
 export type SearchMenuItem = {
     matchText: string;
@@ -41,8 +27,16 @@ export function isUniquelySatisfied(
 
 // ── TST-backed data provider ──────────────────────────────────────────────────
 
+// Interface for data providers that support imperative setChoices loading.
+export interface MutableSearchMenuDataProvider {
+    filterItems(prefix: string): SearchMenuItem[];
+    numChoices(): number;
+    setChoices(choices: SearchMenuItem[]): void;
+    hasExactMatch(text: string): boolean;
+}
+
 export class TSTSearchMenuDataProvider
-    implements SearchMenuDataProvider<SearchMenuItem>
+    implements MutableSearchMenuDataProvider
 {
     private trie: TST<SearchMenuItem> = new TST<SearchMenuItem>();
 
@@ -68,4 +62,9 @@ export class TSTSearchMenuDataProvider
     public numChoices(): number {
         return this.trie.size();
     }
+}
+
+/** Create a mutable SearchMenuDataProvider backed by a prefix tree. */
+export function createSearchMenuDataProvider(): MutableSearchMenuDataProvider {
+    return new TSTSearchMenuDataProvider();
 }

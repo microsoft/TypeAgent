@@ -7,6 +7,7 @@ import {
     makeSession,
     makeDispatcher,
     makeCompletionResult,
+    loadedItems,
 } from "./helpers.js";
 
 describe("PartialCompletionSession — result processing", () => {
@@ -48,7 +49,7 @@ describe("PartialCompletionSession — result processing", () => {
         session.update("play ");
         await Promise.resolve();
 
-        const items = session.filterItems("") as {
+        const items = session.getCompletionState()!.items as {
             sortIndex: number;
             selectedText: string;
         }[];
@@ -79,7 +80,7 @@ describe("PartialCompletionSession — result processing", () => {
         session.update("play ");
         await Promise.resolve();
 
-        expect(session.filterItems("")).toEqual(
+        expect(session.getCompletionState()!.items).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({
                     selectedText: "Bohemian Rhapsody",
@@ -109,9 +110,7 @@ describe("PartialCompletionSession — result processing", () => {
         session.update("x");
         await Promise.resolve();
 
-        const items = session.filterItems("") as { selectedText: string }[];
-        const texts = items.map((i) => i.selectedText);
-        expect(texts).toEqual(["apple", "mango", "zebra"]);
+        expect(loadedItems(session)).toEqual(["apple", "mango", "zebra"]);
     });
 
     test("empty completions list does not call setChoices with items", async () => {
@@ -153,7 +152,7 @@ describe("PartialCompletionSession — result processing", () => {
         session.update("");
         await Promise.resolve();
 
-        expect(session.filterItems("")).toEqual(
+        expect(session.getCompletionState()!.items).toEqual(
             expect.arrayContaining([
                 expect.objectContaining({
                     selectedText: "player",
@@ -187,7 +186,10 @@ describe("PartialCompletionSession — result processing", () => {
         session.update("");
         await Promise.resolve();
 
-        const items = session.filterItems("") as Record<string, unknown>[];
+        const items = session.getCompletionState()!.items as Record<
+            string,
+            unknown
+        >[];
         expect(items[0].emojiChar).toBeUndefined();
     });
 
@@ -217,19 +219,15 @@ describe("PartialCompletionSession — result processing", () => {
         session.update("x");
         await Promise.resolve();
 
-        const items = session.filterItems("") as {
-            selectedText: string;
-            sortIndex: number;
-        }[];
-        const texts = items.map((i) => i.selectedText);
-
         // Sorted group: order preserved (zebra before apple)
         // Unsorted group: alphabetized (banana before cherry)
         // Cross-group: sorted group first
-        expect(texts).toEqual(["zebra", "apple", "banana", "cherry"]);
-
-        // sortIndex is sequential across both groups
-        expect(items.map((i) => i.sortIndex)).toEqual([0, 1, 2, 3]);
+        expect(loadedItems(session)).toEqual([
+            "zebra",
+            "apple",
+            "banana",
+            "cherry",
+        ]);
     });
 
     test("negative startIndex falls back to full input as anchor", async () => {

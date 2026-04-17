@@ -8,6 +8,7 @@ import {
 } from "../../src/helpers/completion/session.js";
 import { CompletionGroup, SeparatorMode } from "@typeagent/agent-sdk";
 import { CommandCompletionResult } from "@typeagent/dispatcher-types";
+import type { TSTSearchMenuDataProvider } from "../../src/helpers/completion/searchMenu.js";
 
 export { PartialCompletionSession };
 export type { ICompletionDispatcher };
@@ -107,8 +108,12 @@ export function makeMultiGroupResult(
     };
 }
 
-// Returns the selectedText values of items currently loaded in the
-// session's trie.  Replaces the old setChoices-based introspection.
+// Test utility: returns the selectedText values of items currently loaded
+// in the session's internal trie.  Accesses internals — acceptable for
+// same-package tests.
 export function loadedItems(session: PartialCompletionSession): string[] {
-    return session.filterItems("").map((i) => i.selectedText);
+    const trieProvider = (
+        session as unknown as { trieProvider: TSTSearchMenuDataProvider }
+    ).trieProvider;
+    return trieProvider.filterItems("").map((i) => i.selectedText);
 }

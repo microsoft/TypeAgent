@@ -12,7 +12,11 @@ import { Dispatcher, TemplateData, TemplateEditConfig } from "agent-dispatcher";
 import { getObjectProperty, setObjectProperty } from "@typeagent/common-utils";
 import { SearchMenu } from "./search";
 import { SearchMenuItem } from "./searchMenuUI/searchMenuUI";
-import { TSTSearchMenuDataProvider } from "agent-dispatcher/helpers/completion";
+import {
+    createSearchMenuDataProvider,
+    isUniquelySatisfied,
+    type MutableSearchMenuDataProvider,
+} from "agent-dispatcher/helpers/completion";
 
 function cloneTemplateData(
     templateData: TemplateData | TemplateData[],
@@ -427,8 +431,10 @@ class FieldScalar extends FieldBase {
     private editUI?: {
         div: HTMLDivElement;
         input: HTMLInputElement;
-        searchMenu?: SearchMenu;
-        dataProvider?: TSTSearchMenuDataProvider;
+        searchMenuData?: {
+            searchMenu: SearchMenu;
+            dataProvider: MutableSearchMenuDataProvider;
+        };
     };
     constructor(
         data: FieldContainer,
@@ -489,11 +495,10 @@ class FieldScalar extends FieldBase {
     private createSearchMenu(
         input: HTMLInputElement,
         choices: SearchMenuItem[],
-    ) {
-        const dataProvider = new TSTSearchMenuDataProvider();
+    ): { searchMenu: SearchMenu; dataProvider: MutableSearchMenuDataProvider } {
+        const dataProvider = createSearchMenuDataProvider();
         dataProvider.setChoices(choices);
         const searchMenu = new SearchMenu(
-            dataProvider,
             (item) => {
                 input.value = item.matchText;
                 this.data.setEditing(this.getNextScalarField());
@@ -514,7 +519,9 @@ class FieldScalar extends FieldBase {
             }, 250);
         });
         input.onwheel = (event) => {
-            this.editUI?.searchMenu?.handleMouseWheel(event.deltaY);
+            this.editUI?.searchMenuData?.searchMenu?.handleMouseWheel(
+                event.deltaY,
+            );
         };
         return { searchMenu, dataProvider };
     }
@@ -527,7 +534,7 @@ class FieldScalar extends FieldBase {
     }
 
     private cancelSearchMenu() {
-        const searchMenu = this.editUI?.searchMenu;
+        const searchMenu = this.editUI?.searchMenuData?.searchMenu;
         searchMenu?.hide();
     }
 
@@ -535,19 +542,24 @@ class FieldScalar extends FieldBase {
         if (this.editUI === undefined) {
             return;
         }
-        const searchMenu = this.editUI.searchMenu;
-        if (searchMenu === undefined) {
+        const searchMenuData = this.editUI.searchMenuData;
+        if (searchMenuData === undefined) {
             return;
         }
 
         const value = this.editUI.input.value;
-        searchMenu.render(value);
+        const items = searchMenuData.dataProvider.filterItems(value);
+        const filtered =
+            items.length !== 0 && !isUniquelySatisfied(items, value)
+                ? items
+                : [];
+        searchMenuData.searchMenu.render(value, filtered);
     }
     private handleSearchMenuKeys(event: KeyboardEvent): boolean {
         if (this.editUI === undefined) {
             return false;
         }
-        const searchMenu = this.editUI.searchMenu;
+        const searchMenu = this.editUI.searchMenuData?.searchMenu;
         if (searchMenu === undefined) {
             return false;
         }
@@ -582,24 +594,20 @@ class FieldScalar extends FieldBase {
 
         const fieldType = this.fieldType;
         if (fieldType.type === "string-union") {
-            const { searchMenu } = this.createSearchMenu(
+            this.editUI.searchMenuData = this.createSearchMenu(
                 input,
                 fieldType.typeEnum.map((e) => ({
                     matchText: e,
                     selectedText: e,
                 })),
             );
-            this.editUI.searchMenu = searchMenu;
             this.updateSearchMenu();
         } else if (fieldType.type === "string") {
             const templateConfig = this.data.actionTemplates;
             if (templateConfig.completion === true) {
-                const { searchMenu, dataProvider } = this.createSearchMenu(
-                    input,
-                    [],
-                );
-                this.editUI.searchMenu = searchMenu;
-                this.editUI.dataProvider = dataProvider;
+                this.editUI.searchMenuData = this.createSearchMenu(input, []);
+                // Capture references for the async stale-check below.
+                const { searchMenu, dataProvider } = this.editUI.searchMenuData;
                 dispatcher
                     .getTemplateCompletion(
                         this.data.actionTemplates.templateAgentName,
@@ -609,7 +617,8 @@ class FieldScalar extends FieldBase {
                     )
                     .then((items) => {
                         if (
-                            searchMenu !== this.editUI?.searchMenu ||
+                            searchMenu !==
+                                this.editUI?.searchMenuData?.searchMenu ||
                             items === undefined
                         ) {
                             return;
@@ -649,7 +658,7 @@ class FieldScalar extends FieldBase {
             return true;
         }
         this.cancelSearchMenu();
-        this.editUI.searchMenu = undefined;
+        this.editUI.searchMenuData = undefined;
 
         const fieldType = this.fieldType;
         const newValue = this.getInputValue(fieldType.type, input);

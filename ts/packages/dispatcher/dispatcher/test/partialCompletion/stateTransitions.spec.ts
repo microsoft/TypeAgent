@@ -9,6 +9,7 @@ import {
     makeDispatcher,
     makeCompletionResult,
     isActive,
+    loadedItems,
 } from "./helpers.js";
 
 describe("PartialCompletionSession — state transitions", () => {
@@ -48,9 +49,9 @@ describe("PartialCompletionSession — state transitions", () => {
         session.update("play ");
         await Promise.resolve(); // flush microtask
 
-        expect(session.filterItems("").map((i) => i.selectedText)).toEqual(
-            expect.arrayContaining(["shuffle", "song"]),
-        );
+        expect(
+            session.getCompletionState()!.items.map((i) => i.selectedText),
+        ).toEqual(expect.arrayContaining(["shuffle", "song"]));
         expect(onUpdate).toHaveBeenCalled();
     });
 
@@ -194,7 +195,7 @@ describe("PartialCompletionSession — state transitions", () => {
         resolve(makeCompletionResult(["song"], 4));
         await Promise.resolve();
 
-        expect(session.filterItems("").map((i) => i.selectedText)).not.toEqual(
+        expect(loadedItems(session)).not.toEqual(
             expect.arrayContaining(["song"]),
         );
     });
@@ -213,9 +214,9 @@ describe("PartialCompletionSession — state transitions", () => {
             "",
             "forward",
         );
-        expect(session.filterItems("").map((i) => i.selectedText)).toEqual(
-            expect.arrayContaining(["@"]),
-        );
+        expect(
+            session.getCompletionState()!.items.map((i) => i.selectedText),
+        ).toEqual(expect.arrayContaining(["@"]));
     });
 
     test("empty input: second update reuses session without re-fetch", async () => {

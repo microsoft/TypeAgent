@@ -13,7 +13,6 @@ import {
     SearchMenuItem,
     TSTSearchMenuDataProvider,
     isUniquelySatisfied,
-    type SearchMenuDataProvider,
 } from "./searchMenu.js";
 import registerDebug from "debug";
 
@@ -91,9 +90,7 @@ function computeNoMatchPolicy(
 //
 // Architecture: docs/architecture/completion.md — §5 Shell — Completion Session
 // This class has no DOM dependencies and is fully unit-testable with Jest.
-export class PartialCompletionSession
-    implements SearchMenuDataProvider<SearchMenuItem>
-{
+export class PartialCompletionSession {
     // The "anchor" prefix for the current session.  Set to the full input
     // when the request is issued, then narrowed to input[0..startIndex] when
     // the backend reports how much the grammar consumed.  `undefined` = IDLE.
@@ -135,10 +132,15 @@ export class PartialCompletionSession
 
     // The input text from the most recent update() or explicitHide() call.
     // Used to compute the cached completionState.
+    // Safe to read in async callbacks (.then/.catch) without synchronization
+    // because JavaScript is single-threaded — the value is always set
+    // synchronously before any async operation begins, and microtask
+    // callbacks see the latest value.
     private lastInput: string = "";
 
     // The direction from the most recent update() or explicitHide() call.
     // Used by async callbacks to reconcile with the latest user intent.
+    // Same single-threaded safety guarantee as lastInput.
     private lastDirection: CompletionDirection = "forward";
 
     // Cached completion state, recomputed at every mutation point.
@@ -160,16 +162,6 @@ export class PartialCompletionSession
 
     public setOnUpdate(onUpdate: () => void): void {
         this.onUpdate = onUpdate;
-    }
-
-    // ── SearchMenuDataProvider implementation ─────────────────────────────────
-
-    public filterItems(prefix: string): SearchMenuItem[] {
-        return this.trieProvider.filterItems(prefix);
-    }
-
-    public numChoices(): number {
-        return this.trieProvider.numChoices();
     }
 
     // Load the trie with items for the given level and set menuSepLevel.
@@ -334,7 +326,7 @@ export class PartialCompletionSession
             return undefined;
         }
         const prefix = input.substring(this.menuAnchorIndex);
-        const items = this.filterItems(prefix);
+        const items = this.trieProvider.filterItems(prefix);
         if (items.length === 0 || isUniquelySatisfied(items, prefix)) {
             return undefined;
         }
@@ -513,7 +505,7 @@ export class PartialCompletionSession
     // session, false to trigger a re-fetch.
     private matchOrConsume(input: string, rawPrefix: string): boolean {
         for (;;) {
-            const items = this.filterItems(rawPrefix);
+            const items = this.trieProvider.filterItems(rawPrefix);
 
             // [C1] UNIQUE — exactly one match, re-fetch for next level.
             if (isUniquelySatisfied(items, rawPrefix)) {
@@ -596,6 +588,10 @@ export class PartialCompletionSession
     // cannot handle it AND the input/direction actually changed — this
     // avoids infinite re-fetch loops when reuseSession legitimately
     // returns false for the same input (e.g. C1 UNIQUE).
+    //
+    // reuseSession must always run (even when input hasn't changed)
+    // because it performs essential state transitions like progressive
+    // separator consumption (D1) and level loading.
     private reconcileTypeAhead(
         fetchInput: string,
         fetchDirection: CompletionDirection,
@@ -608,6 +604,11 @@ export class PartialCompletionSession
                 currentDirection !== fetchDirection
             ) {
                 this.startNewSession(currentInput, currentDirection);
+            } else {
+                // reuseSession returned false for the same input (e.g. C1
+                // UNIQUE).  No re-fetch, but ensure the renderer sees the
+                // latest state.
+                this.notifyUpdate();
             }
         }
     }

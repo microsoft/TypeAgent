@@ -9,8 +9,7 @@ import {
 } from "./helpers.js";
 import {
     isUniquelySatisfied,
-    TSTSearchMenuDataProvider,
-    type SearchMenuDataProvider,
+    createSearchMenuDataProvider,
 } from "agent-dispatcher/helpers/completion";
 import type {
     SearchMenuItem,
@@ -42,7 +41,7 @@ function makeMockUI(): MockSearchMenuUI {
 // and switchMode logic that runs in the real shell.
 
 class TestableSearchMenu {
-    private readonly dataProvider: SearchMenuDataProvider<SearchMenuItem>;
+    private readonly dataProvider = createSearchMenuDataProvider();
     private searchMenuUI: MockSearchMenuUI | undefined;
     private lastPosition: SearchMenuPosition | undefined;
     private lastPrefix: string | undefined;
@@ -57,10 +56,8 @@ class TestableSearchMenu {
 
     constructor(
         inline: boolean = true,
-        dataProvider?: SearchMenuDataProvider<SearchMenuItem>,
         getPosition?: (prefix: string) => SearchMenuPosition | undefined,
     ) {
-        this.dataProvider = dataProvider ?? new TSTSearchMenuDataProvider();
         this.inline = inline;
         this.getPosition = getPosition ?? (() => ({ left: 0, bottom: 0 }));
     }
@@ -82,11 +79,7 @@ class TestableSearchMenu {
     // Populate the internal trie for standalone tests (not needed when
     // using an external data provider like CompletionController).
     public setChoicesOnProvider(choices: SearchMenuItem[]): void {
-        if ("setChoices" in this.dataProvider) {
-            (
-                this.dataProvider as { setChoices(c: SearchMenuItem[]): void }
-            ).setChoices(choices);
-        }
+        this.dataProvider.setChoices(choices);
         this.invalidate();
     }
 
@@ -99,24 +92,30 @@ class TestableSearchMenu {
             return false;
         }
 
+        const items = this.dataProvider.filterItems(prefix);
+        const uniquelySatisfied = isUniquelySatisfied(items, prefix);
+        const showMenu = items.length !== 0 && !uniquelySatisfied;
+        this.render(prefix, showMenu ? items : []);
+        return uniquelySatisfied;
+    }
+
+    // Mirrors production SearchMenu.render() — accepts pre-computed items.
+    public render(prefix: string, items: SearchMenuItem[]): void {
         const position = this.getPosition(prefix);
         if (position === undefined) {
             this.hide();
-            return false;
+            return;
         }
 
         if (this.prefix === prefix && this._active) {
             this.lastPosition = position;
             this.searchMenuUI!.update({ position });
-            return false;
+            return;
         }
 
         this.prefix = prefix;
-        const items = this.dataProvider.filterItems(prefix);
-        const uniquelySatisfied = isUniquelySatisfied(items, prefix);
-        const showMenu = items.length !== 0 && !uniquelySatisfied;
 
-        if (showMenu) {
+        if (items.length > 0) {
             this._active = true;
             this.lastPosition = position;
             this.lastPrefix = prefix;
@@ -128,7 +127,6 @@ class TestableSearchMenu {
         } else {
             this.hide();
         }
-        return uniquelySatisfied;
     }
 
     public hide(): void {
@@ -180,7 +178,7 @@ const defaultPos: SearchMenuPosition = { left: 10, bottom: 20 };
 
 describe("SearchMenu switchMode", () => {
     function setupActiveMenu(): TestableSearchMenu {
-        const menu = new TestableSearchMenu(true, undefined, () => defaultPos);
+        const menu = new TestableSearchMenu(true, () => defaultPos);
         const items: SearchMenuItem[] = [
             { matchText: "alpha", selectedText: "alpha" },
             { matchText: "beta", selectedText: "beta" },
@@ -311,7 +309,7 @@ describe("SearchMenu switchMode", () => {
 describe("SearchMenu state tracking", () => {
     test("onShow stores position, prefix, and items", () => {
         const pos = { left: 5, bottom: 15 };
-        const menu = new TestableSearchMenu(true, undefined, () => pos);
+        const menu = new TestableSearchMenu(true, () => pos);
         menu.setChoicesOnProvider([
             { matchText: "foo", selectedText: "foo" },
             { matchText: "foobar", selectedText: "foobar" },
@@ -326,7 +324,7 @@ describe("SearchMenu state tracking", () => {
 
     test("onHide clears stored state", () => {
         const pos = { left: 1, bottom: 2 };
-        const menu = new TestableSearchMenu(true, undefined, () => pos);
+        const menu = new TestableSearchMenu(true, () => pos);
         menu.setChoicesOnProvider([
             { matchText: "abc", selectedText: "abc" },
             { matchText: "abd", selectedText: "abd" },
@@ -344,7 +342,7 @@ describe("SearchMenu state tracking", () => {
 
     test("onUpdatePosition updates stored position", () => {
         let pos: SearchMenuPosition = { left: 10, bottom: 20 };
-        const menu = new TestableSearchMenu(true, undefined, () => pos);
+        const menu = new TestableSearchMenu(true, () => pos);
         menu.setChoicesOnProvider([
             { matchText: "xyz", selectedText: "xyz" },
             { matchText: "xyw", selectedText: "xyw" },
@@ -370,20 +368,18 @@ describe("switchMode integration with CompletionController", () => {
         });
         const dispatcher = makeDispatcher(result);
         const controller = createCompletionController(dispatcher);
-        const menu = new TestableSearchMenu(true, controller, anyPos);
-        let lastInput = "";
+        const menu = new TestableSearchMenu(true, anyPos);
         controller.setOnUpdate(() => {
             const state = controller.getCompletionState();
             if (state) {
-                menu.updatePrefix(state.prefix);
+                menu.render(state.prefix, state.items);
             } else {
                 menu.hide();
             }
         });
 
         // Trigger initial completion — "play " is anchor, "s" is prefix
-        lastInput = "play s";
-        controller.update(lastInput, "forward");
+        controller.update("play s", "forward");
         await Promise.resolve();
 
         expect(menu.isActive()).toBe(true);
@@ -402,19 +398,17 @@ describe("switchMode integration with CompletionController", () => {
         const result = makeCompletionResult(["alpha", "beta"], 0);
         const dispatcher = makeDispatcher(result);
         const controller = createCompletionController(dispatcher);
-        const menu = new TestableSearchMenu(true, controller, anyPos);
-        let lastInput = "";
+        const menu = new TestableSearchMenu(true, anyPos);
         controller.setOnUpdate(() => {
             const state = controller.getCompletionState();
             if (state) {
-                menu.updatePrefix(state.prefix);
+                menu.render(state.prefix, state.items);
             } else {
                 menu.hide();
             }
         });
 
-        lastInput = "a";
-        controller.update(lastInput, "forward");
+        controller.update("a", "forward");
         await Promise.resolve();
 
         menu.switchMode(false);

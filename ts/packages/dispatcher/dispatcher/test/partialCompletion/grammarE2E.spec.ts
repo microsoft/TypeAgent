@@ -8,6 +8,7 @@ import {
     CommandCompletionResult,
     makeSession,
     isActive,
+    loadedItems,
 } from "./helpers.js";
 import {
     loadGrammarRules,
@@ -152,7 +153,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             await flush();
 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-            expect(session.filterItems("")).toEqual(
+            expect(session.getCompletionState()!.items).toEqual(
                 expect.arrayContaining([
                     expect.objectContaining({ matchText: "pause" }),
                     expect.objectContaining({ matchText: "play" }),
@@ -226,11 +227,11 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // Entity group has separatorMode "spacePunctuation" → deferred.
             // Items pre-loaded at lowest non-empty level (L1) but hidden
             // until separator is consumed.
-            expect(session.filterItems("")).toEqual(
+            expect(loadedItems(session)).toEqual(
                 expect.arrayContaining([
-                    expect.objectContaining({ matchText: "Bohemian Rhapsody" }),
-                    expect.objectContaining({ matchText: "Shake It Off" }),
-                    expect.objectContaining({ matchText: "Shape of You" }),
+                    "Bohemian Rhapsody",
+                    "Shake It Off",
+                    "Shape of You",
                 ]),
             );
             // Entities deferred — no separator typed.
@@ -320,10 +321,8 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // Grammar at "play Shake It Off": completions=["by"],
             // separatorMode="spacePunctuation" → deferred.
             // Items pre-loaded at lowest non-empty level.
-            expect(session.filterItems("")).toEqual(
-                expect.arrayContaining([
-                    expect.objectContaining({ matchText: "by" }),
-                ]),
+            expect(loadedItems(session)).toEqual(
+                expect.arrayContaining(["by"]),
             );
             expect(isActive(session)).toBe(false);
 
@@ -369,12 +368,8 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             );
             // Entity values deferred (separatorMode "spacePunctuation",
             // rawPrefix "" → items pre-loaded but hidden).
-            expect(session.filterItems("")).toEqual(
-                expect.arrayContaining([
-                    expect.objectContaining({ matchText: "Ed Sheeran" }),
-                    expect.objectContaining({ matchText: "Queen" }),
-                    expect.objectContaining({ matchText: "Taylor Swift" }),
-                ]),
+            expect(loadedItems(session)).toEqual(
+                expect.arrayContaining(["Ed Sheeran", "Queen", "Taylor Swift"]),
             );
             // Entities deferred — separator needed.
             expect(isActive(session)).toBe(false);
@@ -418,7 +413,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             await flush();
 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-            expect(session.filterItems("")).toEqual(
+            expect(session.getCompletionState()!.items).toEqual(
                 expect.arrayContaining([
                     expect.objectContaining({ matchText: "set" }),
                 ]),
@@ -437,11 +432,8 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // with separatorMode "spacePunctuation" → deferred.
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
             // Items pre-loaded at lowest non-empty level.
-            expect(session.filterItems("")).toEqual(
-                expect.arrayContaining([
-                    expect.objectContaining({ matchText: "brightness" }),
-                    expect.objectContaining({ matchText: "volume" }),
-                ]),
+            expect(loadedItems(session)).toEqual(
+                expect.arrayContaining(["brightness", "volume"]),
             );
             // Properties deferred — separator needed.
             expect(isActive(session)).toBe(false);
@@ -476,12 +468,8 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(3);
             // Entity group has separatorMode "spacePunctuation" → deferred.
             // Items pre-loaded at lowest non-empty level.
-            expect(session.filterItems("")).toEqual(
-                expect.arrayContaining([
-                    expect.objectContaining({ matchText: "high" }),
-                    expect.objectContaining({ matchText: "low" }),
-                    expect.objectContaining({ matchText: "medium" }),
-                ]),
+            expect(loadedItems(session)).toEqual(
+                expect.arrayContaining(["high", "low", "medium"]),
             );
             // Entities deferred — separator needed.
             expect(isActive(session)).toBe(false);
@@ -593,7 +581,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             );
             expect(session.getCompletionState()?.prefix).toBe("b");
             // The trie should show "by" as a narrowed match.
-            expect(session.filterItems("")).toEqual(
+            expect(session.getCompletionState()!.items).toEqual(
                 expect.arrayContaining([
                     expect.objectContaining({ matchText: "by" }),
                 ]),
@@ -689,12 +677,8 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // Grammar returns artist properties → mock entities injected.
             // Entity group has separatorMode "spacePunctuation" → deferred.
             // Items pre-loaded at lowest non-empty level.
-            expect(session.filterItems("")).toEqual(
-                expect.arrayContaining([
-                    expect.objectContaining({ matchText: "Ed Sheeran" }),
-                    expect.objectContaining({ matchText: "Queen" }),
-                    expect.objectContaining({ matchText: "Taylor Swift" }),
-                ]),
+            expect(loadedItems(session)).toEqual(
+                expect.arrayContaining(["Ed Sheeran", "Queen", "Taylor Swift"]),
             );
             // Entities deferred — separator needed.
             expect(isActive(session)).toBe(false);
@@ -740,11 +724,8 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // afterWildcard="some" → noMatchPolicy="refetch"
             // separatorMode="spacePunctuation" → items deferred at anchor.
             // Items pre-loaded at lowest non-empty level.
-            expect(session.filterItems("")).toEqual(
-                expect.arrayContaining([
-                    expect.objectContaining({ matchText: "music" }),
-                    expect.objectContaining({ matchText: "by" }),
-                ]),
+            expect(loadedItems(session)).toEqual(
+                expect.arrayContaining(["music", "by"]),
             );
             expect(isActive(session)).toBe(false);
 
@@ -785,15 +766,11 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // "music" should be gone — it was position-sensitive to
             // "play beautiful" (exact partial match of Rule B).
             // Items pre-loaded at lowest non-empty level.
-            expect(session.filterItems("")).toEqual(
-                expect.arrayContaining([
-                    expect.objectContaining({ matchText: "by" }),
-                ]),
+            expect(loadedItems(session)).toEqual(
+                expect.arrayContaining(["by"]),
             );
-            expect(session.filterItems("")).not.toEqual(
-                expect.arrayContaining([
-                    expect.objectContaining({ matchText: "music" }),
-                ]),
+            expect(loadedItems(session)).not.toEqual(
+                expect.arrayContaining(["music"]),
             );
             expect(isActive(session)).toBe(false);
 
@@ -967,7 +944,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             session.update("play ");
             expect(isActive(session)).toBe(true);
-            expect(session.filterItems("")).toEqual(
+            expect(session.getCompletionState()!.items).toEqual(
                 expect.arrayContaining([
                     expect.objectContaining({ matchText: "music" }),
                 ]),
@@ -1012,7 +989,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // The extra space should not leak into the trie filter.
             // Menu should be active with "music" offered.
             expect(isActive(session)).toBe(true);
-            expect(session.filterItems("")).toEqual(
+            expect(session.getCompletionState()!.items).toEqual(
                 expect.arrayContaining([
                     expect.objectContaining({ matchText: "music" }),
                 ]),
@@ -1062,7 +1039,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
             // Double space should not break entity display.
             expect(isActive(session)).toBe(true);
-            expect(session.filterItems("")).toEqual(
+            expect(session.getCompletionState()!.items).toEqual(
                 expect.arrayContaining([
                     expect.objectContaining({ matchText: "Bohemian Rhapsody" }),
                     expect.objectContaining({ matchText: "Shake It Off" }),
@@ -1159,7 +1136,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // Grammar reports: completions=["cd"], separatorMode="none",
             // closedSet=false (candidates were dropped).
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-            expect(session.filterItems("")).toEqual(
+            expect(session.getCompletionState()!.items).toEqual(
                 expect.arrayContaining([
                     expect.objectContaining({ matchText: "cd" }),
                 ]),
@@ -1186,7 +1163,7 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
             // No new fetch — both groups already loaded at anchor "ab".
             expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
             // setChoices IS called again (visibility changed — more items now visible).
-            expect(session.filterItems("")).toEqual(
+            expect(session.getCompletionState()!.items).toEqual(
                 expect.arrayContaining([
                     expect.objectContaining({ matchText: "cd" }),
                 ]),
@@ -1720,10 +1697,8 @@ describe("PartialCompletionSession — grammar e2e with mocked entities", () => 
 
             // Next-level completions deferred
             // (separatorMode "spacePunctuation", pre-loaded at target level).
-            expect(session.filterItems("")).toEqual(
-                expect.arrayContaining([
-                    expect.objectContaining({ matchText: "by" }),
-                ]),
+            expect(loadedItems(session)).toEqual(
+                expect.arrayContaining(["by"]),
             );
 
             // Type separator → D1 consumes, items already loaded.
