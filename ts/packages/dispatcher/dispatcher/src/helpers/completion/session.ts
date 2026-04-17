@@ -253,6 +253,23 @@ export class PartialCompletionSession {
         this.completionState = undefined;
     }
 
+    /** Accept the current completion (Tab/Enter). Resets session to idle. */
+    public accept(): void {
+        this.resetToIdle();
+    }
+
+    /**
+     * Dismiss completions (Escape key). Performs smart level-shift or refetch.
+     * @param input      Current input text
+     * @param direction  Direction hint for the session
+     */
+    public dismiss(
+        input: string,
+        direction: CompletionDirection = "forward",
+    ): void {
+        this.explicitHide(input, direction);
+    }
+
     // Called when the user explicitly dismisses the menu (e.g. Escape key).
     //
     // Four outcomes:
@@ -309,6 +326,12 @@ export class PartialCompletionSession {
     // no completions to show.  Recomputed at every mutation point.
     public getCompletionState(): CompletionState | undefined {
         return this.completionState;
+    }
+
+    // @internal — Test-only: returns all items currently loaded in the trie.
+    // Avoids unsafe casts in test code.  Not part of the public API.
+    public getLoadedItems(): SearchMenuItem[] {
+        return this.trieProvider.filterItems("");
     }
 
     // Compute the completion state from current session fields.
@@ -589,9 +612,11 @@ export class PartialCompletionSession {
     // avoids infinite re-fetch loops when reuseSession legitimately
     // returns false for the same input (e.g. C1 UNIQUE).
     //
-    // reuseSession must always run (even when input hasn't changed)
-    // because it performs essential state transitions like progressive
-    // separator consumption (D1) and level loading.
+    // Note: reuseSession must always run — even when input hasn't changed
+    // — because the .then() handler sets anchor to the *resolved* prefix
+    // (which can be shorter than the original input).  The gap between
+    // the new anchor and the full input may contain separator characters
+    // that need progressive consumption (D1) and level loading.
     private reconcileTypeAhead(
         fetchInput: string,
         fetchDirection: CompletionDirection,

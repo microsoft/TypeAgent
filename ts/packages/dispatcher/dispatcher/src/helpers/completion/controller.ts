@@ -1,12 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CompletionDirection } from "@typeagent/agent-sdk";
+// CompletionController is the public consumer-facing type for the completion
+// session.  PartialCompletionSession exposes consumer-friendly aliases
+// (accept, dismiss) directly, so no wrapper class is needed — this module
+// provides the type alias and factory for backward-compatible imports.
+
 import {
     ICompletionDispatcher,
     PartialCompletionSession,
     CompletionState,
 } from "./session.js";
+import { CompletionDirection } from "@typeagent/agent-sdk";
 
 export type { CompletionState };
 
@@ -17,7 +22,7 @@ export type CompletionControllerOptions = {
 };
 
 /**
- * High-level completion controller wrapping PartialCompletionSession.
+ * Consumer-facing interface for the completion session.
  *
  * API surface:
  *   - update()  — called on each keystroke
@@ -27,73 +32,17 @@ export type CompletionControllerOptions = {
  *   - getCompletionState() — returns current completions for rendering
  *   - setOnUpdate() — set/replace the onUpdate callback
  *
- * Both CLI and Shell create a controller. The onUpdate callback fires
- * whenever completion state changes.  Renderers query
- * getCompletionState() in the callback to get the current items.
+ * Both CLI and Shell create a controller via createCompletionController().
+ * The onUpdate callback fires whenever completion state changes.  Renderers
+ * query getCompletionState() in the callback to get the current items.
  */
-export class CompletionController {
-    private readonly session: PartialCompletionSession;
-
-    constructor(
-        dispatcher: ICompletionDispatcher,
-        options?: CompletionControllerOptions,
-    ) {
-        const onUpdate = options?.onUpdate ?? (() => {});
-        this.session = new PartialCompletionSession(dispatcher, onUpdate);
-    }
-
-    // ── Callback wiring ──────────────────────────────────────────────
-
-    /**
-     * Set or replace the callback invoked when completions change.
-     */
-    public setOnUpdate(onUpdate: () => void): void {
-        this.session.setOnUpdate(onUpdate);
-    }
-
-    // ── Completion lifecycle ─────────────────────────────────────────
-
-    /**
-     * Drive the completion state machine on each keystroke.
-     * @param input   Current input text
-     * @param direction  "forward" (typing) or "backward" (backspace)
-     */
-    public update(
-        input: string,
-        direction: CompletionDirection = "forward",
-    ): void {
-        this.session.update(input, direction);
-    }
-
-    /** Accept the current completion (Tab/Enter). Resets session to idle. */
-    public accept(): void {
-        this.session.resetToIdle();
-    }
-
-    /**
-     * Dismiss completions (Escape key). Performs smart level-shift or refetch.
-     * @param input      Current input text
-     * @param direction  Direction hint for the session
-     */
-    public dismiss(
-        input: string,
-        direction: CompletionDirection = "forward",
-    ): void {
-        this.session.explicitHide(input, direction);
-    }
-
-    /** Hide the menu without clearing session state (e.g. cursor moved away). */
-    public hide(): void {
-        this.session.hide();
-    }
-
-    /**
-     * Returns the current completion state for rendering, or undefined
-     * when there are no completions to show.
-     */
-    public getCompletionState(): CompletionState | undefined {
-        return this.session.getCompletionState();
-    }
+export interface CompletionController {
+    update(input: string, direction?: CompletionDirection): void;
+    accept(): void;
+    dismiss(input: string, direction?: CompletionDirection): void;
+    hide(): void;
+    getCompletionState(): CompletionState | undefined;
+    setOnUpdate(onUpdate: () => void): void;
 }
 
 /** Factory function for creating a CompletionController. */
@@ -101,5 +50,5 @@ export function createCompletionController(
     dispatcher: ICompletionDispatcher,
     options?: CompletionControllerOptions,
 ): CompletionController {
-    return new CompletionController(dispatcher, options);
+    return new PartialCompletionSession(dispatcher, options?.onUpdate);
 }

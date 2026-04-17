@@ -2,14 +2,13 @@
 // Licensed under the MIT License.
 
 import { jest, describe, it, expect, beforeEach } from "@jest/globals";
-import {
-    CompletionController,
-    createCompletionController,
-} from "../../src/helpers/completion/index.js";
+import { createCompletionController } from "../../src/helpers/completion/index.js";
+import { PartialCompletionSession } from "../../src/helpers/completion/session.js";
 import {
     makeDispatcher,
     makeCompletionResult,
     MockDispatcher,
+    flushPromises,
 } from "./helpers.js";
 
 describe("CompletionController", () => {
@@ -22,7 +21,7 @@ describe("CompletionController", () => {
     describe("basic lifecycle", () => {
         it("should create without options", () => {
             const controller = createCompletionController(dispatcher);
-            expect(controller).toBeInstanceOf(CompletionController);
+            expect(controller).toBeInstanceOf(PartialCompletionSession);
         });
 
         it("should return completions after update", async () => {
@@ -134,9 +133,3 @@ describe("CompletionController", () => {
         });
     });
 });
-
-function flushPromises(): Promise<void> {
-    return Promise.resolve()
-        .then(() => Promise.resolve())
-        .then(() => Promise.resolve());
-}

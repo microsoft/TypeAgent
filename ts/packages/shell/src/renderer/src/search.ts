@@ -15,6 +15,9 @@ import {
 // Architecture: docs/architecture/completion.md — §7 Shell — Search Menu
 export class SearchMenu {
     private searchMenuUI: SearchMenuUI | undefined;
+    // lastPosition/lastPrefix/lastItems are retained solely for switchMode():
+    // when the user toggles inline↔popup, the menu must be re-created with
+    // the same data.  These are cleared on hide() and set on render().
     private lastPosition: SearchMenuPosition | undefined;
     private lastPrefix: string | undefined;
     private lastItems: SearchMenuItem[] | undefined;

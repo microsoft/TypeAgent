@@ -8,7 +8,6 @@ import {
 } from "../../src/helpers/completion/session.js";
 import { CompletionGroup, SeparatorMode } from "@typeagent/agent-sdk";
 import { CommandCompletionResult } from "@typeagent/dispatcher-types";
-import type { TSTSearchMenuDataProvider } from "../../src/helpers/completion/searchMenu.js";
 
 export { PartialCompletionSession };
 export type { ICompletionDispatcher };
@@ -109,11 +108,13 @@ export function makeMultiGroupResult(
 }
 
 // Test utility: returns the selectedText values of items currently loaded
-// in the session's internal trie.  Accesses internals — acceptable for
-// same-package tests.
+// in the session's internal trie.
 export function loadedItems(session: PartialCompletionSession): string[] {
-    const trieProvider = (
-        session as unknown as { trieProvider: TSTSearchMenuDataProvider }
-    ).trieProvider;
-    return trieProvider.filterItems("").map((i) => i.selectedText);
+    return session.getLoadedItems().map((i) => i.selectedText);
+}
+
+// Flush microtask queue.  Use after resolving/rejecting deferred promises
+// to allow .then/.catch handlers to execute.
+export function flushPromises(): Promise<void> {
+    return Promise.resolve().then(() => Promise.resolve());
 }

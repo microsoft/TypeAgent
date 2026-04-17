@@ -11,7 +11,7 @@ export {
 } from "./searchMenu.js";
 export { CompletionState } from "./session.js";
 export {
-    CompletionController,
-    CompletionControllerOptions,
+    type CompletionController,
+    type CompletionControllerOptions,
     createCompletionController,
 } from "./controller.js";

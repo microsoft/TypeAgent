@@ -160,6 +160,42 @@ describe("PartialCompletionSession — type-ahead during pending fetch", () => {
         expect(mock).toHaveBeenCalledTimes(1);
     });
 
+    test("fetch error with type-ahead: re-fetch resolves and shows completions", async () => {
+        // Full round-trip: error → reconcile → new fetch → completions shown.
+        const result2 = makeCompletionResult(["stop", "store"], 0, {
+            separatorMode: "none",
+        });
+        const { dispatcher, mock, reject1 } = makeDeferredDispatcher();
+        mock.mockResolvedValueOnce(result2);
+        const { session } = makeSession(dispatcher);
+
+        // User types "play" → starts fetch
+        session.update("play");
+        expect(mock).toHaveBeenCalledTimes(1);
+
+        // User types "sto" while fetch is pending
+        session.update("sto");
+
+        // First fetch fails
+        reject1(new Error("network error"));
+        await Promise.resolve(); // flush microtask
+        await Promise.resolve(); // flush catch handler
+
+        // reconcileTypeAhead should detect diverged input and re-fetch
+        expect(mock).toHaveBeenCalledTimes(2);
+        expect(mock).toHaveBeenLastCalledWith("sto", "forward");
+
+        // Second fetch resolves
+        await Promise.resolve();
+
+        // Completions for "sto" should now be active
+        expect(isActive(session)).toBe(true);
+        const items = getItemTexts(session);
+        expect(items).toContain("stop");
+        expect(items).toContain("store");
+        expect(session.getCompletionState()?.prefix).toBe("sto");
+    });
+
     test("empty result with type-ahead: new fetch for current input", async () => {
         // Backend returns empty completions for "xyz"
         const emptyResult: CommandCompletionResult = {
