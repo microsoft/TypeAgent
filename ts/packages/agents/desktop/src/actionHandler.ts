@@ -67,9 +67,16 @@ function formatResultDisplay(message: string, data?: unknown): string {
         return message;
     }
     if (Array.isArray(data)) {
-        return data.length > 0
-            ? `${message}:\n${data.map((item) => `  - ${item}`).join("\n")}`
-            : message;
+        if (data.length === 0) {
+            return message;
+        }
+        const lines = data.map((item) => {
+            if (typeof item === "object" && item !== null) {
+                return `  - ${Object.values(item).join(", ")}`;
+            }
+            return `  - ${item}`;
+        });
+        return `${message}:\n${lines.join("\n")}`;
     }
     if (typeof data === "object") {
         return `${message}:\n${JSON.stringify(data, null, 2)}`;
