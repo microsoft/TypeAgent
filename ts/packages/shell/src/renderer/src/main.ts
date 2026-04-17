@@ -373,6 +373,87 @@ function registerClient(
                         getClientAPI().openFolder(data as string);
                         break;
                     }
+                    case "manage-conversation": {
+                        const payload = d as {
+                            subcommand: string;
+                            name?: string;
+                        };
+                        const api = getClientAPI();
+                        (async () => {
+                            switch (payload.subcommand) {
+                                case "new": {
+                                    if (!payload.name) {
+                                        console.error(
+                                            "Session name is required for new session.",
+                                        );
+                                        break;
+                                    }
+                                    await api.sessionCreate(payload.name);
+                                    break;
+                                }
+                                case "list": {
+                                    const sessions = await api.sessionList();
+                                    const current =
+                                        await api.sessionGetCurrent();
+                                    for (const s of sessions) {
+                                        const marker =
+                                            current &&
+                                            s.sessionId === current.sessionId
+                                                ? " ▸"
+                                                : "";
+                                        console.log(
+                                            `${s.name} (${s.sessionId})${marker}`,
+                                        );
+                                    }
+                                    break;
+                                }
+                                case "info": {
+                                    const cur = await api.sessionGetCurrent();
+                                    if (cur) {
+                                        console.log(
+                                            `Current session: ${cur.name} (${cur.sessionId})`,
+                                        );
+                                    } else {
+                                        console.log("No active session.");
+                                    }
+                                    break;
+                                }
+                                case "switch": {
+                                    const sessions = await api.sessionList();
+                                    const match = sessions.find(
+                                        (s) =>
+                                            s.name.toLowerCase() ===
+                                            payload.name?.toLowerCase(),
+                                    );
+                                    if (!match) {
+                                        console.error(
+                                            `Session "${payload.name}" not found.`,
+                                        );
+                                        break;
+                                    }
+                                    await api.sessionSwitch(match.sessionId);
+                                    break;
+                                }
+                                case "delete": {
+                                    const sessions = await api.sessionList();
+                                    const match = sessions.find(
+                                        (s) =>
+                                            s.name.toLowerCase() ===
+                                            payload.name?.toLowerCase(),
+                                    );
+                                    if (!match) {
+                                        console.error(
+                                            `Session "${payload.name}" not found.`,
+                                        );
+                                        break;
+                                    }
+                                    await api.sessionDelete(match.sessionId);
+                                    break;
+                                }
+                            }
+                        })().catch(console.error);
+                        break;
+                    }
                 }
             } catch (e) {
                 console.log(e);

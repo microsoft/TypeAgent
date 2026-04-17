@@ -485,7 +485,13 @@ The system agent also has sub-agents with LLM-translated action schemas:
   five action types: `newSession`, `listSession`, `showSessionInfo`,
   `switchSession`, and `deleteSession`. These let users say things like
   "switch to my work conversation" or "delete the old project session"
-  instead of using `@session` commands directly.
+  instead of using `@conversation` commands directly. Because the
+  dispatcher cannot access the agent-server RPC layer directly,
+  `executeSessionAction` bridges to the client via
+  `ClientIO.takeAction(requestId, "manage-conversation", payload)` where
+  `payload` is `{ subcommand: "new"|"list"|"info"|"switch"|"delete", name? }`.
+  The CLI handles this by calling `handleConversationCommand`; the Shell
+  calls the corresponding `ClientAPI` session methods over IPC.
 
 ### Dispatcher agent
 

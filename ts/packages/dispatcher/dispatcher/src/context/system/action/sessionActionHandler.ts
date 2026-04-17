@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { processCommandNoLock } from "../../../command/command.js";
+import { getRequestId } from "../../commandHandlerContext.js";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { SessionAction } from "../schema/sessionActionSchema.js";
 import { ActionContext, TypeAgentAction } from "@typeagent/agent-sdk";
@@ -10,43 +10,36 @@ export async function executeSessionAction(
     action: TypeAgentAction<SessionAction>,
     context: ActionContext<CommandHandlerContext>,
 ) {
+    const agentContext = context.sessionContext.agentContext;
+    const requestId = getRequestId(agentContext);
+    let payload: { subcommand: string; name?: string };
+
     switch (action.actionName) {
         case "newSession": {
             const name = action.parameters.name;
-            await processCommandNoLock(
-                name ? `@session new ${name}` : "@session new",
-                context.sessionContext.agentContext,
-            );
+            payload = name
+                ? { subcommand: "new", name }
+                : { subcommand: "new" };
             break;
         }
         case "listSession":
-            await processCommandNoLock(
-                "@session list",
-                context.sessionContext.agentContext,
-            );
+            payload = { subcommand: "list" };
             break;
         case "showSessionInfo":
-            await processCommandNoLock(
-                "@session info",
-                context.sessionContext.agentContext,
-            );
+            payload = { subcommand: "info" };
             break;
         case "switchSession":
-            await processCommandNoLock(
-                `@session open ${action.parameters.name}`,
-                context.sessionContext.agentContext,
-            );
+            payload = { subcommand: "switch", name: action.parameters.name };
             break;
         case "deleteSession":
-            await processCommandNoLock(
-                `@session delete ${action.parameters.name}`,
-                context.sessionContext.agentContext,
-            );
+            payload = { subcommand: "delete", name: action.parameters.name };
             break;
         default:
             throw new Error(
                 `Invalid action name: ${(action as { actionName: string }).actionName}`,
             );
     }
+
+    agentContext.clientIO.takeAction(requestId, "manage-conversation", payload);
     return undefined;
 }

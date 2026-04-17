@@ -42,7 +42,9 @@ import {
     isSlashCommand,
     handleSlashCommand,
     getVerboseIndicator,
+    getConversationCommandContext,
 } from "./slashCommands.js";
+import { handleConversationCommand } from "./conversationCommands.js";
 import {
     setSpinnerAccessor,
     getDebugPanel,
@@ -968,6 +970,44 @@ export function createEnhancedClientIO(
                 import("open").then(({ default: open }) =>
                     open(data as string),
                 );
+                return;
+            }
+            if (action === "manage-conversation") {
+                const payload = data as {
+                    subcommand: string;
+                    name?: string;
+                };
+                const convCtx = getConversationCommandContext();
+                if (!convCtx) {
+                    console.error(
+                        "Cannot manage conversations: not connected to agent server.",
+                    );
+                    return;
+                }
+                let args: string;
+                switch (payload.subcommand) {
+                    case "new":
+                        args = payload.name ? `new ${payload.name}` : "new";
+                        break;
+                    case "list":
+                        args = "list";
+                        break;
+                    case "info":
+                        args = "list";
+                        break;
+                    case "switch":
+                        args = `switch ${payload.name}`;
+                        break;
+                    case "delete":
+                        args = `delete ${payload.name}`;
+                        break;
+                    default:
+                        console.error(
+                            `Unknown conversation subcommand: ${payload.subcommand}`,
+                        );
+                        return;
+                }
+                handleConversationCommand(convCtx, args).catch(console.error);
                 return;
             }
             throw new Error(`Action ${action} not supported`);

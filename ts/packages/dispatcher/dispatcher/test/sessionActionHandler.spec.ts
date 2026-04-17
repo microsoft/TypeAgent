@@ -4,19 +4,18 @@
 /**
  * Tests for executeSessionAction in sessionActionHandler.ts.
  *
- * processCommandNoLock is an ESM module export, so we use
- * jest.unstable_mockModule to mock it before dynamically importing
- * the module under test.
+ * getRequestId is mocked to return a stable RequestId, and
+ * clientIO.takeAction is a mock on the context stub.
  */
 
-import { describe, it, expect, jest, beforeEach } from "@jest/globals";
+import { describe, it, expect, jest } from "@jest/globals";
 
-// ── Mock processCommandNoLock before importing the handler ────────────────────
+// ── Mock getRequestId before importing the handler ──────────────────────────
 
-const mockProcessCommandNoLock = jest.fn<() => Promise<void>>();
+const mockRequestId = { requestId: "test-request-id" };
 
-jest.unstable_mockModule("../src/command/command.js", () => ({
-    processCommandNoLock: mockProcessCommandNoLock,
+jest.unstable_mockModule("../src/context/commandHandlerContext.js", () => ({
+    getRequestId: jest.fn(() => mockRequestId),
 }));
 
 // ── Dynamic import after mocks are installed ──────────────────────────────────
@@ -27,170 +26,190 @@ const { executeSessionAction } = await import(
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Minimal ActionContext stub — only agentContext path is needed. */
+let mockTakeAction: jest.Mock;
+
+/** Minimal ActionContext stub — agentContext with clientIO.takeAction. */
 function makeContext() {
+    mockTakeAction = jest.fn();
     return {
         sessionContext: {
-            agentContext: {},
+            agentContext: {
+                clientIO: {
+                    takeAction: mockTakeAction,
+                },
+                currentRequestId: mockRequestId,
+            },
         },
     } as any;
 }
 
-// ── Setup ─────────────────────────────────────────────────────────────────────
-
-beforeEach(() => {
-    mockProcessCommandNoLock.mockResolvedValue(undefined);
-    mockProcessCommandNoLock.mockClear();
-});
-
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("executeSessionAction — newSession", () => {
-    it("calls @session new with name when name is provided", async () => {
+    it("sends manage-conversation with subcommand new and name", async () => {
+        const ctx = makeContext();
         await executeSessionAction(
             {
                 schemaName: "system.session",
                 actionName: "newSession",
                 parameters: { name: "research" },
             },
-            makeContext(),
+            ctx,
         );
-        expect(mockProcessCommandNoLock).toHaveBeenCalledWith(
-            "@session new research",
-            expect.anything(),
+        expect(mockTakeAction).toHaveBeenCalledWith(
+            mockRequestId,
+            "manage-conversation",
+            { subcommand: "new", name: "research" },
         );
     });
 
-    it("calls @session new without trailing space when name is omitted", async () => {
+    it("sends manage-conversation with subcommand new without name when omitted", async () => {
+        const ctx = makeContext();
         await executeSessionAction(
             {
                 schemaName: "system.session",
                 actionName: "newSession",
                 parameters: {},
             },
-            makeContext(),
+            ctx,
         );
-        expect(mockProcessCommandNoLock).toHaveBeenCalledWith(
-            "@session new",
-            expect.anything(),
+        expect(mockTakeAction).toHaveBeenCalledWith(
+            mockRequestId,
+            "manage-conversation",
+            { subcommand: "new" },
         );
     });
 
     it("preserves session names that contain spaces", async () => {
+        const ctx = makeContext();
         await executeSessionAction(
             {
                 schemaName: "system.session",
                 actionName: "newSession",
                 parameters: { name: "my work project" },
             },
-            makeContext(),
+            ctx,
         );
-        expect(mockProcessCommandNoLock).toHaveBeenCalledWith(
-            "@session new my work project",
-            expect.anything(),
+        expect(mockTakeAction).toHaveBeenCalledWith(
+            mockRequestId,
+            "manage-conversation",
+            { subcommand: "new", name: "my work project" },
         );
     });
 });
 
 describe("executeSessionAction — listSession", () => {
-    it("calls @session list", async () => {
+    it("sends manage-conversation with subcommand list", async () => {
+        const ctx = makeContext();
         await executeSessionAction(
             { schemaName: "system.session", actionName: "listSession" },
-            makeContext(),
+            ctx,
         );
-        expect(mockProcessCommandNoLock).toHaveBeenCalledWith(
-            "@session list",
-            expect.anything(),
+        expect(mockTakeAction).toHaveBeenCalledWith(
+            mockRequestId,
+            "manage-conversation",
+            { subcommand: "list" },
         );
     });
 });
 
 describe("executeSessionAction — showSessionInfo", () => {
-    it("calls @session info", async () => {
+    it("sends manage-conversation with subcommand info", async () => {
+        const ctx = makeContext();
         await executeSessionAction(
             { schemaName: "system.session", actionName: "showSessionInfo" },
-            makeContext(),
+            ctx,
         );
-        expect(mockProcessCommandNoLock).toHaveBeenCalledWith(
-            "@session info",
-            expect.anything(),
+        expect(mockTakeAction).toHaveBeenCalledWith(
+            mockRequestId,
+            "manage-conversation",
+            { subcommand: "info" },
         );
     });
 });
 
 describe("executeSessionAction — switchSession", () => {
-    it("calls @session open with the given name", async () => {
+    it("sends manage-conversation with subcommand switch", async () => {
+        const ctx = makeContext();
         await executeSessionAction(
             {
                 schemaName: "system.session",
                 actionName: "switchSession",
                 parameters: { name: "work" },
             },
-            makeContext(),
+            ctx,
         );
-        expect(mockProcessCommandNoLock).toHaveBeenCalledWith(
-            "@session open work",
-            expect.anything(),
+        expect(mockTakeAction).toHaveBeenCalledWith(
+            mockRequestId,
+            "manage-conversation",
+            { subcommand: "switch", name: "work" },
         );
     });
 
     it("preserves session names that contain spaces", async () => {
+        const ctx = makeContext();
         await executeSessionAction(
             {
                 schemaName: "system.session",
                 actionName: "switchSession",
                 parameters: { name: "my work project" },
             },
-            makeContext(),
+            ctx,
         );
-        expect(mockProcessCommandNoLock).toHaveBeenCalledWith(
-            "@session open my work project",
-            expect.anything(),
+        expect(mockTakeAction).toHaveBeenCalledWith(
+            mockRequestId,
+            "manage-conversation",
+            { subcommand: "switch", name: "my work project" },
         );
     });
 });
 
 describe("executeSessionAction — deleteSession", () => {
-    it("calls @session delete with the given name", async () => {
+    it("sends manage-conversation with subcommand delete", async () => {
+        const ctx = makeContext();
         await executeSessionAction(
             {
                 schemaName: "system.session",
                 actionName: "deleteSession",
                 parameters: { name: "old-project" },
             },
-            makeContext(),
+            ctx,
         );
-        expect(mockProcessCommandNoLock).toHaveBeenCalledWith(
-            "@session delete old-project",
-            expect.anything(),
+        expect(mockTakeAction).toHaveBeenCalledWith(
+            mockRequestId,
+            "manage-conversation",
+            { subcommand: "delete", name: "old-project" },
         );
     });
 
     it("preserves session names that contain spaces", async () => {
+        const ctx = makeContext();
         await executeSessionAction(
             {
                 schemaName: "system.session",
                 actionName: "deleteSession",
                 parameters: { name: "old work project" },
             },
-            makeContext(),
+            ctx,
         );
-        expect(mockProcessCommandNoLock).toHaveBeenCalledWith(
-            "@session delete old work project",
-            expect.anything(),
+        expect(mockTakeAction).toHaveBeenCalledWith(
+            mockRequestId,
+            "manage-conversation",
+            { subcommand: "delete", name: "old work project" },
         );
     });
 });
 
 describe("executeSessionAction — invalid action", () => {
     it("throws on an unrecognized action name", async () => {
+        const ctx = makeContext();
         await expect(
             executeSessionAction(
                 {
                     schemaName: "system.session",
                     actionName: "unknownAction",
                 } as any,
-                makeContext(),
+                ctx,
             ),
         ).rejects.toThrow("Invalid action name: unknownAction");
     });

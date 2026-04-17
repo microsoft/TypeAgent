@@ -432,7 +432,26 @@ When connected to the agentServer:
 
 ## Natural Language Session Management
 
-In addition to the `@session` commands and the RPC/CLI surface described above, users can manage sessions via natural language through the `system.session` sub-agent. The dispatcher translates requests like "switch to my work conversation", "create a new conversation called research", or "delete the old project session" into the corresponding session operations. See the [dispatcher README](../../packages/dispatcher/dispatcher/README.md#sessions) for the full list of supported phrases.
+In addition to the RPC/CLI surface described above, users can manage server-side sessions via natural language through the `system.session` sub-agent built into the dispatcher. Phrases like "switch to my work conversation", "create a new conversation called research", or "delete the old project session" are translated into structured actions and bridged to the client layer.
+
+Because the dispatcher has no direct access to the agent-server RPC layer, `executeSessionAction` uses the existing `ClientIO.takeAction` mechanism:
+
+```typescript
+agentContext.clientIO.takeAction(requestId, "manage-conversation", payload);
+```
+
+where `payload` has the shape:
+
+```typescript
+{ subcommand: "new" | "list" | "info" | "switch" | "delete"; name?: string }
+```
+
+Each client handles `"manage-conversation"` using its own session management API:
+
+- **CLI** — `enhancedConsole.ts` receives the action and calls `handleConversationCommand(conversationContext, argsString)`, delegating to the same `@conversation` command machinery used for explicit slash commands.
+- **Shell** — `main.ts` receives the action and calls the corresponding `ClientAPI` session method (`sessionCreate`, `sessionList`, `sessionSwitch`, `sessionDelete`, `sessionGetCurrent`) over the Electron IPC bridge.
+
+See the [dispatcher README](../../packages/dispatcher/dispatcher/README.md#sessions) for the full list of supported phrases.
 
 ## Summary
 
