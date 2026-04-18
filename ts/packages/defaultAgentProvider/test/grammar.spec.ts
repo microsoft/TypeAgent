@@ -10,7 +10,7 @@ import {
     readExplanationTestData,
     getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
-import { fromJsonActions, RequestAction, toJsonActions } from "agent-cache";
+import { fromJsonActions, normalizeParamString, RequestAction, toJsonActions } from "agent-cache";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 import { glob } from "glob";
 import { loadGrammarRules, matchGrammar } from "action-grammar";
@@ -90,11 +90,9 @@ describe("Grammar", () => {
                 const g = loadGrammarRules("test", grammar);
                 const matched = matchGrammar(g, requestAction.request);
 
-                // TODO: once MatchPart allow matches ignoring diacritical marks,
-                // we can use normalizeParamString instead toLowerCase here.
                 const matchedLowerCase = matchGrammar(
                     g,
-                    requestAction.request.toLowerCase(),
+                    normalizeParamString(requestAction.request),
                 );
 
                 // Able to match roundtrip
