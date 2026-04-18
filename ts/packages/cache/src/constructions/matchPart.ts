@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { normalizeParamString } from "../explanation/requestAction.js";
 import { escapeMatch } from "../utils/regexp.js";
 import {
     MatchPartJSON,
@@ -62,9 +63,10 @@ export class MatchSet {
         public readonly namespace: string | undefined,
         private readonly index: number = -1, // Assign an index as id for serialization and reference in construction
     ) {
-        // Case insensitive match
-        // TODO: non-diacritic match
-        this.matches = new Set(Array.from(matches).map((m) => m.toLowerCase()));
+        // Case- and diacritic-insensitive match
+        this.matches = new Set(
+            Array.from(matches).map((m) => normalizeParamString(m)),
+        );
 
         // Error checking
         if (this.matches.has("")) {
