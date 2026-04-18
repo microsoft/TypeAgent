@@ -53,6 +53,10 @@ function convertJsonSchemaOutput(
 export function createActionSchemaJsonValidator<T extends TranslatedAction>(
     actionSchemaGroup: ActionSchemaGroup,
     generateOptions?: GenerateSchemaOptions,
+    // Maps action names from injected sub-schemas to their schemaName.
+    // Used as a fallback when the action is not in the primary schema group:
+    // stamps value.schemaName so the dispatcher routes to the correct sub-schema.
+    injectedSchemaNameMap?: Map<string, string>,
 ): TypeAgentJsonValidator<T> {
     const schema = generateActionSchema(actionSchemaGroup, generateOptions);
     const generateJsonSchema = generateOptions?.jsonSchema ?? false;
@@ -84,6 +88,17 @@ export function createActionSchemaJsonValidator<T extends TranslatedAction>(
                     value.actionName,
                 );
                 if (actionSchema === undefined) {
+                    // Check whether this action belongs to an injected sub-schema
+                    // that the LLM saw in its prompt but that lives outside the
+                    // primary validation map.  If so, stamp the correct schemaName
+                    // so the dispatcher can route it without an error round-trip.
+                    const injectedSchemaName = injectedSchemaNameMap?.get(
+                        value.actionName,
+                    );
+                    if (injectedSchemaName !== undefined) {
+                        value.schemaName = injectedSchemaName;
+                        return success(value);
+                    }
                     return error(`Unknown action name: ${value.actionName}`);
                 }
 

@@ -183,6 +183,7 @@ export async function createAgentRpcClient(
             return fn({
                 actionContextId: actionContextMap.getId(actionContext),
                 activityContext: actionContext.activityContext,
+                isFromReasoningLoop: actionContext.isFromReasoningLoop,
                 ...getContextParam(actionContext.sessionContext),
             });
         } finally {
@@ -191,11 +192,15 @@ export async function createAgentRpcClient(
     }
     async function withActionContextAsync<T>(
         actionContext: ActionContext<ShimContext>,
-        fn: (contextParams: { actionContextId: number }) => Promise<T>,
+        fn: (contextParams: {
+            actionContextId: number;
+            isFromReasoningLoop: boolean;
+        }) => Promise<T>,
     ) {
         try {
             return await fn({
                 actionContextId: actionContextMap.getId(actionContext),
+                isFromReasoningLoop: actionContext.isFromReasoningLoop,
                 ...getContextParam(actionContext.sessionContext),
             });
         } finally {

@@ -340,7 +340,13 @@ export class ShellWindow {
         try {
             // Send settings asap
             this.sendUserSettingChanged();
-            globalShortcut.register("Alt+Right", () => {
+            let lastDemoAdvance = 0;
+            globalShortcut.register("Control+Right", () => {
+                const now = Date.now();
+                if (now - lastDemoAdvance < 500) {
+                    return;
+                }
+                lastDemoAdvance = now;
                 this.chatView.webContents.send("send-demo-event", "Alt+Right");
             });
 
@@ -436,7 +442,7 @@ export class ShellWindow {
         ipcMain.removeAllListeners("browser-go-forward");
         ipcMain.removeAllListeners("browser-reload");
 
-        globalShortcut.unregister("Alt+Right");
+        globalShortcut.unregister("Control+Right");
         globalShortcut.unregister("CommandOrControl+L");
         globalShortcut.unregister("Alt+E");
 

@@ -10,7 +10,17 @@ import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { ensureDirectory, getUniqueFileName } from "../utils/fsUtils.js";
 
 export function getUserDataDir() {
-    return path.join(os.homedir(), ".typeagent");
+    return (
+        process.env.TYPEAGENT_USER_DATA_DIR ??
+        path.join(os.homedir(), ".typeagent")
+    );
+}
+
+export function _resetCacheForTest() {
+    instanceDir = undefined;
+    instanceDirPromise = undefined;
+    traceId = undefined;
+    traceIdPromise = undefined;
 }
 
 function ensureUserDataDir() {
@@ -90,8 +100,42 @@ function lockUserData<T>(fn: () => T) {
     }
 }
 
+async function lockUserDataAsync<T>(fn: () => T | Promise<T>): Promise<T> {
+    let release: () => Promise<void>;
+    try {
+        release = await lockfile.lock(ensureUserDataDir(), {
+            retries: { retries: 10, minTimeout: 500, maxTimeout: 1000 },
+        });
+    } catch (error: any) {
+        console.error(
+            `ERROR: Unable to lock user data directory: ${error.message}. Exiting.`,
+        );
+        process.exit(-1);
+    }
+    try {
+        return await fn();
+    } finally {
+        await release();
+    }
+}
+
 function getInstancesDir() {
     return path.join(ensureUserDataDir(), "profiles");
+}
+
+function pruneStaleInstances(userConfig: GlobalUserConfig): boolean {
+    if (!userConfig.instances) {
+        return false;
+    }
+    const instancesDir = getInstancesDir();
+    let changed = false;
+    for (const [name, dirName] of Object.entries(userConfig.instances)) {
+        if (!fs.existsSync(path.join(instancesDir, dirName))) {
+            delete userConfig.instances[name];
+            changed = true;
+        }
+    }
+    return changed;
 }
 
 function ensureInstanceDirName(instanceName: string) {
@@ -99,8 +143,12 @@ function ensureInstanceDirName(instanceName: string) {
         return "prod";
     }
     const userConfig = ensureGlobalUserConfig();
+    const dirty = pruneStaleInstances(userConfig);
     const profileName = userConfig.instances?.[instanceName];
-    if (profileName) {
+    if (profileName !== undefined) {
+        if (dirty) {
+            saveGlobalUserConfig(userConfig);
+        }
         return profileName;
     }
     const newProfileName = getUniqueFileName(
@@ -144,6 +192,31 @@ export function getInstanceDir() {
     return instanceDir;
 }
 
+let instanceDirPromise: Promise<string> | undefined;
+export function getInstanceDirAsync(): Promise<string> {
+    if (instanceDirPromise === undefined) {
+        instanceDirPromise = resolveInstanceDir();
+    }
+    return instanceDirPromise;
+}
+
+async function resolveInstanceDir(): Promise<string> {
+    const instanceName = getInstanceName();
+    const currentConfig = readGlobalUserConfig();
+    const existing = currentConfig?.instances?.[instanceName];
+    if (existing !== undefined) {
+        const dir = path.join(getInstancesDir(), existing);
+        instanceDir = dir;
+        return dir;
+    }
+    const dirName = await lockUserDataAsync(() =>
+        ensureInstanceDirName(instanceName),
+    );
+    const dir = path.join(getInstancesDir(), dirName);
+    instanceDir = dir;
+    return dir;
+}
+
 let traceId: string | undefined;
 export function getTraceId(): string {
     if (traceId !== undefined) {
@@ -157,5 +230,28 @@ export function getTraceId(): string {
     return lockUserData(() => {
         traceId = ensureGlobalUserConfig().traceId;
         return traceId;
+    });
+}
+
+let traceIdPromise: Promise<string> | undefined;
+export function getTraceIdAsync(): Promise<string> {
+    if (traceIdPromise === undefined) {
+        traceIdPromise = resolveTraceId();
+    }
+    return traceIdPromise;
+}
+
+async function resolveTraceId(): Promise<string> {
+    if (traceId !== undefined) {
+        return traceId;
+    }
+    const currentConfig = readGlobalUserConfig();
+    if (currentConfig?.traceId !== undefined) {
+        traceId = currentConfig.traceId;
+        return traceId;
+    }
+    return lockUserDataAsync(() => {
+        traceId = ensureGlobalUserConfig().traceId;
+        return traceId!;
     });
 }

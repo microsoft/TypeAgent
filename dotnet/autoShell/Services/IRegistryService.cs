@@ -39,4 +39,16 @@ internal interface IRegistryService
     /// </summary>
     /// <param name="setting">The setting name to broadcast (e.g., "ImmersiveColorSet"), or null for a generic notification.</param>
     void BroadcastSettingChange(string setting = null);
+
+    /// <summary>
+    /// Notifies the shell that file associations or Explorer settings have changed,
+    /// causing open Explorer windows to refresh immediately.
+    /// </summary>
+    void NotifyShellChange();
+
+    /// <summary>
+    /// Notifies the taskbar to update its auto-hide state immediately.
+    /// </summary>
+    /// <param name="autoHide">True to enable auto-hide, false to disable.</param>
+    void SetTaskbarAutoHideState(bool autoHide);
 }

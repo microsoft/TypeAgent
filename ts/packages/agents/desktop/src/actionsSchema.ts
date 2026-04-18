@@ -15,8 +15,10 @@ export type DesktopActions =
     | SetWallpaperAction
     | ChangeThemeModeAction
     | ApplyThemeAction
+    | ListThemesAction
     | ConnectWifiAction
     | DisconnectWifiAction
+    | ListWifiNetworksAction
     | ToggleAirplaneModeAction
     | CreateDesktopAction
     | MoveWindowToDesktopAction
@@ -133,12 +135,18 @@ export type ChangeThemeModeAction = {
     };
 };
 
-// Applies a Windows theme by name or file path
+// Applies a Windows theme by name (e.g. "Captured Motion", "Glow", "Sunrise") or file path. Use this when the user wants to switch to a specific named theme.
 export type ApplyThemeAction = {
     actionName: "ApplyTheme";
     parameters: {
-        filePath: string; // The theme name or file path to apply (use "previous" to revert)
+        filePath: string; // The theme name or .theme file path to apply (use "previous" to revert)
     };
+};
+
+// Lists all installed Windows themes
+export type ListThemesAction = {
+    actionName: "ListThemes";
+    parameters: {};
 };
 
 export type ConnectWifiAction = {
@@ -155,6 +163,12 @@ export type DisconnectWifiAction = {
     parameters: {
         // No parameters required
     };
+};
+
+// Lists available WiFi networks
+export type ListWifiNetworksAction = {
+    actionName: "ListWifiNetworks";
+    parameters: {};
 };
 
 export type ToggleAirplaneModeAction = {

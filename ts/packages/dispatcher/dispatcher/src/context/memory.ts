@@ -134,42 +134,46 @@ export function addResultToMemory(
         activityContext,
     );
 
-    if (context.conversationManager && entities) {
-        const newEntities = entities.filter(
-            (e) => !conversation.isMemorizedEntity(e.type),
-        );
-        if (newEntities.length > 0) {
-            context.conversationManager.queueAddMessage(
-                {
-                    text: message,
-                    // knowledge-processor might modify the entities. clone it so it doesn't impact other usage.
-                    knowledge: structuredClone(newEntities),
-                    timestamp: new Date(),
-                },
-                false,
+    if (context.actionResultKnowledgeExtraction) {
+        if (context.conversationManager && entities) {
+            const newEntities = entities.filter(
+                (e) => !conversation.isMemorizedEntity(e.type),
+            );
+            if (newEntities.length > 0) {
+                context.conversationManager.queueAddMessage(
+                    {
+                        text: message,
+                        // knowledge-processor might modify the entities. clone it so it doesn't impact other usage.
+                        knowledge: structuredClone(
+                            newEntities,
+                        ) as conversation.ConcreteEntity[],
+                        timestamp: new Date(),
+                    },
+                    false,
+                );
+            }
+        }
+
+        if (context.conversationMemory) {
+            const concreteEntity = entities
+                ? toConcreteEntity(getAppAgentName(schemaName), entities)
+                : undefined;
+            context.conversationMemory.queueAddMessage(
+                new ConversationMessage(
+                    message,
+                    new ConversationMessageMeta("assistant", ["user"]),
+                    undefined,
+                    concreteEntity
+                        ? {
+                              entities: concreteEntity,
+                              actions: [],
+                              inverseActions: [],
+                              topics: [],
+                          }
+                        : undefined,
+                ),
             );
         }
-    }
-
-    if (context.conversationMemory) {
-        const concreteEntity = entities
-            ? toConcreteEntity(getAppAgentName(schemaName), entities)
-            : undefined;
-        context.conversationMemory.queueAddMessage(
-            new ConversationMessage(
-                message,
-                new ConversationMessageMeta("assistant", ["user"]),
-                undefined,
-                concreteEntity
-                    ? {
-                          entities: concreteEntity,
-                          actions: [],
-                          inverseActions: [],
-                          topics: [],
-                      }
-                    : undefined,
-            ),
-        );
     }
 }
 
@@ -210,7 +214,7 @@ export function addActionResultToMemory(
 export async function lookupAndAnswerFromMemory(
     context: ActionContext<CommandHandlerContext>,
     question: string,
-): Promise<string[]> {
+): Promise<{ historyText: string[]; answered: boolean }> {
     const systemContext = context.sessionContext.agentContext;
     const conversationMemory = systemContext.conversationMemory;
     if (conversationMemory === undefined) {
@@ -223,18 +227,20 @@ export async function lookupAndAnswerFromMemory(
     }
 
     const historyText: string[] = [];
+    let answered = false;
     for (const [searchResult, answer] of result.data) {
         debug("Conversation memory search result:", searchResult);
         if (answer.type === "Answered") {
+            answered = true;
             historyText.push(answer.answer!);
             displayResult(answer.answer!, context);
         } else {
             historyText.push(answer.whyNoAnswer!);
-            displayError(answer.whyNoAnswer!, context);
+            // Don't display error here; caller decides whether to show error or fall back to reasoning
         }
     }
     // TODO: how about entities?
-    return historyText;
+    return { historyText, answered };
 }
 
 function ensureMemory(context: ActionContext<CommandHandlerContext>) {

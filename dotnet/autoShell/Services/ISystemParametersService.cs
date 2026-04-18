@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#nullable enable
+
 using System;
 
 namespace autoShell.Services;
@@ -51,4 +53,23 @@ internal interface ISystemParametersService
     /// </summary>
     /// <param name="swap">If true, swaps the buttons; if false, restores default.</param>
     bool SwapMouseButton(bool swap);
+
+    /// <summary>
+    /// Enables or disables Filter Keys via SystemParametersInfo(SPI_SETFILTERKEYS).
+    /// </summary>
+    bool SetFilterKeys(bool enable);
+
+    /// <summary>
+    /// Enables or disables Sticky Keys via SystemParametersInfo(SPI_SETSTICKYKEYS).
+    /// </summary>
+    bool SetStickyKeys(bool enable);
+
+    /// <summary>
+    /// Loads a string resource from a native DLL by resource ID.
+    /// Used to resolve localized display names (e.g., theme names from themeui.dll).
+    /// </summary>
+    /// <param name="dllPath">Full path to the DLL containing the string resource.</param>
+    /// <param name="resourceId">The resource ID of the string to load.</param>
+    /// <returns>The loaded string, or null if the resource could not be found.</returns>
+    string? LoadStringResource(string dllPath, int resourceId);
 }

@@ -50,8 +50,56 @@ internal class WindowsRegistryService : IRegistryService
             out _);
     }
 
+    /// <inheritdoc/>
+    public void NotifyShellChange()
+    {
+        const int SHCNE_ASSOCCHANGED = 0x08000000;
+        const int SHCNF_IDLIST = 0x0000;
+        SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, IntPtr.Zero, IntPtr.Zero);
+    }
+
+    /// <inheritdoc/>
+    public void SetTaskbarAutoHideState(bool autoHide)
+    {
+        const int ABM_SETSTATE = 0x0000000A;
+        const int ABS_AUTOHIDE = 0x0001;
+        const int ABS_ALWAYSONTOP = 0x0002;
+
+        IntPtr taskbarHwnd = FindWindow("Shell_TrayWnd", null);
+        if (taskbarHwnd != IntPtr.Zero)
+        {
+            var abd = new APPBARDATA
+            {
+                cbSize = Marshal.SizeOf<APPBARDATA>(),
+                hWnd = taskbarHwnd,
+                lParam = (IntPtr)(autoHide ? (ABS_AUTOHIDE | ABS_ALWAYSONTOP) : ABS_ALWAYSONTOP)
+            };
+            SHAppBarMessage(ABM_SETSTATE, ref abd);
+        }
+    }
+
     [DllImport(NativeDlls.User32, CharSet = CharSet.Auto, SetLastError = true)]
     private static extern IntPtr SendMessageTimeout(
         IntPtr hWnd, uint Msg, IntPtr wParam, string lParam,
         uint fuFlags, uint uTimeout, out IntPtr lpdwResult);
+
+    [DllImport(NativeDlls.Shell32, CharSet = CharSet.Auto)]
+    private static extern void SHChangeNotify(int wEventId, int uFlags, IntPtr dwItem1, IntPtr dwItem2);
+
+    [DllImport(NativeDlls.User32, CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+
+    [DllImport(NativeDlls.Shell32)]
+    private static extern IntPtr SHAppBarMessage(int dwMessage, ref APPBARDATA pData);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct APPBARDATA
+    {
+        public int cbSize;
+        public IntPtr hWnd;
+        public uint uCallbackMessage;
+        public uint uEdge;
+        public int left, top, right, bottom;
+        public IntPtr lParam;
+    }
 }

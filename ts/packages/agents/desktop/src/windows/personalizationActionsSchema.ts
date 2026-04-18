@@ -23,13 +23,13 @@ export type ApplyColorToTitleBarAction = {
     };
 };
 
-// Enables high contrast theme
+// Opens the high contrast accessibility settings page. Only use when the user explicitly asks for high contrast settings.
 export type HighContrastThemeAction = {
     actionName: "HighContrastTheme";
     parameters: {};
 };
 
-// Sets the system-wide theme mode (affects apps, taskbar, and Start menu)
+// Sets the system-wide theme mode to light or dark (affects apps, taskbar, and Start menu). Only for light/dark mode, not for named themes.
 export type SystemThemeModeAction = {
     actionName: "SystemThemeMode";
     parameters: {

@@ -207,6 +207,27 @@ type ParameterEntityResolverOptions = {
     filter: boolean;
 };
 
+/**
+ * Replace all ${entity-N} placeholders in `value` using the provided map.
+ * Handles both whole-value refs ("${entity-1}") and embedded structured refs
+ * ("${entity-1}[Column]", "${entity-0}[A],${entity-0}[B]").
+ * Throws if any placeholder has no corresponding entry in the map.
+ */
+export function resolveEntityPlaceholders(
+    value: string,
+    promptEntityMap: Map<string, PromptEntity> | undefined,
+): string {
+    return value.replace(/\$\{entity-(\d+)\}/g, (match) => {
+        const entity = promptEntityMap?.get(match);
+        if (entity === undefined) {
+            throw new Error(
+                `Entity reference not found: ${match} in "${value}"`,
+            );
+        }
+        return entity.name;
+    });
+}
+
 function toPromptEntityMap(entities: PromptEntity[] | undefined) {
     return entities
         ? new Map<string, PromptEntity>(
@@ -653,17 +674,20 @@ function createParameterEntityResolver(
                 return existing;
             }
 
-            if (value.startsWith("${entity-")) {
-                const entity = promptEntityMap?.get(value);
-                if (entity !== undefined) {
-                    // fix up the action to the actual entity name
-                    obj[key] = entity.name;
-                    // Don't allow entity to be used in different app agent name.
-                    return entity.sourceAppAgentName === appAgentName
+            if (value.includes("${entity-")) {
+                const resolved = resolveEntityPlaceholders(
+                    value,
+                    promptEntityMap,
+                );
+                obj[key] = resolved;
+                // Return entity metadata only when the whole value was a single bare ref.
+                if (/^\$\{entity-\d+\}$/.test(value)) {
+                    const entity = promptEntityMap?.get(value);
+                    return entity?.sourceAppAgentName === appAgentName
                         ? entity
                         : undefined;
                 }
-                throw new Error(`Entity reference not found: ${value}`);
+                return undefined;
             }
 
             const entity = resolvePromptEntity(

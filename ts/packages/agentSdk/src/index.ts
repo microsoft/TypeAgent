@@ -81,4 +81,4 @@ export type {
     TemplateSchema,
 } from "./templateInput.js";
 
-export { Entity } from "./memory.js";
+export { Entity, EntityFacet, EntityFacetValue } from "./memory.js";
