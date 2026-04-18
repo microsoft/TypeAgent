@@ -15,6 +15,11 @@ import {
     BrowserTraceStep,
     DEFAULT_BROWSER_REASONING_CONFIG,
 } from "./browserReasoningTypes.mjs";
+import {
+    WebFlowToolAdapter,
+    RecordedStep,
+    WebFlowToolCallbacks,
+} from "./webFlowToolAdapter.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:webflows:reasoning");
@@ -36,10 +41,43 @@ export interface BrowserReasoningCallbacks {
  * capturing a trace of all actions for later script generation.
  */
 export class BrowserReasoningAgent {
+    private toolAdapter?: WebFlowToolAdapter;
+
     constructor(
         private browserApi: WebFlowBrowserAPI,
         private callbacks?: BrowserReasoningCallbacks,
     ) {}
+
+    /**
+     * Creates an agent using the unified WebFlowBrowserAPI tools.
+     * This ensures the reasoning phase uses the same API methods that will appear in saved scripts.
+     */
+    static withUnifiedTools(
+        browserApi: WebFlowBrowserAPI,
+        callbacks?: BrowserReasoningCallbacks,
+    ): BrowserReasoningAgent {
+        const agent = new BrowserReasoningAgent(browserApi, callbacks);
+        const toolCallbacks: WebFlowToolCallbacks = {
+            onStepRecorded: (step) => {
+                callbacks?.onToolResult?.(step.tool, step.result);
+            },
+        };
+        if (callbacks?.onThinking) {
+            toolCallbacks.onThinking = callbacks.onThinking;
+        }
+        if (callbacks?.onText) {
+            toolCallbacks.onText = callbacks.onText;
+        }
+        agent.toolAdapter = new WebFlowToolAdapter(browserApi, toolCallbacks);
+        return agent;
+    }
+
+    /**
+     * Returns whether this agent is using unified WebFlowBrowserAPI tools.
+     */
+    isUsingUnifiedTools(): boolean {
+        return this.toolAdapter !== undefined;
+    }
 
     async executeGoal(
         config: Partial<BrowserReasoningConfig> & { goal: string },
@@ -64,15 +102,34 @@ export class BrowserReasoningAgent {
             debug(`Already on target URL: ${fullConfig.startUrl}, skipping navigation`);
         }
 
-        const tools = this.buildBrowserMcpTools(steps);
-        const systemPrompt = this.buildSystemPrompt(fullConfig);
+        // Use unified tools if adapter is available, otherwise fall back to legacy tools
+        let tools: SdkMcpToolDefinition<any>[];
+        let systemPrompt: string;
+
+        if (this.toolAdapter) {
+            this.toolAdapter.clearSteps();
+            tools = this.toolAdapter.buildTools();
+            systemPrompt = this.buildUnifiedSystemPrompt(fullConfig);
+        } else {
+            tools = this.buildBrowserMcpTools(steps);
+            systemPrompt = this.buildSystemPrompt(fullConfig);
+        }
 
         const options: Options = {
             model: fullConfig.model,
             maxTurns: fullConfig.maxSteps,
             systemPrompt,
             allowedTools: [`mcp__${MCP_SERVER_NAME}__*`],
-            canUseTool: async () => ({ behavior: "allow" as const }),
+            canUseTool: async (toolName) => {
+                // Only allow browser-tools MCP tools; deny all others (Bash, WebFetch, etc.)
+                if (toolName.startsWith(`mcp__${MCP_SERVER_NAME}__`)) {
+                    return { behavior: "allow" as const };
+                }
+                return {
+                    behavior: "deny" as const,
+                    message: `Tool "${toolName}" is not available. Use only browser automation tools (mcp__${MCP_SERVER_NAME}__*).`,
+                };
+            },
             mcpServers: {
                 [MCP_SERVER_NAME]: createSdkMcpServer({
                     name: MCP_SERVER_NAME,
@@ -130,13 +187,36 @@ export class BrowserReasoningAgent {
             summary = error instanceof Error ? error.message : String(error);
         }
 
+        // Convert recorded steps from tool adapter to trace format
+        const finalSteps = this.toolAdapter
+            ? this.convertRecordedSteps(this.toolAdapter.getRecordedSteps())
+            : steps;
+
         return {
             goal: fullConfig.goal,
             startUrl,
-            steps,
+            steps: finalSteps,
             result: { success, summary },
             duration: Date.now() - startTime,
         };
+    }
+
+    /**
+     * Converts RecordedStep objects from WebFlowToolAdapter to BrowserTraceStep format.
+     */
+    private convertRecordedSteps(
+        recordedSteps: RecordedStep[],
+    ): BrowserTraceStep[] {
+        return recordedSteps.map((step) => ({
+            stepNumber: step.stepNumber,
+            thinking: step.thinking || "",
+            action: {
+                tool: step.tool,
+                args: step.args,
+            },
+            result: step.result,
+            timestamp: step.timestamp,
+        }));
     }
 
     private buildBrowserMcpTools(
@@ -384,6 +464,80 @@ export class BrowserReasoningAgent {
             "",
             "Be methodical. If an action fails, try alternative approaches.",
             "Always verify the page state after navigation or form submission.",
+        ].join("\n");
+    }
+
+    /**
+     * Builds system prompt for unified WebFlowBrowserAPI tools.
+     * Emphasizes the extractComponent-first pattern for component reuse.
+     */
+    private buildUnifiedSystemPrompt(config: BrowserReasoningConfig): string {
+        return [
+            "You are a browser automation agent. Your goal is to complete the user's task by interacting with web pages.",
+            "",
+            "## CRITICAL: Use ONLY Browser Tools",
+            "",
+            "You have access ONLY to browser automation tools (mcp__browser-tools__*).",
+            "Do NOT attempt to use any other tools like Bash, WebFetch, Read, Write, or ToolSearch.",
+            "If you need information from the web page, use the browser tools provided.",
+            "",
+            "## Important Pattern: Extract First, Then Act",
+            "",
+            "ALWAYS use extractComponent to find UI elements BEFORE interacting with them.",
+            "This returns an object with CSS selectors that you use in subsequent actions.",
+            "",
+            "Example workflow:",
+            "1. extractComponent({ typeName: 'SearchInput', ... }, 'search box')",
+            "   → Returns: { cssSelector: '#search', submitButtonCssSelector: '#search-btn' }",
+            "2. enterText('#search', 'query text')  // Use the cssSelector from step 1",
+            "3. click('#search-btn')  // Reuse the submitButtonCssSelector from step 1",
+            "",
+            "## Available Tools",
+            "",
+            "**Find UI Components:**",
+            "- extractComponent: Find a UI component by description. Returns object with CSS selectors.",
+            "  Types: SearchInput, Button, TextInput, DropdownControl, Element",
+            "",
+            "**Navigation:**",
+            "- navigateTo: Navigate to a URL",
+            "- awaitPageLoad: Wait for page to finish loading",
+            "",
+            "**Actions (require CSS selector from extractComponent):**",
+            "- click: Click element by CSS selector",
+            "- clickAndWait: Click and wait for navigation/update",
+            "- enterText: Type text into input field",
+            "- clearAndType: Clear field then type text",
+            "- selectOption: Select dropdown option",
+            "- pressKey: Press keyboard key (Enter, Tab, Escape, etc.)",
+            "",
+            "**Page State (choose the right tool):**",
+            "- checkPageState: PREFERRED for verification. Returns true/false for expected content.",
+            "  Use this to verify you're on the right page or that an action succeeded.",
+            "  Example: checkPageState({ expectedContent: ['Booking confirmed', 'Order #'] })",
+            "- getPageText: Read full visible text. Use when you need to understand page content",
+            "  or extract specific information (not just verify presence).",
+            "- queryContent: Extract structured data from page using a schema.",
+            "",
+            "## Strategy",
+            "",
+            "1. Understand the current page with getPageText (once at start)",
+            "2. Use extractComponent to find each UI element you need",
+            "3. Perform actions using CSS selectors from extracted components",
+            "4. Verify results with checkPageState (not getPageText for simple verification)",
+            "5. Report success when goal is achieved",
+            "",
+            "## When to Use checkPageState vs getPageText",
+            "",
+            "- Use checkPageState when: Verifying page state, confirming navigation, checking action results",
+            "- Use getPageText when: Initially exploring a page, extracting information to display to user",
+            "",
+            "## Component Reuse",
+            "",
+            "Components can be extracted once and used multiple times:",
+            "- Search inputs often have both cssSelector (for typing) and submitButtonCssSelector (for submitting)",
+            "- Dropdown controls include available values you can reference",
+            "",
+            "Be methodical. If an action fails, try alternative approaches.",
         ].join("\n");
     }
 }

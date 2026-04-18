@@ -1837,7 +1837,8 @@ async function executeBrowserAction(
                                 },
                             } as any,
                             context.sessionContext,
-                            (msg) => context.sessionContext.notify(AppAgentEvent.Inline, { type: "text", content: msg }, `webflow-progress-${Date.now()}`),
+                            undefined,
+                            context.actionIO,
                         );
 
                         agentCtx.lastInferredActions = undefined;
@@ -1948,7 +1949,8 @@ Select actions to create as WebFlows:`;
                                     },
                                 } as any,
                                 context.sessionContext,
-                                (msg) => context.sessionContext.notify(AppAgentEvent.Inline, { type: "text", content: msg }, `webflow-progress-${Date.now()}`),
+                                undefined,
+                                context.actionIO,
                             );
 
                             // Clear stored actions
@@ -2806,7 +2808,8 @@ class InferActionsHandler implements CommandHandlerNoParams {
                                 },
                             } as any,
                             context.sessionContext,
-                            (msg) => context.sessionContext.notify(AppAgentEvent.Inline, { type: "text", content: msg }, `webflow-progress-${Date.now()}`),
+                            undefined,
+                            context.actionIO,
                         );
 
                         // Clear stored actions
@@ -2934,7 +2937,8 @@ class CreateInferredActionsHandler implements CommandHandler {
                     },
                 } as any,
                 context.sessionContext,
-                (msg) => context.sessionContext.notify(AppAgentEvent.Inline, { type: "text", content: msg }, `webflow-progress-${Date.now()}`),
+                undefined,
+                context.actionIO,
             );
 
             // Clear stored actions after creation

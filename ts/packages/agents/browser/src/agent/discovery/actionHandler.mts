@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { SessionContext } from "@typeagent/agent-sdk";
+import {
+    SessionContext,
+    DisplayContent,
+    DisplayAppendMode,
+} from "@typeagent/agent-sdk";
 import {
     BrowserActionContext,
     getBrowserControl,
@@ -43,7 +47,9 @@ import {
 import { sendWebFlowRefreshToClient } from "../browserActionHandler.mjs";
 import { BrowserReasoningAgent } from "../webFlows/reasoning/browserReasoningAgent.mjs";
 import { WebFlowBrowserAPIImpl } from "../webFlows/webFlowBrowserApi.mjs";
+import { createComponentExtractor } from "../webFlows/componentExtractor.mjs";
 import { getWebFlowStore } from "../webFlows/actionHandler.mjs";
+import { testGeneratedScript } from "../webFlows/webFlowTestRunner.mjs";
 
 const debug = registerDebug("typeagent:browser:discover:handler");
 const debugPerf = registerDebug("typeagent:browser:discover:perf");
@@ -84,6 +90,11 @@ export class EntityCollector {
     }
 }
 
+// Simplified action IO interface for progress reporting
+interface ProgressActionIO {
+    appendDisplay: (content: DisplayContent, mode?: DisplayAppendMode) => void;
+}
+
 // Context interface for discovery action handler functions
 interface DiscoveryActionHandlerContext {
     browser: BrowserControl;
@@ -91,6 +102,7 @@ interface DiscoveryActionHandlerContext {
     entities: EntityCollector;
     sessionContext: SessionContext<BrowserActionContext>;
     progressCallback?: (message: string) => void;
+    actionIO?: ProgressActionIO;
 }
 
 // ── Discovery cache ─────────────────────────────────────────────────────────
@@ -884,6 +896,18 @@ async function inferActionsFromHtml(
     return [];
 }
 
+/**
+ * Reports progress to the user using the best available mechanism.
+ * Prefers actionIO.appendDisplay for immediate UI updates, falls back to progressCallback.
+ */
+function reportProgress(ctx: DiscoveryActionHandlerContext, message: string): void {
+    if (ctx.actionIO) {
+        ctx.actionIO.appendDisplay(message, "temporary");
+    } else if (ctx.progressCallback) {
+        ctx.progressCallback(message);
+    }
+}
+
 async function handleCreateInferredFlows(
     action: CreateInferredFlows,
     ctx: DiscoveryActionHandlerContext,
@@ -916,24 +940,32 @@ async function handleCreateInferredFlows(
         processedCount++;
         const progressMsg = `[${processedCount}/${totalActions}] Processing: ${inferredAction.name}`;
         debug(progressMsg);
-        ctx.progressCallback?.(progressMsg);
+        reportProgress(ctx, progressMsg);
 
         try {
             // Build enriched goal from the inferred action
             const goal = buildGoalFromInferredAction(inferredAction, pageUrl);
             debug(`Goal for ${inferredAction.name}: ${goal.slice(0, 200)}...`);
 
-            // Create browser API and reasoning agent
-            const browserApi = new WebFlowBrowserAPIImpl(ctx.browser);
-            const agent = new BrowserReasoningAgent(browserApi, {
+            // Create browser API with extraction function and reasoning agent with unified tools
+            const extractFn = createComponentExtractor(ctx.browser);
+            const browserApi = new WebFlowBrowserAPIImpl(ctx.browser, undefined, extractFn);
+            const agent = BrowserReasoningAgent.withUnifiedTools(browserApi, {
                 onThinking: (text) => debug(`[${inferredAction.name}] thinking: ${text.slice(0, 100)}...`),
-                onToolCall: (tool) => debug(`[${inferredAction.name}] tool: ${tool}`),
+                onToolCall: (tool, args) => {
+                    debug(`[${inferredAction.name}] tool: ${tool}`);
+                    // Report browser tool calls to user for visibility
+                    const toolDisplay = formatToolCallForDisplay(tool, args);
+                    if (toolDisplay) {
+                        reportProgress(ctx, toolDisplay);
+                    }
+                },
                 onText: (text) => debug(`[${inferredAction.name}] text: ${text.slice(0, 100)}...`),
             });
 
             // Execute the goal using the reasoning agent
             debug(`Executing goal for ${inferredAction.name}...`);
-            ctx.progressCallback?.(`Running automation for: ${inferredAction.name}...`);
+            reportProgress(ctx, `Running automation for: ${inferredAction.name}...`);
             const trace = await agent.executeGoal({
                 goal,
                 startUrl: pageUrl,
@@ -942,7 +974,7 @@ async function handleCreateInferredFlows(
 
             if (trace.result.success) {
                 debug(`Goal succeeded for ${inferredAction.name}, generating WebFlow from trace...`);
-                ctx.progressCallback?.(`Generating WebFlow script for: ${inferredAction.name}...`);
+                reportProgress(ctx, `Generating WebFlow script for: ${inferredAction.name}...`);
 
                 // Build existing flows context for dedup-aware generation
                 const existingFlows = store.getIndex().flows
@@ -993,10 +1025,30 @@ async function handleCreateInferredFlows(
                         originUrl: pageUrl,
                     };
 
+                    // Test the generated script before saving
+                    reportProgress(ctx, `Testing WebFlow script for: ${inferredAction.name}...`);
+                    const testParams: Record<string, unknown> = {};
+                    for (const param of inferredAction.parameters) {
+                        testParams[param.name] = getSampleValueForParam(param);
+                    }
+                    const testResult = await testGeneratedScript(
+                        generatedFlow.script,
+                        browserApi,
+                        testParams,
+                        { timeout: 60000 },
+                    );
+
+                    if (!testResult.success) {
+                        debug(`Script test failed for ${inferredAction.name}: ${testResult.error}`);
+                        reportProgress(ctx, `Script test failed for ${inferredAction.name}, saving anyway...`);
+                    } else {
+                        debug(`Script test passed for ${inferredAction.name}`);
+                    }
+
                     await store.save(generatedFlow);
                     createdFlows.push(generatedFlow.name);
                     debug(`Created WebFlow from reasoning: ${generatedFlow.name}`);
-                    ctx.progressCallback?.(`Created WebFlow: ${generatedFlow.name}`);
+                    reportProgress(ctx, `Created WebFlow: ${generatedFlow.name}`);
                 } else {
                     // Generation failed, create placeholder
                     debug(`WebFlow generation failed for ${inferredAction.name}, creating placeholder`);
@@ -1205,6 +1257,49 @@ async function execute(browser, { ${paramList} }) {
 }`;
 }
 
+/**
+ * Format a tool call for user-friendly display during automation.
+ * Returns empty string for non-browser tools that shouldn't be shown to users.
+ */
+function formatToolCallForDisplay(tool: string, args: unknown): string {
+    // Strip MCP prefix if present (e.g., "mcp__browser-tools__click" -> "click")
+    const toolName = tool.replace(/^mcp__browser-tools__/, "");
+
+    // Skip Claude Code SDK internal tools (not browser actions)
+    if (!tool.includes("browser-tools") && !tool.startsWith("mcp__")) {
+        // This is a Claude SDK tool like ToolSearch, Task, etc. - don't display
+        return "";
+    }
+
+    const argsObj = args as Record<string, unknown> | undefined;
+    switch (toolName) {
+        case "extractComponent":
+            return `Finding: ${argsObj?.description || "component"}`;
+        case "click":
+        case "clickAndWait":
+            return `Clicking element...`;
+        case "enterText":
+        case "clearAndType":
+            return `Typing: "${String(argsObj?.text || "").slice(0, 30)}..."`;
+        case "selectOption":
+            return `Selecting: "${argsObj?.value}"`;
+        case "navigateTo":
+            return `Navigating to page...`;
+        case "getPageText":
+            return "Reading page content...";
+        case "checkPageState":
+            return "Verifying page state...";
+        case "awaitPageLoad":
+            return "Waiting for page to load...";
+        case "pressKey":
+            return `Pressing key: ${argsObj?.key}`;
+        case "queryContent":
+            return "Extracting content...";
+        default:
+            return `${toolName}...`;
+    }
+}
+
 function generateGrammarPatterns(action: InferredAction): string[] {
     const patterns: string[] = [];
     const words = action.name
@@ -1232,6 +1327,7 @@ export async function handleSchemaDiscoveryAction(
     action: SchemaDiscoveryActions,
     context: SessionContext<BrowserActionContext>,
     progressCallback?: (message: string) => void,
+    actionIO?: ProgressActionIO,
 ) {
     if (!context.agentContext.browserControl) {
         throw new Error("No connection to browser session.");
@@ -1248,6 +1344,7 @@ export async function handleSchemaDiscoveryAction(
         entities: entityCollector,
         sessionContext: context,
         ...(progressCallback && { progressCallback }),
+        ...(actionIO && { actionIO }),
     };
 
     let result: DiscoveryActionResult;
