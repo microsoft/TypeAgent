@@ -167,6 +167,42 @@ describe("executeSessionAction — switchSession", () => {
     });
 });
 
+describe("executeSessionAction — renameSession", () => {
+    it("sends manage-conversation with subcommand rename and newName (current session)", async () => {
+        const ctx = makeContext();
+        await executeSessionAction(
+            {
+                schemaName: "system.session",
+                actionName: "renameSession",
+                parameters: { newName: "my project" },
+            },
+            ctx,
+        );
+        expect(mockTakeAction).toHaveBeenCalledWith(
+            mockRequestId,
+            "manage-conversation",
+            { subcommand: "rename", name: undefined, newName: "my project" },
+        );
+    });
+
+    it("sends manage-conversation with subcommand rename, name, and newName (targeted session)", async () => {
+        const ctx = makeContext();
+        await executeSessionAction(
+            {
+                schemaName: "system.session",
+                actionName: "renameSession",
+                parameters: { name: "test7", newName: "test5" },
+            },
+            ctx,
+        );
+        expect(mockTakeAction).toHaveBeenCalledWith(
+            mockRequestId,
+            "manage-conversation",
+            { subcommand: "rename", name: "test7", newName: "test5" },
+        );
+    });
+});
+
 describe("executeSessionAction — deleteSession", () => {
     it("sends manage-conversation with subcommand delete", async () => {
         const ctx = makeContext();

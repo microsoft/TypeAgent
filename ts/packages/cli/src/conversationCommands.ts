@@ -167,13 +167,53 @@ async function handleRename(
     ctx: ConversationCommandContext,
     args: string,
 ): Promise<void> {
-    const newName = parseNameArg(args);
+    const trimmed = args.trim();
+    if (!trimmed) {
+        console.log(chalk.yellow("Usage: @conversation rename <newName>"));
+        console.log(
+            chalk.yellow("       @conversation rename <currentName> <newName>"),
+        );
+        return;
+    }
+
+    // If args contains two tokens, first is the target session name and second is the new name.
+    // If only one token, rename the current session.
+    const spaceIdx = trimmed.indexOf(" ");
+    let targetName: string | undefined;
+    let newName: string;
+    if (spaceIdx === -1) {
+        newName = parseNameArg(trimmed);
+    } else {
+        targetName = parseNameArg(trimmed.substring(0, spaceIdx));
+        newName = parseNameArg(trimmed.substring(spaceIdx + 1));
+    }
+
     if (!newName) {
         console.log(chalk.yellow("Usage: @conversation rename <newName>"));
         return;
     }
-    await ctx.connection.renameSession(ctx.getCurrentSessionId(), newName);
-    console.log(`Renamed current conversation to '${chalk.green(newName)}'.`);
+
+    let sessionId: string;
+    if (targetName) {
+        const all = await ctx.connection.listSessions();
+        const match = all.find(
+            (s) => s.name.toLowerCase() === targetName!.toLowerCase(),
+        );
+        if (!match) {
+            console.log(
+                chalk.red(
+                    `No conversation named '${targetName}' found. Use @conversation list to see all.`,
+                ),
+            );
+            return;
+        }
+        sessionId = match.sessionId;
+    } else {
+        sessionId = ctx.getCurrentSessionId();
+    }
+
+    await ctx.connection.renameSession(sessionId, newName);
+    console.log(`Renamed conversation to '${chalk.green(newName)}'.`);
 }
 
 async function handleDelete(

@@ -12,7 +12,7 @@ export async function executeSessionAction(
 ) {
     const agentContext = context.sessionContext.agentContext;
     const requestId = getRequestId(agentContext);
-    let payload: { subcommand: string; name?: string };
+    let payload: { subcommand: string; name?: string; newName?: string };
 
     let resultEntity: { name: string; type: string[] } | undefined;
 
@@ -37,6 +37,21 @@ export async function executeSessionAction(
         case "switchSession":
             payload = { subcommand: "switch", name: action.parameters.name };
             break;
+        case "renameSession": {
+            const renameName = action.parameters.name;
+            payload = renameName
+                ? {
+                      subcommand: "rename",
+                      name: renameName,
+                      newName: action.parameters.newName,
+                  }
+                : { subcommand: "rename", newName: action.parameters.newName };
+            resultEntity = {
+                name: action.parameters.newName,
+                type: ["conversation", "session"],
+            };
+            break;
+        }
         case "deleteSession":
             payload = { subcommand: "delete", name: action.parameters.name };
             break;

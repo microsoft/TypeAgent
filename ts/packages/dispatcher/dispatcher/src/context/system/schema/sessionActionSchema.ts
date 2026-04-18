@@ -6,6 +6,7 @@ export type SessionAction =
     | ListSessionAction
     | ShowConversationInfoAction
     | SwitchSessionAction
+    | RenameSessionAction
     | DeleteSessionAction;
 
 // Create a new session/conversation and optionally give it a name.
@@ -46,6 +47,22 @@ export type SwitchSessionAction = {
     parameters: {
         // The name of the session/conversation to switch to
         name: string;
+    };
+};
+
+// Rename a session/conversation.
+// Use this when the user wants to rename, relabel, or give a new name to a conversation.
+// If the user specifies which conversation to rename, capture it as 'name'.
+// If the user only says "rename this conversation" or "rename current session", omit 'name'.
+// Examples: "rename this conversation to work", "rename test7 to test5",
+// "call this conversation research", "rename current session to my project".
+export type RenameSessionAction = {
+    actionName: "renameSession";
+    parameters: {
+        // Optional: the current name of the session to rename. Omit to rename the active session.
+        name?: string;
+        // The new name for the session/conversation
+        newName: string;
     };
 };
 

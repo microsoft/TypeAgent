@@ -994,6 +994,7 @@ export function createEnhancedClientIO(
                 const payload = data as {
                     subcommand: string;
                     name?: string;
+                    newName?: string;
                 };
                 const convCtx = getConversationCommandContext();
                 if (!convCtx) {
@@ -1018,6 +1019,11 @@ export function createEnhancedClientIO(
                         break;
                     case "delete":
                         args = `delete ${payload.name}`;
+                        break;
+                    case "rename":
+                        args = payload.name
+                            ? `rename ${payload.name} ${payload.newName}`
+                            : `rename ${payload.newName}`;
                         break;
                     default:
                         console.error(
