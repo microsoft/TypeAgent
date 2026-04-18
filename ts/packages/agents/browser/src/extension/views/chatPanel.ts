@@ -389,7 +389,7 @@ function handleUserMessage(text: string, attachments?: string[]) {
         if (authoringMode === "ai") {
             chatPanel.setEnabled(false);
             chatPanel.showStatus("Starting AI-driven automation...");
-            const learnCommand = `@browser learn: ${text}`;
+            const learnCommand = `@browser learn "${text}"`;
             rpc.invoke("chatPanelProcessCommand", {
                 command: learnCommand,
                 clientRequestId: `ext-${++requestCounter}`,

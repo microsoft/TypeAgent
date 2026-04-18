@@ -182,13 +182,13 @@ Common component types and their schemas:
             },
             handler: async (args) => {
                 const url = args.url as string;
-                const NAVIGATION_TIMEOUT_MS = 30000; // 30 second timeout
+                const NAVIGATION_TIMEOUT_MS = 5000; // 5 second timeout
 
                 try {
                     // Wrap navigation in a timeout to prevent hanging
                     const navigationPromise = (async () => {
                         await this.browserApi.navigateTo(url);
-                        await this.browserApi.awaitPageLoad(10000);
+                        await this.browserApi.awaitPageLoad(3000);
                         return await this.browserApi.getCurrentUrl();
                     })();
 

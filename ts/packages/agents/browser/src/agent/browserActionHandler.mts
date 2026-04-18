@@ -2865,99 +2865,6 @@ To create WebFlows, say: "build flow 1" or "build flows 1,2" or "build all flows
     }
 }
 
-class CreateInferredActionsHandler implements CommandHandler {
-    public readonly description =
-        "Create WebFlows from previously inferred actions";
-    public readonly parameters = {
-        args: {
-            indices: {
-                description: 'Action indices to create (e.g., "1,2,3" or "all")',
-                type: "string" as const,
-                required: true,
-            },
-        },
-    };
-    public async run(
-        context: ActionContext<BrowserActionContext>,
-        _params: ParsedCommandParams<typeof this.parameters>,
-        args: string[],
-    ) {
-        const agentContext = context.sessionContext.agentContext;
-        const inferredActions = agentContext.lastInferredActions;
-
-        if (!inferredActions || inferredActions.length === 0) {
-            displayError(
-                "No inferred actions available. Run '@browser actions infer' first.",
-                context,
-            );
-            return;
-        }
-
-        const indexArg = (args || []).join(" ").trim().toLowerCase();
-        let selectedIndices: number[];
-
-        if (!indexArg) {
-            displayError(
-                "Please specify action indices. Examples: 1, 1,2,3, or all",
-                context,
-            );
-            return;
-        }
-
-        if (indexArg === "all") {
-            selectedIndices = inferredActions.map((_: any, i: number) => i + 1);
-        } else if (indexArg === "none") {
-            context.actionIO.setDisplay("No actions created.");
-            return;
-        } else {
-            // Parse comma-separated numbers
-            selectedIndices = indexArg
-                .split(/[,\s]+/)
-                .map((s: string) => parseInt(s.trim(), 10))
-                .filter((n: number) => !isNaN(n) && n >= 1 && n <= inferredActions.length);
-
-            if (selectedIndices.length === 0) {
-                displayError(
-                    `Invalid indices. Please specify numbers 1-${inferredActions.length}, "all", or "none".`,
-                    context,
-                );
-                return;
-            }
-        }
-
-        context.actionIO.appendDisplay(`Creating ${selectedIndices.length} WebFlow(s)...`, "temporary");
-
-        try {
-            const result = await handleSchemaDiscoveryAction(
-                {
-                    actionName: "createInferredFlows",
-                    parameters: {
-                        selectedIndices,
-                        inferredActions,
-                    },
-                } as any,
-                context.sessionContext,
-                undefined,
-                context.actionIO,
-            );
-
-            // Clear stored actions after creation
-            agentContext.lastInferredActions = undefined;
-            agentContext.lastInferredActionsPageUrl = undefined;
-
-            context.actionIO.setDisplay({
-                type: "markdown",
-                content: result.displayText,
-            });
-        } catch (error: any) {
-            displayError(
-                `Failed to create actions: ${error?.message || error}`,
-                context,
-            );
-        }
-    }
-}
-
 class LearnHandler implements CommandHandler {
     public readonly description =
         "Learn a new action by demonstrating or describing it";
@@ -2983,7 +2890,7 @@ class LearnHandler implements CommandHandler {
 
         const goal = args.join(" ").trim();
         if (!goal) {
-            displayError("Please provide a goal description. Example: @browser learn: add item to cart", context);
+            displayError("Please provide a goal description. Example: @browser learn add item to cart", context);
             return;
         }
 
@@ -3212,12 +3119,11 @@ export const handlers: CommandHandlerTable = {
         ask: new AskAboutPageHandler(),
         learn: new LearnHandler(),
         actions: {
-            description: "Manage page actions (discover, record, infer, author)",
-            defaultSubCommand: "discover",
+            description: "Manage page actions (match, record, infer, author)",
+            defaultSubCommand: "match",
             commands: {
-                discover: new DiscoverActionsHandler(),
+                match: new DiscoverActionsHandler(),
                 infer: new InferActionsHandler(),
-                create: new CreateInferredActionsHandler(),
                 record: new RecordActionHandler(),
                 stop: {
                     description: "Stop operations",

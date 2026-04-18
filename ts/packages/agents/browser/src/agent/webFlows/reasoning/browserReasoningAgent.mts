@@ -121,13 +121,18 @@ export class BrowserReasoningAgent {
             systemPrompt,
             allowedTools: [`mcp__${MCP_SERVER_NAME}__*`],
             canUseTool: async (toolName) => {
-                // Only allow browser-tools MCP tools; deny all others (Bash, WebFetch, etc.)
+                // Only allow browser-tools MCP tools; deny all others
                 if (toolName.startsWith(`mcp__${MCP_SERVER_NAME}__`)) {
                     return { behavior: "allow" as const };
                 }
+                // Explicitly deny ToolSearch and other SDK tools
+                const deniedTools = ["ToolSearch", "Bash", "WebFetch", "Read", "Write", "Task", "Glob", "Grep", "Edit", "WebSearch"];
+                const isDenied = deniedTools.some(t => toolName === t || toolName.includes(t));
                 return {
                     behavior: "deny" as const,
-                    message: `Tool "${toolName}" is not available. Use only browser automation tools (mcp__${MCP_SERVER_NAME}__*).`,
+                    message: isDenied
+                        ? `Tool "${toolName}" is forbidden. All browser tools are already loaded - use mcp__browser-tools__* tools directly.`
+                        : `Tool "${toolName}" is not available. Use only mcp__browser-tools__* tools.`,
                 };
             },
             mcpServers: {
@@ -475,11 +480,25 @@ export class BrowserReasoningAgent {
         return [
             "You are a browser automation agent. Your goal is to complete the user's task by interacting with web pages.",
             "",
-            "## CRITICAL: Use ONLY Browser Tools",
+            "## CRITICAL: Tool Restrictions",
             "",
-            "You have access ONLY to browser automation tools (mcp__browser-tools__*).",
-            "Do NOT attempt to use any other tools like Bash, WebFetch, Read, Write, or ToolSearch.",
-            "If you need information from the web page, use the browser tools provided.",
+            "You have access ONLY to browser automation tools. ALL browser tools are ALREADY LOADED - do NOT use ToolSearch.",
+            "",
+            "**FORBIDDEN tools (will be denied):** ToolSearch, Bash, WebFetch, Read, Write, Task, Glob, Grep, Edit, WebSearch",
+            "",
+            "**AVAILABLE tools (use ONLY these):**",
+            "- mcp__browser-tools__extractComponent - Find UI elements",
+            "- mcp__browser-tools__click - Click an element",
+            "- mcp__browser-tools__clickAndWait - Click and wait for page update",
+            "- mcp__browser-tools__enterText - Type into a field",
+            "- mcp__browser-tools__clearAndType - Clear and type text",
+            "- mcp__browser-tools__selectOption - Select dropdown option",
+            "- mcp__browser-tools__pressKey - Press keyboard key",
+            "- mcp__browser-tools__navigateTo - Navigate to URL",
+            "- mcp__browser-tools__awaitPageLoad - Wait for page load",
+            "- mcp__browser-tools__checkPageState - Verify page content",
+            "- mcp__browser-tools__getPageText - Read page text",
+            "- mcp__browser-tools__queryContent - Extract structured data",
             "",
             "## Important Pattern: Extract First, Then Act",
             "",
@@ -537,7 +556,24 @@ export class BrowserReasoningAgent {
             "- Search inputs often have both cssSelector (for typing) and submitButtonCssSelector (for submitting)",
             "- Dropdown controls include available values you can reference",
             "",
-            "Be methodical. If an action fails, try alternative approaches.",
+            "## Form Submission Success Criteria",
+            "",
+            "IMPORTANT: Not all pages show explicit confirmation messages after form submission.",
+            "",
+            "Consider a form submission SUCCESSFUL if:",
+            "- You filled all required fields and clicked submit",
+            "- No validation errors appeared (like 'field required' or 'invalid input')",
+            "- The page updated in any way (form cleared, new content appeared, or state changed)",
+            "",
+            "Do NOT keep retrying if:",
+            "- The form submitted without errors but shows a different result than expected (e.g., 'no availability')",
+            "- The page simply returned to its initial state without error messages",
+            "- You've already attempted the same action 2+ times with the same result",
+            "",
+            "The automation's job is to demonstrate the PROCESS works, not guarantee a specific business outcome.",
+            "If form submission completes without validation errors, report SUCCESS and move on.",
+            "",
+            "Be methodical. If an action fails, try alternative approaches - but don't loop on the same action.",
         ].join("\n");
     }
 }

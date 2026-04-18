@@ -57,7 +57,7 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        title: "Ask TypeAgent about this page",
+        title: "Ask about this page",
         id: "askAboutPage",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
@@ -68,32 +68,32 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        title: "View page macros",
-        id: "viewPageMacros",
-        documentUrlPatterns: ["http://*/*", "https://*/*"],
-    });
-
-    chrome.contextMenus.create({
-        title: "Add new macro",
-        id: "addNewMacro",
-        documentUrlPatterns: ["http://*/*", "https://*/*"],
-    });
-
-    chrome.contextMenus.create({
-        title: "Infer new actions",
+        title: "Show actions on this page",
         id: "inferNewActions",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
     chrome.contextMenus.create({
-        title: "Manage Macros",
-        id: "manageMacros",
+        title: "Add actions to this page",
+        id: "addNewMacro",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
+
+    chrome.contextMenus.create({
+        title: "Match known actions",
+        id: "matchKnownActions",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
     chrome.contextMenus.create({
         type: "separator",
         id: "menuSeparator3",
+    });
+
+    chrome.contextMenus.create({
+        title: "Action Library",
+        id: "manageMacros",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
     chrome.contextMenus.create({
@@ -117,10 +117,10 @@ export async function handleContextMenuClick(
     }
 
     switch (info.menuItemId) {
-        case "viewPageMacros": {
+         case "matchKnownActions": {
             await openChatAndInjectCommand(
                 tab.id!,
-                "@browser actions discover",
+                "@browser actions match",
             );
             break;
         }

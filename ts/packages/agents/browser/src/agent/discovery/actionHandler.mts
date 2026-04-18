@@ -928,7 +928,6 @@ async function handleCreateInferredFlows(
 
     const createdFlows: string[] = [];
     const failedFlows: string[] = [];
-    const placeholderFlows: string[] = [];
 
     const totalActions = selectedIndices.length;
     let processedCount = 0;
@@ -969,7 +968,7 @@ async function handleCreateInferredFlows(
             const trace = await agent.executeGoal({
                 goal,
                 startUrl: pageUrl,
-                maxSteps: 30,
+                maxSteps: 50, // Higher limit for complex multi-field forms
             });
 
             if (trace.result.success) {
@@ -1050,27 +1049,22 @@ async function handleCreateInferredFlows(
                     debug(`Created WebFlow from reasoning: ${generatedFlow.name}`);
                     reportProgress(ctx, `Created WebFlow: ${generatedFlow.name}`);
                 } else {
-                    // Generation failed, create placeholder
-                    debug(`WebFlow generation failed for ${inferredAction.name}, creating placeholder`);
-                    await createPlaceholderFlow(inferredAction, pageUrl, domain, store);
-                    placeholderFlows.push(inferredAction.name);
+                    // Generation failed - report failure instead of creating placeholder
+                    debug(`WebFlow generation failed for ${inferredAction.name}`);
+                    reportProgress(ctx, `Failed to generate WebFlow script for: ${inferredAction.name}`);
+                    failedFlows.push(inferredAction.name);
                 }
             } else {
-                // Reasoning failed, create placeholder
+                // Reasoning failed - report failure with summary instead of creating placeholder
                 debug(`Reasoning failed for ${inferredAction.name}: ${trace.result.summary}`);
-                await createPlaceholderFlow(inferredAction, pageUrl, domain, store);
-                placeholderFlows.push(inferredAction.name);
-            }
-        } catch (error) {
-            debug(`Error creating WebFlow for ${inferredAction.name}:`, error);
-            try {
-                // Fall back to placeholder on any error
-                await createPlaceholderFlow(inferredAction, pageUrl, domain, store);
-                placeholderFlows.push(inferredAction.name);
-            } catch (placeholderError) {
-                debug(`Failed to create placeholder for ${inferredAction.name}:`, placeholderError);
+                reportProgress(ctx, `Automation failed for ${inferredAction.name}: ${trace.result.summary}`);
                 failedFlows.push(inferredAction.name);
             }
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            debug(`Error creating WebFlow for ${inferredAction.name}:`, error);
+            reportProgress(ctx, `Error for ${inferredAction.name}: ${errorMsg}`);
+            failedFlows.push(inferredAction.name);
         }
     }
 
@@ -1086,13 +1080,11 @@ async function handleCreateInferredFlows(
 
     let displayText = "";
     if (createdFlows.length > 0) {
-        displayText += `Created ${createdFlows.length} WebFlow(s) with implementation: ${createdFlows.join(", ")}\n`;
-    }
-    if (placeholderFlows.length > 0) {
-        displayText += `Created ${placeholderFlows.length} placeholder(s) (use @browser learn: to implement): ${placeholderFlows.join(", ")}\n`;
+        displayText += `Created ${createdFlows.length} WebFlow(s): ${createdFlows.join(", ")}\n`;
     }
     if (failedFlows.length > 0) {
-        displayText += `Failed to create: ${failedFlows.join(", ")}`;
+        displayText += `Failed to create ${failedFlows.length} flow(s): ${failedFlows.join(", ")}\n`;
+        displayText += `Tip: Try running the automation again or simplify the goal.`;
     }
 
     return {
@@ -1100,49 +1092,9 @@ async function handleCreateInferredFlows(
         entities: ctx.entities.getEntities(),
         data: {
             created: createdFlows,
-            placeholders: placeholderFlows,
             failed: failedFlows,
         },
     };
-}
-
-/**
- * Create a placeholder WebFlow when reasoning fails.
- */
-async function createPlaceholderFlow(
-    inferredAction: InferredAction,
-    pageUrl: string,
-    domain: string,
-    store: Awaited<ReturnType<typeof getWebFlowStore>>,
-): Promise<void> {
-    const flow: WebFlowDefinition = {
-        name: inferredAction.name,
-        description: inferredAction.description,
-        version: 1,
-        parameters: {},
-        script: generateBasicScript(inferredAction),
-        grammarPatterns: generateGrammarPatterns(inferredAction),
-        scope: {
-            type: "site",
-            domains: [domain],
-        },
-        source: {
-            type: "discovered",
-            timestamp: new Date().toISOString(),
-            originUrl: pageUrl,
-        },
-    };
-
-    for (const param of inferredAction.parameters) {
-        flow.parameters[param.name] = {
-            type: param.type,
-            required: param.required,
-            description: param.description,
-        };
-    }
-
-    await store.save(flow);
-    debug(`Created placeholder WebFlow: ${flow.name}`);
 }
 
 /**
@@ -1244,17 +1196,6 @@ function getSampleValueForParam(param: InferredAction["parameters"][0]): string 
     }
 
     return "test value";
-}
-
-function generateBasicScript(action: InferredAction): string {
-    const paramList = action.parameters.map((p) => p.name).join(", ");
-    return `// Auto-generated script for ${action.name}
-// ${action.description}
-// Expected outcome: ${action.expectedOutcome}
-
-async function execute(browser, { ${paramList} }) {
-    throw new Error("Action not yet implemented - please record or edit the script");
-}`;
 }
 
 /**
