@@ -90,7 +90,6 @@
     "@playwright/test": "^1.55.0",
     "@types/debug": "^4.1.12",
     "@types/jest": "^29.5.7",
-    "action-grammar": "workspace:*",
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
     "electron": "40.8.5",

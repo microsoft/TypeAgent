@@ -6,10 +6,9 @@ import { CompletionDirection } from "@typeagent/agent-sdk";
 import { SearchMenu } from "./search";
 import { SearchMenuItem } from "./searchMenuUI/searchMenuUI";
 import {
-    ICompletionDispatcher,
-    ISearchMenu,
-    PartialCompletionSession,
-} from "./partialCompletionSession";
+    CompletionController,
+    createCompletionController,
+} from "agent-dispatcher/helpers/completion";
 
 import registerDebug from "debug";
 import { ExpandableTextArea } from "./chat/expandableTextArea";
@@ -52,11 +51,16 @@ function getLeafNode(node: Node, offset: number) {
 // Architecture: docs/architecture/completion.md — §6 Shell — DOM Adapter
 export class PartialCompletion {
     private readonly searchMenu: SearchMenu;
-    private readonly session: PartialCompletionSession;
+    private readonly controller: CompletionController;
     public closed: boolean = false;
     // Track previous input to determine direction: shorter = backspace
     // ("backward"), longer/same = forward action.
     private previousInput: string = "";
+    // Tracks the last generation and prefix seen from CompletionState to
+    // decide whether render() (items changed) or updatePosition() (same
+    // items) should be called on the SearchMenu.
+    private lastGeneration: number = -1;
+    private lastPrefix: string = "";
 
     private readonly cleanupEventListeners: () => void;
     constructor(
@@ -66,24 +70,39 @@ export class PartialCompletion {
         inline: boolean = true,
         onToggleMode?: () => void,
     ) {
+        // Create controller first.
+        this.controller = createCompletionController(dispatcher);
+
         this.searchMenu = new SearchMenu(
             (item) => {
                 this.handleSelect(item);
             },
             inline,
+            (prefix) => this.getSearchMenuPosition(prefix),
             this.input.getTextEntry(),
             onToggleMode,
         );
 
-        // Wrap SearchMenu to implement ISearchMenu (same shape, just typed).
-        const menuAdapter: ISearchMenu = this.searchMenu;
-        // Wrap Dispatcher to implement ICompletionDispatcher.
-        const dispatcherAdapter: ICompletionDispatcher = dispatcher;
-
-        this.session = new PartialCompletionSession(
-            menuAdapter,
-            dispatcherAdapter,
-        );
+        // When completion state changes, re-render the search menu.
+        // CompletionState already contains filtered items and prefix —
+        // pass them directly to avoid a redundant trie query in render().
+        this.controller.setOnUpdate(() => {
+            const state = this.controller.getCompletionState();
+            if (state) {
+                if (
+                    state.generation !== this.lastGeneration ||
+                    state.prefix !== this.lastPrefix
+                ) {
+                    this.lastGeneration = state.generation;
+                    this.lastPrefix = state.prefix;
+                    this.searchMenu.render(state.prefix, state.items);
+                } else {
+                    this.searchMenu.updatePosition(state.prefix);
+                }
+            } else {
+                this.searchMenu.hide();
+            }
+        });
 
         const selectionChangeHandler = () => {
             debug("Partial completion update on selection changed");
@@ -112,7 +131,7 @@ export class PartialCompletion {
             this.input.getTextEntry().normalize();
         }
         if (!this.isSelectionAtEnd(contentChanged)) {
-            this.session.hide();
+            this.controller.hide();
             return;
         }
         const input = this.getCurrentInputForCompletion();
@@ -127,24 +146,25 @@ export class PartialCompletion {
                 : "forward";
         this.previousInput = input;
 
-        this.session.update(
-            input,
-            (prefix) => this.getSearchMenuPosition(prefix),
-            direction,
-        );
+        this.controller.update(input, direction);
     }
 
     public hide() {
-        this.session.hide();
+        this.controller.hide();
     }
 
     public switchMode(newInline: boolean) {
         this.searchMenu.switchMode(newInline);
+        // Always full render after mode switch (new UI instance).
+        const state = this.controller.getCompletionState();
+        if (state) {
+            this.searchMenu.render(state.prefix, state.items);
+        }
     }
 
     public close() {
         this.closed = true;
-        this.session.hide();
+        this.controller.dispose();
         this.cleanupEventListeners();
     }
 
@@ -277,9 +297,8 @@ export class PartialCompletion {
         this.searchMenu.hide();
 
         // Compute the filter prefix relative to the current anchor.
-        // Must be read before resetToIdle() clears the session's anchor.
-        const currentInput = this.getCurrentInputForCompletion();
-        const completionPrefix = this.session.getCompletionPrefix(currentInput);
+        // Must be read before accept() clears the session's anchor.
+        const completionPrefix = this.controller.getCompletionState()?.prefix;
         if (completionPrefix === undefined) {
             debugError(`Partial completion abort select: prefix not found`);
             return;
@@ -337,7 +356,7 @@ export class PartialCompletion {
         textEntry.focus();
 
         // Reset completion state so the next update requests fresh completions.
-        this.session.resetToIdle();
+        this.controller.accept();
 
         debug(`Partial completion replaced: ${replaceText}`);
 
@@ -366,11 +385,7 @@ export class PartialCompletion {
             this.previousInput.startsWith(input)
                 ? "backward"
                 : "forward";
-        this.session.explicitHide(
-            input,
-            (prefix) => this.getSearchMenuPosition(prefix),
-            direction,
-        );
+        this.controller.dismiss(input, direction);
     }
 
     public handleMouseWheel(event: WheelEvent) {
