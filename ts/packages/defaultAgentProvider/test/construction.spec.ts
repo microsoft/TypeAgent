@@ -83,7 +83,9 @@ describe("construction", () => {
                     expect(matched[0].match).toEqual(requestAction);
 
                     expect(matchedLowerCase.length).not.toEqual(0);
-                    // TODO: Validating the lower case action
+                    expect(matchedLowerCase[0].match.actions).toEqual(
+                        requestAction.actions,
+                    );
                 } else {
                     // TODO: needs fix these
                     if (matched.length !== 0) {
