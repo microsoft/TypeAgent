@@ -117,11 +117,8 @@ export async function handleContextMenuClick(
     }
 
     switch (info.menuItemId) {
-         case "matchKnownActions": {
-            await openChatAndInjectCommand(
-                tab.id!,
-                "@browser actions match",
-            );
+        case "matchKnownActions": {
+            await openChatAndInjectCommand(tab.id!, "@browser actions match");
             break;
         }
         case "addNewMacro": {
@@ -129,10 +126,7 @@ export async function handleContextMenuClick(
             break;
         }
         case "inferNewActions": {
-            await openChatAndInjectCommand(
-                tab.id!,
-                "@browser actions infer",
-            );
+            await openChatAndInjectCommand(tab.id!, "@browser actions infer");
             break;
         }
         case "manageMacros": {

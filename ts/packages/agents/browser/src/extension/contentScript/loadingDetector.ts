@@ -284,7 +284,11 @@ export async function awaitPageIncrementalUpdates(
 
         // Set up timeout to resolve even if page never stabilizes
         const timeoutId = setTimeout(() => {
-            console.warn("awaitPageIncrementalUpdates timed out after", timeout, "ms");
+            console.warn(
+                "awaitPageIncrementalUpdates timed out after",
+                timeout,
+                "ms",
+            );
             resolve("timeout");
         }, timeout);
 

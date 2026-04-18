@@ -292,7 +292,8 @@ export function instantiate(): AppAgent {
             response: boolean | number[],
             context: ActionContext<BrowserActionContext>,
         ) => {
-            const choiceManager = context.sessionContext.agentContext.choiceManager;
+            const choiceManager =
+                context.sessionContext.agentContext.choiceManager;
             if (!choiceManager) {
                 throw new Error("Choice manager not initialized");
             }
@@ -1552,37 +1553,57 @@ async function executeBrowserAction(
     const agentContext = context.sessionContext.agentContext;
 
     // Check for pending infer choice - intercept number inputs
-    debug(`[InferChoice] Checking: pendingInferChoiceId=${agentContext.pendingInferChoiceId}, hasChoiceManager=${!!agentContext.choiceManager}, action=${action.schemaName}.${action.actionName}`);
-    if (agentContext.pendingInferChoiceId && agentContext.choiceManager && agentContext.lastInferredActions) {
+    debug(
+        `[InferChoice] Checking: pendingInferChoiceId=${agentContext.pendingInferChoiceId}, hasChoiceManager=${!!agentContext.choiceManager}, action=${action.schemaName}.${action.actionName}`,
+    );
+    if (
+        agentContext.pendingInferChoiceId &&
+        agentContext.choiceManager &&
+        agentContext.lastInferredActions
+    ) {
         // Check if this looks like a number selection
         // We intercept openSearchResult actions where position matches a valid inferred action index
-        if (action.schemaName === "browser" && action.actionName === "openSearchResult") {
+        if (
+            action.schemaName === "browser" &&
+            action.actionName === "openSearchResult"
+        ) {
             const params = (action as any).parameters;
             const inferredActions = agentContext.lastInferredActions;
 
-            debug(`[InferChoice] openSearchResult params: ${JSON.stringify(params)}, inferredActions count: ${inferredActions.length}`);
+            debug(
+                `[InferChoice] openSearchResult params: ${JSON.stringify(params)}, inferredActions count: ${inferredActions.length}`,
+            );
 
             if (params?.position !== undefined) {
                 const position = params.position;
                 const positionNum = Number(position);
 
                 // Check if position is a valid index (1-based) for the inferred actions
-                if (!isNaN(positionNum) && positionNum >= 1 && positionNum <= inferredActions.length) {
+                if (
+                    !isNaN(positionNum) &&
+                    positionNum >= 1 &&
+                    positionNum <= inferredActions.length
+                ) {
                     const choiceId = agentContext.pendingInferChoiceId;
                     // Convert 1-based position to 0-based index
                     const selectedIndices = [positionNum - 1];
 
-                    debug(`[InferChoice] Intercepting as choice selection: position=${position}, indices=${selectedIndices}`);
+                    debug(
+                        `[InferChoice] Intercepting as choice selection: position=${position}, indices=${selectedIndices}`,
+                    );
 
                     try {
-                        const result = await agentContext.choiceManager.handleChoice(
-                            choiceId,
-                            selectedIndices,
-                        );
+                        const result =
+                            await agentContext.choiceManager.handleChoice(
+                                choiceId,
+                                selectedIndices,
+                            );
                         agentContext.pendingInferChoiceId = undefined;
                         return result;
                     } catch (error: any) {
-                        debug(`[InferChoice] Choice handling failed: ${error?.message}, falling through`);
+                        debug(
+                            `[InferChoice] Choice handling failed: ${error?.message}, falling through`,
+                        );
                         // Choice expired or not found - fall through to normal handling
                         agentContext.pendingInferChoiceId = undefined;
                     }
@@ -1800,16 +1821,25 @@ async function executeBrowserAction(
                         );
                     }
 
-                    const selection = action.parameters.selection.toLowerCase().trim();
+                    const selection = action.parameters.selection
+                        .toLowerCase()
+                        .trim();
                     let selectedIndices: number[];
 
                     if (selection === "all") {
-                        selectedIndices = inferredActions.map((_: any, i: number) => i + 1);
+                        selectedIndices = inferredActions.map(
+                            (_: any, i: number) => i + 1,
+                        );
                     } else {
                         selectedIndices = selection
                             .split(/[,\s]+/)
                             .map((s: string) => parseInt(s.trim(), 10))
-                            .filter((n: number) => !isNaN(n) && n >= 1 && n <= inferredActions.length);
+                            .filter(
+                                (n: number) =>
+                                    !isNaN(n) &&
+                                    n >= 1 &&
+                                    n <= inferredActions.length,
+                            );
 
                         if (selectedIndices.length === 0) {
                             return createActionResult(
@@ -1890,14 +1920,20 @@ async function executeBrowserAction(
                 );
 
                 // Special handling for inferActions - return multi-choice result
-                if (action.actionName === "inferActions" && discoveryResult.data?.newActions?.length > 0) {
+                if (
+                    action.actionName === "inferActions" &&
+                    discoveryResult.data?.newActions?.length > 0
+                ) {
                     const newActions = discoveryResult.data.newActions;
-                    const existingActions = discoveryResult.data.existingActions || [];
+                    const existingActions =
+                        discoveryResult.data.existingActions || [];
                     const pageUrl = discoveryResult.data.pageUrl;
 
                     // Store in context for command handler fallback
-                    context.sessionContext.agentContext.lastInferredActions = newActions;
-                    context.sessionContext.agentContext.lastInferredActionsPageUrl = pageUrl;
+                    context.sessionContext.agentContext.lastInferredActions =
+                        newActions;
+                    context.sessionContext.agentContext.lastInferredActionsPageUrl =
+                        pageUrl;
 
                     // Build display message
                     let displayText = `Found ${newActions.length + existingActions.length} possible actions on this page:
@@ -1916,14 +1952,17 @@ async function executeBrowserAction(
                     for (const newAction of newActions) {
                         displayText += `  ${displayIndex}. ${newAction.name} - ${newAction.description} [NEW]
 `;
-                        choices.push(`${newAction.name}: ${newAction.description}`);
+                        choices.push(
+                            `${newAction.name}: ${newAction.description}`,
+                        );
                         displayIndex++;
                     }
 
                     displayText += `
 Select actions to create as WebFlows:`;
 
-                    const choiceManager = context.sessionContext.agentContext.choiceManager;
+                    const choiceManager =
+                        context.sessionContext.agentContext.choiceManager;
                     if (!choiceManager) {
                         return createActionResult(discoveryResult.displayText);
                     }
@@ -1934,28 +1973,35 @@ Select actions to create as WebFlows:`;
                         choices,
                         async (selectedIndices: number[]) => {
                             if (selectedIndices.length === 0) {
-                                return createActionResult("No actions selected. WebFlow creation cancelled.");
+                                return createActionResult(
+                                    "No actions selected. WebFlow creation cancelled.",
+                                );
                             }
 
                             // Convert 0-based indices to 1-based for the handler
-                            const oneBasedIndices = selectedIndices.map(i => i + 1);
-
-                            const createResult = await handleSchemaDiscoveryAction(
-                                {
-                                    actionName: "createInferredFlows",
-                                    parameters: {
-                                        selectedIndices: oneBasedIndices,
-                                        inferredActions: newActions,
-                                    },
-                                } as any,
-                                context.sessionContext,
-                                undefined,
-                                context.actionIO,
+                            const oneBasedIndices = selectedIndices.map(
+                                (i) => i + 1,
                             );
 
+                            const createResult =
+                                await handleSchemaDiscoveryAction(
+                                    {
+                                        actionName: "createInferredFlows",
+                                        parameters: {
+                                            selectedIndices: oneBasedIndices,
+                                            inferredActions: newActions,
+                                        },
+                                    } as any,
+                                    context.sessionContext,
+                                    undefined,
+                                    context.actionIO,
+                                );
+
                             // Clear stored actions
-                            context.sessionContext.agentContext.lastInferredActions = undefined;
-                            context.sessionContext.agentContext.lastInferredActionsPageUrl = undefined;
+                            context.sessionContext.agentContext.lastInferredActions =
+                                undefined;
+                            context.sessionContext.agentContext.lastInferredActionsPageUrl =
+                                undefined;
 
                             return createActionResult(createResult.displayText);
                         },
@@ -2769,7 +2815,10 @@ class InferActionsHandler implements CommandHandlerNoParams {
             return;
         }
 
-        context.actionIO.appendDisplay("Analyzing page for possible actions...", "temporary");
+        context.actionIO.appendDisplay(
+            "Analyzing page for possible actions...",
+            "temporary",
+        );
 
         try {
             const result = await handleSchemaDiscoveryAction(
@@ -2793,11 +2842,15 @@ class InferActionsHandler implements CommandHandlerNoParams {
                     async (response: boolean | number[]) => {
                         const selectedIndices = response as number[];
                         if (selectedIndices.length === 0) {
-                            return createActionResult("No actions selected. WebFlow creation cancelled.");
+                            return createActionResult(
+                                "No actions selected. WebFlow creation cancelled.",
+                            );
                         }
 
                         // Convert 0-based indices to 1-based for the handler
-                        const oneBasedIndices = selectedIndices.map(i => i + 1);
+                        const oneBasedIndices = selectedIndices.map(
+                            (i) => i + 1,
+                        );
 
                         const createResult = await handleSchemaDiscoveryAction(
                             {
@@ -2821,7 +2874,9 @@ class InferActionsHandler implements CommandHandlerNoParams {
                     },
                 );
                 agentContext.pendingInferChoiceId = choiceId;
-                debug(`[InferChoice] Registered pending choice: ${choiceId}, newActions: ${newActions.length}`);
+                debug(
+                    `[InferChoice] Registered pending choice: ${choiceId}, newActions: ${newActions.length}`,
+                );
 
                 // Build display with choice prompt
                 let displayText = `Found ${newActions.length + existingActions.length} possible actions on this page:
@@ -2871,7 +2926,8 @@ class LearnHandler implements CommandHandler {
     public readonly parameters = {
         args: {
             goal: {
-                description: "The goal to accomplish (what the action should do)",
+                description:
+                    "The goal to accomplish (what the action should do)",
                 type: "string" as const,
                 required: true,
             },
@@ -2890,11 +2946,17 @@ class LearnHandler implements CommandHandler {
 
         const goal = args.join(" ").trim();
         if (!goal) {
-            displayError("Please provide a goal description. Example: @browser learn add item to cart", context);
+            displayError(
+                "Please provide a goal description. Example: @browser learn add item to cart",
+                context,
+            );
             return;
         }
 
-        context.actionIO.appendDisplay(`Starting goal-driven automation: "${goal}"...`, "temporary");
+        context.actionIO.appendDisplay(
+            `Starting goal-driven automation: "${goal}"...`,
+            "temporary",
+        );
 
         try {
             const result = await handleWebFlowAction(
@@ -2909,7 +2971,10 @@ class LearnHandler implements CommandHandler {
             );
 
             // If successful, offer to save as WebFlow
-            if ((result.data as any)?.result?.success && (result.data as any)?.traceId) {
+            if (
+                (result.data as any)?.result?.success &&
+                (result.data as any)?.traceId
+            ) {
                 let md = result.displayText + "\n\n";
                 md += "**Would you like to save this as a reusable macro?**\n";
                 md += `Use: \`@browser flows generate ${(result.data as any).traceId}\` to create a WebFlow from this trace.`;

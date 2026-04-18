@@ -177,7 +177,10 @@ export function createAgentInvokeHandlers(
             if (!index) {
                 return { success: false, error: "Tab index not initialized" };
             }
-            const results = await index.search(params.query, params.maxMatches || 10);
+            const results = await index.search(
+                params.query,
+                params.maxMatches || 10,
+            );
             return { success: true, results };
         },
         resetTabIdToIndex: async (_params: any) => {

@@ -56,7 +56,10 @@ function isContentSubstantial(
     if (content.length < MIN_CONTENT_LENGTH) {
         return false;
     }
-    if (originalHtmlLength > 0 && content.length / originalHtmlLength < MIN_CONTENT_RATIO) {
+    if (
+        originalHtmlLength > 0 &&
+        content.length / originalHtmlLength < MIN_CONTENT_RATIO
+    ) {
         return false;
     }
     return true;
@@ -143,16 +146,23 @@ export function getReadablePageContent(): PageContent {
 
     if (unhiddenResult) {
         const unhiddenText = unhiddenResult.formattedText?.join(" ") || "";
-        const readabilityText = readabilityResult?.formattedText?.join(" ") || "";
+        const readabilityText =
+            readabilityResult?.formattedText?.join(" ") || "";
 
         // Use whichever extraction yielded more content
-        if (unhiddenText.length > readabilityText.length && isContentSubstantial(unhiddenText, htmlLength)) {
+        if (
+            unhiddenText.length > readabilityText.length &&
+            isContentSubstantial(unhiddenText, htmlLength)
+        ) {
             return unhiddenResult;
         }
     }
 
     // Step 3: If we have any Readability result (even thin), check if it's better than nothing
-    if (readabilityResult && (readabilityResult.formattedText?.join(" ").length || 0) > 50) {
+    if (
+        readabilityResult &&
+        (readabilityResult.formattedText?.join(" ").length || 0) > 50
+    ) {
         return readabilityResult;
     }
 

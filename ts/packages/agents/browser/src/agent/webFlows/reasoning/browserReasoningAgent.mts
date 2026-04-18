@@ -99,7 +99,9 @@ export class BrowserReasoningAgent {
             await this.browserApi.navigateTo(fullConfig.startUrl);
             await this.browserApi.awaitPageLoad(PAGE_LOAD_TIMEOUT_MS);
         } else if (fullConfig.startUrl) {
-            debug(`Already on target URL: ${fullConfig.startUrl}, skipping navigation`);
+            debug(
+                `Already on target URL: ${fullConfig.startUrl}, skipping navigation`,
+            );
         }
 
         // Use unified tools if adapter is available, otherwise fall back to legacy tools
@@ -126,8 +128,21 @@ export class BrowserReasoningAgent {
                     return { behavior: "allow" as const };
                 }
                 // Explicitly deny ToolSearch and other SDK tools
-                const deniedTools = ["ToolSearch", "Bash", "WebFetch", "Read", "Write", "Task", "Glob", "Grep", "Edit", "WebSearch"];
-                const isDenied = deniedTools.some(t => toolName === t || toolName.includes(t));
+                const deniedTools = [
+                    "ToolSearch",
+                    "Bash",
+                    "WebFetch",
+                    "Read",
+                    "Write",
+                    "Task",
+                    "Glob",
+                    "Grep",
+                    "Edit",
+                    "WebSearch",
+                ];
+                const isDenied = deniedTools.some(
+                    (t) => toolName === t || toolName.includes(t),
+                );
                 return {
                     behavior: "deny" as const,
                     message: isDenied

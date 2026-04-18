@@ -629,10 +629,7 @@ export class SchemaDiscoveryAgent<T extends object> {
         return response;
     }
 
-    async inferPageActions(
-        pageUrl: string,
-        fragments?: HtmlFragments[],
-    ) {
+    async inferPageActions(pageUrl: string, fragments?: HtmlFragments[]) {
         const inferredActionsSchema = `
 export type InferredActionParameter = {
     name: string;

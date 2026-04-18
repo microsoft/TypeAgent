@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 import { BrowserControl } from "../../common/browserControl.mjs";
-import { ComponentDefinition, ExtractComponentFn } from "./webFlowBrowserApi.mjs";
+import {
+    ComponentDefinition,
+    ExtractComponentFn,
+} from "./webFlowBrowserApi.mjs";
 import { openai as ai } from "aiclient";
 import { createJsonTranslator, MultimodalPromptContent } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
@@ -88,7 +91,9 @@ ${translator.validator.getSchemaText()}
 \`\`\``,
         });
 
-        debug(`Extracting component: ${componentDef.typeName} - "${userRequest}"`);
+        debug(
+            `Extracting component: ${componentDef.typeName} - "${userRequest}"`,
+        );
 
         const response = await translator.translate("", [
             {

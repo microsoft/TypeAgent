@@ -900,7 +900,10 @@ async function inferActionsFromHtml(
  * Reports progress to the user using the best available mechanism.
  * Prefers actionIO.appendDisplay for immediate UI updates, falls back to progressCallback.
  */
-function reportProgress(ctx: DiscoveryActionHandlerContext, message: string): void {
+function reportProgress(
+    ctx: DiscoveryActionHandlerContext,
+    message: string,
+): void {
     if (ctx.actionIO) {
         ctx.actionIO.appendDisplay(message, "temporary");
     } else if (ctx.progressCallback) {
@@ -948,9 +951,16 @@ async function handleCreateInferredFlows(
 
             // Create browser API with extraction function and reasoning agent with unified tools
             const extractFn = createComponentExtractor(ctx.browser);
-            const browserApi = new WebFlowBrowserAPIImpl(ctx.browser, undefined, extractFn);
+            const browserApi = new WebFlowBrowserAPIImpl(
+                ctx.browser,
+                undefined,
+                extractFn,
+            );
             const agent = BrowserReasoningAgent.withUnifiedTools(browserApi, {
-                onThinking: (text) => debug(`[${inferredAction.name}] thinking: ${text.slice(0, 100)}...`),
+                onThinking: (text) =>
+                    debug(
+                        `[${inferredAction.name}] thinking: ${text.slice(0, 100)}...`,
+                    ),
                 onToolCall: (tool, args) => {
                     debug(`[${inferredAction.name}] tool: ${tool}`);
                     // Report browser tool calls to user for visibility
@@ -959,12 +969,18 @@ async function handleCreateInferredFlows(
                         reportProgress(ctx, toolDisplay);
                     }
                 },
-                onText: (text) => debug(`[${inferredAction.name}] text: ${text.slice(0, 100)}...`),
+                onText: (text) =>
+                    debug(
+                        `[${inferredAction.name}] text: ${text.slice(0, 100)}...`,
+                    ),
             });
 
             // Execute the goal using the reasoning agent
             debug(`Executing goal for ${inferredAction.name}...`);
-            reportProgress(ctx, `Running automation for: ${inferredAction.name}...`);
+            reportProgress(
+                ctx,
+                `Running automation for: ${inferredAction.name}...`,
+            );
             const trace = await agent.executeGoal({
                 goal,
                 startUrl: pageUrl,
@@ -972,8 +988,13 @@ async function handleCreateInferredFlows(
             });
 
             if (trace.result.success) {
-                debug(`Goal succeeded for ${inferredAction.name}, generating WebFlow from trace...`);
-                reportProgress(ctx, `Generating WebFlow script for: ${inferredAction.name}...`);
+                debug(
+                    `Goal succeeded for ${inferredAction.name}, generating WebFlow from trace...`,
+                );
+                reportProgress(
+                    ctx,
+                    `Generating WebFlow script for: ${inferredAction.name}...`,
+                );
 
                 // Build existing flows context for dedup-aware generation
                 const existingFlows = store.getIndex().flows
@@ -1007,8 +1028,12 @@ async function handleCreateInferredFlows(
                     }
 
                     // Ensure grammar patterns exist
-                    if (!generatedFlow.grammarPatterns || generatedFlow.grammarPatterns.length === 0) {
-                        generatedFlow.grammarPatterns = generateGrammarPatterns(inferredAction);
+                    if (
+                        !generatedFlow.grammarPatterns ||
+                        generatedFlow.grammarPatterns.length === 0
+                    ) {
+                        generatedFlow.grammarPatterns =
+                            generateGrammarPatterns(inferredAction);
                     }
 
                     // Set scope to site-specific
@@ -1025,7 +1050,10 @@ async function handleCreateInferredFlows(
                     };
 
                     // Test the generated script before saving
-                    reportProgress(ctx, `Testing WebFlow script for: ${inferredAction.name}...`);
+                    reportProgress(
+                        ctx,
+                        `Testing WebFlow script for: ${inferredAction.name}...`,
+                    );
                     const testParams: Record<string, unknown> = {};
                     for (const param of inferredAction.parameters) {
                         testParams[param.name] = getSampleValueForParam(param);
@@ -1038,32 +1066,56 @@ async function handleCreateInferredFlows(
                     );
 
                     if (!testResult.success) {
-                        debug(`Script test failed for ${inferredAction.name}: ${testResult.error}`);
-                        reportProgress(ctx, `Script test failed for ${inferredAction.name}, saving anyway...`);
+                        debug(
+                            `Script test failed for ${inferredAction.name}: ${testResult.error}`,
+                        );
+                        reportProgress(
+                            ctx,
+                            `Script test failed for ${inferredAction.name}, saving anyway...`,
+                        );
                     } else {
                         debug(`Script test passed for ${inferredAction.name}`);
                     }
 
                     await store.save(generatedFlow);
                     createdFlows.push(generatedFlow.name);
-                    debug(`Created WebFlow from reasoning: ${generatedFlow.name}`);
-                    reportProgress(ctx, `Created WebFlow: ${generatedFlow.name}`);
+                    debug(
+                        `Created WebFlow from reasoning: ${generatedFlow.name}`,
+                    );
+                    reportProgress(
+                        ctx,
+                        `Created WebFlow: ${generatedFlow.name}`,
+                    );
                 } else {
                     // Generation failed - report failure instead of creating placeholder
-                    debug(`WebFlow generation failed for ${inferredAction.name}`);
-                    reportProgress(ctx, `Failed to generate WebFlow script for: ${inferredAction.name}`);
+                    debug(
+                        `WebFlow generation failed for ${inferredAction.name}`,
+                    );
+                    reportProgress(
+                        ctx,
+                        `Failed to generate WebFlow script for: ${inferredAction.name}`,
+                    );
                     failedFlows.push(inferredAction.name);
                 }
             } else {
                 // Reasoning failed - report failure with summary instead of creating placeholder
-                debug(`Reasoning failed for ${inferredAction.name}: ${trace.result.summary}`);
-                reportProgress(ctx, `Automation failed for ${inferredAction.name}: ${trace.result.summary}`);
+                debug(
+                    `Reasoning failed for ${inferredAction.name}: ${trace.result.summary}`,
+                );
+                reportProgress(
+                    ctx,
+                    `Automation failed for ${inferredAction.name}: ${trace.result.summary}`,
+                );
                 failedFlows.push(inferredAction.name);
             }
         } catch (error) {
-            const errorMsg = error instanceof Error ? error.message : String(error);
+            const errorMsg =
+                error instanceof Error ? error.message : String(error);
             debug(`Error creating WebFlow for ${inferredAction.name}:`, error);
-            reportProgress(ctx, `Error for ${inferredAction.name}: ${errorMsg}`);
+            reportProgress(
+                ctx,
+                `Error for ${inferredAction.name}: ${errorMsg}`,
+            );
             failedFlows.push(inferredAction.name);
         }
     }
@@ -1148,30 +1200,59 @@ function buildGoalFromInferredAction(
 /**
  * Generate a reasonable sample value for a parameter based on its type and name.
  */
-function getSampleValueForParam(param: InferredAction["parameters"][0]): string {
+function getSampleValueForParam(
+    param: InferredAction["parameters"][0],
+): string {
     const name = param.name.toLowerCase();
     const type = param.type.toLowerCase();
 
     // Location-related parameters
-    if (name.includes("location") || name.includes("address") || name.includes("from") || name.includes("to") || name.includes("destination") || name.includes("pickup") || name.includes("dropoff")) {
-        if (name.includes("from") || name.includes("pickup") || name.includes("origin")) {
+    if (
+        name.includes("location") ||
+        name.includes("address") ||
+        name.includes("from") ||
+        name.includes("to") ||
+        name.includes("destination") ||
+        name.includes("pickup") ||
+        name.includes("dropoff")
+    ) {
+        if (
+            name.includes("from") ||
+            name.includes("pickup") ||
+            name.includes("origin")
+        ) {
             return "Building A";
         }
         return "Building B";
     }
 
     // Count/number parameters
-    if (name.includes("count") || name.includes("quantity") || name.includes("passengers") || name.includes("guests") || name.includes("people")) {
+    if (
+        name.includes("count") ||
+        name.includes("quantity") ||
+        name.includes("passengers") ||
+        name.includes("guests") ||
+        name.includes("people")
+    ) {
         return "2";
     }
 
     // Boolean parameters
-    if (type === "boolean" || name.includes("accessibility") || name.includes("enabled") || name.includes("required")) {
+    if (
+        type === "boolean" ||
+        name.includes("accessibility") ||
+        name.includes("enabled") ||
+        name.includes("required")
+    ) {
         return "false";
     }
 
     // Date/time parameters
-    if (name.includes("date") || name.includes("time") || name.includes("when")) {
+    if (
+        name.includes("date") ||
+        name.includes("time") ||
+        name.includes("when")
+    ) {
         return "tomorrow";
     }
 

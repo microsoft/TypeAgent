@@ -50,7 +50,9 @@ export async function testGeneratedScript(
     let lastError: string | undefined;
     let attempts = 0;
 
-    while (attempts < (fullOptions.retryOnFailure ? fullOptions.maxRetries : 1)) {
+    while (
+        attempts < (fullOptions.retryOnFailure ? fullOptions.maxRetries : 1)
+    ) {
         attempts++;
         debug(
             `Test attempt ${attempts}/${fullOptions.maxRetries} with params:`,

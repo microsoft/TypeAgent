@@ -195,7 +195,7 @@ function initialize() {
                         type: "text",
                         content:
                             "Let's create a new macro! What would you like this macro to do?\n\n" +
-                            "Please describe the goal you want to automate (e.g., \"Add the current product to my cart\").",
+                            'Please describe the goal you want to automate (e.g., "Add the current product to my cart").',
                     },
                     "browser",
                 );
@@ -294,7 +294,7 @@ function handleInternalCommand(text: string): boolean {
                 type: "text",
                 content:
                     "Great! Please describe your automation goal and I'll try to complete it.\n\n" +
-                    "Type your goal below (e.g., \"Add the current product to cart and go to checkout\"):",
+                    'Type your goal below (e.g., "Add the current product to cart and go to checkout"):',
             },
             "browser",
         );
@@ -412,7 +412,9 @@ function handleUserMessage(text: string, attachments?: string[]) {
                 });
             return;
         } else if (authoringMode === "demo") {
-            const actionName = text.replace(/[^a-zA-Z0-9]/g, "_").substring(0, 30) || "myAction";
+            const actionName =
+                text.replace(/[^a-zA-Z0-9]/g, "_").substring(0, 30) ||
+                "myAction";
             chatPanel.addAgentMessage(
                 {
                     type: "text",

@@ -3,7 +3,10 @@
 
 import { SdkMcpToolDefinition } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod/v4";
-import { WebFlowBrowserAPI, ComponentDefinition } from "../webFlowBrowserApi.mjs";
+import {
+    WebFlowBrowserAPI,
+    ComponentDefinition,
+} from "../webFlowBrowserApi.mjs";
 import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:webflows:tooladapter");
@@ -165,7 +168,9 @@ Common component types and their schemas:
                         { success: false, error: msg },
                     );
                     return {
-                        content: [{ type: "text" as const, text: `Error: ${msg}` }],
+                        content: [
+                            { type: "text" as const, text: `Error: ${msg}` },
+                        ],
                         isError: true,
                     };
                 }
@@ -211,15 +216,24 @@ Common component types and their schemas:
                     );
                     return {
                         content: [
-                            { type: "text" as const, text: `Navigated to ${pageUrl}` },
+                            {
+                                type: "text" as const,
+                                text: `Navigated to ${pageUrl}`,
+                            },
                         ],
                     };
                 } catch (error) {
                     const msg =
                         error instanceof Error ? error.message : String(error);
-                    this.recordStep("navigateTo", { url }, { success: false, error: msg });
+                    this.recordStep(
+                        "navigateTo",
+                        { url },
+                        { success: false, error: msg },
+                    );
                     return {
-                        content: [{ type: "text" as const, text: `Error: ${msg}` }],
+                        content: [
+                            { type: "text" as const, text: `Error: ${msg}` },
+                        ],
                         isError: true,
                     };
                 }
@@ -248,7 +262,10 @@ Common component types and their schemas:
                     );
                     return {
                         content: [
-                            { type: "text" as const, text: `Clicked: ${selector}` },
+                            {
+                                type: "text" as const,
+                                text: `Clicked: ${selector}`,
+                            },
                         ],
                     };
                 } catch (error) {
@@ -260,7 +277,9 @@ Common component types and their schemas:
                         { success: false, error: msg },
                     );
                     return {
-                        content: [{ type: "text" as const, text: `Error: ${msg}` }],
+                        content: [
+                            { type: "text" as const, text: `Error: ${msg}` },
+                        ],
                         isError: true,
                     };
                 }
@@ -304,7 +323,9 @@ Common component types and their schemas:
                         { success: false, error: msg },
                     );
                     return {
-                        content: [{ type: "text" as const, text: `Error: ${msg}` }],
+                        content: [
+                            { type: "text" as const, text: `Error: ${msg}` },
+                        ],
                         isError: true,
                     };
                 }
@@ -347,7 +368,9 @@ Common component types and their schemas:
                         { success: false, error: msg },
                     );
                     return {
-                        content: [{ type: "text" as const, text: `Error: ${msg}` }],
+                        content: [
+                            { type: "text" as const, text: `Error: ${msg}` },
+                        ],
                         isError: true,
                     };
                 }
@@ -391,7 +414,9 @@ Common component types and their schemas:
                         { success: false, error: msg },
                     );
                     return {
-                        content: [{ type: "text" as const, text: `Error: ${msg}` }],
+                        content: [
+                            { type: "text" as const, text: `Error: ${msg}` },
+                        ],
                         isError: true,
                     };
                 }
@@ -436,7 +461,9 @@ Common component types and their schemas:
                         { success: false, error: msg },
                     );
                     return {
-                        content: [{ type: "text" as const, text: `Error: ${msg}` }],
+                        content: [
+                            { type: "text" as const, text: `Error: ${msg}` },
+                        ],
                         isError: true,
                     };
                 }
@@ -450,7 +477,9 @@ Common component types and their schemas:
             description:
                 "Press a keyboard key (e.g., 'Enter', 'Tab', 'Escape'). Use after entering text to submit forms.",
             inputSchema: {
-                key: z.string().describe("Key name to press (Enter, Tab, Escape, etc.)"),
+                key: z
+                    .string()
+                    .describe("Key name to press (Enter, Tab, Escape, etc.)"),
             },
             handler: async (args) => {
                 const key = args.key as string;
@@ -459,15 +488,24 @@ Common component types and their schemas:
                     this.recordStep("pressKey", { key }, { success: true });
                     return {
                         content: [
-                            { type: "text" as const, text: `Pressed key: ${key}` },
+                            {
+                                type: "text" as const,
+                                text: `Pressed key: ${key}`,
+                            },
                         ],
                     };
                 } catch (error) {
                     const msg =
                         error instanceof Error ? error.message : String(error);
-                    this.recordStep("pressKey", { key }, { success: false, error: msg });
+                    this.recordStep(
+                        "pressKey",
+                        { key },
+                        { success: false, error: msg },
+                    );
                     return {
-                        content: [{ type: "text" as const, text: `Error: ${msg}` }],
+                        content: [
+                            { type: "text" as const, text: `Error: ${msg}` },
+                        ],
                         isError: true,
                     };
                 }
@@ -495,9 +533,15 @@ Common component types and their schemas:
                 } catch (error) {
                     const msg =
                         error instanceof Error ? error.message : String(error);
-                    this.recordStep("getPageText", {}, { success: false, error: msg });
+                    this.recordStep(
+                        "getPageText",
+                        {},
+                        { success: false, error: msg },
+                    );
                     return {
-                        content: [{ type: "text" as const, text: `Error: ${msg}` }],
+                        content: [
+                            { type: "text" as const, text: `Error: ${msg}` },
+                        ],
                         isError: true,
                     };
                 }
@@ -539,7 +583,9 @@ Common component types and their schemas:
                         { success: false, error: msg },
                     );
                     return {
-                        content: [{ type: "text" as const, text: `Error: ${msg}` }],
+                        content: [
+                            { type: "text" as const, text: `Error: ${msg}` },
+                        ],
                         isError: true,
                     };
                 }
@@ -586,7 +632,9 @@ Common component types and their schemas:
                         { success: false, error: msg },
                     );
                     return {
-                        content: [{ type: "text" as const, text: `Error: ${msg}` }],
+                        content: [
+                            { type: "text" as const, text: `Error: ${msg}` },
+                        ],
                         isError: true,
                     };
                 }
@@ -602,7 +650,9 @@ Common component types and their schemas:
             inputSchema: {
                 question: z
                     .string()
-                    .describe("Question about the page, e.g. 'What is the total price?'"),
+                    .describe(
+                        "Question about the page, e.g. 'What is the total price?'",
+                    ),
             },
             handler: async (args) => {
                 const question = args.question as string;
@@ -641,7 +691,9 @@ Common component types and their schemas:
                         { success: false, error: msg },
                     );
                     return {
-                        content: [{ type: "text" as const, text: `Error: ${msg}` }],
+                        content: [
+                            { type: "text" as const, text: `Error: ${msg}` },
+                        ],
                         isError: true,
                     };
                 }
