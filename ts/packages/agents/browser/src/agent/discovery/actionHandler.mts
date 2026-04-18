@@ -41,6 +41,8 @@ import {
     ScriptGenerationOptions,
 } from "../webFlows/scriptGenerator.mjs";
 import { sendWebFlowRefreshToClient } from "../browserActionHandler.mjs";
+import { BrowserReasoningAgent } from "../webFlows/reasoning/browserReasoningAgent.mjs";
+import { WebFlowBrowserAPIImpl } from "../webFlows/webFlowBrowserApi.mjs";
 import { getWebFlowStore } from "../webFlows/actionHandler.mjs";
 
 const debug = registerDebug("typeagent:browser:discover:handler");
@@ -88,6 +90,7 @@ interface DiscoveryActionHandlerContext {
     agent: SchemaDiscoveryAgent<SchemaDiscoveryActions>;
     entities: EntityCollector;
     sessionContext: SessionContext<BrowserActionContext>;
+    progressCallback?: (message: string) => void;
 }
 
 // ── Discovery cache ─────────────────────────────────────────────────────────
@@ -666,6 +669,14 @@ async function handleCreateWebFlowFromRecording(
 
     sendWebFlowRefreshToClient(ctx.sessionContext);
 
+    // Reload the agent schema so the dispatcher picks up the new grammar patterns
+    try {
+        await ctx.sessionContext.reloadAgentSchema();
+        debug("Reloaded agent schema after WebFlow recording");
+    } catch (err) {
+        debug("Failed to reload agent schema:", err);
+    }
+
     return {
         displayText: `Created action: ${flow.name}`,
         entities: ctx.entities.getEntities(),
@@ -825,11 +836,11 @@ async function handleInferActions(
 
     let displayIndex = 1;
     for (const existingAction of existingActions) {
-        displayText += `✓ ${displayIndex}. ${existingAction.name} - Already available\n`;
+        displayText += `${displayIndex}. ${existingAction.name} - Already available ✓\n`;
         displayIndex++;
     }
     for (const newAction of newActions) {
-        displayText += `  ${displayIndex}. ${newAction.name} - ${newAction.description} [NEW]\n`;
+        displayText += `${displayIndex}. ${newAction.name} - ${newAction.description} [NEW]\n`;
         displayIndex++;
     }
 
@@ -893,55 +904,140 @@ async function handleCreateInferredFlows(
 
     const createdFlows: string[] = [];
     const failedFlows: string[] = [];
+    const placeholderFlows: string[] = [];
+
+    const totalActions = selectedIndices.length;
+    let processedCount = 0;
 
     for (const idx of selectedIndices) {
         const inferredAction = inferredActions[idx - 1];
         if (!inferredAction) continue;
 
+        processedCount++;
+        const progressMsg = `[${processedCount}/${totalActions}] Processing: ${inferredAction.name}`;
+        debug(progressMsg);
+        ctx.progressCallback?.(progressMsg);
+
         try {
-            const flow: WebFlowDefinition = {
-                name: inferredAction.name,
-                description: inferredAction.description,
-                version: 1,
-                parameters: {},
-                script: generateBasicScript(inferredAction),
-                grammarPatterns: generateGrammarPatterns(inferredAction),
-                scope: {
-                    type: "site",
-                    domains: [domain],
-                },
-                source: {
-                    type: "discovered",
-                    timestamp: new Date().toISOString(),
-                    originUrl: pageUrl,
-                },
-            };
+            // Build enriched goal from the inferred action
+            const goal = buildGoalFromInferredAction(inferredAction, pageUrl);
+            debug(`Goal for ${inferredAction.name}: ${goal.slice(0, 200)}...`);
 
-            for (const param of inferredAction.parameters) {
-                flow.parameters[param.name] = {
-                    type: param.type,
-                    required: param.required,
-                    description: param.description,
-                };
+            // Create browser API and reasoning agent
+            const browserApi = new WebFlowBrowserAPIImpl(ctx.browser);
+            const agent = new BrowserReasoningAgent(browserApi, {
+                onThinking: (text) => debug(`[${inferredAction.name}] thinking: ${text.slice(0, 100)}...`),
+                onToolCall: (tool) => debug(`[${inferredAction.name}] tool: ${tool}`),
+                onText: (text) => debug(`[${inferredAction.name}] text: ${text.slice(0, 100)}...`),
+            });
+
+            // Execute the goal using the reasoning agent
+            debug(`Executing goal for ${inferredAction.name}...`);
+            ctx.progressCallback?.(`Running automation for: ${inferredAction.name}...`);
+            const trace = await agent.executeGoal({
+                goal,
+                startUrl: pageUrl,
+                maxSteps: 30,
+            });
+
+            if (trace.result.success) {
+                debug(`Goal succeeded for ${inferredAction.name}, generating WebFlow from trace...`);
+                ctx.progressCallback?.(`Generating WebFlow script for: ${inferredAction.name}...`);
+
+                // Build existing flows context for dedup-aware generation
+                const existingFlows = store.getIndex().flows
+                    ? Object.entries(store.getIndex().flows).map(([n, e]) => ({
+                          name: n,
+                          description: e.description,
+                          parameters: (e.parameters ?? []).map((p) => p.name),
+                      }))
+                    : [];
+
+                // Generate WebFlow from the trace
+                const generatedFlow = await generateWebFlowFromTrace(
+                    trace,
+                    {
+                        suggestedName: inferredAction.name,
+                        description: inferredAction.description,
+                    },
+                    existingFlows,
+                );
+
+                if (generatedFlow) {
+                    // Enhance with inferred parameters that may not have been detected
+                    for (const param of inferredAction.parameters) {
+                        if (!generatedFlow.parameters[param.name]) {
+                            generatedFlow.parameters[param.name] = {
+                                type: param.type,
+                                required: param.required,
+                                description: param.description,
+                            };
+                        }
+                    }
+
+                    // Ensure grammar patterns exist
+                    if (!generatedFlow.grammarPatterns || generatedFlow.grammarPatterns.length === 0) {
+                        generatedFlow.grammarPatterns = generateGrammarPatterns(inferredAction);
+                    }
+
+                    // Set scope to site-specific
+                    generatedFlow.scope = {
+                        type: "site",
+                        domains: [domain],
+                    };
+
+                    // Update source info
+                    generatedFlow.source = {
+                        type: "discovered",
+                        timestamp: new Date().toISOString(),
+                        originUrl: pageUrl,
+                    };
+
+                    await store.save(generatedFlow);
+                    createdFlows.push(generatedFlow.name);
+                    debug(`Created WebFlow from reasoning: ${generatedFlow.name}`);
+                    ctx.progressCallback?.(`Created WebFlow: ${generatedFlow.name}`);
+                } else {
+                    // Generation failed, create placeholder
+                    debug(`WebFlow generation failed for ${inferredAction.name}, creating placeholder`);
+                    await createPlaceholderFlow(inferredAction, pageUrl, domain, store);
+                    placeholderFlows.push(inferredAction.name);
+                }
+            } else {
+                // Reasoning failed, create placeholder
+                debug(`Reasoning failed for ${inferredAction.name}: ${trace.result.summary}`);
+                await createPlaceholderFlow(inferredAction, pageUrl, domain, store);
+                placeholderFlows.push(inferredAction.name);
             }
-
-            await store.save(flow);
-            createdFlows.push(flow.name);
-            debug(`Created inferred WebFlow: ${flow.name}`);
         } catch (error) {
-            debug(
-                `Failed to create WebFlow for ${inferredAction.name}:`,
-                error,
-            );
-            failedFlows.push(inferredAction.name);
+            debug(`Error creating WebFlow for ${inferredAction.name}:`, error);
+            try {
+                // Fall back to placeholder on any error
+                await createPlaceholderFlow(inferredAction, pageUrl, domain, store);
+                placeholderFlows.push(inferredAction.name);
+            } catch (placeholderError) {
+                debug(`Failed to create placeholder for ${inferredAction.name}:`, placeholderError);
+                failedFlows.push(inferredAction.name);
+            }
         }
     }
 
     sendWebFlowRefreshToClient(ctx.sessionContext);
 
+    // Reload the agent schema so the dispatcher picks up the new grammar patterns
+    try {
+        await ctx.sessionContext.reloadAgentSchema();
+        debug("Reloaded agent schema after WebFlow creation");
+    } catch (err) {
+        debug("Failed to reload agent schema:", err);
+    }
+
     let displayText = "";
     if (createdFlows.length > 0) {
-        displayText += `Created ${createdFlows.length} new actions: ${createdFlows.join(", ")}\n`;
+        displayText += `Created ${createdFlows.length} WebFlow(s) with implementation: ${createdFlows.join(", ")}\n`;
+    }
+    if (placeholderFlows.length > 0) {
+        displayText += `Created ${placeholderFlows.length} placeholder(s) (use @browser learn: to implement): ${placeholderFlows.join(", ")}\n`;
     }
     if (failedFlows.length > 0) {
         displayText += `Failed to create: ${failedFlows.join(", ")}`;
@@ -952,9 +1048,150 @@ async function handleCreateInferredFlows(
         entities: ctx.entities.getEntities(),
         data: {
             created: createdFlows,
+            placeholders: placeholderFlows,
             failed: failedFlows,
         },
     };
+}
+
+/**
+ * Create a placeholder WebFlow when reasoning fails.
+ */
+async function createPlaceholderFlow(
+    inferredAction: InferredAction,
+    pageUrl: string,
+    domain: string,
+    store: Awaited<ReturnType<typeof getWebFlowStore>>,
+): Promise<void> {
+    const flow: WebFlowDefinition = {
+        name: inferredAction.name,
+        description: inferredAction.description,
+        version: 1,
+        parameters: {},
+        script: generateBasicScript(inferredAction),
+        grammarPatterns: generateGrammarPatterns(inferredAction),
+        scope: {
+            type: "site",
+            domains: [domain],
+        },
+        source: {
+            type: "discovered",
+            timestamp: new Date().toISOString(),
+            originUrl: pageUrl,
+        },
+    };
+
+    for (const param of inferredAction.parameters) {
+        flow.parameters[param.name] = {
+            type: param.type,
+            required: param.required,
+            description: param.description,
+        };
+    }
+
+    await store.save(flow);
+    debug(`Created placeholder WebFlow: ${flow.name}`);
+}
+
+/**
+ * Build an enriched goal prompt from an inferred action for the reasoning agent.
+ * This creates a detailed prompt that guides the reasoning agent to execute
+ * the inferred action on the current page.
+ */
+function buildGoalFromInferredAction(
+    action: InferredAction,
+    pageUrl: string,
+): string {
+    let goal = `Task: ${action.name}
+
+`;
+    goal += `Description: ${action.description}
+
+`;
+    goal += `Expected outcome: ${action.expectedOutcome}
+
+`;
+
+    if (action.parameters.length > 0) {
+        goal += `This task requires the following inputs:
+`;
+        for (const param of action.parameters) {
+            const sampleValue = getSampleValueForParam(param);
+            goal += `- ${param.name} (${param.type}): ${param.description}`;
+            goal += ` [Use sample value: "${sampleValue}"]
+`;
+        }
+        goal += `
+`;
+    }
+
+    goal += `Instructions:
+`;
+    goal += `1. You are on the page: ${pageUrl}
+`;
+    goal += `2. Find the relevant form or UI elements to complete this task
+`;
+    goal += `3. Use the sample values provided for each parameter
+`;
+    goal += `4. Complete the task by filling in forms, clicking buttons, etc.
+`;
+    goal += `5. Verify the expected outcome is achieved
+`;
+
+    return goal;
+}
+
+/**
+ * Generate a reasonable sample value for a parameter based on its type and name.
+ */
+function getSampleValueForParam(param: InferredAction["parameters"][0]): string {
+    const name = param.name.toLowerCase();
+    const type = param.type.toLowerCase();
+
+    // Location-related parameters
+    if (name.includes("location") || name.includes("address") || name.includes("from") || name.includes("to") || name.includes("destination") || name.includes("pickup") || name.includes("dropoff")) {
+        if (name.includes("from") || name.includes("pickup") || name.includes("origin")) {
+            return "Building A";
+        }
+        return "Building B";
+    }
+
+    // Count/number parameters
+    if (name.includes("count") || name.includes("quantity") || name.includes("passengers") || name.includes("guests") || name.includes("people")) {
+        return "2";
+    }
+
+    // Boolean parameters
+    if (type === "boolean" || name.includes("accessibility") || name.includes("enabled") || name.includes("required")) {
+        return "false";
+    }
+
+    // Date/time parameters
+    if (name.includes("date") || name.includes("time") || name.includes("when")) {
+        return "tomorrow";
+    }
+
+    // Name parameters
+    if (name.includes("name") || name.includes("title")) {
+        return "Test Item";
+    }
+
+    // Email parameters
+    if (name.includes("email")) {
+        return "test@example.com";
+    }
+
+    // Default for strings
+    if (type === "string") {
+        return `Sample ${param.name}`;
+    }
+
+    // Default for numbers
+    if (type === "number") {
+        return "1";
+    }
+
+    return "test value";
 }
 
 function generateBasicScript(action: InferredAction): string {
@@ -994,6 +1231,7 @@ function generateGrammarPatterns(action: InferredAction): string[] {
 export async function handleSchemaDiscoveryAction(
     action: SchemaDiscoveryActions,
     context: SessionContext<BrowserActionContext>,
+    progressCallback?: (message: string) => void,
 ) {
     if (!context.agentContext.browserControl) {
         throw new Error("No connection to browser session.");
@@ -1009,6 +1247,7 @@ export async function handleSchemaDiscoveryAction(
         agent,
         entities: entityCollector,
         sessionContext: context,
+        ...(progressCallback && { progressCallback }),
     };
 
     let result: DiscoveryActionResult;

@@ -19,6 +19,8 @@ import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:browser:webflows:reasoning");
 
+const PAGE_LOAD_TIMEOUT_MS = 5000; // 5 second timeout for page loads
+
 const MCP_SERVER_NAME = "browser-tools";
 
 export interface BrowserReasoningCallbacks {
@@ -50,13 +52,16 @@ export class BrowserReasoningAgent {
         const startTime = Date.now();
         const steps: BrowserTraceStep[] = [];
 
-        const startUrl = fullConfig.startUrl
-            ? fullConfig.startUrl
-            : await this.browserApi.getCurrentUrl();
+        const currentUrl = await this.browserApi.getCurrentUrl();
+        const startUrl = fullConfig.startUrl || currentUrl;
 
-        if (fullConfig.startUrl) {
+        // Only navigate if not already on the target URL (avoids unnecessary reload)
+        if (fullConfig.startUrl && fullConfig.startUrl !== currentUrl) {
+            debug(`Navigating from ${currentUrl} to ${fullConfig.startUrl}`);
             await this.browserApi.navigateTo(fullConfig.startUrl);
-            await this.browserApi.awaitPageLoad();
+            await this.browserApi.awaitPageLoad(PAGE_LOAD_TIMEOUT_MS);
+        } else if (fullConfig.startUrl) {
+            debug(`Already on target URL: ${fullConfig.startUrl}, skipping navigation`);
         }
 
         const tools = this.buildBrowserMcpTools(steps);
@@ -162,7 +167,7 @@ export class BrowserReasoningAgent {
                 { url: z.string().describe("The URL to navigate to") },
                 async (args) => {
                     await this.browserApi.navigateTo(args.url as string);
-                    await this.browserApi.awaitPageLoad();
+                    await this.browserApi.awaitPageLoad(PAGE_LOAD_TIMEOUT_MS);
                     const pageUrl = await this.browserApi.getCurrentUrl();
                     recordStep("navigateTo", args, {
                         success: true,

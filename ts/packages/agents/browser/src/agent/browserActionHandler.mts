@@ -1552,35 +1552,40 @@ async function executeBrowserAction(
     const agentContext = context.sessionContext.agentContext;
 
     // Check for pending infer choice - intercept number inputs
-    if (agentContext.pendingInferChoiceId && agentContext.choiceManager) {
-        // Check if this looks like a number selection (openSearchResult with just position)
+    debug(`[InferChoice] Checking: pendingInferChoiceId=${agentContext.pendingInferChoiceId}, hasChoiceManager=${!!agentContext.choiceManager}, action=${action.schemaName}.${action.actionName}`);
+    if (agentContext.pendingInferChoiceId && agentContext.choiceManager && agentContext.lastInferredActions) {
+        // Check if this looks like a number selection
+        // We intercept openSearchResult actions where position matches a valid inferred action index
         if (action.schemaName === "browser" && action.actionName === "openSearchResult") {
             const params = (action as any).parameters;
-            // If user just provided a position number, treat as infer choice
-            if (params?.position !== undefined && !params.title && !params.url) {
-                const choiceId = agentContext.pendingInferChoiceId;
-                const position = params.position;
-                
-                // Handle "all" case or number input
-                let selectedIndices: number[];
-                if (typeof position === "string" && position.toLowerCase() === "all") {
-                    const inferredActions = agentContext.lastInferredActions || [];
-                    selectedIndices = inferredActions.map((_: any, i: number) => i);
-                } else {
-                    // Convert 1-based position to 0-based index
-                    selectedIndices = [Number(position) - 1];
-                }
+            const inferredActions = agentContext.lastInferredActions;
 
-                try {
-                    const result = await agentContext.choiceManager.handleChoice(
-                        choiceId,
-                        selectedIndices,
-                    );
-                    agentContext.pendingInferChoiceId = undefined;
-                    return result;
-                } catch (error: any) {
-                    // Choice expired or not found - fall through to normal handling
-                    agentContext.pendingInferChoiceId = undefined;
+            debug(`[InferChoice] openSearchResult params: ${JSON.stringify(params)}, inferredActions count: ${inferredActions.length}`);
+
+            if (params?.position !== undefined) {
+                const position = params.position;
+                const positionNum = Number(position);
+
+                // Check if position is a valid index (1-based) for the inferred actions
+                if (!isNaN(positionNum) && positionNum >= 1 && positionNum <= inferredActions.length) {
+                    const choiceId = agentContext.pendingInferChoiceId;
+                    // Convert 1-based position to 0-based index
+                    const selectedIndices = [positionNum - 1];
+
+                    debug(`[InferChoice] Intercepting as choice selection: position=${position}, indices=${selectedIndices}`);
+
+                    try {
+                        const result = await agentContext.choiceManager.handleChoice(
+                            choiceId,
+                            selectedIndices,
+                        );
+                        agentContext.pendingInferChoiceId = undefined;
+                        return result;
+                    } catch (error: any) {
+                        debug(`[InferChoice] Choice handling failed: ${error?.message}, falling through`);
+                        // Choice expired or not found - fall through to normal handling
+                        agentContext.pendingInferChoiceId = undefined;
+                    }
                 }
             }
         }
@@ -1784,6 +1789,69 @@ async function executeBrowserAction(
                     );
                     return createActionResult(JSON.stringify(scriptResult));
                 }
+                case "createInferredFlow": {
+                    const agentCtx = context.sessionContext.agentContext;
+                    const inferredActions = agentCtx.lastInferredActions;
+
+                    if (!inferredActions || inferredActions.length === 0) {
+                        return createActionResult(
+                            "No inferred actions available. Run '@browser actions infer' first.",
+                            "error",
+                        );
+                    }
+
+                    const selection = action.parameters.selection.toLowerCase().trim();
+                    let selectedIndices: number[];
+
+                    if (selection === "all") {
+                        selectedIndices = inferredActions.map((_: any, i: number) => i + 1);
+                    } else {
+                        selectedIndices = selection
+                            .split(/[,\s]+/)
+                            .map((s: string) => parseInt(s.trim(), 10))
+                            .filter((n: number) => !isNaN(n) && n >= 1 && n <= inferredActions.length);
+
+                        if (selectedIndices.length === 0) {
+                            return createActionResult(
+                                `Invalid selection. Please specify numbers 1-${inferredActions.length} or "all".`,
+                                "error",
+                            );
+                        }
+                    }
+
+                    context.actionIO.appendDisplay(
+                        `Creating ${selectedIndices.length} WebFlow(s)...`,
+                        "temporary",
+                    );
+
+                    try {
+                        const { handleSchemaDiscoveryAction } = await import(
+                            "./discovery/actionHandler.mjs"
+                        );
+                        const result = await handleSchemaDiscoveryAction(
+                            {
+                                actionName: "createInferredFlows",
+                                parameters: {
+                                    selectedIndices,
+                                    inferredActions,
+                                },
+                            } as any,
+                            context.sessionContext,
+                            (msg) => context.sessionContext.notify(AppAgentEvent.Inline, { type: "text", content: msg }, `webflow-progress-${Date.now()}`),
+                        );
+
+                        agentCtx.lastInferredActions = undefined;
+                        agentCtx.lastInferredActionsPageUrl = undefined;
+                        agentCtx.pendingInferChoiceId = undefined;
+
+                        return createActionResult(result.displayText);
+                    } catch (error: any) {
+                        return createActionResult(
+                            `Failed to create WebFlows: ${error?.message || error}`,
+                            "error",
+                        );
+                    }
+                }
                 default:
                     // Should never happen.
                     throw new Error(
@@ -1839,7 +1907,7 @@ async function executeBrowserAction(
                     let displayIndex = 1;
 
                     for (const existingAction of existingActions) {
-                        displayText += `✓ ${displayIndex}. ${existingAction.name} - Already available
+                        displayText += `${displayIndex}. ${existingAction.name} - Already available ✓
 `;
                         displayIndex++;
                     }
@@ -1880,6 +1948,7 @@ Select actions to create as WebFlows:`;
                                     },
                                 } as any,
                                 context.sessionContext,
+                                (msg) => context.sessionContext.notify(AppAgentEvent.Inline, { type: "text", content: msg }, `webflow-progress-${Date.now()}`),
                             );
 
                             // Clear stored actions
@@ -2737,6 +2806,7 @@ class InferActionsHandler implements CommandHandlerNoParams {
                                 },
                             } as any,
                             context.sessionContext,
+                            (msg) => context.sessionContext.notify(AppAgentEvent.Inline, { type: "text", content: msg }, `webflow-progress-${Date.now()}`),
                         );
 
                         // Clear stored actions
@@ -2748,6 +2818,7 @@ class InferActionsHandler implements CommandHandlerNoParams {
                     },
                 );
                 agentContext.pendingInferChoiceId = choiceId;
+                debug(`[InferChoice] Registered pending choice: ${choiceId}, newActions: ${newActions.length}`);
 
                 // Build display with choice prompt
                 let displayText = `Found ${newActions.length + existingActions.length} possible actions on this page:
@@ -2756,19 +2827,20 @@ class InferActionsHandler implements CommandHandlerNoParams {
                 let choiceIndex = 0;
 
                 for (const existingAction of existingActions) {
-                    displayText += `✓ ${choiceIndex + 1}. ${existingAction.name} - Already available
+                    displayText += `${choiceIndex + 1}. ${existingAction.name} - Already available ✓
 `;
                     choiceIndex++;
                 }
 
                 for (const newAction of newActions) {
-                    displayText += `  ${choiceIndex + 1}. ${newAction.name} - ${newAction.description} [NEW]
+                    displayText += `${choiceIndex + 1}. ${newAction.name} - ${newAction.description} [NEW]
 `;
                     choiceIndex++;
                 }
 
                 displayText += `
-Reply with numbers to create WebFlows (e.g., "1" or "1,2" or "all")`;
+
+To create WebFlows, say: "build flow 1" or "build flows 1,2" or "build all flows"`;
 
                 context.actionIO.setDisplay({
                     type: "markdown",
@@ -2862,6 +2934,7 @@ class CreateInferredActionsHandler implements CommandHandler {
                     },
                 } as any,
                 context.sessionContext,
+                (msg) => context.sessionContext.notify(AppAgentEvent.Inline, { type: "text", content: msg }, `webflow-progress-${Date.now()}`),
             );
 
             // Clear stored actions after creation
