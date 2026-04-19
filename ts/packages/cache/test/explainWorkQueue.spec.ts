@@ -68,14 +68,22 @@ describe("ExplainWorkQueue.checkExplainableValues", () => {
         ).rejects.toThrow(/not found in the request/i);
     });
 
-    test("does not validate number parameters against request (TODO:42)", async () => {
-        // Number value 2024 is not in "play recent songs", but currently numbers are not validated
-        // TODO:42: After the fix, this should throw (number should also be checked)
+    test("validates number parameters against request", async () => {
+        // Number value 2024 is not in "play recent songs", so it should throw
         const requestAction = makeRequestAction("play recent songs", {
             year: 2024,
         });
         const queue = createQueue();
-        // Current behavior: no throw for number parameters (TODO:42 to fix)
+        await expect(
+            queue.queueTask(requestAction, false, options),
+        ).rejects.toThrow(/not found in the request/i);
+    });
+
+    test("does not throw when number parameter is in request", async () => {
+        const requestAction = makeRequestAction("play songs from 2024", {
+            year: 2024,
+        });
+        const queue = createQueue();
         await expect(
             queue.queueTask(requestAction, false, options),
         ).resolves.toBeDefined();
