@@ -25,6 +25,8 @@ namespace autoShell.Handlers.Settings;
 /// <param name="ValueKind">The registry data type (default DWord).</param>
 /// <param name="UseLocalMachine">If true, writes to HKLM instead of HKCU (default false).</param>
 /// <param name="DisplayName">Human-readable name for log messages.</param>
+/// <param name="BroadcastSetting">If set, broadcasts WM_SETTINGCHANGE with this string after writing.</param>
+/// <param name="NotifyShell">If true, calls SHChangeNotify to refresh Explorer views after writing (default false).</param>
 internal record RegistryToggleConfig(
     string KeyPath,
     string ValueName,
@@ -33,7 +35,9 @@ internal record RegistryToggleConfig(
     object OffValue,
     RegistryValueKind ValueKind = RegistryValueKind.DWord,
     bool UseLocalMachine = false,
-    string? DisplayName = null);
+    string? DisplayName = null,
+    string? BroadcastSetting = null,
+    bool NotifyShell = false);
 
 /// <summary>
 /// Configuration for a registry map action: reads a string parameter and maps it to a registry value.
@@ -45,6 +49,7 @@ internal record RegistryToggleConfig(
 /// <param name="DefaultValue">Value used when the parameter doesn't match any key in the map.</param>
 /// <param name="ValueKind">The registry data type (default DWord).</param>
 /// <param name="DisplayName">Human-readable name for log messages.</param>
+/// <param name="NotifyShell">If true, calls SHChangeNotify to refresh Explorer views after writing (default false).</param>
 internal record RegistryMapConfig(
     string KeyPath,
     string ValueName,
@@ -52,7 +57,8 @@ internal record RegistryMapConfig(
     Dictionary<string, object> ValueMap,
     object DefaultValue,
     RegistryValueKind ValueKind = RegistryValueKind.DWord,
-    string? DisplayName = null);
+    string? DisplayName = null,
+    bool NotifyShell = false);
 
 /// <summary>
 /// Configuration for an action that opens a Windows Settings page.
@@ -141,6 +147,12 @@ internal abstract class SettingsHandlerBase : ActionHandlerBase
             {
                 Registry.SetValue(config.KeyPath, config.ValueName, value, config.ValueKind);
             }
+
+            Registry.BroadcastSettingChange(config.BroadcastSetting);
+            if (config.NotifyShell)
+            {
+                Registry.NotifyShellChange();
+            }
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or SecurityException or IOException)
         {
@@ -162,6 +174,11 @@ internal abstract class SettingsHandlerBase : ActionHandlerBase
         try
         {
             Registry.SetValue(config.KeyPath, config.ValueName, regValue, config.ValueKind);
+            Registry.BroadcastSettingChange();
+            if (config.NotifyShell)
+            {
+                Registry.NotifyShellChange();
+            }
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or SecurityException or IOException)
         {

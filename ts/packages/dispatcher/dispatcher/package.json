@@ -19,7 +19,7 @@
     "./helpers/config": "./dist/helpers/config.js",
     "./helpers/status": "./dist/helpers/status.js",
     "./helpers/command": "./dist/helpers/command.js",
-    "./helpers/completion": "./dist/helpers/completion.js",
+    "./helpers/completion": "./dist/helpers/completion/index.js",
     "./internal": "./dist/internal.js",
     "./explorer": "./dist/explorer.js"
   },
@@ -79,6 +79,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
+    "@jest/globals": "^29.7.0",
     "@types/debug": "^4.1.12",
     "@types/file-size": "^1.0.3",
     "@types/html-to-text": "^9.0.4",

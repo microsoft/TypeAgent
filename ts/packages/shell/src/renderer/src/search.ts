@@ -2,7 +2,6 @@
 // Licensed under the MIT License.
 
 import { isElectron } from "./main";
-import { SearchMenuBase } from "./searchMenuBase";
 import { CompletionToggle } from "./searchMenuUI/completionToggle";
 import { InlineSearchMenuUI } from "./searchMenuUI/inlineSearchMenuUI";
 import { LocalSearchMenuUI } from "./searchMenuUI/localSearchMenuUI";
@@ -14,20 +13,20 @@ import {
 } from "./searchMenuUI/searchMenuUI";
 
 // Architecture: docs/architecture/completion.md — §7 Shell — Search Menu
-export class SearchMenu extends SearchMenuBase {
+export class SearchMenu {
     private searchMenuUI: SearchMenuUI | undefined;
-    private lastPosition: SearchMenuPosition | undefined;
-    private lastPrefix: string | undefined;
-    private lastItems: SearchMenuItem[] | undefined;
     private readonly toggle: CompletionToggle | undefined;
+    private _active: boolean = false;
 
     constructor(
         private readonly onCompletion: (item: SearchMenuItem) => void,
         private inline: boolean,
+        private readonly getPosition: (
+            prefix: string,
+        ) => SearchMenuPosition | undefined,
         private readonly textEntry?: HTMLSpanElement,
         onToggleMode?: () => void,
     ) {
-        super();
         if (onToggleMode && textEntry && textEntry.parentElement) {
             this.toggle = new CompletionToggle(
                 inline ? "expand" : "collapse",
@@ -50,59 +49,77 @@ export class SearchMenu extends SearchMenuBase {
         if (this.inline === newInline) {
             return;
         }
-        const wasActive = this.isActive();
         if (this.searchMenuUI) {
             this.searchMenuUI.close();
             this.searchMenuUI = undefined;
         }
         this.inline = newInline;
         this.toggle?.setDirection(newInline ? "expand" : "collapse");
-        if (
-            wasActive &&
-            this.lastPosition &&
-            this.lastPrefix !== undefined &&
-            this.lastItems
-        ) {
-            this.searchMenuUI = this.createUI();
-            this.searchMenuUI.update({
-                position: this.lastPosition,
-                prefix: this.lastPrefix,
-                items: this.lastItems,
-            });
-            this.updateToggleLayout();
+    }
+
+    // ── Rendering ───────────────────────────────────────────────────────────────
+
+    /**
+     * Update only the popup position without re-rendering items.
+     * Called by the host when the completion generation has not changed
+     * (same items, same prefix) but the cursor may have moved.
+     */
+    public updatePosition(prefix: string): void {
+        if (!this._active || this.searchMenuUI === undefined) {
+            return;
+        }
+        const position = this.getPosition(prefix);
+        if (position === undefined) {
+            this.hide();
+            return;
+        }
+        this.searchMenuUI.update({ position });
+        this.updateToggleLayout(position);
+    }
+
+    /**
+     * Render completions for the given prefix and pre-computed items.
+     * Always performs a full item update on the underlying UI.  The
+     * caller decides whether to call this (items changed) or
+     * updatePosition() (position only).
+     *
+     * Called by the shell in response to onUpdate (partial.ts) or
+     * on input events (templateEditor.ts).
+     */
+    public render(prefix: string, items: SearchMenuItem[]): void {
+        const position = this.getPosition(prefix);
+        if (position === undefined) {
+            this.hide();
+            return;
+        }
+
+        if (items.length > 0) {
+            this._active = true;
+            if (this.searchMenuUI === undefined) {
+                this.searchMenuUI = this.createUI();
+            }
+            this.searchMenuUI.update({ position, prefix, items });
+            this.toggle?.show();
+            this.updateToggleLayout(position);
+        } else {
+            this.hide();
         }
     }
 
-    protected override onShow(
-        position: SearchMenuPosition,
-        prefix: string,
-        items: SearchMenuItem[],
-    ): void {
-        this.lastPosition = position;
-        this.lastPrefix = prefix;
-        this.lastItems = items;
-        if (this.searchMenuUI === undefined) {
-            this.searchMenuUI = this.createUI();
+    public hide(): void {
+        if (this._active) {
+            this._active = false;
+            this.toggle?.hide();
+            this.searchMenuUI?.close();
+            this.searchMenuUI = undefined;
         }
-        this.searchMenuUI.update({ position, prefix, items });
-        this.toggle?.show();
-        this.updateToggleLayout();
     }
 
-    protected override onUpdatePosition(position: SearchMenuPosition): void {
-        this.lastPosition = position;
-        this.searchMenuUI!.update({ position });
-        this.updateToggleLayout();
+    public isActive(): boolean {
+        return this._active;
     }
 
-    protected override onHide(): void {
-        this.lastPosition = undefined;
-        this.lastPrefix = undefined;
-        this.lastItems = undefined;
-        this.toggle?.hide();
-        this.searchMenuUI?.close();
-        this.searchMenuUI = undefined;
-    }
+    // ── UI event handling ─────────────────────────────────────────────────────
 
     public handleMouseWheel(deltaY: number) {
         this.searchMenuUI?.adjustSelection(deltaY);
@@ -132,7 +149,7 @@ export class SearchMenu extends SearchMenuBase {
         return false;
     }
 
-    private updateToggleLayout(): void {
+    private updateToggleLayout(position: SearchMenuPosition): void {
         if (!this.toggle || !this.textEntry?.parentElement) {
             return;
         }
@@ -140,9 +157,7 @@ export class SearchMenu extends SearchMenuBase {
         const chatInputRect =
             this.textEntry.parentElement.getBoundingClientRect();
 
-        if (this.lastPosition) {
-            toggleEl.style.left = `${this.lastPosition.left - chatInputRect.left}px`;
-        }
+        toggleEl.style.left = `${position.left - chatInputRect.left}px`;
         toggleEl.style.width = "";
     }
 }

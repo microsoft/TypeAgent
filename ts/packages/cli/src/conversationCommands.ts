@@ -2,12 +2,12 @@
 // Licensed under the MIT License.
 
 import chalk from "chalk";
-import * as readline from "readline";
 import type {
     AgentServerConnection,
     SessionDispatcher,
     SessionInfo,
 } from "@typeagent/agent-server-client";
+import { confirmYesNo } from "./enhancedConsole.js";
 
 /**
  * Context required by conversation commands. Created in connect.ts after
@@ -49,19 +49,6 @@ async function resolveByName(
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
-function promptYesNo(question: string): Promise<boolean> {
-    const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout,
-    });
-    return new Promise((resolve) => {
-        rl.question(`${question} [y/N] `, (answer) => {
-            rl.close();
-            resolve(answer.trim().toLowerCase() === "y");
-        });
-    });
-}
-
 /**
  * Parse the argument string, respecting double-quoted names.
  * Returns the trimmed argument (without surrounding quotes).
@@ -78,6 +65,44 @@ function parseNameArg(args: string): string {
     return trimmed;
 }
 
+/**
+ * Tokenize a string into up to `maxTokens` logical arguments, respecting
+ * double-quoted values.  A quoted token may contain spaces; the surrounding
+ * quotes are stripped.  Any remaining text after `maxTokens - 1` splits is
+ * returned as the last token verbatim (unquoted).
+ */
+function tokenizeArgs(args: string, maxTokens: number): string[] {
+    const tokens: string[] = [];
+    let remaining = args.trim();
+    while (remaining.length > 0 && tokens.length < maxTokens) {
+        if (remaining.startsWith('"')) {
+            const close = remaining.indexOf('"', 1);
+            if (close === -1) {
+                // Unclosed quote — treat the rest as a single token
+                tokens.push(remaining.slice(1));
+                remaining = "";
+            } else {
+                tokens.push(remaining.slice(1, close));
+                remaining = remaining.slice(close + 1).trimStart();
+            }
+        } else if (tokens.length === maxTokens - 1) {
+            // Last allowed token: consume everything remaining
+            tokens.push(remaining);
+            remaining = "";
+        } else {
+            const spaceIdx = remaining.search(/\s/);
+            if (spaceIdx === -1) {
+                tokens.push(remaining);
+                remaining = "";
+            } else {
+                tokens.push(remaining.slice(0, spaceIdx));
+                remaining = remaining.slice(spaceIdx).trimStart();
+            }
+        }
+    }
+    return tokens;
+}
+
 // ── Subcommand handlers ────────────────────────────────────────────────
 
 async function handleNew(
@@ -90,11 +115,24 @@ async function handleNew(
         return;
     }
     const created = await ctx.connection.createSession(name);
-    console.log(`Created conversation '${chalk.green(name)}'.`);
-    const switchNow = await promptYesNo(`Switch to '${name}' now?`);
+    const switchNow = await confirmYesNo(`Switch to '${name}' now?`);
     if (switchNow) {
         await ctx.switchSession(created.sessionId);
+    } else {
+        console.log(`Created conversation '${chalk.green(name)}'.`);
     }
+}
+
+async function handleInfo(
+    ctx: ConversationCommandContext,
+    _args: string,
+): Promise<void> {
+    const name = ctx.getCurrentSessionName();
+    const id = ctx.getCurrentSessionId();
+    console.log(chalk.bold("\nCurrent conversation:"));
+    console.log(`  ${chalk.dim("Name:")}  ${chalk.green(name)}`);
+    console.log(`  ${chalk.dim("ID:")}    ${chalk.dim(id)}`);
+    console.log("");
 }
 
 async function handleSwitch(
@@ -167,13 +205,54 @@ async function handleRename(
     ctx: ConversationCommandContext,
     args: string,
 ): Promise<void> {
-    const newName = parseNameArg(args);
+    const trimmed = args.trim();
+    if (!trimmed) {
+        console.log(chalk.yellow("Usage: @conversation rename <newName>"));
+        console.log(
+            chalk.yellow("       @conversation rename <currentName> <newName>"),
+        );
+        return;
+    }
+
+    // If args contains two tokens, first is the target session name and second is the new name.
+    // If only one token, rename the current session.
+    // tokenizeArgs respects double quotes so names with spaces work correctly.
+    const tokens = tokenizeArgs(trimmed, 2);
+    let targetName: string | undefined;
+    let newName: string;
+    if (tokens.length === 1) {
+        newName = tokens[0];
+    } else {
+        targetName = tokens[0];
+        newName = tokens[1];
+    }
+
     if (!newName) {
         console.log(chalk.yellow("Usage: @conversation rename <newName>"));
         return;
     }
-    await ctx.connection.renameSession(ctx.getCurrentSessionId(), newName);
-    console.log(`Renamed current conversation to '${chalk.green(newName)}'.`);
+
+    let sessionId: string;
+    if (targetName) {
+        const all = await ctx.connection.listSessions();
+        const match = all.find(
+            (s) => s.name.toLowerCase() === targetName!.toLowerCase(),
+        );
+        if (!match) {
+            console.log(
+                chalk.red(
+                    `No conversation named '${targetName}' found. Use @conversation list to see all.`,
+                ),
+            );
+            return;
+        }
+        sessionId = match.sessionId;
+    } else {
+        sessionId = ctx.getCurrentSessionId();
+    }
+
+    await ctx.connection.renameSession(sessionId, newName);
+    console.log(`Renamed conversation to '${chalk.green(newName)}'.`);
 }
 
 async function handleDelete(
@@ -194,7 +273,7 @@ async function handleDelete(
         );
         return;
     }
-    const confirmed = await promptYesNo(
+    const confirmed = await confirmYesNo(
         `Delete conversation '${target.name}'?`,
     );
     if (!confirmed) {
@@ -213,6 +292,7 @@ function printHelp(): void {
         ["new <name>", "Create a new conversation"],
         ["switch <name>", "Switch to a conversation by name"],
         ["list [<filter>]", "List all conversations"],
+        ["info", "Show info about the current conversation"],
         ["rename <newName>", "Rename the current conversation"],
         ["delete <name>", "Delete a conversation by name"],
     ];
@@ -235,6 +315,7 @@ const subcommands: Record<
     list: handleList,
     rename: handleRename,
     delete: handleDelete,
+    info: handleInfo,
 };
 
 /**
@@ -264,7 +345,7 @@ export async function handleConversationCommand(
     if (!handler) {
         console.log(
             chalk.yellow(
-                `Unknown subcommand '${sub}'. Available: new, switch, list, rename, delete`,
+                `Unknown subcommand '${sub}'. Available: new, switch, list, info, rename, delete`,
             ),
         );
         return;

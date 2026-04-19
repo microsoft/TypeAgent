@@ -5,6 +5,7 @@ using System;
 using autoShell.Handlers.Generated;
 using autoShell.Logging;
 using autoShell.Services;
+using static autoShell.Services.Interop.SpiConstants;
 
 namespace autoShell.Handlers.Settings;
 
@@ -14,15 +15,6 @@ namespace autoShell.Handlers.Settings;
 /// </summary>
 internal class MouseSettingsHandler : SettingsHandlerBase
 {
-    private const int SPI_GETMOUSE = 3;
-    private const int SPI_SETMOUSE = 4;
-    private const int SPI_SETMOUSESPEED = 0x0071;
-    private const int SPI_SETMOUSETRAILS = 0x005D;
-    private const int SPI_SETWHEELSCROLLLINES = 0x0069;
-    private const int SPIF_UPDATEINIFILE = 0x01;
-    private const int SPIF_SENDCHANGE = 0x02;
-    private const int SPIF_UPDATEINIFILE_SENDCHANGE = 3;
-
     private readonly ISystemParametersService _systemParams;
     private readonly ILogger _logger;
 
@@ -40,14 +32,19 @@ internal class MouseSettingsHandler : SettingsHandlerBase
         AddOpenSettingsAction("MousePointerCustomization", new OpenSettingsConfig("ms-settings:easeofaccess-mouse", "mouse settings"));
         AddOpenSettingsAction("EnableTouchPad", new OpenSettingsConfig("ms-settings:devices-touchpad", "touchpad settings"));
         AddOpenSettingsAction("TouchpadCursorSpeed", new OpenSettingsConfig("ms-settings:devices-touchpad", "touchpad settings"));
-        AddRegistryToggleAction("ToggleMouseSonar", new RegistryToggleConfig(
-            @"Control Panel\Mouse", "MouseSonar", "enable",
-            OnValue: "1", OffValue: "0", ValueKind: Microsoft.Win32.RegistryValueKind.String, DisplayName: "Mouse Sonar"));
+        AddAction<ToggleMouseSonarParams>("ToggleMouseSonar", HandleToggleMouseSonar);
         AddAction<CursorTrailParams>("CursorTrail", HandleMouseCursorTrail);
         AddAction<EnhancePointerPrecisionParams>("EnhancePointerPrecision", HandleEnhancePointerPrecision);
         AddAction<MouseCursorSpeedParams>("MouseCursorSpeed", HandleMouseCursorSpeed);
         AddAction<MouseWheelScrollLinesParams>("MouseWheelScrollLines", HandleMouseWheelScrollLines);
         AddAction<SetPrimaryMouseButtonParams>("SetPrimaryMouseButton", HandleSetPrimaryMouseButton);
+    }
+
+    private ActionResult HandleToggleMouseSonar(ToggleMouseSonarParams p)
+    {
+        bool enable = p.Enable;
+        _systemParams.SetParameter(SPI_SETMOUSESONAR, 0, (IntPtr)(enable ? 1 : 0), SPIF_UPDATEINIFILE_SENDCHANGE);
+        return ActionResult.Ok($"Mouse Sonar {(enable ? "enabled" : "disabled")}");
     }
 
     private ActionResult HandleEnhancePointerPrecision(EnhancePointerPrecisionParams p)

@@ -51,21 +51,29 @@ export async function lockInstanceDir(instanceDir: string) {
         return await lockfile.lock(instanceDir, {
             // Retry for up to ~15 seconds to handle the case where a previous
             // process was forcibly killed and its lock file is not yet stale.
-            retries: { retries: 15, minTimeout: 1000, maxTimeout: 1000 },
+            retries: { retries: 30, minTimeout: 1000, maxTimeout: 1000 },
+            // Break locks whose mtime heartbeat hasn't fired in 10s. proper-lockfile
+            // updates the mtime every stale/2 ms (5s) while the holder is alive, so a
+            // live server easily stays under the threshold. A crashed server's mtime
+            // freezes and its orphaned lock gets broken here. stale must be < total
+            // retry window (30s) so a freshly-orphaned lock can be recovered.
+            stale: 10000,
             onCompromised: (err) => {
                 if (isExiting) {
                     // We are exiting, just ignore the error
                     return;
                 }
+                // Log but do not exit — on Windows, proper-lockfile's PID liveness
+                // check can incorrectly mark a live lock as stale, causing false
+                // compromised events when running multiple concurrent server processes.
                 console.error(
-                    `\nERROR: User instance directory lock ${instanceDir} compromised. Only one client per instance directory can be active at a time.\n  ${err}`,
+                    `\nWARN: User instance directory lock ${instanceDir} reported as compromised — continuing.\n  ${err}`,
                 );
-                process.exit(-1);
             },
         });
-    } catch (e) {
+    } catch (e: any) {
         throw new Error(
-            `Unable to lock instance directory ${instanceDir}. Only one client per instance directory can be active at a time.`,
+            `Unable to lock instance directory ${instanceDir}. Only one client per instance directory can be active at a time. Cause: ${e?.code ?? "unknown"} — ${e?.message ?? e}`,
         );
     }
 }

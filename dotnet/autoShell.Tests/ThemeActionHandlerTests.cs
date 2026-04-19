@@ -6,6 +6,7 @@ using autoShell.Handlers;
 using autoShell.Services;
 using Microsoft.Win32;
 using Moq;
+using static autoShell.Services.Interop.SpiConstants;
 
 namespace autoShell.Tests;
 
@@ -31,7 +32,7 @@ public class ThemeActionHandlerTests
         _handler.Handle("SetWallpaper", JsonDocument.Parse("""{"filePath":"C:\\wallpaper.jpg"}""").RootElement);
 
         _systemParamsMock.Verify(s => s.SetParameter(
-            0x0014, 0, @"C:\wallpaper.jpg", 3), Times.Once);
+            SPI_SETDESKWALLPAPER, 0, @"C:\wallpaper.jpg", SPIF_UPDATEINIFILE_SENDCHANGE), Times.Once);
     }
 
     /// <summary>

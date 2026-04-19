@@ -63,8 +63,7 @@ internal class DisplayActionHandler : ActionHandlerBase
             }
 
             string result = _display.SetResolution((uint)width, (uint)height, refreshRate);
-            using var doc = JsonDocument.Parse(result);
-            return ActionResult.Ok($"Screen resolution set to {width}x{height}", doc.RootElement.Clone());
+            return ActionResult.Ok(result);
         }
         catch (Exception ex)
         {

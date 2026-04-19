@@ -7,6 +7,18 @@ import registerDebug from "debug";
 const debugUrl = registerDebug("typeagent:rest:url");
 const debugHeader = registerDebug("typeagent:rest:header");
 const debugError = registerDebug("typeagent:rest:error");
+// Always-on visibility into transient-error retries (429/5xx). Separate from
+// debugError so operators see throttling even without error-level tracing.
+const debugRetry = registerDebug("typeagent:rest:retry");
+
+function hostOf(url: string): string {
+    try {
+        const u = new URL(url);
+        return u.host + u.pathname;
+    } catch {
+        return url;
+    }
+}
 
 /**
  * Call an API using a JSON message body
@@ -253,11 +265,16 @@ export async function fetchWithRetry(
 ) {
     retryMaxAttempts ??= 3;
     retryPauseMs ??= 1000;
-    timeout ??= 60_000; // default to 1 minute
+    // Default total budget of 3 minutes. Previous default of 60s meant a single
+    // `Retry-After: 60` response would exhaust the budget before the retry
+    // even fired. Per-fetch calls should resolve in seconds; this cap only
+    // matters when retrying through transient throttling.
+    timeout ??= 180_000;
 
     const backOffFactor = 3_000;
     let retryCount = 0;
     const startTime: number = Date.now();
+    const host = hostOf(url);
     try {
         while (true) {
             const result = await callFetch(url, options, timeout, throttler);
@@ -267,29 +284,51 @@ export async function fetchWithRetry(
             debugHeader(result.status, result.statusText);
             debugHeader(result.headers);
             if (result.status === 200 || result.status === 201) {
+                if (retryCount > 0) {
+                    debugRetry(
+                        `recovered ${host} after ${retryCount} retr${retryCount === 1 ? "y" : "ies"} in ${Date.now() - startTime}ms`,
+                    );
+                }
                 return success(result);
             }
+            const elapsed = Date.now() - startTime;
             if (
                 !isTransientHttpError(result.status) || // non-transient error
                 retryCount >= retryMaxAttempts || // exceeded max retries
-                Date.now() - startTime > timeout // exceeded total time allowed
+                elapsed > timeout // exceeded total time allowed
             ) {
+                const reason = !isTransientHttpError(result.status)
+                    ? `non-transient status ${result.status}`
+                    : retryCount >= retryMaxAttempts
+                      ? `exhausted ${retryMaxAttempts} retries`
+                      : `exceeded ${timeout}ms budget (${elapsed}ms elapsed)`;
+                debugRetry(
+                    `giving up on ${host}: ${reason}, status=${result.status}`,
+                );
                 return error(
-                    `fetch error: ${await getErrorMessage(result, retryCount, Date.now() - startTime)}`,
+                    `fetch error: ${await getErrorMessage(result, retryCount, elapsed)}`,
                 );
             } else if (debugError.enabled) {
                 debugError(await getErrorMessage(result));
             }
 
             // See if the service tells how long to wait to retry
+            const rawRetryAfter = result.headers.get("Retry-After");
             const pauseMs = getRetryAfterMs(result, retryPauseMs);
+            const totalWait =
+                pauseMs + retryCount * backOffFactor + getRandomDelay();
+
+            debugRetry(
+                `retry ${retryCount + 1}/${retryMaxAttempts} on ${host}: status=${result.status}` +
+                    ` retryAfter=${rawRetryAfter ?? "<none>"}` +
+                    ` pause=${pauseMs}ms backoff=${retryCount * backOffFactor}ms totalWait=${totalWait}ms` +
+                    ` elapsed=${elapsed}ms budget=${timeout}ms`,
+            );
 
             // wait before retrying
             // wait at least as long as the Retry-After header, plus a back-off factor that increases with each retry
             // plus a random delay to avoid thundering herd
-            await sleep(
-                pauseMs + retryCount * backOffFactor + getRandomDelay(),
-            );
+            await sleep(totalWait);
 
             retryCount++;
         }

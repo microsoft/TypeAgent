@@ -135,7 +135,15 @@ export const systemManifest: AppAgentManifest = {
         },
         session: {
             schema: {
-                description: "System agent that helps you manage your session.",
+                description:
+                    "System agent that manages sessions/conversations. " +
+                    "Use this agent when the user wants to: " +
+                    "CREATE a new conversation (e.g. 'create a new conversation', 'start a new conversation called test', 'new conversation named work', 'open a new conversation test'), " +
+                    "LIST conversations (e.g. 'list our conversations', 'show all conversations', 'what conversations do I have'), " +
+                    "SWITCH to an existing conversation (e.g. 'switch to conversation test', 'go to my work conversation', 'switch to test'), " +
+                    "DELETE a conversation (e.g. 'delete conversation test', 'remove the work session'), " +
+                    "RENAME the current conversation, " +
+                    "or SHOW info about the current conversation.",
                 schemaFile:
                     "./src/context/system/schema/sessionActionSchema.ts",
                 schemaType: "SessionAction",

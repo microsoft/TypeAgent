@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { CommandCompletionResult } from "agent-dispatcher";
-import { needsSeparatorInAutoMode } from "agent-dispatcher/helpers/completion";
+import { CommandCompletionResult } from "@typeagent/dispatcher-types";
+import { needsSeparatorInAutoMode } from "action-grammar/completion";
 import {
     AfterWildcard,
     CompletionDirection,
@@ -11,23 +11,28 @@ import {
 } from "@typeagent/agent-sdk";
 import {
     SearchMenuItem,
-    SearchMenuPosition,
-} from "../../preload/electronTypes.js";
+    TSTSearchMenuIndex,
+    isUniquelySatisfied,
+} from "./searchMenu.js";
 import registerDebug from "debug";
+import type { CompletionController } from "./controller.js";
 
-const debug = registerDebug("typeagent:shell:partial");
-const debugError = registerDebug("typeagent:shell:partial:error");
+const debug = registerDebug("typeagent:completion:session");
+const debugError = registerDebug("typeagent:completion:session:error");
 
-export interface ISearchMenu {
-    setChoices(choices: SearchMenuItem[]): void;
-    // Returns true when the prefix uniquely satisfies exactly one entry
-    // (exact match that is not a prefix of any other entry).
-    updatePrefix(prefix: string, position: SearchMenuPosition): boolean;
-    // Returns true when text is an exact match for a completion entry.
-    hasExactMatch(text: string): boolean;
-    hide(): void;
-    isActive(): boolean;
-}
+// C2 COMMITTED: matches a trie-entry followed by a separator character.
+// Cached at module scope to avoid per-keystroke regex allocation.
+const committedSepRe = /^(.+?)[\s\p{P}]/u;
+
+export type CompletionState = {
+    items: SearchMenuItem[];
+    prefix: string;
+    anchorIndex: number;
+    // Monotonically increasing counter, bumped whenever the trie is
+    // reloaded (level change, new session result).  Lets callers detect
+    // item-set changes even when prefix and anchorIndex are unchanged.
+    generation: number;
+};
 
 export interface ICompletionDispatcher {
     getCommandCompletion(
@@ -36,7 +41,7 @@ export interface ICompletionDispatcher {
     ): Promise<CommandCompletionResult>;
 }
 
-// Describes what the shell should do when the local trie has no matches
+// Describes what the host should do when the local trie has no matches
 // for the user's typed prefix.  Computed once from the backend's
 // descriptive fields (closedSet, afterWildcard) when a result arrives,
 // then used in reuseSession() decisions.
@@ -92,9 +97,9 @@ function computeNoMatchPolicy(
 //       "refetch" → open-ended, backend may know more
 //       "slide"   → wildcard boundary, slide anchor forward
 //
-// Architecture: docs/architecture/completion.md — §5 Shell — Completion Session
+// Architecture: docs/architecture/completion.md — §5 Completion Session
 // This class has no DOM dependencies and is fully unit-testable with Jest.
-export class PartialCompletionSession {
+export class PartialCompletionSession implements CompletionController {
     // The "anchor" prefix for the current session.  Set to the full input
     // when the request is issued, then narrowed to input[0..startIndex] when
     // the backend reports how much the grammar consumed.  `undefined` = IDLE.
@@ -103,7 +108,7 @@ export class PartialCompletionSession {
     // Items partitioned by separatorMode from the last result.
     private partitions: ItemPartition[] = [];
     // Precomputed item counts per SepLevel.  Updated whenever
-    // partitions change (setPartitions / resetToIdle).
+    // partitions change (setPartitions / accept).
     private levelCounts: LevelCounts = [0, 0, 0];
     // The SepLevel at which the trie is currently loaded.
     // Items in the trie correspond to itemsAtLevel(partitions, menuSepLevel).
@@ -128,29 +133,59 @@ export class PartialCompletionSession {
     // The in-flight completion request, or undefined when settled.
     private completionP: Promise<CommandCompletionResult> | undefined;
 
-    // Set when the user explicitly closes the menu (e.g. Escape).
+    // Set when the user dismisses completions (e.g. Escape).
     // startNewSession uses this to suppress reopening if the refetch returns
     // the same anchor — meaning the completions are unchanged and the user
     // already dismissed them.
-    private explicitCloseAnchor: string | undefined = undefined;
+    private dismissAnchor: string | undefined = undefined;
+
+    // The input text from the most recent update() or dismiss() call.
+    // Used to compute the cached completionState.
+    // Safe to read in async callbacks (.then/.catch) without synchronization
+    // because JavaScript is single-threaded — the value is always set
+    // synchronously before any async operation begins, and microtask
+    // callbacks see the latest value.
+    private lastInput: string = "";
+
+    // The direction from the most recent update() or dismiss() call.
+    // Used by async callbacks to reconcile with the latest user intent.
+    // Same single-threaded safety guarantee as lastInput.
+    private lastDirection: CompletionDirection = "forward";
+
+    // Cached completion state, recomputed at every mutation point.
+    // Callers retrieve this via getCompletionState().
+    private completionState: CompletionState | undefined = undefined;
+
+    // Internal trie backing the SearchMenuIndex interface.
+    private readonly searchMenuIndex = new TSTSearchMenuIndex();
+
+    // Monotonically increasing counter, bumped on every loadLevel() call.
+    // Exposed via CompletionState.generation so callers can detect
+    // item-set changes without comparing items by reference.
+    private generation: number = 0;
+
+    // Callback fired whenever completion state changes.
+    private onUpdate: () => void;
 
     constructor(
-        private readonly menu: ISearchMenu,
         private readonly dispatcher: ICompletionDispatcher,
-    ) {}
+        onUpdate?: () => void,
+    ) {
+        this.onUpdate = onUpdate ?? (() => {});
+    }
+
+    public setOnUpdate(onUpdate: () => void): void {
+        this.onUpdate = onUpdate;
+    }
 
     // Load the trie with items for the given level and set menuSepLevel.
     // Shared by reuseSession (narrow/consume), startNewSession (initial load),
-    // and explicitHide (level change on dismiss).
+    // and dismiss (level change on dismiss).
     private loadLevel(level: SepLevel): void {
         this.menuSepLevel = level;
         const items = itemsAtLevel(this.partitions, level);
-        this.menu.setChoices(items);
-        if (items.length === 0) {
-            // setChoices does not reset the active state, so hide explicitly
-            // when loading an empty level to avoid stale isActive().
-            this.menu.hide();
-        }
+        this.searchMenuIndex.setItems(items);
+        this.generation++;
     }
 
     // Update partitions and recompute levelCounts.
@@ -159,20 +194,15 @@ export class PartialCompletionSession {
         this.levelCounts = computeLevelCounts(partitions);
     }
 
-    // Compute the menu position and update the trie prefix.  rawPrefix
-    // is input[menuAnchorIndex..] — already past the consumed separator.
-    // Returns true when the prefix uniquely satisfies one entry; hides
-    // the menu when position cannot be determined.
-    private positionMenu(
-        rawPrefix: string,
-        getPosition: (prefix: string) => SearchMenuPosition | undefined,
-    ): boolean {
-        const position = getPosition(rawPrefix);
-        if (position !== undefined) {
-            return this.menu.updatePrefix(rawPrefix, position);
+    // Update the cached completionState and fire the onUpdate callback.
+    // Skips firing when transitioning from undefined to undefined (no
+    // visible change — avoids redundant hide() calls in the renderer).
+    private setCompletionState(state: CompletionState | undefined): void {
+        if (state === undefined && this.completionState === undefined) {
+            return;
         }
-        this.menu.hide();
-        return false;
+        this.completionState = state;
+        this.onUpdate();
     }
 
     // Slide the anchor forward to the current input, clearing consumed
@@ -182,7 +212,14 @@ export class PartialCompletionSession {
         this.anchor = input;
         this.menuAnchorIndex = input.length;
         this.consumedSep = "";
-        this.menu.hide();
+        // After sliding, prefix is "".  If the trie is loaded at a
+        // level that requires separator (menuSepLevel > 0), items must
+        // stay hidden until a separator char is typed (deferred state).
+        this.setCompletionState(
+            this.menuSepLevel > 0
+                ? undefined
+                : this.filterForState("", input.length),
+        );
     }
 
     // Shift the trie to the level implied by the leading separator chars
@@ -190,7 +227,7 @@ export class PartialCompletionSession {
     // target level.  Returns the new SepLevel, or undefined when no level
     // has items at all.
     // Shared by B1 NARROW (backspace or separator text change) and
-    // explicitHide (Escape).
+    // dismiss (Escape).
     private shiftToSepLevel(rawPrefix: string): SepLevel | undefined {
         const sepLevel = computeSepLevel(rawPrefix);
         const newLevel = targetLevel(this.levelCounts, sepLevel);
@@ -203,67 +240,82 @@ export class PartialCompletionSession {
         return newLevel;
     }
 
-    // Main entry point.  Called by PartialCompletion.update() after DOM checks pass.
-    //   input:       trimmed input text (ghost text stripped, leading whitespace stripped)
-    //   direction:   host-provided signal: "forward" (user is moving ahead) or
-    //                "backward" (user is reconsidering, e.g. backspaced)
-    //   getPosition: DOM callback that computes the menu anchor position; returns
-    //                undefined when position cannot be determined (hides menu).
+    // Main entry point.  Called on each keystroke after the host validates cursor position.
     public update(
         input: string,
-        getPosition: (prefix: string) => SearchMenuPosition | undefined,
         direction: CompletionDirection = "forward",
     ): void {
-        if (this.reuseSession(input, getPosition, direction)) {
+        this.lastInput = input;
+        this.lastDirection = direction;
+        if (this.reuseSession(input, direction)) {
             return;
         }
 
-        this.startNewSession(input, getPosition, direction);
+        this.fetchNewSession(input, direction);
     }
 
-    // Hide the menu and cancel any in-flight fetch, but preserve session
+    // Hide completions and cancel any in-flight fetch, but preserve session
     // state so reuseSession() can still match the anchor if the user
     // returns (e.g. cursor moved away then back without typing).
     public hide(): void {
         // Cancel any in-flight request but preserve anchor and config
         // so reuseSession() can still match on re-focus.
         this.completionP = undefined;
-        this.menu.hide();
+        this.setCompletionState(undefined);
     }
 
-    // Reset state to IDLE without hiding the menu (used after handleSelect inserts text).
-    public resetToIdle(): void {
+    /** Accept the current completion (Tab/Enter). Resets session to idle. */
+    public accept(): void {
         this.anchor = undefined;
         this.completionP = undefined;
         this.setPartitions([]);
         this.menuSepLevel = 0;
         this.menuAnchorIndex = 0;
         this.consumedSep = "";
-        this.explicitCloseAnchor = undefined;
+        this.dismissAnchor = undefined;
+        this.lastInput = "";
+        this.lastDirection = "forward";
+        this.setCompletionState(undefined);
     }
 
-    // Called when the user explicitly dismisses the menu (e.g. Escape key).
-    //
-    // Four outcomes:
-    //   1. Level shift — a different SepLevel has items the user hasn't
-    //      seen.  Shift the trie and show the new items (no backend call).
-    //   2. No advance — IDLE or input equals anchor.  A refetch would
-    //      return identical data.  Just hide the menu.
-    //   3. Hide/slide — noMatchPolicy is "accept" or "slide" and the
-    //      input still extends the anchor.  No refetch can help.
-    //   4. Refetch — input advanced past the anchor at the same level
-    //      and noMatchPolicy allows it.  When the backend returns the
-    //      same anchor (startIndex unchanged), reopening is suppressed.
-    public explicitHide(
+    /**
+     * Permanently shut down this session.  Clears all state, detaches
+     * the onUpdate callback, and prevents further fetches.  After
+     * dispose() the instance should not be reused.
+     */
+    public dispose(): void {
+        this.accept();
+        this.onUpdate = () => {};
+    }
+
+    /**
+     * Dismiss completions (Escape key). Performs smart level-shift or refetch.
+     *
+     * Four outcomes:
+     *   1. Level shift — a different SepLevel has items the user hasn't
+     *      seen.  Shift the trie and show the new items (no backend call).
+     *   2. No advance — IDLE or input equals anchor.  A refetch would
+     *      return identical data.  Just hide the menu.
+     *   3. Hide/slide — noMatchPolicy is "accept" or "slide" and the
+     *      input still extends the anchor.  No refetch can help.
+     *   4. Refetch — input advanced past the anchor at the same level
+     *      and noMatchPolicy allows it.  When the backend returns the
+     *      same anchor (startIndex unchanged), reopening is suppressed.
+     *
+     * @param input      Current input text
+     * @param direction  Direction hint for the session
+     */
+    public dismiss(
         input: string,
-        getPosition: (prefix: string) => SearchMenuPosition | undefined,
-        direction: CompletionDirection,
+        direction: CompletionDirection = "forward",
     ): void {
+        this.lastInput = input;
+        this.lastDirection = direction;
         this.completionP = undefined; // cancel any in-flight fetch
 
         // IDLE — no session data, nothing to shift or refetch.
         if (this.anchor === undefined) {
-            this.menu.hide();
+            this.setCompletionState(undefined);
             return;
         }
 
@@ -276,9 +328,14 @@ export class PartialCompletionSession {
                 const prevLevel = this.menuSepLevel;
                 const newLevel = this.shiftToSepLevel(rawPrefix);
                 if (newLevel !== undefined && newLevel !== prevLevel) {
-                    this.positionMenu(
-                        input.substring(this.menuAnchorIndex),
-                        getPosition,
+                    // shiftToSepLevel loaded a new trie; filter with
+                    // the post-separator prefix.
+                    const prefix = input.substring(this.menuAnchorIndex);
+                    this.setCompletionState(
+                        this.filterForState(
+                            prefix,
+                            input.length - prefix.length,
+                        ),
                     );
                     return;
                 }
@@ -288,30 +345,48 @@ export class PartialCompletionSession {
         // No level shift available.  If input hasn't advanced past
         // the anchor, a refetch would return identical results — just hide.
         if (input === this.anchor || this.noMatchPolicy !== "refetch") {
-            this.menu.hide();
+            this.setCompletionState(undefined);
             return;
         }
 
-        // Save anchor so startNewSession can compare after the result arrives.
-        this.explicitCloseAnchor = this.anchor;
-        this.startNewSession(input, getPosition, direction);
+        // Save anchor so fetchNewSession can compare after the result arrives.
+        this.dismissAnchor = this.anchor;
+        this.fetchNewSession(input, direction);
     }
 
-    // Returns the text typed after the menu anchor, or undefined when
-    // the input has diverged or no items are loaded.
-    public getCompletionPrefix(input: string): string | undefined {
-        const anchor = this.anchor;
-        if (anchor === undefined || !input.startsWith(anchor)) {
+    // Returns the cached completion state, or undefined when there are
+    // no completions to show.  Recomputed at every mutation point.
+    public getCompletionState(): CompletionState | undefined {
+        return this.completionState;
+    }
+
+    /**
+     * @internal Test-only — returns all items currently loaded in the trie.
+     * Not part of the {@link CompletionController} public API.
+     */
+    public getLoadedItems(): SearchMenuItem[] {
+        return this.searchMenuIndex.filterItems("");
+    }
+
+    // Filter the trie and build a CompletionState, or return undefined
+    // when items are empty or uniquely satisfied.  Used by cold paths
+    // (slideAnchor, dismiss level-shift) where the caller knows the
+    // prefix and anchorIndex but hasn't filtered yet.  The hot path
+    // (C3 in matchOrConsume) inlines this to avoid a redundant filter.
+    private filterForState(
+        prefix: string,
+        anchorIndex: number,
+    ): CompletionState | undefined {
+        const items = this.searchMenuIndex.filterItems(prefix);
+        if (items.length === 0 || isUniquelySatisfied(items, prefix)) {
             return undefined;
         }
-        if (input.length < this.menuAnchorIndex) {
-            return undefined;
-        }
-        // Deferred — separator not yet consumed; no valid prefix.
-        if (this.menuSepLevel > 0 && this.consumedSep === "") {
-            return undefined;
-        }
-        return input.substring(this.menuAnchorIndex);
+        return {
+            items,
+            prefix,
+            anchorIndex,
+            generation: this.generation,
+        };
     }
 
     // Decides whether the current session can service `input` without a new
@@ -338,7 +413,7 @@ export class PartialCompletionSession {
     // C. Trie matching — does the menu have results?
     //   C1  UNIQUE     uniquelySatisfied                           → re-fetch
     //   C2  COMMITTED  committed past boundary                     → re-fetch
-    //   C3  ACTIVE     menu.isActive()                             → reuse
+    //   C3  ACTIVE     trie has matches                            → reuse
     //
     // D. Progressive consumption — consume leading separator, retry
     //   D1  CONSUME    leading char is separator                   → consume, → C
@@ -348,13 +423,16 @@ export class PartialCompletionSession {
 
     private reuseSession(
         input: string,
-        getPosition: (prefix: string) => SearchMenuPosition | undefined,
         direction: CompletionDirection,
     ): boolean {
         // ── A. Session validity ──────────────────────────────────────
         // [A1] PENDING — a fetch is already in flight, wait.
         if (this.completionP !== undefined) {
             debug(`Partial completion pending: ${this.anchor}`);
+            // Trie is empty (startNewSession clears it before setting
+            // completionP), so filterForState would return
+            // undefined — skip the redundant trie filter.
+            this.setCompletionState(undefined);
             return true;
         }
 
@@ -394,7 +472,9 @@ export class PartialCompletionSession {
             debug(
                 `Partial completion deferred: no items at menuSepLevel=${this.menuSepLevel}`,
             );
-            this.menu.hide();
+            // Trie is empty at this level — filterItems would return []
+            // and filterForState would return undefined.
+            this.setCompletionState(undefined);
             return true;
         }
 
@@ -406,7 +486,9 @@ export class PartialCompletionSession {
                 debug(
                     `Partial completion deferred: separator needed, menuSepLevel=${this.menuSepLevel}`,
                 );
-                this.menu.hide();
+                // filterForState would return undefined
+                // (menuSepLevel > 0 with no separator consumed).
+                this.setCompletionState(undefined);
                 return true;
             }
 
@@ -434,7 +516,7 @@ export class PartialCompletionSession {
         }
 
         // ── C + D: trie matching with progressive consumption ─────
-        return this.matchOrConsume(input, rawPrefix, getPosition);
+        return this.matchOrConsume(input, rawPrefix);
     }
 
     // ── A. Session validity ─────────────────────────────────────────
@@ -480,32 +562,41 @@ export class PartialCompletionSession {
     // C + D: attempt trie match, then progressively consume leading
     // separator characters and retry.  Returns true to reuse the
     // session, false to trigger a re-fetch.
-    private matchOrConsume(
-        input: string,
-        rawPrefix: string,
-        getPosition: (prefix: string) => SearchMenuPosition | undefined,
-    ): boolean {
+    private matchOrConsume(input: string, rawPrefix: string): boolean {
         for (;;) {
-            const uniquelySatisfied = this.positionMenu(rawPrefix, getPosition);
+            const items = this.searchMenuIndex.filterItems(rawPrefix);
 
             // [C1] UNIQUE — exactly one match, re-fetch for next level.
-            if (uniquelySatisfied) {
+            if (isUniquelySatisfied(items, rawPrefix)) {
                 debug(`Partial completion re-fetch: uniquely satisfied`);
                 return false;
             }
 
             // [C2] COMMITTED — separator after a valid match.
-            const sepMatch = rawPrefix.match(/^(.+?)[\s\p{P}]/u);
-            if (sepMatch !== null && this.menu.hasExactMatch(sepMatch[1])) {
+            const sepMatch = rawPrefix.match(committedSepRe);
+            if (
+                sepMatch !== null &&
+                this.searchMenuIndex.hasExactMatch(sepMatch[1])
+            ) {
                 debug(
                     `Partial completion re-fetch: '${sepMatch[1]}' committed with separator`,
                 );
                 return false;
             }
 
-            // [C3] ACTIVE — trie has matches, menu visible.
-            if (this.menu.isActive()) {
-                debug(`Partial completion reuse: menuActive=true`);
+            // [C3] ACTIVE — trie has matches for this prefix.
+            // Build CompletionState inline — items and rawPrefix are
+            // already computed, and all filterForState guards
+            // (anchor, startsWith, menuAnchorIndex, deferred) are
+            // satisfied by A/B/deferred checks above.
+            if (items.length > 0) {
+                debug(`Partial completion reuse: trie has matches`);
+                this.setCompletionState({
+                    items,
+                    prefix: rawPrefix,
+                    anchorIndex: input.length - rawPrefix.length,
+                    generation: this.generation,
+                });
                 return true;
             }
 
@@ -553,107 +644,164 @@ export class PartialCompletionSession {
         }
 
         // [D4] ACCEPT — exhaustive set, nothing else to show.
+        // Items are empty (loop exited on items.length===0), so
+        // filterForState would return undefined — hide directly.
         debug(`Partial completion reuse: noMatchPolicy=accept, menu exhausted`);
+        this.setCompletionState(undefined);
         return true;
     }
 
-    // Start a new completion session: issue backend request and process result.
-    private startNewSession(
+    // After a fetch completes (success or error), check whether the user
+    // typed ahead or changed direction while the request was in flight.
+    // If so, try to service the latest input with the current session
+    // state (reuseSession).  Only issue a new fetch when the session
+    // cannot handle it AND the input/direction actually changed — this
+    // avoids infinite re-fetch loops when reuseSession legitimately
+    // returns false for the same input (e.g. C1 UNIQUE).
+    //
+    // Note: reuseSession must always run — even when input hasn't changed
+    // — because the .then() handler sets anchor to the *resolved* prefix
+    // (which can be shorter than the original input).  The gap between
+    // the new anchor and the full input may contain separator characters
+    // that need progressive consumption (D1) and level loading.
+    private reconcileTypeAhead(
+        fetchInput: string,
+        fetchDirection: CompletionDirection,
+    ): void {
+        const currentInput = this.lastInput;
+        const currentDirection = this.lastDirection;
+        if (!this.reuseSession(currentInput, currentDirection)) {
+            if (
+                currentInput !== fetchInput ||
+                currentDirection !== fetchDirection
+            ) {
+                this.fetchNewSession(currentInput, currentDirection);
+            } else {
+                // reuseSession returned false for the same input (e.g. C1
+                // UNIQUE, C2 COMMITTED, D3 REFETCH).  In all cases items
+                // are empty or uniquely satisfied — completionState is
+                // undefined.
+                debug(
+                    `Partial completion reconcile: reuseSession=false for same input, suppressing re-fetch`,
+                );
+                this.setCompletionState(undefined);
+            }
+        }
+    }
+
+    // Sync entry point: fires the async session and attaches a terminal
+    // .catch() so unhandled rejections never escape.
+    private fetchNewSession(
         input: string,
-        getPosition: (prefix: string) => SearchMenuPosition | undefined,
         direction: CompletionDirection,
     ): void {
+        this.startNewSession(input, direction).catch((e) =>
+            debugError(`Unhandled error in startNewSession: '${input}' ${e}`),
+        );
+    }
+
+    // Start a new completion session: issue backend request and process result.
+    private async startNewSession(
+        input: string,
+        direction: CompletionDirection,
+    ): Promise<void> {
         debug(`Partial completion start: '${input}' direction=${direction}`);
-        this.menu.hide();
-        this.menu.setChoices([]);
+        this.searchMenuIndex.setItems([]);
         this.anchor = input;
         this.menuAnchorIndex = input.length;
         this.consumedSep = "";
         this.setPartitions([]);
         this.menuSepLevel = 0;
         this.noMatchPolicy = "refetch";
+        // Trie just cleared via setItems([]) — filterItems returns []
+        // and filterForState would return undefined.
+        this.setCompletionState(undefined);
         const completionP = this.dispatcher.getCommandCompletion(
             input,
             direction,
         );
         this.completionP = completionP;
-        completionP
-            .then((result) => {
-                if (this.completionP !== completionP) {
-                    debug(`Partial completion canceled: '${input}'`);
-                    return;
-                }
+        try {
+            const result = await completionP;
 
-                this.completionP = undefined;
-                debug(`Partial completion result: `, result);
+            if (this.completionP !== completionP) {
+                debug(`Partial completion canceled: '${input}'`);
+                return;
+            }
 
-                this.noMatchPolicy = computeNoMatchPolicy(
-                    result.closedSet,
-                    result.afterWildcard,
+            this.completionP = undefined;
+            debug(`Partial completion result: `, result);
+
+            this.noMatchPolicy = computeNoMatchPolicy(
+                result.closedSet,
+                result.afterWildcard,
+            );
+            this.directionSensitive = result.directionSensitive;
+
+            const partitions = toPartitions(
+                result.completions,
+                input,
+                result.startIndex,
+            );
+
+            if (partitions.length === 0) {
+                debug(
+                    `Partial completion skipped: No completions for '${input}'`,
                 );
-                this.directionSensitive = result.directionSensitive;
+                this.setPartitions([]);
+                this.reconcileTypeAhead(input, direction);
+                return;
+            }
 
-                const partitions = toPartitions(
-                    result.completions,
-                    input,
-                    result.startIndex,
+            // Anchor the session at the resolved prefix so
+            // subsequent keystrokes filter within the trie.
+            const partial =
+                result.startIndex >= 0 && result.startIndex <= input.length
+                    ? input.substring(0, result.startIndex)
+                    : input;
+            this.anchor = partial;
+            this.menuAnchorIndex = partial.length;
+            this.consumedSep = "";
+            this.setPartitions(partitions);
+
+            // Start at the lowest non-empty level to avoid
+            // parking at an empty L0 that requires consumption.
+            const lowest = lowestLevelWithItems(this.levelCounts);
+            this.loadLevel(lowest ?? 0);
+
+            // If triggered by a dismiss, only reopen when the
+            // anchor advanced.  Same anchor means the same completions at
+            // the same position — the user already dismissed them.
+            const dismissAnchor = this.dismissAnchor;
+            this.dismissAnchor = undefined;
+            if (
+                dismissAnchor !== undefined &&
+                partial === dismissAnchor &&
+                this.lastInput === input &&
+                this.lastDirection === direction
+            ) {
+                debug(
+                    `Partial completion dismiss: anchor unchanged ('${partial}'), suppressing reopen`,
                 );
+                return;
+            }
 
-                if (partitions.length === 0) {
-                    debug(
-                        `Partial completion skipped: No completions for '${input}'`,
-                    );
-                    this.setPartitions([]);
-                    return;
-                }
-
-                // Anchor the session at the resolved prefix so
-                // subsequent keystrokes filter within the trie.
-                const partial =
-                    result.startIndex >= 0 && result.startIndex <= input.length
-                        ? input.substring(0, result.startIndex)
-                        : input;
-                this.anchor = partial;
-                this.menuAnchorIndex = partial.length;
-                this.consumedSep = "";
-                this.setPartitions(partitions);
-
-                // Start at the lowest non-empty level to avoid
-                // parking at an empty L0 that requires consumption.
-                const lowest = lowestLevelWithItems(this.levelCounts);
-                this.loadLevel(lowest ?? 0);
-
-                // If triggered by an explicit close, only reopen when the
-                // anchor advanced.  Same anchor means the same completions at
-                // the same position — the user already dismissed them.
-                const explicitCloseAnchor = this.explicitCloseAnchor;
-                this.explicitCloseAnchor = undefined;
-                if (
-                    explicitCloseAnchor !== undefined &&
-                    partial === explicitCloseAnchor
-                ) {
-                    debug(
-                        `Partial completion explicit-hide: anchor unchanged ('${partial}'), suppressing reopen`,
-                    );
-                    return;
-                }
-
-                // Re-run update with captured input to show the menu (or defer
-                // if no items are visible yet).
-                this.reuseSession(input, getPosition, direction);
-            })
-            .catch((e) => {
-                debugError(`Partial completion error: '${input}' ${e}`);
-                // On error, clear the in-flight promise but preserve the
-                // anchor so that identical input reuses the session (no
-                // re-fetch) while diverged input still triggers a new fetch.
-                this.completionP = undefined;
-                this.explicitCloseAnchor = undefined;
-            });
+            // Use the latest input/direction — the user may have typed
+            // ahead while the fetch was in flight.
+            this.reconcileTypeAhead(input, direction);
+        } catch (e) {
+            debugError(`Partial completion error: '${input}' ${e}`);
+            // On error, clear the in-flight promise but preserve the
+            // anchor so that identical input reuses the session (no
+            // re-fetch) while diverged input still triggers a new fetch.
+            this.completionP = undefined;
+            this.dismissAnchor = undefined;
+            this.reconcileTypeAhead(input, direction);
+        }
     }
 }
 
-// ── SepLevel: separator progression model ────────────────────────────────
+// ── SepLevel: separator progression model ────────────────────────────────────
 //
 // Three ordered levels describing what separator characters have been
 // consumed between anchor and menuAnchorIndex.  Each level defines which
@@ -665,7 +813,7 @@ export class PartialCompletionSession {
 
 // SeparatorMode after "autoSpacePunctuation" has been resolved per-item
 // and undefined has been defaulted to "space".  Partitions always use
-// this type — no deferred or missing modes at the shell level.
+// this type — no deferred or missing modes at the session level.
 type ResolvedSeparatorMode = Exclude<SeparatorMode, "autoSpacePunctuation">;
 
 // Visibility matrix (non-cumulative, per-level):
