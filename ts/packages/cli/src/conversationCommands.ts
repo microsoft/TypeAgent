@@ -65,6 +65,44 @@ function parseNameArg(args: string): string {
     return trimmed;
 }
 
+/**
+ * Tokenize a string into up to `maxTokens` logical arguments, respecting
+ * double-quoted values.  A quoted token may contain spaces; the surrounding
+ * quotes are stripped.  Any remaining text after `maxTokens - 1` splits is
+ * returned as the last token verbatim (unquoted).
+ */
+function tokenizeArgs(args: string, maxTokens: number): string[] {
+    const tokens: string[] = [];
+    let remaining = args.trim();
+    while (remaining.length > 0 && tokens.length < maxTokens) {
+        if (remaining.startsWith('"')) {
+            const close = remaining.indexOf('"', 1);
+            if (close === -1) {
+                // Unclosed quote — treat the rest as a single token
+                tokens.push(remaining.slice(1));
+                remaining = "";
+            } else {
+                tokens.push(remaining.slice(1, close));
+                remaining = remaining.slice(close + 1).trimStart();
+            }
+        } else if (tokens.length === maxTokens - 1) {
+            // Last allowed token: consume everything remaining
+            tokens.push(remaining);
+            remaining = "";
+        } else {
+            const spaceIdx = remaining.search(/\s/);
+            if (spaceIdx === -1) {
+                tokens.push(remaining);
+                remaining = "";
+            } else {
+                tokens.push(remaining.slice(0, spaceIdx));
+                remaining = remaining.slice(spaceIdx).trimStart();
+            }
+        }
+    }
+    return tokens;
+}
+
 // ── Subcommand handlers ────────────────────────────────────────────────
 
 async function handleNew(
@@ -178,14 +216,15 @@ async function handleRename(
 
     // If args contains two tokens, first is the target session name and second is the new name.
     // If only one token, rename the current session.
-    const spaceIdx = trimmed.indexOf(" ");
+    // tokenizeArgs respects double quotes so names with spaces work correctly.
+    const tokens = tokenizeArgs(trimmed, 2);
     let targetName: string | undefined;
     let newName: string;
-    if (spaceIdx === -1) {
-        newName = parseNameArg(trimmed);
+    if (tokens.length === 1) {
+        newName = tokens[0];
     } else {
-        targetName = parseNameArg(trimmed.substring(0, spaceIdx));
-        newName = parseNameArg(trimmed.substring(spaceIdx + 1));
+        targetName = tokens[0];
+        newName = tokens[1];
     }
 
     if (!newName) {

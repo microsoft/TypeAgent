@@ -27,6 +27,7 @@ import { ClientIO, Dispatcher, RequestId } from "agent-dispatcher";
 import { swapContent } from "./setContent";
 import { remoteSearchMenuUIOnCompletion } from "./searchMenuUI/remoteSearchMenuUI";
 import { ChatInput } from "./chat/chatInput";
+import { escapeHtml } from "./chat/sessionCommands";
 
 export function isElectron(): boolean {
     return globalThis.api !== undefined;
@@ -384,6 +385,8 @@ function registerClient(
                             switch (payload.subcommand) {
                                 case "new": {
                                     if (!payload.name) {
+                                        // TODO: prompt the user for a name inline instead of warning,
+                                        // so that NL "create a new conversation" works end-to-end.
                                         chatView.addNotificationMessage(
                                             {
                                                 type: "html",
@@ -622,6 +625,18 @@ function registerClient(
                                             type: "html",
                                             content: `🗑️ Deleted conversation "<b>${escapeHtml(match.name)}</b>"`,
                                             kind: "info",
+                                        },
+                                        "session",
+                                        undefined,
+                                    );
+                                    break;
+                                }
+                                default: {
+                                    chatView.addNotificationMessage(
+                                        {
+                                            type: "html",
+                                            content: `Unknown manage-conversation subcommand: "<b>${escapeHtml(payload.subcommand)}</b>"`,
+                                            kind: "warning",
                                         },
                                         "session",
                                         undefined,
@@ -1000,12 +1015,4 @@ function getDateDifferenceDescription(date1: Date, date2: Date): string {
     } else {
         return date1.toLocaleDateString("en-US", { weekday: "long" });
     }
-}
-
-function escapeHtml(str: string): string {
-    return str
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
 }

@@ -443,13 +443,18 @@ agentContext.clientIO.takeAction(requestId, "manage-conversation", payload);
 where `payload` has the shape:
 
 ```typescript
-{ subcommand: "new" | "list" | "info" | "switch" | "delete"; name?: string }
+{ subcommand: "new"; name?: string }
+{ subcommand: "list" }
+{ subcommand: "info" }
+{ subcommand: "switch" }
+{ subcommand: "delete"; name: string }
+{ subcommand: "rename"; name: string; newName: string }
 ```
 
 Each client handles `"manage-conversation"` using its own session management API:
 
-- **CLI** — `enhancedConsole.ts` receives the action and calls `handleConversationCommand(conversationContext, argsString)`, delegating to the same `@conversation` command machinery used for explicit slash commands.
-- **Shell** — `main.ts` receives the action and calls the corresponding `ClientAPI` session method (`sessionCreate`, `sessionList`, `sessionSwitch`, `sessionDelete`, `sessionGetCurrent`) over the Electron IPC bridge.
+- **CLI** — `enhancedConsole.ts` receives the action and calls `handleConversationCommand(conversationContext, argsString)`, delegating to the same `@conversation` command machinery used for explicit slash commands (`new`, `list`, `info`, `switch`, `rename`, `delete`).
+- **Shell** — `main.ts` receives the action and calls the corresponding `ClientAPI` session method (`sessionCreate`, `sessionList`, `sessionSwitch`, `sessionRename`, `sessionDelete`, `sessionGetCurrent`) over the Electron IPC bridge.
 
 See the [dispatcher README](../../packages/dispatcher/dispatcher/README.md#sessions) for the full list of supported phrases.
 

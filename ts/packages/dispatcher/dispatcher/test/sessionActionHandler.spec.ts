@@ -181,7 +181,7 @@ describe("executeSessionAction — renameSession", () => {
         expect(mockTakeAction).toHaveBeenCalledWith(
             mockRequestId,
             "manage-conversation",
-            { subcommand: "rename", name: undefined, newName: "my project" },
+            { subcommand: "rename", newName: "my project" },
         );
     });
 

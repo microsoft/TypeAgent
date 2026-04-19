@@ -1008,7 +1008,7 @@ export function createEnhancedClientIO(
                 let args: string;
                 switch (payload.subcommand) {
                     case "new":
-                        args = payload.name ? `new ${payload.name}` : "new";
+                        args = payload.name ? `new "${payload.name}"` : "new";
                         break;
                     case "list":
                         args = "list";
@@ -1017,15 +1017,15 @@ export function createEnhancedClientIO(
                         args = "info";
                         break;
                     case "switch":
-                        args = `switch ${payload.name}`;
+                        args = `switch "${payload.name}"`;
                         break;
                     case "delete":
-                        args = `delete ${payload.name}`;
+                        args = `delete "${payload.name}"`;
                         break;
                     case "rename":
                         args = payload.name
-                            ? `rename ${payload.name} ${payload.newName}`
-                            : `rename ${payload.newName}`;
+                            ? `rename "${payload.name}" "${payload.newName}"`
+                            : `rename "${payload.newName}"`;
                         break;
                     default:
                         console.error(
