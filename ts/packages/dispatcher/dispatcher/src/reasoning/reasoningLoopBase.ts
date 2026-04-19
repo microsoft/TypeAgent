@@ -32,9 +32,9 @@ export interface ReasoningLoopConfig {
     onToolResult?: (tool: string, result: unknown, isError: boolean) => void;
     onText?: (text: string) => void;
     /**
-     * When set, the adapter resumes the prior session with this id rather than
-     * starting a fresh conversation. Used by the VBA-to-typed-actions subagent
-     * to carry parent/sub-agent dialogue across iterations.
+     * When set, the adapter resumes the prior session with this id rather
+     * than starting a fresh conversation. Useful for subagents that need to
+     * carry parent/sub-agent dialogue across iterations.
      */
     resumeSessionId?: string;
 }
