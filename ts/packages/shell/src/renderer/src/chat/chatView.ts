@@ -26,6 +26,9 @@ import { InputChoice } from "../choicePanel";
 import { MessageGroup } from "./messageGroup";
 import { SettingsView } from "../settingsView";
 import { uint8ArrayToBase64 } from "@typeagent/common-utils";
+import registerDebug from "debug";
+
+const debugPartial = registerDebug("typeagent:shell:partial");
 
 const DynamicDisplayMinRefreshIntervalMs = 15;
 
@@ -926,7 +929,7 @@ export class ChatView {
             isInput: boolean,
         ) => {
             if (this.partialCompletion) {
-                console.log(`Partial completion on change: ${isInput}`);
+                debugPartial(`Partial completion on change: ${isInput}`);
                 if (isInput) {
                     this.partialCompletion.update(true);
                 } else {

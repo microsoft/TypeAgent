@@ -61,6 +61,10 @@ export class PartialCompletion {
     // items) should be called on the SearchMenu.
     private lastGeneration: number = -1;
     private lastPrefix: string = "";
+    // Set when update(contentChanged=true) runs so the selectionchange
+    // handler can skip the redundant re-update that the browser fires
+    // after every content mutation.
+    private contentUpdated: boolean = false;
 
     private readonly cleanupEventListeners: () => void;
     constructor(
@@ -111,6 +115,10 @@ export class PartialCompletion {
         });
 
         const selectionChangeHandler = () => {
+            if (this.contentUpdated) {
+                this.contentUpdated = false;
+                return;
+            }
             debug("Partial completion update on selection changed");
             this.update(false);
         };
@@ -135,6 +143,9 @@ export class PartialCompletion {
         if (contentChanged) {
             // Normalize the input text to ensure selection at end is correct.
             this.input.getTextEntry().normalize();
+            // Suppress the selectionchange event that the browser fires
+            // after every content mutation — this update already covers it.
+            this.contentUpdated = true;
         }
         if (!this.isSelectionAtEnd(contentChanged)) {
             this.controller.hide();
