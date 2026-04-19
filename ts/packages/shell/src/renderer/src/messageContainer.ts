@@ -170,6 +170,30 @@ export class MessageContainer {
         }
     }
 
+    private diagnosticData: any[] | undefined;
+
+    public appendDiagnosticData(data: any) {
+        if (this.diagnosticData === undefined) {
+            this.diagnosticData = [data];
+        } else {
+            this.diagnosticData.push(data);
+        }
+        const label = this.timestampDiv.firstChild as HTMLSpanElement;
+        label.setAttribute(
+            "action-data",
+            "<pre>" +
+                JSON.stringify(
+                    this.diagnosticData.length === 1
+                        ? this.diagnosticData[0]
+                        : this.diagnosticData,
+                    undefined,
+                    2,
+                ) +
+                "</pre>",
+        );
+        this.nameSpan.classList.add("clickable");
+    }
+
     private createTimestampDiv(timestamp: Date, className: string) {
         const timeStampDiv = document.createElement("div");
         timeStampDiv.classList.add(className);

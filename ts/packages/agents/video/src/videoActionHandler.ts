@@ -198,7 +198,9 @@ function createVideoPlaceHolder(
                     container.innerText = "❌ Failed to retrieve video content.";
                 }
             } else {
-                container.innerHTML = "<div>❌ Video generation failed: " + statusData.failure_reason ?? "" + "</div>";
+                const div = document.createElement('div');
+                div.textContent = "❌ Video generation failed: " + (statusData.failure_reason ?? "");
+                container.appendChild(div);
                 console.log(JSON.stringify(statusData, null, 2));
             }
         }

@@ -134,7 +134,9 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/agents/spelunker/src/spelunkerActionHandler.ts` | 89 | What other standard functions could be handy here? | Medium | Low | Component | No Fix | Yes |
 | `ts/packages/agents/spelunker/src/summarizing.ts` | 42 | Prompt engineering | High | Medium | Local | Fix | Yes |
 | `ts/packages/agents/video/src/videoActionHandler.ts` | 54 | dynamic duration | Medium | Medium | Local | Fix | Yes |
-| `ts/packages/agents/weather/src/weatherActionHandler.ts` | 227 | Add more sophisticated validation: | Medium | High | Local | Fix | No |
+| ~~`ts/packages/agents/weather/src/weatherActionHandler.ts`~~ | ~~227~~ | ~~Add more sophisticated validation:~~ | ~~Medium~~ | ~~High~~ | ~~Local~~ | ~~Fix~~ | ~~No~~ | ✅ Fixed: now uses geocoding API |
+| `ts/packages/aiclient/src/models.ts` | 31 | JsonSchemaType | Low | High | Local | Fix | No |
+| `ts/packages/aiclient/src/models.ts` | 39 | JsonSchemaType | Low | High | Local | Fix | No |
 | `ts/packages/aiclient/src/models.ts` | 176 | add support for videos | High | Medium | Component | Fix | Yes |
 | `ts/packages/aiclient/src/openai.ts` | 580 | remove after API endpoint correctly handles this case | Low | Medium | Local | Fix | Yes |
 | `ts/packages/aiclient/src/tokenCounter.ts` | 58 | intermittently cache these with the session | Medium | Medium | Component | Fix | Yes |
@@ -149,10 +151,11 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/azure-ai-foundry/src/websiteAliasExtraction.ts` | 65 | IMPLEMENT | High | Low | Component | Fix | Yes |
 | `ts/packages/azure-ai-foundry/src/websiteAliasExtraction.ts` | 121 | handle multi-modal content | High | Medium | Component | Fix | No |
 | `ts/packages/cache/src/cache/cache.ts` | 599 | Move this in the construction store | Medium | Medium | Component | Fix | Yes |
+| ~~`ts/packages/cache/src/cache/explainWorkQueue.ts`~~ | ~~42~~ | ~~check number too.~~ | Low | High | Local | ✅ Fixed | No |
 | `ts/packages/cache/src/constructions/constructionCache.ts` | 420 | GC match sets | Medium | Medium | Component | Fix | No |
 | `ts/packages/cache/src/constructions/constructionValue.ts` | 140 | Don't support multiple subphrase wildcard match for now. | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/cache/src/constructions/constructionValue.ts` | 156 | Only deal with exact match for now | Medium | Medium | Component | Fix | Yes |
-| `ts/packages/cache/src/constructions/matchPart.ts` | 66 | non-diacritic match | Medium | Medium | Component | Fix | No |
+| ~~`ts/packages/cache/src/constructions/matchPart.ts`~~ | ~~66~~ | ~~non-diacritic match~~ | Medium | Medium | Component | ✅ Fixed | No |
 | `ts/packages/cache/src/constructions/transforms.ts` | 208 | Better history matching heuristic. Currently it will just the first one in the list. | Medium | Medium | Component | Fix | No |
 | `ts/packages/cache/src/explanation/typeChatAgent.ts` | 61 | probably most (all?) of these can be integrated into TypeChat | High | Low | Cross-cutting | No Fix | Yes |
 | `ts/packages/cache/src/explanation/v5/explanationV5.ts` | 282 | consider to improve this for cases where different actions have the same parameters schema. | Medium | Medium | Component | Fix | No |
@@ -161,10 +164,11 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/cache/src/utils/language.ts` | 396 | initial implementation. Can be over-broad and incomplete. | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/cli/src/enhancedConsole.ts` | 655 | Not implemented | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/cli/src/enhancedConsole.ts` | 784 | Ignored | Low | High | Local | No Fix | Yes |
-| `ts/packages/defaultAgentProvider/test/construction.spec.ts` | 74 | once MatchPart allow matches ignoring diacritical marks | Medium | Medium | Component | Fix | No |
+| ~~`ts/packages/defaultAgentProvider/test/construction.spec.ts`~~ | ~~74~~ | ~~once MatchPart allow matches ignoring diacritical marks~~ | Medium | Medium | Component | ✅ Fixed | No |
+| ~~`ts/packages/defaultAgentProvider/test/construction.spec.ts`~~ | ~~86~~ | ~~Validating the lower case action~~ | Low | High | Local | ✅ Fixed | No |
 | `ts/packages/defaultAgentProvider/test/construction.spec.ts` | 88 | needs fix these | Low | Medium | Local | Fix | Yes |
 | `ts/packages/defaultAgentProvider/test/constructionCacheTestCommon.ts` | 240 | needs fix these | Low | Medium | Local | Fix | Yes |
-| `ts/packages/defaultAgentProvider/test/grammar.spec.ts` | 93 | once MatchPart allow matches ignoring diacritical marks | Medium | Medium | Component | Fix | No |
+| ~~`ts/packages/defaultAgentProvider/test/grammar.spec.ts`~~ | ~~93~~ | ~~once MatchPart allow matches ignoring diacritical marks~~ | Medium | Medium | Component | ✅ Fixed | No |
 | `ts/packages/defaultAgentProvider/test/schema.spec.ts` | 18 | mcpfilesystem schema can't be loaded without allowDirectory to start up the server. | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/context/appAgentManager.ts` | 1151 | Make this not hard coded | Low | High | Local | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/context/appAgentManager.ts` | 1182 | unload agent as well? | Medium | Medium | Component | Fix | Yes |
@@ -199,7 +203,7 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/dispatcher/dispatcher/src/search/internet.ts` | 373 | handle multi-modal content | High | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/search/search.ts` | 125 | how about entities? | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/translation/actionTemplate.ts` | 79 | smarter about type unions. | Medium | Medium | Component | Fix | Yes |
-| `ts/packages/dispatcher/dispatcher/src/translation/actionTemplate.ts` | 82 | need to handle circular references (or error on circular references) | Medium | High | Component | Fix | No |
+| ~~`ts/packages/dispatcher/dispatcher/src/translation/actionTemplate.ts`~~ | ~~82~~ | ~~need to handle circular references (or error on circular references)~~ | ~~Medium~~ | ~~High~~ | ~~Component~~ | ~~Fix~~ | ~~No~~ | ✅ Fixed: threads visited set to detect cycles |
 | `ts/packages/dispatcher/dispatcher/src/translation/entityResolution.ts` | 139 | Should we use the index here? Probably need the translation to validate the index to match the name. | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/translation/entityResolution.ts` | 146 | Should we use the index here? Probably need the translation to validate the index to match the name. | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/translation/entityResolution.ts` | 153 | Should we use the index here? Probably need the translation to validate the index to match the name. | Medium | Medium | Component | Fix | Yes |
@@ -240,9 +244,9 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/memory/website/src/websiteCollection.ts` | 2646 | If we have access to Graphology graphs, compute more advanced metrics | High | Low | Component | No Fix | Yes |
 | `ts/packages/memory/website/src/websiteCollection.ts` | 2709 | In a full implementation, this would: | High | Low | Component | No Fix | Yes |
 | `ts/packages/shell/src/main/index.ts` | 143 | connected mode only needs the speech key. | Low | Medium | Component | Fix | Yes |
-| `ts/packages/shell/src/main/shellWindow.ts` | 1260 | add logic for opening in external browser if a modifier key is pressed | Low | High | Local | Fix | No |
+| ~~`ts/packages/shell/src/main/shellWindow.ts`~~ | ~~1260~~ | ~~add logic for opening in external browser if a modifier key is pressed~~ | ~~Low~~ | ~~High~~ | ~~Local~~ | ~~Fix~~ | ~~No~~ | ✅ Fixed: tracks modifier key via before-input-event |
 | `ts/packages/shell/src/renderer/src/main.ts` | 128 | wire up any other functionality (player agent?) | High | Low | Cross-cutting | No Fix | Yes |
-| `ts/packages/shell/src/renderer/src/main.ts` | 196 | append data instead of replace | Low | High | Local | Fix | No |
+| ~~`ts/packages/shell/src/renderer/src/main.ts`~~ | ~~196~~ | ~~append data instead of replace~~ | ~~Low~~ | ~~High~~ | ~~Local~~ | ~~Fix~~ | ~~No~~ | ✅ Fixed: appendDiagnosticData now accumulates into an array |
 | `ts/packages/shell/src/renderer/src/main.ts` | 311 | Design for toast notifications in shell | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/shell/src/renderer/src/messageContainer.ts` | 506 | Adjust this value. | Low | High | Local | Fix | Yes |
 | `ts/packages/shell/src/renderer/src/webSocketAPI.ts` | 128 | Not implemented yet. | Medium | Medium | Component | Fix | Yes |
