@@ -349,6 +349,37 @@ entity references. Named entities (e.g., "that song", "the meeting") are
 looked up in conversation memory. Ambiguous references trigger a user
 clarification prompt via the `ClientIO` layer.
 
+Translated actions may also contain **entity placeholders** — explicit
+references the LLM emits as string values pointing back at entities
+provided in the prompt's history context. `resolveEntityPlaceholders()`
+in `pendingActions.ts` replaces them with the referenced values. Grammar:
+
+| Form                          | Example                       | Resolves to                                      |
+| ----------------------------- | ----------------------------- | ------------------------------------------------ |
+| Bare whole-value              | `${entity-0}`                 | `entity.name`                                    |
+| Embedded structured reference | `${entity-0}[Revenue]`        | `<entity.name>[Revenue]` (literal concatenation) |
+| Dotted path navigation        | `${entity-0.facets[0].value}` | Result of walking the path on the entity object  |
+
+Path navigation is controlled by the session config
+`translation.entity.pathNavigation` with four modes:
+
+| Mode                 | Behavior on a valid path                   | Behavior on miss                                                       |
+| -------------------- | ------------------------------------------ | ---------------------------------------------------------------------- |
+| `"off"`              | Not attempted — placeholder passes through | N/A                                                                    |
+| `"throw"` (default)  | Resolves and interpolates                  | Throws `Entity path did not resolve …`, surfaced to the reasoning loop |
+| `"fallback-to-name"` | Resolves and interpolates                  | Returns `entity.name` (same as the bare form)                          |
+| `"passthrough"`      | Resolves and interpolates                  | Leaves the literal `${entity-N.…}` placeholder intact                  |
+
+The `"throw"` default is intentional: a path miss is almost always an LLM
+mistake about the entity's shape (or a shape that changed under it), and
+the reasoning loop can retry with a corrected path. Silent fallbacks hide
+these mistakes as wrong-answer-looks-right failures downstream.
+
+When path navigation is enabled (any mode ≠ `"off"`), the translator
+system prompt includes a short line documenting the dotted syntax so the
+LLM knows it's an available form — see `createTypeAgentRequestPrompt()`
+in `chatHistoryPrompt.ts`.
+
 **Flow execution** — Some actions have registered flow definitions
 (multi-step recipes). When `getFlow(schemaName, actionName)` returns a
 flow, the `flowInterpreter` executes it step-by-step with parameter

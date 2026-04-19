@@ -35,7 +35,8 @@ export async function callWithRetry<T = any>(
         } catch (e: any) {
             const elapsed = Date.now() - attemptStart;
             const msg =
-                e?.message ?? (typeof e === "string" ? e : JSON.stringify(e));
+                e?.message ??
+                (typeof e === "string" ? e : JSON.stringify(e));
             if (
                 retryCount >= retryMaxAttempts ||
                 (shouldAbort && shouldAbort(e))
@@ -68,9 +69,7 @@ async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
                 timer = setTimeout(
                     () =>
                         reject(
-                            new Error(
-                                `callWithRetry attempt timed out after ${ms}ms`,
-                            ),
+                            new Error(`callWithRetry attempt timed out after ${ms}ms`),
                         ),
                     ms,
                 );

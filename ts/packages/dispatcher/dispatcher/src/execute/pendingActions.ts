@@ -205,19 +205,99 @@ type ParameterEntityResolverOptions = {
     resolve: boolean;
     clarify: boolean;
     filter: boolean;
+    // Read at the dispatcher via session config translation.entity.pathNavigation.
+    // Existing call sites that omit this field keep the pre-existing "off"
+    // behavior — no path navigation, literal placeholders pass through.
+    pathNavigation?: EntityPathNavigationMode;
 };
+
+/**
+ * Path-navigation mode for entity placeholders. See `translation.entity.pathNavigation`
+ * in session.ts for the semantics of each mode.
+ */
+export type EntityPathNavigationMode =
+    | "off"
+    | "throw"
+    | "fallback-to-name"
+    | "passthrough";
+
+/**
+ * Walk a dotted + bracketed path on `root` and return the value at the leaf,
+ * or `undefined` if any step misses. The path grammar accepts:
+ *   .identifier        — property access
+ *   [integer]          — array index
+ *   .identifier[N]     — combined
+ * Returns `{ ok: true, value }` on success or `{ ok: false, at }` on miss,
+ * where `at` is the path prefix that failed (for error messages).
+ */
+function walkEntityPath(
+    root: unknown,
+    path: string,
+): { ok: true; value: unknown } | { ok: false; at: string } {
+    if (path === "") return { ok: true, value: root };
+    // Tokenize the path into steps. Each step is either ".name" or "[index]".
+    const stepRe = /\.([A-Za-z_][A-Za-z0-9_]*)|\[(\d+)\]/g;
+    let cur: unknown = root;
+    let consumedEnd = 0;
+    let lastConsumed = "";
+    let m: RegExpExecArray | null;
+    // Path should begin with either "." or "[" — any other leading char is a
+    // syntactic miss we surface the same way as an unresolved path.
+    if (path[0] !== "." && path[0] !== "[") {
+        return { ok: false, at: "" };
+    }
+    while ((m = stepRe.exec(path)) !== null) {
+        if (m.index !== consumedEnd) {
+            // Unparseable segment between the last match and the next.
+            return { ok: false, at: lastConsumed };
+        }
+        consumedEnd = m.index + m[0].length;
+        lastConsumed += m[0];
+        if (cur === null || cur === undefined) {
+            return { ok: false, at: lastConsumed };
+        }
+        if (m[1] !== undefined) {
+            // .property
+            cur = (cur as Record<string, unknown>)[m[1]];
+        } else {
+            // [index]
+            const idx = Number(m[2]);
+            if (!Array.isArray(cur)) {
+                return { ok: false, at: lastConsumed };
+            }
+            cur = cur[idx];
+        }
+        if (cur === undefined) {
+            return { ok: false, at: lastConsumed };
+        }
+    }
+    if (consumedEnd !== path.length) {
+        // Trailing garbage — path not fully consumed by the step grammar.
+        return { ok: false, at: lastConsumed };
+    }
+    return { ok: true, value: cur };
+}
 
 /**
  * Replace all ${entity-N} placeholders in `value` using the provided map.
  * Handles both whole-value refs ("${entity-1}") and embedded structured refs
  * ("${entity-1}[Column]", "${entity-0}[A],${entity-0}[B]").
- * Throws if any placeholder has no corresponding entry in the map.
+ *
+ * When `mode` is not "off", the extended form `${entity-N<path>}` is also
+ * recognized (e.g. `${entity-0.facets[0].value}`). The path is walked against
+ * the PromptEntity object; see `EntityPathNavigationMode` for miss semantics.
+ *
+ * Throws if any bare `${entity-N}` placeholder has no corresponding entry in
+ * the map, regardless of mode.
  */
 export function resolveEntityPlaceholders(
     value: string,
     promptEntityMap: Map<string, PromptEntity> | undefined,
+    mode: EntityPathNavigationMode = "off",
 ): string {
-    return value.replace(/\$\{entity-(\d+)\}/g, (match) => {
+    // Match the bare form first: ${entity-N} with nothing else inside the
+    // braces. This is the existing, always-supported grammar.
+    const bareResolved = value.replace(/\$\{entity-(\d+)\}/g, (match) => {
         const entity = promptEntityMap?.get(match);
         if (entity === undefined) {
             throw new Error(
@@ -226,6 +306,55 @@ export function resolveEntityPlaceholders(
         }
         return entity.name;
     });
+    if (mode === "off") {
+        return bareResolved;
+    }
+    // Extended form: ${entity-N<path>} where <path> is ".prop" / "[idx]" / etc.
+    // Anything that doesn't parse as a clean step chain is treated as a miss.
+    return bareResolved.replace(
+        /\$\{entity-(\d+)([^}]*)\}/g,
+        (match, idx: string, path: string) => {
+            const key = `\${entity-${idx}}`;
+            const entity = promptEntityMap?.get(key);
+            if (entity === undefined) {
+                throw new Error(
+                    `Entity reference not found: ${key} in "${value}"`,
+                );
+            }
+            const walk = walkEntityPath(entity, path);
+            if (walk.ok) {
+                // Navigable values are coerced to string. Object/array leaves
+                // become JSON — the LLM occasionally navigates one level too
+                // shallow and we'd rather surface "[object Object]"-avoiding
+                // output than throw on every non-primitive leaf.
+                const v = walk.value;
+                if (v === null) return "";
+                if (typeof v === "string") return v;
+                if (typeof v === "number" || typeof v === "boolean")
+                    return String(v);
+                try {
+                    return JSON.stringify(v);
+                } catch {
+                    return String(v);
+                }
+            }
+            // Path miss — honor the configured mode.
+            if (mode === "throw") {
+                throw new Error(
+                    `Entity path did not resolve: ${match} in "${value}". ` +
+                        `Navigation failed at "${key}${walk.at}". ` +
+                        `Inspect the entity you were handed in context and use a path ` +
+                        `that matches its actual shape, or inline the literal value.`,
+                );
+            }
+            if (mode === "fallback-to-name") {
+                return entity.name;
+            }
+            // "passthrough": leave the original placeholder untouched, which
+            // matches what "off" would have produced for the same input.
+            return match;
+        },
+    );
 }
 
 function toPromptEntityMap(entities: PromptEntity[] | undefined) {
@@ -678,6 +807,7 @@ function createParameterEntityResolver(
                 const resolved = resolveEntityPlaceholders(
                     value,
                     promptEntityMap,
+                    options?.pathNavigation ?? "off",
                 );
                 obj[key] = resolved;
                 // Return entity metadata only when the whole value was a single bare ref.
