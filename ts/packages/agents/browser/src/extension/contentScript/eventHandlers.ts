@@ -183,7 +183,7 @@ function setupMessageListeners(): void {
             });
         },
         awaitPageLoad: async (timeout?: number) => {
-            return await awaitPageIncrementalUpdates();
+            return await awaitPageIncrementalUpdates(timeout || 5000);
         },
         awaitPageInteraction: async (timeout?: number) => {
             const delay = timeout || 400;

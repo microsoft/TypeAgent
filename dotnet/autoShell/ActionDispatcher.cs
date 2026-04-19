@@ -83,7 +83,7 @@ internal class ActionDispatcher
             new DisplaySettingsHandler(registry, process, brightness, logger),
             new PersonalizationSettingsHandler(registry, process),
             new MouseSettingsHandler(registry, process, systemParams, logger),
-            new AccessibilitySettingsHandler(registry, process),
+            new AccessibilitySettingsHandler(registry, process, systemParams),
             new PowerSettingsHandler(registry, process),
             new FileExplorerSettingsHandler(registry),
             new PrivacySettingsHandler(registry),

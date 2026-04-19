@@ -32,17 +32,12 @@ export type ClientActions =
 
 // end duplicate type section
 
+import type { SearchMenuItem } from "agent-dispatcher/helpers/completion";
+export type { SearchMenuItem };
+
 export type SearchMenuPosition = {
     left: number;
     bottom: number;
-};
-
-export type SearchMenuItem = {
-    matchText: string;
-    emojiChar?: string | undefined;
-    sortIndex?: number;
-    selectedText: string;
-    needQuotes?: boolean | undefined; // default is true, and will add quote to the selectedText if it has spaces.
 };
 
 export type SearchMenuUIUpdateData = {

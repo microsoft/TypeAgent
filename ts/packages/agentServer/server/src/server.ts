@@ -26,20 +26,26 @@ import {
 import type { ChannelProvider } from "@typeagent/agent-rpc/channel";
 import type { Dispatcher } from "agent-dispatcher";
 import dotenv from "dotenv";
+import registerDebug from "debug";
 const envPath = new URL("../../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
 
+const debugStartup = registerDebug("agent-server:startup");
+
 async function main() {
+    debugStartup(`pid=${process.pid} resolving instance dir + traceId`);
     const [instanceDir, traceId] = await Promise.all([
         getInstanceDirAsync(),
         getTraceIdAsync(),
     ]);
+    debugStartup(`instanceDir=${instanceDir}`);
 
     // did the launch request a specific config? (e.g. "test" to load "config.test.json")
     const configIdx = process.argv.indexOf("--config");
     const configName =
         configIdx !== -1 ? process.argv[configIdx + 1] : undefined;
 
+    debugStartup("creating session manager (will lockInstanceDir)");
     const sessionManager: SessionManager = await createSessionManager(
         "agent server",
         {
@@ -66,10 +72,12 @@ async function main() {
         instanceDir,
     );
 
+    debugStartup("session manager ready; prewarming default session");
     // Pre-initialize the default session dispatcher before accepting clients,
     // so the first joinSession call is fast and concurrent joinSession calls
     // don't race to initialize the same dispatcher.
     await sessionManager.prewarmMostRecentSession();
+    debugStartup("prewarm complete");
 
     const portIdx = process.argv.indexOf("--port");
     const port =
@@ -272,5 +280,15 @@ async function main() {
     console.log(`Agent server started at ws://localhost:${port}`);
     scheduleIdleShutdown();
 }
+
+process.on("unhandledRejection", (reason, _promise) => {
+    console.error("[agent-server] Unhandled promise rejection:", reason);
+    // Log but do not exit — crashing the server kills all concurrent workers.
+});
+
+process.on("uncaughtException", (err) => {
+    console.error("[agent-server] Uncaught exception:", err);
+    // Log but do not exit for non-fatal errors.
+});
 
 await main();

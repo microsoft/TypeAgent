@@ -430,6 +430,34 @@ When connected to the agentServer:
 
 ---
 
+## Natural Language Session Management
+
+In addition to the RPC/CLI surface described above, users can manage server-side sessions via natural language through the `system.session` sub-agent built into the dispatcher. Phrases like "switch to my work conversation", "create a new conversation called research", or "delete the old project session" are translated into structured actions and bridged to the client layer.
+
+Because the dispatcher has no direct access to the agent-server RPC layer, `executeSessionAction` uses the existing `ClientIO.takeAction` mechanism:
+
+```typescript
+agentContext.clientIO.takeAction(requestId, "manage-conversation", payload);
+```
+
+where `payload` has the shape:
+
+```typescript
+{ subcommand: "new"; name?: string }
+{ subcommand: "list" }
+{ subcommand: "info" }
+{ subcommand: "switch" }
+{ subcommand: "delete"; name: string }
+{ subcommand: "rename"; name: string; newName: string }
+```
+
+Each client handles `"manage-conversation"` using its own session management API:
+
+- **CLI** — `enhancedConsole.ts` receives the action and calls `handleConversationCommand(conversationContext, argsString)`, delegating to the same `@conversation` command machinery used for explicit slash commands (`new`, `list`, `info`, `switch`, `rename`, `delete`).
+- **Shell** — `main.ts` receives the action and calls the corresponding `ClientAPI` session method (`sessionCreate`, `sessionList`, `sessionSwitch`, `sessionRename`, `sessionDelete`, `sessionGetCurrent`) over the Electron IPC bridge.
+
+See the [dispatcher README](../../packages/dispatcher/dispatcher/README.md#sessions) for the full list of supported phrases.
+
 ## Summary
 
 This design adds explicit session management to the agentServer without fundamentally restructuring its architecture. The core additions are:

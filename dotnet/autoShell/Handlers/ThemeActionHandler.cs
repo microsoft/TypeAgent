@@ -4,12 +4,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 using autoShell.Handlers.Generated;
 using autoShell.Services;
-using autoShell.Services.Interop;
 using Microsoft.Win32;
+using static autoShell.Services.Interop.SpiConstants;
 
 namespace autoShell.Handlers;
 
@@ -18,26 +17,8 @@ namespace autoShell.Handlers;
 /// Contains all Windows theme management logic including discovery, application,
 /// and light/dark mode toggling.
 /// </summary>
-internal partial class ThemeActionHandler : ActionHandlerBase
+internal class ThemeActionHandler : ActionHandlerBase
 {
-    #region P/Invoke
-
-    private const int SPI_SETDESKWALLPAPER = 0x0014;
-    private const int SPIF_UPDATEINIFILE_SENDCHANGE = 3;
-    private const uint LOAD_LIBRARY_AS_DATAFILE = 0x00000002;
-
-    [LibraryImport(NativeDlls.Kernel32, SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
-    private static partial IntPtr LoadLibraryEx(string lpFileName, IntPtr hFile, uint dwFlags);
-
-    [LibraryImport(NativeDlls.Kernel32, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool FreeLibrary(IntPtr hModule);
-
-    [LibraryImport(NativeDlls.User32, StringMarshalling = StringMarshalling.Utf16)]
-    private static partial int LoadString(IntPtr hInstance, uint uID, [Out] char[] lpBuffer, int nBufferMax);
-
-    #endregion P/Invoke
-
     private readonly IRegistryService _registry;
     private readonly IProcessService _process;
     private readonly ISystemParametersService _systemParams;
@@ -314,7 +295,7 @@ internal partial class ThemeActionHandler : ActionHandlerBase
     /// <summary>
     /// Parses the display name from a .theme file.
     /// </summary>
-    private static string GetThemeDisplayName(string themeFilePath)
+    private string GetThemeDisplayName(string themeFilePath)
     {
         try
         {
@@ -377,7 +358,7 @@ internal partial class ThemeActionHandler : ActionHandlerBase
     /// <summary>
     /// Resolves a localized string resource reference.
     /// </summary>
-    private static string ResolveLocalizedString(string localizedString)
+    private string ResolveLocalizedString(string localizedString)
     {
         try
         {
@@ -391,22 +372,10 @@ internal partial class ThemeActionHandler : ActionHandlerBase
                 string resourceIdStr = resourcePath[(commaIndex + 1)..];
                 if (int.TryParse(resourceIdStr, out int resourceId))
                 {
-                    char[] buffer = new char[256];
-                    IntPtr hModule = LoadLibraryEx(dllPath, IntPtr.Zero, LOAD_LIBRARY_AS_DATAFILE);
-                    if (hModule != IntPtr.Zero)
+                    string resolved = _systemParams.LoadStringResource(dllPath, resourceId);
+                    if (resolved != null)
                     {
-                        try
-                        {
-                            int result = LoadString(hModule, (uint)Math.Abs(resourceId), buffer, buffer.Length);
-                            if (result > 0)
-                            {
-                                return new string(buffer, 0, result);
-                            }
-                        }
-                        finally
-                        {
-                            FreeLibrary(hModule);
-                        }
+                        return resolved;
                     }
                 }
             }

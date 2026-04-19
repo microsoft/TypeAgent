@@ -144,7 +144,7 @@ evaluated against the adjacent characters to produce a `separatorMode`
 from the spacing annotation. For `auto` mode, the grammar emits
 `"autoSpacePunctuation"` and the shell resolves each item to
 `"spacePunctuation"` or `"optionalSpacePunctuation"` based on the
-character pair (see `toPartitions()` in `partialCompletionSession.ts`).
+character pair (see `toPartitions()` in `session.ts`).
 At the command/flag level, the dispatcher may override to
 `"optionalSpace"` when trailing whitespace was already consumed.
 Digits are Unicode script "Common" (not a word-boundary script),
@@ -485,7 +485,7 @@ match boundaries. `directionSensitive` is `true` when
 than `completion(input[0..P], "forward")` — where P is the returned
 `matchedPrefixLength`, not the full input length. The caller uses this
 to decide whether a direction change
-requires a re-fetch: the `partialCompletionSession` re-fetches only
+requires a re-fetch: the completion session re-fetches only
 when the user is still at the `matchedPrefixLength` position
 (`input === anchor`); once the user types past it, the cached
 completions remain usable via trie filtering regardless of direction.
@@ -864,7 +864,7 @@ each candidate's `separatorMode` is recorded in its own
 `GrammarCompletionGroup`. The grammar matcher no longer merges
 separator modes or filters conflicting candidates; instead, each
 group carries its own `separatorMode` and the shell's **SepLevel**
-model (see `partialCompletionSession.ts`) shows or hides groups
+model (see `session.ts`) shows or hides groups
 based on the user's trailing separator state.
 
 This means:

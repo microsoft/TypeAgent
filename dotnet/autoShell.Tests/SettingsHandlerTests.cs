@@ -8,6 +8,7 @@ using autoShell.Logging;
 using autoShell.Services;
 using Microsoft.Win32;
 using Moq;
+using static autoShell.Services.Interop.SpiConstants;
 
 namespace autoShell.Tests;
 
@@ -329,63 +330,56 @@ public class AccessibilitySettingsHandlerTests
 {
     private readonly Mock<IRegistryService> _registryMock = new();
     private readonly Mock<IProcessService> _processMock = new();
+    private readonly Mock<ISystemParametersService> _systemParamsMock = new();
     private readonly AccessibilitySettingsHandler _handler;
 
     public AccessibilitySettingsHandlerTests()
     {
-        _handler = new AccessibilitySettingsHandler(_registryMock.Object, _processMock.Object);
+        _handler = new AccessibilitySettingsHandler(_registryMock.Object, _processMock.Object, _systemParamsMock.Object);
     }
 
     /// <summary>
-    /// Verifies that enabling sticky keys sets the Flags registry value to "510".
+    /// Verifies that enabling sticky keys calls SystemParametersInfo(SPI_SETSTICKYKEYS).
     /// </summary>
     [Fact]
-    public void EnableStickyKeys_Enable_SetsFlags510()
+    public void EnableStickyKeys_Enable_CallsSetStickyKeys()
     {
         Handle("EnableStickyKeys", """{"enable":true}""");
 
-        _registryMock.Verify(r => r.SetValue(
-            @"Control Panel\Accessibility\StickyKeys",
-            "Flags", "510", RegistryValueKind.String), Times.Once);
+        _systemParamsMock.Verify(s => s.SetStickyKeys(true), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that disabling sticky keys sets the Flags registry value to "506".
+    /// Verifies that disabling sticky keys calls SystemParametersInfo(SPI_SETSTICKYKEYS).
     /// </summary>
     [Fact]
-    public void EnableStickyKeys_Disable_SetsFlags506()
+    public void EnableStickyKeys_Disable_CallsSetStickyKeys()
     {
         Handle("EnableStickyKeys", """{"enable":false}""");
 
-        _registryMock.Verify(r => r.SetValue(
-            @"Control Panel\Accessibility\StickyKeys",
-            "Flags", "506", RegistryValueKind.String), Times.Once);
+        _systemParamsMock.Verify(s => s.SetStickyKeys(false), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that enabling filter keys sets the Flags registry value to "2".
+    /// Verifies that enabling filter keys calls SystemParametersInfo(SPI_SETFILTERKEYS).
     /// </summary>
     [Fact]
-    public void EnableFilterKeysAction_Enable_SetsFlags2()
+    public void EnableFilterKeysAction_Enable_CallsSetFilterKeys()
     {
         Handle("EnableFilterKeysAction", """{"enable":true}""");
 
-        _registryMock.Verify(r => r.SetValue(
-            @"Control Panel\Accessibility\Keyboard Response",
-            "Flags", "2", RegistryValueKind.String), Times.Once);
+        _systemParamsMock.Verify(s => s.SetFilterKeys(true), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that disabling filter keys sets the Flags registry value to "126".
+    /// Verifies that disabling filter keys calls SystemParametersInfo(SPI_SETFILTERKEYS).
     /// </summary>
     [Fact]
-    public void EnableFilterKeysAction_Disable_SetsFlags126()
+    public void EnableFilterKeysAction_Disable_CallsSetFilterKeys()
     {
         Handle("EnableFilterKeysAction", """{"enable":false}""");
 
-        _registryMock.Verify(r => r.SetValue(
-            @"Control Panel\Accessibility\Keyboard Response",
-            "Flags", "126", RegistryValueKind.String), Times.Once);
+        _systemParamsMock.Verify(s => s.SetFilterKeys(false), Times.Once);
     }
 
     /// <summary>
@@ -470,7 +464,7 @@ public class MouseSettingsHandlerTests
         Handle("MouseCursorSpeed", """{"speedLevel":10}""");
 
         _systemParamsMock.Verify(s => s.SetParameter(
-            0x0071, 0, 10, 3), Times.Once);
+            SPI_SETMOUSESPEED, 0, 10, SPIF_UPDATEINIFILE_SENDCHANGE), Times.Once);
     }
 
     /// <summary>
@@ -482,7 +476,7 @@ public class MouseSettingsHandlerTests
         Handle("MouseWheelScrollLines", """{"scrollLines":5}""");
 
         _systemParamsMock.Verify(s => s.SetParameter(
-            0x0069, 5, IntPtr.Zero, 3), Times.Once);
+            SPI_SETWHEELSCROLLLINES, 5, IntPtr.Zero, SPIF_UPDATEINIFILE_SENDCHANGE), Times.Once);
     }
 
     /// <summary>
@@ -493,9 +487,9 @@ public class MouseSettingsHandlerTests
     {
         Handle("EnhancePointerPrecision", """{"enable":true}""");
 
-        _systemParamsMock.Verify(s => s.GetParameter(3, 0, It.IsAny<int[]>(), 0), Times.Once);
+        _systemParamsMock.Verify(s => s.GetParameter(SPI_GETMOUSE, 0, It.IsAny<int[]>(), 0), Times.Once);
         _systemParamsMock.Verify(s => s.SetParameter(
-            4, 0, It.Is<int[]>(a => a[2] == 1), 3), Times.Once);
+            SPI_SETMOUSE, 0, It.Is<int[]>(a => a[2] == 1), SPIF_UPDATEINIFILE_SENDCHANGE), Times.Once);
     }
 
     /// <summary>
@@ -506,9 +500,9 @@ public class MouseSettingsHandlerTests
     {
         Handle("EnhancePointerPrecision", """{"enable":false}""");
 
-        _systemParamsMock.Verify(s => s.GetParameter(3, 0, It.IsAny<int[]>(), 0), Times.Once);
+        _systemParamsMock.Verify(s => s.GetParameter(SPI_GETMOUSE, 0, It.IsAny<int[]>(), 0), Times.Once);
         _systemParamsMock.Verify(s => s.SetParameter(
-            4, 0, It.Is<int[]>(a => a[2] == 0), 3), Times.Once);
+            SPI_SETMOUSE, 0, It.Is<int[]>(a => a[2] == 0), SPIF_UPDATEINIFILE_SENDCHANGE), Times.Once);
     }
 
     /// <summary>
@@ -571,7 +565,7 @@ public class MouseSettingsHandlerTests
         Handle("CursorTrail", """{"enable":true,"length":7}""");
 
         _systemParamsMock.Verify(s => s.SetParameter(
-            0x005D, 7, IntPtr.Zero, 3), Times.Once);
+            SPI_SETMOUSETRAILS, 7, IntPtr.Zero, SPIF_UPDATEINIFILE_SENDCHANGE), Times.Once);
     }
 
     /// <summary>
@@ -583,7 +577,7 @@ public class MouseSettingsHandlerTests
         Handle("CursorTrail", """{"enable":false}""");
 
         _systemParamsMock.Verify(s => s.SetParameter(
-            0x005D, 0, IntPtr.Zero, It.IsAny<int>()), Times.Once);
+            SPI_SETMOUSETRAILS, 0, IntPtr.Zero, It.IsAny<int>()), Times.Once);
     }
 
     /// <summary>
@@ -595,7 +589,7 @@ public class MouseSettingsHandlerTests
         Handle("CursorTrail", """{"enable":true,"length":0}""");
 
         _systemParamsMock.Verify(s => s.SetParameter(
-            0x005D, 2, IntPtr.Zero, It.IsAny<int>()), Times.Once);
+            SPI_SETMOUSETRAILS, 2, IntPtr.Zero, It.IsAny<int>()), Times.Once);
     }
 
     /// <summary>
@@ -607,7 +601,7 @@ public class MouseSettingsHandlerTests
         Handle("CursorTrail", """{"enable":true,"length":99}""");
 
         _systemParamsMock.Verify(s => s.SetParameter(
-            0x005D, 12, IntPtr.Zero, It.IsAny<int>()), Times.Once);
+            SPI_SETMOUSETRAILS, 12, IntPtr.Zero, It.IsAny<int>()), Times.Once);
     }
 
     /// <summary>
@@ -622,25 +616,25 @@ public class MouseSettingsHandlerTests
     }
 
     /// <summary>
-    /// Verifies that ToggleMouseSonar enable writes "1" to the MouseSonar registry value.
+    /// Verifies that ToggleMouseSonar enable calls SystemParametersInfo with SPI_SETMOUSESONAR and value 1.
     /// </summary>
     [Fact]
     public void ToggleMouseSonar_Enable_SetsSonar1()
     {
         Handle("ToggleMouseSonar", """{"enable":true}""");
 
-        _registryMock.Verify(r => r.SetValue(@"Control Panel\Mouse", "MouseSonar", "1", RegistryValueKind.String), Times.Once);
+        _systemParamsMock.Verify(s => s.SetParameter(SPI_SETMOUSESONAR, 0, (IntPtr)1, SPIF_UPDATEINIFILE_SENDCHANGE), Times.Once);
     }
 
     /// <summary>
-    /// Verifies that ToggleMouseSonar disable writes "0" to the MouseSonar registry value.
+    /// Verifies that ToggleMouseSonar disable calls SystemParametersInfo with SPI_SETMOUSESONAR and value 0.
     /// </summary>
     [Fact]
     public void ToggleMouseSonar_Disable_SetsSonar0()
     {
         Handle("ToggleMouseSonar", """{"enable":false}""");
 
-        _registryMock.Verify(r => r.SetValue(@"Control Panel\Mouse", "MouseSonar", "0", RegistryValueKind.String), Times.Once);
+        _systemParamsMock.Verify(s => s.SetParameter(SPI_SETMOUSESONAR, 0, IntPtr.Zero, SPIF_UPDATEINIFILE_SENDCHANGE), Times.Once);
     }
 
     private void Handle(string key, string jsonValue)

@@ -14,8 +14,9 @@
 TypeAgent's completion system provides real-time, context-aware completions
 as the user types `@`-commands, subcommands, flags, and parameter values.
 The system spans four backend layers — grammar matcher, cache, agent SDK,
-and dispatcher — plus a shell layer (with sub-components for session
-management, DOM integration, and the search menu) and a CLI adapter.
+and dispatcher — plus a host-agnostic completion session (state machine
+and trie), a shell layer (DOM integration and search menu UI), and a
+CLI adapter.
 These are connected by a structured metadata contract that eliminates
 client-side heuristics.
 
@@ -58,7 +59,7 @@ User keystroke
      │
      ▼
 ┌──────────────────────────────────────────────────────────────┐
-│  Shell PartialCompletionSession  (or CLI getCompletionsData) │
+│  CompletionController / PartialCompletionSession             │
 │  State machine: IDLE → PENDING → ACTIVE                      │
 │  Decides: reuse local trie  OR  re-fetch from backend        │
 └────────────────────────┬─────────────────────────────────────┘
@@ -90,7 +91,7 @@ The return path carries `CommandCompletionResult`:
 
 ```typescript
 {
-  startIndex: number;           // where the resolved prefix ends
+  startIndex: number;           // where the anchor ends (resolved prefix length)
   completions: CompletionGroup[];  // each group carries its own separatorMode
   closedSet: boolean;           // true → list is exhaustive
   directionSensitive: boolean;  // true → completion(input[0..P], backward) ≠ completion(input[0..P], forward)
@@ -102,8 +103,8 @@ These fields are cross-cutting concepts that flow through every layer.
 Brief definitions here; see [Key types](#key-types) for full semantics.
 
 - **`startIndex` / `matchedPrefixLength`** — The character position where
-  the backend's matched prefix ends. Everything before this position is
-  "consumed" input; completions apply after it.
+  the backend's matched prefix (the anchor) ends. Everything before this
+  position is "consumed" input; completions apply after it.
 - **`separatorMode`** — Whether a separator character (space, punctuation)
   is required between the consumed prefix and the completion text. Ranges
   from `"space"` (strictest) to `"none"` (no separator needed).
@@ -351,26 +352,21 @@ whether the user is still editing or has committed the last token.
 
 ---
 
-### 5. Shell
+### 5. Completion Session
 
-The shell layer comprises three sub-components: a completion session
-(state machine), a DOM adapter (input extraction and menu positioning),
-and a search menu (trie-backed filtering). Together they form the
-client-side half of the completion system.
-
-#### 5a. Completion Session
-
-**Package:** `packages/shell`
+**Package:** `packages/dispatcher`
 **Class:** `PartialCompletionSession`
+**Consumer interface:** `CompletionController` (created via `createCompletionController()`)
 
 A three-state machine (`IDLE`, `PENDING`, `ACTIVE`) that manages the
-lifecycle of a completion interaction.
+lifecycle of a completion interaction. This class has no DOM dependencies
+and is shared by both the shell and CLI hosts.
 
 **State transitions:**
 
 ```
         ┌───────────────────┐
-        │       IDLE        │ ← resetToIdle()
+        │       IDLE        │ ← accept()
         └────────┬──────────┘
                  │ update() with input
                  ▼
@@ -406,9 +402,9 @@ contiguous within each category.
 
 **Key concepts:**
 
-- **Anchor** (`this.anchor`): the prefix string at `startIndex` returned by
-  the backend. Everything after the anchor is the `completionPrefix` used to
-  filter the local trie.
+- **Anchor** (`this.anchor`): the prefix string at `startIndex` (the
+  resolved prefix) returned by the backend. Everything after the anchor
+  is the completion prefix used to filter the local trie.
 - **Separator stripping**: when `separatorMode` requires a separator
   (`"space"` or `"spacePunctuation"`), or is `"optionalSpace"` / `"optionalSpacePunctuation"`, leading
   separator characters in the raw prefix are stripped before trie lookup.
@@ -421,11 +417,13 @@ contiguous within each category.
 - **Session preservation**: `hide()` cancels in-flight fetches but preserves
   anchor and menu state for quick re-activation on re-focus.
 
-#### 5b. DOM Adapter
+---
+
+### 6. Shell — DOM Adapter
 
 **Class:** `PartialCompletion`
 
-Bridges the DOM text editor and the session state machine:
+Bridges the DOM text editor and the completion session:
 
 - Extracts current input (stripping ghost text from inline suggestions)
 - Validates cursor is at end of input before offering completions
@@ -433,20 +431,28 @@ Bridges the DOM text editor and the session state machine:
 - On user selection: computes replacement range from completion prefix,
   performs DOM text replacement, repositions cursor, triggers fresh completion
 
-#### 5c. Search Menu
+---
 
-**Classes:** `SearchMenuBase` (abstract), `SearchMenu` (concrete)
+### 7. Shell — Search Menu
 
-Trie-backed prefix filtering:
+**Class:** `SearchMenu`
+**Trie index:** `SearchMenuIndex` interface / `TSTSearchMenuIndex` implementation
 
-- `setChoices(items)` — populates a ternary search tree, deduplicates by
-  NFD-normalized, case-folded text
-- `updatePrefix(prefix, position)` — queries trie; returns `true` on unique
-  exact match; calls `onShow()`/`onHide()` template methods
-- `hasExactMatch(text)` — exact trie membership test
+The search menu is split into two layers:
 
-`SearchMenuBase` is extracted to enable unit testing with `TestSearchMenu`
-(real trie logic, jest-mocked lifecycle methods).
+- **`SearchMenuIndex`** (in `packages/dispatcher`) — a TST (ternary search
+  tree) that stores completion items and supports prefix filtering.
+  `setItems(items)` populates the trie (deduplicating by NFD-normalized,
+  case-folded text); `filterItems(prefix)` queries it;
+  `hasExactMatch(text)` tests exact membership.
+
+- **`SearchMenu`** (in `packages/shell`) — a purely presentational class
+  that manages the popup/inline UI. It receives pre-filtered items from
+  `CompletionController.getCompletionState()` via an `onUpdate` callback
+  and delegates to `SearchMenuUI` implementations (`InlineSearchMenuUI`,
+  `LocalSearchMenuUI`, `RemoteSearchMenuUI`) for rendering. The trie
+  filtering happens inside `PartialCompletionSession`; `SearchMenu` only
+  handles display and user interaction (arrow keys, selection, toggle).
 
 ---
 
@@ -840,8 +846,8 @@ _Impact:_ Premature "accept" when one source is open — user misses
 completions from that source.
 
 **#13 — `separatorMode`: per-group, no cross-group merging.**
-Each `CompletionGroup` carries its own `separatorMode`. The shell's
-SepLevel model (see `partialCompletionSession.ts`) partitions groups
+Each `CompletionGroup` carries its own `separatorMode`. The session's
+SepLevel model (see `session.ts`) partitions groups
 by mode and shows/hides them based on the user's trailing separator
 state. No merging or priority ordering is needed.
 _Impact:_ Fused display if a group's mode is wrong, or unnecessary
@@ -888,22 +894,19 @@ needs shadow candidates".
 
 ## CLI integration
 
-The CLI (`packages/cli/src/commands/connect.ts`) follows the same
-contract but with simpler plumbing:
+The CLI (`packages/cli/src/enhancedConsole.ts`) uses the same
+`CompletionController` interface as the shell, created via
+`createCompletionController()`:
 
-1. Sends full input and a `direction` (always `"forward"` for tab-completion,
-   since readline has no equivalent of backspace-triggered recompletion)
-   to `dispatcher.getCommandCompletion(line, direction)` (no
-   token-boundary heuristics).
-2. Uses `result.startIndex` as the readline filter position.
-3. Prepends a space separator when `separatorMode` is `"space"` or
-   `"spacePunctuation"` to prevent fused display (e.g., `"playmusic"`).
+1. Calls `controller.update(input, direction)` on each keystroke, including
+   `"backward"` when the user backspaces. The `onUpdate` callback triggers
+   re-render of the completion menu in the terminal UI.
+2. Queries `controller.getCompletionState()` for the current items, prefix,
+   and anchor index.
+3. Uses `anchorIndex` as the readline filter position.
 
-Because `direction` is always `"forward"`, the CLI cannot trigger
-backward-specific completions (e.g., reconsidering a flag name). In
-practice this is a minor limitation: readline tab-completion is
-inherently forward-looking, and users backspace-and-retype rather than
-expecting the completion menu to adapt to deletions.
+Unlike the shell, the CLI renders completions as a terminal-based menu
+with arrow-key navigation rather than a DOM popup.
 
 ---
 

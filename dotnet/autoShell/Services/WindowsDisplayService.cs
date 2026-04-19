@@ -113,7 +113,7 @@ internal class WindowsDisplayService : IDisplayService
             .ThenByDescending(r => r.RefreshRate)
             .ToList();
 
-        return JsonSerializer.Serialize(uniqueResolutions);
+        return JsonSerializer.Serialize(uniqueResolutions, JsonOptions.CamelCase);
     }
 
     /// <inheritdoc/>

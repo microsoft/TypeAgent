@@ -40,11 +40,8 @@
 //
 
 import {
-    PartialCompletionSession,
-    makeMenu,
+    makeSession,
     makeCompletionResult,
-    getPos,
-    anyPosition,
     type MockDispatcher,
     type CommandCompletionResult,
 } from "./helpers.js";
@@ -89,78 +86,71 @@ describe("Pattern A — startIndex before separator (separatorMode=spacePunctuat
     });
 
     test("space after anchor satisfies separator — shows all completions", async () => {
-        const menu = makeMenu();
         const dispatcher = makeSequentialDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session } = makeSession(dispatcher);
 
-        session.update("play", getPos);
+        session.update("play");
         await Promise.resolve();
 
-        session.update("play ", getPos);
+        session.update("play ");
 
-        expect(menu.updatePrefix).toHaveBeenCalledWith("", anyPosition);
+        expect(session.getCompletionState()?.prefix).toBe("");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
     test("space then letter — trie filters without re-fetch", async () => {
-        const menu = makeMenu();
         const dispatcher = makeSequentialDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session } = makeSession(dispatcher);
 
-        session.update("play", getPos);
+        session.update("play");
         await Promise.resolve();
 
-        session.update("play J", getPos);
+        session.update("play J");
 
-        expect(menu.updatePrefix).toHaveBeenCalledWith("J", anyPosition);
+        expect(session.getCompletionState()?.prefix).toBe("J");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
     test("sequential typing — all trie-filtered, single fetch", async () => {
-        const menu = makeMenu();
         const dispatcher = makeSequentialDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session } = makeSession(dispatcher);
 
-        session.update("play", getPos);
+        session.update("play");
         await Promise.resolve();
 
-        session.update("play ", getPos);
-        session.update("play J", getPos);
-        session.update("play Ja", getPos);
-        session.update("play Jaz", getPos);
+        session.update("play ");
+        session.update("play J");
+        session.update("play Ja");
+        session.update("play Jaz");
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-        const calls = menu.updatePrefix.mock.calls;
-        expect(calls[calls.length - 1][0]).toBe("Jaz");
+        expect(session.getCompletionState()?.prefix).toBe("Jaz");
     });
 
     test("no separator yet — HIDE+KEEP, no re-fetch", async () => {
-        const menu = makeMenu();
         const dispatcher = makeSequentialDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session } = makeSession(dispatcher);
 
-        session.update("play", getPos);
+        session.update("play");
         await Promise.resolve();
 
-        session.update("play J", getPos); // menu shows
-        menu.hide.mockClear();
+        session.update("play J"); // menu shows
 
-        session.update("play", getPos); // back to anchor, no sep
+        session.update("play"); // back to anchor, no sep
 
-        expect(menu.hide).toHaveBeenCalled();
+        expect(session.getCompletionState()).toBeUndefined();
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
     test("non-separator immediately after anchor — A3 re-fetch", async () => {
-        const menu = makeMenu();
         const dispatcher = makeSequentialDispatcher(result, result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session } = makeSession(dispatcher);
 
-        session.update("play", getPos);
+        session.update("play");
         await Promise.resolve();
 
         // "x" is not a separator → A3
-        session.update("playx", getPos);
+        session.update("playx");
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
     });
@@ -183,47 +173,43 @@ describe("Pattern B — startIndex past separator (separatorMode=none)", () => {
     });
 
     test("letter after anchor goes straight to trie (no separator needed)", async () => {
-        const menu = makeMenu();
         const dispatcher = makeSequentialDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session } = makeSession(dispatcher);
 
-        session.update("play ", getPos);
+        session.update("play ");
         await Promise.resolve();
 
         // rawPrefix = "J", separatorMode="none" → needsSep=false → trie filters
-        session.update("play J", getPos);
+        session.update("play J");
 
-        expect(menu.updatePrefix).toHaveBeenCalledWith("J", anyPosition);
+        expect(session.getCompletionState()?.prefix).toBe("J");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
     test("sequential typing — all trie-filtered, single fetch", async () => {
-        const menu = makeMenu();
         const dispatcher = makeSequentialDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session } = makeSession(dispatcher);
 
-        session.update("play ", getPos);
+        session.update("play ");
         await Promise.resolve();
 
-        session.update("play J", getPos);
-        session.update("play Ja", getPos);
-        session.update("play Jaz", getPos);
+        session.update("play J");
+        session.update("play Ja");
+        session.update("play Jaz");
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
-        const calls = menu.updatePrefix.mock.calls;
-        expect(calls[calls.length - 1][0]).toBe("Jaz");
+        expect(session.getCompletionState()?.prefix).toBe("Jaz");
     });
 
     test("empty rawPrefix — trie shows all completions", async () => {
-        const menu = makeMenu();
         const dispatcher = makeSequentialDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session } = makeSession(dispatcher);
 
-        session.update("play ", getPos);
+        session.update("play ");
         await Promise.resolve();
 
-        // rawPrefix = "" → updatePrefix("", ...) → all items
-        expect(menu.updatePrefix).toHaveBeenCalledWith("", anyPosition);
+        // rawPrefix = "" → prefix is "" → all items
+        expect(session.getCompletionState()?.prefix).toBe("");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 });
@@ -241,16 +227,15 @@ describe("Pattern B variant — startIndex past separator (separatorMode=optiona
     });
 
     test("letter after anchor filters via trie (no separator needed)", async () => {
-        const menu = makeMenu();
         const dispatcher = makeSequentialDispatcher(result);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session } = makeSession(dispatcher);
 
-        session.update("play ", getPos);
+        session.update("play ");
         await Promise.resolve();
 
-        session.update("play J", getPos);
+        session.update("play J");
 
-        expect(menu.updatePrefix).toHaveBeenCalledWith("J", anyPosition);
+        expect(session.getCompletionState()?.prefix).toBe("J");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 });
@@ -278,57 +263,54 @@ describe("Double separator — startIndex past separator + separatorMode requiri
     });
 
     test("double space satisfies the separator — trie filters correctly", async () => {
-        const menu = makeMenu();
         const dispatcher = makeSequentialDispatcher(doubleSepResult);
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session } = makeSession(dispatcher);
 
-        session.update("play ", getPos);
+        session.update("play ");
         await Promise.resolve();
 
         // "play  J" — double space: rawPrefix = " J", separator ✓
-        session.update("play  J", getPos);
+        session.update("play  J");
 
-        expect(menu.updatePrefix).toHaveBeenCalledWith("J", anyPosition);
+        expect(session.getCompletionState()?.prefix).toBe("J");
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(1);
     });
 
     test("single space + letter triggers A3 re-fetch (separator unsatisfied)", async () => {
-        const menu = makeMenu();
         const dispatcher = makeSequentialDispatcher(
             doubleSepResult,
             doubleSepResult,
         );
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session } = makeSession(dispatcher);
 
-        session.update("play ", getPos);
+        session.update("play ");
         await Promise.resolve();
 
         // "play J" — single space already in anchor, "J" not a separator → A3
-        session.update("play J", getPos);
+        session.update("play J");
 
         expect(dispatcher.getCommandCompletion).toHaveBeenCalledTimes(2);
     });
 
     test("repeated A3 re-fetch on each keystroke (same storm as open-set C6)", async () => {
-        const menu = makeMenu();
         const dispatcher = makeSequentialDispatcher(
             doubleSepResult,
             doubleSepResult,
             doubleSepResult,
             doubleSepResult,
         );
-        const session = new PartialCompletionSession(menu, dispatcher);
+        const { session } = makeSession(dispatcher);
 
-        session.update("play ", getPos);
+        session.update("play ");
         await Promise.resolve();
 
-        session.update("play J", getPos);
+        session.update("play J");
         await Promise.resolve();
 
-        session.update("play Ja", getPos);
+        session.update("play Ja");
         await Promise.resolve();
 
-        session.update("play Jaz", getPos);
+        session.update("play Jaz");
         await Promise.resolve();
 
         // Each keystroke = 1 A3 re-fetch (same pattern as C6 storm)

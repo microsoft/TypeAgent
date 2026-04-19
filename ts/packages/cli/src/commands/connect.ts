@@ -3,17 +3,14 @@
 
 import { Args, Command, Flags } from "@oclif/core";
 import type { Dispatcher } from "@typeagent/dispatcher-types";
+import { createCompletionController } from "agent-dispatcher/helpers/completion";
 import {
     getEnhancedConsolePrompt,
     processCommandsEnhanced,
     replayDisplayHistory,
     withEnhancedConsoleClientIO,
 } from "../enhancedConsole.js";
-import {
-    isSlashCommand,
-    getSlashCompletions,
-    setConversationCommandContext,
-} from "../slashCommands.js";
+import { setConversationCommandContext } from "../slashCommands.js";
 import type { ConversationCommandContext } from "../conversationCommands.js";
 import {
     connectAgentServer,
@@ -71,59 +68,6 @@ function promptYesNo(question: string): Promise<boolean> {
             resolve(answer.trim().toLowerCase() === "y");
         });
     });
-}
-
-type CompletionData = {
-    allCompletions: string[];
-    filterStartIndex: number;
-    prefix: string;
-};
-
-async function getCompletionsData(
-    line: string,
-    dispatcher: Dispatcher,
-): Promise<CompletionData | null> {
-    try {
-        if (isSlashCommand(line)) {
-            const completions = getSlashCompletions(line);
-            if (completions.length === 0) return null;
-            return {
-                allCompletions: completions,
-                filterStartIndex: 0,
-                prefix: "",
-            };
-        }
-        const direction = "forward" as const;
-        const result = await dispatcher.getCommandCompletion(line, direction);
-        if (result.completions.length === 0) {
-            return null;
-        }
-
-        const allCompletions: string[] = [];
-        for (const group of result.completions) {
-            for (const completion of group.completions) {
-                allCompletions.push(completion);
-            }
-        }
-
-        const filterStartIndex = result.startIndex;
-        const prefix = line.substring(0, filterStartIndex);
-
-        const needsSep = result.completions.some(
-            (g) =>
-                g.separatorMode === "space" ||
-                g.separatorMode === "spacePunctuation",
-        );
-        const separator = needsSep ? " " : "";
-
-        return {
-            allCompletions,
-            filterStartIndex,
-            prefix: prefix + separator,
-        };
-    } catch (e) {
-        return null;
-    }
 }
 
 export default class Connect extends Command {
@@ -423,8 +367,7 @@ export default class Connect extends Command {
                     },
                     activeDispatcher,
                     undefined,
-                    (line: string) =>
-                        getCompletionsData(line, activeDispatcher),
+                    createCompletionController(activeDispatcher),
                     activeDispatcher,
                 );
             } finally {

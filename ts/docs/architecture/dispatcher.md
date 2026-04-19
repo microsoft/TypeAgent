@@ -478,6 +478,39 @@ Handles `@`-prefixed system commands:
 Each command has a `CommandDescriptor` that defines expected parameters,
 subcommands, and help text.
 
+The system agent also has sub-agents with LLM-translated action schemas:
+
+- **`system.config`** — Natural language configuration changes.
+- **`system.session`** — Natural language management of **agentServer client-connection
+  conversations** (the named, GUID-keyed sessions described in
+  [agentServerSessions.md](agentServerSessions.md)). Despite the name, this has
+  **no relation** to the dispatcher's own internal `@session` command, which manages
+  local dispatcher state (agent settings, construction cache, config) stored under
+  `~/.typeagent/profiles/<profile>/sessions/`. `system.session` is the NL front-end
+  for `@conversation`; `@session` is a separate, lower-level command for dispatcher
+  internals.
+
+  `system.session` supports six action types: `newSession`, `listSession`,
+  `showConversationInfo`, `switchSession`, `renameSession`, and `deleteSession`.
+  These let users say things like "switch to my work conversation", "rename this
+  conversation to project notes", or "delete the old project session" instead of
+  using `@conversation` commands directly. Because the dispatcher cannot access
+  the agent-server RPC layer directly, `executeSessionAction` bridges to the client
+  via `ClientIO.takeAction(requestId, "manage-conversation", payload)` where
+  `payload` is one of:
+
+  ```
+  { subcommand: "new";    name?: string }
+  { subcommand: "list" }
+  { subcommand: "info" }
+  { subcommand: "switch"; name: string }
+  { subcommand: "rename"; name?: string; newName: string }
+  { subcommand: "delete"; name: string }
+  ```
+
+  The CLI handles this by calling `handleConversationCommand`; the Shell
+  calls the corresponding `ClientAPI` session methods over IPC.
+
 ### Dispatcher agent
 
 Handles meta-actions that the dispatcher itself fulfills:

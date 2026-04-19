@@ -40,6 +40,12 @@ export function setConversationCommandContext(
     conversationContext = ctx;
 }
 
+export function getConversationCommandContext():
+    | ConversationCommandContext
+    | undefined {
+    return conversationContext;
+}
+
 export function getVerboseIndicator(): string {
     if (!verboseEnabled) return "";
     if (activeNamespaces === "typeagent:*")

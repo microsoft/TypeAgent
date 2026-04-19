@@ -10,7 +10,17 @@ import { getPackageFilePath } from "../utils/getPackageFilePath.js";
 import { ensureDirectory, getUniqueFileName } from "../utils/fsUtils.js";
 
 export function getUserDataDir() {
-    return path.join(os.homedir(), ".typeagent");
+    return (
+        process.env.TYPEAGENT_USER_DATA_DIR ??
+        path.join(os.homedir(), ".typeagent")
+    );
+}
+
+export function _resetCacheForTest() {
+    instanceDir = undefined;
+    instanceDirPromise = undefined;
+    traceId = undefined;
+    traceIdPromise = undefined;
 }
 
 function ensureUserDataDir() {
@@ -91,9 +101,17 @@ function lockUserData<T>(fn: () => T) {
 }
 
 async function lockUserDataAsync<T>(fn: () => T | Promise<T>): Promise<T> {
-    const release = await lockfile.lock(ensureUserDataDir(), {
-        retries: { retries: 10, minTimeout: 500, maxTimeout: 1000 },
-    });
+    let release: () => Promise<void>;
+    try {
+        release = await lockfile.lock(ensureUserDataDir(), {
+            retries: { retries: 10, minTimeout: 500, maxTimeout: 1000 },
+        });
+    } catch (error: any) {
+        console.error(
+            `ERROR: Unable to lock user data directory: ${error.message}. Exiting.`,
+        );
+        process.exit(-1);
+    }
     try {
         return await fn();
     } finally {
@@ -105,13 +123,32 @@ function getInstancesDir() {
     return path.join(ensureUserDataDir(), "profiles");
 }
 
+function pruneStaleInstances(userConfig: GlobalUserConfig): boolean {
+    if (!userConfig.instances) {
+        return false;
+    }
+    const instancesDir = getInstancesDir();
+    let changed = false;
+    for (const [name, dirName] of Object.entries(userConfig.instances)) {
+        if (!fs.existsSync(path.join(instancesDir, dirName))) {
+            delete userConfig.instances[name];
+            changed = true;
+        }
+    }
+    return changed;
+}
+
 function ensureInstanceDirName(instanceName: string) {
     if (instanceName === "prod") {
         return "prod";
     }
     const userConfig = ensureGlobalUserConfig();
+    const dirty = pruneStaleInstances(userConfig);
     const profileName = userConfig.instances?.[instanceName];
-    if (profileName) {
+    if (profileName !== undefined) {
+        if (dirty) {
+            saveGlobalUserConfig(userConfig);
+        }
         return profileName;
     }
     const newProfileName = getUniqueFileName(
