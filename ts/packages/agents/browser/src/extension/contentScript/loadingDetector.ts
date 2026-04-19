@@ -272,20 +272,34 @@ export class SkeletonLoadingDetector {
  * Waits for incremental page updates to complete
  * @returns Promise resolving when the page is stable
  */
-export async function awaitPageIncrementalUpdates(): Promise<string> {
-    return new Promise<string>((resolve, reject) => {
+export async function awaitPageIncrementalUpdates(
+    timeout: number = 5000,
+): Promise<string> {
+    return new Promise<string>((resolve) => {
         const detector = new SkeletonLoadingDetector({
             stabilityThresholdMs: 500,
             // Consider elements visible when they're at least 10% in view
             intersectionThreshold: 0.1,
         });
 
+        // Set up timeout to resolve even if page never stabilizes
+        const timeoutId = setTimeout(() => {
+            console.warn(
+                "awaitPageIncrementalUpdates timed out after",
+                timeout,
+                "ms",
+            );
+            resolve("timeout");
+        }, timeout);
+
         detector
             .detect()
             .then(() => {
+                clearTimeout(timeoutId);
                 resolve("true");
             })
             .catch((_error: Error) => {
+                clearTimeout(timeoutId);
                 resolve("false");
             });
     });

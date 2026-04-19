@@ -28,6 +28,19 @@ async function openChatAndInjectCommand(
     }, 500);
 }
 
+async function openChatAndStartMacroAuthoring(tabId: number): Promise<void> {
+    await chrome.sidePanel.open({ tabId });
+    await chrome.sidePanel.setOptions({
+        tabId,
+        path: "views/chatPanel.html",
+        enabled: true,
+    });
+    // Small delay to let the chat panel initialize before starting authoring
+    setTimeout(() => {
+        rpcSendFn?.("startMacroAuthoring", {});
+    }, 500);
+}
+
 /**
  * Initializes the context menu items
  */
@@ -44,8 +57,8 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        title: "Learn more from page",
-        id: "learnMoreFromPage",
+        title: "Ask about this page",
+        id: "askAboutPage",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
@@ -55,20 +68,32 @@ export function initializeContextMenu(): void {
     });
 
     chrome.contextMenus.create({
-        title: "Discover page macros",
-        id: "discoverPageActions",
+        title: "Show actions on this page",
+        id: "inferNewActions",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
     chrome.contextMenus.create({
-        title: "Manage Macros",
-        id: "manageMacros",
+        title: "Add actions to this page",
+        id: "addNewMacro",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
+    });
+
+    chrome.contextMenus.create({
+        title: "Match known actions",
+        id: "matchKnownActions",
         documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
     chrome.contextMenus.create({
         type: "separator",
         id: "menuSeparator3",
+    });
+
+    chrome.contextMenus.create({
+        title: "Action Library",
+        id: "manageMacros",
+        documentUrlPatterns: ["http://*/*", "https://*/*"],
     });
 
     chrome.contextMenus.create({
@@ -92,11 +117,16 @@ export async function handleContextMenuClick(
     }
 
     switch (info.menuItemId) {
-        case "discoverPageActions": {
-            await openChatAndInjectCommand(
-                tab.id!,
-                "@browser actions discover",
-            );
+        case "matchKnownActions": {
+            await openChatAndInjectCommand(tab.id!, "@browser actions match");
+            break;
+        }
+        case "addNewMacro": {
+            await openChatAndStartMacroAuthoring(tab.id!);
+            break;
+        }
+        case "inferNewActions": {
+            await openChatAndInjectCommand(tab.id!, "@browser actions infer");
             break;
         }
         case "manageMacros": {
@@ -128,7 +158,7 @@ export async function handleContextMenuClick(
             break;
         }
 
-        case "learnMoreFromPage": {
+        case "askAboutPage": {
             await openChatAndInjectCommand(
                 tab.id!,
                 "@browser ask What is this page about?",

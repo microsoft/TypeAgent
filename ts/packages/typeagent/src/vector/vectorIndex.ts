@@ -12,6 +12,14 @@ import {
 } from "./embeddings.js";
 import { EmbeddingModel, TextEmbeddingModel } from "aiclient";
 import { getData } from "typechat";
+import registerDebug from "debug";
+
+const debugEmbeddings = registerDebug("typeagent:embeddings");
+
+// Per-attempt timeout for embedding API calls. Prevents indefinite hangs when
+// the remote endpoint accepts the socket but never responds. 30s is generous
+// for a small batch but still bounded — the retry loop will still fire.
+const DefaultEmbeddingTimeoutMs = 30_000;
 
 /**
  * An index that allows lookup of nearest neighbors of T using vector similarity matching
@@ -71,12 +79,30 @@ export async function generateEmbeddingWithRetry<T>(
     value: T | NormalizedEmbedding,
     retryMaxAttempts: number = DefaultRetryAttempts,
     retryPauseMs: number = DefaultRetryPauseMs,
+    timeoutMs: number = DefaultEmbeddingTimeoutMs,
 ) {
-    return callWithRetry(
-        () => generateEmbedding(model, value),
-        retryMaxAttempts,
-        retryPauseMs,
+    const start = Date.now();
+    debugEmbeddings(
+        `generateEmbeddingWithRetry: single value, timeout=${timeoutMs}ms`,
     );
+    try {
+        const result = await callWithRetry(
+            () => generateEmbedding(model, value),
+            retryMaxAttempts,
+            retryPauseMs,
+            undefined,
+            timeoutMs,
+        );
+        debugEmbeddings(
+            `generateEmbeddingWithRetry: success in ${Date.now() - start}ms`,
+        );
+        return result;
+    } catch (e: any) {
+        debugEmbeddings(
+            `generateEmbeddingWithRetry: failed after ${Date.now() - start}ms: ${e?.message ?? e}`,
+        );
+        throw e;
+    }
 }
 
 /**
@@ -138,12 +164,35 @@ export async function generateTextEmbeddingsWithRetry(
     retryMaxAttempts: number = DefaultRetryAttempts,
     retryPauseMs: number = DefaultRetryPauseMs,
     maxCharsPerChunk: number = Number.MAX_SAFE_INTEGER,
+    timeoutMs: number = DefaultEmbeddingTimeoutMs,
 ): Promise<NormalizedEmbedding[]> {
-    return callWithRetry(
-        () => generateTextEmbeddings(model, values, maxCharsPerChunk),
-        retryMaxAttempts,
-        retryPauseMs,
+    if (values.length === 0) {
+        return [];
+    }
+    const start = Date.now();
+    const preview =
+        values[0].length > 80 ? values[0].slice(0, 80) + "…" : values[0];
+    debugEmbeddings(
+        `generateTextEmbeddingsWithRetry: count=${values.length}, timeout=${timeoutMs}ms, first="${preview}"`,
     );
+    try {
+        const result = await callWithRetry(
+            () => generateTextEmbeddings(model, values, maxCharsPerChunk),
+            retryMaxAttempts,
+            retryPauseMs,
+            undefined,
+            timeoutMs,
+        );
+        debugEmbeddings(
+            `generateTextEmbeddingsWithRetry: success (${values.length} embeddings) in ${Date.now() - start}ms`,
+        );
+        return result;
+    } catch (e: any) {
+        debugEmbeddings(
+            `generateTextEmbeddingsWithRetry: failed (${values.length} keys) after ${Date.now() - start}ms: ${e?.message ?? e}`,
+        );
+        throw e;
+    }
 }
 
 async function generateEmbeddingBatch(

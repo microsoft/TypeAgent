@@ -176,6 +176,7 @@
         "dependsOn": [
           "^build",
           "asc",
+          "agc",
           "build:extension",
           "build:views",
           "tsc:agent",
