@@ -100,6 +100,12 @@ export class PartialCompletion {
                     this.searchMenu.updatePosition(state.prefix);
                 }
             } else {
+                // Reset trackers so that a future state with the same
+                // generation+prefix triggers a full render() instead of
+                // the lightweight updatePosition() (which no-ops when
+                // the menu is inactive).
+                this.lastGeneration = -1;
+                this.lastPrefix = "";
                 this.searchMenu.hide();
             }
         });
