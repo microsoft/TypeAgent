@@ -98,18 +98,11 @@ export function apiSettingsFromEnv(
 export async function getPageObject(
     title: string,
     config: wikipedia.WikipediaApiSettings,
-<<<<<<< Updated upstream
     locale: string = "en",
 ) {
     // TODO: localization (e.g. en, de, fr, etc.)
     const response = await fetch(
         `${config.endpoint}core/v1/wikipedia/${locale}/page/${title}/bare`,
-=======
-    language: string = "en",
-) {
-    const response = await fetch(
-        `${config.endpoint}core/v1/wikipedia/${language}/page/${title}/bare`,
->>>>>>> Stashed changes
         { method: "GET", headers: await config.getAPIHeaders() },
     );
 
@@ -129,15 +122,9 @@ export async function getPageObject(
 export async function getPageMarkdown(
     title: string,
     config: wikipedia.WikipediaApiSettings,
-<<<<<<< Updated upstream
     locale: string = "en",
 ): Promise<string | undefined> {
     const url: string = `${config.endpoint}${locale}/page/${encodeWikipediaTitle(title)}`;
-=======
-    language: string = "en",
-): Promise<string | undefined> {
-    const url: string = `${config.endpoint}${language}/page/${encodeWikipediaTitle(title)}`;
->>>>>>> Stashed changes
     const response = await fetch(url, {
         method: "GET",
         headers: await config.getAPIHeaders(),
