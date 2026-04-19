@@ -387,7 +387,8 @@ export class RequestCommandHandler implements CommandHandler {
                 "record ",
             ];
             const lowerRequest = request.trimStart().toLowerCase();
-            const forceReasoningEnv = process.env.CLAUDE_FORCE_REASONING === "1";
+            const forceReasoningEnv =
+                process.env.CLAUDE_FORCE_REASONING === "1";
             if (
                 !systemContext.noReasoning &&
                 (forceReasoningEnv ||

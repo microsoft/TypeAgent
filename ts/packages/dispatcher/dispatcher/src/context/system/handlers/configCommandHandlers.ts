@@ -1494,9 +1494,7 @@ class ConfigExecutionScriptReuseCommandHandler implements CommandHandler {
     }
 }
 
-class ConfigExecutionEntityPromptShapeCommandHandler
-    implements CommandHandler
-{
+class ConfigExecutionEntityPromptShapeCommandHandler implements CommandHandler {
     public readonly description =
         "Shape used when serializing Entity objects into LLM prompts";
     public readonly parameters = {
@@ -1543,8 +1541,7 @@ const configExecutionCommandHandlers: CommandHandlerTable = {
         reasoning: new ConfigExecutionReasoningCommandHandler(),
         planReuse: new ConfigExecutionPlanReuseCommandHandler(),
         scriptReuse: new ConfigExecutionScriptReuseCommandHandler(),
-        entityPromptShape:
-            new ConfigExecutionEntityPromptShapeCommandHandler(),
+        entityPromptShape: new ConfigExecutionEntityPromptShapeCommandHandler(),
     },
 };
 

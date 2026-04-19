@@ -431,8 +431,7 @@ function getClaudeOptions(
                 "When the user asks about agent capabilities, use discover_actions first.",
                 "When the user asks to perform an action, discover the schema then execute_action.",
                 "",
-                ...(config.execution.entityPromptShape ===
-                "facets-with-schema"
+                ...(config.execution.entityPromptShape === "facets-with-schema"
                     ? [
                           "# Entity Schema",
                           "",
@@ -936,9 +935,7 @@ async function executeReasoningWithoutPlanning(
                         } else if (typeof block.content === "string") {
                             content = block.content;
                         }
-                        const toolName = toolUseIdToName.get(
-                            block.tool_use_id,
-                        );
+                        const toolName = toolUseIdToName.get(block.tool_use_id);
                         context.actionIO.appendDiagnosticData({
                             type: "reasoningStep",
                             phase: "toolResult",
@@ -1733,9 +1730,10 @@ async function runWithReasoningTimeout<T>(
 ): Promise<T> {
     const raw = process.env.TYPEAGENT_REASONING_TIMEOUT_MS;
     const parsed = raw !== undefined ? Number(raw) : NaN;
-    const timeoutMs = Number.isFinite(parsed) && parsed >= 0
-        ? parsed
-        : DEFAULT_REASONING_TIMEOUT_MS;
+    const timeoutMs =
+        Number.isFinite(parsed) && parsed >= 0
+            ? parsed
+            : DEFAULT_REASONING_TIMEOUT_MS;
 
     const controller = new AbortController();
     const externalSignal = context.abortSignal;
@@ -1743,18 +1741,22 @@ async function runWithReasoningTimeout<T>(
 
     if (externalSignal) {
         if (externalSignal.aborted) controller.abort(externalSignal.reason);
-        else externalSignal.addEventListener("abort", onExternalAbort, { once: true });
+        else
+            externalSignal.addEventListener("abort", onExternalAbort, {
+                once: true,
+            });
     }
 
-    const timer = timeoutMs > 0
-        ? setTimeout(() => {
-              controller.abort(
-                  new Error(
-                      `Reasoning exceeded timeout of ${timeoutMs} ms (set TYPEAGENT_REASONING_TIMEOUT_MS to change).`,
-                  ),
-              );
-          }, timeoutMs)
-        : undefined;
+    const timer =
+        timeoutMs > 0
+            ? setTimeout(() => {
+                  controller.abort(
+                      new Error(
+                          `Reasoning exceeded timeout of ${timeoutMs} ms (set TYPEAGENT_REASONING_TIMEOUT_MS to change).`,
+                      ),
+                  );
+              }, timeoutMs)
+            : undefined;
 
     try {
         return await fn(controller.signal);
