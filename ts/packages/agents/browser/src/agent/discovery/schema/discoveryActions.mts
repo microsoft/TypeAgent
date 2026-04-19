@@ -59,6 +59,43 @@ export type GetAllWebFlows = {
     parameters: {};
 };
 
+export type InferredActionParameter = {
+    name: string;
+    type: "string" | "number" | "boolean";
+    required: boolean;
+    description: string;
+};
+
+export type InferredAction = {
+    name: string;
+    description: string;
+    parameters: InferredActionParameter[];
+    expectedOutcome: string;
+};
+
+export type InferActionsResult = {
+    existingActions: {
+        name: string;
+        description: string;
+        flowId?: string;
+    }[];
+    newActions: InferredAction[];
+    pageUrl: string;
+};
+
+export type InferActions = {
+    actionName: "inferActions";
+    parameters: {};
+};
+
+export type CreateInferredFlows = {
+    actionName: "createInferredFlows";
+    parameters: {
+        selectedIndices: number[];
+        inferredActions: InferredAction[];
+    };
+};
+
 export type SchemaDiscoveryActions =
     | DetectPageActions
     | RegisterPageDynamicAgent
@@ -66,4 +103,6 @@ export type SchemaDiscoveryActions =
     | CreateWebFlowFromRecording
     | GetWebFlowsForDomain
     | GetAllWebFlows
-    | DeleteWebFlow;
+    | DeleteWebFlow
+    | InferActions
+    | CreateInferredFlows;

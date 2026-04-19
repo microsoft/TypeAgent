@@ -189,6 +189,29 @@ function initialize() {
             injectCommand(data) {
                 chatPanel.injectCommand(data.command);
             },
+            startMacroAuthoring(_data) {
+                chatPanel.addAgentMessage(
+                    {
+                        type: "text",
+                        content:
+                            "Let's create a new macro! What would you like this macro to do?\n\n" +
+                            'Please describe the goal you want to automate (e.g., "Add the current product to my cart").',
+                    },
+                    "browser",
+                );
+                chatPanel.addFollowUpButtons([
+                    {
+                        label: "Let AI try it",
+                        command: "__macro_authoring_ai__",
+                        displayText: "Let AI demonstrate",
+                    },
+                    {
+                        label: "I'll demonstrate",
+                        command: "__macro_authoring_demo__",
+                        displayText: "I'll demonstrate the steps",
+                    },
+                ]);
+            },
         },
     );
     rpc = client.rpc;
@@ -265,6 +288,32 @@ function handleInternalCommand(text: string): boolean {
             .catch(() => {});
         return true;
     }
+    if (text === "__macro_authoring_ai__") {
+        chatPanel.addAgentMessage(
+            {
+                type: "text",
+                content:
+                    "Great! Please describe your automation goal and I'll try to complete it.\n\n" +
+                    'Type your goal below (e.g., "Add the current product to cart and go to checkout"):',
+            },
+            "browser",
+        );
+        (window as any).__macroAuthoringMode = "ai";
+        return true;
+    }
+    if (text === "__macro_authoring_demo__") {
+        chatPanel.addAgentMessage(
+            {
+                type: "text",
+                content:
+                    "Great! Please describe what this macro should do, then I'll start recording your actions.\n\n" +
+                    "Type your goal below:",
+            },
+            "browser",
+        );
+        (window as any).__macroAuthoringMode = "demo";
+        return true;
+    }
     if (text === "__save_and_stop_recording__") {
         lastRecordedActionName =
             extractRecordedActionName() || "Recorded Action";
@@ -332,6 +381,69 @@ function handleInternalCommand(text: string): boolean {
 function handleUserMessage(text: string, attachments?: string[]) {
     // Handle internal commands (save/discard recording) without going to dispatcher
     if (handleInternalCommand(text)) return;
+
+    // Handle macro authoring goal capture
+    const authoringMode = (window as any).__macroAuthoringMode;
+    if (authoringMode) {
+        delete (window as any).__macroAuthoringMode;
+        if (authoringMode === "ai") {
+            chatPanel.setEnabled(false);
+            chatPanel.showStatus("Starting AI-driven automation...");
+            const learnCommand = `@browser learn "${text}"`;
+            rpc.invoke("chatPanelProcessCommand", {
+                command: learnCommand,
+                clientRequestId: `ext-${++requestCounter}`,
+                attachments: [],
+            })
+                .then(() => {
+                    chatPanel.setEnabled(true);
+                    chatPanel.focus();
+                })
+                .catch((err: any) => {
+                    chatPanel.addAgentMessage(
+                        {
+                            type: "text",
+                            content: `Failed: ${err.message || err}`,
+                            kind: "error",
+                        },
+                        "browser",
+                    );
+                    chatPanel.setEnabled(true);
+                });
+            return;
+        } else if (authoringMode === "demo") {
+            const actionName =
+                text.replace(/[^a-zA-Z0-9]/g, "_").substring(0, 30) ||
+                "myAction";
+            chatPanel.addAgentMessage(
+                {
+                    type: "text",
+                    content: `Recording started for "${text}". Perform your actions on the page, then click "Save recording" when done.`,
+                },
+                "browser",
+            );
+            rpc.invoke("chatPanelStartRecording")
+                .then((result: any) => {
+                    if (result?.success) {
+                        (window as any).__recordingGoal = text;
+                        chatPanel.addFollowUpButtons([
+                            {
+                                label: "Save recording",
+                                command: "__save_and_stop_recording__",
+                                displayText: "Save recording",
+                            },
+                            {
+                                label: "Cancel recording",
+                                command: "__cancel_recording__",
+                                displayText: "Cancel recording",
+                            },
+                        ]);
+                    }
+                })
+                .catch(() => {});
+            return;
+        }
+    }
 
     chatPanel.setEnabled(false);
     chatPanel.showStatus("Processing...");
