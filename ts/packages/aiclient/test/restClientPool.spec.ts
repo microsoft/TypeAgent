@@ -2,10 +2,7 @@
 // Licensed under the MIT License.
 
 import { success } from "typechat";
-import {
-    callJsonApiWithPool,
-    PoolRequestContext,
-} from "../src/restClient.js";
+import { callJsonApiWithPool, PoolRequestContext } from "../src/restClient.js";
 import { EndpointPool } from "../src/endpointPool.js";
 
 // Build a minimal pool with stubbed ApiSettings. The tests don't exercise any
@@ -33,16 +30,20 @@ function makePool(
     };
 }
 
-function jsonResponse(status: number, body: any, headers?: Record<string, string>): Response {
+function jsonResponse(
+    status: number,
+    body: any,
+    headers?: Record<string, string>,
+): Response {
     return new Response(JSON.stringify(body), {
         status,
         headers: { "content-type": "application/json", ...(headers ?? {}) },
     });
 }
 
-function mockBuildRequest(): (member: any) => Promise<
-    ReturnType<typeof success<PoolRequestContext>>
-> {
+function mockBuildRequest(): (
+    member: any,
+) => Promise<ReturnType<typeof success<PoolRequestContext>>> {
     return async () =>
         success({ headers: { "api-key": "test" }, body: { hello: "world" } });
 }
@@ -145,9 +146,7 @@ describe("callJsonApiWithPool — multi-member rotation", () => {
         });
         expect(r2.success).toBe(true);
         if (r2.success) {
-            expect((r2.data as any).served_by).toBe(
-                "https://second.example/x",
-            );
+            expect((r2.data as any).served_by).toBe("https://second.example/x");
         }
     });
 
