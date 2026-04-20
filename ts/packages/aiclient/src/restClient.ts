@@ -3,6 +3,16 @@
 
 import { success, error, Result } from "typechat";
 import registerDebug from "debug";
+import type {
+    EndpointPool,
+    EndpointPoolMember,
+} from "./endpointPool.js";
+import {
+    markSuccess,
+    markThrottled,
+    markTransientFailure,
+    pickEndpoint,
+} from "./endpointPool.js";
 
 const debugUrl = registerDebug("typeagent:rest:url");
 const debugHeader = registerDebug("typeagent:rest:header");
@@ -10,6 +20,7 @@ const debugError = registerDebug("typeagent:rest:error");
 // Always-on visibility into transient-error retries (429/5xx). Separate from
 // debugError so operators see throttling even without error-level tracing.
 const debugRetry = registerDebug("typeagent:rest:retry");
+const debugPool = registerDebug("typeagent:pool");
 
 function hostOf(url: string): string {
     try {
@@ -473,4 +484,200 @@ function isTransientHttpError(code: number): boolean {
 
 function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ---------------------------------------------------------------------------
+// Endpoint-pool aware variants
+//
+// When a caller has more than one endpoint configured (e.g. multiple Azure
+// OpenAI regions behind the same model name), these wrappers select a member,
+// invoke fetchWithRetry against that one endpoint with retryMaxAttempts=1
+// (so the inner layer doesn't re-hit the same URL), and rotate to another
+// member on 429/5xx. The pool of one case is a direct delegate to the
+// existing fetchWithRetry path, preserving today's behavior byte-for-byte.
+// ---------------------------------------------------------------------------
+
+export type PoolRequestContext = {
+    headers: Record<string, string>;
+    body?: any;
+};
+
+/**
+ * Caller supplies this to build per-member headers (and optional body). Called
+ * once per pick, so an Azure AD token refresh can happen per-endpoint.
+ */
+export type BuildPoolRequest = (
+    member: EndpointPoolMember,
+) => Promise<Result<PoolRequestContext>>;
+
+export type PoolCallOptions = {
+    overallBudgetMs?: number | undefined;
+    retryPauseMs?: number | undefined;
+};
+
+async function fetchWithPool(
+    pool: EndpointPool,
+    method: "POST" | "GET",
+    buildRequest: BuildPoolRequest,
+    options?: PoolCallOptions,
+): Promise<Result<Response>> {
+    // One-member shortcut: fall through to the legacy retry path with the
+    // member's own retry budget so behavior is identical to today for users
+    // who haven't opted into a multi-region pool.
+    if (pool.members.length === 1) {
+        const member = pool.members[0];
+        const req = await buildRequest(member);
+        if (!req.success) return req;
+        const init: RequestInit = {
+            method,
+            headers: {
+                "content-type": "application/json",
+                ...req.data.headers,
+            },
+        };
+        if (method === "POST" && req.data.body !== undefined) {
+            init.body = JSON.stringify(req.data.body);
+        }
+        const settings = member.settings;
+        return fetchWithRetry(
+            settings.endpoint,
+            init,
+            settings.maxRetryAttempts,
+            settings.retryPauseMs,
+            settings.timeout,
+            settings.throttler,
+        );
+    }
+
+    const overallBudgetMs = options?.overallBudgetMs ?? 180_000;
+    const retryPauseMs = options?.retryPauseMs ?? 1000;
+    const startTime = Date.now();
+    let lastError: Result<Response> | undefined;
+    let attempts = 0;
+
+    while (true) {
+        const elapsed = Date.now() - startTime;
+        if (elapsed >= overallBudgetMs) {
+            debugPool(
+                `pool ${pool.modelKey} exhausted ${overallBudgetMs}ms budget after ${attempts} attempts`,
+            );
+            return (
+                lastError ??
+                error(
+                    `pool ${pool.modelKey} budget exhausted before any attempt`,
+                )
+            );
+        }
+        const budgetLeft = overallBudgetMs - elapsed;
+
+        const pick = pickEndpoint(pool);
+        if (pick.kind === "cooling") {
+            const wait = Math.min(pick.waitMs, budgetLeft);
+            debugPool(
+                `pool ${pool.modelKey} all cooling; sleeping ${wait}ms for ${pick.member.suffix || "<bare>"}`,
+            );
+            await sleep(wait);
+            continue;
+        }
+
+        const member = pick.member;
+        const req = await buildRequest(member);
+        if (!req.success) {
+            return req;
+        }
+        const init: RequestInit = {
+            method,
+            headers: {
+                "content-type": "application/json",
+                ...req.data.headers,
+            },
+        };
+        if (method === "POST" && req.data.body !== undefined) {
+            init.body = JSON.stringify(req.data.body);
+        }
+
+        attempts += 1;
+        debugPool(
+            `pool ${pool.modelKey} -> ${member.suffix || "<bare>"} (priority=${member.priority}, mode=${member.mode}), attempt ${attempts}`,
+        );
+
+        const perAttemptTimeout = Math.min(
+            member.settings.timeout ?? budgetLeft,
+            budgetLeft,
+        );
+        // Pass retryMaxAttempts=0 so the inner layer does not re-hit the
+        // same URL — the pool wrapper handles rotation on 429/5xx.
+        const result = await fetchWithRetry(
+            member.settings.endpoint,
+            init,
+            0,
+            retryPauseMs,
+            perAttemptTimeout,
+            member.settings.throttler,
+        );
+
+        if (result.success) {
+            markSuccess(member);
+            return result;
+        }
+
+        // fetchWithRetry returns an error string; we don't have the raw status
+        // here anymore. Parse it for the signature "429:" / "503:" etc.
+        const message = result.message ?? "";
+        const statusMatch = /(\b|^)(\d{3})[: ]/.exec(message);
+        const status = statusMatch ? parseInt(statusMatch[2], 10) : 0;
+
+        lastError = result;
+
+        if (status === 429) {
+            // fetchWithRetry has already parsed + logged Retry-After for us,
+            // but the pool-level cooldown needs the value too. We don't have
+            // the Response object here anymore, so use our own exponential.
+            markThrottled(member, undefined);
+            continue;
+        }
+        if (status === 500 || status === 502 || status === 503 || status === 504) {
+            markTransientFailure(member);
+            continue;
+        }
+
+        // Non-transient 4xx or unparseable error: return without rotating.
+        // The caller shouldn't keep trying other endpoints for e.g. a 401.
+        if (status >= 400 && status < 500 && status !== 429) {
+            return result;
+        }
+
+        // Network/timeout or unrecognized shape — treat as transient.
+        markTransientFailure(member);
+    }
+}
+
+/**
+ * Pool-aware variant of callJsonApi. Picks a pool member, calls POST, and
+ * rotates on 429/5xx. Returns parsed JSON on success.
+ */
+export async function callJsonApiWithPool(
+    pool: EndpointPool,
+    buildRequest: BuildPoolRequest,
+    options?: PoolCallOptions,
+): Promise<Result<unknown>> {
+    const response = await fetchWithPool(pool, "POST", buildRequest, options);
+    if (!response.success) return response;
+    try {
+        return success(await response.data.json());
+    } catch (e: any) {
+        return error(`callJsonApiWithPool(): .json(): ${e.message}`);
+    }
+}
+
+/**
+ * Pool-aware variant of callApi. Returns the raw Response (caller will stream
+ * the body themselves).
+ */
+export async function callApiWithPool(
+    pool: EndpointPool,
+    buildRequest: BuildPoolRequest,
+    options?: PoolCallOptions,
+): Promise<Result<Response>> {
+    return fetchWithPool(pool, "POST", buildRequest, options);
 }
