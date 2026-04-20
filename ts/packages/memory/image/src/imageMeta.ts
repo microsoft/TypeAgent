@@ -45,6 +45,17 @@ export class ImageMeta implements IKnowledgeSource, IMessageMetadata {
         return undefined;
     }
 
+    private getImageTakerName(): string {
+        const exifKeys = ["Artist", "Camera Owner Name", "OwnerName"];
+        for (const key of exifKeys) {
+            const value = this.dataFrameValues[key];
+            if (typeof value === "string" && value.trim().length > 0) {
+                return value.trim();
+            }
+        }
+        return "ME";
+    }
+
     getKnowledge() {
         this.imageEntity = {
             name: `${path.basename(this.img.fileName)} - ${this.img.title}`,
@@ -148,7 +159,7 @@ export class ImageMeta implements IKnowledgeSource, IMessageMetadata {
                     verbTense: "present",
                     subjectEntityName: this.img.fileName,
                     objectEntityName: this.img.nearbyPOI[i].name!,
-                    indirectObjectEntityName: "ME", // TODO: image taker name
+                    indirectObjectEntityName: this.getImageTakerName(),
                 });
             }
         }
