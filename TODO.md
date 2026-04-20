@@ -88,7 +88,7 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/actionGrammar/src/grammarCompiler.ts` | 953 | create regexp | Medium | High | Local | Fix | No |
 | `ts/packages/actionGrammar/src/grammarRuleParser.ts` | 84 | Support nested instead of just Rule Ref | Medium | Medium | Component | Fix | No |
 | `ts/packages/actionGrammar/src/grammarTypes.ts` | 174 | support optional string parts | Low | Medium | Local | Fix | No |
-| `ts/packages/actionGrammar/src/grammarTypes.ts` | 177 | cache the regexp? | Low | High | Local | Fix | No |
+| ~~`ts/packages/actionGrammar/src/grammarTypes.ts`~~ | ~~177~~ | ~~cache the regexp?~~ | Low | High | Local | ✅ Already done (regexpCache field exists) | No |
 | `ts/packages/actionGrammar/src/grammarValueTypeValidator.ts` | 1035 | look up entity return types from the entity registry instead of hard-coding | Medium | Medium | Component | Fix | No |
 | `ts/packages/actionGrammar/src/nfaCompletion.ts` | 293 | The NFA path does not yet track wildcard-at-EOI states. | High | Medium | Component | Fix | No |
 | `ts/packages/actionGrammar/test/dynamicGrammarLoader.spec.ts` | 423 | Re-enable after grammar imports and type declarations for converters are complete | Medium | Medium | Component | Fix | Yes |
@@ -152,9 +152,9 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/agents/spelunker/src/summarizing.ts` | 42 | Prompt engineering | High | Medium | Local | Fix | Yes |
 | `ts/packages/agents/spelunker/src/typescriptChunker.ts` | 198 | Move to caller? | Low | High | Local | Fix | No |
 | `ts/packages/agents/video/src/videoActionHandler.ts` | 54 | dynamic duration | Medium | Medium | Local | Fix | Yes |
-| `ts/packages/agents/weather/src/weatherActionHandler.ts` | 227 | Add more sophisticated validation: | Medium | High | Local | Fix | No |
-| `ts/packages/aiclient/src/models.ts` | 31 | JsonSchemaType | Low | High | Local | Fix | No |
-| `ts/packages/aiclient/src/models.ts` | 39 | JsonSchemaType | Low | High | Local | Fix | No |
+| ~~`ts/packages/agents/weather/src/weatherActionHandler.ts`~~ | ~~227~~ | ~~Add more sophisticated validation:~~ | ~~Medium~~ | ~~High~~ | ~~Local~~ | ~~Fix~~ | ~~No~~ | ✅ Fixed: now uses geocoding API |
+| ~~`ts/packages/aiclient/src/models.ts`~~ | ~~31~~ | ~~JsonSchemaType~~ | Low | High | Local | ✅ Already done | No |
+| ~~`ts/packages/aiclient/src/models.ts`~~ | ~~39~~ | ~~JsonSchemaType~~ | Low | High | Local | ✅ Already done | No |
 | `ts/packages/aiclient/src/models.ts` | 176 | add support for videos | High | Medium | Component | Fix | Yes |
 | `ts/packages/aiclient/src/openai.ts` | 580 | remove after API endpoint correctly handles this case | Low | Medium | Local | Fix | Yes |
 | `ts/packages/aiclient/src/tokenCounter.ts` | 58 | intermittently cache these with the session | Medium | Medium | Component | Fix | Yes |
@@ -275,7 +275,7 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/memory/image/src/imageCollection.ts` | 78 | select other Facets/meta data fields | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/memory/image/src/imageCollection.ts` | 79 | put everything in a single table? | High | Medium | Component | No Fix | Yes |
 | `ts/packages/memory/image/src/imageCollection.ts` | 133 | add additional meta data tables | Medium | Medium | Component | Fix | Yes |
-| `ts/packages/memory/image/src/imageMeta.ts` | 151 | image taker name | Low | High | Local | Fix | No |
+| ~~`ts/packages/memory/image/src/imageMeta.ts`~~ | ~~151~~ | ~~image taker name~~ | Low | High | Local | ✅ Fixed | No |
 | `ts/packages/memory/image/src/imageMeta.ts` | 356 | Ensure localization | Medium | Medium | Local | Fix | No |
 | `ts/packages/memory/image/src/indexingService.ts` | 5 | add support for "monitoring" the indexed folder for changes | High | Medium | Component | Fix | No |
 | `ts/packages/memory/image/src/indexingService.ts` | 23 | add token stats | Low | High | Local | Fix | No |
