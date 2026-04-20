@@ -3,6 +3,7 @@
   "defaultEnabled": true,
   "description": "Agent that allows you control an existing browser window",
   "localView": true,
+  "allowDynamicAgents": true,
   "indexingServices": {
     "website": {
       "serviceScript": "./dist/agent/indexing/browserIndexingService.js",
