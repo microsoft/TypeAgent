@@ -192,7 +192,7 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/defaultAgentProvider/test/constructionCacheTestCommon.ts` | 240 | needs fix these | Low | Medium | Local | Fix | Yes |
 | `ts/packages/defaultAgentProvider/test/grammar.spec.ts` | 93 | once MatchPart allow matches ignoring diacritical marks | Medium | Medium | Component | Fix | No |
 | `ts/packages/defaultAgentProvider/test/schema.spec.ts` | 18 | mcpfilesystem schema can't be loaded without allowDirectory to start up the server. | Medium | Medium | Component | Fix | Yes |
-| `ts/packages/dispatcher/dispatcher/src/context/appAgentManager.ts` | 1151 | Make this not hard coded | Low | High | Local | Fix | Yes |
+| ~~`ts/packages/dispatcher/dispatcher/src/context/appAgentManager.ts`~~ | ~~1151~~ | ~~Make this not hard coded~~ | Low | High | Local | ✅ Fixed | Yes |
 | `ts/packages/dispatcher/dispatcher/src/context/appAgentManager.ts` | 1182 | unload agent as well? | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts` | 623 | instead of disabling this let's find a way to gracefully handle this | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts` | 101 | formalize the schema for activityContext | Medium | Medium | Component | Fix | Yes |

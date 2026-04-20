@@ -41,6 +41,7 @@ export type AppAgentManifest = {
     cachedActivities?: Record<string, ActivityCacheSpec>; // Key is activity name, default (if not specified) is false
     // Registered flow programs: actionName → path to .flow.json (relative to manifest file)
     flows?: Record<string, string>;
+    allowDynamicAgents?: boolean; // whether this agent can add/remove dynamic sub-agents at runtime, default is false
 } & ActionManifest;
 
 export type SchemaTypeNames = {

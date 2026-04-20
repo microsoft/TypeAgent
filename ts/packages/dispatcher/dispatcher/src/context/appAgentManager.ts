@@ -1150,7 +1150,7 @@ export class AppAgentManager implements ActionConfigProvider {
             record.name,
             agentContext,
             context,
-            record.name === "browser", // TODO: Make this not hard coded
+            record.manifest.allowDynamicAgents === true,
         );
 
         debug(`Session context created for ${record.name}`);
