@@ -185,6 +185,36 @@ function clarifyRequestAction(
     return result;
 }
 
+// Cache the lookup clarify translator per systemContext since it is expensive
+// to create and only depends on the agents + promptLogger for the session.
+const lookupClarifyTranslatorCache = new WeakMap<
+    CommandHandlerContext,
+    ReturnType<typeof loadAgentJsonTranslator>
+>();
+
+function getLookupClarifyTranslator(systemContext: CommandHandlerContext) {
+    const cached = lookupClarifyTranslatorCache.get(systemContext);
+    if (cached !== undefined) {
+        return cached;
+    }
+    const agents = systemContext.agents;
+    const actionConfigs = [
+        agents.getActionConfig("dispatcher.lookup"),
+        agents.getActionConfig("dispatcher"),
+    ];
+    const translator = loadAgentJsonTranslator(
+        actionConfigs,
+        [],
+        agents,
+        undefined,
+        undefined,
+        undefined,
+        systemContext.promptLogger,
+    );
+    lookupClarifyTranslatorCache.set(systemContext, translator);
+    return translator;
+}
+
 async function clarifyWithLookup(
     action: ClarifyUnresolvedReference,
     context: ActionContext<CommandHandlerContext>,
@@ -199,20 +229,7 @@ async function clarifyWithLookup(
         return undefined;
     }
 
-    const actionConfigs = [
-        agents.getActionConfig("dispatcher.lookup"),
-        agents.getActionConfig("dispatcher"),
-    ];
-    // TODO: cache this?
-    const translator = loadAgentJsonTranslator(
-        actionConfigs,
-        [],
-        agents,
-        undefined,
-        undefined,
-        undefined,
-        systemContext.promptLogger,
-    );
+    const translator = getLookupClarifyTranslator(systemContext);
 
     const question = `What is ${action.parameters.reference}?`;
     const result = await translator.translate(question);

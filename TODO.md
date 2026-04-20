@@ -179,7 +179,7 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/dispatcher/dispatcher/src/context/appAgentManager.ts` | 1182 | unload agent as well? | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts` | 623 | instead of disabling this let's find a way to gracefully handle this | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts` | 101 | formalize the schema for activityContext | Medium | Medium | Component | Fix | Yes |
-| `ts/packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts` | 190 | cache this? | Low | High | Local | Fix | No |
+| ~~`ts/packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts`~~ | ~~190~~ | ~~cache this?~~ | Low | High | Local | ✅ Fixed | No |
 | `ts/packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts` | 223 | This translation can probably more scoped based on the `actionName` field. | Medium | Medium | Component | Fix | No |
 | `ts/packages/dispatcher/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts` | 201 | This does not support activities. | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts` | 328 | revisit | Low | Medium | Local | Fix | Yes |
