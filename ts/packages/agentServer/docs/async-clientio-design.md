@@ -6,7 +6,7 @@
 
 ## Overview
 
-Two `ClientIO` methods — `question` and `proposeAction` — use a **non-blocking, deferred-promise pattern** in the agent-server's `SharedDispatcher`. Rather than blocking on a synchronous RPC round-trip to the originating client, the server broadcasts a fire-and-forget notification, suspends execution via a stored `Promise`, and resumes when any connected client responds. This allows commands to survive client disconnects, supports multi-client sessions, and integrates with the `DisplayLog` for session replay.
+Two `ClientIO` methods — `question` and `proposeAction` — use a **non-blocking, deferred-promise pattern** in the agent-server's `SharedDispatcher`. Rather than blocking on a synchronous RPC round-trip to the originating client, the server broadcasts a fire-and-forget notification, suspends execution via a stored `Promise`, and resumes when any connected client responds. This allows commands to survive client disconnects, supports multi-client conversations, and integrates with the `DisplayLog` for conversation replay.
 
 The `ClientIO` interface signatures are unchanged — callers receive a `Promise<number | unknown>` as before. Only the server-side fulfillment mechanism differs.
 

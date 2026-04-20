@@ -6,19 +6,19 @@ Client library for connecting to a running agentServer, used by the Shell and CL
 
 ### `connectAgentServer(url, onDisconnect?)`
 
-Opens a WebSocket to an already-running agentServer and returns an `AgentServerConnection` with full session management support.
+Opens a WebSocket to an already-running agentServer and returns an `AgentServerConnection` with full conversation management support.
 
 ```typescript
 const connection = await connectAgentServer("ws://localhost:8999");
 
-// Join a session
+// Join a conversation
 const { dispatcher, sessionId } = await connection.joinSession(clientIO, {
   clientType: "shell",
 });
 
-// Session management
+// Conversation management
 await connection.createSession("my session");
-await connection.listSessions(); // all sessions
+await connection.listSessions(); // all conversations
 await connection.listSessions("workout"); // filter by name substring
 await connection.renameSession(sessionId, "new name");
 await connection.deleteSession(sessionId);
@@ -30,15 +30,15 @@ await connection.close();
 
 **`AgentServerConnection`** methods:
 
-| Method                              | Description                                          |
-| ----------------------------------- | ---------------------------------------------------- |
-| `joinSession(clientIO, options?)`   | Join a session; returns `{ dispatcher, sessionId }`  |
-| `leaveSession(sessionId)`           | Leave a session and clean up its channels            |
-| `createSession(name)`               | Create a new named session                           |
-| `listSessions(name?)`               | List sessions, optionally filtered by name substring |
-| `renameSession(sessionId, newName)` | Rename a session                                     |
-| `deleteSession(sessionId)`          | Delete a session and its persisted data              |
-| `close()`                           | Close the WebSocket connection                       |
+| Method                              | Description                                               |
+| ----------------------------------- | --------------------------------------------------------- |
+| `joinSession(clientIO, options?)`   | Join a conversation; returns `{ dispatcher, sessionId }`  |
+| `leaveSession(sessionId)`           | Leave a conversation and clean up its channels            |
+| `createSession(name)`               | Create a new named conversation                           |
+| `listSessions(name?)`               | List conversations, optionally filtered by name substring |
+| `renameSession(sessionId, newName)` | Rename a conversation                                     |
+| `deleteSession(sessionId)`          | Delete a conversation and its persisted data              |
+| `close()`                           | Close the WebSocket connection                            |
 
 ### `ensureAgentServer(port?, hidden?, idleTimeout?)`
 
@@ -97,18 +97,18 @@ const session = await ensureAndConnectSession(
 | -------------- | -------------------------- | ------------ | ----------------------------------------------------- |
 | `clientIO`     | `ClientIO`                 | _(required)_ | Client IO implementation                              |
 | `port`         | `number`                   | `8999`       | Port to connect to                                    |
-| `options`      | `DispatcherConnectOptions` | `undefined`  | Session join options (e.g. `sessionId`)               |
+| `options`      | `DispatcherConnectOptions` | `undefined`  | Conversation join options (e.g. `sessionId`)          |
 | `onDisconnect` | `() => void`               | `undefined`  | Called when the WebSocket disconnects                 |
 | `hidden`       | `boolean`                  | `false`      | Suppress terminal/window when spawning                |
 | `idleTimeout`  | `number`                   | `0`          | Pass `--idle-timeout` to spawned server; `0` disables |
 
 ### `ensureAndConnectDispatcher(clientIO, port?, options?, onDisconnect?)` _(deprecated)_
 
-Convenience wrapper that auto-spawns the server if needed and joins a session, returning a `Dispatcher` directly. Prefer calling `ensureAgentServer()` + `connectAgentServer()` + `joinSession()` separately for full control.
+Convenience wrapper that auto-spawns the server if needed and joins a conversation, returning a `Dispatcher` directly. Prefer calling `ensureAgentServer()` + `connectAgentServer()` + `joinSession()` separately for full control.
 
 ### `connectDispatcher(clientIO, url, options?, onDisconnect?)` _(deprecated)_
 
-Backward-compatible wrapper: connects and immediately joins a session, returning a `Dispatcher`. Use `connectAgentServer()` for full multi-session support.
+Backward-compatible wrapper: connects and immediately joins a conversation, returning a `Dispatcher`. Use `connectAgentServer()` for full multi-conversation support.
 
 ---
 
