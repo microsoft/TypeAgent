@@ -20,7 +20,7 @@ import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
 import type {
     AgentServerInvokeFunctions,
     DispatcherConnectOptions,
-    JoinSessionResult,
+    JoinConversationResult,
 } from "@typeagent/agent-server-protocol";
 import {
     getDispatcherChannelName,
@@ -228,11 +228,11 @@ async function doConnect(): Promise<Dispatcher> {
                 filter: true,
                 clientType: "extension",
             };
-            rpc.invoke("joinSession", options)
-                .then((result: JoinSessionResult) => {
+            rpc.invoke("joinConversation", options)
+                .then((result: JoinConversationResult) => {
                     debug(
-                        "Joined session=%s, connectionId=%s",
-                        result.sessionId,
+                        "Joined conversation=%s, connectionId=%s",
+                        result.conversationId,
                         result.connectionId,
                     );
                     resolved = true;
@@ -240,13 +240,13 @@ async function doConnect(): Promise<Dispatcher> {
                     createClientIORpcServer(
                         clientIO,
                         channel.createChannel(
-                            getClientIOChannelName(result.sessionId),
+                            getClientIOChannelName(result.conversationId),
                         ),
                     );
 
                     const d = createDispatcherRpcClient(
                         channel.createChannel(
-                            getDispatcherChannelName(result.sessionId),
+                            getDispatcherChannelName(result.conversationId),
                         ),
                         result.connectionId,
                     );

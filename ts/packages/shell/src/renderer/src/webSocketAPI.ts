@@ -97,6 +97,25 @@ export const webapi: ClientAPI = {
     sessionGetCurrent: async () => {
         return undefined;
     },
+    conversationList: async () => {
+        // Not supported on mobile
+        return [];
+    },
+    conversationCreate: async (_name: string) => {
+        throw new Error("Conversation management not supported on mobile");
+    },
+    conversationSwitch: async (_conversationId: string) => {
+        throw new Error("Conversation management not supported on mobile");
+    },
+    conversationRename: async (_conversationId: string, _newName: string) => {
+        throw new Error("Conversation management not supported on mobile");
+    },
+    conversationDelete: async (_conversationId: string) => {
+        throw new Error("Conversation management not supported on mobile");
+    },
+    conversationGetCurrent: async () => {
+        return undefined;
+    },
 };
 
 const dispatcherChannel = createChannelAdapter((message: any) =>

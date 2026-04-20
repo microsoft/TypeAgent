@@ -73,14 +73,30 @@ export interface ClientAPI {
     searchMenuClose(id: number): void;
     continuousSpeechProcessing(text: string): Promise<string | undefined>;
 
-    // Session management
-    sessionList(): Promise<SessionInfo[]>;
-    sessionCreate(name: string): Promise<SessionInfo>;
-    sessionSwitch(sessionId: string): Promise<SessionSwitchResult>;
-    sessionRename(sessionId: string, newName: string): Promise<void>;
-    sessionDelete(sessionId: string): Promise<void>;
+    // Conversation management
+    conversationList(): Promise<ConversationInfo[]>;
+    conversationCreate(name: string): Promise<ConversationInfo>;
+    conversationSwitch(
+        conversationId: string,
+    ): Promise<ConversationSwitchResult>;
+    conversationRename(conversationId: string, newName: string): Promise<void>;
+    conversationDelete(conversationId: string): Promise<void>;
+    conversationGetCurrent(): Promise<
+        { conversationId: string; name: string } | undefined
+    >;
+    /** @deprecated Use conversationList instead */
+    sessionList(): Promise<ConversationInfo[]>;
+    /** @deprecated Use conversationCreate instead */
+    sessionCreate(name: string): Promise<ConversationInfo>;
+    /** @deprecated Use conversationSwitch instead */
+    sessionSwitch(conversationId: string): Promise<ConversationSwitchResult>;
+    /** @deprecated Use conversationRename instead */
+    sessionRename(conversationId: string, newName: string): Promise<void>;
+    /** @deprecated Use conversationDelete instead */
+    sessionDelete(conversationId: string): Promise<void>;
+    /** @deprecated Use conversationGetCurrent instead */
     sessionGetCurrent(): Promise<
-        { sessionId: string; name: string } | undefined
+        { conversationId: string; name: string } | undefined
     >;
 }
 
@@ -102,7 +118,9 @@ export interface Client {
     continuousSpeechProcessed(userExpressions: UserExpression[]): void;
     tabRestoreStatus(count: number): void;
     systemNotification?(message: string, id: string, timestamp: number): void;
-    sessionChanged?(sessionId: string, name: string): void;
+    conversationChanged?(conversationId: string, name: string): void;
+    /** @deprecated Use conversationChanged instead */
+    sessionChanged?(conversationId: string, name: string): void;
     markHistoryEntries?(): void;
 }
 
@@ -121,17 +139,23 @@ export type UserExpression = {
     text: string;
 };
 
-// Session management types
-export type SessionInfo = {
-    sessionId: string;
+// Conversation management types
+export type ConversationInfo = {
+    conversationId: string;
     name: string;
     clientCount: number;
     createdAt: string; // ISO 8601
 };
 
-export type SessionSwitchResult = {
+/** @deprecated Use ConversationInfo instead */
+export type SessionInfo = ConversationInfo;
+
+export type ConversationSwitchResult = {
     success: boolean;
-    sessionId?: string;
+    conversationId?: string;
     name?: string;
     error?: string;
 };
+
+/** @deprecated Use ConversationSwitchResult instead */
+export type SessionSwitchResult = ConversationSwitchResult;

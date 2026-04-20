@@ -103,9 +103,14 @@ function registerClient(client: Client) {
         },
     );
 
-    ipcRenderer.on("session-changed", (_, sessionId: string, name: string) => {
-        client.sessionChanged?.(sessionId, name);
-    });
+    ipcRenderer.on(
+        "session-changed",
+        (_, conversationId: string, name: string) => {
+            client.conversationChanged?.(conversationId, name);
+            // Also call deprecated sessionChanged for backward compat
+            client.sessionChanged?.(conversationId, name);
+        },
+    );
 
     ipcRenderer.on("mark-history", () => {
         client.markHistoryEntries?.();
@@ -170,7 +175,26 @@ const api: ClientAPI = {
         return ipcRenderer.invoke("continuous-speech-processing", text);
     },
 
-    // Session management
+    // Conversation management
+    conversationList: () => {
+        return ipcRenderer.invoke("session-list");
+    },
+    conversationCreate: (name: string) => {
+        return ipcRenderer.invoke("session-create", name);
+    },
+    conversationSwitch: (conversationId: string) => {
+        return ipcRenderer.invoke("session-switch", conversationId);
+    },
+    conversationRename: (conversationId: string, newName: string) => {
+        return ipcRenderer.invoke("session-rename", conversationId, newName);
+    },
+    conversationDelete: (conversationId: string) => {
+        return ipcRenderer.invoke("session-delete", conversationId);
+    },
+    conversationGetCurrent: () => {
+        return ipcRenderer.invoke("session-get-current");
+    },
+    // Deprecated session aliases
     sessionList: () => {
         return ipcRenderer.invoke("session-list");
     },

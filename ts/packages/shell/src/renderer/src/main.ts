@@ -404,7 +404,7 @@ function registerClient(
                                     );
                                     const switchResult =
                                         await api.sessionSwitch(
-                                            created.sessionId,
+                                            created.conversationId,
                                         );
                                     const msg = switchResult.success
                                         ? `✅ Created and switched to conversation "<b>${escapeHtml(created.name)}</b>"`
@@ -431,15 +431,15 @@ function registerClient(
                                         const lines = sessions.map((s) => {
                                             const isCurrent =
                                                 current &&
-                                                s.sessionId ===
-                                                    current.sessionId;
+                                                s.conversationId ===
+                                                    current.conversationId;
                                             const marker = isCurrent
                                                 ? " ← <b>current</b>"
                                                 : "";
                                             const date = new Date(
                                                 s.createdAt,
                                             ).toLocaleDateString();
-                                            return `• <b>${escapeHtml(s.name)}</b> (${escapeHtml(s.sessionId)}) — ${s.clientCount} client(s), created ${date}${marker}`;
+                                            return `• <b>${escapeHtml(s.name)}</b> (${escapeHtml(s.conversationId)}) — ${s.clientCount} client(s), created ${date}${marker}`;
                                         });
                                         html = `<b>Conversations (${sessions.length})</b><br>${lines.join("<br>")}`;
                                     }
@@ -457,7 +457,7 @@ function registerClient(
                                 case "info": {
                                     const cur = await api.sessionGetCurrent();
                                     const html = cur
-                                        ? `Current conversation: <b>${escapeHtml(cur.name)}</b> (${escapeHtml(cur.sessionId)})`
+                                        ? `Current conversation: <b>${escapeHtml(cur.name)}</b> (${escapeHtml(cur.conversationId)})`
                                         : "No active conversation.";
                                     chatView.addNotificationMessage(
                                         {
@@ -503,7 +503,7 @@ function registerClient(
                                         break;
                                     }
                                     const result = await api.sessionSwitch(
-                                        match.sessionId,
+                                        match.conversationId,
                                     );
                                     if (!result.success) {
                                         chatView.addNotificationMessage(
@@ -532,7 +532,7 @@ function registerClient(
                                         );
                                         break;
                                     }
-                                    let sessionId: string;
+                                    let conversationId: string;
                                     if (payload.name) {
                                         const sessions =
                                             await api.sessionList();
@@ -553,7 +553,7 @@ function registerClient(
                                             );
                                             break;
                                         }
-                                        sessionId = match.sessionId;
+                                        conversationId = match.conversationId;
                                     } else {
                                         const cur =
                                             await api.sessionGetCurrent();
@@ -570,10 +570,10 @@ function registerClient(
                                             );
                                             break;
                                         }
-                                        sessionId = cur.sessionId;
+                                        conversationId = cur.conversationId;
                                     }
                                     await api.sessionRename(
-                                        sessionId,
+                                        conversationId,
                                         payload.newName,
                                     );
                                     chatView.addNotificationMessage(
@@ -619,7 +619,9 @@ function registerClient(
                                         );
                                         break;
                                     }
-                                    await api.sessionDelete(match.sessionId);
+                                    await api.sessionDelete(
+                                        match.conversationId,
+                                    );
                                     chatView.addNotificationMessage(
                                         {
                                             type: "html",

@@ -2,19 +2,19 @@
 // Licensed under the MIT License.
 
 /**
- * Shell session manager — provides IPC handlers for session management.
+ * Shell conversation manager — provides IPC handlers for conversation management.
  *
- * In "local" mode (in-process dispatcher), multi-session is not supported.
- * The handlers return a single "default" session and reject session switching.
+ * In "local" mode (in-process dispatcher), multi-conversation is not supported.
+ * The handlers return a single "default" conversation and reject conversation switching.
  *
  * In "remote" mode (connected to agent server), the handlers delegate to the
- * AgentServerConnection's session API.
+ * AgentServerConnection's conversation API.
  */
 
 import { ipcMain } from "electron";
 import type {
-    SessionInfo,
-    SessionSwitchResult,
+    ConversationInfo,
+    ConversationSwitchResult,
 } from "../preload/electronTypes.js";
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
 import type { ClientIO, Dispatcher } from "agent-dispatcher";
@@ -29,7 +29,7 @@ import { debugShell } from "./debug.js";
 export async function replayDisplayHistory(
     dispatcher: Dispatcher,
     clientIO: ClientIO,
-    sessionName?: string,
+    conversationName?: string,
     markHistoryFn?: () => void,
 ): Promise<void> {
     const entries = await dispatcher.getDisplayHistory();
@@ -37,16 +37,16 @@ export async function replayDisplayHistory(
 
     if (entries.length === 0) {
         // Nothing to mark as history — skip markHistoryFn entirely.
-        if (sessionName !== undefined) {
+        if (conversationName !== undefined) {
             clientIO.setDisplay({
                 message: {
                     type: "text",
-                    content: `Connected to conversation '${sessionName}'. (no history)`,
+                    content: `Connected to conversation '${conversationName}'. (no history)`,
                     kind: "info",
                 },
                 requestId: {
                     requestId: "",
-                    clientRequestId: `notification-session-info-${ts}`,
+                    clientRequestId: `notification-conversation-info-${ts}`,
                 },
                 source: "session",
             });
@@ -55,19 +55,19 @@ export async function replayDisplayHistory(
     }
 
     debugShell(
-        `Replaying ${entries.length} history entries for session "${sessionName}"`,
+        `Replaying ${entries.length} history entries for conversation "${conversationName}"`,
     );
 
-    // Send a "session history" separator notification
+    // Send a "conversation history" separator notification
     clientIO.setDisplay({
         message: {
             type: "text",
-            content: "─── session history ───",
+            content: "─── conversation history ───",
             kind: "info",
         },
         requestId: {
             requestId: "",
-            clientRequestId: `notification-session-history-start-${ts}`,
+            clientRequestId: `notification-conversation-history-start-${ts}`,
         },
         source: "session",
     });
@@ -112,142 +112,152 @@ export async function replayDisplayHistory(
         },
         requestId: {
             requestId: "",
-            clientRequestId: `notification-session-history-end-${ts}`,
+            clientRequestId: `notification-conversation-history-end-${ts}`,
         },
         source: "session",
     });
 
-    if (sessionName !== undefined) {
+    if (conversationName !== undefined) {
         clientIO.setDisplay({
             message: {
                 type: "text",
-                content: `Connected to conversation '${sessionName}'.`,
+                content: `Connected to conversation '${conversationName}'.`,
                 kind: "info",
             },
             requestId: {
                 requestId: "",
-                clientRequestId: `notification-session-connected-${ts}`,
+                clientRequestId: `notification-conversation-connected-${ts}`,
             },
             source: "session",
         });
     }
 }
 
-export type SessionManagerBackend = {
-    listSessions(): Promise<SessionInfo[]>;
-    createSession(name: string): Promise<SessionInfo>;
-    switchSession(sessionId: string): Promise<SessionSwitchResult>;
-    renameSession(sessionId: string, newName: string): Promise<void>;
-    deleteSession(sessionId: string): Promise<void>;
-    getCurrentSession(): Promise<
-        { sessionId: string; name: string } | undefined
+export type ConversationManagerBackend = {
+    listConversations(): Promise<ConversationInfo[]>;
+    createConversation(name: string): Promise<ConversationInfo>;
+    switchConversation(
+        conversationId: string,
+    ): Promise<ConversationSwitchResult>;
+    renameConversation(conversationId: string, newName: string): Promise<void>;
+    deleteConversation(conversationId: string): Promise<void>;
+    getCurrentConversation(): Promise<
+        { conversationId: string; name: string } | undefined
     >;
 };
 
+/** @deprecated Use ConversationManagerBackend instead */
+export type SessionManagerBackend = ConversationManagerBackend;
+
 /**
- * Create a local-only session backend for in-process dispatcher mode.
- * Multi-session is not supported; all calls operate on a single default session.
+ * Create a local-only conversation backend for in-process dispatcher mode.
+ * Multi-conversation is not supported; all calls operate on a single default conversation.
  */
-export function createLocalSessionBackend(): SessionManagerBackend {
-    const defaultSession: SessionInfo = {
-        sessionId: "local",
-        name: "Default Session",
+export function createLocalConversationBackend(): ConversationManagerBackend {
+    const defaultConversation: ConversationInfo = {
+        conversationId: "local",
+        name: "Default Conversation",
         clientCount: 1,
         createdAt: new Date().toISOString(),
     };
 
     return {
-        async listSessions(): Promise<SessionInfo[]> {
-            return [defaultSession];
+        async listConversations(): Promise<ConversationInfo[]> {
+            return [defaultConversation];
         },
-        async createSession(_name: string): Promise<SessionInfo> {
+        async createConversation(_name: string): Promise<ConversationInfo> {
             throw new Error(
-                "Multi-session is not supported in local mode. " +
-                    "Connect to the Agent Server to use session management.",
+                "Multi-conversation is not supported in local mode. " +
+                    "Connect to the Agent Server to use conversation management.",
             );
         },
-        async switchSession(_sessionId: string): Promise<SessionSwitchResult> {
+        async switchConversation(
+            _conversationId: string,
+        ): Promise<ConversationSwitchResult> {
             return {
                 success: false,
                 error:
-                    "Session switching is not supported in local mode. " +
-                    "Connect to the Agent Server to use session management.",
+                    "Conversation switching is not supported in local mode. " +
+                    "Connect to the Agent Server to use conversation management.",
             };
         },
-        async renameSession(
-            _sessionId: string,
+        async renameConversation(
+            _conversationId: string,
             _newName: string,
         ): Promise<void> {
             throw new Error(
-                "Session renaming is not supported in local mode. " +
-                    "Connect to the Agent Server to use session management.",
+                "Conversation renaming is not supported in local mode. " +
+                    "Connect to the Agent Server to use conversation management.",
             );
         },
-        async deleteSession(_sessionId: string): Promise<void> {
+        async deleteConversation(_conversationId: string): Promise<void> {
             throw new Error(
-                "Session deletion is not supported in local mode. " +
-                    "Connect to the Agent Server to use session management.",
+                "Conversation deletion is not supported in local mode. " +
+                    "Connect to the Agent Server to use conversation management.",
             );
         },
-        async getCurrentSession(): Promise<
-            { sessionId: string; name: string } | undefined
+        async getCurrentConversation(): Promise<
+            { conversationId: string; name: string } | undefined
         > {
             return {
-                sessionId: defaultSession.sessionId,
-                name: defaultSession.name,
+                conversationId: defaultConversation.conversationId,
+                name: defaultConversation.name,
             };
         },
     };
 }
 
+/** @deprecated Use createLocalConversationBackend instead */
+export const createLocalSessionBackend = createLocalConversationBackend;
+
 /**
- * Register session management IPC handlers on ipcMain.
+ * Register conversation management IPC handlers on ipcMain.
  * Returns a cleanup function that removes the handlers.
  */
-export function registerSessionIpcHandlers(
-    backend: SessionManagerBackend,
+export function registerConversationIpcHandlers(
+    backend: ConversationManagerBackend,
 ): () => void {
     const handlers = {
         "session-list": async () => {
             debugShell("IPC: session-list");
-            return backend.listSessions();
+            return backend.listConversations();
         },
         "session-create": async (
             _event: Electron.IpcMainInvokeEvent,
             name: string,
         ) => {
             debugShell("IPC: session-create name=%s", name);
-            return backend.createSession(name);
+            return backend.createConversation(name);
         },
         "session-switch": async (
             _event: Electron.IpcMainInvokeEvent,
-            sessionId: string,
+            conversationId: string,
         ) => {
-            debugShell("IPC: session-switch sessionId=%s", sessionId);
-            return backend.switchSession(sessionId);
+            debugShell("IPC: session-switch conversationId=%s", conversationId);
+            return backend.switchConversation(conversationId);
         },
         "session-rename": async (
             _event: Electron.IpcMainInvokeEvent,
-            sessionId: string,
+            conversationId: string,
             newName: string,
         ) => {
             debugShell(
-                "IPC: session-rename sessionId=%s newName=%s",
-                sessionId,
+                "IPC: session-rename conversationId=%s newName=%s",
+                conversationId,
                 newName,
             );
-            return backend.renameSession(sessionId, newName);
+            return backend.renameConversation(conversationId, newName);
         },
         "session-delete": async (
             _event: Electron.IpcMainInvokeEvent,
-            sessionId: string,
+            conversationId: string,
         ) => {
-            debugShell("IPC: session-delete sessionId=%s", sessionId);
-            return backend.deleteSession(sessionId);
+            debugShell("IPC: session-delete conversationId=%s", conversationId);
+            return backend.deleteConversation(conversationId);
         },
         "session-get-current": async () => {
             debugShell("IPC: session-get-current");
-            return backend.getCurrentSession();
+            return backend.getCurrentConversation();
         },
     };
 
@@ -262,53 +272,60 @@ export function registerSessionIpcHandlers(
     };
 }
 
+/** @deprecated Use registerConversationIpcHandlers instead */
+export const registerSessionIpcHandlers = registerConversationIpcHandlers;
+
 /**
- * Create a remote session backend that delegates to an AgentServerConnection.
- * Uses join-before-leave when switching sessions to avoid stranded clients.
+ * Create a remote conversation backend that delegates to an AgentServerConnection.
+ * Uses join-before-leave when switching conversations to avoid stranded clients.
  */
-export function createRemoteSessionBackend(
+export function createRemoteConversationBackend(
     connection: AgentServerConnection,
     clientIO: ClientIO,
-    initialSessionId: string,
+    initialConversationId: string,
     initialName: string,
-    sendSessionChanged: (sessionId: string, name: string) => void,
+    sendConversationChanged: (conversationId: string, name: string) => void,
     onDispatcherSwitch?: (newDispatcher: Dispatcher) => void,
     markHistoryFn?: () => void,
-): SessionManagerBackend {
-    let currentSessionId = initialSessionId;
+): ConversationManagerBackend {
+    let currentConversationId = initialConversationId;
     let currentName = initialName;
 
     return {
-        async listSessions(): Promise<SessionInfo[]> {
-            return connection.listSessions();
+        async listConversations(): Promise<ConversationInfo[]> {
+            return connection.listConversations();
         },
 
-        async createSession(name: string): Promise<SessionInfo> {
-            return connection.createSession(name);
+        async createConversation(name: string): Promise<ConversationInfo> {
+            return connection.createConversation(name);
         },
 
-        async switchSession(sessionId: string): Promise<SessionSwitchResult> {
-            if (sessionId === currentSessionId) {
+        async switchConversation(
+            conversationId: string,
+        ): Promise<ConversationSwitchResult> {
+            if (conversationId === currentConversationId) {
                 return {
                     success: true,
-                    sessionId: currentSessionId,
+                    conversationId: currentConversationId,
                     name: currentName,
                 };
             }
 
-            const oldSessionId = currentSessionId;
+            const oldConversationId = currentConversationId;
 
-            // Phase 1: join new session. If this fails we haven't left the old
+            // Phase 1: join new conversation. If this fails we haven't left the old
             // one, so fall through to the catch and report failure cleanly.
-            let newSession: Awaited<ReturnType<typeof connection.joinSession>>;
+            let newConversation: Awaited<
+                ReturnType<typeof connection.joinConversation>
+            >;
             try {
-                newSession = await connection.joinSession(clientIO, {
-                    sessionId,
+                newConversation = await connection.joinConversation(clientIO, {
+                    conversationId,
                 });
             } catch (e: any) {
                 debugShell(
-                    "Failed to join session %s: %s",
-                    sessionId,
+                    "Failed to join conversation %s: %s",
+                    conversationId,
                     e.message,
                 );
                 return {
@@ -318,84 +335,95 @@ export function createRemoteSessionBackend(
             }
 
             // Override close so it doesn't close the shared WebSocket
-            newSession.dispatcher.close = async () => {
-                await connection.leaveSession(newSession.sessionId);
+            newConversation.dispatcher.close = async () => {
+                await connection.leaveConversation(
+                    newConversation.conversationId,
+                );
             };
 
-            // Phase 2: commit the switch. We are now joined to the new session,
+            // Phase 2: commit the switch. We are now joined to the new conversation,
             // so tracked state must be updated regardless of what happens next.
-            currentSessionId = newSession.sessionId;
-            currentName = newSession.name;
+            currentConversationId = newConversation.conversationId;
+            currentName = newConversation.name;
 
-            // Best-effort leave of the old session — a failure here does not
-            // undo the switch; the client is already on the new session.
+            // Best-effort leave of the old conversation — a failure here does not
+            // undo the switch; the client is already on the new conversation.
             try {
-                await connection.leaveSession(oldSessionId);
+                await connection.leaveConversation(oldConversationId);
             } catch (e: any) {
                 debugShell(
-                    "Failed to leave old session %s (best-effort, ignoring): %s",
-                    oldSessionId,
+                    "Failed to leave old conversation %s (best-effort, ignoring): %s",
+                    oldConversationId,
                     e.message,
                 );
             }
 
             // Notify the shell that the dispatcher has changed so it can
             // rebind its command-processing pipeline to the new instance.
-            onDispatcherSwitch?.(newSession.dispatcher);
+            onDispatcherSwitch?.(newConversation.dispatcher);
 
-            // Clear the renderer and replay the new session's display
+            // Clear the renderer and replay the new conversation's display
             // history through clientIO (same IPC path as live messages).
             clientIO.clear({
                 requestId: "",
-                clientRequestId: "session-switch",
+                clientRequestId: "conversation-switch",
             });
             try {
                 await replayDisplayHistory(
-                    newSession.dispatcher,
+                    newConversation.dispatcher,
                     clientIO,
-                    newSession.name,
+                    newConversation.name,
                     markHistoryFn,
                 );
             } catch (e: any) {
                 // History replay is best-effort — the switch itself succeeded.
                 debugShell(
-                    "Failed to replay display history for session %s: %s",
-                    newSession.name,
+                    "Failed to replay display history for conversation %s: %s",
+                    newConversation.name,
                     e.message,
                 );
             }
 
-            sendSessionChanged(currentSessionId, currentName);
+            sendConversationChanged(currentConversationId, currentName);
 
             return {
                 success: true,
-                sessionId: currentSessionId,
+                conversationId: currentConversationId,
                 name: currentName,
             };
         },
 
-        async renameSession(sessionId: string, newName: string): Promise<void> {
-            await connection.renameSession(sessionId, newName);
-            // If the renamed session is the current one, update tracked name
-            if (sessionId === currentSessionId) {
+        async renameConversation(
+            conversationId: string,
+            newName: string,
+        ): Promise<void> {
+            await connection.renameConversation(conversationId, newName);
+            // If the renamed conversation is the current one, update tracked name
+            if (conversationId === currentConversationId) {
                 currentName = newName;
-                sendSessionChanged(currentSessionId, currentName);
+                sendConversationChanged(currentConversationId, currentName);
             }
         },
 
-        async deleteSession(sessionId: string): Promise<void> {
-            if (sessionId === currentSessionId) {
+        async deleteConversation(conversationId: string): Promise<void> {
+            if (conversationId === currentConversationId) {
                 throw new Error(
-                    "Cannot delete the currently active session. Switch to another session first.",
+                    "Cannot delete the currently active conversation. Switch to another conversation first.",
                 );
             }
-            return connection.deleteSession(sessionId);
+            return connection.deleteConversation(conversationId);
         },
 
-        async getCurrentSession(): Promise<
-            { sessionId: string; name: string } | undefined
+        async getCurrentConversation(): Promise<
+            { conversationId: string; name: string } | undefined
         > {
-            return { sessionId: currentSessionId, name: currentName };
+            return {
+                conversationId: currentConversationId,
+                name: currentName,
+            };
         },
     };
 }
+
+/** @deprecated Use createRemoteConversationBackend instead */
+export const createRemoteSessionBackend = createRemoteConversationBackend;

@@ -4,8 +4,8 @@
 import chalk from "chalk";
 import type {
     AgentServerConnection,
-    SessionDispatcher,
-    SessionInfo,
+    ConversationDispatcher,
+    ConversationInfo,
 } from "@typeagent/agent-server-client";
 import { confirmYesNo } from "./enhancedConsole.js";
 
@@ -15,9 +15,11 @@ import { confirmYesNo } from "./enhancedConsole.js";
  */
 export type ConversationCommandContext = {
     connection: AgentServerConnection;
-    getCurrentSessionId: () => string;
-    getCurrentSessionName: () => string;
-    switchSession: (sessionId: string) => Promise<SessionDispatcher>;
+    getCurrentConversationId: () => string;
+    getCurrentConversationName: () => string;
+    switchConversation: (
+        conversationId: string,
+    ) => Promise<ConversationDispatcher>;
 };
 
 // ── Name resolution ────────────────────────────────────────────────────
@@ -29,8 +31,8 @@ export type ConversationCommandContext = {
 async function resolveByName(
     connection: AgentServerConnection,
     name: string,
-): Promise<SessionInfo> {
-    const all = await connection.listSessions();
+): Promise<ConversationInfo> {
+    const all = await connection.listConversations();
     const matches = all.filter(
         (s) => s.name.toLowerCase() === name.toLowerCase(),
     );
@@ -114,10 +116,10 @@ async function handleNew(
         console.log(chalk.yellow("Usage: @conversation new <name>"));
         return;
     }
-    const created = await ctx.connection.createSession(name);
+    const created = await ctx.connection.createConversation(name);
     const switchNow = await confirmYesNo(`Switch to '${name}' now?`);
     if (switchNow) {
-        await ctx.switchSession(created.sessionId);
+        await ctx.switchConversation(created.conversationId);
     } else {
         console.log(`Created conversation '${chalk.green(name)}'.`);
     }
@@ -127,8 +129,8 @@ async function handleInfo(
     ctx: ConversationCommandContext,
     _args: string,
 ): Promise<void> {
-    const name = ctx.getCurrentSessionName();
-    const id = ctx.getCurrentSessionId();
+    const name = ctx.getCurrentConversationName();
+    const id = ctx.getCurrentConversationId();
     console.log(chalk.bold("\nCurrent conversation:"));
     console.log(`  ${chalk.dim("Name:")}  ${chalk.green(name)}`);
     console.log(`  ${chalk.dim("ID:")}    ${chalk.dim(id)}`);
@@ -145,11 +147,11 @@ async function handleSwitch(
         return;
     }
     const target = await resolveByName(ctx.connection, name);
-    if (target.sessionId === ctx.getCurrentSessionId()) {
+    if (target.conversationId === ctx.getCurrentConversationId()) {
         console.log(chalk.yellow(`Already in conversation '${target.name}'.`));
         return;
     }
-    await ctx.switchSession(target.sessionId);
+    await ctx.switchConversation(target.conversationId);
 }
 
 async function handleList(
@@ -157,7 +159,7 @@ async function handleList(
     args: string,
 ): Promise<void> {
     const filter = args.trim() || undefined;
-    const sessions = await ctx.connection.listSessions(filter);
+    const sessions = await ctx.connection.listConversations(filter);
     if (sessions.length === 0) {
         console.log(chalk.dim("No conversations found."));
         return;
@@ -169,7 +171,7 @@ async function handleList(
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
 
-    const currentId = ctx.getCurrentSessionId();
+    const currentId = ctx.getCurrentConversationId();
 
     // Calculate column widths
     const nameWidth = Math.max(4, ...sessions.map((s) => s.name.length));
@@ -183,7 +185,7 @@ async function handleList(
     console.log(chalk.dim(divider));
 
     for (const s of sessions) {
-        const isCurrent = s.sessionId === currentId;
+        const isCurrent = s.conversationId === currentId;
         const marker = isCurrent ? "▸ " : "  ";
         const created = new Date(s.createdAt)
             .toISOString()
@@ -214,8 +216,8 @@ async function handleRename(
         return;
     }
 
-    // If args contains two tokens, first is the target session name and second is the new name.
-    // If only one token, rename the current session.
+    // If args contains two tokens, first is the target conversation name and second is the new name.
+    // If only one token, rename the current conversation.
     // tokenizeArgs respects double quotes so names with spaces work correctly.
     const tokens = tokenizeArgs(trimmed, 2);
     let targetName: string | undefined;
@@ -232,9 +234,9 @@ async function handleRename(
         return;
     }
 
-    let sessionId: string;
+    let conversationId: string;
     if (targetName) {
-        const all = await ctx.connection.listSessions();
+        const all = await ctx.connection.listConversations();
         const match = all.find(
             (s) => s.name.toLowerCase() === targetName!.toLowerCase(),
         );
@@ -246,12 +248,12 @@ async function handleRename(
             );
             return;
         }
-        sessionId = match.sessionId;
+        conversationId = match.conversationId;
     } else {
-        sessionId = ctx.getCurrentSessionId();
+        conversationId = ctx.getCurrentConversationId();
     }
 
-    await ctx.connection.renameSession(sessionId, newName);
+    await ctx.connection.renameConversation(conversationId, newName);
     console.log(`Renamed conversation to '${chalk.green(newName)}'.`);
 }
 
@@ -265,7 +267,7 @@ async function handleDelete(
         return;
     }
     const target = await resolveByName(ctx.connection, name);
-    if (target.sessionId === ctx.getCurrentSessionId()) {
+    if (target.conversationId === ctx.getCurrentConversationId()) {
         console.log(
             chalk.red(
                 "Cannot delete the active conversation. Switch to another conversation first.",
@@ -280,7 +282,7 @@ async function handleDelete(
         console.log(chalk.dim("Cancelled."));
         return;
     }
-    await ctx.connection.deleteSession(target.sessionId);
+    await ctx.connection.deleteConversation(target.conversationId);
     console.log(`Deleted conversation '${chalk.green(target.name)}'.`);
 }
 
