@@ -222,9 +222,8 @@ describe("render vs updatePosition dispatch", () => {
         expect(menu.hideCalls).toBeGreaterThan(hidesAfterS);
 
         // Backspace to "s" → same generation+prefix as before the hide.
-        // Without the fix, this would call updatePosition() which no-ops
-        // because _active is false.  With the fix, trackers are reset on
-        // hide so this triggers a full render().
+        // Tracker reset on hide ensures this triggers render(), not
+        // a no-op updatePosition().
         controller.update("@shell s", "backward");
         expect(menu.renderCalls.length).toBeGreaterThan(rendersAfterS);
         const lastRender = menu.renderCalls[menu.renderCalls.length - 1];

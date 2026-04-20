@@ -16,6 +16,10 @@ import { ExpandableTextArea } from "./chat/expandableTextArea";
 const debug = registerDebug("typeagent:shell:partial");
 const debugError = registerDebug("typeagent:shell:partial:error");
 
+// Expose the debug factory so that Playwright tests (and developers in
+// DevTools) can call  __debug.enable('typeagent:*')  at runtime.
+(globalThis as any).__debug = registerDebug;
+
 function getLeafNode(node: Node, offset: number) {
     let curr = 0;
     let currNode: Node | undefined = node;
@@ -140,6 +144,7 @@ export class PartialCompletion {
         if (this.closed) {
             throw new Error("Using a closed PartialCompletion");
         }
+        debug(`update(contentChanged=${contentChanged})`);
         if (contentChanged) {
             // Normalize the input text to ensure selection at end is correct.
             this.input.getTextEntry().normalize();
@@ -167,6 +172,7 @@ export class PartialCompletion {
     }
 
     public hide() {
+        debug("hide");
         this.controller.hide();
     }
 
