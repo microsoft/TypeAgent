@@ -3,10 +3,7 @@
 
 import { success, error, Result } from "typechat";
 import registerDebug from "debug";
-import type {
-    EndpointPool,
-    EndpointPoolMember,
-} from "./endpointPool.js";
+import type { EndpointPool, EndpointPoolMember } from "./endpointPool.js";
 import {
     markSuccess,
     markThrottled,
@@ -636,7 +633,12 @@ async function fetchWithPool(
             markThrottled(member, undefined);
             continue;
         }
-        if (status === 500 || status === 502 || status === 503 || status === 504) {
+        if (
+            status === 500 ||
+            status === 502 ||
+            status === 503 ||
+            status === 504
+        ) {
             markTransientFailure(member);
             continue;
         }

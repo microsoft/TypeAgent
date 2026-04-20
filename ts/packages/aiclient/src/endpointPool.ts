@@ -5,12 +5,7 @@ import registerDebug from "debug";
 import { priorityQueue } from "async";
 import { azureApiSettingsFromEnv } from "./azureSettings.js";
 import { openAIApiSettingsFromEnv } from "./openaiSettings.js";
-import {
-    ApiSettings,
-    EnvVars,
-    ModelProviders,
-    ModelType,
-} from "./openai.js";
+import { ApiSettings, EnvVars, ModelProviders, ModelType } from "./openai.js";
 import { FetchThrottler } from "./restClient.js";
 
 const debugPool = registerDebug("typeagent:pool");
@@ -135,7 +130,10 @@ function extractRegionAndMode(tail: string): {
     const tokens = tail.split("_").filter((t) => t.length > 0);
     let mode: EndpointMode = "PAYG";
     // trailing _PTU variant marker
-    if (tokens.length > 0 && tokens[tokens.length - 1].toUpperCase() === "PTU") {
+    if (
+        tokens.length > 0 &&
+        tokens[tokens.length - 1].toUpperCase() === "PTU"
+    ) {
         mode = "PTU";
         tokens.pop();
     }
@@ -164,7 +162,9 @@ function scanSuffixes(
             // bare-suffix case. For root==basePrefix (default model) this is
             // empty; for named models (basePrefix = root + "_" + endpointName)
             // it's endpointName.
-            suffixes.add(basePrefix === root ? "" : basePrefix.slice(root.length + 1));
+            suffixes.add(
+                basePrefix === root ? "" : basePrefix.slice(root.length + 1),
+            );
             continue;
         }
         if (!key.startsWith(basePrefix + "_")) {
@@ -408,7 +408,9 @@ export function pickEndpoint(
     const tiers = [...byPriority.keys()].sort((a, b) => a - b);
 
     for (const tier of tiers) {
-        const ready = byPriority.get(tier)!.filter((m) => m.cooldownUntil <= now);
+        const ready = byPriority
+            .get(tier)!
+            .filter((m) => m.cooldownUntil <= now);
         if (ready.length > 0) {
             const pick = ready[Math.floor(rng() * ready.length)];
             return { kind: "ready", member: pick };

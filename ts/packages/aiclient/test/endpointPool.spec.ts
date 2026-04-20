@@ -25,7 +25,12 @@ describe("endpointPool.discoverEndpointPool", () => {
             AZURE_OPENAI_ENDPOINT: "https://legacy.example/openai/chat",
             AZURE_OPENAI_API_KEY: "legacy-key",
         };
-        const pool = discoverEndpointPool("azure", ModelType.Chat, undefined, env);
+        const pool = discoverEndpointPool(
+            "azure",
+            ModelType.Chat,
+            undefined,
+            env,
+        );
         expect(pool.members).toHaveLength(1);
         expect(pool.members[0].suffix).toBe("");
         expect(pool.members[0].priority).toBe(1);
@@ -39,7 +44,12 @@ describe("endpointPool.discoverEndpointPool", () => {
             AZURE_OPENAI_ENDPOINT_GPT_4_O: "https://legacy.example/gpt-4o",
             AZURE_OPENAI_API_KEY_GPT_4_O: "key-gpt4o",
         };
-        const pool = discoverEndpointPool("azure", ModelType.Chat, "GPT_4_O", env);
+        const pool = discoverEndpointPool(
+            "azure",
+            ModelType.Chat,
+            "GPT_4_O",
+            env,
+        );
         expect(pool.members).toHaveLength(1);
         expect(pool.members[0].suffix).toBe("GPT_4_O");
         expect(pool.members[0].priority).toBe(1);
@@ -54,7 +64,12 @@ describe("endpointPool.discoverEndpointPool", () => {
             AZURE_OPENAI_ENDPOINT_GPT_4_O_WESTUS: "https://westus",
             AZURE_OPENAI_API_KEY_GPT_4_O_WESTUS: "k3",
         };
-        const pool = discoverEndpointPool("azure", ModelType.Chat, "GPT_4_O", env);
+        const pool = discoverEndpointPool(
+            "azure",
+            ModelType.Chat,
+            "GPT_4_O",
+            env,
+        );
         expect(pool.members).toHaveLength(3);
         const ptu = pool.members.find((m) => m.mode === "PTU");
         const sweden = pool.members.find((m) => m.region === "sweden");
@@ -78,13 +93,16 @@ describe("endpointPool.discoverEndpointPool", () => {
                 { suffix: "GPT_4_O_SWEDEN", priority: 1, tpm: 30000 },
             ]),
         };
-        const pool = discoverEndpointPool("azure", ModelType.Chat, "GPT_4_O", env);
+        const pool = discoverEndpointPool(
+            "azure",
+            ModelType.Chat,
+            "GPT_4_O",
+            env,
+        );
         const ptu = pool.members.find(
             (m) => m.suffix === "GPT_4_O_EASTUS_PTU",
         )!;
-        const sweden = pool.members.find(
-            (m) => m.suffix === "GPT_4_O_SWEDEN",
-        )!;
+        const sweden = pool.members.find((m) => m.suffix === "GPT_4_O_SWEDEN")!;
         expect(ptu.priority).toBe(3);
         expect(ptu.mode).toBe("PAYG");
         expect(sweden.priority).toBe(1);
@@ -95,8 +113,7 @@ describe("endpointPool.discoverEndpointPool", () => {
         const env = {
             AZURE_OPENAI_ENDPOINT_EMBEDDING: "https://legacy/embeddings",
             AZURE_OPENAI_API_KEY_EMBEDDING: "k",
-            AZURE_OPENAI_ENDPOINT_EMBEDDING_EASTUS:
-                "https://eastus/embeddings",
+            AZURE_OPENAI_ENDPOINT_EMBEDDING_EASTUS: "https://eastus/embeddings",
             AZURE_OPENAI_API_KEY_EMBEDDING_EASTUS: "k-east",
             AZURE_OPENAI_ENDPOINT_EMBEDDING_SWEDEN: "https://sweden/embed",
             AZURE_OPENAI_API_KEY_EMBEDDING_SWEDEN: "k-sweden",

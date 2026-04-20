@@ -26,47 +26,45 @@ export function getChatModelMaxConcurrency(
 // AZURE_OPENAI_API_KEY_GPT_4_O_EASTUS should surface as "GPT_4_O", not
 // "GPT_4_O_EASTUS" — otherwise every regional variant pollutes the model
 // picker with a bogus "model".
-const REGION_TAIL_TOKENS = new Set(
-    [
-        "EASTUS",
-        "EASTUS2",
-        "WESTUS",
-        "WESTUS2",
-        "WESTUS3",
-        "CENTRALUS",
-        "NORTHCENTRALUS",
-        "SOUTHCENTRALUS",
-        "WESTCENTRALUS",
-        "SWEDEN",
-        "SWEDENCENTRAL",
-        "FRANCECENTRAL",
-        "GERMANYWESTCENTRAL",
-        "NORWAYEAST",
-        "NORTHEUROPE",
-        "WESTEUROPE",
-        "UKSOUTH",
-        "UKWEST",
-        "SWITZERLANDNORTH",
-        "JAPANEAST",
-        "JAPANWEST",
-        "AUSTRALIAEAST",
-        "KOREACENTRAL",
-        "SOUTHEASTASIA",
-        "EASTASIA",
-        "CENTRALINDIA",
-        "SOUTHINDIA",
-        "BRAZILSOUTH",
-        "CANADACENTRAL",
-        "CANADAEAST",
-        "JAPAN",
-        "AUSTRALIA",
-        "BRAZIL",
-        "CANADA",
-        "KOREA",
-        "UK",
-        "PTU",
-    ],
-);
+const REGION_TAIL_TOKENS = new Set([
+    "EASTUS",
+    "EASTUS2",
+    "WESTUS",
+    "WESTUS2",
+    "WESTUS3",
+    "CENTRALUS",
+    "NORTHCENTRALUS",
+    "SOUTHCENTRALUS",
+    "WESTCENTRALUS",
+    "SWEDEN",
+    "SWEDENCENTRAL",
+    "FRANCECENTRAL",
+    "GERMANYWESTCENTRAL",
+    "NORWAYEAST",
+    "NORTHEUROPE",
+    "WESTEUROPE",
+    "UKSOUTH",
+    "UKWEST",
+    "SWITZERLANDNORTH",
+    "JAPANEAST",
+    "JAPANWEST",
+    "AUSTRALIAEAST",
+    "KOREACENTRAL",
+    "SOUTHEASTASIA",
+    "EASTASIA",
+    "CENTRALINDIA",
+    "SOUTHINDIA",
+    "BRAZILSOUTH",
+    "CANADACENTRAL",
+    "CANADAEAST",
+    "JAPAN",
+    "AUSTRALIA",
+    "BRAZIL",
+    "CANADA",
+    "KOREA",
+    "UK",
+    "PTU",
+]);
 
 function stripRegionTail(suffix: string): string {
     // Strip a trailing _PTU and a trailing _<REGION>. We only strip when the
@@ -90,7 +88,8 @@ function stripRegionTail(suffix: string): string {
             parts.splice(-2, 2);
             continue;
         }
-        const joined3 = parts.length >= 3 ? parts.slice(-3).join("") : undefined;
+        const joined3 =
+            parts.length >= 3 ? parts.slice(-3).join("") : undefined;
         if (joined3 && REGION_TAIL_TOKENS.has(joined3)) {
             parts.splice(-3, 3);
             continue;
