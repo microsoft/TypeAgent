@@ -57,9 +57,10 @@ test.describe("Partial completion update suppression", () => {
             await input.focus();
 
             await mainWindow.keyboard.type("p", { delay: 0 });
-            await mainWindow.waitForTimeout(200);
 
-            expect(contentTrue.length).toBe(1);
+            await expect(async () => {
+                expect(contentTrue.length).toBe(1);
+            }).toPass({ timeout: 2000 });
             expect(contentFalse.length).toBe(0);
 
             await mainWindow.keyboard.press("Escape");
@@ -75,7 +76,16 @@ test.describe("Partial completion update suppression", () => {
 
             // Type first character and let it settle.
             await mainWindow.keyboard.type("p", { delay: 0 });
-            await mainWindow.waitForTimeout(200);
+
+            await expect(async () => {
+                expect(
+                    await mainWindow.evaluate(() =>
+                        document
+                            .querySelector("#phraseDiv")
+                            ?.textContent?.includes("p"),
+                    ),
+                ).toBe(true);
+            }).toPass({ timeout: 2000 });
 
             // Start collecting after the first keystroke has settled.
             const contentTrue = collectConsoleMessages(
@@ -88,9 +98,10 @@ test.describe("Partial completion update suppression", () => {
             );
 
             await mainWindow.keyboard.type("l", { delay: 0 });
-            await mainWindow.waitForTimeout(200);
 
-            expect(contentTrue.length).toBe(1);
+            await expect(async () => {
+                expect(contentTrue.length).toBe(1);
+            }).toPass({ timeout: 2000 });
             expect(contentFalse.length).toBe(0);
 
             await mainWindow.keyboard.press("Escape");
@@ -106,7 +117,16 @@ test.describe("Partial completion update suppression", () => {
 
             // Type two characters first.
             await mainWindow.keyboard.type("pl", { delay: 50 });
-            await mainWindow.waitForTimeout(200);
+
+            await expect(async () => {
+                expect(
+                    await mainWindow.evaluate(() =>
+                        document
+                            .querySelector("#phraseDiv")
+                            ?.textContent?.includes("pl"),
+                    ),
+                ).toBe(true);
+            }).toPass({ timeout: 2000 });
 
             // Start collecting after the initial typing has settled.
             const contentTrue = collectConsoleMessages(
@@ -119,9 +139,10 @@ test.describe("Partial completion update suppression", () => {
             );
 
             await mainWindow.keyboard.press("Backspace");
-            await mainWindow.waitForTimeout(200);
 
-            expect(contentTrue.length).toBe(1);
+            await expect(async () => {
+                expect(contentTrue.length).toBe(1);
+            }).toPass({ timeout: 2000 });
             expect(contentFalse.length).toBe(0);
 
             await mainWindow.keyboard.press("Escape");
