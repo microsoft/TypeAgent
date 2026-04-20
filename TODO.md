@@ -276,7 +276,7 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/memory/image/src/imageCollection.ts` | 79 | put everything in a single table? | High | Medium | Component | No Fix | Yes |
 | `ts/packages/memory/image/src/imageCollection.ts` | 133 | add additional meta data tables | Medium | Medium | Component | Fix | Yes |
 | ~~`ts/packages/memory/image/src/imageMeta.ts`~~ | ~~151~~ | ~~image taker name~~ | Low | High | Local | ✅ Fixed | No |
-| `ts/packages/memory/image/src/imageMeta.ts` | 356 | Ensure localization | Medium | Medium | Local | Fix | No |
+| ~~`ts/packages/memory/image/src/imageMeta.ts`~~ | ~~356~~ | ~~Ensure localization~~ | Medium | Medium | Local | ✅ Fixed | No |
 | `ts/packages/memory/image/src/indexingService.ts` | 5 | add support for "monitoring" the indexed folder for changes | High | Medium | Component | Fix | No |
 | `ts/packages/memory/image/src/indexingService.ts` | 23 | add token stats | Low | High | Local | Fix | No |
 | `ts/packages/memory/image/src/indexingService.ts` | 132 | make this less chatty - maybe percentage based or something? | Low | High | Local | Fix | No |
