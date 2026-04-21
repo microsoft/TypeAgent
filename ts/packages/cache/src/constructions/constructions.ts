@@ -6,7 +6,6 @@ import {
     ParamValueType,
     HistoryContext,
     fromJsonActions,
-    normalizeParamString,
 } from "../explanation/requestAction.js";
 import { MatchConfig, matchParts } from "./constructionMatch.js";
 import { ParsePart, createParsePartFromJSON } from "./parsePart.js";
@@ -128,10 +127,8 @@ export class Construction {
         request: string,
         config: MatchConfig,
     ): ConstructionMatchResult[] {
-        // Normalize to make matching case- and diacritic-insensitive
-        const normalizedRequest = normalizeParamString(request);
         const matchedValues = matchParts(
-            normalizedRequest,
+            request,
             this.parts,
             config,
             getDefaultMatchValueTranslator(this.transformNamespaces),
