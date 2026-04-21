@@ -117,7 +117,7 @@ export class AgentServerBridge {
         const config = vscode.workspace.getConfiguration("typeagent");
         const serverUrl = config.get<string>(
             "serverUrl",
-            "ws://localhost:3000",
+            "ws://localhost:8999",
         );
 
         try {
@@ -425,7 +425,7 @@ export class AgentServerBridge {
         const config = vscode.workspace.getConfiguration("typeagent");
         const serverUrl = config.get<string>(
             "serverUrl",
-            "ws://localhost:3000",
+            "ws://localhost:8999",
         );
 
         this.connection = await connectAgentServer(serverUrl, () => {

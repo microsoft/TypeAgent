@@ -75,7 +75,7 @@
             "properties": {
                 "typeagent.serverUrl": {
                     "type": "string",
-                    "default": "ws://localhost:3000",
+                    "default": "ws://localhost:8999",
                     "description": "WebSocket URL of the TypeAgent agent server"
                 },
                 "typeagent.autoStart": {
@@ -85,7 +85,7 @@
                 },
                 "typeagent.serverPort": {
                     "type": "number",
-                    "default": 3000,
+                    "default": 8999,
                     "description": "Port for the agent server when auto-starting"
                 }
             }
