@@ -48,6 +48,26 @@
                 "command": "typeagent-shell.focusChat",
                 "title": "Focus Chat",
                 "category": "TypeAgent"
+            },
+            {
+                "command": "typeagent-shell.switchSession",
+                "title": "Switch Session",
+                "category": "TypeAgent"
+            },
+            {
+                "command": "typeagent-shell.newSession",
+                "title": "New Session",
+                "category": "TypeAgent"
+            },
+            {
+                "command": "typeagent-shell.renameSession",
+                "title": "Rename Session",
+                "category": "TypeAgent"
+            },
+            {
+                "command": "typeagent-shell.deleteSession",
+                "title": "Delete Session",
+                "category": "TypeAgent"
             }
         ],
         "configuration": {

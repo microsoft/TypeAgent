@@ -12,12 +12,14 @@ import type { IAgentMessage, RequestId } from "@typeagent/dispatcher-types";
 import type { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
 import type { TemplateEditConfig } from "@typeagent/dispatcher-types";
 import type { PendingInteractionRequest } from "@typeagent/dispatcher-types";
+import type { SessionInfo } from "@typeagent/agent-server-protocol";
 
 /**
  * Messages from extension host → webview
  */
 export type BridgeToWebviewMessage =
-    | { type: "status"; connected: boolean; sessionId?: string }
+    | { type: "status"; connected: boolean; sessionId?: string; sessionName?: string }
+    | { type: "sessionChanged"; sessionId: string; sessionName: string }
     | { type: "setDisplay"; message: IAgentMessage; seq?: number }
     | {
           type: "appendDisplay";
@@ -140,6 +142,7 @@ export class AgentServerBridge {
                 type: "status",
                 connected: true,
                 sessionId: this.session.sessionId,
+                sessionName: this.session.name,
             });
         } catch (e: any) {
             const msg = e?.message ?? String(e);
@@ -170,6 +173,178 @@ export class AgentServerBridge {
     dispose(): void {
         this.disconnect();
         this.statusBarItem.dispose();
+    }
+
+    // ── Session management ──────────────────────────────────────
+
+    /**
+     * Show a QuickPick to switch sessions.
+     */
+    async switchSession(): Promise<void> {
+        if (!this.connection) {
+            vscode.window.showWarningMessage("Not connected to agent server.");
+            return;
+        }
+
+        const sessions = await this.connection.listSessions();
+        const currentId = this.session?.sessionId;
+
+        const items = sessions.map((s) => ({
+            label: s.name || s.sessionId.substring(0, 8),
+            description: s.sessionId === currentId ? "(current)" : "",
+            detail: `ID: ${s.sessionId} · Clients: ${s.clientCount}`,
+            sessionId: s.sessionId,
+        }));
+
+        const pick = await vscode.window.showQuickPick(items, {
+            placeHolder: "Select a session to switch to",
+        });
+
+        if (!pick || pick.sessionId === currentId) {
+            return;
+        }
+
+        await this.joinSpecificSession(pick.sessionId);
+    }
+
+    /**
+     * Create a new session and switch to it.
+     */
+    async newSession(): Promise<void> {
+        if (!this.connection) {
+            vscode.window.showWarningMessage("Not connected to agent server.");
+            return;
+        }
+
+        const name = await vscode.window.showInputBox({
+            prompt: "Name for the new session",
+            placeHolder: "My Session",
+        });
+
+        if (!name) {
+            return;
+        }
+
+        const info = await this.connection.createSession(name);
+        await this.joinSpecificSession(info.sessionId);
+        vscode.window.showInformationMessage(
+            `Created and joined session "${name}"`,
+        );
+    }
+
+    /**
+     * Rename the current session.
+     */
+    async renameCurrentSession(): Promise<void> {
+        if (!this.connection || !this.session) {
+            vscode.window.showWarningMessage("No active session.");
+            return;
+        }
+
+        const newName = await vscode.window.showInputBox({
+            prompt: "New name for the current session",
+            placeHolder: "My Session",
+        });
+
+        if (!newName) {
+            return;
+        }
+
+        await this.connection.renameSession(this.session.sessionId, newName);
+        this.broadcastToWebviews({
+            type: "status",
+            connected: true,
+            sessionId: this.session.sessionId,
+            sessionName: newName,
+        });
+        vscode.window.showInformationMessage(
+            `Session renamed to "${newName}"`,
+        );
+    }
+
+    /**
+     * Delete a session (shows picker, prevents deleting current).
+     */
+    async deleteSession(): Promise<void> {
+        if (!this.connection) {
+            vscode.window.showWarningMessage("Not connected to agent server.");
+            return;
+        }
+
+        const sessions = await this.connection.listSessions();
+        const currentId = this.session?.sessionId;
+
+        const items = sessions
+            .filter((s) => s.sessionId !== currentId)
+            .map((s) => ({
+                label: s.name || s.sessionId.substring(0, 8),
+                detail: `ID: ${s.sessionId}`,
+                sessionId: s.sessionId,
+            }));
+
+        if (items.length === 0) {
+            vscode.window.showInformationMessage(
+                "No other sessions to delete.",
+            );
+            return;
+        }
+
+        const pick = await vscode.window.showQuickPick(items, {
+            placeHolder: "Select a session to delete",
+        });
+
+        if (!pick) {
+            return;
+        }
+
+        const confirm = await vscode.window.showWarningMessage(
+            `Delete session "${pick.label}"?`,
+            { modal: true },
+            "Delete",
+        );
+
+        if (confirm === "Delete") {
+            await this.connection.deleteSession(pick.sessionId);
+            vscode.window.showInformationMessage(
+                `Deleted session "${pick.label}"`,
+            );
+        }
+    }
+
+    /**
+     * Leave the current session and join a different one.
+     */
+    private async joinSpecificSession(sessionId: string): Promise<void> {
+        if (!this.connection) {
+            return;
+        }
+
+        // Leave current session
+        if (this.session) {
+            await this.connection.leaveSession(this.session.sessionId);
+            this.session = undefined;
+        }
+
+        // Join the new session
+        const clientIO = this.createClientIO();
+        this.session = await this.connection.joinSession(clientIO, {
+            clientType: "extension",
+            filter: true,
+            sessionId,
+        });
+
+        // Notify webviews
+        this.broadcastToWebviews({
+            type: "sessionChanged",
+            sessionId: this.session.sessionId,
+            sessionName: this.session.name,
+        });
+        this.broadcastToWebviews({
+            type: "status",
+            connected: true,
+            sessionId: this.session.sessionId,
+            sessionName: this.session.name,
+        });
     }
 
     private async handleWebviewMessage(

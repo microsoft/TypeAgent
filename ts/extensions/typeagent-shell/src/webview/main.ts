@@ -21,7 +21,10 @@ window.addEventListener("message", (event) => {
     const msg = event.data;
     switch (msg.type) {
         case "status":
-            chatUI.setStatus(msg.connected, msg.sessionId);
+            chatUI.setStatus(msg.connected, msg.sessionId, msg.sessionName);
+            break;
+        case "sessionChanged":
+            chatUI.onSessionChanged(msg.sessionName);
             break;
         case "setDisplay":
             chatUI.setAgentDisplay(msg.message.message, msg.message.source);

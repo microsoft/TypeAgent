@@ -47,6 +47,26 @@ export function activate(context: vscode.ExtensionContext): void {
             );
         }),
     );
+
+    // Session management commands
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            "typeagent-shell.switchSession",
+            () => bridge?.switchSession(),
+        ),
+        vscode.commands.registerCommand(
+            "typeagent-shell.newSession",
+            () => bridge?.newSession(),
+        ),
+        vscode.commands.registerCommand(
+            "typeagent-shell.renameSession",
+            () => bridge?.renameCurrentSession(),
+        ),
+        vscode.commands.registerCommand(
+            "typeagent-shell.deleteSession",
+            () => bridge?.deleteSession(),
+        ),
+    );
 }
 
 export function deactivate(): void {

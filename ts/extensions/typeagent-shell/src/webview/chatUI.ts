@@ -180,11 +180,16 @@ export class ChatUI {
         this._scrollToBottom();
     }
 
-    public setStatus(connected: boolean, sessionId?: string): void {
+    public setStatus(
+        connected: boolean,
+        sessionId?: string,
+        sessionName?: string,
+    ): void {
         if (connected) {
             this._statusEl.className = "status connected";
-            this._statusEl.textContent = sessionId
-                ? `Connected (${sessionId.substring(0, 8)}…)`
+            const label = sessionName || sessionId?.substring(0, 8) || "";
+            this._statusEl.textContent = label
+                ? `Connected · ${label}`
                 : "Connected to TypeAgent";
             this._inputEl.disabled = false;
             this._sendBtn.disabled = false;
@@ -194,6 +199,14 @@ export class ChatUI {
             this._inputEl.disabled = true;
             this._sendBtn.disabled = true;
         }
+    }
+
+    /**
+     * Called when the user switches to a different session.
+     */
+    public onSessionChanged(sessionName: string): void {
+        this.clearMessages();
+        this.addSystemMessage(`Switched to session: ${sessionName}`);
     }
 
     public addSystemMessage(text: string): void {
