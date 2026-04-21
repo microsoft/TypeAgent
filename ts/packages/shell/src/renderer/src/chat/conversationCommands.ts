@@ -70,7 +70,14 @@ export async function handleConversationCommand(
             case "new":
             case "create": {
                 const name = parts.slice(2).join(" ") || "New Conversation";
-                const conversation = await api.conversationCreate(name);
+                let conversation: ConversationInfo;
+                try {
+                    conversation = await api.conversationCreate(name);
+                } catch {
+                    // Local mode doesn't support multi-conversation via IPC;
+                    // fall through to the dispatcher to handle it.
+                    return false;
+                }
                 sink.addSystemMessage(
                     `✅ Created conversation "<b>${escapeHtml(conversation.name)}</b>" (${conversation.conversationId})`,
                 );
