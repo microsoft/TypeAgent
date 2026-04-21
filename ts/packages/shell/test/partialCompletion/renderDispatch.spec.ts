@@ -51,6 +51,12 @@ function wireController(
                 menu.updatePosition(state.prefix);
             }
         } else {
+            // Reset trackers so that a future state with the same
+            // generation+prefix triggers a full render() instead of
+            // the lightweight updatePosition() (which no-ops when
+            // the menu is inactive).
+            lastGeneration = -1;
+            lastPrefix = "";
             menu.hide();
         }
     });
@@ -185,6 +191,44 @@ describe("render vs updatePosition dispatch", () => {
         // Diverge from anchor → re-fetch clears state → hide.
         controller.update("stop", "forward");
         expect(menu.hideCalls).toBeGreaterThan(hidesBefore);
+    });
+
+    test("backspace restores menu after accept-policy exhaustion", async () => {
+        // Scenario: "@shell s" shows completions, "@shell ss" exhausts
+        // the closed set (D4 ACCEPT hides menu), backspace to "@shell s"
+        // must re-show the menu via render().
+        const result = makeCompletionResult(["set", "status"], 7, {
+            separatorMode: "optionalSpace",
+            closedSet: true,
+            afterWildcard: "none",
+        });
+        const dispatcher = makeDispatcher(result);
+        const controller = createCompletionController(dispatcher);
+        const menu = new MockSearchMenu();
+        wireController(controller, menu);
+
+        // Initial fetch: "@shell " → items loaded.
+        controller.update("@shell ", "forward");
+        await Promise.resolve();
+
+        // Type "s" → prefix="s", trie has matches → render.
+        controller.update("@shell s", "forward");
+        expect(menu.renderCalls.length).toBeGreaterThan(0);
+        const rendersAfterS = menu.renderCalls.length;
+        const hidesAfterS = menu.hideCalls;
+
+        // Type "ss" → prefix="ss", no matches → D4 accept → hide.
+        controller.update("@shell ss", "forward");
+        expect(menu.hideCalls).toBeGreaterThan(hidesAfterS);
+
+        // Backspace to "s" → same generation+prefix as before the hide.
+        // Tracker reset on hide ensures this triggers render(), not
+        // a no-op updatePosition().
+        controller.update("@shell s", "backward");
+        expect(menu.renderCalls.length).toBeGreaterThan(rendersAfterS);
+        const lastRender = menu.renderCalls[menu.renderCalls.length - 1];
+        expect(lastRender.prefix).toBe("s");
+        expect(lastRender.items.length).toBeGreaterThan(0);
     });
 
     test("no redundant hide when state is already undefined", async () => {

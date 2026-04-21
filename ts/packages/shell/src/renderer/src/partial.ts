@@ -16,6 +16,10 @@ import { ExpandableTextArea } from "./chat/expandableTextArea";
 const debug = registerDebug("typeagent:shell:partial");
 const debugError = registerDebug("typeagent:shell:partial:error");
 
+// Expose the debug factory so that Playwright tests (and developers in
+// DevTools) can call  __debug.enable('typeagent:*')  at runtime.
+(globalThis as any).__debug = registerDebug;
+
 function getLeafNode(node: Node, offset: number) {
     let curr = 0;
     let currNode: Node | undefined = node;
@@ -61,6 +65,10 @@ export class PartialCompletion {
     // items) should be called on the SearchMenu.
     private lastGeneration: number = -1;
     private lastPrefix: string = "";
+    // Set when update(contentChanged=true) runs so the selectionchange
+    // handler can skip the redundant re-update that the browser fires
+    // after every content mutation.
+    private contentUpdated: boolean = false;
 
     private readonly cleanupEventListeners: () => void;
     constructor(
@@ -100,11 +108,21 @@ export class PartialCompletion {
                     this.searchMenu.updatePosition(state.prefix);
                 }
             } else {
+                // Reset trackers so that a future state with the same
+                // generation+prefix triggers a full render() instead of
+                // the lightweight updatePosition() (which no-ops when
+                // the menu is inactive).
+                this.lastGeneration = -1;
+                this.lastPrefix = "";
                 this.searchMenu.hide();
             }
         });
 
         const selectionChangeHandler = () => {
+            if (this.contentUpdated) {
+                this.contentUpdated = false;
+                return;
+            }
             debug("Partial completion update on selection changed");
             this.update(false);
         };
@@ -126,9 +144,13 @@ export class PartialCompletion {
         if (this.closed) {
             throw new Error("Using a closed PartialCompletion");
         }
+        debug(`update(contentChanged=${contentChanged})`);
         if (contentChanged) {
             // Normalize the input text to ensure selection at end is correct.
             this.input.getTextEntry().normalize();
+            // Suppress the selectionchange event that the browser fires
+            // after every content mutation — this update already covers it.
+            this.contentUpdated = true;
         }
         if (!this.isSelectionAtEnd(contentChanged)) {
             this.controller.hide();
@@ -150,6 +172,7 @@ export class PartialCompletion {
     }
 
     public hide() {
+        debug("hide");
         this.controller.hide();
     }
 
