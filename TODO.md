@@ -168,11 +168,8 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/azure-ai-foundry/src/urlResolverCache.ts` | 121 | make async | Low | High | Local | Fix | No |
 | `ts/packages/azure-ai-foundry/src/websiteAliasExtraction.ts` | 65 | IMPLEMENT | High | Low | Component | Fix | Yes |
 | `ts/packages/azure-ai-foundry/src/websiteAliasExtraction.ts` | 121 | handle multi-modal content | High | Medium | Component | Fix | No |
-<<<<<<< Updated upstream
-=======
-| ~~`ts/packages/azure-ai-foundry/src/wikipedia.ts`~~ | ~~102~~ | ~~localization (e.g. en, de, fr, etc.)~~ | Low | High | Local | ✅ Fixed | No |
-| ~~`ts/packages/azure-ai-foundry/src/wikipedia.ts`~~ | ~~125~~ | ~~localization (e.g. en, de, fr, etc.)~~ | Low | High | Local | ✅ Fixed | No |
->>>>>>> Stashed changes
+| `ts/packages/azure-ai-foundry/src/wikipedia.ts` | 102 | localization (e.g. en, de, fr, etc.) | Low | High | Local | Fix | No |
+| `ts/packages/azure-ai-foundry/src/wikipedia.ts` | 125 | localization (e.g. en, de, fr, etc.) | Low | High | Local | Fix | No |
 | `ts/packages/cache/src/cache/cache.ts` | 599 | Move this in the construction store | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/cache/src/cache/explainWorkQueue.ts` | 42 | check number too. | Low | High | Local | Fix | No |
 | `ts/packages/cache/src/constructions/constructionCache.ts` | 420 | GC match sets | Medium | Medium | Component | Fix | No |
