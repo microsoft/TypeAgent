@@ -10,7 +10,6 @@ import {
 import {
     ExecutableAction,
     HistoryContext,
-    normalizeParamString,
 } from "../explanation/requestAction.js";
 import {
     Construction,
@@ -447,9 +446,6 @@ export class ConstructionCache {
         if (namespaceKeys?.length === 0) {
             return [];
         }
-        // Normalize before building the cache so cache keys stay consistent
-        // with what Construction.match sees after its own normalization.
-        request = normalizeParamString(request);
         const config = {
             enableWildcard: options?.wildcard ?? true, // default to true.
             enableEntityWildcard: options?.entityWildcard ?? true, // default to true.

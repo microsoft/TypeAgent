@@ -12,7 +12,6 @@ import {
 } from "agent-dispatcher/internal";
 import {
     fromJsonActions,
-    normalizeParamString,
     RequestAction,
     toJsonActions,
 } from "agent-cache";
@@ -95,9 +94,12 @@ describe("Grammar", () => {
                 const g = loadGrammarRules("test", grammar);
                 const matched = matchGrammar(g, requestAction.request);
 
+                // The grammar matcher is case-insensitive but not
+                // diacritic-insensitive, so use toLowerCase (not
+                // normalizeParamString) for the lower-case round-trip.
                 const matchedLowerCase = matchGrammar(
                     g,
-                    normalizeParamString(requestAction.request),
+                    requestAction.request.toLowerCase(),
                 );
 
                 // Able to match roundtrip
