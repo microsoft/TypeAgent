@@ -45,7 +45,8 @@ export type BridgeToWebviewMessage =
     | { type: "notify"; event: string; data: any; source: string; seq?: number }
     | { type: "commandResult"; requestId: string; result: any }
     | { type: "commandComplete"; requestId: string; result: any }
-    | { type: "error"; message: string };
+    | { type: "error"; message: string }
+    | { type: "switching"; switching: boolean; targetName?: string };
 
 /**
  * Messages from webview → extension host
@@ -209,7 +210,7 @@ export class AgentServerBridge {
             return;
         }
 
-        await this.joinSpecificSession(pick.sessionId);
+        await this.joinSpecificSession(pick.sessionId, pick.label);
     }
 
     /**
@@ -244,10 +245,11 @@ export class AgentServerBridge {
             return;
         }
 
-        const info = await this.connection.createSession(name.trim());
-        await this.joinSpecificSession(info.sessionId);
+        const trimmed = name.trim();
+        const info = await this.connection.createSession(trimmed);
+        await this.joinSpecificSession(info.sessionId, trimmed);
         vscode.window.showInformationMessage(
-            `Created and switched to conversation "${name.trim()}"`,
+            `Created and switched to conversation "${trimmed}"`,
         );
     }
 
@@ -352,12 +354,20 @@ export class AgentServerBridge {
     /**
      * Leave the current conversation and join a different one.
      */
-    private async joinSpecificSession(sessionId: string): Promise<void> {
+    private async joinSpecificSession(
+        sessionId: string,
+        targetName?: string,
+    ): Promise<void> {
         if (!this.connection) {
             return;
         }
 
         this.isSwitching = true;
+        this.broadcastToWebviews({
+            type: "switching",
+            switching: true,
+            targetName,
+        });
         try {
             // Leave current session (cleans up its channels)
             if (this.session) {
@@ -403,6 +413,10 @@ export class AgentServerBridge {
             }
         } finally {
             this.isSwitching = false;
+            this.broadcastToWebviews({
+                type: "switching",
+                switching: false,
+            });
         }
     }
 

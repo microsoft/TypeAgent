@@ -58,6 +58,9 @@ window.addEventListener("message", (event) => {
             // Command finished — clean up any remaining temporary status
             chatUI.onCommandComplete();
             break;
+        case "switching":
+            chatUI.setSwitching(msg.switching, msg.targetName);
+            break;
     }
 });
 

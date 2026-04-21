@@ -19,6 +19,9 @@ export class ChatUI {
     // Dedup: track last appended content to avoid duplicates
     private _lastAppendedContent?: string;
 
+    // Track switching state to keep input disabled
+    private _isSwitching = false;
+
     constructor() {
         this._messagesEl = document.getElementById("messages")!;
         this._inputEl = document.getElementById(
@@ -191,13 +194,39 @@ export class ChatUI {
             this._statusEl.textContent = label
                 ? `Connected · ${label}`
                 : "Connected to TypeAgent";
-            this._inputEl.disabled = false;
-            this._sendBtn.disabled = false;
+            // Don't re-enable input if a switch is in progress
+            if (!this._isSwitching) {
+                this._inputEl.disabled = false;
+                this._sendBtn.disabled = false;
+            }
         } else {
             this._statusEl.className = "status disconnected";
             this._statusEl.textContent = "Disconnected";
             this._inputEl.disabled = true;
             this._sendBtn.disabled = true;
+        }
+    }
+
+    /**
+     * Disable input and show a status message while a conversation switch
+     * is in progress.
+     */
+    public setSwitching(switching: boolean, targetName?: string): void {
+        this._isSwitching = switching;
+        if (switching) {
+            this._inputEl.disabled = true;
+            this._sendBtn.disabled = true;
+            const label = targetName
+                ? `Switching to conversation "${targetName}"…`
+                : "Switching conversation…";
+            this._statusEl.className = "status switching";
+            this._statusEl.textContent = label;
+            this._inputEl.placeholder = label;
+        } else {
+            this._inputEl.disabled = false;
+            this._sendBtn.disabled = false;
+            this._inputEl.placeholder = "";
+            // Status will be refreshed by the next "status" message
         }
     }
 

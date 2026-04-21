@@ -49,6 +49,12 @@ body {
     color: var(--vscode-editor-background);
 }
 
+.status.switching {
+    background: var(--vscode-editorWarning-foreground);
+    color: var(--vscode-editor-background);
+    font-style: italic;
+}
+
 /* ── Messages area ───────────────────────────────────────────── */
 
 #messages {
