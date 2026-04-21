@@ -11,7 +11,7 @@ import {
     CommandHandlerTable,
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
-import { executeSessionAction } from "./action/conversationActionHandler.js";
+import { executeConversationAction } from "./action/conversationActionHandler.js";
 import { executeConfigAction } from "./action/configActionHandler.js";
 import {
     type CommandHandlerContext,
@@ -29,14 +29,14 @@ import { executeGrammarAction } from "./action/grammarActionHandler.js";
 import { ConfigAction } from "./schema/configActionSchema.js";
 import { NotificationAction } from "./schema/notificationActionSchema.js";
 import { HistoryAction } from "./schema/historyActionSchema.js";
-import { SessionAction } from "./schema/conversationActionSchema.js";
+import { ConversationAction } from "./schema/conversationActionSchema.js";
 import { GrammarAction } from "./schema/grammarActionSchema.js";
 
 // handlers
 import { getConfigCommandHandlers } from "./handlers/configCommandHandlers.js";
 import { getConstructionCommandHandlers } from "./handlers/constructionCommandHandlers.js";
 import { DebugCommandHandler } from "./handlers/debugCommandHandlers.js";
-import { getSessionCommandHandlers } from "./handlers/conversationCommandHandlers.js";
+import { getConversationCommandHandlers } from "./handlers/conversationCommandHandlers.js";
 import { getHistoryCommandHandlers } from "./handlers/historyCommandHandler.js";
 import { TraceCommandHandler } from "./handlers/traceCommandHandler.js";
 import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
@@ -59,7 +59,7 @@ export const systemHandlers: CommandHandlerTable = {
     description: "Type Agent System Commands",
     commands: {
         action: new ActionCommandHandler(),
-        session: getSessionCommandHandlers(),
+        conversation: getConversationCommandHandlers(),
         history: getHistoryCommandHandlers(),
         memory: getMemoryCommandHandlers(),
         const: getConstructionCommandHandlers(),
@@ -96,7 +96,7 @@ export const systemHandlers: CommandHandlerTable = {
 
 function executeSystemAction(
     action:
-        | TypeAgentAction<SessionAction, "system.session">
+        | TypeAgentAction<ConversationAction, "system.conversation">
         | TypeAgentAction<ConfigAction, "system.config">
         | TypeAgentAction<NotificationAction, "system.notify">
         | TypeAgentAction<HistoryAction, "system.history">
@@ -104,8 +104,8 @@ function executeSystemAction(
     context: ActionContext<CommandHandlerContext>,
 ) {
     switch (action.schemaName) {
-        case "system.session":
-            return executeSessionAction(action, context);
+        case "system.conversation":
+            return executeConversationAction(action, context);
         case "system.config":
             return executeConfigAction(action, context);
         case "system.notify":
@@ -123,7 +123,8 @@ function executeSystemAction(
 
 export const systemManifest: AppAgentManifest = {
     emojiChar: "🔧",
-    description: "Built-in agent to manage system configuration and sessions",
+    description:
+        "Built-in agent to manage system configuration and conversations",
     subActionManifests: {
         config: {
             schema: {
@@ -133,10 +134,10 @@ export const systemManifest: AppAgentManifest = {
                 schemaType: "ConfigAction",
             },
         },
-        session: {
+        conversation: {
             schema: {
                 description:
-                    "System agent that manages sessions/conversations. " +
+                    "System agent that manages conversations. " +
                     "Use this agent when the user wants to: " +
                     "CREATE a new conversation (e.g. 'create a new conversation', 'start a new conversation called test', 'new conversation named work', 'open a new conversation test'), " +
                     "LIST conversations (e.g. 'list our conversations', 'show all conversations', 'what conversations do I have'), " +
@@ -146,7 +147,7 @@ export const systemManifest: AppAgentManifest = {
                     "or SHOW info about the current conversation.",
                 schemaFile:
                     "./src/context/system/schema/conversationActionSchema.ts",
-                schemaType: "SessionAction",
+                schemaType: "ConversationAction",
             },
         },
         notify: {

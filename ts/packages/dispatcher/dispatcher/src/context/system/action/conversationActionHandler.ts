@@ -3,11 +3,11 @@
 
 import { getRequestId } from "../../commandHandlerContext.js";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { SessionAction } from "../schema/conversationActionSchema.js";
+import { ConversationAction } from "../schema/conversationActionSchema.js";
 import { ActionContext, TypeAgentAction } from "@typeagent/agent-sdk";
 
-export async function executeSessionAction(
-    action: TypeAgentAction<SessionAction>,
+export async function executeConversationAction(
+    action: TypeAgentAction<ConversationAction>,
     context: ActionContext<CommandHandlerContext>,
 ) {
     const agentContext = context.sessionContext.agentContext;
@@ -17,7 +17,7 @@ export async function executeSessionAction(
     let resultEntity: { name: string; type: string[] } | undefined;
 
     switch (action.actionName) {
-        case "newSession": {
+        case "newConversation": {
             const name = action.parameters.name;
             payload = name
                 ? { subcommand: "new", name }
@@ -28,16 +28,16 @@ export async function executeSessionAction(
             };
             break;
         }
-        case "listSession":
+        case "listConversation":
             payload = { subcommand: "list" };
             break;
         case "showConversationInfo":
             payload = { subcommand: "info" };
             break;
-        case "switchSession":
+        case "switchConversation":
             payload = { subcommand: "switch", name: action.parameters.name };
             break;
-        case "renameSession": {
+        case "renameConversation": {
             const renameName = action.parameters.name;
             payload = renameName
                 ? {
@@ -52,7 +52,7 @@ export async function executeSessionAction(
             };
             break;
         }
-        case "deleteSession":
+        case "deleteConversation":
             payload = { subcommand: "delete", name: action.parameters.name };
             break;
         default:

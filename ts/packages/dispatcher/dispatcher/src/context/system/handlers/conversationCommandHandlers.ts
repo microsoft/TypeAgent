@@ -30,8 +30,8 @@ import {
 import { askYesNoWithContext } from "../../interactiveIO.js";
 import { appAgentStateKeys } from "../../appAgentStateConfig.js";
 
-class SessionNewCommandHandler implements CommandHandler {
-    public readonly description = "Create a new empty session";
+class ConversationNewCommandHandler implements CommandHandler {
+    public readonly description = "Create a new empty conversation";
     public readonly parameters = {
         flags: {
             keep: {
@@ -80,8 +80,8 @@ class SessionNewCommandHandler implements CommandHandler {
     }
 }
 
-class SessionOpenCommandHandler implements CommandHandler {
-    public readonly description = "Open an existing session";
+class ConversationOpenCommandHandler implements CommandHandler {
+    public readonly description = "Open an existing conversation";
     public readonly parameters = {
         args: {
             session: {
@@ -107,17 +107,18 @@ class SessionOpenCommandHandler implements CommandHandler {
     }
 }
 
-class SessionResetCommandHandler implements CommandHandlerNoParams {
-    public readonly description = "Reset config on session and keep the data";
+class ConversationResetCommandHandler implements CommandHandlerNoParams {
+    public readonly description =
+        "Reset config on conversation and keep the data";
     public async run(context: ActionContext<CommandHandlerContext>) {
         await changeContextConfig(null, context);
         displaySuccess(`Session settings revert to default.`, context);
     }
 }
 
-class SessionClearCommandHandler implements CommandHandlerNoParams {
+class ConversationClearCommandHandler implements CommandHandlerNoParams {
     public readonly description =
-        "Delete all data on the current sessions, keeping current settings";
+        "Delete all data on the current conversation, keeping current settings";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         if (systemContext.session.sessionDirPath === undefined) {
@@ -144,9 +145,9 @@ class SessionClearCommandHandler implements CommandHandlerNoParams {
     }
 }
 
-class SessionDeleteCommandHandler implements CommandHandler {
+class ConversationDeleteCommandHandler implements CommandHandler {
     public readonly description =
-        "Delete a session. If no session is specified, delete the current session and start a new session.\n-a to delete all sessions";
+        "Delete a conversation. If no conversation is specified, delete the current conversation and start a new one.\n-a to delete all conversations";
     public readonly parameters = {
         args: {
             session: {
@@ -220,9 +221,9 @@ class SessionDeleteCommandHandler implements CommandHandler {
     }
 }
 
-class SessionListCommandHandler implements CommandHandlerNoParams {
+class ConversationListCommandHandler implements CommandHandlerNoParams {
     public readonly description =
-        "List all sessions. The current session is marked green.";
+        "List all conversations. The current conversation is marked green.";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         if (systemContext.persistDir === undefined) {
@@ -242,8 +243,8 @@ class SessionListCommandHandler implements CommandHandlerNoParams {
     }
 }
 
-class SessionInfoCommandHandler implements CommandHandlerNoParams {
-    public readonly description = "Show info about the current session";
+class ConversationInfoCommandHandler implements CommandHandlerNoParams {
+    public readonly description = "Show info about the current conversation";
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         const constructionFiles = systemContext.session.sessionDirPath
@@ -315,17 +316,17 @@ class SessionInfoCommandHandler implements CommandHandlerNoParams {
     }
 }
 
-export function getSessionCommandHandlers(): CommandHandlerTable {
+export function getConversationCommandHandlers(): CommandHandlerTable {
     return {
-        description: "Session commands",
+        description: "Conversation commands",
         commands: {
-            new: new SessionNewCommandHandler(),
-            open: new SessionOpenCommandHandler(),
-            reset: new SessionResetCommandHandler(),
-            clear: new SessionClearCommandHandler(),
-            list: new SessionListCommandHandler(),
-            delete: new SessionDeleteCommandHandler(),
-            info: new SessionInfoCommandHandler(),
+            new: new ConversationNewCommandHandler(),
+            open: new ConversationOpenCommandHandler(),
+            reset: new ConversationResetCommandHandler(),
+            clear: new ConversationClearCommandHandler(),
+            list: new ConversationListCommandHandler(),
+            delete: new ConversationDeleteCommandHandler(),
+            info: new ConversationInfoCommandHandler(),
         },
     };
 }

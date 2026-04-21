@@ -1,21 +1,21 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type SessionAction =
-    | NewSessionAction
-    | ListSessionAction
+export type ConversationAction =
+    | NewConversationAction
+    | ListConversationAction
     | ShowConversationInfoAction
-    | SwitchSessionAction
-    | RenameSessionAction
-    | DeleteSessionAction;
+    | SwitchConversationAction
+    | RenameConversationAction
+    | DeleteConversationAction;
 
 // Create a new session/conversation and optionally give it a name.
 // Use this when the user wants to create, start, make, or open a brand-new conversation.
 // Examples: "create a new conversation", "start a new conversation called test",
 // "make a new session", "new conversation named work", "open a new conversation test".
 // IMPORTANT: use this only when the user is creating something new, not switching to an existing one.
-export type NewSessionAction = {
-    actionName: "newSession";
+export type NewConversationAction = {
+    actionName: "newConversation";
     parameters: {
         // Optional name for the new session
         name?: string;
@@ -26,8 +26,8 @@ export type NewSessionAction = {
 // Use this when the user wants to see, show, or list their conversations or sessions.
 // Examples: "list our conversations", "show all conversations", "what conversations do I have",
 // "show me my sessions".
-export type ListSessionAction = {
-    actionName: "listSession";
+export type ListConversationAction = {
+    actionName: "listConversation";
 };
 
 // Show information about the current conversation.
@@ -42,8 +42,8 @@ export type ShowConversationInfoAction = {
 // Examples: "switch to conversation test", "go to my work conversation",
 // "switch to test", "open conversation named work", "change to the test session".
 // IMPORTANT: use this only when switching to an already-existing conversation, not creating a new one.
-export type SwitchSessionAction = {
-    actionName: "switchSession";
+export type SwitchConversationAction = {
+    actionName: "switchConversation";
     parameters: {
         // The name of the session/conversation to switch to
         name: string;
@@ -56,8 +56,8 @@ export type SwitchSessionAction = {
 // If the user only says "rename this conversation" or "rename current session", omit 'name'.
 // Examples: "rename this conversation to work", "rename test7 to test5",
 // "call this conversation research", "rename current session to my project".
-export type RenameSessionAction = {
-    actionName: "renameSession";
+export type RenameConversationAction = {
+    actionName: "renameConversation";
     parameters: {
         // Optional: the current name of the session to rename. Omit to rename the active session.
         name?: string;
@@ -69,8 +69,8 @@ export type RenameSessionAction = {
 // Delete a session/conversation by name.
 // Use this when the user wants to remove, delete, or destroy a conversation.
 // Examples: "delete conversation test", "remove the work session", "delete test2".
-export type DeleteSessionAction = {
-    actionName: "deleteSession";
+export type DeleteConversationAction = {
+    actionName: "deleteConversation";
     parameters: {
         // The name of the session/conversation to delete
         name: string;
