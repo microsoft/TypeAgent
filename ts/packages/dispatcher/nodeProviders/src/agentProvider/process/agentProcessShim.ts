@@ -7,12 +7,15 @@ import { AppAgent } from "@typeagent/agent-sdk";
 import { createAgentRpcClient } from "@typeagent/agent-rpc/client";
 import { createChannelProvider } from "@typeagent/agent-rpc/channel";
 import { fileURLToPath } from "url";
-import { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
+import {
+    AgentControlMessage,
+    AgentInterfaceFunctionName,
+} from "@typeagent/agent-rpc/server";
 
 export type AgentProcess = {
     appAgent: AppAgent;
     count: number;
-    process?: child_process.ChildProcess;
+    close?: () => Promise<void>;
     trace?: (namespaces: string) => void;
 };
 
@@ -64,18 +67,10 @@ export async function createAgentProcess(
         agentProcess,
     );
     const traceChannel = channelProvider.createChannel("trace");
-    return {
-        process: agentProcess,
-        trace: (namespaces: string) => {
-            traceChannel.send(namespaces);
-        },
-        appAgent: await initializeAgentRpcClient(agentName, channelProvider),
-        count: 1,
-    };
-}
-
-async function initializeAgentRpcClient(name: string, channelProvider: any) {
-    const channel = channelProvider.createChannel("initialize");
+    const channel = channelProvider.createChannel<
+        AgentInterfaceFunctionName[],
+        AgentControlMessage
+    >("control");
     const agentInterface = await new Promise<AgentInterfaceFunctionName[]>(
         (resolve, reject) => {
             channel.once("message", (message: any) => {
@@ -91,5 +86,54 @@ async function initializeAgentRpcClient(name: string, channelProvider: any) {
             });
         },
     );
-    return createAgentRpcClient(name, channelProvider, agentInterface);
+    return {
+        close: async () => {
+            if (agentProcess.exitCode !== null) {
+                return;
+            }
+            await new Promise<void>((resolve) => {
+                let timer: NodeJS.Timeout | undefined;
+                agentProcess.once("exit", () => {
+                    if (timer !== undefined) {
+                        clearTimeout(timer);
+                    }
+                    resolve();
+                });
+
+                // Ask the child to exit gracefully via the control channel.
+                // If it doesn't exit within 1s, fall back to disconnect/kill.
+                if (agentProcess.connected) {
+                    timer = setTimeout(() => {
+                        if (agentProcess.exitCode !== null) {
+                            return;
+                        }
+                        if (agentProcess.connected) {
+                            agentProcess.disconnect();
+                        } else {
+                            agentProcess.kill();
+                        }
+                    }, 1000);
+                    timer.unref();
+                    try {
+                        channel.send("exit");
+                    } catch {
+                        // IPC channel may have closed between the
+                        // connected check and the send; the exit
+                        // event will still fire.
+                    }
+                } else {
+                    agentProcess.kill();
+                }
+            });
+        },
+        trace: (namespaces: string) => {
+            traceChannel.send(namespaces);
+        },
+        appAgent: await createAgentRpcClient(
+            agentName,
+            channelProvider,
+            agentInterface,
+        ),
+        count: 1,
+    };
 }
