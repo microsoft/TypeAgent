@@ -39,6 +39,11 @@ process.on("disconnect", () => {
     process.exit(-1);
 });
 
+process.on("SIGTERM", () => {
+    debug(`SIGTERM received, exiting '${agentName}': ${modulePath}`);
+    process.exit(-2);
+});
+
 //=================================================================
 // Load the module.
 //=================================================================
