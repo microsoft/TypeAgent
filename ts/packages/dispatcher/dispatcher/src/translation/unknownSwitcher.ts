@@ -145,10 +145,18 @@ export async function selectFromPartitions(
     partitions.forEach(({ names }) =>
         debugSwitchSearch(`Switch: searching ${names.join(", ")}`),
     );
-    const results = await Promise.all(
-        partitions.map(({ translator }) => translator.translate(request)),
+    // Start all translations in parallel.
+    const promises = partitions.map(({ translator }) =>
+        translator.translate(request).catch(
+            (err): Result<AssistantSelection> => ({
+                success: false,
+                message: err instanceof Error ? err.message : String(err),
+            }),
+        ),
     );
-    for (const result of results) {
+    // Await results in partition order; return as soon as outcome is decided.
+    for (const promise of promises) {
+        const result = await promise;
         if (!result.success) {
             return result;
         }

@@ -162,7 +162,7 @@ export class MessageContainer {
         if (this.action !== undefined && !Array.isArray(this.action)) {
             label.setAttribute(
                 "action-data",
-                "<pre>" + JSON.stringify(this.action, undefined, 2) + "</pre>",
+                JSON.stringify(this.action, undefined, 2),
             );
 
             // mark the span as clickable
@@ -181,15 +181,13 @@ export class MessageContainer {
         const label = this.timestampDiv.firstChild as HTMLSpanElement;
         label.setAttribute(
             "action-data",
-            "<pre>" +
-                JSON.stringify(
-                    this.diagnosticData.length === 1
-                        ? this.diagnosticData[0]
-                        : this.diagnosticData,
-                    undefined,
-                    2,
-                ) +
-                "</pre>",
+            JSON.stringify(
+                this.diagnosticData.length === 1
+                    ? this.diagnosticData[0]
+                    : this.diagnosticData,
+                undefined,
+                2,
+            ),
         );
         this.nameSpan.classList.add("clickable");
     }
