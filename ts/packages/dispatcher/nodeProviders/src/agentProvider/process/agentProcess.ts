@@ -4,6 +4,7 @@
 import registerDebug from "debug";
 import { AppAgent } from "@typeagent/agent-sdk";
 import {
+    AgentControlMessage,
     AgentInterfaceFunctionName,
     createAgentRpcServer,
 } from "@typeagent/agent-rpc/server";
@@ -69,7 +70,7 @@ const { agentInterface } = createAgentRpcServer(
 );
 
 const controlChannel = channelProvider.createChannel<
-    string,
+    AgentControlMessage,
     AgentInterfaceFunctionName[]
 >("control");
 

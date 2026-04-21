@@ -7,7 +7,10 @@ import { AppAgent } from "@typeagent/agent-sdk";
 import { createAgentRpcClient } from "@typeagent/agent-rpc/client";
 import { createChannelProvider } from "@typeagent/agent-rpc/channel";
 import { fileURLToPath } from "url";
-import { AgentInterfaceFunctionName } from "@typeagent/agent-rpc/server";
+import {
+    AgentControlMessage,
+    AgentInterfaceFunctionName,
+} from "@typeagent/agent-rpc/server";
 
 export type AgentProcess = {
     appAgent: AppAgent;
@@ -64,7 +67,10 @@ export async function createAgentProcess(
         agentProcess,
     );
     const traceChannel = channelProvider.createChannel("trace");
-    const channel = channelProvider.createChannel("control");
+    const channel = channelProvider.createChannel<
+        AgentInterfaceFunctionName[],
+        AgentControlMessage
+    >("control");
     const agentInterface = await new Promise<AgentInterfaceFunctionName[]>(
         (resolve, reject) => {
             channel.once("message", (message: any) => {
@@ -86,12 +92,18 @@ export async function createAgentProcess(
                 return;
             }
             await new Promise<void>((resolve) => {
-                agentProcess.once("exit", resolve);
+                let timer: NodeJS.Timeout | undefined;
+                agentProcess.once("exit", () => {
+                    if (timer !== undefined) {
+                        clearTimeout(timer);
+                    }
+                    resolve();
+                });
 
                 // Ask the child to exit gracefully via the control channel.
                 // If it doesn't exit within 1s, fall back to disconnect/kill.
                 if (agentProcess.connected) {
-                    const timer = setTimeout(() => {
+                    timer = setTimeout(() => {
                         if (agentProcess.exitCode !== null) {
                             return;
                         }
@@ -102,7 +114,13 @@ export async function createAgentProcess(
                         }
                     }, 1000);
                     timer.unref();
-                    channel.send("exit");
+                    try {
+                        channel.send("exit");
+                    } catch {
+                        // IPC channel may have closed between the
+                        // connected check and the send; the exit
+                        // event will still fire.
+                    }
                 } else {
                     agentProcess.kill();
                 }

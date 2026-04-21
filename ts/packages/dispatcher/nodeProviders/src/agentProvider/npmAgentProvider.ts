@@ -214,7 +214,9 @@ export function createNpmAppAgentProvider(
             }
             if (--agent.count === 0) {
                 moduleAgents.delete(appAgentName);
-                await agent.close?.();
+                if (agent.close) {
+                    await agent.close();
+                }
             }
         },
         setTraceNamespaces(namespaces: string) {
