@@ -82,9 +82,7 @@ export class MatchSet {
     ) {
         // Case-insensitive storage; diacritic-insensitive matching is done by
         // buildDiacriticVariantPattern on the regex side.
-        this.matches = new Set(
-            Array.from(matches).map((m) => m.toLowerCase()),
-        );
+        this.matches = new Set(Array.from(matches).map((m) => m.toLowerCase()));
 
         // Error checking
         if (this.matches.has("")) {
@@ -116,10 +114,7 @@ export class MatchSet {
         return Array.from(this.matches)
             .sort((a, b) => b.length - a.length) // Match longest first
             .map((m) =>
-                buildDiacriticVariantPattern(m).replaceAll(
-                    /\s+/g,
-                    "\\s+",
-                ),
+                buildDiacriticVariantPattern(m).replaceAll(/\s+/g, "\\s+"),
             ) // allow multiple spaces
             .join("|");
     }
