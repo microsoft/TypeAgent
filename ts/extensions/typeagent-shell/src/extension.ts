@@ -3,17 +3,14 @@
 
 import * as vscode from "vscode";
 import { ChatViewProvider } from "./chatViewProvider";
-import { AgentServerManager } from "./agentServerManager";
+import { AgentServerBridge } from "./agentServerBridge";
 
-let serverManager: AgentServerManager | undefined;
+let bridge: AgentServerBridge | undefined;
 
 export function activate(context: vscode.ExtensionContext): void {
-    serverManager = new AgentServerManager(context);
+    bridge = new AgentServerBridge();
 
-    const provider = new ChatViewProvider(
-        context.extensionUri,
-        serverManager,
-    );
+    const provider = new ChatViewProvider(context.extensionUri, bridge);
 
     // Sidebar webview provider
     context.subscriptions.push(
@@ -26,23 +23,20 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // Command: open chat as an editor tab
     context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "typeagent-shell.openChat",
-            () => {
-                const panel = vscode.window.createWebviewPanel(
-                    "typeagent-shell.chatPanel",
-                    "TypeAgent Chat",
-                    vscode.ViewColumn.Beside,
-                    getWebviewOptions(context.extensionUri),
-                );
-                panel.iconPath = vscode.Uri.joinPath(
-                    context.extensionUri,
-                    "media",
-                    "typeagent-icon.svg",
-                );
-                provider.resolveWebviewPanel(panel.webview);
-            },
-        ),
+        vscode.commands.registerCommand("typeagent-shell.openChat", () => {
+            const panel = vscode.window.createWebviewPanel(
+                "typeagent-shell.chatPanel",
+                "TypeAgent Chat",
+                vscode.ViewColumn.Beside,
+                getWebviewOptions(context.extensionUri),
+            );
+            panel.iconPath = vscode.Uri.joinPath(
+                context.extensionUri,
+                "media",
+                "typeagent-icon.svg",
+            );
+            provider.resolveWebviewPanel(panel.webview);
+        }),
     );
 
     // Command: focus the sidebar chat
@@ -53,16 +47,10 @@ export function activate(context: vscode.ExtensionContext): void {
             );
         }),
     );
-
-    // Auto-start server if configured
-    const config = vscode.workspace.getConfiguration("typeagent");
-    if (config.get<boolean>("autoStart", true)) {
-        serverManager.ensureRunning();
-    }
 }
 
 export function deactivate(): void {
-    serverManager?.dispose();
+    bridge?.dispose();
 }
 
 function getWebviewOptions(

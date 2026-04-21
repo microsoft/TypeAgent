@@ -16,6 +16,11 @@ const extensionConfig = {
     target: "node20",
     sourcemap: true,
     minify: !watch,
+    // The agentServerClient uses import.meta.url internally for auto-start
+    // which we don't use; suppress the warning by defining it away.
+    define: {
+        "import.meta.url": "undefined",
+    },
 };
 
 /** @type {import('esbuild').BuildOptions} */

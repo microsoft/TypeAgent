@@ -60,7 +60,7 @@
                 },
                 "typeagent.autoStart": {
                     "type": "boolean",
-                    "default": true,
+                    "default": false,
                     "description": "Automatically start the agent server if not running"
                 },
                 "typeagent.serverPort": {
@@ -76,9 +76,21 @@
         "compile": "node esbuild.mjs",
         "watch": "node esbuild.mjs --watch"
     },
+    "dependencies": {
+        "@typeagent/agent-server-client": "file:../../packages/agentServer/client",
+        "@typeagent/agent-server-protocol": "file:../../packages/agentServer/protocol",
+        "@typeagent/agent-rpc": "file:../../packages/agentRpc",
+        "@typeagent/agent-sdk": "file:../../packages/agentSdk",
+        "@typeagent/dispatcher-rpc": "file:../../packages/dispatcher/rpc",
+        "@typeagent/dispatcher-types": "file:../../packages/dispatcher/types",
+        "isomorphic-ws": "^5.0.0",
+        "ws": "^8.18.0",
+        "debug": "^4.4.0"
+    },
     "devDependencies": {
         "@types/vscode": "^1.90.0",
-        "esbuild": "^0.25.0",
-        "@vscode/vsce": "^3.0.0"
+        "@types/ws": "^8.5.0",
+        "@types/debug": "^4.1.0",
+        "esbuild": "^0.25.0"
     }
 }

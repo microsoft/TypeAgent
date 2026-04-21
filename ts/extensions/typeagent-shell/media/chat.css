@@ -96,6 +96,24 @@ body {
     padding: 4px 8px;
 }
 
+.message.error {
+    align-self: center;
+    font-size: 12px;
+    color: var(--vscode-errorForeground);
+    background: var(--vscode-inputValidation-errorBackground, rgba(255, 0, 0, 0.1));
+    border: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
+    padding: 6px 10px;
+}
+
+.source-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--vscode-descriptionForeground);
+    margin-bottom: 2px;
+    text-transform: uppercase;
+}
+
 /* ── Input area ──────────────────────────────────────────────── */
 
 #input-area {

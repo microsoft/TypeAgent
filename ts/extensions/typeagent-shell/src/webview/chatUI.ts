@@ -10,6 +10,7 @@ export class ChatUI {
     private _sendBtn: HTMLButtonElement;
     private _statusEl: HTMLElement;
     private _sendCallback?: (text: string) => void;
+    private _lastAgentEl?: HTMLElement;
 
     constructor() {
         this._messagesEl = document.getElementById("messages")!;
@@ -45,54 +46,86 @@ export class ChatUI {
         this._appendMessage(text, "user");
     }
 
-    public addAgentMessage(text: string): void {
-        this._appendMessage(text, "agent");
-    }
-
-    public updatePartialMessage(text: string): void {
-        let partial = this._messagesEl.querySelector(
-            ".message.agent.partial",
-        );
-        if (!partial) {
-            partial = document.createElement("div");
-            partial.className = "message agent partial";
-            this._messagesEl.appendChild(partial);
+    public addAgentMessage(text: string, source?: string): void {
+        const el = document.createElement("div");
+        el.className = "message agent";
+        if (source) {
+            const sourceEl = document.createElement("span");
+            sourceEl.className = "source-label";
+            sourceEl.textContent = source;
+            el.appendChild(sourceEl);
         }
-        partial.textContent = text;
+        const content = document.createElement("span");
+        content.textContent = text;
+        el.appendChild(content);
+        this._messagesEl.appendChild(el);
+        this._lastAgentEl = el;
         this._scrollToBottom();
     }
 
-    public finalizePartialMessage(): void {
-        const partial = this._messagesEl.querySelector(
-            ".message.agent.partial",
-        );
-        if (partial) {
-            partial.classList.remove("partial");
+    public appendAgentMessage(
+        text: string,
+        source?: string,
+        _mode?: string,
+    ): void {
+        if (this._lastAgentEl) {
+            const content = this._lastAgentEl.querySelector(
+                "span:last-child",
+            );
+            if (content) {
+                content.textContent += text;
+            }
+        } else {
+            this.addAgentMessage(text, source);
+        }
+        this._scrollToBottom();
+    }
+
+    public setDisplayInfo(source: string, action?: any): void {
+        // Show which agent is handling the request
+        if (source) {
+            const el = document.createElement("div");
+            el.className = "message system";
+            el.textContent = `[${source}]${action ? " processing..." : ""}`;
+            this._messagesEl.appendChild(el);
+            this._scrollToBottom();
         }
     }
 
-    public setStatus(
-        state: "connected" | "connecting" | "disconnected",
-        detail?: string,
-    ): void {
-        this._statusEl.className = "status " + state;
-        switch (state) {
-            case "connected":
-                this._statusEl.textContent =
-                    detail ?? "Connected to TypeAgent";
-                this._inputEl.disabled = false;
-                this._sendBtn.disabled = false;
-                break;
-            case "connecting":
-                this._statusEl.textContent = detail ?? "Connecting…";
-                this._inputEl.disabled = true;
-                this._sendBtn.disabled = true;
-                break;
-            case "disconnected":
-                this._statusEl.textContent = detail ?? "Disconnected";
-                this._inputEl.disabled = true;
-                this._sendBtn.disabled = true;
-                break;
+    public clearMessages(): void {
+        this._messagesEl.innerHTML = "";
+        this._lastAgentEl = undefined;
+    }
+
+    public addNotification(event: string, _data: any, source: string): void {
+        const el = document.createElement("div");
+        el.className = "message system";
+        el.textContent = `[${source}] ${event}`;
+        this._messagesEl.appendChild(el);
+        this._scrollToBottom();
+    }
+
+    public addErrorMessage(text: string): void {
+        const el = document.createElement("div");
+        el.className = "message error";
+        el.textContent = `Error: ${text}`;
+        this._messagesEl.appendChild(el);
+        this._scrollToBottom();
+    }
+
+    public setStatus(connected: boolean, sessionId?: string): void {
+        if (connected) {
+            this._statusEl.className = "status connected";
+            this._statusEl.textContent = sessionId
+                ? `Connected (${sessionId.substring(0, 8)}…)`
+                : "Connected to TypeAgent";
+            this._inputEl.disabled = false;
+            this._sendBtn.disabled = false;
+        } else {
+            this._statusEl.className = "status disconnected";
+            this._statusEl.textContent = "Disconnected";
+            this._inputEl.disabled = true;
+            this._sendBtn.disabled = true;
         }
     }
 
@@ -103,8 +136,10 @@ export class ChatUI {
     private _handleSend(): void {
         const text = this._inputEl.value.trim();
         if (!text) return;
+        this.addUserMessage(text);
         this._inputEl.value = "";
         this._inputEl.style.height = "auto";
+        this._lastAgentEl = undefined;
         this._sendCallback?.(text);
     }
 

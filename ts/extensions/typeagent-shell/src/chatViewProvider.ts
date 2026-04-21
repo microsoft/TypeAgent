@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
-import { AgentServerManager } from "./agentServerManager";
+import { AgentServerBridge } from "./agentServerBridge";
 
 /**
  * Provides the chat webview for both the sidebar panel and editor tabs.
@@ -14,7 +14,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
-        private readonly _serverManager: AgentServerManager,
+        private readonly _bridge: AgentServerBridge,
     ) {}
 
     public resolveWebviewView(
@@ -40,27 +40,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         webview.html = this._getHtmlForWebview(webview);
 
-        // Handle messages from the webview
-        webview.onDidReceiveMessage((message) => {
-            switch (message.type) {
-                case "getServerUrl":
-                    webview.postMessage({
-                        type: "serverUrl",
-                        url: this._serverManager.getServerUrl(),
-                    });
-                    break;
-                case "openExternal":
-                    if (message.url) {
-                        vscode.env.openExternal(
-                            vscode.Uri.parse(message.url),
-                        );
-                    }
-                    break;
-                case "log":
-                    console.log("[TypeAgent Webview]", message.text);
-                    break;
-            }
-        });
+        // Register webview with the bridge — this connects it to the RPC stream
+        const bridgeDisposable = this._bridge.registerWebview(webview);
+
+        // Auto-connect when webview opens
+        this._bridge.connect();
+
+        // Clean up on dispose
+        if (this._sidebarView) {
+            this._sidebarView.onDidDispose(() => {
+                bridgeDisposable.dispose();
+            });
+        }
     }
 
     private _getHtmlForWebview(webview: vscode.Webview): string {
@@ -81,7 +72,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           content="default-src 'none';
                    style-src ${webview.cspSource} 'unsafe-inline';
                    script-src 'nonce-${nonce}';
-                   connect-src ws://localhost:* wss://localhost:*;
                    img-src ${webview.cspSource} data:;
                    font-src ${webview.cspSource};">
     <link href="${styleUri}" rel="stylesheet">
