@@ -1289,7 +1289,15 @@ function createMainWindow(inputOnly: boolean): BrowserWindow {
     // the user holds a modifier key (Ctrl/Meta, Shift, or Alt) while clicking
     mainWindow.webContents.setWindowOpenHandler((details) => {
         if (modifierHeld) {
-            shell.openExternal(details.url);
+            // Only allow http/https URLs to prevent malicious schemes (e.g., file:, javascript:).
+            try {
+                const { protocol } = new URL(details.url);
+                if (protocol === "http:" || protocol === "https:") {
+                    shell.openExternal(details.url);
+                }
+            } catch {
+                // Invalid URL — deny silently.
+            }
             return { action: "deny" };
         }
         return { action: "allow" };
