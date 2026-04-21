@@ -24,6 +24,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as readline from "readline";
+import { loadUserSettings } from "agent-dispatcher/helpers/userSettings";
 
 const CLI_STATE_FILE = path.join(os.homedir(), ".typeagent", "cli-state.json");
 const CLI_CONVERSATION_NAME = "CLI";
@@ -135,7 +136,19 @@ export default class Connect extends Command {
         }),
     };
     async run(): Promise<void> {
-        const { args, flags } = await this.parse(Connect);
+        const { args, flags: rawFlags } = await this.parse(Connect);
+
+        // Merge persistent user settings as defaults for flags not explicitly set
+        const userSettings = loadUserSettings();
+        const flags = {
+            ...rawFlags,
+            hidden: rawFlags.hidden || userSettings.server.hidden,
+            idleTimeout:
+                rawFlags.idleTimeout > 0
+                    ? rawFlags.idleTimeout
+                    : userSettings.server.idleTimeout,
+            resume: rawFlags.resume || userSettings.conversation.resume,
+        };
 
         if (flags.verbose !== undefined) {
             const { default: registerDebug } = await import("debug");

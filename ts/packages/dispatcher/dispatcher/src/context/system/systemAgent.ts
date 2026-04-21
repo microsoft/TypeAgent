@@ -54,6 +54,7 @@ import { HelpCommandHandler } from "./handlers/helpCommandHandler.js";
 import { OpenCommandHandler } from "./handlers/openCommandHandler.js";
 import { getIndexCommandHandlers } from "./handlers/indexCommandHandler.js";
 import { getMemoryCommandHandlers } from "../memory.js";
+import { getSettingsCommandHandlers } from "./handlers/settingsCommandHandlers.js";
 
 export const systemHandlers: CommandHandlerTable = {
     description: "Type Agent System Commands",
@@ -91,6 +92,7 @@ export const systemHandlers: CommandHandlerTable = {
         uninstall: new UninstallCommandHandler(),
         open: new OpenCommandHandler(),
         index: getIndexCommandHandlers(),
+        settings: getSettingsCommandHandlers(),
     },
 };
 

@@ -45,6 +45,7 @@ import {
     connectAgentServer,
 } from "@typeagent/agent-server-client";
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
+import { loadUserSettings } from "agent-dispatcher/helpers/userSettings";
 
 type ShellInstance = {
     shellWindow: ShellWindow;
@@ -162,7 +163,12 @@ async function initializeDispatcher(
         if (connect !== undefined) {
             // Connect to remote dispatcher — use connectAgentServer directly
             // so we retain the connection reference for multi-conversation support.
-            await ensureAgentServer(connect, true);
+            const userSettings = loadUserSettings();
+            await ensureAgentServer(
+                connect,
+                true,
+                userSettings.server.idleTimeout,
+            );
             const url = `ws://localhost:${connect}`;
             connection = await connectAgentServer(url, () => {
                 if (!quitting) {
