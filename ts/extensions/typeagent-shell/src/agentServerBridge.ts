@@ -216,19 +216,33 @@ export class AgentServerBridge {
             return;
         }
 
+        const sessions = await this.connection.listSessions();
+        const existingNames = new Set(
+            sessions.map((s) => s.name.toLowerCase()),
+        );
+
         const name = await vscode.window.showInputBox({
             prompt: "Name for the new session",
             placeHolder: "My Session",
+            validateInput: (value) => {
+                if (!value.trim()) {
+                    return "Session name cannot be empty";
+                }
+                if (existingNames.has(value.trim().toLowerCase())) {
+                    return `A session named "${value.trim()}" already exists`;
+                }
+                return undefined;
+            },
         });
 
         if (!name) {
             return;
         }
 
-        const info = await this.connection.createSession(name);
+        const info = await this.connection.createSession(name.trim());
         await this.joinSpecificSession(info.sessionId);
         vscode.window.showInformationMessage(
-            `Created and joined session "${name}"`,
+            `Created and joined session "${name.trim()}"`,
         );
     }
 
@@ -241,24 +255,43 @@ export class AgentServerBridge {
             return;
         }
 
+        const sessions = await this.connection.listSessions();
+        const existingNames = new Set(
+            sessions
+                .filter((s) => s.sessionId !== this.session!.sessionId)
+                .map((s) => s.name.toLowerCase()),
+        );
+
         const newName = await vscode.window.showInputBox({
             prompt: "New name for the current session",
             placeHolder: "My Session",
+            validateInput: (value) => {
+                if (!value.trim()) {
+                    return "Session name cannot be empty";
+                }
+                if (existingNames.has(value.trim().toLowerCase())) {
+                    return `A session named "${value.trim()}" already exists`;
+                }
+                return undefined;
+            },
         });
 
         if (!newName) {
             return;
         }
 
-        await this.connection.renameSession(this.session.sessionId, newName);
+        await this.connection.renameSession(
+            this.session.sessionId,
+            newName.trim(),
+        );
         this.broadcastToWebviews({
             type: "status",
             connected: true,
             sessionId: this.session.sessionId,
-            sessionName: newName,
+            sessionName: newName.trim(),
         });
         vscode.window.showInformationMessage(
-            `Session renamed to "${newName}"`,
+            `Session renamed to "${newName.trim()}"`,
         );
     }
 
@@ -319,13 +352,72 @@ export class AgentServerBridge {
             return;
         }
 
-        // Leave current session
+        // Leave current session (cleans up its channels)
         if (this.session) {
-            await this.connection.leaveSession(this.session.sessionId);
+            try {
+                await this.connection.leaveSession(this.session.sessionId);
+            } catch {
+                // Best effort — session may already be gone
+            }
             this.session = undefined;
         }
 
         // Join the new session
+        try {
+            const clientIO = this.createClientIO();
+            this.session = await this.connection.joinSession(clientIO, {
+                clientType: "extension",
+                filter: true,
+                sessionId,
+            });
+
+            // Notify webviews
+            this.broadcastToWebviews({
+                type: "sessionChanged",
+                sessionId: this.session.sessionId,
+                sessionName: this.session.name,
+            });
+            this.broadcastToWebviews({
+                type: "status",
+                connected: true,
+                sessionId: this.session.sessionId,
+                sessionName: this.session.name,
+            });
+        } catch (e: any) {
+            // Channel conflict — reconnect from scratch
+            const msg = e?.message ?? String(e);
+            if (msg.includes("already exists")) {
+                await this.reconnectAndJoin(sessionId);
+            } else {
+                throw e;
+            }
+        }
+    }
+
+    /**
+     * Full reconnect to resolve channel conflicts, then join a session.
+     */
+    private async reconnectAndJoin(sessionId: string): Promise<void> {
+        if (this.connection) {
+            await this.connection.close();
+            this.connection = undefined;
+            this.session = undefined;
+        }
+
+        const config = vscode.workspace.getConfiguration("typeagent");
+        const serverUrl = config.get<string>(
+            "serverUrl",
+            "ws://localhost:3000",
+        );
+
+        this.connection = await connectAgentServer(serverUrl, () => {
+            this.isConnected = false;
+            this.session = undefined;
+            this.updateStatusBar(false);
+            this.broadcastToWebviews({ type: "status", connected: false });
+            this.scheduleReconnect();
+        });
+
         const clientIO = this.createClientIO();
         this.session = await this.connection.joinSession(clientIO, {
             clientType: "extension",
@@ -333,7 +425,8 @@ export class AgentServerBridge {
             sessionId,
         });
 
-        // Notify webviews
+        this.isConnected = true;
+        this.updateStatusBar(true);
         this.broadcastToWebviews({
             type: "sessionChanged",
             sessionId: this.session.sessionId,
