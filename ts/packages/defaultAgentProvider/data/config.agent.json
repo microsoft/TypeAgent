@@ -39,9 +39,6 @@
     "montage": {
       "name": "montage-agent"
     },
-    "spelunker": {
-      "name": "spelunker-agent"
-    },
     "video": {
       "name": "video-agent",
       "excecMode": "dispatcher"

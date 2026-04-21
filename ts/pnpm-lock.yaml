@@ -695,46 +695,6 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
 
-  examples/spelunker:
-    dependencies:
-      aiclient:
-        specifier: workspace:*
-        version: link:../../packages/aiclient
-      chalk:
-        specifier: ^5.4.1
-        version: 5.6.2
-      code-processor:
-        specifier: workspace:*
-        version: link:../../packages/codeProcessor
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.5.0
-      interactive-app:
-        specifier: workspace:*
-        version: link:../../packages/interactiveApp
-      knowledge-processor:
-        specifier: workspace:*
-        version: link:../../packages/knowledgeProcessor
-      typeagent:
-        specifier: workspace:*
-        version: link:../../packages/typeagent
-      typechat:
-        specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
-    devDependencies:
-      '@types/readline-sync':
-        specifier: ^1.4.8
-        version: 1.4.8
-      copyfiles:
-        specifier: ^2.4.1
-        version: 2.4.1
-      rimraf:
-        specifier: ^6.0.1
-        version: 6.0.1
-
   examples/viewList:
     dependencies:
       agent-dispatcher:
@@ -2509,55 +2469,6 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
-  packages/agents/spelunker:
-    dependencies:
-      '@typeagent/agent-sdk':
-        specifier: workspace:*
-        version: link:../../agentSdk
-      '@typeagent/common-utils':
-        specifier: workspace:*
-        version: link:../../utils/commonUtils
-      aiclient:
-        specifier: workspace:*
-        version: link:../../aiclient
-      better-sqlite3:
-        specifier: 12.6.2
-        version: 12.6.2
-      code-processor:
-        specifier: workspace:*
-        version: link:../../codeProcessor
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.5.0
-      typeagent:
-        specifier: workspace:*
-        version: link:../../typeagent
-      typechat:
-        specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
-    devDependencies:
-      '@types/better-sqlite3':
-        specifier: 7.6.13
-        version: 7.6.13
-      '@types/jest':
-        specifier: ^29.5.7
-        version: 29.5.14
-      copyfiles:
-        specifier: ^2.4.1
-        version: 2.4.1
-      jest:
-        specifier: ^29.7.0
-        version: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
-      prettier:
-        specifier: ^3.5.3
-        version: 3.5.3
-      rimraf:
-        specifier: ^6.0.1
-        version: 6.0.1
-
   packages/agents/taskflow:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
@@ -3462,9 +3373,6 @@ importers:
       settings-agent:
         specifier: workspace:*
         version: link:../agents/settings
-      spelunker-agent:
-        specifier: workspace:*
-        version: link:../agents/spelunker
       string-width:
         specifier: ^7.2.0
         version: 7.2.0
@@ -7916,9 +7824,6 @@ packages:
 
   '@types/react@18.3.18':
     resolution: {integrity: sha512-t4yC+vtgnkYjNSKlFx1jkAhH8LgTo2N/7Qvi83kdEaUtMDiwpbLAktKDaAMlRcJ5eSxZkH74eEGt1ky31d7kfQ==}
-
-  '@types/readline-sync@1.4.8':
-    resolution: {integrity: sha512-BL7xOf0yKLA6baAX6MMOnYkoflUyj/c7y3pqMRfU0va7XlwHAOTOIo4x55P/qLfMsuaYdJJKubToLqRVmRtRZA==}
 
   '@types/regexp.escape@2.0.0':
     resolution: {integrity: sha512-L0+4KOC47zH0AE/27YhzECRlE4HxHycQy0ng8P4SMmsYIdUqJFzKlk4LameozRQ2mRozPRwRAzpXsDsUgb6ezA==}
@@ -19170,8 +19075,6 @@ snapshots:
     dependencies:
       '@types/prop-types': 15.7.14
       csstype: 3.1.3
-
-  '@types/readline-sync@1.4.8': {}
 
   '@types/regexp.escape@2.0.0': {}
 
