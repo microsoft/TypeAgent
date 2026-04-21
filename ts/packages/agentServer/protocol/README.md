@@ -13,49 +13,49 @@ export const AgentServerChannelName = "agent-server";
 Session-namespaced channels (one pair per joined conversation) are constructed via helper functions:
 
 ```typescript
-getDispatcherChannelName(sessionId: string): string // "dispatcher:<sessionId>"
-getClientIOChannelName(sessionId: string): string // "clientio:<sessionId>"
+getDispatcherChannelName(conversationId: string): string // "dispatcher:<conversationId>"
+getClientIOChannelName(conversationId: string): string // "clientio:<conversationId>"
 ```
 
 ## Conversation types
 
 **`ConversationInfo`** — describes a conversation:
 
-| Field         | Type     | Description                                                           |
-| ------------- | -------- | --------------------------------------------------------------------- |
-| `sessionId`   | `string` | UUIDv4 stable identifier                                              |
-| `name`        | `string` | Human-readable label (1–256 chars)                                    |
-| `clientCount` | `number` | Number of clients currently connected (runtime-only, never persisted) |
-| `createdAt`   | `string` | ISO 8601 creation timestamp                                           |
+| Field            | Type     | Description                                                           |
+| ---------------- | -------- | --------------------------------------------------------------------- |
+| `conversationId` | `string` | UUIDv4 stable identifier                                              |
+| `name`           | `string` | Human-readable label (1–256 chars)                                    |
+| `clientCount`    | `number` | Number of clients currently connected (runtime-only, never persisted) |
+| `createdAt`      | `string` | ISO 8601 creation timestamp                                           |
 
 **`JoinConversationResult`** — returned by `joinConversation`:
 
-| Field          | Type     | Description                                      |
-| -------------- | -------- | ------------------------------------------------ |
-| `connectionId` | `string` | Unique identifier for this connection            |
-| `sessionId`    | `string` | The conversation that was joined or auto-created |
+| Field            | Type     | Description                                      |
+| ---------------- | -------- | ------------------------------------------------ |
+| `connectionId`   | `string` | Unique identifier for this connection            |
+| `conversationId` | `string` | The conversation that was joined or auto-created |
 
 **`DispatcherConnectOptions`** — options passed to `joinConversation`:
 
-| Field        | Type      | Description                                                                        |
-| ------------ | --------- | ---------------------------------------------------------------------------------- |
-| `sessionId`  | `string`  | Join a specific conversation by UUID. Omit to connect to the default conversation. |
-| `clientType` | `string`  | Identifies the client (`"shell"`, `"extension"`, etc.)                             |
-| `filter`     | `boolean` | If true, only receive ClientIO messages for this connection's requests             |
+| Field            | Type      | Description                                                                        |
+| ---------------- | --------- | ---------------------------------------------------------------------------------- |
+| `conversationId` | `string`  | Join a specific conversation by UUID. Omit to connect to the default conversation. |
+| `clientType`     | `string`  | Identifies the client (`"shell"`, `"extension"`, etc.)                             |
+| `filter`         | `boolean` | If true, only receive ClientIO messages for this connection's requests             |
 
 ## RPC methods
 
 **`AgentServerInvokeFunctions`** — methods exposed on the `agent-server` channel:
 
-| Method                                   | Description                                                                      |
-| ---------------------------------------- | -------------------------------------------------------------------------------- |
-| `joinConversation(options?)`             | Join or auto-create a conversation; returns `JoinConversationResult`             |
-| `leaveConversation(sessionId)`           | Leave a conversation and clean up its channels                                   |
-| `createConversation(name)`               | Create a new named conversation; returns `ConversationInfo`                      |
-| `listConversations(name?)`               | List all conversations, optionally filtered by name substring (case-insensitive) |
-| `renameConversation(sessionId, newName)` | Rename a conversation                                                            |
-| `deleteConversation(sessionId)`          | Delete a conversation and all its persisted data                                 |
-| `shutdown()`                             | Request graceful server shutdown                                                 |
+| Method                                        | Description                                                                      |
+| --------------------------------------------- | -------------------------------------------------------------------------------- |
+| `joinConversation(options?)`                  | Join or auto-create a conversation; returns `JoinConversationResult`             |
+| `leaveConversation(conversationId)`           | Leave a conversation and clean up its channels                                   |
+| `createConversation(name)`                    | Create a new named conversation; returns `ConversationInfo`                      |
+| `listConversations(name?)`                    | List all conversations, optionally filtered by name substring (case-insensitive) |
+| `renameConversation(conversationId, newName)` | Rename a conversation                                                            |
+| `deleteConversation(conversationId)`          | Delete a conversation and all its persisted data                                 |
+| `shutdown()`                                  | Request graceful server shutdown                                                 |
 
 ## Client-type registry
 

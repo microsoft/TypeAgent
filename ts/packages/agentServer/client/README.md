@@ -12,33 +12,36 @@ Opens a WebSocket to an already-running agentServer and returns an `AgentServerC
 const connection = await connectAgentServer("ws://localhost:8999");
 
 // Join a conversation
-const { dispatcher, sessionId } = await connection.joinConversation(clientIO, {
-  clientType: "shell",
-});
+const { dispatcher, conversationId } = await connection.joinConversation(
+  clientIO,
+  {
+    clientType: "shell",
+  },
+);
 
 // Conversation management
-await connection.createConversation("my session");
+await connection.createConversation("my conversation");
 await connection.listConversations(); // all conversations
 await connection.listConversations("workout"); // filter by name substring
-await connection.renameConversation(sessionId, "new name");
-await connection.deleteConversation(sessionId);
+await connection.renameConversation(conversationId, "new name");
+await connection.deleteConversation(conversationId);
 
 // Leave and close
-await connection.leaveConversation(sessionId);
+await connection.leaveConversation(conversationId);
 await connection.close();
 ```
 
 **`AgentServerConnection`** methods:
 
-| Method                                   | Description                                               |
-| ---------------------------------------- | --------------------------------------------------------- |
-| `joinConversation(clientIO, options?)`   | Join a conversation; returns `{ dispatcher, sessionId }`  |
-| `leaveConversation(sessionId)`           | Leave a conversation and clean up its channels            |
-| `createConversation(name)`               | Create a new named conversation                           |
-| `listConversations(name?)`               | List conversations, optionally filtered by name substring |
-| `renameConversation(sessionId, newName)` | Rename a conversation                                     |
-| `deleteConversation(sessionId)`          | Delete a conversation and its persisted data              |
-| `close()`                                | Close the WebSocket connection                            |
+| Method                                        | Description                                                   |
+| --------------------------------------------- | ------------------------------------------------------------- |
+| `joinConversation(clientIO, options?)`        | Join a conversation; returns `{ dispatcher, conversationId }` |
+| `leaveConversation(conversationId)`           | Leave a conversation and clean up its channels                |
+| `createConversation(name)`                    | Create a new named conversation                               |
+| `listConversations(name?)`                    | List conversations, optionally filtered by name substring     |
+| `renameConversation(conversationId, newName)` | Rename a conversation                                         |
+| `deleteConversation(conversationId)`          | Delete a conversation and its persisted data                  |
+| `close()`                                     | Close the WebSocket connection                                |
 
 ### `ensureAgentServer(port?, hidden?, idleTimeout?)`
 
@@ -78,15 +81,15 @@ if (await isServerRunning("ws://localhost:8999")) {
 
 Connects to the running server on the given port and sends a `shutdown()` RPC.
 
-### `ensureAndConnectSession(clientIO, port?, options?, onDisconnect?, hidden?, idleTimeout?)`
+### `ensureAndConnectConversation(clientIO, port?, options?, onDisconnect?, hidden?, idleTimeout?)`
 
-Convenience wrapper: ensures the server is running, connects, and joins a session in one call. Returns a `SessionDispatcher` directly.
+Convenience wrapper: ensures the server is running, connects, and joins a conversation in one call. Returns a `ConversationDispatcher` directly.
 
 ```typescript
-const session = await ensureAndConnectSession(
+const conversation = await ensureAndConnectConversation(
   clientIO,
   8999,
-  { sessionId },
+  { conversationId },
   onDisconnect,
   true,
   600,
@@ -97,7 +100,7 @@ const session = await ensureAndConnectSession(
 | -------------- | -------------------------- | ------------ | ----------------------------------------------------- |
 | `clientIO`     | `ClientIO`                 | _(required)_ | Client IO implementation                              |
 | `port`         | `number`                   | `8999`       | Port to connect to                                    |
-| `options`      | `DispatcherConnectOptions` | `undefined`  | Conversation join options (e.g. `sessionId`)          |
+| `options`      | `DispatcherConnectOptions` | `undefined`  | Conversation join options (e.g. `conversationId`)     |
 | `onDisconnect` | `() => void`               | `undefined`  | Called when the WebSocket disconnects                 |
 | `hidden`       | `boolean`                  | `false`      | Suppress terminal/window when spawning                |
 | `idleTimeout`  | `number`                   | `0`          | Pass `--idle-timeout` to spawned server; `0` disables |

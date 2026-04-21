@@ -2,11 +2,11 @@
 
 The agentServer hosts a **TypeAgent dispatcher over WebSocket**, allowing multiple clients (Shell, CLI, extensions) to share a single running dispatcher instance with full conversation management. It is split into three sub-packages:
 
-| Package     | npm name                | Purpose                                                                           |
-| ----------- | ----------------------- | --------------------------------------------------------------------------------- |
-| `protocol/` | `agent-server-protocol` | RPC channel names, session types, client-type registry                            |
-| `client/`   | `agent-server-client`   | Client library: connect, conversation management, auto-spawn, stop                |
-| `server/`   | `agent-server`          | Long-running WebSocket server with `SessionManager` and per-conversation dispatch |
+| Package     | npm name                | Purpose                                                                                |
+| ----------- | ----------------------- | -------------------------------------------------------------------------------------- |
+| `protocol/` | `agent-server-protocol` | RPC channel names, conversation types, client-type registry                            |
+| `client/`   | `agent-server-client`   | Client library: connect, conversation management, auto-spawn, stop                     |
+| `server/`   | `agent-server`          | Long-running WebSocket server with `ConversationManager` and per-conversation dispatch |
 
 ---
 
@@ -21,7 +21,7 @@ Shell (Electron)              CLI (Node.js)
          ┌────────▼────────┐
          │   agentServer   │
          │                 │
-         │  SessionManager │
+         │ ConversationManager│
          │  ┌────────────┐ │
          │  │ Convo A    │ │  ← clients 0, 1
          │  │ Dispatcher │ │
@@ -38,13 +38,13 @@ Each conversation has its own `SharedDispatcher` instance with isolated chat his
 
 Each WebSocket connection multiplexes independent JSON-RPC channels:
 
-| Channel                  | Direction       | Purpose                                                                           |
-| ------------------------ | --------------- | --------------------------------------------------------------------------------- |
-| `agent-server`           | client → server | Conversation lifecycle: `joinConversation`, `leaveConversation`, CRUD, `shutdown` |
-| `dispatcher:<sessionId>` | client → server | Commands: `processCommand`, `getCommandCompletion`, etc.                          |
-| `clientio:<sessionId>`   | server → client | Display/interaction callbacks: `setDisplay`, `askYesNo`, etc.                     |
+| Channel                       | Direction       | Purpose                                                                           |
+| ----------------------------- | --------------- | --------------------------------------------------------------------------------- |
+| `agent-server`                | client → server | Conversation lifecycle: `joinConversation`, `leaveConversation`, CRUD, `shutdown` |
+| `dispatcher:<conversationId>` | client → server | Commands: `processCommand`, `getCommandCompletion`, etc.                          |
+| `clientio:<conversationId>`   | server → client | Display/interaction callbacks: `setDisplay`, `askYesNo`, etc.                     |
 
-The dispatcher and clientIO channels are namespaced by `sessionId`, allowing a single WebSocket connection to participate in multiple conversations simultaneously.
+The dispatcher and clientIO channels are namespaced by `conversationId`, allowing a single WebSocket connection to participate in multiple conversations simultaneously.
 
 ---
 
@@ -85,17 +85,17 @@ The server listens on `ws://localhost:8999` and logs `Agent server started at ws
 ## Conversation lifecycle
 
 ```
-Client calls joinConversation({ sessionId?, clientType, filter })
+Client calls joinConversation({ conversationId?, clientType, filter })
   │
-  ├─ sessionId provided?
-  │   ├─ Yes → look up sessions.json
+  ├─ conversationId provided?
+  │   ├─ Yes → look up conversations.json
   │   │   ├─ Found → load SharedDispatcher (lazy init if not in memory)
   │   │   └─ Not found → error: "Conversation not found"
   │   └─ No → connect to the default conversation
   │       └─ No conversations exist → auto-create conversation named "default"
   │
   ├─ Register client in conversation's SharedDispatcher routing table
-  └─ Return { connectionId, sessionId }
+  └─ Return { connectionId, conversationId }
 ```
 
 Conversation dispatchers are automatically evicted from memory after 5 minutes with no connected clients.
@@ -115,8 +115,8 @@ Client calls connectAgentServer(url)
   │
   ├─ Open WebSocket → create RPC channels
   │
-  ├─ Send joinConversation({ sessionId, clientType, filter }) on agent-server channel
-  │   └─ Server assigns connectionId, returns { connectionId, sessionId }
+  ├─ Send joinConversation({ conversationId, clientType, filter }) on agent-server channel
+  │   └─ Server assigns connectionId, returns { connectionId, conversationId }
   │
   └─ Return AgentServerConnection (call .joinConversation() to get a Dispatcher proxy)
 ```
@@ -216,15 +216,15 @@ pnpm --filter agent-server stop    # via pnpm script
 
 ## Conversation persistence
 
-Conversation metadata is stored at `~/.typeagent/server-sessions/sessions.json`. Each conversation's data (chat history, conversation memory, display log) lives under `~/.typeagent/server-sessions/<sessionId>/`.
+Conversation metadata is stored at `~/.typeagent/profiles/dev/conversations/conversations.json`. Each conversation's data (chat history, conversation memory, display log) lives under `~/.typeagent/profiles/dev/conversations/<conversationId>/`.
 
 ---
 
 ## Sub-package details
 
-- [protocol/README.md](protocol/README.md) — channel names, RPC types, session types, client-type registry
-- [client/README.md](client/README.md) — `connectAgentServer`, `ensureAndConnectDispatcher`, `stopAgentServer`
-- [server/README.md](server/README.md) — server entry point, `SessionManager`, `SharedDispatcher`, routing ClientIO
+- [protocol/README.md](protocol/README.md) — channel names, RPC types, conversation types, client-type registry
+- [client/README.md](client/README.md) — `connectAgentServer`, `ensureAndConnectConversation`, `stopAgentServer`
+- [server/README.md](server/README.md) — server entry point, `ConversationManager`, `SharedDispatcher`, routing ClientIO
 
 ---
 
