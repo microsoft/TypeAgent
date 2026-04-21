@@ -213,8 +213,8 @@ export function createNpmAppAgentProvider(
                 throw new Error(`Invalid app agent: ${appAgentName}`);
             }
             if (--agent.count === 0) {
-                agent.process?.kill();
                 moduleAgents.delete(appAgentName);
+                await agent.close?.();
             }
         },
         setTraceNamespaces(namespaces: string) {
