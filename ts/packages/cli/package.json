@@ -44,8 +44,8 @@
       "run": {
         "description": "Run the handler directly. Same as @<command> in interactive mode."
       },
-      "sessions": {
-        "description": "Manage agent server sessions (create, list, rename, delete)."
+      "conversations": {
+        "description": "Manage agent server conversations (create, list, rename, delete)."
       }
     }
   },

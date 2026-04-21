@@ -4,7 +4,7 @@
 import { Args, Command, Flags } from "@oclif/core";
 import { connectAgentServer } from "@typeagent/agent-server-client";
 
-export default class SessionsRename extends Command {
+export default class ConversationsRename extends Command {
     static description =
         "Rename a conversation on the agent server. Usage: sessions rename <id> <newName>";
     static flags = {
@@ -25,7 +25,7 @@ export default class SessionsRename extends Command {
     };
 
     async run(): Promise<void> {
-        const { args, flags } = await this.parse(SessionsRename);
+        const { args, flags } = await this.parse(ConversationsRename);
         const url = `ws://localhost:${flags.port}`;
         const connection = await connectAgentServer(url);
         try {

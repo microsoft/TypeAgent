@@ -6,7 +6,7 @@ import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/
 import {
     createConversationManager,
     ConversationManager,
-} from "./sessionManager.js";
+} from "./conversationManager.js";
 import {
     getInstanceDirAsync,
     getTraceIdAsync,

@@ -5,7 +5,7 @@ import { Args, Command, Flags } from "@oclif/core";
 import { connectAgentServer } from "@typeagent/agent-server-client";
 import { createInterface } from "readline/promises";
 
-export default class SessionsDelete extends Command {
+export default class ConversationsDelete extends Command {
     static description =
         "Delete a conversation and its persisted data from the agent server. Usage: sessions delete <id>";
     static flags = {
@@ -27,7 +27,7 @@ export default class SessionsDelete extends Command {
     };
 
     async run(): Promise<void> {
-        const { args, flags } = await this.parse(SessionsDelete);
+        const { args, flags } = await this.parse(ConversationsDelete);
 
         if (!flags.yes) {
             const rl = createInterface({

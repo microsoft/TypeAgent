@@ -3,7 +3,7 @@
 
 import { getRequestId } from "../../commandHandlerContext.js";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
-import { SessionAction } from "../schema/sessionActionSchema.js";
+import { SessionAction } from "../schema/conversationActionSchema.js";
 import { ActionContext, TypeAgentAction } from "@typeagent/agent-sdk";
 
 export async function executeSessionAction(

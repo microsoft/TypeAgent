@@ -28,7 +28,7 @@ import {
     createRemoteConversationBackend,
     registerConversationIpcHandlers,
     replayDisplayHistory,
-} from "./sessionManager.js";
+} from "./conversationManager.js";
 import {
     ClientIO,
     createDispatcher,

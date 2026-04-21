@@ -11,7 +11,7 @@ import {
     CommandHandlerTable,
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
-import { executeSessionAction } from "./action/sessionActionHandler.js";
+import { executeSessionAction } from "./action/conversationActionHandler.js";
 import { executeConfigAction } from "./action/configActionHandler.js";
 import {
     type CommandHandlerContext,
@@ -29,14 +29,14 @@ import { executeGrammarAction } from "./action/grammarActionHandler.js";
 import { ConfigAction } from "./schema/configActionSchema.js";
 import { NotificationAction } from "./schema/notificationActionSchema.js";
 import { HistoryAction } from "./schema/historyActionSchema.js";
-import { SessionAction } from "./schema/sessionActionSchema.js";
+import { SessionAction } from "./schema/conversationActionSchema.js";
 import { GrammarAction } from "./schema/grammarActionSchema.js";
 
 // handlers
 import { getConfigCommandHandlers } from "./handlers/configCommandHandlers.js";
 import { getConstructionCommandHandlers } from "./handlers/constructionCommandHandlers.js";
 import { DebugCommandHandler } from "./handlers/debugCommandHandlers.js";
-import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js";
+import { getSessionCommandHandlers } from "./handlers/conversationCommandHandlers.js";
 import { getHistoryCommandHandlers } from "./handlers/historyCommandHandler.js";
 import { TraceCommandHandler } from "./handlers/traceCommandHandler.js";
 import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
@@ -145,7 +145,7 @@ export const systemManifest: AppAgentManifest = {
                     "RENAME the current conversation, " +
                     "or SHOW info about the current conversation.",
                 schemaFile:
-                    "./src/context/system/schema/sessionActionSchema.ts",
+                    "./src/context/system/schema/conversationActionSchema.ts",
                 schemaType: "SessionAction",
             },
         },

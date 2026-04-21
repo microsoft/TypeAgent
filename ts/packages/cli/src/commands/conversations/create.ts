@@ -4,7 +4,7 @@
 import { Args, Command, Flags } from "@oclif/core";
 import { connectAgentServer } from "@typeagent/agent-server-client";
 
-export default class SessionsCreate extends Command {
+export default class ConversationsCreate extends Command {
     static description =
         "Create a new named conversation on the agent server. Defaults to 'CLI' if no name is provided.";
     static flags = {
@@ -22,7 +22,7 @@ export default class SessionsCreate extends Command {
     };
 
     async run(): Promise<void> {
-        const { args, flags } = await this.parse(SessionsCreate);
+        const { args, flags } = await this.parse(ConversationsCreate);
         const url = `ws://localhost:${flags.port}`;
         const connection = await connectAgentServer(url);
         try {

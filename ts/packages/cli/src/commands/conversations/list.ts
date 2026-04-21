@@ -53,7 +53,7 @@ function formatTable(conversations: ConversationInfo[]): string {
     return [header, separator, ...rows].join("\n");
 }
 
-export default class SessionsList extends Command {
+export default class ConversationsList extends Command {
     static description =
         "List conversations on the agent server. Usage: sessions list [--name <filter>]";
     static flags = {
@@ -69,7 +69,7 @@ export default class SessionsList extends Command {
     };
 
     async run(): Promise<void> {
-        const { flags } = await this.parse(SessionsList);
+        const { flags } = await this.parse(ConversationsList);
         const url = `ws://localhost:${flags.port}`;
         const connection = await connectAgentServer(url);
         try {
