@@ -51,22 +51,22 @@
             },
             {
                 "command": "typeagent-shell.switchSession",
-                "title": "Switch Session",
+                "title": "Switch Conversation",
                 "category": "TypeAgent"
             },
             {
                 "command": "typeagent-shell.newSession",
-                "title": "New Session",
+                "title": "New Conversation",
                 "category": "TypeAgent"
             },
             {
                 "command": "typeagent-shell.renameSession",
-                "title": "Rename Session",
+                "title": "Rename Conversation",
                 "category": "TypeAgent"
             },
             {
                 "command": "typeagent-shell.deleteSession",
-                "title": "Delete Session",
+                "title": "Delete Conversation",
                 "category": "TypeAgent"
             }
         ],

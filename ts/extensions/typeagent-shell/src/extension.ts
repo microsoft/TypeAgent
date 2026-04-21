@@ -48,7 +48,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }),
     );
 
-    // Session management commands
+    // Conversation management commands
     context.subscriptions.push(
         vscode.commands.registerCommand(
             "typeagent-shell.switchSession",

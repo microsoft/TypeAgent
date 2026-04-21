@@ -175,10 +175,10 @@ export class AgentServerBridge {
         this.statusBarItem.dispose();
     }
 
-    // ── Session management ──────────────────────────────────────
+    // ── Conversation management ─────────────────────────────────
 
     /**
-     * Show a QuickPick to switch sessions.
+     * Show a QuickPick to switch conversations.
      */
     async switchSession(): Promise<void> {
         if (!this.connection) {
@@ -197,7 +197,7 @@ export class AgentServerBridge {
         }));
 
         const pick = await vscode.window.showQuickPick(items, {
-            placeHolder: "Select a session to switch to",
+            placeHolder: "Select a conversation to switch to",
         });
 
         if (!pick || pick.sessionId === currentId) {
@@ -208,7 +208,7 @@ export class AgentServerBridge {
     }
 
     /**
-     * Create a new session and switch to it.
+     * Create a new conversation and switch to it.
      */
     async newSession(): Promise<void> {
         if (!this.connection) {
@@ -222,14 +222,14 @@ export class AgentServerBridge {
         );
 
         const name = await vscode.window.showInputBox({
-            prompt: "Name for the new session",
-            placeHolder: "My Session",
+            prompt: "Name for the new conversation",
+            placeHolder: "My Conversation",
             validateInput: (value) => {
                 if (!value.trim()) {
-                    return "Session name cannot be empty";
+                    return "Conversation name cannot be empty";
                 }
                 if (existingNames.has(value.trim().toLowerCase())) {
-                    return `A session named "${value.trim()}" already exists`;
+                    return `A conversation named "${value.trim()}" already exists`;
                 }
                 return undefined;
             },
@@ -242,16 +242,16 @@ export class AgentServerBridge {
         const info = await this.connection.createSession(name.trim());
         await this.joinSpecificSession(info.sessionId);
         vscode.window.showInformationMessage(
-            `Created and joined session "${name.trim()}"`,
+            `Created and switched to conversation "${name.trim()}"`,
         );
     }
 
     /**
-     * Rename the current session.
+     * Rename the current conversation.
      */
     async renameCurrentSession(): Promise<void> {
         if (!this.connection || !this.session) {
-            vscode.window.showWarningMessage("No active session.");
+            vscode.window.showWarningMessage("No active conversation.");
             return;
         }
 
@@ -263,14 +263,14 @@ export class AgentServerBridge {
         );
 
         const newName = await vscode.window.showInputBox({
-            prompt: "New name for the current session",
-            placeHolder: "My Session",
+            prompt: "New name for the current conversation",
+            placeHolder: "My Conversation",
             validateInput: (value) => {
                 if (!value.trim()) {
-                    return "Session name cannot be empty";
+                    return "Conversation name cannot be empty";
                 }
                 if (existingNames.has(value.trim().toLowerCase())) {
-                    return `A session named "${value.trim()}" already exists`;
+                    return `A conversation named "${value.trim()}" already exists`;
                 }
                 return undefined;
             },
@@ -291,12 +291,12 @@ export class AgentServerBridge {
             sessionName: newName.trim(),
         });
         vscode.window.showInformationMessage(
-            `Session renamed to "${newName.trim()}"`,
+            `Renamed conversation to "${newName.trim()}"`,
         );
     }
 
     /**
-     * Delete a session (shows picker, prevents deleting current).
+     * Delete a conversation (shows picker, prevents deleting current).
      */
     async deleteSession(): Promise<void> {
         if (!this.connection) {
@@ -317,13 +317,13 @@ export class AgentServerBridge {
 
         if (items.length === 0) {
             vscode.window.showInformationMessage(
-                "No other sessions to delete.",
+                "No other conversations to delete.",
             );
             return;
         }
 
         const pick = await vscode.window.showQuickPick(items, {
-            placeHolder: "Select a session to delete",
+            placeHolder: "Select a conversation to delete",
         });
 
         if (!pick) {
@@ -331,7 +331,7 @@ export class AgentServerBridge {
         }
 
         const confirm = await vscode.window.showWarningMessage(
-            `Delete session "${pick.label}"?`,
+            `Delete conversation "${pick.label}"?`,
             { modal: true },
             "Delete",
         );
@@ -339,13 +339,13 @@ export class AgentServerBridge {
         if (confirm === "Delete") {
             await this.connection.deleteSession(pick.sessionId);
             vscode.window.showInformationMessage(
-                `Deleted session "${pick.label}"`,
+                `Deleted conversation "${pick.label}"`,
             );
         }
     }
 
     /**
-     * Leave the current session and join a different one.
+     * Leave the current conversation and join a different one.
      */
     private async joinSpecificSession(sessionId: string): Promise<void> {
         if (!this.connection) {

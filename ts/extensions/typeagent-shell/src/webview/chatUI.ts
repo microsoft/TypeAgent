@@ -202,11 +202,11 @@ export class ChatUI {
     }
 
     /**
-     * Called when the user switches to a different session.
+     * Called when the user switches to a different conversation.
      */
     public onSessionChanged(sessionName: string): void {
         this.clearMessages();
-        this.addSystemMessage(`Switched to session: ${sessionName}`);
+        this.addSystemMessage(`Switched to conversation: ${sessionName}`);
     }
 
     public addSystemMessage(text: string): void {
