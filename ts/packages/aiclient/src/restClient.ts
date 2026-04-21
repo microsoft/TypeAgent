@@ -546,8 +546,12 @@ async function fetchWithPool(
         );
     }
 
+    // Multi-member branch. We bypass fetchWithRetry here because we need the
+    // raw Response (to parse Retry-After and route on status) — fetchWithRetry
+    // swallows the Response and only returns a stringified error. Every
+    // per-member call goes through callFetch directly; the pool wrapper owns
+    // rotation, cooldown, and overall-budget enforcement.
     const overallBudgetMs = options?.overallBudgetMs ?? 180_000;
-    const retryPauseMs = options?.retryPauseMs ?? 1000;
     const startTime = Date.now();
     let lastError: Result<Response> | undefined;
     let attempts = 0;
@@ -580,6 +584,8 @@ async function fetchWithPool(
         const member = pick.member;
         const req = await buildRequest(member);
         if (!req.success) {
+            // buildRequest failure (e.g. Azure AD token acquisition) is not
+            // per-endpoint recoverable — bubble it out rather than rotating.
             return req;
         }
         const init: RequestInit = {
@@ -602,55 +608,62 @@ async function fetchWithPool(
             member.settings.timeout ?? budgetLeft,
             budgetLeft,
         );
-        // Pass retryMaxAttempts=0 so the inner layer does not re-hit the
-        // same URL — the pool wrapper handles rotation on 429/5xx.
-        const result = await fetchWithRetry(
-            member.settings.endpoint,
-            init,
-            0,
-            retryPauseMs,
-            perAttemptTimeout,
-            member.settings.throttler,
-        );
 
-        if (result.success) {
-            markSuccess(member);
-            return result;
-        }
-
-        // fetchWithRetry returns an error string; we don't have the raw status
-        // here anymore. Parse it for the signature "429:" / "503:" etc.
-        const message = result.message ?? "";
-        const statusMatch = /(\b|^)(\d{3})[: ]/.exec(message);
-        const status = statusMatch ? parseInt(statusMatch[2], 10) : 0;
-
-        lastError = result;
-
-        if (status === 429) {
-            // fetchWithRetry has already parsed + logged Retry-After for us,
-            // but the pool-level cooldown needs the value too. We don't have
-            // the Response object here anymore, so use our own exponential.
-            markThrottled(member, undefined);
-            continue;
-        }
-        if (
-            status === 500 ||
-            status === 502 ||
-            status === 503 ||
-            status === 504
-        ) {
+        let response: Response | undefined;
+        try {
+            response = await callFetch(
+                member.settings.endpoint,
+                init,
+                perAttemptTimeout,
+                member.settings.throttler,
+            );
+        } catch (e: any) {
+            // Network error, timeout (AbortError re-thrown as "fetch timeout"),
+            // or connection reset. Treat as transient and rotate.
+            debugPool(
+                `pool ${pool.modelKey} ${member.suffix || "<bare>"} threw: ${e?.message ?? e}`,
+            );
             markTransientFailure(member);
+            lastError = error(
+                `fetch error: ${e?.cause?.message ?? e?.message ?? String(e)}`,
+            );
             continue;
         }
 
-        // Non-transient 4xx or unparseable error: return without rotating.
-        // The caller shouldn't keep trying other endpoints for e.g. a 401.
-        if (status >= 400 && status < 500 && status !== 429) {
-            return result;
+        if (response.status === 200 || response.status === 201) {
+            markSuccess(member);
+            return success(response);
         }
 
-        // Network/timeout or unrecognized shape — treat as transient.
-        markTransientFailure(member);
+        if (response.status === 429) {
+            // Parse Retry-After and pass it to the pool-level cooldown so
+            // the member isn't revisited before the server is ready.
+            const retryAfterMs = getRetryAfterMs(response, 0);
+            markThrottled(
+                member,
+                retryAfterMs > 0 ? retryAfterMs : undefined,
+            );
+            lastError = error(
+                `fetch error: ${await getErrorMessage(response, attempts, Date.now() - startTime)}`,
+            );
+            continue;
+        }
+
+        if (isTransientHttpError(response.status)) {
+            // 5xx — transient at the server level. Rotate without extending
+            // the 429 exponential.
+            markTransientFailure(member);
+            lastError = error(
+                `fetch error: ${await getErrorMessage(response, attempts, Date.now() - startTime)}`,
+            );
+            continue;
+        }
+
+        // Non-transient 4xx (e.g. 401, 403, 400). Don't rotate — the caller
+        // gets the same outcome from every endpoint.
+        return error(
+            `fetch error: ${await getErrorMessage(response, attempts, Date.now() - startTime)}`,
+        );
     }
 }
 

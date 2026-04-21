@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { success } from "typechat";
+import { error, success } from "typechat";
 import { callJsonApiWithPool, PoolRequestContext } from "../src/restClient.js";
 import { EndpointPool } from "../src/endpointPool.js";
 
@@ -164,5 +164,230 @@ describe("callJsonApiWithPool — multi-member rotation", () => {
         const result = await callJsonApiWithPool(pool, mockBuildRequest());
         expect(result.success).toBe(false);
         expect(calls).toHaveLength(1); // did NOT rotate
+    });
+
+    test("5xx on tier-1 rotates to tier-2", async () => {
+        const calls: string[] = [];
+        (globalThis as any).fetch = async (url: string) => {
+            calls.push(url);
+            if (url.includes("first")) {
+                return jsonResponse(503, { error: "service unavailable" });
+            }
+            return jsonResponse(200, { served_by: url });
+        };
+
+        const pool = makePool([
+            { suffix: "A", priority: 1, endpoint: "https://first.example/x" },
+            { suffix: "B", priority: 2, endpoint: "https://second.example/x" },
+        ]);
+        const result = await callJsonApiWithPool(pool, mockBuildRequest(), {
+            overallBudgetMs: 30_000,
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect((result.data as any).served_by).toBe(
+                "https://second.example/x",
+            );
+        }
+        expect(calls[0]).toContain("first");
+        expect(calls[1]).toContain("second");
+        // 5xx marks the member transient, not throttled, so consecutive429s
+        // stays 0 — verified via the next call still attempting tier-1 since
+        // the transient floor is 5s and our mock gives it back.
+        expect(pool.members[0].consecutive429s).toBe(0);
+    });
+
+    test("multi-hop: tier-1 fails, tier-2 fails, tier-3 succeeds", async () => {
+        const calls: string[] = [];
+        (globalThis as any).fetch = async (url: string) => {
+            calls.push(url);
+            if (url.includes("first")) {
+                return jsonResponse(
+                    429,
+                    { error: "rate limit" },
+                    { "Retry-After": "1" },
+                );
+            }
+            if (url.includes("second")) {
+                return jsonResponse(502, { error: "bad gateway" });
+            }
+            return jsonResponse(200, { served_by: url });
+        };
+
+        const pool = makePool([
+            { suffix: "A", priority: 1, endpoint: "https://first.example/x" },
+            { suffix: "B", priority: 2, endpoint: "https://second.example/x" },
+            { suffix: "C", priority: 3, endpoint: "https://third.example/x" },
+        ]);
+        const result = await callJsonApiWithPool(pool, mockBuildRequest(), {
+            overallBudgetMs: 30_000,
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect((result.data as any).served_by).toBe(
+                "https://third.example/x",
+            );
+        }
+        expect(calls.map((c) => c.match(/\w+\.example/)?.[0])).toEqual([
+            "first.example",
+            "second.example",
+            "third.example",
+        ]);
+    });
+
+    test("429 Retry-After is honored by pool cooldown", async () => {
+        (globalThis as any).fetch = async (url: string) => {
+            if (url.includes("first")) {
+                return jsonResponse(
+                    429,
+                    { error: "rate limit" },
+                    { "Retry-After": "7" }, // 7 seconds
+                );
+            }
+            return jsonResponse(200, { served_by: url });
+        };
+
+        const pool = makePool([
+            { suffix: "A", priority: 1, endpoint: "https://first.example/x" },
+            { suffix: "B", priority: 2, endpoint: "https://second.example/x" },
+        ]);
+        const before = Date.now();
+        await callJsonApiWithPool(pool, mockBuildRequest(), {
+            overallBudgetMs: 30_000,
+        });
+        // Retry-After: 7 should land member A's cooldown at least ~7s out.
+        // markThrottled uses max(retryAfterMs, base * 2^n); first 429 so
+        // base=2s, and retryAfter=7s wins.
+        expect(pool.members[0].cooldownUntil).toBeGreaterThanOrEqual(
+            before + 7000 - 100,
+        );
+    });
+
+    test("all cooling: wrapper sleeps until soonest member recovers", async () => {
+        // Pre-seed both members as cooling in the near future. Wrapper should
+        // sleep until the earliest one expires, then serve that request.
+        (globalThis as any).fetch = async (url: string) =>
+            jsonResponse(200, { served_by: url });
+
+        const pool = makePool([
+            { suffix: "A", priority: 1, endpoint: "https://a.example/x" },
+            { suffix: "B", priority: 2, endpoint: "https://b.example/x" },
+        ]);
+        const now = Date.now();
+        pool.members[0].cooldownUntil = now + 500; // soonest
+        pool.members[1].cooldownUntil = now + 2000;
+
+        const start = Date.now();
+        const result = await callJsonApiWithPool(pool, mockBuildRequest(), {
+            overallBudgetMs: 30_000,
+        });
+        const elapsed = Date.now() - start;
+        expect(result.success).toBe(true);
+        // Slept roughly 500ms then served with A.
+        expect(elapsed).toBeGreaterThanOrEqual(450);
+        expect(elapsed).toBeLessThan(2000);
+        if (result.success) {
+            expect((result.data as any).served_by).toBe("https://a.example/x");
+        }
+    });
+
+    test("overall budget exhaustion returns the last error", async () => {
+        // Every member always 429s; wrapper should exhaust the budget and
+        // return an error rather than looping forever.
+        let attempts = 0;
+        (globalThis as any).fetch = async (_url: string) => {
+            attempts++;
+            return jsonResponse(
+                429,
+                { error: "rate limit" },
+                { "Retry-After": "10" },
+            );
+        };
+
+        const pool = makePool([
+            { suffix: "A", priority: 1, endpoint: "https://a.example/x" },
+            { suffix: "B", priority: 2, endpoint: "https://b.example/x" },
+        ]);
+        const start = Date.now();
+        const result = await callJsonApiWithPool(pool, mockBuildRequest(), {
+            overallBudgetMs: 600, // 600ms: enough to hit both, not enough to wait for Retry-After=10s
+        });
+        const elapsed = Date.now() - start;
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(result.message).toMatch(/429/);
+        }
+        // Must respect the budget — bounded slack for Promise microtasks.
+        expect(elapsed).toBeLessThan(2000);
+        // Should have made at least 2 attempts (one per member) before giving up.
+        expect(attempts).toBeGreaterThanOrEqual(2);
+    });
+
+    test("network error (fetch throws) rotates as transient failure", async () => {
+        const calls: string[] = [];
+        (globalThis as any).fetch = async (url: string) => {
+            calls.push(url);
+            if (url.includes("first")) {
+                throw new TypeError("fetch failed"); // undici network-error shape
+            }
+            return jsonResponse(200, { served_by: url });
+        };
+
+        const pool = makePool([
+            { suffix: "A", priority: 1, endpoint: "https://first.example/x" },
+            { suffix: "B", priority: 2, endpoint: "https://second.example/x" },
+        ]);
+        const result = await callJsonApiWithPool(pool, mockBuildRequest(), {
+            overallBudgetMs: 30_000,
+        });
+        expect(result.success).toBe(true);
+        expect(calls[0]).toContain("first");
+        expect(calls[1]).toContain("second");
+        // Network error should NOT bump the 429 counter.
+        expect(pool.members[0].consecutive429s).toBe(0);
+    });
+
+    test("buildRequest failure bubbles out without rotation", async () => {
+        const calls: string[] = [];
+        (globalThis as any).fetch = async (url: string) => {
+            calls.push(url);
+            return jsonResponse(200, { ok: true });
+        };
+        const failingBuild = async () =>
+            error("token acquisition failed");
+
+        const pool = makePool([
+            { suffix: "A", priority: 1, endpoint: "https://a.example/x" },
+            { suffix: "B", priority: 2, endpoint: "https://b.example/x" },
+        ]);
+        const result = await callJsonApiWithPool(pool, failingBuild as any);
+        expect(result.success).toBe(false);
+        if (!result.success) {
+            expect(result.message).toContain("token acquisition failed");
+        }
+        // Never reached fetch — buildRequest is the first thing after pickEndpoint.
+        expect(calls).toHaveLength(0);
+    });
+
+    test("tier-1 recovers after cooldown expires and becomes preferred again", async () => {
+        // Setup: tier-1 has a short cooldown that has already passed; tier-2
+        // is healthy. Selector should prefer tier-1 on the next call.
+        (globalThis as any).fetch = async (url: string) =>
+            jsonResponse(200, { served_by: url });
+
+        const pool = makePool([
+            { suffix: "A", priority: 1, endpoint: "https://a.example/x" },
+            { suffix: "B", priority: 2, endpoint: "https://b.example/x" },
+        ]);
+        // Cooldown already expired.
+        pool.members[0].cooldownUntil = Date.now() - 1000;
+
+        const result = await callJsonApiWithPool(pool, mockBuildRequest(), {
+            overallBudgetMs: 30_000,
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect((result.data as any).served_by).toBe("https://a.example/x");
+        }
     });
 });
