@@ -53,7 +53,7 @@ Pending interactions have a 10-minute timeout (configurable per-type in `sharedD
 
 ### Reconnects
 
-Each `join()` call mints a new ephemeral `connectionId`. On reconnect a client receives a fresh `connectionId`, so interactions created before the disconnect (whose `requestId.connectionId` names the old connection) are not re-broadcast to the new connection. A joining client receives any still-pending interactions via `JoinSessionResult.pendingInteractions` and is responsible for displaying them and potentially responding.
+Each `join()` call mints a new ephemeral `connectionId`. On reconnect a client receives a fresh `connectionId`, so interactions created before the disconnect (whose `requestId.connectionId` names the old connection) are not re-broadcast to the new connection. A joining client receives any still-pending interactions via `JoinConversationResult.pendingInteractions` and is responsible for displaying them and potentially responding.
 
 ## Interaction Types
 

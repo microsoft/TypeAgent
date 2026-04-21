@@ -18,12 +18,12 @@ As we begin making a larger shift towards a client-server model with the agent s
 - **Rename** a conversation.
 - **Delete** a conversation and its persisted data.
 - Conversations are identified by a **GUID** and carry a human-readable **name** and **client count** so clients can make informed join decisions.
-- Clients specify an **optional session ID** at `joinSession()` time; omitting it connects to the default conversation, or auto-creates one if none exist. The server always resolves to `"default"` rather than the most recently active conversation because in a multi-client environment, "most recently active" is a server-wide concept — a CLI user spinning up independently should not be silently dropped into an active Shell conversation. Clients that want last-used behavior should remember their last session ID locally and pass it explicitly.
+- Clients specify an **optional session ID** at `joinConversation()` time; omitting it connects to the default conversation, or auto-creates one if none exist. The server always resolves to `"default"` rather than the most recently active conversation because in a multi-client environment, "most recently active" is a server-wide concept — a CLI user spinning up independently should not be silently dropped into an active Shell conversation. Clients that want last-used behavior should remember their last session ID locally and pass it explicitly.
 - Conversation isolation is **client-enforced** for now — the server provides the signals, clients decide the policy.
 
 ## Non-Goals
 
-- **Authentication or access control on the WebSocket endpoint.** Any process that can reach the agentServer's WebSocket port can call any RPC method, including `deleteSession`. Securing the endpoint itself is out of scope for v1.
+- **Authentication or access control on the WebSocket endpoint.** Any process that can reach the agentServer's WebSocket port can call any RPC method, including `deleteConversation`. Securing the endpoint itself is out of scope for v1.
 - **Per-conversation access control.** The server does not restrict which clients can join or delete which conversations. Clients are trusted. See Open Questions for a future path.
 - **Multi-user or multi-machine conversation sharing.** Conversations are local to a single agentServer instance.
 
@@ -104,7 +104,7 @@ Each conversation is identified by:
 | Field         | Type                | Description                                                                                                                                                         |
 | ------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `sessionId`   | `string` (UUIDv4)   | Stable, globally unique identifier                                                                                                                                  |
-| `name`        | `string`            | Human-readable label (1–256 chars), set by the caller at `createSession()` time. Not enforced unique.                                                               |
+| `name`        | `string`            | Human-readable label (1–256 chars), set by the caller at `createConversation()` time. Not enforced unique.                                                          |
 | `createdAt`   | `string` (ISO 8601) | When the conversation was first created                                                                                                                             |
 | `clientCount` | `number`            | Number of clients currently connected to this conversation (runtime-derived; `0` if the conversation is not loaded in memory). **Never persisted** — see Section 2. |
 
@@ -146,39 +146,39 @@ type DispatcherConnectOptions = {
 
 #### New `AgentServerInvokeFunctions`
 
-The existing `join` RPC is replaced by `joinSession`. A `leaveSession` call is added for explicit conversation departure. Full conversation CRUD is exposed:
+The existing `join` RPC is replaced by `joinConversation`. A `leaveConversation` call is added for explicit conversation departure. Full conversation CRUD is exposed:
 
 ```typescript
 type AgentServerInvokeFunctions = {
   // Replaces the old `join`
-  joinSession: (
+  joinConversation: (
     options?: DispatcherConnectOptions,
-  ) => Promise<JoinSessionResult>;
-  leaveSession: (sessionId: string) => Promise<void>;
+  ) => Promise<JoinConversationResult>;
+  leaveConversation: (sessionId: string) => Promise<void>;
 
-  // Session CRUD
-  createSession: (name: string) => Promise<SessionInfo>;
-  listSessions: (name?: string) => Promise<SessionInfo[]>;
-  renameSession: (sessionId: string, newName: string) => Promise<void>;
-  deleteSession: (sessionId: string) => Promise<void>;
+  // Conversation CRUD
+  createConversation: (name: string) => Promise<ConversationInfo>;
+  listConversations: (name?: string) => Promise<ConversationInfo[]>;
+  renameConversation: (sessionId: string, newName: string) => Promise<void>;
+  deleteConversation: (sessionId: string) => Promise<void>;
 };
 ```
 
-#### `JoinSessionResult`
+#### `JoinConversationResult`
 
 ```typescript
-type JoinSessionResult = {
+type JoinConversationResult = {
   connectionId: string;
   sessionId: string; // The conversation that was joined or auto-created
 };
 ```
 
-> **Migration note:** The old `join()` returned `Promise<string>` (the `connectionId`). The fork avoids this breaking change by renaming the method to `joinSession()` and keeping `connectDispatcher()` as a `@deprecated` backward-compatible wrapper in `agentServerClient.ts`.
+> **Migration note:** The old `join()` returned `Promise<string>` (the `connectionId`). The fork avoids this breaking change by renaming the method to `joinConversation()` and keeping `connectDispatcher()` as a `@deprecated` backward-compatible wrapper in `agentServerClient.ts`.
 
-#### `SessionInfo`
+#### `ConversationInfo`
 
 ```typescript
-type SessionInfo = {
+type ConversationInfo = {
   sessionId: string;
   name: string;
   clientCount: number;
@@ -277,7 +277,7 @@ export type CommandHandlerContext = {
 };
 ```
 
-Each conversation's `SharedDispatcher` is created lazily on first `joinSession()` and calls `initializeCommandHandlerContext()` with a `persistDir` scoped to `server-sessions/<sessionId>/` and a shared `instanceDir`, giving it fully isolated chat history and session config while preserving agent configuration across conversation boundaries. Clients connecting to the same conversation share one dispatcher instance and its routing `ClientIO` table, consistent with how the current single dispatcher works today.
+Each conversation's `SharedDispatcher` is created lazily on first `joinConversation()` and calls `initializeCommandHandlerContext()` with a `persistDir` scoped to `server-sessions/<sessionId>/` and a shared `instanceDir`, giving it fully isolated chat history and session config while preserving agent configuration across conversation boundaries. Clients connecting to the same conversation share one dispatcher instance and its routing `ClientIO` table, consistent with how the current single dispatcher works today.
 
 `SharedDispatcher.join()` calls `createDispatcherFromContext(context, connectionId, ...)` per client — producing a lightweight `Dispatcher` handle bound to a unique `connectionId` but sharing the same underlying context. Output routing is per-client via `connectionId`; conversation state is shared across all clients in the conversation.
 
@@ -290,10 +290,10 @@ Each conversation uses namespaced WebSocket channels to allow multiple conversat
 - `dispatcher:<sessionId>` — the dispatcher RPC channel for that conversation
 - `clientio:<sessionId>` — the ClientIO RPC channel for that conversation
 
-### 5. Conversation Lifecycle on `joinSession()`
+### 5. Conversation Lifecycle on `joinConversation()`
 
 ```
-Client calls joinSession({ sessionId?, clientType, filter })
+Client calls joinConversation({ sessionId?, clientType, filter })
   │
   ├─ sessionId provided?
   │   ├─ Yes → look up instanceDir/server-sessions/sessions.json
@@ -306,16 +306,16 @@ Client calls joinSession({ sessionId?, clientType, filter })
   │           └─ Init dispatcher with instanceDir (global) + persistDir (conversation-scoped)
   │
   ├─ Register client in conversation's SharedDispatcher routing table
-  └─ Return JoinSessionResult { connectionId, sessionId }
+  └─ Return JoinConversationResult { connectionId, sessionId }
 ```
 
-### 6. `listSessions(name?)`
+### 6. `listConversations(name?)`
 
 Returns the conversations from `sessions.json`. If `name` is provided, only conversations whose `name` contains the substring (case-insensitive) are returned. If `name` is omitted, all conversations are returned. `clientCount` is populated from the live dispatcher pool for conversations currently loaded in memory.
 
 ```typescript
 // Response shape
-SessionInfo[]
+ConversationInfo[]
 // Example:
 [
   {
@@ -333,14 +333,14 @@ SessionInfo[]
 ]
 ```
 
-### 7. `deleteSession(sessionId)`
+### 7. `deleteConversation(sessionId)`
 
 1. Close all active client dispatcher handles for the conversation.
 2. Shut down and evict the conversation's `SharedDispatcher` from the in-memory pool.
 3. Remove `instanceDir/server-sessions/<sessionId>/` from disk (recursive delete of the `persistDir` subtree only, best-effort). **Agent `instanceStorage` under `instanceDir/<agentName>/` is not touched.**
 4. Remove the entry from `sessions.json`.
 
-> **Note:** Any connected client can call `deleteSession` on any conversation, including conversations they are not currently connected to. The calling client's session-namespaced channels are cleaned up immediately; other clients connected to the deleted conversation have their dispatcher handles closed when `SharedDispatcher.close()` is called. Server-side authorization is out of scope for v1 (see Open Questions).
+> **Note:** Any connected client can call `deleteConversation` on any conversation, including conversations they are not currently connected to. The calling client's session-namespaced channels are cleaned up immediately; other clients connected to the deleted conversation have their dispatcher handles closed when `SharedDispatcher.close()` is called. Server-side authorization is out of scope for v1 (see Open Questions).
 
 ---
 
@@ -355,16 +355,16 @@ The CLI implements the full conversation management surface described in this do
 ```bash
 agent-cli connect                        # connect to the 'CLI' conversation (created if absent)
 agent-cli connect --resume               # resume the last used conversation
-agent-cli connect --session <id>         # connect to a specific conversation by ID
+agent-cli connect --conversation <id>    # connect to a specific conversation by ID
 agent-cli connect --port <port>          # connect to a server on a non-default port (default: 8999)
 agent-cli connect --hidden               # start the server hidden (no visible window)
 ```
 
-By default (no flags), `connect` targets a conversation named `"CLI"`. It calls `listSessions("CLI")` and joins the first match, or calls `createSession("CLI")` if none exists.
+By default (no flags), `connect` targets a conversation named `"CLI"`. It calls `listConversations("CLI")` and joins the first match, or calls `createConversation("CLI")` if none exists.
 
 Pass `--resume` / `-r` to instead resume the last used conversation, whose ID is persisted client-side in `~/.typeagent/cli-state.json`. If that conversation is no longer found on the server, the user is prompted to join the `"CLI"` conversation (find-or-create). If the user declines, the stale ID is cleared and the command exits.
 
-Pass `--session` / `-s <id>` to connect to a specific conversation by UUID. This takes priority over `--resume` if both are provided; errors propagate as-is without the recovery prompt.
+Pass `--conversation` / `-s <id>` to connect to a specific conversation by UUID. This takes priority over `--resume` if both are provided; errors propagate as-is without the recovery prompt.
 
 Pass `--hidden` to start the agent server without a visible window. Default is a visible window for interactive use.
 
@@ -372,7 +372,7 @@ On every successful connection the connected session ID is written to `~/.typeag
 
 #### `run` — non-interactive commands
 
-`agent-cli run request`, `run translate`, and `run explain` each accept `--session <id>` / `-s` to target a specific conversation. If omitted, they use the find-or-create `"CLI"` conversation. The server is started hidden by default for non-interactive commands; use `--show` to get a visible window.
+`agent-cli run request`, `run translate`, and `run explain` each accept `--conversation <id>` / `-s` to target a specific conversation. If omitted, they use the find-or-create `"CLI"` conversation. The server is started hidden by default for non-interactive commands; use `--show` to get a visible window.
 
 #### `server` — manage the server process
 
@@ -381,20 +381,20 @@ agent-cli server status                  # show whether the server is running
 agent-cli server stop                    # send a graceful shutdown to the running server
 ```
 
-#### `sessions` topic — conversation CRUD
+#### `conversations` topic — conversation CRUD
 
-| Command                                    | RPC call                     |
-| ------------------------------------------ | ---------------------------- |
-| `agent-cli sessions create <name>`         | `createSession(name)`        |
-| `agent-cli sessions list [--name <sub>]`   | `listSessions(name?)`        |
-| `agent-cli sessions rename <id> <newName>` | `renameSession(id, newName)` |
-| `agent-cli sessions delete <id> [--yes]`   | `deleteSession(id)`          |
+| Command                                         | RPC call                          |
+| ----------------------------------------------- | --------------------------------- |
+| `agent-cli conversations create <name>`         | `createConversation(name)`        |
+| `agent-cli conversations list [--name <sub>]`   | `listConversations(name?)`        |
+| `agent-cli conversations rename <id> <newName>` | `renameConversation(id, newName)` |
+| `agent-cli conversations delete <id> [--yes]`   | `deleteConversation(id)`          |
 
-`sessions create`, `list`, `rename`, and `delete` use `connectAgentServer()` directly (no `joinSession()`) — they are management operations that do not require joining a conversation.
+`conversations create`, `list`, `rename`, and `delete` use `connectAgentServer()` directly (no `joinConversation()`) — they are management operations that do not require joining a conversation.
 
-`sessions delete` prompts `Delete conversation <id> and all its data? (y/N)` before calling `deleteSession()`. Pass `--yes` / `-y` to skip the prompt.
+`conversations delete` prompts `Delete conversation <id> and all its data? (y/N)` before calling `deleteConversation()`. Pass `--yes` / `-y` to skip the prompt.
 
-`sessions list` renders a fixed-width table with columns `SESSION ID`, `NAME`, `CLIENTS`, and `CREATED AT`. Pass `--name <substring>` to filter by name (case-insensitive).
+`conversations list` renders a fixed-width table with columns `SESSION ID`, `NAME`, `CLIENTS`, and `CREATED AT`. Pass `--name <substring>` to filter by name (case-insensitive).
 
 ### Shell
 
@@ -402,7 +402,7 @@ Conversation management only applies when the Shell is running in **connected mo
 
 When connected to the agentServer:
 
-- On startup, Shell calls `listSessions()` and presents a conversation picker (or auto-connects to the default conversation).
+- On startup, Shell calls `listConversations()` and presents a conversation picker (or auto-connects to the default conversation).
 - A conversation management panel allows listing, switching, renaming, and deleting conversations.
 - When resuming a conversation, the Shell loads chat history from the server via `getDisplayHistory()` (which already exists on the `Dispatcher` interface and works per-conversation since each conversation has its own `DisplayLog` instance) rather than its local HTML file. How this history is rendered in the Shell UI is an open question — see Open Questions item 2.
 
@@ -413,9 +413,9 @@ When connected to the agentServer:
 - **Conversation sharing across machines** — conversations are local to one agentServer instance for now.
 - **Conversation export/import** — useful for backup/restore, but not required for v1.
 - **Per-conversation agent configuration** — conversations inherit the global agent enable/disable config for now.
-- **Pagination for `listSessions()`** — the full index is loaded on every call; pagination (`limit`/`offset`) can be added once conversation counts grow large enough to matter.
-- **Graceful drain on `deleteSession()`** — currently `deleteSession()` closes all client dispatcher handles immediately with no drain window. A future iteration should notify connected clients and await in-flight `processCommand()` calls (with a timeout) before tearing down the conversation.
-- **Per-conversation concurrency lock** — concurrent `joinSession()` calls targeting the same session ID before lazy initialization completes could race. A per-conversation async mutex should be added in a follow-up.
+- **Pagination for `listConversations()`** — the full index is loaded on every call; pagination (`limit`/`offset`) can be added once conversation counts grow large enough to matter.
+- **Graceful drain on `deleteConversation()`** — currently `deleteConversation()` closes all client dispatcher handles immediately with no drain window. A future iteration should notify connected clients and await in-flight `processCommand()` calls (with a timeout) before tearing down the conversation.
+- **Per-conversation concurrency lock** — concurrent `joinConversation()` calls targeting the same session ID before lazy initialization completes could race. A per-conversation async mutex should be added in a follow-up.
 - **LLM-generated conversation summaries** — auto-generating a one-line summary after the first exchange is a useful future addition for conversation discoverability, but is deferred in favor of explicit `name` for now.
 
 ---
@@ -432,9 +432,9 @@ When connected to the agentServer:
 
 ## Natural Language Conversation Management
 
-In addition to the RPC/CLI surface described above, users can manage server-side conversations via natural language through the `system.session` sub-agent built into the dispatcher. Phrases like "switch to my work conversation", "create a new conversation called research", or "delete the old project conversation" are translated into structured actions and bridged to the client layer.
+In addition to the RPC/CLI surface described above, users can manage server-side conversations via natural language through the `system.conversation` sub-agent built into the dispatcher. Phrases like "switch to my work conversation", "create a new conversation called research", or "delete the old project conversation" are translated into structured actions and bridged to the client layer.
 
-Because the dispatcher has no direct access to the agent-server RPC layer, `executeSessionAction` uses the existing `ClientIO.takeAction` mechanism:
+Because the dispatcher has no direct access to the agent-server RPC layer, `executeConversationAction` uses the existing `ClientIO.takeAction` mechanism:
 
 ```typescript
 agentContext.clientIO.takeAction(requestId, "manage-conversation", payload);
@@ -464,9 +464,9 @@ This design adds explicit conversation management to the agentServer without fun
 
 - A `sessions.json` registry for discoverable, GUID-keyed named conversations.
 - A `SessionManager` that maintains a pool of per-conversation `SharedDispatcher` instances, each with its own isolated `initializeCommandHandlerContext()` call, chat history, conversation memory, and persist directory.
-- Five new RPC methods on the `AgentServer` channel: `joinSession`, `leaveSession`, `createSession`, `listSessions`, `renameSession`, `deleteSession`.
+- Five new RPC methods on the `AgentServer` channel: `joinConversation`, `leaveConversation`, `createConversation`, `listConversations`, `renameConversation`, `deleteConversation`.
 - `sessionId` in `DispatcherConnectOptions` so clients can resume a specific conversation by ID.
-- `listSessions(name?)` with optional substring filtering as the primary conversation discovery mechanism.
+- `listConversations(name?)` with optional substring filtering as the primary conversation discovery mechanism.
 - Session-namespaced WebSocket channels (`dispatcher:<id>`, `clientio:<id>`) enabling multiple concurrent conversations over a single connection.
 - Idle dispatcher eviction after 5 minutes to free memory for inactive conversations.
 - **A split storage root**: `instanceDir` (global, shared across all conversations) and `persistDir` (per-conversation, discarded with the conversation). `instanceStorage` is rooted at `instanceDir`, preserving agent configuration and auth tokens across conversation boundaries. `sessionStorage` and all ephemeral dispatcher data (chat history, memory, display log) remain scoped to `persistDir`. A new `instanceDir` field is added to `DispatcherOptions` and `CommandHandlerContext`; when absent, behavior falls back to `persistDir` for full backward compatibility with the standalone Shell, CLI, and tests.

@@ -80,7 +80,7 @@ describe("executeConversationAction — newConversation", () => {
         );
     });
 
-    it("preserves session names that contain spaces", async () => {
+    it("preserves conversation names that contain spaces", async () => {
         const ctx = makeContext();
         await executeConversationAction(
             {
@@ -152,7 +152,7 @@ describe("executeConversationAction — switchConversation", () => {
         );
     });
 
-    it("preserves session names that contain spaces", async () => {
+    it("preserves conversation names that contain spaces", async () => {
         const ctx = makeContext();
         await executeConversationAction(
             {
@@ -171,7 +171,7 @@ describe("executeConversationAction — switchConversation", () => {
 });
 
 describe("executeConversationAction — renameConversation", () => {
-    it("sends manage-conversation with subcommand rename and newName (current session)", async () => {
+    it("sends manage-conversation with subcommand rename and newName (current conversation)", async () => {
         const ctx = makeContext();
         await executeConversationAction(
             {
@@ -188,7 +188,7 @@ describe("executeConversationAction — renameConversation", () => {
         );
     });
 
-    it("sends manage-conversation with subcommand rename, name, and newName (targeted session)", async () => {
+    it("sends manage-conversation with subcommand rename, name, and newName (targeted conversation)", async () => {
         const ctx = makeContext();
         await executeConversationAction(
             {
@@ -224,7 +224,7 @@ describe("executeConversationAction — deleteConversation", () => {
         );
     });
 
-    it("preserves session names that contain spaces", async () => {
+    it("preserves conversation names that contain spaces", async () => {
         const ctx = makeContext();
         await executeConversationAction(
             {

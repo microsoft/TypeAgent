@@ -12,33 +12,33 @@ Opens a WebSocket to an already-running agentServer and returns an `AgentServerC
 const connection = await connectAgentServer("ws://localhost:8999");
 
 // Join a conversation
-const { dispatcher, sessionId } = await connection.joinSession(clientIO, {
+const { dispatcher, sessionId } = await connection.joinConversation(clientIO, {
   clientType: "shell",
 });
 
 // Conversation management
-await connection.createSession("my session");
-await connection.listSessions(); // all conversations
-await connection.listSessions("workout"); // filter by name substring
-await connection.renameSession(sessionId, "new name");
-await connection.deleteSession(sessionId);
+await connection.createConversation("my session");
+await connection.listConversations(); // all conversations
+await connection.listConversations("workout"); // filter by name substring
+await connection.renameConversation(sessionId, "new name");
+await connection.deleteConversation(sessionId);
 
 // Leave and close
-await connection.leaveSession(sessionId);
+await connection.leaveConversation(sessionId);
 await connection.close();
 ```
 
 **`AgentServerConnection`** methods:
 
-| Method                              | Description                                               |
-| ----------------------------------- | --------------------------------------------------------- |
-| `joinSession(clientIO, options?)`   | Join a conversation; returns `{ dispatcher, sessionId }`  |
-| `leaveSession(sessionId)`           | Leave a conversation and clean up its channels            |
-| `createSession(name)`               | Create a new named conversation                           |
-| `listSessions(name?)`               | List conversations, optionally filtered by name substring |
-| `renameSession(sessionId, newName)` | Rename a conversation                                     |
-| `deleteSession(sessionId)`          | Delete a conversation and its persisted data              |
-| `close()`                           | Close the WebSocket connection                            |
+| Method                                   | Description                                               |
+| ---------------------------------------- | --------------------------------------------------------- |
+| `joinConversation(clientIO, options?)`   | Join a conversation; returns `{ dispatcher, sessionId }`  |
+| `leaveConversation(sessionId)`           | Leave a conversation and clean up its channels            |
+| `createConversation(name)`               | Create a new named conversation                           |
+| `listConversations(name?)`               | List conversations, optionally filtered by name substring |
+| `renameConversation(sessionId, newName)` | Rename a conversation                                     |
+| `deleteConversation(sessionId)`          | Delete a conversation and its persisted data              |
+| `close()`                                | Close the WebSocket connection                            |
 
 ### `ensureAgentServer(port?, hidden?, idleTimeout?)`
 
@@ -104,7 +104,7 @@ const session = await ensureAndConnectSession(
 
 ### `ensureAndConnectDispatcher(clientIO, port?, options?, onDisconnect?)` _(deprecated)_
 
-Convenience wrapper that auto-spawns the server if needed and joins a conversation, returning a `Dispatcher` directly. Prefer calling `ensureAgentServer()` + `connectAgentServer()` + `joinSession()` separately for full control.
+Convenience wrapper that auto-spawns the server if needed and joins a conversation, returning a `Dispatcher` directly. Prefer calling `ensureAgentServer()` + `connectAgentServer()` + `joinConversation()` separately for full control.
 
 ### `connectDispatcher(clientIO, url, options?, onDisconnect?)` _(deprecated)_
 

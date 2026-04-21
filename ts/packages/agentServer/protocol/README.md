@@ -19,7 +19,7 @@ getClientIOChannelName(sessionId: string): string // "clientio:<sessionId>"
 
 ## Conversation types
 
-**`SessionInfo`** — describes a conversation:
+**`ConversationInfo`** — describes a conversation:
 
 | Field         | Type     | Description                                                           |
 | ------------- | -------- | --------------------------------------------------------------------- |
@@ -28,14 +28,14 @@ getClientIOChannelName(sessionId: string): string // "clientio:<sessionId>"
 | `clientCount` | `number` | Number of clients currently connected (runtime-only, never persisted) |
 | `createdAt`   | `string` | ISO 8601 creation timestamp                                           |
 
-**`JoinSessionResult`** — returned by `joinSession`:
+**`JoinConversationResult`** — returned by `joinConversation`:
 
 | Field          | Type     | Description                                      |
 | -------------- | -------- | ------------------------------------------------ |
 | `connectionId` | `string` | Unique identifier for this connection            |
 | `sessionId`    | `string` | The conversation that was joined or auto-created |
 
-**`DispatcherConnectOptions`** — options passed to `joinSession`:
+**`DispatcherConnectOptions`** — options passed to `joinConversation`:
 
 | Field        | Type      | Description                                                                        |
 | ------------ | --------- | ---------------------------------------------------------------------------------- |
@@ -47,19 +47,19 @@ getClientIOChannelName(sessionId: string): string // "clientio:<sessionId>"
 
 **`AgentServerInvokeFunctions`** — methods exposed on the `agent-server` channel:
 
-| Method                              | Description                                                                      |
-| ----------------------------------- | -------------------------------------------------------------------------------- |
-| `joinSession(options?)`             | Join or auto-create a conversation; returns `JoinSessionResult`                  |
-| `leaveSession(sessionId)`           | Leave a conversation and clean up its channels                                   |
-| `createSession(name)`               | Create a new named conversation; returns `SessionInfo`                           |
-| `listSessions(name?)`               | List all conversations, optionally filtered by name substring (case-insensitive) |
-| `renameSession(sessionId, newName)` | Rename a conversation                                                            |
-| `deleteSession(sessionId)`          | Delete a conversation and all its persisted data                                 |
-| `shutdown()`                        | Request graceful server shutdown                                                 |
+| Method                                   | Description                                                                      |
+| ---------------------------------------- | -------------------------------------------------------------------------------- |
+| `joinConversation(options?)`             | Join or auto-create a conversation; returns `JoinConversationResult`             |
+| `leaveConversation(sessionId)`           | Leave a conversation and clean up its channels                                   |
+| `createConversation(name)`               | Create a new named conversation; returns `ConversationInfo`                      |
+| `listConversations(name?)`               | List all conversations, optionally filtered by name substring (case-insensitive) |
+| `renameConversation(sessionId, newName)` | Rename a conversation                                                            |
+| `deleteConversation(sessionId)`          | Delete a conversation and all its persisted data                                 |
+| `shutdown()`                             | Request graceful server shutdown                                                 |
 
 ## Client-type registry
 
-A module-level registry maps `connectionId → clientType`, populated when a client calls `joinSession()`. Agents and the dispatcher can call `getClientType(connectionId)` to adapt behavior per client.
+A module-level registry maps `connectionId → clientType`, populated when a client calls `joinConversation()`. Agents and the dispatcher can call `getClientType(connectionId)` to adapt behavior per client.
 
 ```typescript
 registerClientType(connectionId: string, clientType: string): void
