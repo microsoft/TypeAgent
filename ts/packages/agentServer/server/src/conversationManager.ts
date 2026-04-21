@@ -21,8 +21,8 @@ const debugConversation = registerDebug("agent-server:conversation");
 const debugConversationErr = registerDebug("agent-server:conversation:error");
 
 const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
-const CONVERSATIONS_DIR = "server-sessions"; // keep on-disk dir name for backward compat
-const METADATA_FILE = "sessions.json"; // keep on-disk file name for backward compat
+const CONVERSATIONS_DIR = "conversations";
+const METADATA_FILE = "conversations.json";
 
 type ConversationMetadata = {
     conversationId: string;
@@ -89,6 +89,36 @@ export async function createConversationManager(
 ): Promise<ConversationManager> {
     const conversationsDir = path.join(baseDir, CONVERSATIONS_DIR);
     await fs.promises.mkdir(conversationsDir, { recursive: true });
+
+    // Migrate old on-disk layout: "server-sessions/" → "conversations/"
+    const oldConversationsDir = path.join(baseDir, "server-sessions");
+    try {
+        await fs.promises.rename(oldConversationsDir, conversationsDir);
+        debugConversation(
+            `Migrated on-disk directory "server-sessions" → "conversations"`,
+        );
+    } catch (e: any) {
+        if (
+            e?.code !== "ENOENT" &&
+            e?.code !== "EEXIST" &&
+            e?.code !== "EPERM"
+        ) {
+            debugConversationErr("Failed to migrate server-sessions dir:", e);
+        }
+    }
+    // Migrate old metadata filename: "sessions.json" → "conversations.json"
+    const oldMetadataPath = path.join(conversationsDir, "sessions.json");
+    const newMetadataPath = path.join(conversationsDir, METADATA_FILE);
+    try {
+        await fs.promises.rename(oldMetadataPath, newMetadataPath);
+        debugConversation(
+            `Migrated metadata file "sessions.json" → "conversations.json"`,
+        );
+    } catch (e: any) {
+        if (e?.code !== "ENOENT") {
+            debugConversationErr("Failed to migrate sessions.json:", e);
+        }
+    }
 
     // Lock the shared instance directory for the lifetime of this process.
     // Each per-conversation dispatcher locks its own persistDir; this lock covers

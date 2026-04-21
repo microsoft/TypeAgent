@@ -142,7 +142,7 @@ export const systemManifest: AppAgentManifest = {
                     "CREATE a new conversation (e.g. 'create a new conversation', 'start a new conversation called test', 'new conversation named work', 'open a new conversation test'), " +
                     "LIST conversations (e.g. 'list our conversations', 'show all conversations', 'what conversations do I have'), " +
                     "SWITCH to an existing conversation (e.g. 'switch to conversation test', 'go to my work conversation', 'switch to test'), " +
-                    "DELETE a conversation (e.g. 'delete conversation test', 'remove the work session'), " +
+                    "DELETE a conversation (e.g. 'delete conversation test', 'remove the work conversation'), " +
                     "RENAME the current conversation, " +
                     "or SHOW info about the current conversation.",
                 schemaFile:

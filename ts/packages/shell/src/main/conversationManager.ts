@@ -48,7 +48,7 @@ export async function replayDisplayHistory(
                     requestId: "",
                     clientRequestId: `notification-conversation-info-${ts}`,
                 },
-                source: "session",
+                source: "conversation",
             });
         }
         return;
@@ -69,7 +69,7 @@ export async function replayDisplayHistory(
             requestId: "",
             clientRequestId: `notification-conversation-history-start-${ts}`,
         },
-        source: "session",
+        source: "conversation",
     });
 
     for (const entry of entries) {
@@ -114,7 +114,7 @@ export async function replayDisplayHistory(
             requestId: "",
             clientRequestId: `notification-conversation-history-end-${ts}`,
         },
-        source: "session",
+        source: "conversation",
     });
 
     if (conversationName !== undefined) {
@@ -128,7 +128,7 @@ export async function replayDisplayHistory(
                 requestId: "",
                 clientRequestId: `notification-conversation-connected-${ts}`,
             },
-            source: "session",
+            source: "conversation",
         });
     }
 }

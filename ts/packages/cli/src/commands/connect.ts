@@ -161,7 +161,7 @@ export default class Connect extends Command {
         const persistedConversationId =
             flags.conversation ??
             (flags.resume ? loadLastConversationId() : undefined);
-        // Only intercept "Session not found" when using the client-side default
+        // Only intercept "Conversation not found" when using the client-side default
         // (no explicit --conversation flag). Explicit --conversation errors propagate as-is.
         const isDefaultConversation = flags.conversation === undefined;
         const isEphemeral = flags.memory;
@@ -251,7 +251,7 @@ export default class Connect extends Command {
                 ephemeralConversationId = result.ephemeralConversationId;
             } else {
                 // Resolve the conversation to join:
-                //   1. explicit --session flag
+                //   1. explicit --conversation flag
                 //   2. persisted last-used conversation ID (with "not found" recovery)
                 //   3. default: find-or-create the "CLI" conversation
                 const result =
@@ -275,7 +275,7 @@ export default class Connect extends Command {
                                       isDefaultConversation &&
                                       typeof err?.message === "string" &&
                                       err.message.startsWith(
-                                          "Session not found:",
+                                          "Conversation not found:",
                                       )
                                   ) {
                                       console.log(

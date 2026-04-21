@@ -24,7 +24,7 @@ export async function executeConversationAction(
                 : { subcommand: "new" };
             resultEntity = {
                 name: name ?? "new conversation",
-                type: ["conversation", "session"],
+                type: ["conversation"],
             };
             break;
         }
@@ -48,7 +48,7 @@ export async function executeConversationAction(
                 : { subcommand: "rename", newName: action.parameters.newName };
             resultEntity = {
                 name: action.parameters.newName,
-                type: ["conversation", "session"],
+                type: ["conversation"],
             };
             break;
         }

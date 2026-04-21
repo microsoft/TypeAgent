@@ -27,7 +27,7 @@ import { ClientIO, Dispatcher, RequestId } from "agent-dispatcher";
 import { swapContent } from "./setContent";
 import { remoteSearchMenuUIOnCompletion } from "./searchMenuUI/remoteSearchMenuUI";
 import { ChatInput } from "./chat/chatInput";
-import { escapeHtml } from "./chat/sessionCommands";
+import { escapeHtml } from "./chat/conversationCommands";
 
 export function isElectron(): boolean {
     return globalThis.api !== undefined;
@@ -394,7 +394,7 @@ function registerClient(
                                                     "A name is required to create a new conversation.",
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                         break;
@@ -416,7 +416,7 @@ function registerClient(
                                             content: msg,
                                             kind: "info",
                                         },
-                                        "session",
+                                        "conversation",
                                         undefined,
                                     );
                                     break;
@@ -451,7 +451,7 @@ function registerClient(
                                             content: html,
                                             kind: "info",
                                         },
-                                        "session",
+                                        "conversation",
                                         undefined,
                                     );
                                     break;
@@ -468,7 +468,7 @@ function registerClient(
                                             content: html,
                                             kind: "info",
                                         },
-                                        "session",
+                                        "conversation",
                                         undefined,
                                     );
                                     break;
@@ -482,7 +482,7 @@ function registerClient(
                                                     "A conversation name is required to switch.",
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                         break;
@@ -501,7 +501,7 @@ function registerClient(
                                                 content: `No conversation named "<b>${escapeHtml(payload.name)}</b>" found.`,
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                         break;
@@ -516,7 +516,7 @@ function registerClient(
                                                 content: `❌ ${escapeHtml(result.error ?? "Failed to switch conversation")}`,
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                     }
@@ -531,7 +531,7 @@ function registerClient(
                                                     "A new name is required to rename the conversation.",
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                         break;
@@ -552,7 +552,7 @@ function registerClient(
                                                     content: `No conversation named "<b>${escapeHtml(payload.name)}</b>" found.`,
                                                     kind: "warning",
                                                 },
-                                                "session",
+                                                "conversation",
                                                 undefined,
                                             );
                                             break;
@@ -569,7 +569,7 @@ function registerClient(
                                                         "No active conversation to rename.",
                                                     kind: "warning",
                                                 },
-                                                "session",
+                                                "conversation",
                                                 undefined,
                                             );
                                             break;
@@ -586,7 +586,7 @@ function registerClient(
                                             content: `✅ Renamed conversation to "<b>${escapeHtml(payload.newName)}</b>"`,
                                             kind: "info",
                                         },
-                                        "session",
+                                        "conversation",
                                         undefined,
                                     );
                                     break;
@@ -600,7 +600,7 @@ function registerClient(
                                                     "A conversation name is required to delete.",
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                         break;
@@ -619,7 +619,7 @@ function registerClient(
                                                 content: `❌ Conversation "<b>${escapeHtml(payload.name)}</b>" not found.`,
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                         break;
@@ -633,7 +633,7 @@ function registerClient(
                                             content: `🗑️ Deleted conversation "<b>${escapeHtml(match.name)}</b>"`,
                                             kind: "info",
                                         },
-                                        "session",
+                                        "conversation",
                                         undefined,
                                     );
                                     break;
@@ -645,7 +645,7 @@ function registerClient(
                                             content: `Unknown manage-conversation subcommand: "<b>${escapeHtml(payload.subcommand)}</b>"`,
                                             kind: "warning",
                                         },
-                                        "session",
+                                        "conversation",
                                         undefined,
                                     );
                                     break;
@@ -658,7 +658,7 @@ function registerClient(
                                     content: `❌ ${escapeHtml(e?.message ?? String(e))}`,
                                     kind: "warning",
                                 },
-                                "session",
+                                "conversation",
                                 undefined,
                             ),
                         );

@@ -36,13 +36,13 @@ class ConversationNewCommandHandler implements CommandHandler {
         flags: {
             keep: {
                 description:
-                    "Copy the current session settings in the new session",
+                    "Copy the current conversation settings in the new conversation",
                 default: false,
             },
 
             persist: {
                 description:
-                    "Persist the new session.  Default to whether the current session is persisted.",
+                    "Persist the new conversation.  Default to whether the current conversation is persisted.",
                 type: "boolean",
             },
         },
@@ -70,7 +70,7 @@ class ConversationNewCommandHandler implements CommandHandler {
         context.sessionContext.agentContext.chatHistory.clear();
 
         displaySuccess(
-            `New session created${
+            `New conversation created${
                 systemContext.session.sessionDirPath
                     ? `: ${getSessionName(systemContext.session.sessionDirPath)}`
                     : ""
@@ -85,7 +85,7 @@ class ConversationOpenCommandHandler implements CommandHandler {
     public readonly parameters = {
         args: {
             session: {
-                description: "Name of the session to open.",
+                description: "Name of the conversation to open.",
             },
         },
     } as const;
@@ -103,7 +103,7 @@ class ConversationOpenCommandHandler implements CommandHandler {
             systemContext.indexingServiceRegistry,
         );
         await setSessionOnCommandHandlerContext(systemContext, session);
-        displaySuccess(`Session opened: ${params.args.session}`, context);
+        displaySuccess(`Conversation opened: ${params.args.session}`, context);
     }
 }
 
@@ -112,7 +112,7 @@ class ConversationResetCommandHandler implements CommandHandlerNoParams {
         "Reset config on conversation and keep the data";
     public async run(context: ActionContext<CommandHandlerContext>) {
         await changeContextConfig(null, context);
-        displaySuccess(`Session settings revert to default.`, context);
+        displaySuccess(`Conversation settings revert to default.`, context);
     }
 }
 
@@ -122,13 +122,13 @@ class ConversationClearCommandHandler implements CommandHandlerNoParams {
     public async run(context: ActionContext<CommandHandlerContext>) {
         const systemContext = context.sessionContext.agentContext;
         if (systemContext.session.sessionDirPath === undefined) {
-            throw new Error("Session is not persisted. Nothing to clear.");
+            throw new Error("Conversation is not persisted. Nothing to clear.");
         }
 
         if (
             !(await askYesNoWithContext(
                 systemContext,
-                `Are you sure you want to clear data for current session '${getSessionName(systemContext.session.sessionDirPath)}'?`,
+                `Are you sure you want to clear data for current conversation '${getSessionName(systemContext.session.sessionDirPath)}'?`,
                 false,
             ))
         ) {
@@ -141,7 +141,7 @@ class ConversationClearCommandHandler implements CommandHandlerNoParams {
             systemContext,
             systemContext.session,
         );
-        displaySuccess(`Session data cleared.`, context);
+        displaySuccess(`Conversation data cleared.`, context);
     }
 }
 
@@ -151,13 +151,13 @@ class ConversationDeleteCommandHandler implements CommandHandler {
     public readonly parameters = {
         args: {
             session: {
-                description: "Session name to delete",
+                description: "Conversation name to delete",
                 optional: true,
             },
         },
         flags: {
             all: {
-                description: "Delete all sessions",
+                description: "Delete all conversations",
                 char: "a",
                 type: "boolean",
             },
@@ -176,7 +176,7 @@ class ConversationDeleteCommandHandler implements CommandHandler {
             if (
                 !(await askYesNoWithContext(
                     systemContext,
-                    "Are you sure you want to delete all sessions?",
+                    "Are you sure you want to delete all conversations?",
                     false,
                 ))
             ) {
@@ -184,7 +184,7 @@ class ConversationDeleteCommandHandler implements CommandHandler {
                 return;
             }
             await deleteAllSessions(systemContext.persistDir);
-            displaySuccess("All session deleted.", context);
+            displaySuccess("All conversations deleted.", context);
         } else {
             const currentSessionName = systemContext.session.sessionDirPath
                 ? getSessionName(systemContext.session.sessionDirPath)
@@ -192,19 +192,19 @@ class ConversationDeleteCommandHandler implements CommandHandler {
             const del = params.args.session ?? currentSessionName;
             if (del === undefined) {
                 throw new Error(
-                    "The current session is not persisted. Nothing to clear.",
+                    "The current conversation is not persisted. Nothing to clear.",
                 );
             }
             const sessionNames = await getSessionNames(
                 systemContext.persistDir,
             );
             if (!sessionNames.includes(del)) {
-                throw new Error(`'${del}' is not a session name`);
+                throw new Error(`'${del}' is not a conversation name`);
             }
             if (
                 !(await askYesNoWithContext(
                     systemContext,
-                    `Are you sure you want to delete session '${del}'?`,
+                    `Are you sure you want to delete conversation '${del}'?`,
                     false,
                 ))
             ) {
@@ -212,7 +212,7 @@ class ConversationDeleteCommandHandler implements CommandHandler {
                 return;
             }
             await deleteSession(systemContext.persistDir, del);
-            displaySuccess(`Session '${del}' deleted.`, context);
+            displaySuccess(`Conversation '${del}' deleted.`, context);
             if (del !== currentSessionName) {
                 return;
             }
@@ -259,7 +259,7 @@ class ConversationInfoCommandHandler implements CommandHandlerNoParams {
         );
         const session = systemContext.session;
         displayResult(
-            `${chalk.bold("Session settings")} (${
+            `${chalk.bold("Conversation settings")} (${
                 session.sessionDirPath
                     ? chalk.green(getSessionName(session.sessionDirPath))
                     : "in-memory"

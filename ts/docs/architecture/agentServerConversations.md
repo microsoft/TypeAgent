@@ -18,7 +18,7 @@ As we begin making a larger shift towards a client-server model with the agent s
 - **Rename** a conversation.
 - **Delete** a conversation and its persisted data.
 - Conversations are identified by a **GUID** and carry a human-readable **name** and **client count** so clients can make informed join decisions.
-- Clients specify an **optional session ID** at `joinConversation()` time; omitting it connects to the default conversation, or auto-creates one if none exist. The server always resolves to `"default"` rather than the most recently active conversation because in a multi-client environment, "most recently active" is a server-wide concept — a CLI user spinning up independently should not be silently dropped into an active Shell conversation. Clients that want last-used behavior should remember their last session ID locally and pass it explicitly.
+- Clients specify an **optional conversation ID** at `joinConversation()` time; omitting it connects to the default conversation, or auto-creates one if none exist. The server always resolves to `"default"` rather than the most recently active conversation because in a multi-client environment, "most recently active" is a server-wide concept — a CLI user spinning up independently should not be silently dropped into an active Shell conversation. Clients that want last-used behavior should remember their last conversation ID locally and pass it explicitly.
 - Conversation isolation is **client-enforced** for now — the server provides the signals, clients decide the policy.
 
 ## Non-Goals
@@ -65,11 +65,11 @@ This contract — `instanceStorage` survives, `sessionStorage` is ephemeral — 
 
 ### The Problem with Scoping `persistDir` per Conversation
 
-Naively scoping each conversation's `persistDir` to `server-sessions/<server-session-id>/` breaks this contract:
+Naively scoping each conversation's `persistDir` to `conversations/<conversationId>/` breaks this contract:
 
 ```
-server-sessions/<server-session-id>/                        ← persistDir → instanceStorage root
-server-sessions/<server-session-id>/sessions/<session-id>/  ← sessionStorage
+conversations/<conversationId>/                        ← persistDir → instanceStorage root
+conversations/<conversationId>/sessions/<session-id>/  ← sessionStorage
 ```
 
 **Every time a new conversation is created, both `instanceStorage` and `sessionStorage` start fresh.** Agent configuration data (auth tokens, user preferences, learned state) is silently discarded whenever the user connects to a new conversation. The fix is a split storage root described in Section 4.
@@ -101,22 +101,22 @@ There is no way for a client to specify which conversation to use, or to perform
 
 Each conversation is identified by:
 
-| Field         | Type                | Description                                                                                                                                                         |
-| ------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sessionId`   | `string` (UUIDv4)   | Stable, globally unique identifier                                                                                                                                  |
-| `name`        | `string`            | Human-readable label (1–256 chars), set by the caller at `createConversation()` time. Not enforced unique.                                                          |
-| `createdAt`   | `string` (ISO 8601) | When the conversation was first created                                                                                                                             |
-| `clientCount` | `number`            | Number of clients currently connected to this conversation (runtime-derived; `0` if the conversation is not loaded in memory). **Never persisted** — see Section 2. |
+| Field            | Type                | Description                                                                                                                                                         |
+| ---------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `conversationId` | `string` (UUIDv4)   | Stable, globally unique identifier                                                                                                                                  |
+| `name`           | `string`            | Human-readable label (1–256 chars), set by the caller at `createConversation()` time. Not enforced unique.                                                          |
+| `createdAt`      | `string` (ISO 8601) | When the conversation was first created                                                                                                                             |
+| `clientCount`    | `number`            | Number of clients currently connected to this conversation (runtime-derived; `0` if the conversation is not loaded in memory). **Never persisted** — see Section 2. |
 
 ### 2. Conversation Metadata
 
-A `sessions.json` file lives at `instanceDir/server-sessions/sessions.json` and is the authoritative registry:
+A `conversations.json` file lives at `instanceDir/conversations/conversations.json` and is the authoritative registry:
 
 ```json
 {
   "sessions": [
     {
-      "sessionId": "a1b2c3d4-...",
+      "conversationId": "a1b2c3d4-...",
       "name": "workout playlist setup",
       "createdAt": "2026-04-01T10:00:00Z"
     }
@@ -124,9 +124,9 @@ A `sessions.json` file lives at `instanceDir/server-sessions/sessions.json` and 
 }
 ```
 
-Each conversation's ephemeral data (chat history, conversation memory, display log, session config) is stored in `instanceDir/server-sessions/<sessionId>/`. Agent `instanceStorage` (config, auth tokens, learned state) is stored directly under `instanceDir/<agentName>/`, **shared across all conversations**.
+Each conversation's ephemeral data (chat history, conversation memory, display log, session config) is stored in `instanceDir/conversations/<conversationId>/`. Agent `instanceStorage` (config, auth tokens, learned state) is stored directly under `instanceDir/<agentName>/`, **shared across all conversations**.
 
-> **Note:** `clientCount` is a runtime-only field — it is **never written to `sessions.json`**. It is populated at query time by inspecting the live dispatcher pool.
+> **Note:** `clientCount` is a runtime-only field — it is **never written to `conversations.json`**. It is populated at query time by inspecting the live dispatcher pool.
 
 > **Note:** Legacy session data (from standalone Shell runs) is left in place and coexists on disk with the agentServer's conversation registry. The agentServer does not read, migrate, or touch legacy session directories. The standalone Shell continues to use its own session management independently for now.
 
@@ -140,7 +140,7 @@ type DispatcherConnectOptions = {
   clientType?: "shell" | "extension";
 
   // Session management (new)
-  sessionId?: string; // Join a specific conversation by UUID. If omitted → connects to the default conversation.
+  conversationId?: string; // Join a specific conversation by UUID. If omitted → connects to the default conversation.
 };
 ```
 
@@ -154,13 +154,16 @@ type AgentServerInvokeFunctions = {
   joinConversation: (
     options?: DispatcherConnectOptions,
   ) => Promise<JoinConversationResult>;
-  leaveConversation: (sessionId: string) => Promise<void>;
+  leaveConversation: (conversationId: string) => Promise<void>;
 
   // Conversation CRUD
   createConversation: (name: string) => Promise<ConversationInfo>;
   listConversations: (name?: string) => Promise<ConversationInfo[]>;
-  renameConversation: (sessionId: string, newName: string) => Promise<void>;
-  deleteConversation: (sessionId: string) => Promise<void>;
+  renameConversation: (
+    conversationId: string,
+    newName: string,
+  ) => Promise<void>;
+  deleteConversation: (conversationId: string) => Promise<void>;
 };
 ```
 
@@ -169,7 +172,7 @@ type AgentServerInvokeFunctions = {
 ```typescript
 type JoinConversationResult = {
   connectionId: string;
-  sessionId: string; // The conversation that was joined or auto-created
+  conversationId: string; // The conversation that was joined or auto-created
 };
 ```
 
@@ -179,20 +182,20 @@ type JoinConversationResult = {
 
 ```typescript
 type ConversationInfo = {
-  sessionId: string;
+  conversationId: string;
   name: string;
   clientCount: number;
   createdAt: string;
 };
 ```
 
-### 4. Server-Side: `SessionManager` and `SharedDispatcher`
+### 4. Server-Side: `ConversationManager` and `SharedDispatcher`
 
-Today, `createSharedDispatcher()` creates one global dispatcher with one session. Under the new design, a `SessionManager` maintains a **pool of per-conversation `SharedDispatcher` instances** — one per active conversation, shared by all clients connected to that conversation.
+Today, `createSharedDispatcher()` creates one global dispatcher with one session. Under the new design, a `ConversationManager` maintains a **pool of per-conversation `SharedDispatcher` instances** — one per active conversation, shared by all clients connected to that conversation.
 
 ```
 AgentServer
-  └── SessionManager
+  └── ConversationManager
         ├── SessionRecord[conversation-A]
         │     └── SharedDispatcher ← clients 0, 1 (both connected to conversation A)
         └── SessionRecord[conversation-B]
@@ -206,14 +209,14 @@ To preserve the `instanceStorage` / `sessionStorage` contract across conversatio
 | Directory     | Purpose                                                                                                                                 | Lifetime                                                                                                |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | `instanceDir` | Global instance root — maps to `instanceStorage` for all agents. Contains agent config, auth tokens, user preferences, embedding cache. | Lives for the lifetime of the agentServer process (or the user profile). Never scoped per conversation. |
-| `persistDir`  | Per-conversation root — maps to `sessionStorage` and holds chat history, conversation memory, display log, and session config.          | Scoped to `instanceDir/server-sessions/<sessionId>/`. Discarded with the conversation.                  |
+| `persistDir`  | Per-conversation root — maps to `sessionStorage` and holds chat history, conversation memory, display log, and session config.          | Scoped to `instanceDir/conversations/<conversationId>/`. Discarded with the conversation.               |
 
 **Concrete paths:**
 
 ```
 ~/.typeagent/profiles/dev/                                              ← instanceDir (global)
-~/.typeagent/profiles/dev/server-sessions/<sessionId>/                  ← persistDir (per conversation)
-~/.typeagent/profiles/dev/server-sessions/<sessionId>/sessions/<id>/    ← sessionStorage
+~/.typeagent/profiles/dev/conversations/<conversationId>/                  ← persistDir (per conversation)
+~/.typeagent/profiles/dev/conversations/<conversationId>/sessions/<id>/    ← sessionStorage
 ~/.typeagent/profiles/dev/<agentName>/                                  ← instanceStorage (global)
 ```
 
@@ -254,7 +257,7 @@ When the agentServer starts up, it resolves both directories once and passes the
 
 ```typescript
 const instanceDir = getProfilePath("dev"); // e.g. ~/.typeagent/profiles/dev
-const persistDir = path.join(instanceDir, "server-sessions", sessionId); // per-session subdirectory
+const persistDir = path.join(instanceDir, "conversations", conversationId); // per-conversation subdirectory
 
 initializeCommandHandlerContext("agentServer", {
   instanceDir, // global — never changes between conversations
@@ -277,7 +280,7 @@ export type CommandHandlerContext = {
 };
 ```
 
-Each conversation's `SharedDispatcher` is created lazily on first `joinConversation()` and calls `initializeCommandHandlerContext()` with a `persistDir` scoped to `server-sessions/<sessionId>/` and a shared `instanceDir`, giving it fully isolated chat history and session config while preserving agent configuration across conversation boundaries. Clients connecting to the same conversation share one dispatcher instance and its routing `ClientIO` table, consistent with how the current single dispatcher works today.
+Each conversation's `SharedDispatcher` is created lazily on first `joinConversation()` and calls `initializeCommandHandlerContext()` with a `persistDir` scoped to `conversations/<conversationId>/` and a shared `instanceDir`, giving it fully isolated chat history and session config while preserving agent configuration across conversation boundaries. Clients connecting to the same conversation share one dispatcher instance and its routing `ClientIO` table, consistent with how the current single dispatcher works today.
 
 `SharedDispatcher.join()` calls `createDispatcherFromContext(context, connectionId, ...)` per client — producing a lightweight `Dispatcher` handle bound to a unique `connectionId` but sharing the same underlying context. Output routing is per-client via `connectionId`; conversation state is shared across all clients in the conversation.
 
@@ -287,31 +290,31 @@ Idle conversation dispatchers are automatically evicted from memory after 5 minu
 
 Each conversation uses namespaced WebSocket channels to allow multiple conversations over a single WebSocket connection:
 
-- `dispatcher:<sessionId>` — the dispatcher RPC channel for that conversation
-- `clientio:<sessionId>` — the ClientIO RPC channel for that conversation
+- `dispatcher:<conversationId>` — the dispatcher RPC channel for that conversation
+- `clientio:<conversationId>` — the ClientIO RPC channel for that conversation
 
 ### 5. Conversation Lifecycle on `joinConversation()`
 
 ```
-Client calls joinConversation({ sessionId?, clientType, filter })
+Client calls joinConversation({ conversationId?, clientType, filter })
   │
-  ├─ sessionId provided?
-  │   ├─ Yes → look up instanceDir/server-sessions/sessions.json
+  ├─ conversationId provided?
+  │   ├─ Yes → look up instanceDir/conversations/conversations.json
   │   │   ├─ Found → load SharedDispatcher for this conversation (lazy init if not in memory pool)
   │   │   └─ Not found → return error: "Conversation not found"
   │   └─ No → connect to the default conversation
   │       ├─ Conversation named "default" exists → use it
   │       └─ No conversations exist → auto-create conversation named "default"
-  │           ├─ Create instanceDir/server-sessions/<sessionId>/     ← persistDir
+  │           ├─ Create instanceDir/conversations/<conversationId>/     ← persistDir
   │           └─ Init dispatcher with instanceDir (global) + persistDir (conversation-scoped)
   │
   ├─ Register client in conversation's SharedDispatcher routing table
-  └─ Return JoinConversationResult { connectionId, sessionId }
+  └─ Return JoinConversationResult { connectionId, conversationId }
 ```
 
 ### 6. `listConversations(name?)`
 
-Returns the conversations from `sessions.json`. If `name` is provided, only conversations whose `name` contains the substring (case-insensitive) are returned. If `name` is omitted, all conversations are returned. `clientCount` is populated from the live dispatcher pool for conversations currently loaded in memory.
+Returns the conversations from `conversations.json`. If `name` is provided, only conversations whose `name` contains the substring (case-insensitive) are returned. If `name` is omitted, all conversations are returned. `clientCount` is populated from the live dispatcher pool for conversations currently loaded in memory.
 
 ```typescript
 // Response shape
@@ -319,13 +322,13 @@ ConversationInfo[]
 // Example:
 [
   {
-    sessionId: "a1b2c3d4-e5f6-...",
+    conversationId: "a1b2c3d4-e5f6-...",
     name: "workout playlist setup",
     createdAt: "2026-04-01T10:00:00Z",
     clientCount: 1
   },
   {
-    sessionId: "f7e8d9c0-...",
+    conversationId: "f7e8d9c0-...",
     name: "flight research",
     createdAt: "2026-03-28T09:15:00Z",
     clientCount: 0
@@ -333,12 +336,12 @@ ConversationInfo[]
 ]
 ```
 
-### 7. `deleteConversation(sessionId)`
+### 7. `deleteConversation(conversationId)`
 
 1. Close all active client dispatcher handles for the conversation.
 2. Shut down and evict the conversation's `SharedDispatcher` from the in-memory pool.
-3. Remove `instanceDir/server-sessions/<sessionId>/` from disk (recursive delete of the `persistDir` subtree only, best-effort). **Agent `instanceStorage` under `instanceDir/<agentName>/` is not touched.**
-4. Remove the entry from `sessions.json`.
+3. Remove `instanceDir/conversations/<conversationId>/` from disk (recursive delete of the `persistDir` subtree only, best-effort). **Agent `instanceStorage` under `instanceDir/<agentName>/` is not touched.**
+4. Remove the entry from `conversations.json`.
 
 > **Note:** Any connected client can call `deleteConversation` on any conversation, including conversations they are not currently connected to. The calling client's session-namespaced channels are cleaned up immediately; other clients connected to the deleted conversation have their dispatcher handles closed when `SharedDispatcher.close()` is called. Server-side authorization is out of scope for v1 (see Open Questions).
 
@@ -368,7 +371,7 @@ Pass `--conversation` / `-s <id>` to connect to a specific conversation by UUID.
 
 Pass `--hidden` to start the agent server without a visible window. Default is a visible window for interactive use.
 
-On every successful connection the connected session ID is written to `~/.typeagent/cli-state.json` for use by future `--resume` invocations.
+On every successful connection the conversation ID is written to `~/.typeagent/cli-state.json` for use by future `--resume` invocations.
 
 #### `run` — non-interactive commands
 
@@ -394,7 +397,7 @@ agent-cli server stop                    # send a graceful shutdown to the runni
 
 `conversations delete` prompts `Delete conversation <id> and all its data? (y/N)` before calling `deleteConversation()`. Pass `--yes` / `-y` to skip the prompt.
 
-`conversations list` renders a fixed-width table with columns `SESSION ID`, `NAME`, `CLIENTS`, and `CREATED AT`. Pass `--name <substring>` to filter by name (case-insensitive).
+`conversations list` renders a fixed-width table with columns `CONVERSATION ID`, `NAME`, `CLIENTS`, and `CREATED AT`. Pass `--name <substring>` to filter by name (case-insensitive).
 
 ### Shell
 
@@ -415,7 +418,7 @@ When connected to the agentServer:
 - **Per-conversation agent configuration** — conversations inherit the global agent enable/disable config for now.
 - **Pagination for `listConversations()`** — the full index is loaded on every call; pagination (`limit`/`offset`) can be added once conversation counts grow large enough to matter.
 - **Graceful drain on `deleteConversation()`** — currently `deleteConversation()` closes all client dispatcher handles immediately with no drain window. A future iteration should notify connected clients and await in-flight `processCommand()` calls (with a timeout) before tearing down the conversation.
-- **Per-conversation concurrency lock** — concurrent `joinConversation()` calls targeting the same session ID before lazy initialization completes could race. A per-conversation async mutex should be added in a follow-up.
+- **Per-conversation concurrency lock** — concurrent `joinConversation()` calls targeting the same conversation ID before lazy initialization completes could race. A per-conversation async mutex should be added in a follow-up.
 - **LLM-generated conversation summaries** — auto-generating a one-line summary after the first exchange is a useful future addition for conversation discoverability, but is deferred in favor of explicit `name` for now.
 
 ---
@@ -454,7 +457,7 @@ where `payload` has the shape:
 Each client handles `"manage-conversation"` using its own conversation management API:
 
 - **CLI** — `enhancedConsole.ts` receives the action and calls `handleConversationCommand(conversationContext, argsString)`, delegating to the same `@conversation` command machinery used for explicit slash commands (`new`, `list`, `info`, `switch`, `rename`, `delete`).
-- **Shell** — `main.ts` receives the action and calls the corresponding `ClientAPI` session method (`sessionCreate`, `sessionList`, `sessionSwitch`, `sessionRename`, `sessionDelete`, `sessionGetCurrent`) over the Electron IPC bridge.
+- **Shell** — `main.ts` receives the action and calls the corresponding `ClientAPI` session method (`conversationCreate`, `conversationList`, `conversationSwitch`, `conversationRename`, `conversationDelete`, `conversationGetCurrent`) over the Electron IPC bridge.
 
 See the [dispatcher README](../../packages/dispatcher/dispatcher/README.md#sessions) for the full list of supported phrases.
 
@@ -462,10 +465,10 @@ See the [dispatcher README](../../packages/dispatcher/dispatcher/README.md#sessi
 
 This design adds explicit conversation management to the agentServer without fundamentally restructuring its architecture. The core additions are:
 
-- A `sessions.json` registry for discoverable, GUID-keyed named conversations.
-- A `SessionManager` that maintains a pool of per-conversation `SharedDispatcher` instances, each with its own isolated `initializeCommandHandlerContext()` call, chat history, conversation memory, and persist directory.
+- A `conversations.json` registry for discoverable, GUID-keyed named conversations.
+- A `ConversationManager` that maintains a pool of per-conversation `SharedDispatcher` instances, each with its own isolated `initializeCommandHandlerContext()` call, chat history, conversation memory, and persist directory.
 - Five new RPC methods on the `AgentServer` channel: `joinConversation`, `leaveConversation`, `createConversation`, `listConversations`, `renameConversation`, `deleteConversation`.
-- `sessionId` in `DispatcherConnectOptions` so clients can resume a specific conversation by ID.
+- `conversationId` in `DispatcherConnectOptions` so clients can resume a specific conversation by ID.
 - `listConversations(name?)` with optional substring filtering as the primary conversation discovery mechanism.
 - Session-namespaced WebSocket channels (`dispatcher:<id>`, `clientio:<id>`) enabling multiple concurrent conversations over a single connection.
 - Idle dispatcher eviction after 5 minutes to free memory for inactive conversations.

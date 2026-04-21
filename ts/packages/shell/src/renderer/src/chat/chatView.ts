@@ -4,7 +4,7 @@
 import { IdGenerator } from "../main";
 import { ChatInput } from "./chatInput";
 import { ExpandableTextArea } from "./expandableTextArea";
-import { handleConversationCommand } from "./sessionCommands";
+import { handleConversationCommand } from "./conversationCommands";
 import { iconCheckMarkCircle, iconX } from "../icon";
 import {
     DisplayAppendMode,
@@ -498,7 +498,7 @@ export class ChatView {
                 addSystemMessage: (content: string) => {
                     this.addNotificationMessage(
                         { type: "html", content, kind: "info" },
-                        "session",
+                        "conversation",
                         undefined,
                     );
                 },
