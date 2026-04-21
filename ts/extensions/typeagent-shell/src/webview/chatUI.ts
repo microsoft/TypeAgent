@@ -3,6 +3,7 @@
 
 /**
  * Manages the chat UI elements in the webview.
+ * Groups messages by requestId to match the shell's behavior.
  */
 export class ChatUI {
     private _messagesEl: HTMLElement;
@@ -10,7 +11,13 @@ export class ChatUI {
     private _sendBtn: HTMLButtonElement;
     private _statusEl: HTMLElement;
     private _sendCallback?: (text: string) => void;
-    private _lastAgentEl?: HTMLElement;
+
+    // Track the active response bubble for setDisplay/appendDisplay
+    private _activeResponseEl?: HTMLElement;
+    // Track the status indicator element
+    private _statusIndicatorEl?: HTMLElement;
+    // Dedup: track last appended content to avoid duplicates
+    private _lastAppendedContent?: string;
 
     constructor() {
         this._messagesEl = document.getElementById("messages")!;
@@ -43,58 +50,118 @@ export class ChatUI {
     }
 
     public addUserMessage(text: string): void {
-        this._appendMessage(text, "user");
-    }
-
-    public addAgentMessage(text: string, source?: string): void {
+        this._removeStatusIndicator();
+        this._removeTemporary();
+        this._activeResponseEl = undefined;
+        this._lastAppendedContent = undefined;
         const el = document.createElement("div");
-        el.className = "message agent";
-        if (source) {
-            const sourceEl = document.createElement("span");
-            sourceEl.className = "source-label";
-            sourceEl.textContent = source;
-            el.appendChild(sourceEl);
-        }
-        const content = document.createElement("span");
-        content.textContent = text;
-        el.appendChild(content);
+        el.className = "message user";
+        el.textContent = text;
         this._messagesEl.appendChild(el);
-        this._lastAgentEl = el;
         this._scrollToBottom();
     }
 
-    public appendAgentMessage(
-        text: string,
-        source?: string,
-        _mode?: string,
-    ): void {
-        if (this._lastAgentEl) {
-            const content = this._lastAgentEl.querySelector(
-                "span:last-child",
-            );
-            if (content) {
-                content.textContent += text;
+    /**
+     * setDisplay: replace the content of the active agent bubble.
+     */
+    public setAgentDisplay(content: any, source?: string): void {
+        this._removeStatusIndicator();
+        this._removeTemporary();
+        if (!this._activeResponseEl) {
+            this._activeResponseEl = this._createAgentBubble(source);
+        }
+        if (source) {
+            const sourceEl = this._activeResponseEl.querySelector(".source-label");
+            if (sourceEl) {
+                sourceEl.textContent = source;
             }
-        } else {
-            this.addAgentMessage(text, source);
+        }
+        const contentEl =
+            this._activeResponseEl.querySelector(".agent-content");
+        if (contentEl) {
+            contentEl.innerHTML = this._renderDisplayContent(content);
         }
         this._scrollToBottom();
     }
 
-    public setDisplayInfo(source: string, action?: any): void {
-        // Show which agent is handling the request
-        if (source) {
+    /**
+     * appendDisplay: append to the active agent bubble.
+     * mode "temporary" = replaceable status text (e.g. "Translating...")
+     * mode "inline" / "block" = permanent content
+     */
+    public appendAgentDisplay(
+        content: any,
+        source?: string,
+        mode?: string,
+    ): void {
+        this._removeStatusIndicator();
+
+        if (mode === "temporary") {
+            // Show as a replaceable status line — each new temporary replaces the last
+            this._removeTemporary();
             const el = document.createElement("div");
-            el.className = "message system";
-            el.textContent = `[${source}]${action ? " processing..." : ""}`;
+            el.className = "message system temporary";
+            const text = this._renderDisplayContent(content);
+            el.innerHTML = text;
             this._messagesEl.appendChild(el);
             this._scrollToBottom();
+            return;
         }
+
+        // Permanent content — keep temporary status visible (shows agent progress)
+        const rendered = this._renderDisplayContent(content);
+
+        // Dedup: skip if this exact content was just appended
+        if (rendered === this._lastAppendedContent && rendered.length > 0) {
+            return;
+        }
+        this._lastAppendedContent = rendered;
+
+        if (!this._activeResponseEl) {
+            // Remove temporary when first real content arrives
+            this._removeTemporary();
+            this._activeResponseEl = this._createAgentBubble(source);
+        }
+        const contentEl =
+            this._activeResponseEl.querySelector(".agent-content");
+        if (contentEl) {
+            contentEl.innerHTML += rendered;
+        }
+        this._scrollToBottom();
+    }
+
+    /**
+     * setDisplayInfo: show which agent is processing (status indicator).
+     * Replaces previous status indicator rather than accumulating.
+     */
+    public setDisplayInfo(source: string, action?: any): void {
+        if (!source) return;
+
+        if (!this._statusIndicatorEl) {
+            this._statusIndicatorEl = document.createElement("div");
+            this._statusIndicatorEl.className = "message system status-indicator";
+            this._messagesEl.appendChild(this._statusIndicatorEl);
+        }
+        const label = action ? `[${source}] processing...` : `[${source}] processing...`;
+        this._statusIndicatorEl.textContent = label;
+        this._scrollToBottom();
     }
 
     public clearMessages(): void {
         this._messagesEl.innerHTML = "";
-        this._lastAgentEl = undefined;
+        this._activeResponseEl = undefined;
+        this._statusIndicatorEl = undefined;
+    }
+
+    /**
+     * Called when a command finishes processing.
+     * Cleans up temporary status messages.
+     */
+    public onCommandComplete(): void {
+        this._removeTemporary();
+        this._removeStatusIndicator();
+        this._activeResponseEl = undefined;
+        this._lastAppendedContent = undefined;
     }
 
     public addNotification(event: string, _data: any, source: string): void {
@@ -130,28 +197,97 @@ export class ChatUI {
     }
 
     public addSystemMessage(text: string): void {
-        this._appendMessage(text, "system");
+        const el = document.createElement("div");
+        el.className = "message system";
+        el.textContent = text;
+        this._messagesEl.appendChild(el);
+        this._scrollToBottom();
     }
 
     private _handleSend(): void {
         const text = this._inputEl.value.trim();
         if (!text) return;
+        // Show user message immediately (don't wait for server echo)
         this.addUserMessage(text);
         this._inputEl.value = "";
         this._inputEl.style.height = "auto";
-        this._lastAgentEl = undefined;
         this._sendCallback?.(text);
     }
 
-    private _appendMessage(
-        text: string,
-        role: "user" | "agent" | "system",
-    ): void {
+    private _createAgentBubble(source?: string): HTMLElement {
         const el = document.createElement("div");
-        el.className = "message " + role;
-        el.textContent = text;
+        el.className = "message agent";
+        if (source) {
+            const sourceEl = document.createElement("span");
+            sourceEl.className = "source-label";
+            sourceEl.textContent = source;
+            el.appendChild(sourceEl);
+        }
+        const contentEl = document.createElement("span");
+        contentEl.className = "agent-content";
+        el.appendChild(contentEl);
         this._messagesEl.appendChild(el);
-        this._scrollToBottom();
+        return el;
+    }
+
+    private _removeStatusIndicator(): void {
+        if (this._statusIndicatorEl) {
+            this._statusIndicatorEl.remove();
+            this._statusIndicatorEl = undefined;
+        }
+    }
+
+    private _removeTemporary(): void {
+        const temps = this._messagesEl.querySelectorAll(".temporary");
+        temps.forEach((el) => el.remove());
+    }
+
+    /**
+     * Convert DisplayContent (string | string[] | string[][] | TypedDisplayContent)
+     * into an HTML string for rendering.
+     */
+    private _renderDisplayContent(content: any): string {
+        if (content === null || content === undefined) {
+            return "";
+        }
+        if (typeof content === "string") {
+            return this._escapeHtml(content);
+        }
+        // TypedDisplayContent: { type, content, alternates? }
+        if (typeof content === "object" && !Array.isArray(content)) {
+            if (content.alternates) {
+                const textAlt = content.alternates.find(
+                    (a: any) => a.type === "text",
+                );
+                if (textAlt) {
+                    return this._renderDisplayContent(textAlt.content);
+                }
+            }
+            if (content.content !== undefined) {
+                return this._renderDisplayContent(content.content);
+            }
+            return this._escapeHtml(JSON.stringify(content));
+        }
+        // string[] or string[][]
+        if (Array.isArray(content)) {
+            if (content.length === 0) return "";
+            if (Array.isArray(content[0])) {
+                return content
+                    .map((row: string[]) => row.join(" | "))
+                    .map((line: string) => this._escapeHtml(line))
+                    .join("<br>");
+            }
+            return content
+                .map((line: string) => this._escapeHtml(String(line)))
+                .join("<br>");
+        }
+        return this._escapeHtml(String(content));
+    }
+
+    private _escapeHtml(text: string): string {
+        const div = document.createElement("div");
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     private _scrollToBottom(): void {

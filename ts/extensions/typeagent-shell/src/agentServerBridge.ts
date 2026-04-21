@@ -42,6 +42,7 @@ export type BridgeToWebviewMessage =
     | { type: "clear"; requestId: RequestId }
     | { type: "notify"; event: string; data: any; source: string; seq?: number }
     | { type: "commandResult"; requestId: string; result: any }
+    | { type: "commandComplete"; requestId: string; result: any }
     | { type: "error"; message: string };
 
 /**
@@ -126,9 +127,11 @@ export class AgentServerBridge {
             });
 
             // Join the default session with our ClientIO implementation
+            // filter: true ensures we only see responses to our own requests
             const clientIO = this.createClientIO();
             this.session = await this.connection.joinSession(clientIO, {
                 clientType: "extension",
+                filter: true,
             });
 
             this.isConnected = true;
@@ -205,14 +208,12 @@ export class AgentServerBridge {
         try {
             const result =
                 await this.session.dispatcher.processCommand(command);
-            // Result will be communicated through ClientIO callbacks
-            if (result) {
-                this.broadcastToWebviews({
-                    type: "commandResult",
-                    requestId: "",
-                    result,
-                });
-            }
+            // Command finished — tell webview to clean up temporary status
+            this.broadcastToWebviews({
+                type: "commandComplete",
+                requestId: "",
+                result: result ?? null,
+            });
         } catch (e: any) {
             this.broadcastToWebviews({
                 type: "error",

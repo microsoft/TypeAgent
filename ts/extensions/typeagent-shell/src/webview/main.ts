@@ -24,17 +24,17 @@ window.addEventListener("message", (event) => {
             chatUI.setStatus(msg.connected, msg.sessionId);
             break;
         case "setDisplay":
-            chatUI.addAgentMessage(msg.message.message, msg.message.source);
+            chatUI.setAgentDisplay(msg.message.message, msg.message.source);
             break;
         case "appendDisplay":
-            chatUI.appendAgentMessage(
+            chatUI.appendAgentDisplay(
                 msg.message.message,
                 msg.message.source,
                 msg.mode,
             );
             break;
         case "setUserRequest":
-            chatUI.addUserMessage(msg.command);
+            // User message is shown immediately on send — skip server echo
             break;
         case "setDisplayInfo":
             chatUI.setDisplayInfo(msg.source, msg.action);
@@ -49,7 +49,11 @@ window.addEventListener("message", (event) => {
             chatUI.addErrorMessage(msg.message);
             break;
         case "commandResult":
-            // Command completed — could update UI state
+            // Legacy — no-op
+            break;
+        case "commandComplete":
+            // Command finished — clean up any remaining temporary status
+            chatUI.onCommandComplete();
             break;
     }
 });
