@@ -100,14 +100,23 @@ export async function createConversationManager(
     // Load persisted metadata
     await loadMetadata();
 
+    // One-time migration: pre-rename builds stored entries with `sessionId` instead
+    // of `conversationId`. On first load after the rename, both field names are
+    // accepted and the file is re-written in the new format automatically.
     async function loadMetadata(): Promise<void> {
         const metadataPath = path.join(conversationsDir, METADATA_FILE);
         try {
             const data = await fs.promises.readFile(metadataPath, "utf-8");
             const persisted: PersistedMetadata = JSON.parse(data);
+            let needsMigration = false;
             for (const entry of persisted.sessions) {
-                conversations.set(entry.conversationId, {
-                    conversationId: entry.conversationId,
+                // Migrate old on-disk format: `sessionId` → `conversationId`
+                const conversationId =
+                    entry.conversationId ?? (entry as any).sessionId;
+                if (!conversationId) continue;
+                if (!entry.conversationId) needsMigration = true;
+                conversations.set(conversationId, {
+                    conversationId,
                     name: entry.name,
                     createdAt: entry.createdAt,
                     lastActiveAt: 0,
@@ -119,6 +128,12 @@ export async function createConversationManager(
             debugConversation(
                 `Loaded ${conversations.size} conversation(s) from metadata`,
             );
+            if (needsMigration) {
+                debugConversation(
+                    "Migrating metadata from old sessionId format to conversationId",
+                );
+                await saveMetadata();
+            }
         } catch (e: any) {
             if (e?.code === "ENOENT") {
                 // No metadata file yet — first run
