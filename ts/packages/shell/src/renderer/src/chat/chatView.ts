@@ -491,9 +491,11 @@ export class ChatView {
             requestText = request.content;
         }
 
-        // Intercept /conversation (and @conversation alias) before sending to dispatcher
+        // Intercept /conversation (UI slash command only, NOT @conversation).
+        // @conversation is dispatched to the in-process/remote dispatcher which
+        // handles it correctly in both local and remote modes.
         const t = requestText.trim();
-        if (t.startsWith("/conversation") || t.startsWith("@conversation")) {
+        if (t.startsWith("/conversation")) {
             const handled = await handleConversationCommand(requestText, {
                 addSystemMessage: (content: string) => {
                     this.addNotificationMessage(

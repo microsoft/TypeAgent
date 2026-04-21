@@ -19,20 +19,20 @@ test.describe("@conversation Commands", () => {
         // launch the app
         await runTestCallback(async (mainWindow: Page) => {
             // get the session count
-            let msg = await sendUserRequestAndWaitForResponse(
+            let msg = await sendUserRequestAndWaitForCompletion(
                 `@conversation list`,
                 mainWindow,
             );
 
             const sessions: string[] = msg.split("\n");
 
-            msg = await sendUserRequestAndWaitForResponse(
+            msg = await sendUserRequestAndWaitForCompletion(
                 `@conversation new`,
                 mainWindow,
             );
             expect(msg.toLowerCase()).toContain("new conversation created: ");
 
-            msg = await sendUserRequestAndWaitForResponse(
+            msg = await sendUserRequestAndWaitForCompletion(
                 `@conversation list`,
                 mainWindow,
             );
@@ -56,14 +56,14 @@ test.describe("@conversation Commands", () => {
         // launch the app
         await runTestCallback(async (mainWindow: Page) => {
             // create a new session so we have at least two
-            let msg = await sendUserRequestAndWaitForResponse(
+            let msg = await sendUserRequestAndWaitForCompletion(
                 `@conversation new`,
                 mainWindow,
             );
             expect(msg.toLowerCase()).toContain("new conversation created: ");
 
             // get the session count
-            msg = await sendUserRequestAndWaitForResponse(
+            msg = await sendUserRequestAndWaitForCompletion(
                 `@conversation list`,
                 mainWindow,
             );
@@ -84,7 +84,7 @@ test.describe("@conversation Commands", () => {
                 .click();
 
             // verify session not deleted
-            msg = await sendUserRequestAndWaitForResponse(
+            msg = await sendUserRequestAndWaitForCompletion(
                 `@conversation list`,
                 mainWindow,
             );
@@ -106,7 +106,7 @@ test.describe("@conversation Commands", () => {
                 .click();
 
             // get new session count
-            msg = await sendUserRequestAndWaitForResponse(
+            msg = await sendUserRequestAndWaitForCompletion(
                 `@conversation list`,
                 mainWindow,
             );
@@ -116,7 +116,7 @@ test.describe("@conversation Commands", () => {
             );
 
             // get session info
-            msg = await sendUserRequestAndWaitForResponse(
+            msg = await sendUserRequestAndWaitForCompletion(
                 `@conversation info`,
                 mainWindow,
             );
@@ -164,21 +164,21 @@ test.describe("@conversation Commands", () => {
         // launch the app
         await runTestCallback(async (mainWindow: Page) => {
             // create a new session
-            let msg = await sendUserRequestAndWaitForResponse(
+            let msg = await sendUserRequestAndWaitForCompletion(
                 `@conversation new`,
                 mainWindow,
             );
             expect(msg.toLowerCase()).toContain("new conversation created: ");
 
             // get the session list
-            msg = await sendUserRequestAndWaitForResponse(
+            msg = await sendUserRequestAndWaitForCompletion(
                 `@conversation list`,
                 mainWindow,
             );
             const sessions: string[] = msg.split("\n");
 
             // open the earlier session
-            msg = await sendUserRequestAndWaitForResponse(
+            msg = await sendUserRequestAndWaitForCompletion(
                 `@conversation open ${sessions[0]}`,
                 mainWindow,
             );
