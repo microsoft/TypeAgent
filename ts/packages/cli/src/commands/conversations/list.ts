@@ -55,7 +55,7 @@ function formatTable(conversations: ConversationInfo[]): string {
 
 export default class ConversationsList extends Command {
     static description =
-        "List conversations on the agent server. Usage: sessions list [--name <filter>]";
+        "List conversations on the agent server. Usage: conversations list [--name <filter>]";
     static flags = {
         port: Flags.integer({
             description: "Port for type agent server",

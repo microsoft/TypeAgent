@@ -100,7 +100,7 @@ export default class Connect extends Command {
             default: false,
         }),
         conversation: Flags.string({
-            char: "s",
+            char: "c",
             description:
                 "Conversation ID to join. Takes priority over --resume.",
             required: false,

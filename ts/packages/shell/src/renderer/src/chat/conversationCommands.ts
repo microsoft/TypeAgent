@@ -101,16 +101,29 @@ export async function handleConversationCommand(
                 return true;
             }
 
-            case "rename": {
-                // /conversation rename <id> <new name>
-                const conversationId = parts[2];
-                const newName = parts.slice(3).join(" ");
-                if (!conversationId || !newName) {
+            case "info": {
+                const current = await api.conversationGetCurrent();
+                if (!current) {
+                    sink.addSystemMessage("No active conversation.");
+                } else {
                     sink.addSystemMessage(
-                        "Usage: <code>/conversation rename &lt;id&gt; &lt;newName&gt;</code>",
+                        `<b>Current conversation:</b> ${escapeHtml(current.name)} (${escapeHtml(current.conversationId)})`,
+                    );
+                }
+                return true;
+            }
+
+            case "rename": {
+                // /conversation rename <id|name> <new name>
+                const target = parts[2];
+                const newName = parts.slice(3).join(" ");
+                if (!target || !newName) {
+                    sink.addSystemMessage(
+                        "Usage: <code>/conversation rename &lt;id|name&gt; &lt;newName&gt;</code>",
                     );
                     return true;
                 }
+                const conversationId = await resolveConversationTarget(target);
                 await api.conversationRename(conversationId, newName);
                 sink.addSystemMessage(
                     `✅ Renamed conversation ${escapeHtml(conversationId)} to "<b>${escapeHtml(newName)}</b>"`,
@@ -156,7 +169,8 @@ function showConversationHelp(sink: ConversationMessageSink): void {
             "<code>/conversation list</code> — List all conversations",
             "<code>/conversation new [name]</code> — Create a new conversation",
             "<code>/conversation switch &lt;id|name&gt;</code> — Switch to a conversation",
-            "<code>/conversation rename &lt;id&gt; &lt;name&gt;</code> — Rename a conversation",
+            "<code>/conversation info</code> — Show current conversation info",
+            "<code>/conversation rename &lt;id|name&gt; &lt;name&gt;</code> — Rename a conversation",
             "<code>/conversation delete &lt;id|name&gt;</code> — Delete a conversation",
             "",
             "Tip: <code>@conversation</code> is accepted as an alias for <code>/conversation</code>.",

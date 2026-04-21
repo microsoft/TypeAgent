@@ -7,7 +7,7 @@ import { createInterface } from "readline/promises";
 
 export default class ConversationsDelete extends Command {
     static description =
-        "Delete a conversation and its persisted data from the agent server. Usage: sessions delete <id>";
+        "Delete a conversation and its persisted data from the agent server. Usage: conversations delete <id>";
     static flags = {
         port: Flags.integer({
             description: "Port for type agent server",

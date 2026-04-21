@@ -6,7 +6,7 @@ import { connectAgentServer } from "@typeagent/agent-server-client";
 
 export default class ConversationsRename extends Command {
     static description =
-        "Rename a conversation on the agent server. Usage: sessions rename <id> <newName>";
+        "Rename a conversation on the agent server. Usage: conversations rename <id> <newName>";
     static flags = {
         port: Flags.integer({
             description: "Port for type agent server",
