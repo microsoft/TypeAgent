@@ -76,7 +76,7 @@ function promptYesNo(question: string): Promise<boolean> {
 
 export default class Connect extends Command {
     static description =
-        "Connect to the agent server in interactive mode. Defaults to the 'CLI' conversation, or specify --session <id> to join a specific one.";
+        "Connect to the agent server in interactive mode. Defaults to the 'CLI' conversation, or specify --conversation <id> to join a specific one.";
     static flags = {
         request: Flags.string({
             description:
@@ -96,12 +96,13 @@ export default class Connect extends Command {
         resume: Flags.boolean({
             char: "r",
             description:
-                "Resume the last used conversation instead of defaulting to 'CLI'. Ignored if --session is provided.",
+                "Resume the last used conversation instead of defaulting to 'CLI'. Ignored if --conversation is provided.",
             default: false,
         }),
-        session: Flags.string({
+        conversation: Flags.string({
             char: "s",
-            description: "Session ID to join. Takes priority over --resume.",
+            description:
+                "Conversation ID to join. Takes priority over --resume.",
             required: false,
         }),
         verbose: Flags.string({
@@ -113,7 +114,7 @@ export default class Connect extends Command {
             description:
                 "Use an ephemeral conversation that is automatically deleted on exit",
             default: false,
-            exclusive: ["session", "resume"],
+            exclusive: ["conversation", "resume"],
         }),
         hidden: Flags.boolean({
             description:
@@ -158,11 +159,11 @@ export default class Connect extends Command {
         }
 
         const persistedConversationId =
-            flags.session ??
+            flags.conversation ??
             (flags.resume ? loadLastConversationId() : undefined);
         // Only intercept "Session not found" when using the client-side default
-        // (no explicit --session flag). Explicit --session errors propagate as-is.
-        const isDefaultConversation = flags.session === undefined;
+        // (no explicit --conversation flag). Explicit --conversation errors propagate as-is.
+        const isDefaultConversation = flags.conversation === undefined;
         const isEphemeral = flags.memory;
 
         await withEnhancedConsoleClientIO(async (clientIO, bindDispatcher) => {

@@ -36,7 +36,7 @@ export default class RequestCommand extends Command {
                 "Start the agent server in a visible window if it is not already running. Default is to start it hidden.",
             default: false,
         }),
-        session: Flags.string({
+        conversation: Flags.string({
             char: "s",
             description:
                 "Conversation ID to use. Defaults to the 'CLI' conversation if not specified.",
@@ -58,10 +58,10 @@ export default class RequestCommand extends Command {
         try {
             connection = await connectAgentServer(url);
 
-            // Use --session directly if provided, otherwise find-or-create the "CLI" conversation
+            // Use --conversation directly if provided, otherwise find-or-create the "CLI" conversation
             let conversationId: string;
-            if (flags.session !== undefined) {
-                conversationId = flags.session;
+            if (flags.conversation !== undefined) {
+                conversationId = flags.conversation;
             } else {
                 const existing = await connection.listConversations(
                     CLI_CONVERSATION_NAME,
