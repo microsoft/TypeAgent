@@ -84,20 +84,6 @@ export interface ClientAPI {
     conversationGetCurrent(): Promise<
         { conversationId: string; name: string } | undefined
     >;
-    /** @deprecated Use conversationList instead */
-    sessionList(): Promise<ConversationInfo[]>;
-    /** @deprecated Use conversationCreate instead */
-    sessionCreate(name: string): Promise<ConversationInfo>;
-    /** @deprecated Use conversationSwitch instead */
-    sessionSwitch(conversationId: string): Promise<ConversationSwitchResult>;
-    /** @deprecated Use conversationRename instead */
-    sessionRename(conversationId: string, newName: string): Promise<void>;
-    /** @deprecated Use conversationDelete instead */
-    sessionDelete(conversationId: string): Promise<void>;
-    /** @deprecated Use conversationGetCurrent instead */
-    sessionGetCurrent(): Promise<
-        { conversationId: string; name: string } | undefined
-    >;
 }
 
 // Functions that are called from the main process to the renderer process.
@@ -119,8 +105,6 @@ export interface Client {
     tabRestoreStatus(count: number): void;
     systemNotification?(message: string, id: string, timestamp: number): void;
     conversationChanged?(conversationId: string, name: string): void;
-    /** @deprecated Use conversationChanged instead */
-    sessionChanged?(conversationId: string, name: string): void;
     markHistoryEntries?(): void;
 }
 
@@ -147,15 +131,9 @@ export type ConversationInfo = {
     createdAt: string; // ISO 8601
 };
 
-/** @deprecated Use ConversationInfo instead */
-export type SessionInfo = ConversationInfo;
-
 export type ConversationSwitchResult = {
     success: boolean;
     conversationId?: string;
     name?: string;
     error?: string;
 };
-
-/** @deprecated Use ConversationSwitchResult instead */
-export type SessionSwitchResult = ConversationSwitchResult;

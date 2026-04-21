@@ -16,9 +16,6 @@ export type ConversationInfo = {
     createdAt: string; // ISO 8601
 };
 
-/** @deprecated Use ConversationInfo instead */
-export type SessionInfo = ConversationInfo;
-
 export type JoinConversationResult = {
     connectionId: string;
     conversationId: string;
@@ -29,9 +26,6 @@ export type JoinConversationResult = {
      */
     pendingInteractions?: PendingInteractionRequest[];
 };
-
-/** @deprecated Use JoinConversationResult instead */
-export type JoinSessionResult = JoinConversationResult;
 
 export type AgentServerInvokeFunctions = {
     joinConversation: (

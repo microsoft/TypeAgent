@@ -399,11 +399,12 @@ function registerClient(
                                         );
                                         break;
                                     }
-                                    const created = await api.sessionCreate(
-                                        payload.name,
-                                    );
+                                    const created =
+                                        await api.conversationCreate(
+                                            payload.name,
+                                        );
                                     const switchResult =
-                                        await api.sessionSwitch(
+                                        await api.conversationSwitch(
                                             created.conversationId,
                                         );
                                     const msg = switchResult.success
@@ -421,9 +422,10 @@ function registerClient(
                                     break;
                                 }
                                 case "list": {
-                                    const sessions = await api.sessionList();
+                                    const sessions =
+                                        await api.conversationList();
                                     const current =
-                                        await api.sessionGetCurrent();
+                                        await api.conversationGetCurrent();
                                     let html: string;
                                     if (sessions.length === 0) {
                                         html = "No conversations found.";
@@ -455,7 +457,8 @@ function registerClient(
                                     break;
                                 }
                                 case "info": {
-                                    const cur = await api.sessionGetCurrent();
+                                    const cur =
+                                        await api.conversationGetCurrent();
                                     const html = cur
                                         ? `Current conversation: <b>${escapeHtml(cur.name)}</b> (${escapeHtml(cur.conversationId)})`
                                         : "No active conversation.";
@@ -484,7 +487,8 @@ function registerClient(
                                         );
                                         break;
                                     }
-                                    const sessions = await api.sessionList();
+                                    const sessions =
+                                        await api.conversationList();
                                     const match = sessions.find(
                                         (s) =>
                                             s.name.toLowerCase() ===
@@ -502,7 +506,7 @@ function registerClient(
                                         );
                                         break;
                                     }
-                                    const result = await api.sessionSwitch(
+                                    const result = await api.conversationSwitch(
                                         match.conversationId,
                                     );
                                     if (!result.success) {
@@ -535,7 +539,7 @@ function registerClient(
                                     let conversationId: string;
                                     if (payload.name) {
                                         const sessions =
-                                            await api.sessionList();
+                                            await api.conversationList();
                                         const match = sessions.find(
                                             (s) =>
                                                 s.name.toLowerCase() ===
@@ -556,7 +560,7 @@ function registerClient(
                                         conversationId = match.conversationId;
                                     } else {
                                         const cur =
-                                            await api.sessionGetCurrent();
+                                            await api.conversationGetCurrent();
                                         if (!cur) {
                                             chatView.addNotificationMessage(
                                                 {
@@ -572,7 +576,7 @@ function registerClient(
                                         }
                                         conversationId = cur.conversationId;
                                     }
-                                    await api.sessionRename(
+                                    await api.conversationRename(
                                         conversationId,
                                         payload.newName,
                                     );
@@ -601,7 +605,8 @@ function registerClient(
                                         );
                                         break;
                                     }
-                                    const sessions = await api.sessionList();
+                                    const sessions =
+                                        await api.conversationList();
                                     const match = sessions.find(
                                         (s) =>
                                             s.name.toLowerCase() ===
@@ -619,7 +624,7 @@ function registerClient(
                                         );
                                         break;
                                     }
-                                    await api.sessionDelete(
+                                    await api.conversationDelete(
                                         match.conversationId,
                                     );
                                     chatView.addNotificationMessage(
@@ -765,8 +770,8 @@ function registerClient(
             }
             chatView.addNotificationMessage(message, "shell", id);
         },
-        sessionChanged(_sessionId: string, _name: string): void {
-            // Session changed — no UI to update (dropdown removed)
+        conversationChanged(_conversationId: string, _name: string): void {
+            // Conversation changed — no UI to update (dropdown removed)
         },
         markHistoryEntries(): void {
             for (const child of chatView.getScrollContainer().children) {

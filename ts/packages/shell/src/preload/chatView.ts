@@ -107,8 +107,6 @@ function registerClient(client: Client) {
         "session-changed",
         (_, conversationId: string, name: string) => {
             client.conversationChanged?.(conversationId, name);
-            // Also call deprecated sessionChanged for backward compat
-            client.sessionChanged?.(conversationId, name);
         },
     );
 
@@ -192,25 +190,6 @@ const api: ClientAPI = {
         return ipcRenderer.invoke("session-delete", conversationId);
     },
     conversationGetCurrent: () => {
-        return ipcRenderer.invoke("session-get-current");
-    },
-    // Deprecated session aliases
-    sessionList: () => {
-        return ipcRenderer.invoke("session-list");
-    },
-    sessionCreate: (name: string) => {
-        return ipcRenderer.invoke("session-create", name);
-    },
-    sessionSwitch: (sessionId: string) => {
-        return ipcRenderer.invoke("session-switch", sessionId);
-    },
-    sessionRename: (sessionId: string, newName: string) => {
-        return ipcRenderer.invoke("session-rename", sessionId, newName);
-    },
-    sessionDelete: (sessionId: string) => {
-        return ipcRenderer.invoke("session-delete", sessionId);
-    },
-    sessionGetCurrent: () => {
         return ipcRenderer.invoke("session-get-current");
     },
 };

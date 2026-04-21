@@ -20,9 +20,6 @@ export type ConversationMessageSink = {
     clear(): void;
 };
 
-/** @deprecated Use ConversationMessageSink instead */
-export type SessionMessageSink = ConversationMessageSink;
-
 /**
  * Try to handle a `/conversation` (or `@conversation`) command.  Returns true
  * if the command was recognized and handled (caller should not forward it to

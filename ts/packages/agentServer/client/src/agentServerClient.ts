@@ -34,9 +34,6 @@ export type ConversationDispatcher = {
     name: string;
 };
 
-/** @deprecated Use ConversationDispatcher instead */
-export type SessionDispatcher = ConversationDispatcher;
-
 export type AgentServerConnection = {
     joinConversation(
         clientIO: ClientIO,
@@ -48,21 +45,6 @@ export type AgentServerConnection = {
     renameConversation(conversationId: string, newName: string): Promise<void>;
     deleteConversation(conversationId: string): Promise<void>;
     close(): Promise<void>;
-    /** @deprecated Use joinConversation instead */
-    joinSession(
-        clientIO: ClientIO,
-        options?: DispatcherConnectOptions,
-    ): Promise<ConversationDispatcher>;
-    /** @deprecated Use leaveConversation instead */
-    leaveSession(conversationId: string): Promise<void>;
-    /** @deprecated Use createConversation instead */
-    createSession(name: string): Promise<ConversationInfo>;
-    /** @deprecated Use listConversations instead */
-    listSessions(name?: string): Promise<ConversationInfo[]>;
-    /** @deprecated Use renameConversation instead */
-    renameSession(conversationId: string, newName: string): Promise<void>;
-    /** @deprecated Use deleteConversation instead */
-    deleteSession(conversationId: string): Promise<void>;
 };
 
 /**
@@ -197,26 +179,6 @@ export async function connectAgentServer(
                     );
                 }
                 return rpc.invoke("deleteConversation", conversationId);
-            },
-
-            // Deprecated aliases
-            joinSession(clientIO, options) {
-                return this.joinConversation(clientIO, options);
-            },
-            leaveSession(id) {
-                return this.leaveConversation(id);
-            },
-            createSession(name) {
-                return this.createConversation(name);
-            },
-            listSessions(name) {
-                return this.listConversations(name);
-            },
-            renameSession(id, newName) {
-                return this.renameConversation(id, newName);
-            },
-            deleteSession(id) {
-                return this.deleteConversation(id);
             },
 
             async close(): Promise<void> {
@@ -459,9 +421,6 @@ export async function ensureAndConnectConversation(
     };
     return conversation;
 }
-
-/** @deprecated Use ensureAndConnectConversation instead */
-export const ensureAndConnectSession = ensureAndConnectConversation;
 
 export async function stopAgentServer(port: number = 8999): Promise<void> {
     const url = `ws://localhost:${port}`;

@@ -146,9 +146,6 @@ export type ConversationManagerBackend = {
     >;
 };
 
-/** @deprecated Use ConversationManagerBackend instead */
-export type SessionManagerBackend = ConversationManagerBackend;
-
 /**
  * Create a local-only conversation backend for in-process dispatcher mode.
  * Multi-conversation is not supported; all calls operate on a single default conversation.
@@ -206,9 +203,6 @@ export function createLocalConversationBackend(): ConversationManagerBackend {
         },
     };
 }
-
-/** @deprecated Use createLocalConversationBackend instead */
-export const createLocalSessionBackend = createLocalConversationBackend;
 
 /**
  * Register conversation management IPC handlers on ipcMain.
@@ -271,9 +265,6 @@ export function registerConversationIpcHandlers(
         }
     };
 }
-
-/** @deprecated Use registerConversationIpcHandlers instead */
-export const registerSessionIpcHandlers = registerConversationIpcHandlers;
 
 /**
  * Create a remote conversation backend that delegates to an AgentServerConnection.
@@ -424,6 +415,3 @@ export function createRemoteConversationBackend(
         },
     };
 }
-
-/** @deprecated Use createRemoteConversationBackend instead */
-export const createRemoteSessionBackend = createRemoteConversationBackend;
