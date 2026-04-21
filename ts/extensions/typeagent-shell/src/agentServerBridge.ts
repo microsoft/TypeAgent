@@ -67,6 +67,8 @@ export class AgentServerBridge {
     private statusBarItem: vscode.StatusBarItem;
     private isConnected = false;
     private reconnectTimer: NodeJS.Timeout | undefined;
+    // Suppress disconnect handler during intentional reconnects
+    private isSwitching = false;
 
     constructor() {
         this.statusBarItem = vscode.window.createStatusBarItem(
@@ -120,7 +122,10 @@ export class AgentServerBridge {
 
         try {
             this.connection = await connectAgentServer(serverUrl, () => {
-                // onDisconnect callback
+                // onDisconnect callback — ignore during intentional reconnects
+                if (this.isSwitching) {
+                    return;
+                }
                 this.isConnected = false;
                 this.session = undefined;
                 this.updateStatusBar(false);
@@ -352,45 +357,52 @@ export class AgentServerBridge {
             return;
         }
 
-        // Leave current session (cleans up its channels)
-        if (this.session) {
-            try {
-                await this.connection.leaveSession(this.session.sessionId);
-            } catch {
-                // Best effort — session may already be gone
-            }
-            this.session = undefined;
-        }
-
-        // Join the new session
+        this.isSwitching = true;
         try {
-            const clientIO = this.createClientIO();
-            this.session = await this.connection.joinSession(clientIO, {
-                clientType: "extension",
-                filter: true,
-                sessionId,
-            });
+            // Leave current session (cleans up its channels)
+            if (this.session) {
+                try {
+                    await this.connection.leaveSession(this.session.sessionId);
+                } catch {
+                    // Best effort — session may already be gone
+                }
+                this.session = undefined;
+            }
+
+            // Join the new session
+            try {
+                const clientIO = this.createClientIO();
+                this.session = await this.connection.joinSession(clientIO, {
+                    clientType: "extension",
+                    filter: true,
+                    sessionId,
+                });
+            } catch (e: any) {
+                // Channel conflict — reconnect from scratch
+                const msg = e?.message ?? String(e);
+                if (msg.includes("already exists")) {
+                    await this.reconnectAndJoin(sessionId);
+                } else {
+                    throw e;
+                }
+            }
 
             // Notify webviews
-            this.broadcastToWebviews({
-                type: "sessionChanged",
-                sessionId: this.session.sessionId,
-                sessionName: this.session.name,
-            });
-            this.broadcastToWebviews({
-                type: "status",
-                connected: true,
-                sessionId: this.session.sessionId,
-                sessionName: this.session.name,
-            });
-        } catch (e: any) {
-            // Channel conflict — reconnect from scratch
-            const msg = e?.message ?? String(e);
-            if (msg.includes("already exists")) {
-                await this.reconnectAndJoin(sessionId);
-            } else {
-                throw e;
+            if (this.session) {
+                this.broadcastToWebviews({
+                    type: "sessionChanged",
+                    sessionId: this.session.sessionId,
+                    sessionName: this.session.name,
+                });
+                this.broadcastToWebviews({
+                    type: "status",
+                    connected: true,
+                    sessionId: this.session.sessionId,
+                    sessionName: this.session.name,
+                });
             }
+        } finally {
+            this.isSwitching = false;
         }
     }
 
@@ -398,6 +410,12 @@ export class AgentServerBridge {
      * Full reconnect to resolve channel conflicts, then join a session.
      */
     private async reconnectAndJoin(sessionId: string): Promise<void> {
+        // Cancel any pending auto-reconnect
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = undefined;
+        }
+
         if (this.connection) {
             await this.connection.close();
             this.connection = undefined;
@@ -411,6 +429,9 @@ export class AgentServerBridge {
         );
 
         this.connection = await connectAgentServer(serverUrl, () => {
+            if (this.isSwitching) {
+                return;
+            }
             this.isConnected = false;
             this.session = undefined;
             this.updateStatusBar(false);
@@ -427,17 +448,6 @@ export class AgentServerBridge {
 
         this.isConnected = true;
         this.updateStatusBar(true);
-        this.broadcastToWebviews({
-            type: "sessionChanged",
-            sessionId: this.session.sessionId,
-            sessionName: this.session.name,
-        });
-        this.broadcastToWebviews({
-            type: "status",
-            connected: true,
-            sessionId: this.session.sessionId,
-            sessionName: this.session.name,
-        });
     }
 
     private async handleWebviewMessage(
