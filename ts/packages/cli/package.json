@@ -41,11 +41,11 @@
     ],
     "topicSeparator": " ",
     "topics": {
-      "run": {
-        "description": "Run the handler directly. Same as @<command> in interactive mode."
-      },
       "conversations": {
         "description": "Manage agent server conversations (create, list, rename, delete)."
+      },
+      "run": {
+        "description": "Run the handler directly. Same as @<command> in interactive mode."
       }
     }
   },
