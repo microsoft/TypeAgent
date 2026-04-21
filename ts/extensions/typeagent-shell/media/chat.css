@@ -1,0 +1,180 @@
+/* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+
+/* TypeAgent Shell Chat — VS Code Webview Styles
+   Uses VS Code CSS variables for theme integration. */
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+    color: var(--vscode-foreground);
+    background: var(--vscode-editor-background);
+    height: 100vh;
+    overflow: hidden;
+}
+
+#chat-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* ── Status bar ──────────────────────────────────────────────── */
+
+.status {
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.status.connected {
+    background: var(--vscode-testing-iconPassed);
+    color: var(--vscode-editor-background);
+}
+
+.status.connecting {
+    background: var(--vscode-editorWarning-foreground);
+    color: var(--vscode-editor-background);
+}
+
+.status.disconnected {
+    background: var(--vscode-errorForeground);
+    color: var(--vscode-editor-background);
+}
+
+/* ── Messages area ───────────────────────────────────────────── */
+
+#messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.message {
+    padding: 8px 12px;
+    border-radius: 8px;
+    max-width: 85%;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    line-height: 1.4;
+}
+
+.message.user {
+    align-self: flex-end;
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border-bottom-right-radius: 2px;
+}
+
+.message.agent {
+    align-self: flex-start;
+    background: var(--vscode-editor-inactiveSelectionBackground);
+    color: var(--vscode-foreground);
+    border-bottom-left-radius: 2px;
+}
+
+.message.agent.partial {
+    opacity: 0.8;
+}
+
+.message.system {
+    align-self: center;
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+    font-style: italic;
+    background: none;
+    padding: 4px 8px;
+}
+
+/* ── Input area ──────────────────────────────────────────────── */
+
+#input-area {
+    display: flex;
+    align-items: flex-end;
+    padding: 8px 12px;
+    gap: 8px;
+    border-top: 1px solid var(--vscode-panel-border);
+    background: var(--vscode-sideBar-background);
+    flex-shrink: 0;
+}
+
+#chat-input {
+    flex: 1;
+    resize: none;
+    border: 1px solid var(--vscode-input-border);
+    background: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+    line-height: 1.4;
+    max-height: 120px;
+    overflow-y: auto;
+}
+
+#chat-input:focus {
+    outline: none;
+    border-color: var(--vscode-focusBorder);
+}
+
+#chat-input:disabled {
+    opacity: 0.5;
+}
+
+#chat-input::placeholder {
+    color: var(--vscode-input-placeholderForeground);
+}
+
+#send-btn {
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    border-radius: 4px;
+    width: 32px;
+    height: 32px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+#send-btn:hover {
+    background: var(--vscode-button-hoverBackground);
+}
+
+#send-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+/* ── Scrollbar styling ───────────────────────────────────────── */
+
+#messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+#messages::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#messages::-webkit-scrollbar-thumb {
+    background: var(--vscode-scrollbarSlider-background);
+    border-radius: 3px;
+}
+
+#messages::-webkit-scrollbar-thumb:hover {
+    background: var(--vscode-scrollbarSlider-hoverBackground);
+}

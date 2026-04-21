@@ -1,0 +1,84 @@
+{
+    "name": "typeagent-shell",
+    "displayName": "TypeAgent Shell",
+    "description": "Embeds the TypeAgent shell chat into VS Code",
+    "version": "0.0.1",
+    "private": true,
+    "publisher": "typeagent",
+    "license": "MIT",
+    "author": "Microsoft",
+    "homepage": "https://github.com/microsoft/TypeAgent#readme",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/microsoft/TypeAgent.git",
+        "directory": "ts/extensions/typeagent-shell"
+    },
+    "engines": {
+        "vscode": "^1.90.0"
+    },
+    "categories": ["Other"],
+    "activationEvents": [],
+    "main": "./dist/extension.js",
+    "contributes": {
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "typeagent-shell",
+                    "title": "TypeAgent",
+                    "icon": "media/typeagent-icon.svg"
+                }
+            ]
+        },
+        "views": {
+            "typeagent-shell": [
+                {
+                    "type": "webview",
+                    "id": "typeagent-shell.chatView",
+                    "name": "Chat"
+                }
+            ]
+        },
+        "commands": [
+            {
+                "command": "typeagent-shell.openChat",
+                "title": "Open Chat in Editor",
+                "category": "TypeAgent"
+            },
+            {
+                "command": "typeagent-shell.focusChat",
+                "title": "Focus Chat",
+                "category": "TypeAgent"
+            }
+        ],
+        "configuration": {
+            "title": "TypeAgent Shell",
+            "properties": {
+                "typeagent.serverUrl": {
+                    "type": "string",
+                    "default": "ws://localhost:3000",
+                    "description": "WebSocket URL of the TypeAgent agent server"
+                },
+                "typeagent.autoStart": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Automatically start the agent server if not running"
+                },
+                "typeagent.serverPort": {
+                    "type": "number",
+                    "default": 3000,
+                    "description": "Port for the agent server when auto-starting"
+                }
+            }
+        }
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "node esbuild.mjs",
+        "watch": "node esbuild.mjs --watch"
+    },
+    "devDependencies": {
+        "@types/vscode": "^1.90.0",
+        "esbuild": "^0.25.0",
+        "@vscode/vsce": "^3.0.0"
+    }
+}
