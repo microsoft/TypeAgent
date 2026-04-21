@@ -126,6 +126,28 @@ export type DispatcherConfig = {
             resolve: boolean; // resolve entities in the request
             clarify: boolean; // clarify entity names when multiple entities match
             filter: boolean;
+            // Path-navigation resolution for entity placeholders in action
+            // parameters. Extends the `${entity-N}` form with dotted property
+            // access — `${entity-0.facets[0].value}` — by walking the entity
+            // object. Four modes:
+            //  • "off":              current behavior — only the bare regex form is
+            //                        resolved; anything else passes through as a
+            //                        literal string.
+            //  • "throw":            attempt path navigation; throw a descriptive
+            //                        error if the path does not resolve. Strictest —
+            //                        feeds a named error into the reasoning loop.
+            //  • "fallback-to-name": attempt path navigation; if the path misses,
+            //                        resolve the bare form (entity.name) instead.
+            //  • "passthrough":      attempt path navigation; if the path misses,
+            //                        leave the literal placeholder untouched
+            //                        (equivalent to "off" for that specific miss).
+            // Shape-agnostic: if the entity schema grows a new field, the LLM's
+            // path guess resolves automatically — no code change here.
+            pathNavigation:
+                | "off"
+                | "throw"
+                | "fallback-to-name"
+                | "passthrough";
         };
     };
 
@@ -139,6 +161,11 @@ export type DispatcherConfig = {
             legacy: boolean; // use legacy memory behavior
         };
         reasoning: "claude" | "copilot" | "none";
+        // Controls how Entity objects are rendered into LLM prompts (translation + reasoning context).
+        // "facets" (default): current shape `{id, name, type, facets: [{name, value}, ...]}`.
+        // "flat": collapse facets into a `properties` object — `{id, name, type, uniqueId?, properties: {...}}`.
+        // "facets-with-schema": same JSON as "facets", but the Entity/EntityFacet TS type is appended to the reasoning system prompt.
+        entityPromptShape: "facets" | "flat" | "facets-with-schema";
     };
     explainer: {
         enabled: boolean;
@@ -222,6 +249,13 @@ const defaultSessionConfig: SessionConfig = {
             resolve: true,
             filter: true,
             clarify: false, // TODO: enable when it is ready.
+            // Default "throw": path navigation is ON, and unresolvable paths
+            // fail fast with a descriptive error. This matches the project
+            // pattern of making the reasoning loop — not silent fallbacks —
+            // handle LLM mistakes. Set to "off" to restore pre-feature
+            // behavior, "fallback-to-name" to recover via entity.name on
+            // miss, or "passthrough" to leave the literal placeholder.
+            pathNavigation: "throw",
         },
     },
     execution: {
@@ -233,6 +267,10 @@ const defaultSessionConfig: SessionConfig = {
             legacy: true, // use the new memory behavior
         },
         reasoning: "none",
+        // Default set based on the entity-shape experiment (bench-results/entity-shape-experiment.md):
+        // appending the Entity TS type to the reasoning system prompt produced 4 consistent
+        // gains / 0 consistent regressions on a 20-test sample (median of 3 runs).
+        entityPromptShape: "facets-with-schema",
     },
     explainer: {
         enabled: true,

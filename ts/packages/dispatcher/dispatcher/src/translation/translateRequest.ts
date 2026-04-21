@@ -121,7 +121,8 @@ export function getTranslatorForSchema(
         debugTranslate(`Using cached translator for '${translatorName}'`);
         return translator;
     }
-    const config = context.session.getConfig().translation;
+    const sessionConfig = context.session.getConfig();
+    const config = sessionConfig.translation;
     const { actionConfigs, switchActionConfigs } = getTranslationActionConfigs(
         context.agents,
         activeSchemas,
@@ -157,6 +158,8 @@ export function getTranslatorForSchema(
         generateOptions,
         config.model,
         context.promptLogger,
+        sessionConfig.execution.entityPromptShape,
+        sessionConfig.translation.entity.pathNavigation !== "off",
     );
     if (!activityContext) {
         context.translatorCache.set(translatorName, newTranslator);
@@ -191,7 +194,8 @@ async function getTranslatorForSelectedActions(
     if (nearestNeighbors === undefined) {
         return undefined;
     }
-    const config = context.session.getConfig().translation;
+    const sessionConfig = context.session.getConfig();
+    const config = sessionConfig.translation;
     const { actionConfigs, switchActionConfigs } = getTranslationActionConfigs(
         context.agents,
         activeSchemas,
@@ -210,6 +214,8 @@ async function getTranslatorForSelectedActions(
         },
         config.model,
         context.promptLogger,
+        sessionConfig.execution.entityPromptShape,
+        sessionConfig.translation.entity.pathNavigation !== "off",
     );
 }
 

@@ -31,6 +31,12 @@ export interface ReasoningLoopConfig {
     onToolCall?: (tool: string, args: unknown) => void;
     onToolResult?: (tool: string, result: unknown, isError: boolean) => void;
     onText?: (text: string) => void;
+    /**
+     * When set, the adapter resumes the prior session with this id rather
+     * than starting a fresh conversation. Useful for subagents that need to
+     * carry parent/sub-agent dialogue across iterations.
+     */
+    resumeSessionId?: string;
 }
 
 export interface ReasoningTraceCollectorInterface {

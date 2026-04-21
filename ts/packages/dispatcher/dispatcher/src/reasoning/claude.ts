@@ -15,6 +15,7 @@ import {
     SdkMcpToolDefinition,
 } from "@anthropic-ai/claude-agent-sdk";
 import registerDebug from "debug";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod/v4";
@@ -23,6 +24,8 @@ import {
     composeActionSchema,
     createActionSchemaJsonValidator,
 } from "../translation/actionSchemaJsonTranslator.js";
+import { serializeEntityForPrompt } from "../context/chatHistoryPrompt.js";
+import { Entity } from "@typeagent/agent-sdk";
 import { TypeAgentJsonValidator } from "typechat-utils";
 import { executeAction } from "../execute/actionHandlers.js";
 import { nullClientIO } from "../context/interactiveIO.js";
@@ -37,6 +40,10 @@ import {
     formatThinkingDisplay as sharedFormatThinkingDisplay,
 } from "./reasoningLoopBase.js";
 const debug = registerDebug("typeagent:dispatcher:reasoning:messages");
+// Separate channel for MCP tool invocations (discover_actions / execute_action)
+// so call counts can be traced without enabling the full messages channel.
+// Enable with DEBUG=typeagent:dispatcher:reasoning:mcp (or :* for everything).
+const debugMcp = registerDebug("typeagent:dispatcher:reasoning:mcp");
 
 const model = "claude-opus-4-6";
 
@@ -147,12 +154,21 @@ function buildPromptWithContext(
         if (fallbackContext.error) {
             lines.push(`Error: ${fallbackContext.error}`);
         }
-        lines.push(
-            "You MUST use scriptflow actions (discover_actions, listScriptFlows, executeScriptFlow, createScriptFlow, editScriptFlow, deleteScriptFlow) to handle this request. Do NOT use the Bash tool for operations that scriptflow can handle.",
-        );
-        if (fallbackContext.failedFlowName) {
+        const isScriptflowFailure =
+            fallbackContext.failedSchema?.startsWith("scriptflow") === true ||
+            fallbackContext.failedFlowName !== undefined;
+        if (isScriptflowFailure) {
             lines.push(
-                `IMPORTANT: The flow '${fallbackContext.failedFlowName}' failed. Use editScriptFlow to fix its script rather than creating a duplicate flow. Only create a new flow if the existing one's parameters/grammar are fundamentally wrong.`,
+                "You MUST use scriptflow actions (discover_actions, listScriptFlows, executeScriptFlow, createScriptFlow, editScriptFlow, deleteScriptFlow) to handle this request. Do NOT use the Bash tool for operations that scriptflow can handle.",
+            );
+            if (fallbackContext.failedFlowName) {
+                lines.push(
+                    `IMPORTANT: The flow '${fallbackContext.failedFlowName}' failed. Use editScriptFlow to fix its script rather than creating a duplicate flow. Only create a new flow if the existing one's parameters/grammar are fundamentally wrong.`,
+                );
+            }
+        } else {
+            lines.push(
+                "IMPORTANT: Do NOT re-invoke the failed action with substantively the same parameters — that attempt already failed. Complete the user's original request using a different approach: a different action, different parameters, or a sequence of typed actions.",
             );
         }
         parts.push(lines.join("\n"));
@@ -254,6 +270,7 @@ function getClaudeOptions(
         ].join("\n"),
         inputSchema: discoverSchema,
         handler: async (args) => {
+            debugMcp(`discover_actions schema=${args.schemaName}`);
             const validator = getValidator(args.schemaName);
             if (!validator) {
                 throw new Error(`Invalid schema name '${args.schemaName}'`);
@@ -285,6 +302,9 @@ function getClaudeOptions(
         ].join("\n"),
         inputSchema: executeSchema,
         handler: async (args) => {
+            debugMcp(
+                `execute_action schema=${args.schemaName} action=${args.action?.actionName}`,
+            );
             const validator = getValidator(args.schemaName);
             if (!validator) {
                 throw new Error(`Invalid schema name '${args.schemaName}'`);
@@ -300,6 +320,9 @@ function getClaudeOptions(
             }
             const validationResult = validator.validate(actionJson);
             if (!validationResult.success) {
+                debugMcp(
+                    `execute_action validation failed: ${validationResult.message}`,
+                );
                 // For unknown action names, include the schema text so the model
                 // can self-correct without an extra discover_actions round trip.
                 if (
@@ -319,6 +342,7 @@ function getClaudeOptions(
             }
 
             const result: IAgentMessage[] = [];
+            const savedClientIO = systemContext.clientIO;
             const capturingClientIO: ClientIO = {
                 ...nullClientIO,
                 setDisplay: (message) => {
@@ -329,8 +353,15 @@ function getClaudeOptions(
                         result.push(message);
                     }
                 },
+                // Diagnostic data emitted by handlers running inside the
+                // reasoning loop should still reach the outer collector.
+                // Without this override the default nullClientIO drops it
+                // silently, breaking any external consumer that inspects
+                // handler-emitted diagnostics.
+                appendDiagnosticData: (requestId, data) => {
+                    savedClientIO.appendDiagnosticData(requestId, data);
+                },
             };
-            const savedClientIO = systemContext.clientIO;
             systemContext.isInsideReasoningLoop = true;
             try {
                 systemContext.clientIO = capturingClientIO;
@@ -355,6 +386,26 @@ function getClaudeOptions(
     };
 
     const sessionId = getSessionId(context);
+
+    // Experimental override: if CLAUDE_CUSTOM_PROMPT_FILE is set, read that file
+    // each call and use its contents as the ENTIRE system prompt (bypassing
+    // claude_code preset and config.promptAppend). Used by prompt-variation
+    // benchmark experiments.
+    const overrideFile = process.env.CLAUDE_CUSTOM_PROMPT_FILE;
+    let customSystemPrompt: string | undefined;
+    if (overrideFile) {
+        try {
+            customSystemPrompt = fs.readFileSync(overrideFile, "utf8");
+            debug(
+                `[prompt-override] Using custom system prompt from ${overrideFile} (${customSystemPrompt.length} chars)`,
+            );
+        } catch (err) {
+            debug(
+                `[prompt-override] Failed to read ${overrideFile}: ${(err as Error).message}`,
+            );
+        }
+    }
+
     const claudeOptions: Options = {
         model,
         permissionMode: "acceptEdits",
@@ -365,7 +416,8 @@ function getClaudeOptions(
         settingSources: [],
         maxTurns: 20,
         thinking: { type: "adaptive" },
-        systemPrompt: {
+        effort: "max",
+        systemPrompt: customSystemPrompt ?? {
             type: "preset",
             preset: "claude_code",
             append: [
@@ -379,6 +431,25 @@ function getClaudeOptions(
                 "When the user asks about agent capabilities, use discover_actions first.",
                 "When the user asks to perform an action, discover the schema then execute_action.",
                 "",
+                ...(config.execution.entityPromptShape === "facets-with-schema"
+                    ? [
+                          "# Entity Schema",
+                          "",
+                          "Entities in the [Context Entities] block follow this TypeScript shape:",
+                          "",
+                          "```typescript",
+                          "interface Entity {",
+                          "    name: string;",
+                          "    type: string[];",
+                          "    uniqueId?: string;",
+                          "    facets?: { name: string; value: string | number | boolean | object | any[] }[];",
+                          "}",
+                          "```",
+                          "",
+                          "Read `facets[].name` as the property key and `facets[].value` as the value. Prefer values from facets over re-reading the underlying source. `uniqueId` can be used to reference an entity in follow-up turns.",
+                          "",
+                      ]
+                    : []),
                 ...(config.promptAppend
                     ? [
                           "# TypeAgent Configuration/Context",
@@ -394,6 +465,8 @@ function getClaudeOptions(
                 "When information is ambiguous or missing, make a reasonable safe default choice and proceed.",
                 "Prefer non-destructive defaults: add rather than replace, use conservative values.",
                 "Only stop if you are truly unable to proceed — in that case, emit a clear error message explaining what is missing.",
+                "",
+                "ACTIONS, NOT DESCRIPTIONS: a request to modify state is only complete when you have actually executed an action that modifies it. Writing code or pseudo-code in a markdown response is NOT execution. If an action exists that performs the change, call it — do not describe the change in text and stop. Never finish a turn with only a text-only explanation when the task required a modification.",
                 "",
                 "# File Placement Policy",
                 "",
@@ -730,6 +803,34 @@ function generateRequestId(): string {
     return `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
+// Default reasoning-loop timeout. Override with TYPEAGENT_REASONING_TIMEOUT_MS.
+const DEFAULT_REASONING_TIMEOUT_MS = 20 * 60 * 1000;
+
+// Pull schemaName + actionName out of a Claude SDK tool_use input when the tool
+// is one of the MCP action-executor tools. Leaves both undefined for other tools
+// so the emitted reasoningStep stays small and well-typed.
+function extractActionInfo(
+    toolName: string,
+    input: unknown,
+): { schemaName?: string; actionName?: string } {
+    const inp = input as Record<string, unknown> | undefined;
+    if (!inp) return {};
+    const out: { schemaName?: string; actionName?: string } = {};
+    if (toolName.endsWith("execute_action")) {
+        if (typeof inp.schemaName === "string") out.schemaName = inp.schemaName;
+        const actionRaw = inp.action as Record<string, unknown> | undefined;
+        if (typeof actionRaw?.actionName === "string") {
+            out.actionName = actionRaw.actionName;
+        }
+        return out;
+    }
+    if (toolName.endsWith("discover_actions")) {
+        if (typeof inp.schemaName === "string") out.schemaName = inp.schemaName;
+        return out;
+    }
+    return out;
+}
+
 /**
  * Execute reasoning action without planning (standard mode)
  */
@@ -737,6 +838,7 @@ async function executeReasoningWithoutPlanning(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
     fallbackContext?: ReasoningFallbackContext,
+    abortSignal?: AbortSignal,
 ): Promise<any> {
     // Display initial message
     context.actionIO.appendDisplay("Thinking...", "temporary");
@@ -752,10 +854,13 @@ async function executeReasoningWithoutPlanning(
     });
 
     let finalResult: string | undefined = undefined;
+    let toolUseCount = 0;
+    let reasoningStepCount = 0;
+    const toolUseIdToName = new Map<string, string>();
 
     // Process streaming response
     for await (const message of queryInstance) {
-        context.abortSignal?.throwIfAborted();
+        (abortSignal ?? context.abortSignal)?.throwIfAborted();
         debug(message);
         // Capture session ID from first message for future resume
         if ("session_id" in message && !getSessionId(context)) {
@@ -774,6 +879,23 @@ async function executeReasoningWithoutPlanning(
                         "block",
                     );
                 } else if (content.type === "tool_use") {
+                    toolUseCount++;
+                    reasoningStepCount++;
+                    toolUseIdToName.set(content.id, content.name);
+                    const actionInfo = extractActionInfo(
+                        content.name,
+                        content.input,
+                    );
+                    context.actionIO.appendDiagnosticData({
+                        type: "reasoningStep",
+                        phase: "toolCall",
+                        stepNumber: reasoningStepCount,
+                        toolUseId: content.id,
+                        toolName: content.name,
+                        ...actionInfo,
+                        parameters: content.input,
+                        timestamp: new Date().toISOString(),
+                    });
                     context.actionIO.appendDisplay(
                         {
                             type: "markdown",
@@ -813,6 +935,16 @@ async function executeReasoningWithoutPlanning(
                         } else if (typeof block.content === "string") {
                             content = block.content;
                         }
+                        const toolName = toolUseIdToName.get(block.tool_use_id);
+                        context.actionIO.appendDiagnosticData({
+                            type: "reasoningStep",
+                            phase: "toolResult",
+                            toolUseId: block.tool_use_id,
+                            ...(toolName !== undefined ? { toolName } : {}),
+                            isError,
+                            result: content,
+                            timestamp: new Date().toISOString(),
+                        });
                         context.actionIO.appendDisplay(
                             {
                                 type: "markdown",
@@ -841,6 +973,16 @@ async function executeReasoningWithoutPlanning(
         }
     }
 
+    // A success result with zero tool calls means the model replied with text
+    // only (e.g. described the change in prose) without executing anything.
+    // Nothing was actually modified — surface as a failure instead of letting
+    // the text be reported as a successful action.
+    if (finalResult && toolUseCount === 0) {
+        throw new Error(
+            "Reasoning completed with no tool calls — the model produced a text-only response and did not execute any action. No state was modified.",
+        );
+    }
+
     return finalResult ? createActionResultNoDisplay(finalResult) : undefined;
 }
 
@@ -851,6 +993,7 @@ async function executeReasoningWithTracing(
     originalRequest: string,
     context: ActionContext<CommandHandlerContext>,
     fallbackContext?: ReasoningFallbackContext,
+    abortSignal?: AbortSignal,
 ): Promise<any> {
     const systemContext = context.sessionContext.agentContext;
     const storage = context.sessionContext.sessionStorage;
@@ -858,7 +1001,12 @@ async function executeReasoningWithTracing(
     if (!storage) {
         // No session storage available - fallback to standard reasoning
         debug("No sessionStorage available, using standard reasoning");
-        return executeReasoningWithoutPlanning(originalRequest, context);
+        return executeReasoningWithoutPlanning(
+            originalRequest,
+            context,
+            undefined,
+            abortSignal,
+        );
     }
 
     const requestId = generateRequestId();
@@ -888,11 +1036,13 @@ async function executeReasoningWithTracing(
         });
 
         let finalResult: string | undefined = undefined;
+        let toolUseCount = 0;
+        let reasoningStepCount = 0;
         const toolUseIdToName = new Map<string, string>();
 
         // Process streaming response with tracing
         for await (const message of queryInstance) {
-            context.abortSignal?.throwIfAborted();
+            (abortSignal ?? context.abortSignal)?.throwIfAborted();
             debug(message);
             // Capture session ID from first message for future resume
             if ("session_id" in message && !getSessionId(context)) {
@@ -911,10 +1061,27 @@ async function executeReasoningWithTracing(
                             content: content.text,
                         });
                     } else if (content.type === "tool_use") {
+                        toolUseCount++;
+                        reasoningStepCount++;
                         // Track tool_use_id → name for matching results
                         toolUseIdToName.set(content.id, content.name);
                         // Record tool call for tracing
                         tracer.recordToolCall(content.name, content.input);
+
+                        const actionInfo = extractActionInfo(
+                            content.name,
+                            content.input,
+                        );
+                        context.actionIO.appendDiagnosticData({
+                            type: "reasoningStep",
+                            phase: "toolCall",
+                            stepNumber: reasoningStepCount,
+                            toolUseId: content.id,
+                            toolName: content.name,
+                            ...actionInfo,
+                            parameters: content.input,
+                            timestamp: new Date().toISOString(),
+                        });
 
                         context.actionIO.appendDisplay(
                             {
@@ -967,6 +1134,16 @@ async function executeReasoningWithTracing(
                                 isError ? content : undefined,
                             );
 
+                            context.actionIO.appendDiagnosticData({
+                                type: "reasoningStep",
+                                phase: "toolResult",
+                                toolUseId: block.tool_use_id,
+                                toolName,
+                                isError,
+                                result: content,
+                                timestamp: new Date().toISOString(),
+                            });
+
                             context.actionIO.appendDisplay(
                                 {
                                     type: "markdown",
@@ -995,6 +1172,15 @@ async function executeReasoningWithTracing(
                     throw new Error(errorMessage);
                 }
             }
+        }
+
+        // A success result with zero tool calls means the model replied with
+        // text only (e.g. described the change in prose) without executing
+        // anything. Nothing was actually modified — surface as a failure.
+        if (finalResult && toolUseCount === 0) {
+            throw new Error(
+                "Reasoning completed with no tool calls — the model produced a text-only response and did not execute any action. No state was modified.",
+            );
         }
 
         // Mark trace as successful
@@ -1143,23 +1329,56 @@ export async function executeReasoningAction(
     if (attemptedAction !== undefined || contextEntities !== undefined) {
         const parts: string[] = [request, ""];
         if (attemptedAction !== undefined) {
+            const hasError =
+                attemptedAction &&
+                typeof attemptedAction === "object" &&
+                typeof (attemptedAction as any).error === "string";
+            const headline = hasError
+                ? "A previous action attempt failed. The failed action (and its error) are shown below:"
+                : "The translator produced this action (intercepted for inspection before execution):";
+            const followUp = hasError
+                ? "Do not retry the failed action as-is — diagnose the error, inspect the " +
+                  "relevant state to understand the actual shape, then complete the user's " +
+                  "original request using whichever available tools are appropriate."
+                : "Use the parameters above as your starting point. Inspect the relevant " +
+                  "state to verify they are correct, then execute the same action (or a " +
+                  "corrected variant) to satisfy the user's request.";
             parts.push(
                 "[Attempted Action]",
-                "The translator produced this action (intercepted for workbook inspection before execution):",
+                headline,
                 "```json",
                 JSON.stringify(attemptedAction, null, 2),
                 "```",
-                "Use the formula and address above as your starting point. Inspect the workbook " +
-                    "to verify they are correct, then call execute_action(setFormula) with the " +
-                    "confirmed (or corrected) parameters.",
+                followUp,
                 "",
             );
         }
         if (contextEntities !== undefined) {
+            // Producers serialize Entity[] in the canonical {name, type,
+            // facets} shape. Re-render here per the configured prompt shape
+            // so all variants flow through one transform point.
+            const shape = config.execution.entityPromptShape;
+            const rendered = Array.isArray(contextEntities)
+                ? contextEntities.map((raw: unknown, i: number) => {
+                      if (
+                          raw !== null &&
+                          typeof raw === "object" &&
+                          typeof (raw as any).name === "string" &&
+                          Array.isArray((raw as any).type)
+                      ) {
+                          return serializeEntityForPrompt(
+                              raw as Entity,
+                              shape,
+                              i,
+                          );
+                      }
+                      return raw;
+                  })
+                : contextEntities;
             parts.push(
                 "[Context Entities]",
                 "```json",
-                JSON.stringify(contextEntities, null, 2),
+                JSON.stringify(rendered, null, 2),
                 "```",
                 "",
             );
@@ -1167,9 +1386,27 @@ export async function executeReasoningAction(
         enrichedRequest = parts.join("\n");
     }
 
+    // Build a fallbackContext from the attemptedAction when an agent
+    // intercepted and redirected the request. This lets
+    // buildPromptWithContext emit the appropriate re-invocation guidance.
+    const fallbackContext: ReasoningFallbackContext | undefined =
+        attemptedAction &&
+        typeof attemptedAction === "object" &&
+        typeof (attemptedAction as any).schemaName === "string" &&
+        typeof (attemptedAction as any).actionName === "string"
+            ? {
+                  failedSchema: (attemptedAction as any).schemaName,
+                  failedAction: (attemptedAction as any).actionName,
+                  ...(typeof (attemptedAction as any).error === "string"
+                      ? { error: (attemptedAction as any).error }
+                      : {}),
+              }
+            : undefined;
+
     return executeReasoning(enrichedRequest, context, {
         planReuseEnabled: planReuseEnabled || scriptReuseEnabled,
         engine: "claude",
+        ...(fallbackContext ? { fallbackContext } : {}),
     });
 }
 
@@ -1477,6 +1714,58 @@ export interface ReasoningFallbackContext {
     error?: string | undefined;
 }
 
+/**
+ * Run `fn` with a per-test reasoning timeout.
+ *
+ * The timeout is taken from `TYPEAGENT_REASONING_TIMEOUT_MS` (milliseconds) and
+ * defaults to 10 minutes. Set it to `0` to disable the timeout entirely.
+ *
+ * The returned AbortSignal is aborted on timeout OR when `context.abortSignal`
+ * is aborted externally. Inner reasoning loops check the signal on every
+ * streamed message, so long-running loops exit promptly on timeout.
+ */
+async function runWithReasoningTimeout<T>(
+    context: ActionContext<CommandHandlerContext>,
+    fn: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+    const raw = process.env.TYPEAGENT_REASONING_TIMEOUT_MS;
+    const parsed = raw !== undefined ? Number(raw) : NaN;
+    const timeoutMs =
+        Number.isFinite(parsed) && parsed >= 0
+            ? parsed
+            : DEFAULT_REASONING_TIMEOUT_MS;
+
+    const controller = new AbortController();
+    const externalSignal = context.abortSignal;
+    const onExternalAbort = () => controller.abort(externalSignal?.reason);
+
+    if (externalSignal) {
+        if (externalSignal.aborted) controller.abort(externalSignal.reason);
+        else
+            externalSignal.addEventListener("abort", onExternalAbort, {
+                once: true,
+            });
+    }
+
+    const timer =
+        timeoutMs > 0
+            ? setTimeout(() => {
+                  controller.abort(
+                      new Error(
+                          `Reasoning exceeded timeout of ${timeoutMs} ms (set TYPEAGENT_REASONING_TIMEOUT_MS to change).`,
+                      ),
+                  );
+              }, timeoutMs)
+            : undefined;
+
+    try {
+        return await fn(controller.signal);
+    } finally {
+        if (timer !== undefined) clearTimeout(timer);
+        externalSignal?.removeEventListener?.("abort", onExternalAbort);
+    }
+}
+
 export async function executeReasoning(
     request: string,
     context: ActionContext<CommandHandlerContext>,
@@ -1492,14 +1781,21 @@ export async function executeReasoning(
     }
     const planReuseEnabled = options?.planReuseEnabled ?? false;
     const fallbackContext = options?.fallbackContext;
-    if (!planReuseEnabled) {
-        return executeReasoningWithoutPlanning(
+    return runWithReasoningTimeout(context, (signal) => {
+        if (!planReuseEnabled) {
+            return executeReasoningWithoutPlanning(
+                request,
+                context,
+                fallbackContext,
+                signal,
+            );
+        }
+        // Trace capture + auto recipe generation
+        return executeReasoningWithTracing(
             request,
             context,
             fallbackContext,
+            signal,
         );
-    }
-
-    // Trace capture + auto recipe generation
-    return executeReasoningWithTracing(request, context, fallbackContext);
+    });
 }

@@ -673,3 +673,5 @@ export function createAgentRpcServer(
 export type AgentInterfaceFunctionName =
     | keyof AgentInvokeFunctions
     | keyof AgentCallFunctions;
+
+export type AgentControlMessage = "exit";

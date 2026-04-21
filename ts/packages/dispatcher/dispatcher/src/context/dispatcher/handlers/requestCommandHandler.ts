@@ -387,9 +387,12 @@ export class RequestCommandHandler implements CommandHandler {
                 "record ",
             ];
             const lowerRequest = request.trimStart().toLowerCase();
+            const forceReasoningEnv =
+                process.env.CLAUDE_FORCE_REASONING === "1";
             if (
                 !systemContext.noReasoning &&
-                REASONING_PREFIXES.some((p) => lowerRequest.startsWith(p))
+                (forceReasoningEnv ||
+                    REASONING_PREFIXES.some((p) => lowerRequest.startsWith(p)))
             ) {
                 await executeReasoning(request, context, { engine: "claude" });
                 return;
@@ -503,6 +506,13 @@ export class RequestCommandHandler implements CommandHandler {
                             );
                             await executeReasoning(augmentedRequest, context, {
                                 engine: "claude",
+                                fallbackContext: {
+                                    failedSchema:
+                                        failedAction.action.schemaName,
+                                    failedAction:
+                                        failedAction.action.actionName,
+                                    error,
+                                },
                             });
                         } catch (e: any) {
                             debugRequest(

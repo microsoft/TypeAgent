@@ -2,9 +2,63 @@
 // Licensed under the MIT License.
 
 import { HistoryContext } from "agent-cache";
+import { Entity } from "@typeagent/agent-sdk";
 import { CachedImageWithDetails, TypeAgentJsonValidator } from "typechat-utils";
 import { PromptSection } from "typechat";
 import { getLocationString } from "./geolocation.js";
+
+export type EntityPromptShape = "facets" | "flat" | "facets-with-schema";
+
+// Renders a single Entity into the JSON-serializable shape the LLM will see.
+// "facets" and "facets-with-schema" produce identical JSON; they differ only in
+// whether the reasoning system prompt includes the Entity TS type block (handled
+// separately at the system-prompt assembly site).
+export function serializeEntityForPrompt(
+    entity: Entity,
+    shape: EntityPromptShape,
+    i: number,
+): Record<string, unknown> {
+    const id = `\${entity-${i}}`;
+    if (shape === "flat") {
+        const properties: Record<string, unknown> = {};
+        let duplicate = false;
+        for (const f of entity.facets ?? []) {
+            if (f.name in properties) {
+                duplicate = true;
+            }
+            properties[f.name] = f.value;
+        }
+        if (duplicate) {
+            // Last-write-wins on duplicate facet names. Surface via debug so we can tell
+            // whether the flat shape is silently losing data in practice.
+            // eslint-disable-next-line no-console
+            console.warn(
+                `serializeEntityForPrompt: duplicate facet name in entity '${entity.name}' — last-write-wins`,
+            );
+        }
+        const out: Record<string, unknown> = {
+            id,
+            name: entity.name,
+            type: entity.type,
+        };
+        if (entity.uniqueId) {
+            out.uniqueId = entity.uniqueId;
+        }
+        if (Object.keys(properties).length > 0) {
+            out.properties = properties;
+        }
+        return out;
+    }
+    const out: Record<string, unknown> = {
+        id,
+        name: entity.name,
+        type: entity.type,
+    };
+    if (entity.facets && entity.facets.length > 0) {
+        out.facets = entity.facets;
+    }
+    return out;
+}
 
 export function createTypeAgentRequestPrompt(
     validator: TypeAgentJsonValidator<object>,
@@ -12,6 +66,13 @@ export function createTypeAgentRequestPrompt(
     history: HistoryContext | undefined,
     attachments: CachedImageWithDetails[] | undefined,
     context: boolean = true, // set to false to totally remove any context information (e.g. today's date), not just history
+    entityPromptShape: EntityPromptShape = "facets",
+    // When the dispatcher's entity path-navigation feature is enabled (any mode
+    // other than "off"), include a short prompt line telling the LLM it may
+    // reference entity subfields via dotted paths. When "off" (the default),
+    // the prompt is unchanged — we don't advertise a feature the resolver
+    // won't honor.
+    entityPathNavigationEnabled: boolean = false,
 ) {
     if (attachments !== undefined && attachments?.length > 0) {
         if (request.length == 0) {
@@ -62,17 +123,13 @@ export function createTypeAgentRequestPrompt(
                     );
                     prompts.push(
                         JSON.stringify(
-                            promptEntities.map((entity, i) => {
-                                const e: Record<string, unknown> = {
-                                    id: `\${entity-${i}}`,
-                                    name: entity.name,
-                                    type: entity.type,
-                                };
-                                if (entity.facets && entity.facets.length > 0) {
-                                    e.facets = entity.facets;
-                                }
-                                return e;
-                            }),
+                            promptEntities.map((entity, i) =>
+                                serializeEntityForPrompt(
+                                    entity,
+                                    entityPromptShape,
+                                    i,
+                                ),
+                            ),
                             undefined,
                             2,
                         ),
@@ -122,6 +179,11 @@ export function createTypeAgentRequestPrompt(
             "Determine the entities implicitly referred in the current user request based on the recent chat history.",
             "If parameter value refers to an entity, use entities' id as parameter values when referring to entities instead of the entities' name. Do not use entity ids that do not exist in the chat history.",
             "Entity facets provide structured properties about the entity. Use facet values directly when filling action parameters — prefer them over guessing or calling additional lookup actions.",
+            ...(entityPathNavigationEnabled
+                ? [
+                      "To reference a subfield of an entity — such as a specific facet value — you may append a dotted path to the entity id, e.g. `${entity-0.facets[0].value}` or `${entity-0.name}`. The path is walked against the entity object you see above. If you are unsure the path exists, inline the literal value from the entity instead.",
+                  ]
+                : []),
             "If there are multiple possible resolution, choose the most likely resolution based on conversation context, bias toward the newest.",
             "Avoid clarifying unless absolutely necessary. Infer the user's intent based on conversation context.",
             `Based primarily on the current user request with references and pronouns resolved with recent entities in the chat history, but considering the context of the whole chat history, the following is the current user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:`,
