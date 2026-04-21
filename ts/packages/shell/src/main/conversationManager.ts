@@ -212,45 +212,51 @@ export function registerConversationIpcHandlers(
     backend: ConversationManagerBackend,
 ): () => void {
     const handlers = {
-        "session-list": async () => {
-            debugShell("IPC: session-list");
+        "conversation-list": async () => {
+            debugShell("IPC: conversation-list");
             return backend.listConversations();
         },
-        "session-create": async (
+        "conversation-create": async (
             _event: Electron.IpcMainInvokeEvent,
             name: string,
         ) => {
-            debugShell("IPC: session-create name=%s", name);
+            debugShell("IPC: conversation-create name=%s", name);
             return backend.createConversation(name);
         },
-        "session-switch": async (
+        "conversation-switch": async (
             _event: Electron.IpcMainInvokeEvent,
             conversationId: string,
         ) => {
-            debugShell("IPC: session-switch conversationId=%s", conversationId);
+            debugShell(
+                "IPC: conversation-switch conversationId=%s",
+                conversationId,
+            );
             return backend.switchConversation(conversationId);
         },
-        "session-rename": async (
+        "conversation-rename": async (
             _event: Electron.IpcMainInvokeEvent,
             conversationId: string,
             newName: string,
         ) => {
             debugShell(
-                "IPC: session-rename conversationId=%s newName=%s",
+                "IPC: conversation-rename conversationId=%s newName=%s",
                 conversationId,
                 newName,
             );
             return backend.renameConversation(conversationId, newName);
         },
-        "session-delete": async (
+        "conversation-delete": async (
             _event: Electron.IpcMainInvokeEvent,
             conversationId: string,
         ) => {
-            debugShell("IPC: session-delete conversationId=%s", conversationId);
+            debugShell(
+                "IPC: conversation-delete conversationId=%s",
+                conversationId,
+            );
             return backend.deleteConversation(conversationId);
         },
-        "session-get-current": async () => {
-            debugShell("IPC: session-get-current");
+        "conversation-get-current": async () => {
+            debugShell("IPC: conversation-get-current");
             return backend.getCurrentConversation();
         },
     };

@@ -480,7 +480,7 @@ export function initializeInstance(
                 initialConversationId,
                 initialConversationName,
                 (conversationId, name) => {
-                    shellWindow.sendSessionChanged(conversationId, name);
+                    shellWindow.sendConversationChanged(conversationId, name);
                 },
                 rebindDispatcher,
                 () => shellWindow.sendMarkHistory(),
@@ -489,7 +489,7 @@ export function initializeInstance(
                 registerConversationIpcHandlers(remoteBackend);
 
             // Notify renderer of the initial conversation
-            shellWindow.sendSessionChanged(
+            shellWindow.sendConversationChanged(
                 initialConversationId,
                 initialConversationName,
             );
