@@ -62,8 +62,8 @@ export class MatchSet {
         public readonly namespace: string | undefined,
         private readonly index: number = -1, // Assign an index as id for serialization and reference in construction
     ) {
-        // Case insensitive match
-        // TODO: non-diacritic match
+        // Case-insensitive storage; diacritic-insensitive matching is done by
+        // buildDiacriticVariantPattern on the regex side.
         this.matches = new Set(Array.from(matches).map((m) => m.toLowerCase()));
 
         // Error checking
@@ -95,7 +95,9 @@ export class MatchSet {
     public get regexPart() {
         return Array.from(this.matches)
             .sort((a, b) => b.length - a.length) // Match longest first
-            .map((m) => escapeMatch(m).replaceAll(/\s+/g, "\\s+")) // allow multiple spaces
+            .map((m) =>
+                buildDiacriticVariantPattern(m).replaceAll(/\s+/g, "\\s+"),
+            ) // allow multiple spaces
             .join("|");
     }
 
