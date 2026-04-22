@@ -49,6 +49,13 @@ export class ChatUI {
     // Track switching state to keep input disabled
     private _isSwitching = false;
 
+    // Display name + initial for the local user (set via setUserInfo)
+    private _userName = "you";
+    private _userInitial = "T";
+
+    // Queue of live user bubbles awaiting a commandComplete to mark done
+    private _pendingUserBubbles: HTMLElement[] = [];
+
     constructor() {
         this._messagesEl = document.getElementById("messages")!;
         this._inputEl = document.getElementById(
@@ -79,7 +86,21 @@ export class ChatUI {
         this._sendCallback = callback;
     }
 
-    public addUserMessage(text: string, timestamp?: number): void {
+    /**
+     * Set the local user's display name and avatar initial.  Called once
+     * from the host with the OS username; safe to call again to update.
+     */
+    public setUserInfo(name: string): void {
+        if (!name) return;
+        this._userName = name;
+        this._userInitial = name.trim().charAt(0).toUpperCase() || "?";
+    }
+
+    public addUserMessage(
+        text: string,
+        timestamp?: number,
+        status: "pending" | "done" = "done",
+    ): void {
         this._removeStatusIndicator();
         this._removeTemporary();
         this._activeResponseEl = undefined;
@@ -91,7 +112,7 @@ export class ChatUI {
         const body = document.createElement("div");
         body.className = "message-body";
 
-        const header = this._createHeader("you", timestamp);
+        const header = this._createHeader(this._userName, timestamp);
         body.appendChild(header);
 
         const bubble = document.createElement("div");
@@ -100,12 +121,22 @@ export class ChatUI {
         textEl.className = "message-content";
         textEl.textContent = text;
         bubble.appendChild(textEl);
+
+        const statusEl = document.createElement("span");
+        statusEl.className = "status-icon";
+        statusEl.textContent = status === "pending" ? "🪶" : "✅";
+        statusEl.title = status === "pending" ? "Sent" : "Done";
+        bubble.appendChild(statusEl);
+
         body.appendChild(bubble);
 
         row.appendChild(body);
         row.appendChild(this._createAvatar("user"));
 
         this._messagesEl.appendChild(row);
+        if (status === "pending") {
+            this._pendingUserBubbles.push(row);
+        }
         this._scrollToBottom();
     }
 
@@ -204,6 +235,7 @@ export class ChatUI {
         this._messagesEl.innerHTML = "";
         this._activeResponseEl = undefined;
         this._statusIndicatorEl = undefined;
+        this._pendingUserBubbles = [];
     }
 
     /**
@@ -215,6 +247,15 @@ export class ChatUI {
         this._removeStatusIndicator();
         this._activeResponseEl = undefined;
         this._lastAppendedContent = undefined;
+        // Mark the oldest pending user bubble as done
+        const pending = this._pendingUserBubbles.shift();
+        if (pending) {
+            const icon = pending.querySelector(".status-icon");
+            if (icon) {
+                icon.textContent = "✅";
+                (icon as HTMLElement).title = "Done";
+            }
+        }
     }
 
     public addNotification(event: string, _data: any, source: string): void {
@@ -356,7 +397,7 @@ export class ChatUI {
         const text = this._inputEl.value.trim();
         if (!text) return;
         // Show user message immediately (don't wait for server echo)
-        this.addUserMessage(text);
+        this.addUserMessage(text, undefined, "pending");
         this._inputEl.value = "";
         this._inputEl.style.height = "auto";
         this._sendCallback?.(text);
@@ -413,9 +454,11 @@ export class ChatUI {
         const el = document.createElement("div");
         el.className = `avatar avatar-${kind}`;
         if (kind === "user") {
-            el.textContent = "T";
+            el.textContent = this._userInitial;
+            el.title = this._userName;
         } else {
             el.textContent = this._avatarForSource(source);
+            if (source) el.title = source;
         }
         return el;
     }
@@ -423,23 +466,40 @@ export class ChatUI {
     private _avatarForSource(source?: string): string {
         if (!source) return "✦";
         const root = source.split(".")[0].toLowerCase();
+        // Emoji per agent, sourced from the manifest emojiChar values
+        // (ts/packages/agents/*/src/*Manifest.json).
         const map: Record<string, string> = {
+            androidmobile: "📱",
             browser: "🌐",
             calendar: "📅",
             chat: "💬",
-            code: "💻",
-            desktop: "🖥",
-            email: "✉",
-            list: "📋",
-            markdown: "📝",
-            montage: "🖼",
-            music: "🎵",
+            code: "⚛️",
+            desktop: "🪟",
+            email: "📩",
+            "github-cli": "🐙",
+            greeting: "🖐️",
+            image: "🖼️",
+            list: "📝",
+            markdown: "🗎",
+            montage: "🎞",
+            onboarding: "🛠️",
             photo: "📷",
+            player: "🎧",
+            localplayer: "🎵",
+            music: "🎵",
+            scriptflow: "🔁",
+            settings: "⚙️",
+            taskflow: "📜",
+            test: "➕",
+            turtle: "🐢",
+            utility: "🔧",
+            video: "📹",
+            weather: "⛅",
+            word: "📄",
             spelunker: "⛏",
             system: "⚙",
-            turtle: "🐢",
-            weather: "☀",
-            word: "📄",
+            shell: "🐚",
+            dispatcher: "🤖",
         };
         return map[root] ?? root.charAt(0).toUpperCase();
     }

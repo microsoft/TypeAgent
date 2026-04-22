@@ -23,6 +23,9 @@ window.addEventListener("message", (event) => {
         case "status":
             chatUI.setStatus(msg.connected, msg.sessionId, msg.sessionName);
             break;
+        case "userInfo":
+            chatUI.setUserInfo(msg.name);
+            break;
         case "sessionChanged":
             chatUI.onSessionChanged(msg.sessionName);
             break;

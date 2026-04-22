@@ -187,6 +187,16 @@ body {
     display: block;
 }
 
+/* Status icon inside user bubble (sent / done) */
+.status-icon {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 11px;
+    opacity: 0.8;
+    vertical-align: baseline;
+    user-select: none;
+}
+
 .message.system {
     align-self: center;
     font-size: 11px;

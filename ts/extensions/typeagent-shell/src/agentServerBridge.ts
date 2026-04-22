@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
+import * as os from "os";
 import { connectAgentServer } from "@typeagent/agent-server-client";
 import type {
     AgentServerConnection,
@@ -49,6 +50,7 @@ export type BridgeToWebviewMessage =
     | { type: "commandComplete"; requestId: string; result: any }
     | { type: "error"; message: string }
     | { type: "switching"; switching: boolean; targetName?: string }
+    | { type: "userInfo"; name: string }
     | {
           type: "historyReplay";
           entries: Array<{
@@ -115,6 +117,16 @@ export class AgentServerBridge {
         const disposable = webview.onDidReceiveMessage((msg) =>
             this.handleWebviewMessage(msg, webview),
         );
+
+        // Send local user info so bubbles can show a real name/initial
+        try {
+            const name = os.userInfo().username;
+            if (name) {
+                this.postToWebview(webview, { type: "userInfo", name });
+            }
+        } catch {
+            // os.userInfo() can throw on some configurations; ignore
+        }
 
         // Send current status
         this.postToWebview(webview, {
