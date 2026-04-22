@@ -20,12 +20,13 @@ import type { SessionInfo } from "@typeagent/agent-server-protocol";
 export type BridgeToWebviewMessage =
     | { type: "status"; connected: boolean; sessionId?: string; sessionName?: string }
     | { type: "sessionChanged"; sessionId: string; sessionName: string }
-    | { type: "setDisplay"; message: IAgentMessage; seq?: number }
+    | { type: "setDisplay"; message: IAgentMessage; seq?: number; timestamp?: number }
     | {
           type: "appendDisplay";
           message: IAgentMessage;
           mode: DisplayAppendMode;
           seq?: number;
+          timestamp?: number;
       }
     | {
           type: "setDisplayInfo";
@@ -40,6 +41,7 @@ export type BridgeToWebviewMessage =
           requestId: RequestId;
           command: string;
           seq?: number;
+          timestamp?: number;
       }
     | { type: "clear"; requestId: RequestId }
     | { type: "notify"; event: string; data: any; source: string; seq?: number }
@@ -462,6 +464,7 @@ export class AgentServerBridge {
                         requestId: entry.requestId,
                         command: entry.command,
                         seq: entry.seq,
+                        timestamp: entry.timestamp,
                     });
                     break;
                 case "set-display":
@@ -469,6 +472,7 @@ export class AgentServerBridge {
                         type: "setDisplay",
                         message: entry.message,
                         seq: entry.seq,
+                        timestamp: entry.timestamp,
                     });
                     break;
                 case "append-display":
@@ -477,6 +481,7 @@ export class AgentServerBridge {
                         message: entry.message,
                         mode: entry.mode,
                         seq: entry.seq,
+                        timestamp: entry.timestamp,
                     });
                     break;
                 case "set-display-info":

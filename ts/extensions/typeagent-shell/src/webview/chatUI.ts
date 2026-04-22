@@ -55,14 +55,19 @@ export class ChatUI {
         this._sendCallback = callback;
     }
 
-    public addUserMessage(text: string): void {
+    public addUserMessage(text: string, timestamp?: number): void {
         this._removeStatusIndicator();
         this._removeTemporary();
         this._activeResponseEl = undefined;
         this._lastAppendedContent = undefined;
         const el = document.createElement("div");
         el.className = "message user";
-        el.textContent = text;
+        const tsEl = this._createTimestampEl(timestamp);
+        el.appendChild(tsEl);
+        const textEl = document.createElement("span");
+        textEl.className = "message-content";
+        textEl.textContent = text;
+        el.appendChild(textEl);
         this._messagesEl.appendChild(el);
         this._scrollToBottom();
     }
@@ -70,11 +75,15 @@ export class ChatUI {
     /**
      * setDisplay: replace the content of the active agent bubble.
      */
-    public setAgentDisplay(content: any, source?: string): void {
+    public setAgentDisplay(
+        content: any,
+        source?: string,
+        timestamp?: number,
+    ): void {
         this._removeStatusIndicator();
         this._removeTemporary();
         if (!this._activeResponseEl) {
-            this._activeResponseEl = this._createAgentBubble(source);
+            this._activeResponseEl = this._createAgentBubble(source, timestamp);
         }
         if (source) {
             const sourceEl = this._activeResponseEl.querySelector(".source-label");
@@ -99,6 +108,7 @@ export class ChatUI {
         content: any,
         source?: string,
         mode?: string,
+        timestamp?: number,
     ): void {
         this._removeStatusIndicator();
 
@@ -126,7 +136,7 @@ export class ChatUI {
         if (!this._activeResponseEl) {
             // Remove temporary when first real content arrives
             this._removeTemporary();
-            this._activeResponseEl = this._createAgentBubble(source);
+            this._activeResponseEl = this._createAgentBubble(source, timestamp);
         }
         const contentEl =
             this._activeResponseEl.querySelector(".agent-content");
@@ -247,35 +257,25 @@ export class ChatUI {
     }
 
     /**
-     * Begin replaying server-side display history.  Inserts a separator and
-     * sets a flag so the webview accepts setUserRequest events (which are
-     * normally ignored because live user messages are added on send).
+     * Begin replaying server-side display history.  Sets a flag so the
+     * webview accepts setUserRequest events (which are normally ignored
+     * because live user messages are added on send).
      */
     public beginHistory(): void {
         this._isHistoryMode = true;
         this._activeResponseEl = undefined;
         this._lastAppendedContent = undefined;
-        const sep = document.createElement("div");
-        sep.className = "message system separator history-start";
-        sep.textContent = "─── conversation history ───";
-        this._messagesEl.appendChild(sep);
     }
 
     /**
      * End history replay.  Marks all replayed message bubbles with the
-     * `.history` class so they render in a muted style, then inserts a
-     * "now" separator and resets active-bubble tracking so live messages
-     * start a fresh bubble.
+     * `.history` class so they render in a muted style, then resets
+     * active-bubble tracking so live messages start a fresh bubble.
      */
     public endHistory(): void {
         // Mark every message currently in the DOM as historical
         const messages = this._messagesEl.querySelectorAll(".message");
         messages.forEach((el) => el.classList.add("history"));
-
-        const sep = document.createElement("div");
-        sep.className = "message system separator history-end";
-        sep.textContent = "─── now ───";
-        this._messagesEl.appendChild(sep);
 
         this._isHistoryMode = false;
         this._activeResponseEl = undefined;
@@ -301,9 +301,14 @@ export class ChatUI {
         this._sendCallback?.(text);
     }
 
-    private _createAgentBubble(source?: string): HTMLElement {
+    private _createAgentBubble(
+        source?: string,
+        timestamp?: number,
+    ): HTMLElement {
         const el = document.createElement("div");
         el.className = "message agent";
+        const tsEl = this._createTimestampEl(timestamp);
+        el.appendChild(tsEl);
         if (source) {
             const sourceEl = document.createElement("span");
             sourceEl.className = "source-label";
@@ -315,6 +320,49 @@ export class ChatUI {
         el.appendChild(contentEl);
         this._messagesEl.appendChild(el);
         return el;
+    }
+
+    private _createTimestampEl(timestamp?: number): HTMLElement {
+        const ts = timestamp ?? Date.now();
+        const el = document.createElement("span");
+        el.className = "message-timestamp";
+        el.textContent = this._formatTimestamp(ts);
+        // Tooltip with full date/time on hover
+        el.title = new Date(ts).toLocaleString();
+        return el;
+    }
+
+    /**
+     * Format timestamp as time-of-day for today, "Yesterday HH:MM" for
+     * yesterday, or short date+time for older messages.
+     */
+    private _formatTimestamp(timestamp: number): string {
+        const d = new Date(timestamp);
+        const now = new Date();
+        const time = d.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+        });
+        const sameDay =
+            d.getFullYear() === now.getFullYear() &&
+            d.getMonth() === now.getMonth() &&
+            d.getDate() === now.getDate();
+        if (sameDay) {
+            return time;
+        }
+        const yesterday = new Date(now);
+        yesterday.setDate(now.getDate() - 1);
+        const isYesterday =
+            d.getFullYear() === yesterday.getFullYear() &&
+            d.getMonth() === yesterday.getMonth() &&
+            d.getDate() === yesterday.getDate();
+        if (isYesterday) {
+            return `Yesterday ${time}`;
+        }
+        return `${d.toLocaleDateString([], {
+            month: "short",
+            day: "numeric",
+        })} ${time}`;
     }
 
     private _removeStatusIndicator(): void {

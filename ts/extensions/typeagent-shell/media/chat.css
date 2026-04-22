@@ -99,12 +99,21 @@ body {
     filter: grayscale(0.4);
 }
 
-.message.system.separator {
-    text-transform: uppercase;
-    letter-spacing: 1px;
+/* Per-bubble timestamp shown above the content */
+.message-timestamp {
+    display: block;
     font-size: 10px;
-    color: var(--vscode-descriptionForeground);
-    margin: 8px 0;
+    opacity: 0.6;
+    margin-bottom: 2px;
+    user-select: none;
+}
+
+.message.user .message-timestamp {
+    text-align: right;
+}
+
+.message-content {
+    display: block;
 }
 
 .message.system {

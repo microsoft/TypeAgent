@@ -27,20 +27,25 @@ window.addEventListener("message", (event) => {
             chatUI.onSessionChanged(msg.sessionName);
             break;
         case "setDisplay":
-            chatUI.setAgentDisplay(msg.message.message, msg.message.source);
+            chatUI.setAgentDisplay(
+                msg.message.message,
+                msg.message.source,
+                msg.timestamp,
+            );
             break;
         case "appendDisplay":
             chatUI.appendAgentDisplay(
                 msg.message.message,
                 msg.message.source,
                 msg.mode,
+                msg.timestamp,
             );
             break;
         case "setUserRequest":
             // Live: user message shown immediately on send — skip echo.
             // History replay: must show it (no live send happened).
             if (chatUI.isHistoryMode()) {
-                chatUI.addUserMessage(msg.command);
+                chatUI.addUserMessage(msg.command, msg.timestamp);
             }
             break;
         case "setDisplayInfo":
