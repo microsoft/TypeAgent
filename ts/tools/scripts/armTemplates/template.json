@@ -15,6 +15,13 @@
       "defaultValue": "typeagent",
       "type": "String"
     },
+    "primaryRegion": {
+      "defaultValue": true,
+      "type": "Bool",
+      "metadata": {
+        "description": "When true (default), deploys the full stack — OpenAI + Maps + Speech + Key Vault + AI Foundry. When false, deploys only the OpenAI account and its deployments so this region acts as a pool member. Use `false` for every region after the first when running multi-region deploys; the primary region's Key Vault and globally-unique services (Maps, Speech, AI Foundry) stay in place."
+      }
+    },
     "group_name": {
       "defaultValue": "[concat(parameters('prefix'), '-', parameters('region'), '-rg')]",
       "type": "String"
@@ -24,7 +31,7 @@
       "type": "String"
     },
     "maps_name": {
-      "defaultValue": "[concat(parameters('prefix'), '-', parameters('maps_region'), '-maps')]",
+      "defaultValue": "[concat(parameters('prefix'), '-maps-', parameters('maps_region'))]",
       "type": "String"
     },
     "speech_region": {
@@ -32,7 +39,7 @@
       "type": "String"
     },
     "speech_name": {
-      "defaultValue": "[concat(parameters('prefix'), '-', parameters('speech_region'), '-speech')]",
+      "defaultValue": "[concat(parameters('prefix'), '-speech-', parameters('speech_region'))]",
       "type": "String"
     },
     "openai_region": {
@@ -40,7 +47,7 @@
       "type": "String"
     },
     "openai_name": {
-      "defaultValue": "[concat(parameters('prefix'), '-', parameters('openai_region'), '-openai')]",
+      "defaultValue": "[concat(parameters('prefix'), '-openai-', parameters('openai_region'))]",
       "type": "String"
     },
     "search_name": {
@@ -95,6 +102,7 @@
           "vaults_region": { "value": "[parameters('vaults_region')]" },
           "vaults_name": { "value": "[parameters('vaults_name')]" },
           "principalId": { "value": "[parameters('principalId')]" },
+          "primaryRegion": { "value": "[parameters('primaryRegion')]" },
           "accounts_typeagent_test_agent_resource_name": {
             "value": "[parameters('accounts_typeagent_test_agent_resource_name')]"
           },
@@ -121,6 +129,7 @@
             "vaults_region": { "type": "String" },
             "vaults_name": { "type": "String" },
             "principalId": { "type": "String" },
+            "primaryRegion": { "type": "Bool" },
             "accounts_typeagent_test_agent_resource_name": { "type": "String" },
             "accounts_bing_with_grounding_externalid": { "type": "String" },
             "workflows_GetHTTPSEndpoint_name": { "type": "String" }
@@ -136,6 +145,7 @@
           },
           "resources": {
             "maps": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.Maps/accounts",
               "apiVersion": "2024-07-01-preview",
               "name": "[parameters('maps_name')]",
@@ -161,6 +171,7 @@
               }
             },
             "map_role": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
               "name": "[guid(concat(parameters('maps_name'), 'Azure Maps Data Reader'))]",
@@ -172,6 +183,7 @@
               }
             },
             "speech": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.CognitiveServices/accounts",
               "apiVersion": "2024-10-01",
               "name": "[parameters('speech_name')]",
@@ -197,6 +209,7 @@
               }
             },
             "speech_role": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
               "name": "[guid(concat(parameters('speech_name'), 'Cognitive Services Speech User'))]",
@@ -242,6 +255,7 @@
               }
             },
             "openai_ada_002": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.CognitiveServices/accounts/deployments",
               "apiVersion": "2024-10-01",
               "name": "[concat(parameters('openai_name'), '/ada-002')]",
@@ -262,6 +276,7 @@
               }
             },
             "openai_image": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.CognitiveServices/accounts/deployments",
               "apiVersion": "2024-10-01",
               "name": "[concat(parameters('openai_name'), '/gpt-image-1.5')]",
@@ -282,6 +297,7 @@
               }
             },
             "openai_gpt35": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.CognitiveServices/accounts/deployments",
               "apiVersion": "2024-10-01",
               "name": "[concat(parameters('openai_name'), '/gpt-35-turbo-16k')]",
@@ -302,6 +318,7 @@
               }
             },
             "openai_gpt4o": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.CognitiveServices/accounts/deployments",
               "apiVersion": "2024-10-01",
               "name": "[concat(parameters('openai_name'), '/gpt-4o')]",
@@ -327,6 +344,7 @@
               }
             },
             "openai_gpt4o_mini": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.CognitiveServices/accounts/deployments",
               "apiVersion": "2024-10-01",
               "name": "[concat(parameters('openai_name'), '/gpt-4o-mini')]",
@@ -353,6 +371,7 @@
               }
             },
             "vault": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.KeyVault/vaults",
               "apiVersion": "2024-12-01-preview",
               "name": "[parameters('vaults_name')]",
@@ -378,6 +397,7 @@
               }
             },
             "vault_role": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
               "name": "[guid(concat(parameters('vaults_name'), 'Key Vault Secrets User'))]",
@@ -389,6 +409,7 @@
               }
             },
             "secrets_map_clientid": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
               "name": "[concat(parameters('vaults_name'), '/AZURE-MAPS-CLIENTID')]",
@@ -401,6 +422,7 @@
               }
             },
             "secrets_map_endpoint": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
               "name": "[concat(parameters('vaults_name'), '/AZURE-MAPS-ENDPOINT')]",
@@ -413,6 +435,7 @@
               }
             },
             "secrets_openai_endpoint": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
               "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-ENDPOINT')]",
@@ -425,6 +448,7 @@
               }
             },
             "secrets_gpt_image_1_5_endpoint": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
               "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-ENDPOINT-GPT-IMAGE-1-5')]",
@@ -437,6 +461,7 @@
               }
             },
             "secrets_gpt_image_1_5_key": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
               "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-API-KEY-GPT-IMAGE-1-5')]",
@@ -449,6 +474,7 @@
               }
             },
             "secrets_sora_key": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
               "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-API-KEY-SORA')]",
@@ -461,6 +487,7 @@
               }
             },
             "secrets_sora_2_key": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
               "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-API-KEY-SORA-2')]",
@@ -473,6 +500,7 @@
               }
             },
             "secrets_sora_2_endpoint": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
               "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-ENDPOINT-SORA-2')]",
@@ -485,6 +513,7 @@
               }
             },
             "secrets_gpt_5_4_pro_key": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
               "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-API-KEY-GPT-5-4-PRO')]",
@@ -497,6 +526,7 @@
               }
             },
             "secrets_gpt_5_4_pro_endpoint": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
               "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-API-ENDPOINT-GPT-5-4-PRO')]",
@@ -509,6 +539,7 @@
               }
             },
             "secrets_embedding_endpoint": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
               "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-ENDPOINT-EMBEDDING')]",
@@ -521,6 +552,7 @@
               }
             },
             "secrets_gpt35_endpoint": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
               "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-ENDPOINT-GPT-35-TURBO')]",
@@ -533,6 +565,7 @@
               }
             },
             "secrets_gpt4o_mini_endpoint": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
               "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-ENDPOINT-GPT-4-O-MINI')]",
@@ -545,6 +578,7 @@
               }
             },
             "secrets_openai_response_format": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
               "name": "[concat(parameters('vaults_name'), '/AZURE-OPENAI-RESPONSE-FORMAT')]",
@@ -557,6 +591,7 @@
               }
             },
             "secrets_groundingWithBing_agent_id": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
               "name": "[concat(parameters('vaults_name'), '/BING-WITH-GROUNDING-AGENT-ID')]",
@@ -569,6 +604,7 @@
               }
             },
             "secrets_groundingWithBing_endpoint": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
               "name": "[concat(parameters('vaults_name'), '/BING-WITH-GROUNDING-ENDPOINT')]",
@@ -581,6 +617,7 @@
               }
             },
             "speech_key": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
               "name": "[concat(parameters('vaults_name'), '/SPEECH-SDK-ENDPOINT')]",
@@ -593,6 +630,7 @@
               }
             },
             "speech_region": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-12-01-preview",
               "name": "[concat(parameters('vaults_name'), '/SPEECH-SDK-REGION')]",
@@ -605,6 +643,7 @@
               }
             },
             "aiFoundry_account": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.CognitiveServices/accounts",
               "apiVersion": "2025-04-01-preview",
               "name": "[parameters('accounts_typeagent_test_agent_resource_name')]",
@@ -635,6 +674,7 @@
               }
             },
             "agent_model": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.CognitiveServices/accounts/deployments",
               "apiVersion": "2025-04-01-preview",
               "name": "[concat(parameters('accounts_typeagent_test_agent_resource_name'), '/gpt-4o')]",
@@ -657,6 +697,7 @@
               }
             },
             "aiFoundry_project": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.CognitiveServices/accounts/projects",
               "apiVersion": "2025-04-01-preview",
               "name": "[concat(parameters('accounts_typeagent_test_agent_resource_name'), '/typeagent-test-agent')]",
@@ -671,6 +712,7 @@
               "properties": {}
             },
             "aiFoundry_connection": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.CognitiveServices/accounts/projects/connections",
               "apiVersion": "2025-04-01-preview",
               "name": "[concat(parameters('accounts_typeagent_test_agent_resource_name'), '/typeagent-test-agent/bingwithgrounding')]",
@@ -698,6 +740,7 @@
               }
             },
             "http_endpoint_logic_app": {
+              "condition": "[parameters('primaryRegion')]",
               "type": "Microsoft.Logic/workflows",
               "apiVersion": "2017-07-01",
               "name": "[parameters('workflows_GetHTTPSEndpoint_name')]",
