@@ -466,17 +466,11 @@ export function factorCommonPrefixes(rules: GrammarRule[]): GrammarRule[] {
 
     // Top-level factoring: wrap the (already nested-factored) top-level
     // rules in a synthetic `RulesPart` so we can reuse `factorRulesPart`
-    // unchanged.  Iterate to a fixed point exactly like `factorParts`
-    // does for nested groups.  Newly synthesized suffix `RulesPart`s
-    // produced here are not themselves re-walked, matching the existing
-    // behavior for nested factoring.
-    let working: RulesPart = { type: "rules", rules: result };
-    for (let i = 0; i < 8; i++) {
-        const next = factorRulesPart(working, counter);
-        if (next === working) break;
-        working = next;
-    }
-    result = working.rules;
+    // unchanged.  Newly synthesized suffix `RulesPart`s produced here are
+    // not themselves re-walked, matching the existing behavior for nested
+    // factoring.
+    const wrapper: RulesPart = { type: "rules", rules: result };
+    result = factorRulesPart(wrapper, counter).rules;
 
     if (counter.factored > 0) {
         debug(`factored ${counter.factored} common prefix groups`);
@@ -534,17 +528,10 @@ function factorParts(
         // Recurse into nested rules first, preserving shared-array
         // identity via memo.
         const recursedRules = factorRulesArray(p.rules, counter, memo);
-        let working: RulesPart =
+        const recursed: RulesPart =
             recursedRules !== p.rules ? { ...p, rules: recursedRules } : p;
 
-        // Factor with bounded iteration to fixed point.  Newly produced
-        // suffix `RulesPart`s are not shared by construction, so they
-        // don't need memo entries.
-        for (let i = 0; i < 8; i++) {
-            const next = factorRulesPart(working, counter);
-            if (next === working) break;
-            working = next;
-        }
+        const working = factorRulesPart(recursed, counter);
         if (working !== p) changed = true;
         out.push(working);
     }
