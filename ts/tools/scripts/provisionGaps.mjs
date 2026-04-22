@@ -24,6 +24,7 @@
 //   node tools/scripts/provisionGaps.mjs --model gpt-5 --include-new-regions
 
 import chalk from "chalk";
+import { escapeRegExp } from "lodash-es";
 import { execAzCliCommand, getAzCliLoggedInInfo } from "./lib/azureUtils.mjs";
 
 // ---------------- config ----------------
@@ -632,10 +633,7 @@ async function main() {
             // (so deployments land in the canonical account when a region has
             // multiple OpenAI accounts). Fall back to the first one found.
             const prefixPattern = options.prefix
-                ? new RegExp(
-                      `^${options.prefix.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")}-openai-`,
-                      "i",
-                  )
+                ? new RegExp(`^${escapeRegExp(options.prefix)}-openai-`, "i")
                 : undefined;
             const target =
                 (prefixPattern &&
