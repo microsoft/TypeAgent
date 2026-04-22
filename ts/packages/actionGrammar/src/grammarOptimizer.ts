@@ -80,7 +80,13 @@ export function inlineSingleAlternativeRules(
 ): GrammarRule[] {
     const counter = { inlined: 0 };
     const memo: RulesArrayMemo = new Map();
-    const result = inlineRulesArray(rules, counter, memo);
+    // Reference count over the input AST: how many `RulesPart`s point at
+    // each `GrammarRule[]` array.  Used to refuse inlining a shared
+    // array, which would otherwise duplicate the child's parts at every
+    // call site and bloat the serialized grammar (the serializer dedups
+    // by array identity).
+    const refCounts = countRulesArrayRefs(rules);
+    const result = inlineRulesArray(rules, counter, memo, refCounts);
     if (counter.inlined > 0) {
         debug(`inlined ${counter.inlined} single-alternative RulesParts`);
     }
@@ -89,16 +95,41 @@ export function inlineSingleAlternativeRules(
 
 type RulesArrayMemo = Map<GrammarRule[], GrammarRule[]>;
 
+/**
+ * Count how many `RulesPart` references each `GrammarRule[]` array has
+ * across the AST reachable from `rules`.  The top-level array itself is
+ * counted as 1 (treated as if held by an implicit root reference) so
+ * single-alternative top-level rules are also protected from inlining
+ * if shared.  Recurses each unique array exactly once via `visited`.
+ */
+function countRulesArrayRefs(rules: GrammarRule[]): Map<GrammarRule[], number> {
+    const counts = new Map<GrammarRule[], number>();
+    const visited = new Set<GrammarRule[]>();
+    function walk(arr: GrammarRule[]) {
+        counts.set(arr, (counts.get(arr) ?? 0) + 1);
+        if (visited.has(arr)) return;
+        visited.add(arr);
+        for (const r of arr) {
+            for (const p of r.parts) {
+                if (p.type === "rules") walk(p.rules);
+            }
+        }
+    }
+    walk(rules);
+    return counts;
+}
+
 function inlineRulesArray(
     rules: GrammarRule[],
     counter: { inlined: number },
     memo: RulesArrayMemo,
+    refCounts: Map<GrammarRule[], number>,
 ): GrammarRule[] {
     const cached = memo.get(rules);
     if (cached !== undefined) return cached;
     // Reserve the slot before recursing so cycles (if any) terminate.
     memo.set(rules, rules);
-    const next = rules.map((r) => inlineRule(r, counter, memo));
+    const next = rules.map((r) => inlineRule(r, counter, memo, refCounts));
     const changed = next.some((r, i) => r !== rules[i]);
     const result = changed ? next : rules;
     memo.set(rules, result);
@@ -109,12 +140,14 @@ function inlineRule(
     rule: GrammarRule,
     counter: { inlined: number },
     memo: RulesArrayMemo,
+    refCounts: Map<GrammarRule[], number>,
 ): GrammarRule {
     const { parts, changed, valueSubstitutions, valueAssignment } = inlineParts(
         rule.parts,
         rule,
         counter,
         memo,
+        refCounts,
     );
     if (!changed) {
         return rule;
@@ -162,6 +195,7 @@ function inlineParts(
     parentRule: GrammarRule,
     counter: { inlined: number },
     memo: RulesArrayMemo,
+    refCounts: Map<GrammarRule[], number>,
 ): {
     parts: GrammarPart[];
     changed: boolean;
@@ -179,11 +213,27 @@ function inlineParts(
         }
         // Recurse into nested rules first (post-order), preserving
         // shared-array identity via memo.
-        const inlinedRules = inlineRulesArray(p.rules, counter, memo);
+        const inlinedRules = inlineRulesArray(
+            p.rules,
+            counter,
+            memo,
+            refCounts,
+        );
         const rewritten: RulesPart =
             inlinedRules !== p.rules ? { ...p, rules: inlinedRules } : p;
 
-        const replacement = tryInlineRulesPart(rewritten, parentRule);
+        // Refuse to inline a RulesPart whose body is shared by more than
+        // one reference: inlining duplicates the child's parts at the
+        // call site, but the original array is still referenced from the
+        // other call sites — net effect is N copies in the serialized
+        // grammar instead of 1 dedup'd entry.  Reference counts come
+        // from the *input* AST; the rewritten array shares identity with
+        // it via the memo when no nested change occurred, and otherwise
+        // is unique to this site (so inlining is safe).
+        const shared = (refCounts.get(p.rules) ?? 1) > 1;
+        const replacement = shared
+            ? undefined
+            : tryInlineRulesPart(rewritten, parentRule);
         if (replacement !== undefined) {
             counter.inlined++;
             changed = true;

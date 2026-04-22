@@ -56,8 +56,7 @@ describe("Grammar Optimizer - Shared rule identity preservation", () => {
                         r.parts.length === 1 &&
                         r.parts[0].type === "string" &&
                         ["the song", "a track", "that tune"].some(
-                            (s) =>
-                                (r.parts[0] as any).value.join(" ") === s,
+                            (s) => (r.parts[0] as any).value.join(" ") === s,
                         ),
                 ),
             )
@@ -135,4 +134,88 @@ describe("Grammar Optimizer - Shared rule identity preservation", () => {
             }
         });
     }
+});
+
+describe("Grammar Optimizer - Shared single-alternative rule is not inlined", () => {
+    // <Inner> has a single alternative AND is referenced from multiple
+    // call sites.  Inlining it would duplicate "the song" at every call
+    // site in the serialized JSON; the optimizer must refuse based on
+    // the input reference count.
+    const text = `<Start> = <Use1> | <Use2> | <Use3>;
+<Use1> = sing $(x:<Inner>) -> x;
+<Use2> = play $(x:<Inner>) -> x;
+<Use3> = hum $(x:<Inner>) -> x;
+<Inner> = the song -> "song";`;
+
+    function innerRulesArrays(
+        grammar: ReturnType<typeof loadGrammarRules>,
+    ): GrammarRule[][] {
+        return findAllRulesParts(grammar.rules)
+            .filter(
+                (p) =>
+                    p.rules.length === 1 &&
+                    p.rules[0].parts.length === 1 &&
+                    p.rules[0].parts[0].type === "string" &&
+                    (p.rules[0].parts[0] as any).value.join(" ") === "the song",
+            )
+            .map((p) => p.rules);
+    }
+
+    it("inliner preserves shared <Inner> array identity", () => {
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { inlineSingleAlternatives: true },
+        });
+        const arrays = innerRulesArrays(optimized);
+        expect(arrays.length).toBeGreaterThanOrEqual(3);
+        for (let i = 1; i < arrays.length; i++) {
+            expect(arrays[i]).toBe(arrays[0]);
+        }
+    });
+
+    it("serialized output dedupes shared single-alt <Inner> rule", () => {
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { inlineSingleAlternatives: true },
+        });
+        const json = grammarToJson(optimized);
+        // Exactly one GrammarRulesJson entry should hold the "the song"
+        // body (the shared <Inner>).
+        const entries = json.filter(
+            (entry) =>
+                Array.isArray(entry) &&
+                entry.length === 1 &&
+                entry[0].parts?.length === 1 &&
+                entry[0].parts[0].type === "string" &&
+                (entry[0].parts[0] as any).value.join(" ") === "the song",
+        );
+        expect(entries.length).toBe(1);
+    });
+
+    it("still inlines a single-alternative rule referenced only once", () => {
+        const single = `<Start> = sing $(x:<Inner>) -> x;
+<Inner> = the song -> "song";`;
+        const baseline = loadGrammarRules("t.grammar", single);
+        const optimized = loadGrammarRules("t.grammar", single, {
+            optimizations: { inlineSingleAlternatives: true },
+        });
+        // The single reference should be inlined → fewer RulesParts.
+        const baseCount = findAllRulesParts(baseline.rules).length;
+        const optCount = findAllRulesParts(optimized.rules).length;
+        expect(optCount).toBeLessThan(baseCount);
+    });
+
+    it("match results unchanged for shared single-alt <Inner>", () => {
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { inlineSingleAlternatives: true },
+        });
+        for (const input of [
+            "sing the song",
+            "play the song",
+            "hum the song",
+        ]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
 });
