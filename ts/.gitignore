@@ -18,3 +18,7 @@ command_history.json
 packages/agents/settings/src/settingsActionSchemaV2.ts
 examples/schemaStudio/data/settingsCommands.csv
 examples/schemaStudio/output/
+
+# Per-subscription inventory snapshot written by inventoryEndpoints.mjs.
+# Contains actual account names, endpoints, and subdomain names — never commit.
+tools/scripts/pools.inventory.json

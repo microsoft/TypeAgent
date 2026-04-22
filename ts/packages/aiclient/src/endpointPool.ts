@@ -145,6 +145,42 @@ function extractRegionAndMode(tail: string): {
     return { region, mode };
 }
 
+// Does the given tail (the suffix *after* the model name) parse as a
+// [region]? + [_PTU]? sequence? Used to distinguish "regional variant of this
+// pool" from "member of a different, longer-named pool that happens to share
+// the same prefix".
+//
+// Examples (for a pool whose basePrefix is AZURE_OPENAI_ENDPOINT_EMBEDDING):
+//   tail="EASTUS"                  → valid (region)
+//   tail="EASTUS_PTU"              → valid (region + PTU)
+//   tail="INDEXING_WESTUS"         → valid (deployment-tag + region);
+//                                    accepted because the tag is non-region
+//                                    but the final tokens still resolve to a
+//                                    known region — this is the tagged-variant
+//                                    case (ada-002-indexing in westus).
+//   tail="3_LARGE_EASTUS"          → INVALID for the EMBEDDING pool — the
+//                                    "3_LARGE" prefix marks a different
+//                                    model (text-embedding-3-large). Caller
+//                                    must request that model by name.
+//
+// The rule: the trailing tokens (after stripping optional _PTU) must
+// concatenate to a known-region token. Anything before that is treated as a
+// deployment tag (fine) or as evidence of a different model (reject).
+function tailLooksLikeRegionSuffix(tail: string): boolean {
+    if (tail.length === 0) return true; // bare suffix — pool-of-one base
+    const tokens = tail.split("_").filter((t) => t.length > 0);
+    if (tokens.length === 0) return true;
+    if (tokens[tokens.length - 1].toUpperCase() === "PTU") tokens.pop();
+    if (tokens.length === 0) return true;
+    // All remaining tokens must combine to a known region. Leaving any
+    // non-region prefix token (e.g. "3_LARGE" in "3_LARGE_EASTUS") means
+    // the suffix belongs to a different, longer-named pool. Regions are at
+    // most 3 tokens when split by "_" (e.g. NORTH_CENTRAL_US).
+    if (tokens.length > 3) return false;
+    const candidate = tokens.join("").toLowerCase();
+    return KNOWN_REGIONS.has(candidate);
+}
+
 function scanSuffixes(
     env: Record<string, string | undefined>,
     root: string,
@@ -330,6 +366,20 @@ export function discoverEndpointPool(
         } else if (!endpointName) {
             tail = suffix; // for embeddings/image default case, suffix == tail
         }
+
+        // Guard against prefix-collision: if the tail doesn't look like a
+        // [region][_PTU] pattern (e.g., tail="3_LARGE_EASTUS" on the
+        // EMBEDDING pool), this env var belongs to a *different* model that
+        // happens to share the same prefix. Skip it here; the correct pool
+        // for that model will pick it up when the caller requests it by
+        // name (e.g. createEmbeddingModel("EMBEDDING_3_LARGE")).
+        if (suffix !== (endpointName ?? "") && !tailLooksLikeRegionSuffix(tail)) {
+            debugPool(
+                `skipping ${provider} ${endpointName ?? "<bare>"} member "${suffix}": tail "${tail}" doesn't look like a region — belongs to a different model`,
+            );
+            continue;
+        }
+
         const { region, mode: defaultMode } = extractRegionAndMode(tail);
 
         // Default priority: bare suffix or PTU variants are tier 1, else tier 2.

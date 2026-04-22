@@ -14,10 +14,7 @@ import child_process from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-    execAzCliCommand,
-    getAzCliLoggedInInfo,
-} from "./lib/azureUtils.mjs";
+import { execAzCliCommand, getAzCliLoggedInInfo } from "./lib/azureUtils.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -94,9 +91,7 @@ async function listKeyVaultSecrets(vaultName) {
         );
         return JSON.parse(raw);
     } catch (e) {
-        error(
-            `Could not list secrets from vault ${vaultName}: ${e.message}`,
-        );
+        error(`Could not list secrets from vault ${vaultName}: ${e.message}`);
         return [];
     }
 }
@@ -216,8 +211,7 @@ async function main() {
 
     // JSON output
     const outPath =
-        options.json ??
-        path.resolve(__dirname, "./pools.inventory.json");
+        options.json ?? path.resolve(__dirname, "./pools.inventory.json");
     fs.writeFileSync(outPath, JSON.stringify(report, null, 2));
     title(`Wrote ${outPath}`);
 }

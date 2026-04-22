@@ -141,6 +141,59 @@ describe("endpointPool.discoverEndpointPool", () => {
         ).not.toThrow();
     });
 
+    test("default embedding pool doesn't swallow EMBEDDING_3_LARGE / _3_SMALL env vars", () => {
+        // EMBEDDING_3_LARGE / _3_SMALL share the AZURE_OPENAI_ENDPOINT_EMBEDDING
+        // prefix but belong to DIFFERENT models. Discovery for the default
+        // EMBEDDING pool must NOT include them as regional members; otherwise
+        // a request for ada-002 could be routed to a text-embedding-3-large
+        // endpoint.
+        const env = {
+            AZURE_OPENAI_ENDPOINT_EMBEDDING: "https://ada-bare",
+            AZURE_OPENAI_API_KEY_EMBEDDING: "k",
+            AZURE_OPENAI_ENDPOINT_EMBEDDING_EASTUS: "https://ada-eastus",
+            AZURE_OPENAI_API_KEY_EMBEDDING_EASTUS: "k",
+            // Should be excluded — different model:
+            AZURE_OPENAI_ENDPOINT_EMBEDDING_3_LARGE_EASTUS: "https://3-large-eastus",
+            AZURE_OPENAI_API_KEY_EMBEDDING_3_LARGE_EASTUS: "k",
+            AZURE_OPENAI_ENDPOINT_EMBEDDING_3_SMALL_SWEDENCENTRAL: "https://3-small-sweden",
+            AZURE_OPENAI_API_KEY_EMBEDDING_3_SMALL_SWEDENCENTRAL: "k",
+            // Should also be excluded from the bare pool — tagged variant
+            // belongs to its own pool (EMBEDDING_INDEXING):
+            AZURE_OPENAI_ENDPOINT_EMBEDDING_INDEXING_WESTUS: "https://indexing-westus",
+            AZURE_OPENAI_API_KEY_EMBEDDING_INDEXING_WESTUS: "k",
+        };
+        const pool = discoverEndpointPool(
+            "azure",
+            ModelType.Embedding,
+            undefined,
+            env,
+        );
+        const suffixes = pool.members.map((m) => m.suffix).sort();
+        expect(suffixes).toEqual(["", "EASTUS"]);
+    });
+
+    test("GPT_4_O pool doesn't swallow GPT_4_O_MINI env vars", () => {
+        const env = {
+            AZURE_OPENAI_ENDPOINT_GPT_4_O_EASTUS: "https://4o-eastus",
+            AZURE_OPENAI_API_KEY_GPT_4_O_EASTUS: "k",
+            AZURE_OPENAI_ENDPOINT_GPT_4_O_SWEDENCENTRAL_PTU: "https://4o-sweden-ptu",
+            AZURE_OPENAI_API_KEY_GPT_4_O_SWEDENCENTRAL_PTU: "k",
+            AZURE_OPENAI_ENDPOINT_GPT_4_O_MINI_EASTUS: "https://4o-mini-eastus",
+            AZURE_OPENAI_API_KEY_GPT_4_O_MINI_EASTUS: "k",
+        };
+        const pool = discoverEndpointPool(
+            "azure",
+            ModelType.Chat,
+            "GPT_4_O",
+            env,
+        );
+        const suffixes = pool.members.map((m) => m.suffix).sort();
+        expect(suffixes).toEqual([
+            "GPT_4_O_EASTUS",
+            "GPT_4_O_SWEDENCENTRAL_PTU",
+        ]);
+    });
+
     test("member without a usable key is skipped (not the whole pool)", () => {
         const env = {
             AZURE_OPENAI_ENDPOINT_GPT_4_O_EASTUS: "https://eastus",
