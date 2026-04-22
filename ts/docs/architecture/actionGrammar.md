@@ -382,6 +382,139 @@ GrammarParseResult {
 6. Type-checks value expressions in two passes (see
    [Validation architecture](#validation-architecture) below)
 7. Produces the flat `Grammar` structure ready for matching
+8. Optionally runs the [Compile-time optimizer](#compile-time-optimizations)
+   to reshape the AST without changing match semantics
+
+### Compile-time optimizations
+
+`grammarOptimizer.ts` exposes opt-in AST passes that reshape the
+compiled `Grammar` to reduce matcher work without changing match
+results. Both passes are off by default and individually controllable
+through `LoadGrammarRulesOptions.optimizations`:
+
+```typescript
+loadGrammarRules("agent.agr", text, {
+    optimizations: {
+        inlineSingleAlternatives: true,
+        factorCommonPrefixes: true,
+    },
+});
+```
+
+The optimizer runs after value-expression validation, so it operates on
+fully-compiled `CompiledValueNode`s.
+
+#### Pass 1 — Inline single-alternative `RulesPart`
+
+`inlineSingleAlternativeRules` walks all rule alternatives post-order
+and replaces an eligible `RulesPart` with the spread of its child
+rule's parts. This removes one layer of `ParentMatchState` push/pop and
+`finalizeNestedRule` in the matcher, which is common for named rules
+that simply delegate to a single sub-rule.
+
+A `RulesPart` is inlined only when **all** of the following hold:
+
+- `part.rules.length === 1`
+- `!part.repeat` and `!part.optional` (loop-back / optional semantics
+  must be preserved)
+- The child rule has no explicit `value` expression (an inlined value
+  would no longer fire under the parent's value-tracking policy)
+- The child rule's `spacingMode` is compatible with the parent
+  (either `undefined` to inherit, or identical to the parent's mode)
+- If `part.variable` is set, the child must consist of a single
+  direct-capture part (`wildcard` or `number`) so the variable name
+  can be propagated onto it. Variable propagation is **never** pushed
+  onto a nested `RulesPart` — that scope is structurally distinct from
+  the parent's and would silently drop the binding for cases like
+  `$(x:<Inner>)` where `<Inner>` produces a nested object via its own
+  value expression.
+
+#### Pass 2 — Common prefix factoring
+
+`factorCommonPrefixes` walks every `RulesPart` and groups alternatives
+that share a non-empty leading prefix. The shared prefix is hoisted
+into the alternative once, followed by a nested `RulesPart` containing
+the remaining suffixes:
+
+```
+play the song -> "song"        play the (song -> "song"
+play the track -> "track"  ⇒              | track -> "track"
+play the album -> "album"                 | album -> "album")
+```
+
+**Prefix shape.** Two alternatives share a prefix of `(fullParts,
+stringTokens)` shape: `fullParts` parts that are structurally equal
+(via `partsEqualForFactoring`), optionally followed by `stringTokens`
+matching leading tokens of a shared `StringPart`. The partial-string
+case lets `play the song | play the track` factor even though
+`play the song` and `play the track` are each tokenized into a single
+multi-token `StringPart`.
+
+**Variable remapping.** `partsEqualForFactoring` treats variable parts
+(`wildcard`, `number`, `rules`) as equal when their type/shape matches
+even if the variable names differ. The lead alternative provides the
+canonical names; for each non-lead member a `remap: Map<string,
+string>` is built and applied to the suffix's parts and value
+expression via `remapPartVariables` and `remapValueVariables`. Object
+shorthand `{ x }` (compiled as `{ key: "x", value: null }`) is
+expanded to `{ key: "x", value: variable("renamed") }` during remap so
+the object field name stays the same.
+
+**Wrapper value capture.** When any suffix carries a value expression,
+the new wrapper rule has more than one part and the matcher's default
+single-part value-tracking policy no longer fires. The optimizer
+generates a fresh variable name (`__opt_factor`, `__opt_factor_1`, …),
+binds the suffix `RulesPart` to it, and produces a wrapper value
+`{ type: "variable", name: "__opt_factor" }` — preserving the suffix
+value through the new nesting level.
+
+**Iteration.** Factoring is applied to a fixed point per `RulesPart`
+(capped at 8 rounds) since a freshly-factored suffix may itself share
+a new prefix among its members. When both passes are enabled, Pass 1
+runs again after factoring so that any single-alternative wrappers
+produced by factoring collapse away.
+
+**Shared-rule identity preservation.** Both passes memoize their
+output by `GrammarRule[]` array identity. The compiler points every
+reference to the same named rule (`<X>`) at the same underlying
+`rules` array so [grammarSerializer.ts](packages/actionGrammar/src/grammarSerializer.ts)
+can dedupe via `rulesToIndex.get(p.rules)`. The optimizer preserves
+that invariant: two `RulesPart`s that originally pointed at the same
+array still point at the same (possibly new) array after the pass —
+keeping `.ag.json` size proportional to unique rule bodies, and
+allowing `partsEqualForFactoring`'s `a.rules === b.rules` check to
+keep matching across multiple references.
+
+**Safety guards.** The optimizer refuses to factor when any of the
+following would change semantics:
+
+- **Mixed value presence.** Some members have an explicit value, others
+  rely on default-value semantics. Wrapping changes the parent shape
+  and would silently drop the implicit values.
+- **Multi-part defaulted suffix.** All members rely on default values
+  but at least one suffix would end up with more than one part, where
+  the matcher's single-part default-value policy no longer applies.
+- **Cross-scope value reference.** A suffix's value expression
+  references (after remap) a variable bound in the canonical prefix.
+  The matcher scopes value variables per nested rule, so the suffix
+  cannot see prefix bindings.
+- **Suffix–prefix variable collision.** A suffix-bound variable name
+  collides with a canonical-prefix name after remap — would shadow the
+  outer binding.
+- **Wholly-consumed alternative with explicit value.** The shared
+  prefix consumes every part of some alternative that also has an
+  explicit value — leaves an empty-parts suffix that cannot carry the
+  value cleanly.
+
+#### Equivalence and benchmarks
+
+The new `grammarOptimizer*` test specs cover unit behavior, structural
+equivalence (every flag combination produces identical `matchGrammar`
+output across a set of curated and real-agent grammars), and an
+informational `grammarOptimizerBenchmark.spec.ts` patterned on
+`dfaBenchmark.spec.ts` that prints matcher-time numbers per
+configuration. Set `TYPEAGENT_SKIP_BENCHMARKS=1` to skip the
+benchmark spec.
 
 ### Matching backend
 

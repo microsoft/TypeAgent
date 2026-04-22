@@ -20,6 +20,10 @@ import {
     isObjectSpread,
 } from "./grammarRuleParser.js";
 import { getLineCol } from "./utils.js";
+import {
+    optimizeGrammar,
+    GrammarOptimizationOptions,
+} from "./grammarOptimizer.js";
 import { globalEntityRegistry } from "./entityRegistry.js";
 import { globalPhraseSetRegistry } from "./builtInPhraseMatchers.js";
 import { getBuiltInEntitiesGrammarContent } from "./builtInFileLoader.js";
@@ -417,6 +421,7 @@ export function compileGrammar(
     warnings?: string[],
     imports?: ImportStatement[],
     schemaLoader?: SchemaLoader,
+    optimizations?: GrammarOptimizationOptions,
 ): Grammar {
     const grammarFileMap = new Map<string, CompileContext>();
     const context = createCompileContext(
@@ -510,6 +515,11 @@ export function compileGrammar(
     const grammar: Grammar = { rules: grammarRules };
     if (allEntities.size > 0) {
         grammar.entities = Array.from(allEntities);
+    }
+    // Skip optimizations when there were errors — the AST may be partial
+    // and optimization invariants may not hold.
+    if (errors.length === 0 && optimizations !== undefined) {
+        return optimizeGrammar(grammar, optimizations);
     }
     return grammar;
 }

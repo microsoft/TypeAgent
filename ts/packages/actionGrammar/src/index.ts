@@ -10,6 +10,7 @@ export { grammarFromJson } from "./grammarDeserializer.js";
 export { grammarToJson } from "./grammarSerializer.js";
 export { loadGrammarRules, loadGrammarRulesNoThrow } from "./grammarLoader.js";
 export type { LoadGrammarRulesOptions } from "./grammarLoader.js";
+export type { GrammarOptimizationOptions } from "./grammarOptimizer.js";
 export type { SchemaLoader } from "./grammarCompiler.js";
 
 // Parser (for tooling — formatter, linters, etc.)
