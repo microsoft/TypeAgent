@@ -225,3 +225,56 @@ body {
 #messages::-webkit-scrollbar-thumb:hover {
     background: var(--vscode-scrollbarSlider-hoverBackground);
 }
+
+/* ── ANSI color codes (from ansi_up with use_classes=true) ───── */
+
+.message span.ansi-black-fg { color: var(--vscode-terminal-ansiBlack, #000); }
+.message span.ansi-red-fg { color: var(--vscode-terminal-ansiRed, #c00); }
+.message span.ansi-green-fg { color: var(--vscode-terminal-ansiGreen, #0c0); }
+.message span.ansi-yellow-fg { color: var(--vscode-terminal-ansiYellow, #cc0); }
+.message span.ansi-blue-fg { color: var(--vscode-terminal-ansiBlue, #00c); }
+.message span.ansi-magenta-fg { color: var(--vscode-terminal-ansiMagenta, #c0c); }
+.message span.ansi-cyan-fg { color: var(--vscode-terminal-ansiCyan, #0cc); }
+.message span.ansi-white-fg { color: var(--vscode-terminal-ansiWhite, #ccc); }
+.message span.ansi-bright-black-fg,
+.message span.ansi-gray-fg { color: var(--vscode-terminal-ansiBrightBlack, #888); }
+.message span.ansi-bright-red-fg { color: var(--vscode-terminal-ansiBrightRed, #f00); }
+.message span.ansi-bright-green-fg { color: var(--vscode-terminal-ansiBrightGreen, #0f0); }
+.message span.ansi-bright-yellow-fg { color: var(--vscode-terminal-ansiBrightYellow, #ff0); }
+.message span.ansi-bright-blue-fg { color: var(--vscode-terminal-ansiBrightBlue, #00f); }
+.message span.ansi-bright-magenta-fg { color: var(--vscode-terminal-ansiBrightMagenta, #f0f); }
+.message span.ansi-bright-cyan-fg { color: var(--vscode-terminal-ansiBrightCyan, #0ff); }
+.message span.ansi-bright-white-fg { color: var(--vscode-terminal-ansiBrightWhite, #fff); }
+
+.message span.ansi-bold { font-weight: bold; }
+.message span.ansi-italic { font-style: italic; }
+.message span.ansi-underline { text-decoration: underline; }
+
+/* ── Markdown content ────────────────────────────────────────── */
+
+.message p { margin: 0.25em 0; }
+.message pre {
+    background: var(--vscode-textCodeBlock-background);
+    padding: 6px 8px;
+    border-radius: 4px;
+    overflow-x: auto;
+    font-size: 0.9em;
+    margin: 0.4em 0;
+}
+.message code {
+    background: var(--vscode-textCodeBlock-background);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+.message pre code { background: transparent; padding: 0; }
+.message ul, .message ol { margin: 0.25em 0 0.25em 1.4em; padding: 0; }
+.message table {
+    border-collapse: collapse;
+    margin: 0.4em 0;
+}
+.message th, .message td {
+    border: 1px solid var(--vscode-panel-border);
+    padding: 3px 6px;
+    font-size: 0.9em;
+}

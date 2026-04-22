@@ -1,6 +1,33 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { AnsiUp } from "ansi_up";
+import MarkdownIt from "markdown-it";
+import DOMPurify from "dompurify";
+
+const ansiText = new AnsiUp();
+ansiText.use_classes = true;
+const ansiMarkdown = new AnsiUp();
+ansiMarkdown.use_classes = true;
+ansiMarkdown.escape_html = false;
+
+const md = new MarkdownIt({ html: true, linkify: true, breaks: false });
+const defaultLinkOpen =
+    md.renderer.rules.link_open ||
+    function (tokens, idx, options, _env, self) {
+        return self.renderToken(tokens, idx, options);
+    };
+md.renderer.rules.link_open = (tokens, idx, ...args) => {
+    tokens[idx].attrSet("target", "_blank");
+    return defaultLinkOpen(tokens, idx, ...args);
+};
+
+const purifyConfig = {
+    ADD_ATTR: ["target"],
+    ALLOWED_URI_REGEXP:
+        /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+};
+
 /**
  * Manages the chat UI elements in the webview.
  * Groups messages by requestId to match the shell's behavior.
@@ -400,44 +427,87 @@ export class ChatUI {
 
     /**
      * Convert DisplayContent (string | string[] | string[][] | TypedDisplayContent)
-     * into an HTML string for rendering.
+     * into an HTML string for rendering. Handles ANSI escape codes and
+     * markdown the same way the Electron shell does.
      */
     private _renderDisplayContent(content: any): string {
         if (content === null || content === undefined) {
             return "";
         }
+        // Plain string: text type — convert ANSI to HTML, escape rest
         if (typeof content === "string") {
-            return this._escapeHtml(content);
+            return this._renderText(content);
         }
-        // TypedDisplayContent: { type, content, alternates? }
-        if (typeof content === "object" && !Array.isArray(content)) {
-            if (content.alternates) {
-                const textAlt = content.alternates.find(
-                    (a: any) => a.type === "text",
-                );
-                if (textAlt) {
-                    return this._renderDisplayContent(textAlt.content);
-                }
-            }
-            if (content.content !== undefined) {
-                return this._renderDisplayContent(content.content);
-            }
-            return this._escapeHtml(JSON.stringify(content));
-        }
-        // string[] or string[][]
+        // string[] / string[][]
         if (Array.isArray(content)) {
             if (content.length === 0) return "";
             if (Array.isArray(content[0])) {
-                return content
-                    .map((row: string[]) => row.join(" | "))
-                    .map((line: string) => this._escapeHtml(line))
-                    .join("<br>");
+                // 2-D: render as a markdown table
+                return this._renderMarkdown(this._tableToMarkdown(content));
             }
-            return content
-                .map((line: string) => this._escapeHtml(String(line)))
-                .join("<br>");
+            return this._renderText((content as string[]).join("\n"));
         }
-        return this._escapeHtml(String(content));
+        // TypedDisplayContent: { type, content, alternates? }
+        if (typeof content === "object") {
+            // Prefer html alternate when present (matches shell)
+            const htmlAlt = content.alternates?.find(
+                (a: any) => a.type === "html",
+            );
+            if (htmlAlt && content.type !== "html") {
+                return this._sanitizeHtml(
+                    this._stringifyMessage(htmlAlt.content),
+                );
+            }
+            const inner = content.content;
+            switch (content.type) {
+                case "html":
+                    return this._sanitizeHtml(this._stringifyMessage(inner));
+                case "markdown":
+                    return this._renderMarkdown(this._stringifyMessage(inner));
+                case "text":
+                default:
+                    return this._renderDisplayContent(inner);
+            }
+        }
+        return this._renderText(String(content));
+    }
+
+    private _stringifyMessage(message: any): string {
+        if (typeof message === "string") return message;
+        if (Array.isArray(message)) {
+            if (message.length === 0) return "";
+            if (Array.isArray(message[0])) {
+                return this._tableToMarkdown(message as string[][]);
+            }
+            return (message as string[]).join("\n");
+        }
+        return String(message);
+    }
+
+    private _renderText(text: string): string {
+        const html = ansiText.ansi_to_html(text);
+        return html.replace(/\n/g, "<br>");
+    }
+
+    private _renderMarkdown(text: string): string {
+        const rendered = md.render(text);
+        const withAnsi = ansiMarkdown.ansi_to_html(rendered);
+        return this._sanitizeHtml(withAnsi);
+    }
+
+    private _sanitizeHtml(html: string): string {
+        return DOMPurify.sanitize(html, purifyConfig);
+    }
+
+    private _tableToMarkdown(table: string[][]): string {
+        if (table.length === 0) return "";
+        const rows: string[] = [];
+        rows.push("| " + table[0].join(" | ") + " |");
+        rows.push("| " + table[0].map(() => "---").join(" | ") + " |");
+        for (let i = 1; i < table.length; i++) {
+            rows.push("| " + table[i].join(" | ") + " |");
+        }
+        return rows.join("\n");
     }
 
     private _escapeHtml(text: string): string {

@@ -16,7 +16,9 @@
     "engines": {
         "vscode": "^1.90.0"
     },
-    "categories": ["Other"],
+    "categories": [
+        "Other"
+    ],
     "activationEvents": [],
     "main": "./dist/extension.js",
     "contributes": {
@@ -97,20 +99,24 @@
         "watch": "node esbuild.mjs --watch"
     },
     "dependencies": {
-        "@typeagent/agent-server-client": "file:../../packages/agentServer/client",
-        "@typeagent/agent-server-protocol": "file:../../packages/agentServer/protocol",
         "@typeagent/agent-rpc": "file:../../packages/agentRpc",
         "@typeagent/agent-sdk": "file:../../packages/agentSdk",
+        "@typeagent/agent-server-client": "file:../../packages/agentServer/client",
+        "@typeagent/agent-server-protocol": "file:../../packages/agentServer/protocol",
         "@typeagent/dispatcher-rpc": "file:../../packages/dispatcher/rpc",
         "@typeagent/dispatcher-types": "file:../../packages/dispatcher/types",
+        "ansi_up": "^6.0.6",
+        "debug": "^4.4.0",
+        "dompurify": "^3.4.1",
         "isomorphic-ws": "^5.0.0",
-        "ws": "^8.18.0",
-        "debug": "^4.4.0"
+        "markdown-it": "^14.1.1",
+        "ws": "^8.18.0"
     },
     "devDependencies": {
+        "@types/debug": "^4.1.0",
+        "@types/markdown-it": "^14.1.2",
         "@types/vscode": "^1.90.0",
         "@types/ws": "^8.5.0",
-        "@types/debug": "^4.1.0",
         "esbuild": "^0.25.0"
     }
 }
