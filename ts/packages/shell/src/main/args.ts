@@ -107,6 +107,11 @@ export function parseShellCommandLine() {
                 continue;
             }
 
+            if (arg === "--no-hidden") {
+                result.hidden = false;
+                continue;
+            }
+
             if (arg === "--idle-timeout") {
                 i++;
                 if (
@@ -129,6 +134,11 @@ export function parseShellCommandLine() {
 
             if (arg === "--resume") {
                 result.resume = true;
+                continue;
+            }
+
+            if (arg === "--no-resume") {
+                result.resume = false;
                 continue;
             }
 

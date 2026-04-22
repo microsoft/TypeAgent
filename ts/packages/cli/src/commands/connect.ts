@@ -100,8 +100,8 @@ export default class Connect extends Command {
         resume: Flags.boolean({
             char: "r",
             description:
-                "Resume the last used conversation instead of defaulting to 'CLI'. Ignored if --conversation is provided.",
-            default: false,
+                "Resume the last used conversation instead of defaulting to 'CLI'. Ignored if --conversation is provided. Use --no-resume to override a saved user setting.",
+            allowNo: true,
         }),
         conversation: Flags.string({
             char: "c",
@@ -122,13 +122,12 @@ export default class Connect extends Command {
         }),
         hidden: Flags.boolean({
             description:
-                "Start the agent server without a visible window (background mode). Only applies when the server is not already running.",
-            default: false,
+                "Start the agent server without a visible window (background mode). Only applies when the server is not already running. Use --no-hidden to override a saved user setting.",
+            allowNo: true,
         }),
         idleTimeout: Flags.integer({
             description:
-                "Shut down the agent server after this many seconds with no connected clients. 0 disables (default). Only applies when the server is spawned by this command.",
-            default: 0,
+                "Shut down the agent server after this many seconds with no connected clients. 0 disables. Only applies when the server is spawned by this command. Omit to use saved user setting.",
         }),
     };
     static args = {
@@ -141,16 +140,16 @@ export default class Connect extends Command {
     async run(): Promise<void> {
         const { args, flags: rawFlags } = await this.parse(Connect);
 
-        // Merge persistent user settings as defaults for flags not explicitly set
+        // Merge persistent user settings as defaults for flags not explicitly set.
+        // With allowNo / no default, omitted flags are undefined, so ?? falls
+        // through to the saved user setting. Explicit --flag or --no-flag wins.
         const userSettings = loadUserSettings();
         const flags = {
             ...rawFlags,
-            hidden: rawFlags.hidden || userSettings.server.hidden,
+            hidden: rawFlags.hidden ?? userSettings.server.hidden,
             idleTimeout:
-                rawFlags.idleTimeout > 0
-                    ? rawFlags.idleTimeout
-                    : userSettings.server.idleTimeout,
-            resume: rawFlags.resume || userSettings.conversation.resume,
+                rawFlags.idleTimeout ?? userSettings.server.idleTimeout,
+            resume: rawFlags.resume ?? userSettings.conversation.resume,
         };
 
         if (flags.verbose !== undefined) {

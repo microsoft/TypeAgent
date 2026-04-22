@@ -51,11 +51,14 @@ All under `@system settings`:
 ### CLI (`packages/cli/src/commands/connect.ts`)
 
 - On startup, load user settings as defaults for `--hidden`, `--idleTimeout`, and `--resume` flags
-- Explicit CLI flags override user settings
+- Explicit CLI flags override user settings via nullish coalescing (`??`)
+- Boolean flags support `--no-<flag>` (e.g., `--no-hidden`, `--no-resume`) to explicitly override a saved `true` setting
+- Omitting a flag leaves it as `undefined`, which falls through to the saved user setting
 
 ### Shell (`packages/shell/src/main/instance.ts`)
 
 - On startup, load user settings and apply to `ensureAgentServer()` calls
+- Shell args support `--hidden`/`--no-hidden`, `--idle-timeout <n>`, `--resume`/`--no-resume`
 - Shell settings UI can be extended later
 
 ## Storage Layer
