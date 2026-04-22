@@ -71,6 +71,8 @@ async function initializeDispatcher(
     updateSummary: (dispatcher: Dispatcher) => Promise<string>,
     startTime: number,
     connect?: number,
+    hidden?: boolean,
+    idleTimeout?: number,
 ): Promise<InitResult | undefined> {
     if (cleanupP !== undefined) {
         // Make sure the previous cleanup is done.
@@ -164,10 +166,15 @@ async function initializeDispatcher(
             // Connect to remote dispatcher — use connectAgentServer directly
             // so we retain the connection reference for multi-conversation support.
             const userSettings = loadUserSettings();
+            const effectiveHidden = hidden ?? userSettings.server.hidden;
+            const effectiveIdleTimeout =
+                idleTimeout !== undefined
+                    ? idleTimeout
+                    : userSettings.server.idleTimeout;
             await ensureAgentServer(
                 connect,
-                true,
-                userSettings.server.idleTimeout,
+                effectiveHidden,
+                effectiveIdleTimeout,
             );
             const url = `ws://localhost:${connect}`;
             connection = await connectAgentServer(url, () => {
@@ -392,6 +399,9 @@ export function initializeInstance(
     inputOnly: boolean = false,
     startTime: number = performance.now(),
     connect?: number,
+    hidden?: boolean,
+    idleTimeout?: number,
+    _resume?: boolean, // reserved: shell conversation resume not yet implemented
 ) {
     if (instance !== undefined) {
         throw new Error("Instance already initialized");
@@ -444,6 +454,8 @@ export function initializeInstance(
         updateTitle,
         startTime,
         connect,
+        hidden,
+        idleTimeout,
     );
 
     const onChatViewReady = async (event: Electron.IpcMainEvent) => {

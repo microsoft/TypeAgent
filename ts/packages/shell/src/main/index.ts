@@ -399,6 +399,9 @@ async function initialize() {
                 parsedArgs.inputOnly,
                 performance.now(),
                 parsedArgs.connect,
+                parsedArgs.hidden,
+                parsedArgs.idleTimeout,
+                parsedArgs.resume,
             );
     });
 
@@ -410,6 +413,9 @@ async function initialize() {
         parsedArgs.inputOnly,
         time,
         parsedArgs.connect,
+        parsedArgs.hidden,
+        parsedArgs.idleTimeout,
+        parsedArgs.resume,
     );
 
     shellWindow.waitForReady().then(() => {
@@ -439,6 +445,9 @@ export async function reloadInstance() {
             parsedArgs.inputOnly,
             performance.now(),
             parsedArgs.connect,
+            parsedArgs.hidden,
+            parsedArgs.idleTimeout,
+            parsedArgs.resume,
         );
     } finally {
         reloadingInstance = false;
