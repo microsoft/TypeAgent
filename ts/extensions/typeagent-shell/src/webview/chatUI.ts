@@ -449,10 +449,20 @@ export class ChatUI {
         }
         // TypedDisplayContent: { type, content, alternates? }
         if (typeof content === "object") {
-            // Note: we deliberately do NOT prefer HTML alternates here.
-            // Many agents emit HTML alternates with hard-coded light-theme
-            // colors (e.g. #1e293b) that are unreadable on dark themes.
-            // The text/markdown primary is themed by our CSS instead.
+            // Prefer html alternate when present (richer rendering with
+            // emojis, layout, etc).  We strip hard-coded inline color
+            // styles so the content inherits theme-aware colors instead
+            // of light-theme defaults baked in by some agents.
+            const htmlAlt = content.alternates?.find(
+                (a: any) => a.type === "html",
+            );
+            if (htmlAlt && content.type !== "html") {
+                return this._sanitizeHtml(
+                    this._stripInlineColors(
+                        this._stringifyMessage(htmlAlt.content),
+                    ),
+                );
+            }
             const inner = content.content;
             switch (content.type) {
                 case "html":
@@ -492,6 +502,40 @@ export class ChatUI {
 
     private _sanitizeHtml(html: string): string {
         return DOMPurify.sanitize(html, purifyConfig);
+    }
+
+    /**
+     * Remove hard-coded color / background / border-color from inline
+     * style attributes so theme variables can take over. Many agents
+     * emit HTML with light-theme baked colors which are unreadable on
+     * a dark theme; this neutralizes those without losing other style
+     * properties (padding, font-weight, alignment, etc).
+     */
+    private _stripInlineColors(html: string): string {
+        return html.replace(
+            /style\s*=\s*"([^"]*)"/gi,
+            (_match, body: string) => {
+                const cleaned = body
+                    .split(";")
+                    .map((decl) => decl.trim())
+                    .filter((decl) => {
+                        if (!decl) return false;
+                        const prop = decl.split(":")[0]?.trim().toLowerCase();
+                        return (
+                            prop !== "color" &&
+                            prop !== "background" &&
+                            prop !== "background-color" &&
+                            prop !== "border-color" &&
+                            prop !== "border-bottom-color" &&
+                            prop !== "border-top-color" &&
+                            prop !== "border-left-color" &&
+                            prop !== "border-right-color"
+                        );
+                    })
+                    .join("; ");
+                return cleaned ? `style="${cleaned}"` : "";
+            },
+        );
     }
 
     private _tableToMarkdown(table: string[][]): string {
