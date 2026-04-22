@@ -178,7 +178,7 @@ const slashCommands: SlashCommand[] = [
                 ),
             );
             try {
-                await stopAgentServer(port);
+                await stopAgentServer(port, true);
                 console.log(chalk.green("Agent server stopped."));
             } catch (e: any) {
                 console.log(

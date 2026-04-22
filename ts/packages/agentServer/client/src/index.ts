@@ -11,6 +11,8 @@ export {
     ensureAndConnectConversation,
     stopAgentServer,
     isServerRunning,
+    writeServerPid,
+    removeServerPid,
 } from "./agentServerClient.js";
 export type * from "@typeagent/dispatcher-rpc/types";
 export type {

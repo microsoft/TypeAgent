@@ -155,7 +155,7 @@ async function initializeDispatcher(
             },
             shutdown: () => {
                 if (connect !== undefined) {
-                    stopAgentServer(connect)
+                    stopAgentServer(connect, true)
                         .catch(() => {
                             // Best-effort: server may already be stopped.
                         })

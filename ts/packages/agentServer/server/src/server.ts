@@ -29,6 +29,10 @@ import {
 import type { ChannelProvider } from "@typeagent/agent-rpc/channel";
 import type { Dispatcher } from "agent-dispatcher";
 import dotenv from "dotenv";
+import {
+    writeServerPid,
+    removeServerPid,
+} from "@typeagent/agent-server-client";
 import registerDebug from "debug";
 const envPath = new URL("../../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
@@ -112,6 +116,7 @@ async function main() {
             );
             wss.close();
             await conversationManager.close();
+            removeServerPid(port);
             process.exit(0);
         }, idleShutdownMs);
     }
@@ -268,6 +273,7 @@ async function main() {
                     console.log("Shutdown requested, stopping agent server...");
                     wss.close();
                     await conversationManager.close();
+                    removeServerPid(port);
                     process.exit(0);
                 },
             };
@@ -298,6 +304,7 @@ async function main() {
     );
 
     console.log(`Agent server started at ws://localhost:${port}`);
+    writeServerPid(port, process.pid);
     scheduleIdleShutdown();
 }
 

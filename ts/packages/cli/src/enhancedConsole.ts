@@ -642,7 +642,7 @@ export function createEnhancedClientIO(
             }
             const port = getServerPort();
             if (port !== undefined) {
-                stopAgentServer(port)
+                stopAgentServer(port, true)
                     .catch(() => {
                         // Best-effort: server may already be stopped.
                     })
