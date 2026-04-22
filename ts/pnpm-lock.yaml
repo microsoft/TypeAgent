@@ -695,46 +695,6 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
 
-  examples/spelunker:
-    dependencies:
-      aiclient:
-        specifier: workspace:*
-        version: link:../../packages/aiclient
-      chalk:
-        specifier: ^5.4.1
-        version: 5.6.2
-      code-processor:
-        specifier: workspace:*
-        version: link:../../packages/codeProcessor
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.5.0
-      interactive-app:
-        specifier: workspace:*
-        version: link:../../packages/interactiveApp
-      knowledge-processor:
-        specifier: workspace:*
-        version: link:../../packages/knowledgeProcessor
-      typeagent:
-        specifier: workspace:*
-        version: link:../../packages/typeagent
-      typechat:
-        specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
-    devDependencies:
-      '@types/readline-sync':
-        specifier: ^1.4.8
-        version: 1.4.8
-      copyfiles:
-        specifier: ^2.4.1
-        version: 2.4.1
-      rimraf:
-        specifier: ^6.0.1
-        version: 6.0.1
-
   examples/viewList:
     dependencies:
       agent-dispatcher:
@@ -925,8 +885,8 @@ importers:
   packages/actionGrammar:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.2.92
-        version: 0.2.92(zod@4.3.6)
+        specifier: ^0.2.101
+        version: 0.2.117(zod@4.3.6)
       '@typeagent/action-schema':
         specifier: workspace:*
         version: link:../actionSchema
@@ -1093,8 +1053,8 @@ importers:
   packages/agentSdkWrapper:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.2.92
-        version: 0.2.92(zod@4.3.6)
+        specifier: ^0.2.101
+        version: 0.2.117(zod@4.3.6)
       '@anthropic-ai/sdk':
         specifier: ^0.82.0
         version: 0.82.0(zod@4.3.6)
@@ -1420,8 +1380,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1
       dompurify:
-        specifier: ^3.3.2
-        version: 3.3.2
+        specifier: ^3.4.0
+        version: 3.4.1
       express:
         specifier: ^4.22.0
         version: 4.22.1
@@ -1845,8 +1805,8 @@ importers:
   packages/agents/email:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.2.92
-        version: 0.2.92(zod@4.3.6)
+        specifier: ^0.2.101
+        version: 0.2.117(zod@4.3.6)
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
@@ -1881,6 +1841,28 @@ importers:
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
+  packages/agents/github-cli:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+    devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
+      action-grammar-compiler:
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -2029,8 +2011,8 @@ importers:
         specifier: ^4.3.4
         version: 4.4.1
       dompurify:
-        specifier: ^3.3.2
-        version: 3.3.2
+        specifier: ^3.4.0
+        version: 3.4.1
       express:
         specifier: ^4.22.0
         version: 4.22.1
@@ -2232,6 +2214,58 @@ importers:
         specifier: ^5.2.0
         version: 5.2.1(debug@4.4.1)(webpack-cli@5.1.4)(webpack@5.105.0)
 
+  packages/agents/onboarding:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+      '@typeagent/dispatcher-types':
+        specifier: workspace:*
+        version: link:../../dispatcher/types
+      agent-dispatcher:
+        specifier: workspace:*
+        version: link:../../dispatcher/dispatcher
+      aiclient:
+        specifier: workspace:*
+        version: link:../../aiclient
+      debug:
+        specifier: ^4.3.4
+        version: 4.4.3(supports-color@8.1.1)
+      dispatcher-node-providers:
+        specifier: workspace:*
+        version: link:../../dispatcher/nodeProviders
+      typeagent:
+        specifier: workspace:*
+        version: link:../../typeagent
+      typechat:
+        specifier: ^0.1.1
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
+    devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
+      action-grammar-compiler:
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
+      copyfiles:
+        specifier: ^2.4.1
+        version: 2.4.1
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/agents/photo:
     dependencies:
       '@typeagent/agent-sdk':
@@ -2290,9 +2324,6 @@ importers:
       '@types/express':
         specifier: ^4.17.17
         version: 4.17.21
-      '@types/jest':
-        specifier: ^29.5.7
-        version: 29.5.14
       '@types/spotify-api':
         specifier: ^0.0.25
         version: 0.0.25
@@ -2302,9 +2333,6 @@ importers:
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
-      jest:
-        specifier: ^29.7.0
-        version: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -2441,57 +2469,11 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
-  packages/agents/spelunker:
-    dependencies:
-      '@typeagent/agent-sdk':
-        specifier: workspace:*
-        version: link:../../agentSdk
-      '@typeagent/common-utils':
-        specifier: workspace:*
-        version: link:../../utils/commonUtils
-      aiclient:
-        specifier: workspace:*
-        version: link:../../aiclient
-      better-sqlite3:
-        specifier: 12.6.2
-        version: 12.6.2
-      code-processor:
-        specifier: workspace:*
-        version: link:../../codeProcessor
-      dotenv:
-        specifier: ^16.3.1
-        version: 16.5.0
-      typeagent:
-        specifier: workspace:*
-        version: link:../../typeagent
-      typechat:
-        specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
-      typescript:
-        specifier: ~5.4.5
-        version: 5.4.5
-    devDependencies:
-      '@types/better-sqlite3':
-        specifier: 7.6.13
-        version: 7.6.13
-      '@types/jest':
-        specifier: ^29.5.7
-        version: 29.5.14
-      copyfiles:
-        specifier: ^2.4.1
-        version: 2.4.1
-      jest:
-        specifier: ^29.7.0
-        version: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
-      prettier:
-        specifier: ^3.5.3
-        version: 3.5.3
-      rimraf:
-        specifier: ^6.0.1
-        version: 6.0.1
-
   packages/agents/taskflow:
     dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: ^0.2.101
+        version: 0.2.117(zod@4.3.6)
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
@@ -2580,8 +2562,8 @@ importers:
   packages/agents/utility:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.2.92
-        version: 0.2.92(zod@4.3.6)
+        specifier: ^0.2.101
+        version: 0.2.117(zod@4.3.6)
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../../agentSdk
@@ -2987,8 +2969,8 @@ importers:
         specifier: ^6.0.2
         version: 6.0.5
       dompurify:
-        specifier: ^3.3.2
-        version: 3.3.2
+        specifier: ^3.4.0
+        version: 3.4.1
       markdown-it:
         specifier: ^14.1.0
         version: 14.1.1
@@ -3023,6 +3005,9 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
+      '@typeagent/dispatcher-types':
+        specifier: workspace:*
+        version: link:../dispatcher/types
       action-grammar:
         specifier: workspace:*
         version: link:../actionGrammar
@@ -3044,9 +3029,6 @@ importers:
       default-agent-provider:
         specifier: workspace:*
         version: link:../defaultAgentProvider
-      dispatcher-node-providers:
-        specifier: workspace:*
-        version: link:../dispatcher/nodeProviders
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
@@ -3071,13 +3053,13 @@ importers:
       ts-node:
         specifier: ^10.9.1
         version: 10.9.2(@types/node@25.5.2)(typescript@5.4.5)
-      typechat:
-        specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
       typechat-utils:
         specifier: workspace:*
         version: link:../utils/typechatUtils
     devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
@@ -3096,6 +3078,9 @@ importers:
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
+      ts-jest:
+        specifier: ^29.4.9
+        version: 29.4.9(@babel/core@7.28.4)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.28.4))(jest-util@29.7.0)(jest@29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5)))(typescript@5.4.5)
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
@@ -3343,6 +3328,9 @@ importers:
       file-size:
         specifier: ^1.0.0
         version: 1.0.0
+      github-cli-agent:
+        specifier: workspace:*
+        version: link:../agents/github-cli
       glob:
         specifier: ^13.0.0
         version: 13.0.6
@@ -3370,6 +3358,9 @@ importers:
       music-local:
         specifier: workspace:*
         version: link:../agents/playerLocal
+      onboarding-agent:
+        specifier: workspace:*
+        version: link:../agents/onboarding
       photo-agent:
         specifier: workspace:*
         version: link:../agents/photo
@@ -3382,9 +3373,6 @@ importers:
       settings-agent:
         specifier: workspace:*
         version: link:../agents/settings
-      spelunker-agent:
-        specifier: workspace:*
-        version: link:../agents/spelunker
       string-width:
         specifier: ^7.2.0
         version: 7.2.0
@@ -3453,8 +3441,8 @@ importers:
   packages/dispatcher/dispatcher:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.2.92
-        version: 0.2.92(zod@4.1.13)
+        specifier: ^0.2.101
+        version: 0.2.117(zod@4.1.13)
       '@azure/ai-agents':
         specifier: ^1.0.0-beta.3
         version: 1.0.0-beta.3
@@ -3564,6 +3552,9 @@ importers:
         specifier: ^4.1.13
         version: 4.1.13
     devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
@@ -3619,6 +3610,9 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
     devDependencies:
+      '@typeagent/dispatcher-types':
+        specifier: workspace:*
+        version: link:../types
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
@@ -3650,6 +3644,15 @@ importers:
         specifier: workspace:*
         version: link:../types
     devDependencies:
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.15.18
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@22.15.18)(ts-node@10.9.2(@types/node@22.15.18)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -3894,8 +3897,8 @@ importers:
   packages/kp:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.2.92
-        version: 0.2.92
+        specifier: ^0.2.101
+        version: 0.2.117
       aiclient:
         specifier: workspace:*
         version: link:../aiclient
@@ -3928,8 +3931,8 @@ importers:
   packages/mcp/thoughts:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.2.92
-        version: 0.2.92(zod@4.3.6)
+        specifier: ^0.2.101
+        version: 0.2.117(zod@4.3.6)
       '@anthropic-ai/sdk':
         specifier: ^0.82.0
         version: 0.82.0(zod@4.3.6)
@@ -4169,8 +4172,8 @@ importers:
         specifier: ^4.4.0
         version: 4.4.1
       dompurify:
-        specifier: ^3.3.2
-        version: 3.3.2
+        specifier: ^3.4.0
+        version: 3.4.1
       get-folder-size:
         specifier: ^5.0.0
         version: 5.0.0
@@ -4315,8 +4318,8 @@ importers:
         specifier: workspace:*
         version: link:../dispatcher/nodeProviders
       dompurify:
-        specifier: ^3.3.2
-        version: 3.3.2
+        specifier: ^3.4.0
+        version: 3.4.1
       dotenv:
         specifier: ^16.3.1
         version: 16.5.0
@@ -4366,9 +4369,6 @@ importers:
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14
-      action-grammar:
-        specifier: workspace:*
-        version: link:../actionGrammar
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
@@ -4773,6 +4773,56 @@ packages:
   '@antfu/utils@8.1.1':
     resolution: {integrity: sha512-Mex9nXf9vR6AhcXmMrlz/HVgYYZpVGJ6YlPgwl7UnaFpnshXs6EK/oa5Gpf3CzENMjkvEx2tQtntGnb7UtSTOQ==}
 
+  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.2.117':
+    resolution: {integrity: sha512-ZeC/Lz8XMKQ5w+GmjTziPR8bSSarBtNCJMkMAYRT9ekNmyXSWXEwGLENe5TDDmtpzNNzAB1mQNuIYoqTsqgV3w==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.2.117':
+    resolution: {integrity: sha512-DKyggGzzpDcr9S435xlpbpwkEYKZNbePSekug75tJclK8l4ddD9+M9BFgMiSUq9F1Zt53kUaRDihDu/cBKvkdQ==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.2.117':
+    resolution: {integrity: sha512-bJU5gEOmM4VCOn4h8vipOKgdhPATePQ23mMpvyVqtVyipWppHfOUfVkqXb+SrF/hfkNSMYxDuoKxbJ+MmKtGjg==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.2.117':
+    resolution: {integrity: sha512-jyHmyZQavpPOe3zxBRX3KbdOAJ8JwZ8m/wMr5bhHhhcstugm/vJx6IIs7D44VvFjk+8sqdvR2ZrliL8PUcJL0g==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.2.117':
+    resolution: {integrity: sha512-LIkKTAYZGugEVssAuWCPqlDWSqhVZAveNPNsfKLbuG1naIMCR04fUqil6i3d3mAAfk7FaS5D4IdHp45psi+GDw==}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
+  '@anthropic-ai/claude-agent-sdk-linux-x64@0.2.117':
+    resolution: {integrity: sha512-Zb5PXKrDNbQ1dyNYwxZMNL+F2Dhgjh9f9B21wZUJqkhJL69hRJwJyxO42HiNmB2zGCaTxQTyjPhLdB/eQJo74Q==}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.2.117':
+    resolution: {integrity: sha512-uetggH3B83PiH0a9D/5MVXB5Hqnlr2DVajehwAP2x0Mt4DBd632ICnHpu6pnSP+vVkWgq3FgQlkHe91RfP+peA==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@anthropic-ai/claude-agent-sdk-win32-x64@0.2.117':
+    resolution: {integrity: sha512-TT4KngAokDTJSvQ2mrAP6ZRkXj50OLj7Tb1zZA4CnkmrrEidgs4KrMx7er1ZwoivngIvCekV9+TbtC9giknr5w==}
+    cpu: [x64]
+    os: [win32]
+
+  '@anthropic-ai/claude-agent-sdk@0.2.117':
+    resolution: {integrity: sha512-pVBss1Vu0w87nKCBhWtjMggSgCh6GVUtdRmuE58ZvXv0E2q0JcnUCQHehmn92BAW0+VCwPY8q/k7uKWkgwz/gA==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      zod: ^4.0.0
+
   '@anthropic-ai/claude-agent-sdk@0.2.92':
     resolution: {integrity: sha512-loYyxVUC5gBwHjGi9Fv0b84mduJTp9Z3Pum+y/7IVQDb4NynKfVQl6l4VeDKZaW+1QTQtd25tY4hwUznD7Krqw==}
     engines: {node: '>=18.0.0'}
@@ -4781,6 +4831,15 @@ packages:
 
   '@anthropic-ai/sdk@0.80.0':
     resolution: {integrity: sha512-WeXLn7zNVk3yjeshn+xZHvld6AoFUOR3Sep6pSoHho5YbSi6HwcirqgPA5ccFuW8QTVJAAU7N8uQQC6Wa9TG+g==}
+    hasBin: true
+    peerDependencies:
+      zod: ^3.25.0 || ^4.0.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
+
+  '@anthropic-ai/sdk@0.81.0':
+    resolution: {integrity: sha512-D4K5PvEV6wPiRtVlVsJHIUhHAmOZ6IT/I9rKlTf84gR7GyyAurPJK7z9BOf/AZqC5d1DhYQGJNKRmV+q8dGhgw==}
     hasBin: true
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
@@ -7994,9 +8053,6 @@ packages:
   '@types/react@18.3.18':
     resolution: {integrity: sha512-t4yC+vtgnkYjNSKlFx1jkAhH8LgTo2N/7Qvi83kdEaUtMDiwpbLAktKDaAMlRcJ5eSxZkH74eEGt1ky31d7kfQ==}
 
-  '@types/readline-sync@1.4.8':
-    resolution: {integrity: sha512-BL7xOf0yKLA6baAX6MMOnYkoflUyj/c7y3pqMRfU0va7XlwHAOTOIo4x55P/qLfMsuaYdJJKubToLqRVmRtRZA==}
-
   '@types/regexp.escape@2.0.0':
     resolution: {integrity: sha512-L0+4KOC47zH0AE/27YhzECRlE4HxHycQy0ng8P4SMmsYIdUqJFzKlk4LameozRQ2mRozPRwRAzpXsDsUgb6ezA==}
 
@@ -9695,9 +9751,8 @@ packages:
     resolution: {integrity: sha512-cgwlv/1iFQiFnU96XXgROh8xTeetsnJiDsTc7TYCLFd9+/WNkIqPTxiM/8pSd8VIrhXGTf1Ny1q1hquVqDJB5w==}
     engines: {node: '>= 4'}
 
-  dompurify@3.3.2:
-    resolution: {integrity: sha512-6obghkliLdmKa56xdbLOpUZ43pAR6xFy1uOrxBaIDjT+yaRuuybLjGS9eVBoSR/UPU5fq3OXClEHLJNGvbxKpQ==}
-    engines: {node: '>=20'}
+  dompurify@3.4.1:
+    resolution: {integrity: sha512-JahakDAIg1gyOm7dlgWSDjV4n7Ip2PKR55NIT6jrMfIgLFgWo81vdr1/QGqWtFNRqXP9UV71oVePtjqS2ebnPw==}
 
   domutils@2.8.0:
     resolution: {integrity: sha512-w96Cjofp72M5IIhpjgobBimYEfoPjx1Vx0BSX9P30WBdZW2WIKU0T1Bd0kz2eNZ9ikjKgHbEyKx8BB6H1L3h3A==}
@@ -10490,6 +10545,11 @@ packages:
 
   handle-thing@2.0.1:
     resolution: {integrity: sha512-9Qn4yBxelxoh2Ow62nP+Ka/kMnOXRi8BXnRaUwezLNhqelnN49xKz4F/dPP8OYLxLxq6JDtZb2i9XznUQbNPTg==}
+
+  handlebars@4.7.9:
+    resolution: {integrity: sha512-4E71E0rpOaQuJR2A3xDZ+GM1HyWYv1clR58tC8emQNeQe3RH7MAzSbat+V0wG78LQBo6m6bzSG/L4pBuCsgnUQ==}
+    engines: {node: '>=0.4.7'}
+    hasBin: true
 
   has-bigints@1.1.0:
     resolution: {integrity: sha512-R3pbpkcIqv2Pm3dUwgjclDRVmWpTJW2DcMzcIhEXEx1oh/CEMObMm3KLmRJOdvhM7o4uQBnwr8pzRK2sJWIqfg==}
@@ -13849,6 +13909,33 @@ packages:
       esbuild:
         optional: true
 
+  ts-jest@29.4.9:
+    resolution: {integrity: sha512-LTb9496gYPMCqjeDLdPrKuXtncudeV1yRZnF4Wo5l3SFi0RYEnYRNgMrFIdg+FHvfzjCyQk1cLncWVqiSX+EvQ==}
+    engines: {node: ^14.15.0 || ^16.10.0 || ^18.0.0 || >=20.0.0}
+    hasBin: true
+    peerDependencies:
+      '@babel/core': '>=7.0.0-beta.0 <8'
+      '@jest/transform': ^29.0.0 || ^30.0.0
+      '@jest/types': ^29.0.0 || ^30.0.0
+      babel-jest: ^29.0.0 || ^30.0.0
+      esbuild: '*'
+      jest: ^29.0.0 || ^30.0.0
+      jest-util: ^29.0.0 || ^30.0.0
+      typescript: '>=4.3 <7'
+    peerDependenciesMeta:
+      '@babel/core':
+        optional: true
+      '@jest/transform':
+        optional: true
+      '@jest/types':
+        optional: true
+      babel-jest:
+        optional: true
+      esbuild:
+        optional: true
+      jest-util:
+        optional: true
+
   ts-loader@9.5.2:
     resolution: {integrity: sha512-Qo4piXvOTWcMGIgRiuFa6nHNm+54HbYaZCKqc9eeZCLRy3XqafQgwX2F7mofrbJG3g7EEb+lkiR+z2Lic2s3Zw==}
     engines: {node: '>=12.0.0'}
@@ -13972,6 +14059,11 @@ packages:
 
   ufo@1.6.1:
     resolution: {integrity: sha512-9a4/uxlTWJ4+a5i0ooc1rU7C7YOw3wT+UGqdeNNHWnOF9qcMBgLRS+4IYUqbczewFx4mLEig6gawh7X6mFlEkA==}
+
+  uglify-js@3.19.3:
+    resolution: {integrity: sha512-v3Xu+yuwBXisp6QYTcH4UbH+xYJXqnq2m/LtQVWKWzYc1iehYnLixoQDN9FH6/j9/oybfd6W9Ghwkl8+UMKTKQ==}
+    engines: {node: '>=0.8.0'}
+    hasBin: true
 
   unbox-primitive@1.1.0:
     resolution: {integrity: sha512-nWJ91DjeOkej/TA8pXQ3myruKpKEYgqvpw9lz4OPHj/NWFNluYrjbz9j01CJ8yKQd2g4jFoOkINCTW2I5LEEyw==}
@@ -14681,39 +14773,79 @@ snapshots:
 
   '@antfu/utils@8.1.1': {}
 
-  '@anthropic-ai/claude-agent-sdk@0.2.92':
+  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.2.117':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.2.117':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.2.117':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.2.117':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.2.117':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-linux-x64@0.2.117':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.2.117':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk-win32-x64@0.2.117':
+    optional: true
+
+  '@anthropic-ai/claude-agent-sdk@0.2.117':
     dependencies:
-      '@anthropic-ai/sdk': 0.80.0(zod@4.1.13)
+      '@anthropic-ai/sdk': 0.81.0(zod@4.1.13)
       '@modelcontextprotocol/sdk': 1.29.0
     optionalDependencies:
-      '@img/sharp-darwin-arm64': 0.34.5
-      '@img/sharp-darwin-x64': 0.34.5
-      '@img/sharp-linux-arm': 0.34.5
-      '@img/sharp-linux-arm64': 0.34.5
-      '@img/sharp-linux-x64': 0.34.5
-      '@img/sharp-linuxmusl-arm64': 0.34.5
-      '@img/sharp-linuxmusl-x64': 0.34.5
-      '@img/sharp-win32-arm64': 0.34.5
-      '@img/sharp-win32-x64': 0.34.5
+      '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-darwin-x64': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-linux-arm64': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-linux-arm64-musl': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-linux-x64': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-linux-x64-musl': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-win32-x64': 0.2.117
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - supports-color
 
-  '@anthropic-ai/claude-agent-sdk@0.2.92(zod@4.1.13)':
+  '@anthropic-ai/claude-agent-sdk@0.2.117(zod@4.1.13)':
     dependencies:
-      '@anthropic-ai/sdk': 0.80.0(zod@4.1.13)
+      '@anthropic-ai/sdk': 0.81.0(zod@4.1.13)
       '@modelcontextprotocol/sdk': 1.29.0(zod@4.1.13)
       zod: 4.1.13
     optionalDependencies:
-      '@img/sharp-darwin-arm64': 0.34.5
-      '@img/sharp-darwin-x64': 0.34.5
-      '@img/sharp-linux-arm': 0.34.5
-      '@img/sharp-linux-arm64': 0.34.5
-      '@img/sharp-linux-x64': 0.34.5
-      '@img/sharp-linuxmusl-arm64': 0.34.5
-      '@img/sharp-linuxmusl-x64': 0.34.5
-      '@img/sharp-win32-arm64': 0.34.5
-      '@img/sharp-win32-x64': 0.34.5
+      '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-darwin-x64': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-linux-arm64': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-linux-arm64-musl': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-linux-x64': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-linux-x64-musl': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-win32-x64': 0.2.117
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - supports-color
+
+  '@anthropic-ai/claude-agent-sdk@0.2.117(zod@4.3.6)':
+    dependencies:
+      '@anthropic-ai/sdk': 0.81.0(zod@4.3.6)
+      '@modelcontextprotocol/sdk': 1.29.0(zod@4.3.6)
+      zod: 4.3.6
+    optionalDependencies:
+      '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-darwin-x64': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-linux-arm64': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-linux-arm64-musl': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-linux-x64': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-linux-x64-musl': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.2.117
+      '@anthropic-ai/claude-agent-sdk-win32-x64': 0.2.117
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - supports-color
@@ -14737,13 +14869,19 @@ snapshots:
       - '@cfworker/json-schema'
       - supports-color
 
-  '@anthropic-ai/sdk@0.80.0(zod@4.1.13)':
+  '@anthropic-ai/sdk@0.80.0(zod@4.3.6)':
+    dependencies:
+      json-schema-to-ts: 3.1.1
+    optionalDependencies:
+      zod: 4.3.6
+
+  '@anthropic-ai/sdk@0.81.0(zod@4.1.13)':
     dependencies:
       json-schema-to-ts: 3.1.1
     optionalDependencies:
       zod: 4.1.13
 
-  '@anthropic-ai/sdk@0.80.0(zod@4.3.6)':
+  '@anthropic-ai/sdk@0.81.0(zod@4.3.6)':
     dependencies:
       json-schema-to-ts: 3.1.1
     optionalDependencies:
@@ -17453,7 +17591,7 @@ snapshots:
       '@types/lodash.debounce': 4.0.9
       '@types/lodash.throttle': 4.1.9
       clsx: 2.1.1
-      dompurify: 3.3.2
+      dompurify: 3.4.1
       lodash.debounce: 4.0.8
       lodash.throttle: 4.1.1
       nanoid: 5.1.5
@@ -19310,8 +19448,6 @@ snapshots:
     dependencies:
       '@types/prop-types': 15.7.14
       csstype: 3.1.3
-
-  '@types/readline-sync@1.4.8': {}
 
   '@types/regexp.escape@2.0.0': {}
 
@@ -21313,7 +21449,7 @@ snapshots:
     dependencies:
       domelementtype: 2.3.0
 
-  dompurify@3.3.2:
+  dompurify@3.4.1:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -22440,6 +22576,15 @@ snapshots:
   hachure-fill@0.5.2: {}
 
   handle-thing@2.0.1: {}
+
+  handlebars@4.7.9:
+    dependencies:
+      minimist: 1.2.8
+      neo-async: 2.6.2
+      source-map: 0.6.1
+      wordwrap: 1.0.0
+    optionalDependencies:
+      uglify-js: 3.19.3
 
   has-bigints@1.1.0: {}
 
@@ -24328,7 +24473,7 @@ snapshots:
       d3-sankey: 0.12.3
       dagre-d3-es: 7.0.11
       dayjs: 1.11.13
-      dompurify: 3.3.2
+      dompurify: 3.4.1
       katex: 0.16.22
       khroma: 2.1.0
       lodash-es: 4.17.23
@@ -26897,6 +27042,26 @@ snapshots:
       '@jest/types': 29.6.3
       babel-jest: 29.7.0(@babel/core@7.28.4)
 
+  ts-jest@29.4.9(@babel/core@7.28.4)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.28.4))(jest-util@29.7.0)(jest@29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5)))(typescript@5.4.5):
+    dependencies:
+      bs-logger: 0.2.6
+      fast-json-stable-stringify: 2.1.0
+      handlebars: 4.7.9
+      jest: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
+      json5: 2.2.3
+      lodash.memoize: 4.1.2
+      make-error: 1.3.6
+      semver: 7.7.4
+      type-fest: 4.41.0
+      typescript: 5.4.5
+      yargs-parser: 21.1.1
+    optionalDependencies:
+      '@babel/core': 7.28.4
+      '@jest/transform': 29.7.0
+      '@jest/types': 29.6.3
+      babel-jest: 29.7.0(@babel/core@7.28.4)
+      jest-util: 29.7.0
+
   ts-loader@9.5.2(typescript@5.4.5)(webpack@5.105.0(esbuild@0.25.12)):
     dependencies:
       chalk: 4.1.2
@@ -27093,6 +27258,9 @@ snapshots:
   uc.micro@2.1.0: {}
 
   ufo@1.6.1: {}
+
+  uglify-js@3.19.3:
+    optional: true
 
   unbox-primitive@1.1.0:
     dependencies:
