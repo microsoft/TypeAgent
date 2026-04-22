@@ -55,7 +55,12 @@ window.addEventListener("message", (event) => {
             chatUI.clearMessages();
             break;
         case "notify":
-            chatUI.addNotification(msg.event, msg.data, msg.source);
+            // Let the chat UI consume status notifications (explained,
+            // grammarRule). Anything it doesn't handle becomes a visible
+            // system message.
+            if (!chatUI.onNotify(msg.event, msg.data, msg.source, msg.requestId)) {
+                chatUI.addNotification(msg.event, msg.data, msg.source);
+            }
             break;
         case "error":
             chatUI.addErrorMessage(msg.message);

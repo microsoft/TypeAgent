@@ -28,6 +28,11 @@ const purifyConfig = {
         /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
 };
 
+// Roadrunner icon (translation/cache state indicator), copied from the
+// Electron shell's icon.ts so the extension matches its visual language.
+// The fill is set via `currentColor` so we can recolor it via CSS class.
+const ROADRUNNER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 567.896 567.896" fill="currentColor" aria-hidden="true"><path d="M554.918,215.052c-2.068,0.322-4.12,0.718-6.16,1.175c-2.199,0.49-4.37-0.653-5.847-1.848c-0.861-0.698-1.938-1.191-3.109-1.371c-2.896-0.449-6.16,0.784-8.936,1.424c-3.965,0.914-7.931,1.832-11.896,2.75c-11.354,2.624-22.714,5.247-34.072,7.871c-60.73,13.223-122.47,19.984-183.938,28.462c-16.753,2.31-33.203-0.147-48.74-6.703c-29.499-12.44-59.76-21.208-91.943-23.208c-20.294-1.26-31.583-15.977-39.796-32.093c-0.473-0.931-0.542-2.053-0.343-3.301c0.29-1.84,1.636-4.431,2.632-5.818c0.6-0.832,1.232-1.648,1.901-2.444c0.184-0.22,0.302-0.465,0.363-0.718c0.106-0.437,0.661-1.159,1.534-1.31c0.498-0.085,1.032-0.11,1.599-0.069c0.938,0.069,1.469-0.498,1.604-1.187c0.229-1.196,0.171-2.607,1.338-3.439c0.706-0.502,1.408-1.004,2.113-1.506c0.714-0.51,0.902-1.33,0.702-2.011c-0.359-1.208-0.804-1.869,0.347-2.746c0.697-0.53,1.391-1.057,2.089-1.587c0.485-0.367,0.75-0.873,0.795-1.375c0.078-0.897,0.163-1.546,1.146-1.661c0.596-0.069,1.191-0.13,1.791-0.184c1.877-0.163,2.371-2.766,0.453-3.35c0,0-0.767-0.232-1.718-0.522c-0.946-0.29,0.017-0.571,2.134-0.853c1.269-0.167,2.534-0.4,3.803-0.689c1.742-0.404,1.514-2.778,0-3.292c-1.122-0.379-2.24-0.755-3.362-1.126c-1.861-0.616-3.419-1.689-3.913-2.093c-0.265-0.216-0.624-0.343-1.081-0.322c-0.469,0.024-0.938,0.029-1.403,0.012c-0.775-0.024-3.146-0.648-5.3-1.306c-3.745-1.142-7.507-2.244-11.285-3.296c-0.224-0.061-0.437-0.082-0.628-0.061c-0.347,0.032-2.415-0.196-4.663-0.049c-0.139,0.008-0.278,0.021-0.417,0.033c-2.244,0.212-5.773,1.065-7.997,1.432c-1.783,0.293-3.574,0.718-5.381,1.301c-4.088,1.314-7.944,3.309-11.408,5.834c-1.824,1.326-4.733,3.521-6.561,4.839c-7.009,5.051-13.154,11.571-18.433,19.348c-8.152,12.003-18.185,18.213-32.122,20.494c-10.877,1.783-21.795,4.325-30.045,13.672c-1.489,1.689-0.71,3.02,1.53,2.787c5.051-0.526,10.102-1.077,15.166-1.485c10.212-0.828,20.433-1.595,30.661-2.17c1.856-0.106,4.133,0.322,5.594,1.367c10.151,7.283,19.931,15.096,30.245,22.134c7.752,5.292,11.51,12.464,12.893,21.367c0.355,2.285,1.302,4.488,1.542,6.777c3.289,31.343,22.077,49.548,50.013,61.009c9.314,3.823,17.723,9.849,27.629,15.929c1.922,1.179,2.248,3.439,0.734,5.111c-5.418,5.985-9.559,10.976-14.37,15.198c-12.938,11.363-26.193,22.375-39.56,33.236c-8.131,6.609-17.168,9.049-27.895,6.201c-3.154-0.837-6.536-0.804-9.959-0.62c-2.252,0.122-5.854-0.429-8.099-0.249c-1.668,0.135-3.301,0.686-4.77,1.641c-0.445,0.289-0.461,1.142,0.163,1.248c0.922,0.155,1.844,0.311,2.767,0.461c1.53,0.257,3.533,1.045,4.476,1.759s0.045,2.056-2.003,2.994c-1.269,0.58-2.509,1.146-3.733,1.706c-2.048,0.934-5.561,1.207-7.769,1.648c-2.248,0.444-4.223,1.685-5.577,3.517c-1.342,1.812-1.849,4.235-1.457,4.627c0.241,0.236,0.604,0.298,0.889-0.013c2.171-2.354,5.312-2.477,8.327-2.974c2.224-0.367,5.712-1.354,7.952-1.596c8.107-0.873,16.238-1.648,24.109-3.517c12.419-2.95,23.741-2.75,35.749,2.501c5.181,2.264,11.028,2.999,17.115,3.729c2.236,0.27,5.708,1.27,7.817,2.064c2.754,1.037,5.582,1.865,8.482,2.477c0.657,0.139,1.159-0.632,0.665-1.142c-0.473-0.486-0.942-0.976-1.408-1.469c-0.771-0.816-1.408-1.612-1.493-1.751c-0.049-0.077-0.114-0.146-0.204-0.208c-0.065-0.045-0.135-0.09-0.2-0.131c-0.114-0.069-0.89-0.844-1.775-1.705c-0.535-0.522-1.082-1.028-1.645-1.514c-0.608-0.526-1.261-0.906-1.942-1.126c-1.183-0.388-3.19-1.742-4.721-3.398c-6.091-6.61-14.521-7.769-23.766-7.186c-2.249,0.144-4.251-0.277-4.488-1.057c-0.232-0.779,1.053-2.488,2.873-3.818c11.204-8.201,22.378-16.438,33.644-24.554c10.955-7.891,22.04-15.602,33.036-23.436c1.053-0.751,1.722-2.126,2.832-2.701c9.519-4.908,40.384,1.783,47.189,10.188c5.426,6.703,10.465,13.745,16.247,20.118c5.483,6.042,12.036,11.118,17.511,17.169c5.055,5.581,9.637,11.673,13.823,17.939c4.818,7.218,4.794,7.128,14.113,6.638c1.656-0.085,3.35,0.498,5.055,1.253c2.057,0.918,5.243,2.791,7.43,3.329c2.456,0.604,5.022,0.29,7.602-1.619c0.293-0.221,0.343-0.556,0.248-0.833c-0.167-0.489-0.767-0.497-0.849-0.53c-0.045-0.017-0.094-0.028-0.146-0.037c-1.322-0.191-2.644-0.379-3.97-0.566c-2.191-0.314-5.279-1.84-6.896-3.411c-9.266-8.992-18.548-18.005-27.993-27.173c-1.615-1.57-1.844-4.312-0.493-6.116c2.795-3.729,5.847-7.764,8.698-11.938c1.612-2.358,3.15-4.762,4.651-7.148c1.195-1.909,3.814-4.288,6.026-4.721c2.321-0.453,4.716-0.408,7.128,0.155c0.22,0.053,0.407,0.004,0.547-0.102c0.253-0.192,0.583-0.571,0.693-0.869c0.061-0.159,0.045-0.347-0.103-0.539c-0.334-0.433-0.701-0.824-1.093-1.175c-0.665-0.592-1.363-1.105-1.53-1.204c-0.167-0.098-1.734-0.836-3.615-0.971s-5.182,0.118-7.434,0.151c-12.815,0.175-17.055,10.954-21.302,21.31c-0.856,2.085-3.296,3.125-5.279,2.057c-7.728-4.17-13.876-11.963-30.375-37.043c-1.236-1.881-0.784-4.508,0.987-5.903c9.2-7.279,18.001-15.365,28.242-20.686c10.151-5.275,21.771-7.736,33.432-11.18c2.162-0.636,2.656-2.529,1.122-4.178c-0.416-0.448-0.841-0.905-1.265-1.358c-1.534-1.648-1.682-4.451-0.131-6.088c13.333-14.117,31.946-12.75,49.389-14.268c18.474-1.611,35.794-6.65,53.378-12.378c7.577-2.468,15.337-4.374,23.167-6.059c20.607-3.562,41.216-7.124,61.824-10.686c2.219-0.383,5.817-1.008,8.041-1.391c12.049-2.081,24.097-4.166,36.149-6.247c3.357-0.579,9.139-2.428,8.755-6.985c-0.073-0.857-0.313-1.648-0.685-2.333c-0.649-1.188-1.678-1.865-1.73-1.955s0.828-0.437,1.971-0.824c0.689-0.232,1.371-0.477,2.053-0.738c3.464-1.155,6.874-2.46,10.24-3.868c1.922-0.804,5.528-1.121,6.088-4.382C569.3,211.686,558.357,214.513,554.918,215.052z"/></svg>`;
+
 /**
  * Manages the chat UI elements in the webview.
  * Groups messages by requestId to match the shell's behavior.
@@ -129,11 +134,17 @@ export class ChatUI {
         textEl.textContent = text;
         bubble.appendChild(textEl);
 
-        const statusEl = document.createElement("span");
-        statusEl.className = "status-icon";
-        statusEl.textContent = status === "pending" ? "🪶" : "✅";
-        statusEl.title = status === "pending" ? "Sent" : "Done";
-        bubble.appendChild(statusEl);
+        // Roadrunner: hidden until an "explained" notify arrives. Mirrors
+        // the Electron shell's translation/cache indicator. For replayed
+        // messages we just leave it hidden — we don't replay notify events.
+        const icon = document.createElement("span");
+        icon.className = "status-icon roadrunner";
+        icon.innerHTML = ROADRUNNER_SVG;
+        if (status !== "pending") {
+            icon.classList.add("hidden");
+        }
+        icon.title = "Waiting for translation…";
+        bubble.appendChild(icon);
 
         body.appendChild(bubble);
 
@@ -254,26 +265,83 @@ export class ChatUI {
         this._removeStatusIndicator();
         this._activeResponseEl = undefined;
         this._lastAppendedContent = undefined;
-
-        // Mark the matching pending user bubble as done.
-        let bubble: HTMLElement | undefined;
-        if (requestId && this._pendingUserBubbles.has(requestId)) {
-            bubble = this._pendingUserBubbles.get(requestId);
+        // Note: we deliberately don't flip the roadrunner here. The
+        // roadrunner reflects translation/cache state, which is signaled
+        // separately via the "explained" notify event (see onNotify).
+        if (requestId) {
             this._pendingUserBubbles.delete(requestId);
-        } else if (!requestId && this._pendingUserBubbles.size > 0) {
-            // Fallback for missing requestId — pop the oldest pending one
-            const firstKey = this._pendingUserBubbles.keys().next().value;
-            if (firstKey !== undefined) {
-                bubble = this._pendingUserBubbles.get(firstKey);
-                this._pendingUserBubbles.delete(firstKey);
-            }
         }
-        if (bubble) {
-            const icon = bubble.querySelector(".status-icon");
-            if (icon) {
-                icon.textContent = "✅";
-                (icon as HTMLElement).title = "Done";
-            }
+    }
+
+    /**
+     * Handle a clientIO notify event. Returns true if the event was
+     * consumed (and so should NOT be shown as a system message).
+     */
+    public onNotify(
+        event: string,
+        data: any,
+        _source: string,
+        requestId?: string,
+    ): boolean {
+        if (event === "explained") {
+            this._applyExplained(requestId, data);
+            return true;
+        }
+        if (event === "grammarRule") {
+            this._applyGrammarRule(requestId, data);
+            return true;
+        }
+        return false;
+    }
+
+    private _findUserBubble(requestId?: string): HTMLElement | undefined {
+        if (!requestId) return undefined;
+        if (this._pendingUserBubbles.has(requestId)) {
+            return this._pendingUserBubbles.get(requestId);
+        }
+        const sel = `.message.user[data-request-id="${CSS.escape(requestId)}"]`;
+        return (this._messagesEl.querySelector(sel) as HTMLElement) ?? undefined;
+    }
+
+    private _applyExplained(requestId: string | undefined, data: any): void {
+        const bubble = this._findUserBubble(requestId);
+        if (!bubble) return;
+        const icon = bubble.querySelector(".roadrunner") as HTMLElement | null;
+        if (!icon) return;
+
+        const fromCache: string | undefined = data?.fromCache;
+        const time: string | undefined = data?.time;
+        const error: string | undefined = data?.error;
+
+        const cachePart = fromCache
+            ? `Translated by ${fromCache}`
+            : "Translated by model";
+        let tooltip: string;
+        let colorVar: string;
+        if (error === undefined) {
+            tooltip = `${cachePart}. Explained at ${time ?? "now"}`;
+            // green = cache hit, gold = model translation
+            colorVar = fromCache ? "#00c000" : "#c0c000";
+        } else {
+            tooltip = `${cachePart}. Nothing to put in cache: ${error}`;
+            colorVar = "lightblue";
+        }
+
+        icon.classList.remove("hidden");
+        icon.style.color = colorVar;
+        icon.title = tooltip;
+    }
+
+    private _applyGrammarRule(requestId: string | undefined, data: any): void {
+        const bubble = this._findUserBubble(requestId);
+        if (!bubble) return;
+        const icon = bubble.querySelector(".roadrunner") as HTMLElement | null;
+        if (!icon) return;
+        if (data?.success === false) {
+            icon.style.color = "cornflowerblue";
+            const existing = icon.title || "";
+            const reason = data?.message ? ` (${data.message})` : "";
+            icon.title = `${existing}. No fast-path cached${reason}`;
         }
     }
 

@@ -45,7 +45,7 @@ export type BridgeToWebviewMessage =
           timestamp?: number;
       }
     | { type: "clear"; requestId: RequestId }
-    | { type: "notify"; event: string; data: any; source: string; seq?: number }
+    | { type: "notify"; event: string; data: any; source: string; seq?: number; requestId?: RequestId }
     | { type: "commandResult"; requestId: string; result: any }
     | { type: "commandComplete"; requestId: string; result: any }
     | { type: "error"; message: string }
@@ -689,7 +689,7 @@ export class AgentServerBridge {
             appendDiagnosticData: () => {},
             setDynamicDisplay: () => {},
             notify: (
-                _notificationId: string | RequestId | undefined,
+                notificationId: string | RequestId | undefined,
                 event: string,
                 data: any,
                 source: string,
@@ -701,6 +701,7 @@ export class AgentServerBridge {
                     data,
                     source,
                     seq,
+                    requestId: notificationId as RequestId | undefined,
                 });
             },
             requestChoice: () => {},

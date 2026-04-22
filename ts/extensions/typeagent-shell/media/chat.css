@@ -187,14 +187,23 @@ body {
     display: block;
 }
 
-/* Status icon inside user bubble (sent / done) */
+/* Status icon inside user bubble (roadrunner: translation/cache state) */
 .status-icon {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
     margin-left: 6px;
-    font-size: 11px;
-    opacity: 0.8;
     vertical-align: baseline;
     user-select: none;
+    color: var(--vscode-descriptionForeground);
+    cursor: help;
+}
+.status-icon.hidden {
+    visibility: hidden;
+}
+.status-icon svg {
+    width: 14px;
+    height: 14px;
+    display: block;
 }
 
 .message.system {
