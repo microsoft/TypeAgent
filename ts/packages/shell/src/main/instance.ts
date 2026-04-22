@@ -164,18 +164,8 @@ async function initializeDispatcher(
         let initialConversationName: string | undefined;
         if (connect !== undefined) {
             // Connect to remote dispatcher — use connectAgentServer directly
-            // so we retain the connection reference for multi-conversation support.
-            const userSettings = loadUserSettings();
-            const effectiveHidden = hidden ?? userSettings.server.hidden;
-            const effectiveIdleTimeout =
-                idleTimeout !== undefined
-                    ? idleTimeout
-                    : userSettings.server.idleTimeout;
-            await ensureAgentServer(
-                connect,
-                effectiveHidden,
-                effectiveIdleTimeout,
-            );
+            // so we retain the connection reference for multi-session support.
+            await ensureAgentServer(connect, true);
             const url = `ws://localhost:${connect}`;
             connection = await connectAgentServer(url, () => {
                 if (!quitting) {
