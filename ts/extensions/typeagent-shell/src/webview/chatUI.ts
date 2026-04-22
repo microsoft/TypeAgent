@@ -84,15 +84,28 @@ export class ChatUI {
         this._removeTemporary();
         this._activeResponseEl = undefined;
         this._lastAppendedContent = undefined;
-        const el = document.createElement("div");
-        el.className = "message user";
-        const tsEl = this._createTimestampEl(timestamp);
-        el.appendChild(tsEl);
+
+        const row = document.createElement("div");
+        row.className = "message user";
+
+        const body = document.createElement("div");
+        body.className = "message-body";
+
+        const header = this._createHeader("you", timestamp);
+        body.appendChild(header);
+
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
         const textEl = document.createElement("span");
         textEl.className = "message-content";
         textEl.textContent = text;
-        el.appendChild(textEl);
-        this._messagesEl.appendChild(el);
+        bubble.appendChild(textEl);
+        body.appendChild(bubble);
+
+        row.appendChild(body);
+        row.appendChild(this._createAvatar("user"));
+
+        this._messagesEl.appendChild(row);
         this._scrollToBottom();
     }
 
@@ -353,21 +366,82 @@ export class ChatUI {
         source?: string,
         timestamp?: number,
     ): HTMLElement {
-        const el = document.createElement("div");
-        el.className = "message agent";
-        const tsEl = this._createTimestampEl(timestamp);
-        el.appendChild(tsEl);
-        if (source) {
-            const sourceEl = document.createElement("span");
-            sourceEl.className = "source-label";
-            sourceEl.textContent = source;
-            el.appendChild(sourceEl);
-        }
+        const row = document.createElement("div");
+        row.className = "message agent";
+
+        row.appendChild(this._createAvatar("agent", source));
+
+        const body = document.createElement("div");
+        body.className = "message-body";
+
+        const header = this._createHeader(source ?? "", timestamp);
+        body.appendChild(header);
+
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
         const contentEl = document.createElement("span");
         contentEl.className = "agent-content";
-        el.appendChild(contentEl);
-        this._messagesEl.appendChild(el);
+        bubble.appendChild(contentEl);
+        body.appendChild(bubble);
+
+        row.appendChild(body);
+        this._messagesEl.appendChild(row);
+        return row;
+    }
+
+    private _createHeader(
+        label: string,
+        timestamp?: number,
+    ): HTMLElement {
+        const header = document.createElement("div");
+        header.className = "message-header";
+        if (label) {
+            const labelEl = document.createElement("span");
+            labelEl.className = "source-label";
+            labelEl.textContent = label;
+            header.appendChild(labelEl);
+        }
+        const tsEl = this._createTimestampEl(timestamp);
+        header.appendChild(tsEl);
+        return header;
+    }
+
+    private _createAvatar(
+        kind: "user" | "agent",
+        source?: string,
+    ): HTMLElement {
+        const el = document.createElement("div");
+        el.className = `avatar avatar-${kind}`;
+        if (kind === "user") {
+            el.textContent = "T";
+        } else {
+            el.textContent = this._avatarForSource(source);
+        }
         return el;
+    }
+
+    private _avatarForSource(source?: string): string {
+        if (!source) return "✦";
+        const root = source.split(".")[0].toLowerCase();
+        const map: Record<string, string> = {
+            browser: "🌐",
+            calendar: "📅",
+            chat: "💬",
+            code: "💻",
+            desktop: "🖥",
+            email: "✉",
+            list: "📋",
+            markdown: "📝",
+            montage: "🖼",
+            music: "🎵",
+            photo: "📷",
+            spelunker: "⛏",
+            system: "⚙",
+            turtle: "🐢",
+            weather: "☀",
+            word: "📄",
+        };
+        return map[root] ?? root.charAt(0).toUpperCase();
     }
 
     private _createTimestampEl(timestamp?: number): HTMLElement {
@@ -388,8 +462,9 @@ export class ChatUI {
         const d = new Date(timestamp);
         const now = new Date();
         const time = d.toLocaleTimeString([], {
-            hour: "2-digit",
+            hour: "numeric",
             minute: "2-digit",
+            second: "2-digit",
         });
         const sameDay =
             d.getFullYear() === now.getFullYear() &&

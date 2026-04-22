@@ -67,27 +67,110 @@ body {
 }
 
 .message {
-    padding: 8px 12px;
-    border-radius: 8px;
-    max-width: 85%;
-    word-wrap: break-word;
-    white-space: pre-wrap;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    max-width: 100%;
     line-height: 1.4;
 }
 
 .message.user {
-    align-self: flex-end;
-    background: var(--vscode-button-background);
-    color: var(--vscode-button-foreground);
-    border-bottom-right-radius: 2px;
+    flex-direction: row-reverse;
 }
 
 .message.agent {
-    align-self: flex-start;
+    flex-direction: row;
+}
+
+.message-body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    max-width: calc(100% - 36px);
+}
+
+.message.user .message-body {
+    align-items: flex-end;
+}
+
+.message.agent .message-body {
+    align-items: flex-start;
+}
+
+.message-header {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    font-size: 10.5px;
+    color: var(--vscode-descriptionForeground);
+    margin-bottom: 2px;
+    padding: 0 4px;
+    user-select: none;
+}
+
+.message.user .message-header {
+    flex-direction: row-reverse;
+}
+
+.source-label {
+    font-weight: 600;
+}
+
+.message-timestamp {
+    opacity: 0.7;
+}
+
+.message.user .message-timestamp::before,
+.message.agent .message-timestamp::before {
+    content: "· ";
+    opacity: 0.5;
+}
+
+/* The actual chat bubble */
+.bubble {
+    padding: 8px 12px;
+    border-radius: 12px;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    max-width: 100%;
+}
+
+.message.user .bubble {
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border-top-right-radius: 4px;
+}
+
+.message.agent .bubble {
     background: var(--vscode-input-background);
     color: var(--vscode-foreground);
     border: 1px solid var(--vscode-input-border, transparent);
-    border-bottom-left-radius: 2px;
+    border-top-left-radius: 4px;
+}
+
+/* Avatars */
+.avatar {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+    user-select: none;
+    margin-top: 18px; /* aligns with bubble, accounting for header */
+}
+
+.avatar-user {
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+}
+
+.avatar-agent {
+    background: var(--vscode-badge-background);
+    color: var(--vscode-badge-foreground);
 }
 
 .message.agent.partial {
@@ -98,19 +181,6 @@ body {
 .message.history {
     opacity: 0.55;
     filter: grayscale(0.4);
-}
-
-/* Per-bubble timestamp shown above the content */
-.message-timestamp {
-    display: block;
-    font-size: 10px;
-    opacity: 0.6;
-    margin-bottom: 2px;
-    user-select: none;
-}
-
-.message.user .message-timestamp {
-    text-align: right;
 }
 
 .message-content {
@@ -124,6 +194,7 @@ body {
     font-style: italic;
     background: none;
     padding: 4px 8px;
+    display: block;
 }
 
 .message.error {
@@ -133,15 +204,7 @@ body {
     background: var(--vscode-inputValidation-errorBackground, rgba(255, 0, 0, 0.1));
     border: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-errorForeground));
     padding: 6px 10px;
-}
-
-.source-label {
     display: block;
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--vscode-descriptionForeground);
-    margin-bottom: 2px;
-    text-transform: uppercase;
 }
 
 /* ── Input area ──────────────────────────────────────────────── */
