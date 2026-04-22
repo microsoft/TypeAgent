@@ -36,7 +36,7 @@ import { GrammarAction } from "./schema/grammarActionSchema.js";
 import { getConfigCommandHandlers } from "./handlers/configCommandHandlers.js";
 import { getConstructionCommandHandlers } from "./handlers/constructionCommandHandlers.js";
 import { DebugCommandHandler } from "./handlers/debugCommandHandlers.js";
-import { getConversationCommandHandlers } from "./handlers/conversationCommandHandlers.js";
+import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js";
 import { getHistoryCommandHandlers } from "./handlers/historyCommandHandler.js";
 import { TraceCommandHandler } from "./handlers/traceCommandHandler.js";
 import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
@@ -60,7 +60,7 @@ export const systemHandlers: CommandHandlerTable = {
     description: "Type Agent System Commands",
     commands: {
         action: new ActionCommandHandler(),
-        conversation: getConversationCommandHandlers(),
+        session: getSessionCommandHandlers(),
         history: getHistoryCommandHandlers(),
         memory: getMemoryCommandHandlers(),
         const: getConstructionCommandHandlers(),
