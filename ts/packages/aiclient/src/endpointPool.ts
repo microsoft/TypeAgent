@@ -330,6 +330,7 @@ export function discoverEndpointPool(
     }
 
     const members: EndpointPoolMember[] = [];
+    let lastHydrateError: Error | undefined;
     for (const suffix of suffixes) {
         let settings: ApiSettings;
         try {
@@ -346,6 +347,7 @@ export function discoverEndpointPool(
             debugPool(
                 `skipping pool member "${suffix}" for ${provider}:${endpointName ?? ""}: ${e?.message}`,
             );
+            lastHydrateError = e;
             continue;
         }
 
@@ -409,8 +411,12 @@ export function discoverEndpointPool(
     }
 
     if (members.length === 0) {
-        // Pool creation failed for every member — rethrow with a clear
-        // message. Callers treat this as "no endpoint configured".
+        // Pool creation failed for every candidate suffix. Surface the
+        // underlying settings-hydration error so legacy callers see the
+        // same `Missing ApiSetting: <name>` they saw before pools existed.
+        // Falling back to a generic pool error would be a compat regression
+        // for callers and tests that match on the specific error message.
+        if (lastHydrateError) throw lastHydrateError;
         throw new Error(
             `No usable endpoints discovered for ${provider}:${endpointName ?? ""} (root=${root})`,
         );
