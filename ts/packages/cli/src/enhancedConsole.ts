@@ -642,11 +642,16 @@ export function createEnhancedClientIO(
             }
             const port = getServerPort();
             if (port !== undefined) {
-                stopAgentServer(port).catch(() => {
-                    // Best-effort: server may already be stopped.
-                });
+                stopAgentServer(port)
+                    .catch(() => {
+                        // Best-effort: server may already be stopped.
+                    })
+                    .finally(() => {
+                        process.exit(0);
+                    });
+            } else {
+                process.exit(0);
             }
-            process.exit(0);
         },
 
         // Display
