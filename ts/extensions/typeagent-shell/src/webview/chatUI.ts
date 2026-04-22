@@ -449,15 +449,10 @@ export class ChatUI {
         }
         // TypedDisplayContent: { type, content, alternates? }
         if (typeof content === "object") {
-            // Prefer html alternate when present (matches shell)
-            const htmlAlt = content.alternates?.find(
-                (a: any) => a.type === "html",
-            );
-            if (htmlAlt && content.type !== "html") {
-                return this._sanitizeHtml(
-                    this._stringifyMessage(htmlAlt.content),
-                );
-            }
+            // Note: we deliberately do NOT prefer HTML alternates here.
+            // Many agents emit HTML alternates with hard-coded light-theme
+            // colors (e.g. #1e293b) that are unreadable on dark themes.
+            // The text/markdown primary is themed by our CSS instead.
             const inner = content.content;
             switch (content.type) {
                 case "html":
