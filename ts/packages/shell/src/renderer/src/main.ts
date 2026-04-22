@@ -27,7 +27,7 @@ import { ClientIO, Dispatcher, RequestId } from "agent-dispatcher";
 import { swapContent } from "./setContent";
 import { remoteSearchMenuUIOnCompletion } from "./searchMenuUI/remoteSearchMenuUI";
 import { ChatInput } from "./chat/chatInput";
-import { escapeHtml } from "./chat/sessionCommands";
+import { escapeHtml } from "./chat/conversationCommands";
 
 export function isElectron(): boolean {
     return globalThis.api !== undefined;
@@ -394,17 +394,18 @@ function registerClient(
                                                     "A name is required to create a new conversation.",
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                         break;
                                     }
-                                    const created = await api.sessionCreate(
-                                        payload.name,
-                                    );
+                                    const created =
+                                        await api.conversationCreate(
+                                            payload.name,
+                                        );
                                     const switchResult =
-                                        await api.sessionSwitch(
-                                            created.sessionId,
+                                        await api.conversationSwitch(
+                                            created.conversationId,
                                         );
                                     const msg = switchResult.success
                                         ? `✅ Created and switched to conversation "<b>${escapeHtml(created.name)}</b>"`
@@ -415,15 +416,16 @@ function registerClient(
                                             content: msg,
                                             kind: "info",
                                         },
-                                        "session",
+                                        "conversation",
                                         undefined,
                                     );
                                     break;
                                 }
                                 case "list": {
-                                    const sessions = await api.sessionList();
+                                    const sessions =
+                                        await api.conversationList();
                                     const current =
-                                        await api.sessionGetCurrent();
+                                        await api.conversationGetCurrent();
                                     let html: string;
                                     if (sessions.length === 0) {
                                         html = "No conversations found.";
@@ -431,15 +433,15 @@ function registerClient(
                                         const lines = sessions.map((s) => {
                                             const isCurrent =
                                                 current &&
-                                                s.sessionId ===
-                                                    current.sessionId;
+                                                s.conversationId ===
+                                                    current.conversationId;
                                             const marker = isCurrent
                                                 ? " ← <b>current</b>"
                                                 : "";
                                             const date = new Date(
                                                 s.createdAt,
                                             ).toLocaleDateString();
-                                            return `• <b>${escapeHtml(s.name)}</b> (${escapeHtml(s.sessionId)}) — ${s.clientCount} client(s), created ${date}${marker}`;
+                                            return `• <b>${escapeHtml(s.name)}</b> (${escapeHtml(s.conversationId)}) — ${s.clientCount} client(s), created ${date}${marker}`;
                                         });
                                         html = `<b>Conversations (${sessions.length})</b><br>${lines.join("<br>")}`;
                                     }
@@ -449,15 +451,16 @@ function registerClient(
                                             content: html,
                                             kind: "info",
                                         },
-                                        "session",
+                                        "conversation",
                                         undefined,
                                     );
                                     break;
                                 }
                                 case "info": {
-                                    const cur = await api.sessionGetCurrent();
+                                    const cur =
+                                        await api.conversationGetCurrent();
                                     const html = cur
-                                        ? `Current conversation: <b>${escapeHtml(cur.name)}</b> (${escapeHtml(cur.sessionId)})`
+                                        ? `Current conversation: <b>${escapeHtml(cur.name)}</b> (${escapeHtml(cur.conversationId)})`
                                         : "No active conversation.";
                                     chatView.addNotificationMessage(
                                         {
@@ -465,7 +468,7 @@ function registerClient(
                                             content: html,
                                             kind: "info",
                                         },
-                                        "session",
+                                        "conversation",
                                         undefined,
                                     );
                                     break;
@@ -479,12 +482,13 @@ function registerClient(
                                                     "A conversation name is required to switch.",
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                         break;
                                     }
-                                    const sessions = await api.sessionList();
+                                    const sessions =
+                                        await api.conversationList();
                                     const match = sessions.find(
                                         (s) =>
                                             s.name.toLowerCase() ===
@@ -497,13 +501,13 @@ function registerClient(
                                                 content: `No conversation named "<b>${escapeHtml(payload.name)}</b>" found.`,
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                         break;
                                     }
-                                    const result = await api.sessionSwitch(
-                                        match.sessionId,
+                                    const result = await api.conversationSwitch(
+                                        match.conversationId,
                                     );
                                     if (!result.success) {
                                         chatView.addNotificationMessage(
@@ -512,7 +516,7 @@ function registerClient(
                                                 content: `❌ ${escapeHtml(result.error ?? "Failed to switch conversation")}`,
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                     }
@@ -527,15 +531,15 @@ function registerClient(
                                                     "A new name is required to rename the conversation.",
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                         break;
                                     }
-                                    let sessionId: string;
+                                    let conversationId: string;
                                     if (payload.name) {
                                         const sessions =
-                                            await api.sessionList();
+                                            await api.conversationList();
                                         const match = sessions.find(
                                             (s) =>
                                                 s.name.toLowerCase() ===
@@ -548,15 +552,15 @@ function registerClient(
                                                     content: `No conversation named "<b>${escapeHtml(payload.name)}</b>" found.`,
                                                     kind: "warning",
                                                 },
-                                                "session",
+                                                "conversation",
                                                 undefined,
                                             );
                                             break;
                                         }
-                                        sessionId = match.sessionId;
+                                        conversationId = match.conversationId;
                                     } else {
                                         const cur =
-                                            await api.sessionGetCurrent();
+                                            await api.conversationGetCurrent();
                                         if (!cur) {
                                             chatView.addNotificationMessage(
                                                 {
@@ -565,15 +569,15 @@ function registerClient(
                                                         "No active conversation to rename.",
                                                     kind: "warning",
                                                 },
-                                                "session",
+                                                "conversation",
                                                 undefined,
                                             );
                                             break;
                                         }
-                                        sessionId = cur.sessionId;
+                                        conversationId = cur.conversationId;
                                     }
-                                    await api.sessionRename(
-                                        sessionId,
+                                    await api.conversationRename(
+                                        conversationId,
                                         payload.newName,
                                     );
                                     chatView.addNotificationMessage(
@@ -582,7 +586,7 @@ function registerClient(
                                             content: `✅ Renamed conversation to "<b>${escapeHtml(payload.newName)}</b>"`,
                                             kind: "info",
                                         },
-                                        "session",
+                                        "conversation",
                                         undefined,
                                     );
                                     break;
@@ -596,12 +600,13 @@ function registerClient(
                                                     "A conversation name is required to delete.",
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                         break;
                                     }
-                                    const sessions = await api.sessionList();
+                                    const sessions =
+                                        await api.conversationList();
                                     const match = sessions.find(
                                         (s) =>
                                             s.name.toLowerCase() ===
@@ -614,19 +619,21 @@ function registerClient(
                                                 content: `❌ Conversation "<b>${escapeHtml(payload.name)}</b>" not found.`,
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                         break;
                                     }
-                                    await api.sessionDelete(match.sessionId);
+                                    await api.conversationDelete(
+                                        match.conversationId,
+                                    );
                                     chatView.addNotificationMessage(
                                         {
                                             type: "html",
                                             content: `🗑️ Deleted conversation "<b>${escapeHtml(match.name)}</b>"`,
                                             kind: "info",
                                         },
-                                        "session",
+                                        "conversation",
                                         undefined,
                                     );
                                     break;
@@ -638,7 +645,7 @@ function registerClient(
                                             content: `Unknown manage-conversation subcommand: "<b>${escapeHtml(payload.subcommand)}</b>"`,
                                             kind: "warning",
                                         },
-                                        "session",
+                                        "conversation",
                                         undefined,
                                     );
                                     break;
@@ -651,7 +658,7 @@ function registerClient(
                                     content: `❌ ${escapeHtml(e?.message ?? String(e))}`,
                                     kind: "warning",
                                 },
-                                "session",
+                                "conversation",
                                 undefined,
                             ),
                         );
@@ -763,8 +770,8 @@ function registerClient(
             }
             chatView.addNotificationMessage(message, "shell", id);
         },
-        sessionChanged(_sessionId: string, _name: string): void {
-            // Session changed — no UI to update (dropdown removed)
+        conversationChanged(_conversationId: string, _name: string): void {
+            // Conversation changed — no UI to update (dropdown removed)
         },
         markHistoryEntries(): void {
             for (const child of chatView.getScrollContainer().children) {

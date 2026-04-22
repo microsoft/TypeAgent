@@ -2028,7 +2028,7 @@ export function getEnhancedConsolePrompt(_text: string): string {
 }
 
 /**
- * Replay display history entries from a previous (or concurrent) session onto
+ * Replay display history entries from a previous (or concurrent) conversation onto
  * the given clientIO so that the user sees the chat history when joining.
  *
  * User requests are printed as styled prompt lines; agent display entries are
@@ -2053,7 +2053,7 @@ export async function replayDisplayHistory(
     const width = process.stdout.columns || 80;
     process.stdout.write(
         chalk.dim(
-            "─── session history " + "─".repeat(Math.max(0, width - 20)),
+            "─── conversation history " + "─".repeat(Math.max(0, width - 25)),
         ) + "\n",
     );
 

@@ -245,6 +245,20 @@ export class PartialCompletionSession implements CompletionController {
         input: string,
         direction: CompletionDirection = "forward",
     ): void {
+        // Deduplicate: if the input and direction haven't changed and
+        // the session is already active or pending, there is no new
+        // work to do.  The shell's previousInput guard prevents
+        // selectionchange echoes from reaching here, so direction is
+        // safe to compare.
+        if (
+            input === this.lastInput &&
+            direction === this.lastDirection &&
+            (this.completionState !== undefined ||
+                this.completionP !== undefined)
+        ) {
+            debug(`update skipped: input unchanged ('${input}')`);
+            return;
+        }
         this.lastInput = input;
         this.lastDirection = direction;
         if (this.reuseSession(input, direction)) {

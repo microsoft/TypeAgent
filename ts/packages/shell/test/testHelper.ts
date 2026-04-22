@@ -253,7 +253,9 @@ export async function sendUserRequestFast(prompt: string, page: Page) {
 }
 
 async function getAgentMessageLocators(page: Page): Promise<Locator[]> {
-    return page.locator(".chat-message-agent .chat-message-content").all();
+    return page
+        .locator(".chat-message-container-agent:not(.chat-message-hidden)")
+        .all();
 }
 
 /**
@@ -353,7 +355,7 @@ async function waitForAgentMessage(
 
     while (true) {
         const locators = await page
-            .locator(".chat-message-container-agent")
+            .locator(".chat-message-container-agent:not(.chat-message-hidden)")
             .all();
         const messageCount = locators.length;
         if (messageCount >= expectedMessageCount) {

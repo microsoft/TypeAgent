@@ -65,10 +65,6 @@ export class PartialCompletion {
     // items) should be called on the SearchMenu.
     private lastGeneration: number = -1;
     private lastPrefix: string = "";
-    // Set when update(contentChanged=true) runs so the selectionchange
-    // handler can skip the redundant re-update that the browser fires
-    // after every content mutation.
-    private contentUpdated: boolean = false;
 
     private readonly cleanupEventListeners: () => void;
     constructor(
@@ -96,6 +92,9 @@ export class PartialCompletion {
         // pass them directly to avoid a redundant trie query in render().
         this.controller.setOnUpdate(() => {
             const state = this.controller.getCompletionState();
+            debug(
+                `onUpdate: ${state ? `prefix='${state.prefix}' items=${state.items.length}` : "hidden"}`,
+            );
             if (state) {
                 if (
                     state.generation !== this.lastGeneration ||
@@ -119,10 +118,6 @@ export class PartialCompletion {
         });
 
         const selectionChangeHandler = () => {
-            if (this.contentUpdated) {
-                this.contentUpdated = false;
-                return;
-            }
             debug("Partial completion update on selection changed");
             this.update(false);
         };
@@ -144,20 +139,32 @@ export class PartialCompletion {
         if (this.closed) {
             throw new Error("Using a closed PartialCompletion");
         }
-        debug(`update(contentChanged=${contentChanged})`);
+        debug(`update entry: contentChanged=${contentChanged}`);
         if (contentChanged) {
             // Normalize the input text to ensure selection at end is correct.
             this.input.getTextEntry().normalize();
-            // Suppress the selectionchange event that the browser fires
-            // after every content mutation — this update already covers it.
-            this.contentUpdated = true;
         }
         if (!this.isSelectionAtEnd(contentChanged)) {
+            this.previousInput = "";
             this.controller.hide();
+            debug("update: selection not at end, hiding");
             return;
         }
         const input = this.getCurrentInputForCompletion();
-        debug(`Partial completion input: '${input}'`);
+
+        // Skip if input hasn't changed since the last call we forwarded
+        // to the controller.  This prevents selectionchange echoes from
+        // recomputing direction against the already-mutated previousInput
+        // (which would flip "backward" to "forward").
+        // Reset to "" on hide (cursor moved away) so re-focus always
+        // re-activates the controller.
+        if (input === this.previousInput) {
+            debug(`update skipped: input unchanged ('${input}')`);
+            return;
+        }
+        debug(
+            `Partial completion input: '${input}' (${contentChanged ? "content changed" : "selection changed"})`,
+        );
 
         // Only use "backward" when the user is genuinely backspacing:
         // the new input must be a strict prefix of the previous input.

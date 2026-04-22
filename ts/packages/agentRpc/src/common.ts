@@ -6,17 +6,17 @@ import registerDebug from "debug";
 type MessageHandler<T> = (message: Partial<T>) => void;
 type DisconnectHandler = () => void;
 
-export type SharedRpcChannel<T = any> = {
-    on(event: "message", cb: MessageHandler<T>): void;
+export type SharedRpcChannel<InT = any, OutT = any> = {
+    on(event: "message", cb: MessageHandler<InT>): void;
     on(event: "disconnect", cb: DisconnectHandler): void;
-    off(event: "message", cb: MessageHandler<T>): void;
+    off(event: "message", cb: MessageHandler<InT>): void;
     off(event: "disconnect", cb: DisconnectHandler): void;
-    send(message: T, cb?: (err: Error | null) => void): void;
+    send(message: OutT, cb?: (err: Error | null) => void): void;
 };
 
 // Compatible with ChildProcess | NodeJS.Process
-export type RpcChannel<T = any> = SharedRpcChannel<T> & {
-    once(event: "message", cb: MessageHandler<T>): void;
+export type RpcChannel<InT = any, OutT = any> = SharedRpcChannel<InT, OutT> & {
+    once(event: "message", cb: MessageHandler<InT>): void;
     once(event: "disconnect", cb: DisconnectHandler): void;
 };
 
@@ -33,7 +33,7 @@ type ChannelData = {
 export type ChannelProvider = {
     on(event: "disconnect", cb: DisconnectHandler): void;
     off(event: "disconnect", cb: DisconnectHandler): void;
-    createChannel<T = any>(name: string): RpcChannel<T>;
+    createChannel<InT = any, OutT = any>(name: string): RpcChannel<InT, OutT>;
     deleteChannel(name: string): void;
 };
 

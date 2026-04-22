@@ -1,12 +1,12 @@
 # agentServer
 
-The agentServer hosts a **TypeAgent dispatcher over WebSocket**, allowing multiple clients (Shell, CLI, extensions) to share a single running dispatcher instance with full session management. It is split into three sub-packages:
+The agentServer hosts a **TypeAgent dispatcher over WebSocket**, allowing multiple clients (Shell, CLI, extensions) to share a single running dispatcher instance with full conversation management. It is split into three sub-packages:
 
-| Package     | npm name                | Purpose                                                                      |
-| ----------- | ----------------------- | ---------------------------------------------------------------------------- |
-| `protocol/` | `agent-server-protocol` | RPC channel names, session types, client-type registry                       |
-| `client/`   | `agent-server-client`   | Client library: connect, session management, auto-spawn, stop                |
-| `server/`   | `agent-server`          | Long-running WebSocket server with `SessionManager` and per-session dispatch |
+| Package     | npm name                | Purpose                                                                                |
+| ----------- | ----------------------- | -------------------------------------------------------------------------------------- |
+| `protocol/` | `agent-server-protocol` | RPC channel names, conversation types, client-type registry                            |
+| `client/`   | `agent-server-client`   | Client library: connect, conversation management, auto-spawn, stop                     |
+| `server/`   | `agent-server`          | Long-running WebSocket server with `ConversationManager` and per-conversation dispatch |
 
 ---
 
@@ -21,30 +21,30 @@ Shell (Electron)              CLI (Node.js)
          ┌────────▼────────┐
          │   agentServer   │
          │                 │
-         │  SessionManager │
+         │ ConversationManager│
          │  ┌────────────┐ │
-         │  │ Session A  │ │  ← clients 0, 1
+         │  │ Convo A    │ │  ← clients 0, 1
          │  │ Dispatcher │ │
          │  ├────────────┤ │
-         │  │ Session B  │ │  ← client 2
+         │  │ Convo B    │ │  ← client 2
          │  │ Dispatcher │ │
          │  └────────────┘ │
          └─────────────────┘
 ```
 
-Each session has its own `SharedDispatcher` instance with isolated chat history, conversation memory, display log, and persist directory. Clients connected to the same session share one dispatcher; clients in different sessions are fully isolated.
+Each conversation has its own `SharedDispatcher` instance with isolated chat history, conversation memory, display log, and persist directory. Clients connected to the same conversation share one dispatcher; clients in different conversations are fully isolated.
 
 ### RPC channels per connection
 
 Each WebSocket connection multiplexes independent JSON-RPC channels:
 
-| Channel                  | Direction       | Purpose                                                            |
-| ------------------------ | --------------- | ------------------------------------------------------------------ |
-| `agent-server`           | client → server | Session lifecycle: `joinSession`, `leaveSession`, CRUD, `shutdown` |
-| `dispatcher:<sessionId>` | client → server | Commands: `processCommand`, `getCommandCompletion`, etc.           |
-| `clientio:<sessionId>`   | server → client | Display/interaction callbacks: `setDisplay`, `askYesNo`, etc.      |
+| Channel                       | Direction       | Purpose                                                                           |
+| ----------------------------- | --------------- | --------------------------------------------------------------------------------- |
+| `agent-server`                | client → server | Conversation lifecycle: `joinConversation`, `leaveConversation`, CRUD, `shutdown` |
+| `dispatcher:<conversationId>` | client → server | Commands: `processCommand`, `getCommandCompletion`, etc.                          |
+| `clientio:<conversationId>`   | server → client | Display/interaction callbacks: `setDisplay`, `askYesNo`, etc.                     |
 
-The dispatcher and clientIO channels are namespaced by `sessionId`, allowing a single WebSocket connection to participate in multiple sessions simultaneously.
+The dispatcher and clientIO channels are namespaced by `conversationId`, allowing a single WebSocket connection to participate in multiple conversations simultaneously.
 
 ---
 
@@ -82,23 +82,23 @@ The server listens on `ws://localhost:8999` and logs `Agent server started at ws
 
 ---
 
-## Session lifecycle
+## Conversation lifecycle
 
 ```
-Client calls joinSession({ sessionId?, clientType, filter })
+Client calls joinConversation({ conversationId?, clientType, filter })
   │
-  ├─ sessionId provided?
-  │   ├─ Yes → look up sessions.json
+  ├─ conversationId provided?
+  │   ├─ Yes → look up conversations.json
   │   │   ├─ Found → load SharedDispatcher (lazy init if not in memory)
-  │   │   └─ Not found → error: "Session not found"
-  │   └─ No → connect to the default session
-  │       └─ No sessions exist → auto-create session named "default"
+  │   │   └─ Not found → error: "Conversation not found"
+  │   └─ No → connect to the default conversation
+  │       └─ No conversations exist → auto-create conversation named "default"
   │
-  ├─ Register client in session's SharedDispatcher routing table
-  └─ Return { connectionId, sessionId }
+  ├─ Register client in conversation's SharedDispatcher routing table
+  └─ Return { connectionId, conversationId }
 ```
 
-Session dispatchers are automatically evicted from memory after 5 minutes with no connected clients.
+Conversation dispatchers are automatically evicted from memory after 5 minutes with no connected clients.
 
 ---
 
@@ -115,13 +115,13 @@ Client calls connectAgentServer(url)
   │
   ├─ Open WebSocket → create RPC channels
   │
-  ├─ Send joinSession({ sessionId, clientType, filter }) on agent-server channel
-  │   └─ Server assigns connectionId, returns { connectionId, sessionId }
+  ├─ Send joinConversation({ conversationId, clientType, filter }) on agent-server channel
+  │   └─ Server assigns connectionId, returns { connectionId, conversationId }
   │
-  └─ Return AgentServerConnection (call .joinSession() to get a Dispatcher proxy)
+  └─ Return AgentServerConnection (call .joinConversation() to get a Dispatcher proxy)
 ```
 
-On disconnect, the server removes all of that connection's sessions from its routing table.
+On disconnect, the server removes all of that connection's conversations from its routing table.
 
 ---
 
@@ -153,15 +153,15 @@ Terminal ↔ ConsoleClientIO ↔ WebSocket ↔ agentServer
 
 ### `agent-cli connect` (interactive)
 
-`connect` calls `ensureAgentServer(port, hidden, idleTimeout)` to auto-spawn the server if needed, then calls `connectAgentServer()` and `joinSession()` directly. By default the spawned server window is visible; pass `--hidden` to suppress it. Pass `--idle-timeout <seconds>` to enable idle shutdown when spawning (default: `0`, server stays alive indefinitely).
+`connect` calls `ensureAgentServer(port, hidden, idleTimeout)` to auto-spawn the server if needed, then calls `connectAgentServer()` and `joinConversation()` directly. By default the spawned server window is visible; pass `--hidden` to suppress it. Pass `--idle-timeout <seconds>` to enable idle shutdown when spawning (default: `0`, server stays alive indefinitely).
 
 ### `agent-cli run` (non-interactive)
 
-The `run request`, `run translate`, and `run explain` subcommands also call `ensureAgentServer()` — but default to **hidden** (no window), with `--show` to opt into a visible window. All three support `--session <id>` to target a specific session instead of the default `"CLI"` session. When spawning, passes `--idle-timeout 600` so the server exits 10 minutes after the last client disconnects.
+The `run request`, `run translate`, and `run explain` subcommands also call `ensureAgentServer()` — but default to **hidden** (no window), with `--show` to opt into a visible window. All three support `--conversation <id>` to target a specific conversation instead of the default `"CLI"` conversation. When spawning, passes `--idle-timeout 600` so the server exits 10 minutes after the last client disconnects.
 
 ### `agent-cli replay`
 
-`replay` always creates an ephemeral session (`cli-replay-<uuid>`) and deletes it on exit. Defaults to hidden; `--show` to opt in. Also passes `--idle-timeout 600` when spawning.
+`replay` always creates an ephemeral conversation (`cli-replay-<uuid>`) and deletes it on exit. Defaults to hidden; `--show` to opt in. Also passes `--idle-timeout 600` when spawning.
 
 ### `agent-cli server`
 
@@ -185,7 +185,7 @@ Shell launches → createDispatcher() in-process → no server involved
 ```
 Client → ensureAgentServer(port=8999, hidden)
        → server already running → no-op
-Client → connectAgentServer() → joinSession() → Dispatcher proxy
+Client → connectAgentServer() → joinConversation() → Dispatcher proxy
 ```
 
 **Shell or CLI — server not yet running**
@@ -194,7 +194,7 @@ Client → connectAgentServer() → joinSession() → Dispatcher proxy
 Client → ensureAgentServer(port=8999, hidden, idleTimeout)
        → server not found → spawnAgentServer() (hidden or visible window)
        → poll until ready (60 s timeout)
-Client → connectAgentServer() → joinSession() → Dispatcher proxy
+Client → connectAgentServer() → joinConversation() → Dispatcher proxy
 ```
 
 **Headless server**
@@ -202,7 +202,7 @@ Client → connectAgentServer() → joinSession() → Dispatcher proxy
 ```
 pnpm --filter agent-server start
 → listens on ws://localhost:8999
-→ any number of Shell/CLI clients can connect and share sessions
+→ any number of Shell/CLI clients can connect and share conversations
 ```
 
 **Stopping the server**
@@ -214,17 +214,17 @@ pnpm --filter agent-server stop    # via pnpm script
 
 ---
 
-## Session persistence
+## Conversation persistence
 
-Session metadata is stored at `~/.typeagent/server-sessions/sessions.json`. Each session's data (chat history, conversation memory, display log) lives under `~/.typeagent/server-sessions/<sessionId>/`.
+Conversation metadata is stored at `~/.typeagent/profiles/dev/conversations/conversations.json`. Each conversation's data (chat history, conversation memory, display log) lives under `~/.typeagent/profiles/dev/conversations/<conversationId>/`.
 
 ---
 
 ## Sub-package details
 
-- [protocol/README.md](protocol/README.md) — channel names, RPC types, session types, client-type registry
-- [client/README.md](client/README.md) — `connectAgentServer`, `ensureAndConnectDispatcher`, `stopAgentServer`
-- [server/README.md](server/README.md) — server entry point, `SessionManager`, `SharedDispatcher`, routing ClientIO
+- [protocol/README.md](protocol/README.md) — channel names, RPC types, conversation types, client-type registry
+- [client/README.md](client/README.md) — `connectAgentServer`, `ensureAndConnectConversation`, `stopAgentServer`
+- [server/README.md](server/README.md) — server entry point, `ConversationManager`, `SharedDispatcher`, routing ClientIO
 
 ---
 

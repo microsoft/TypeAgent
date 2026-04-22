@@ -10,12 +10,12 @@
  */
 
 import type {
-    SessionInfo,
-    SessionSwitchResult,
+    ConversationInfo,
+    ConversationSwitchResult,
 } from "../../../preload/electronTypes";
 import { getClientAPI } from "../main";
 
-export type SessionMessageSink = {
+export type ConversationMessageSink = {
     addSystemMessage(content: string): void;
     clear(): void;
 };
@@ -30,7 +30,7 @@ export type SessionMessageSink = {
  */
 export async function handleConversationCommand(
     text: string,
-    sink: SessionMessageSink,
+    sink: ConversationMessageSink,
 ): Promise<boolean> {
     const trimmed = text.trim();
 
@@ -57,18 +57,22 @@ export async function handleConversationCommand(
 
         switch (subcommand) {
             case "list": {
-                const sessions = await api.sessionList();
-                const current = await api.sessionGetCurrent();
-                formatSessionList(sessions, current?.sessionId, sink);
+                const conversations = await api.conversationList();
+                const current = await api.conversationGetCurrent();
+                formatConversationList(
+                    conversations,
+                    current?.conversationId,
+                    sink,
+                );
                 return true;
             }
 
             case "new":
             case "create": {
                 const name = parts.slice(2).join(" ") || "New Conversation";
-                const session = await api.sessionCreate(name);
+                const conversation = await api.conversationCreate(name);
                 sink.addSystemMessage(
-                    `✅ Created conversation "<b>${escapeHtml(session.name)}</b>" (${session.sessionId})`,
+                    `✅ Created conversation "<b>${escapeHtml(conversation.name)}</b>" (${conversation.conversationId})`,
                 );
                 return true;
             }
@@ -82,12 +86,12 @@ export async function handleConversationCommand(
                     return true;
                 }
                 // Try to resolve by name first, then by ID
-                const sessionId = await resolveSessionTarget(target);
-                const result: SessionSwitchResult =
-                    await api.sessionSwitch(sessionId);
+                const conversationId = await resolveConversationTarget(target);
+                const result: ConversationSwitchResult =
+                    await api.conversationSwitch(conversationId);
                 if (result.success) {
                     sink.addSystemMessage(
-                        `🔄 Switched to conversation "<b>${escapeHtml(result.name ?? sessionId)}</b>"`,
+                        `🔄 Switched to conversation "<b>${escapeHtml(result.name ?? conversationId)}</b>"`,
                     );
                 } else {
                     sink.addSystemMessage(
@@ -97,19 +101,32 @@ export async function handleConversationCommand(
                 return true;
             }
 
-            case "rename": {
-                // /conversation rename <id> <new name>
-                const sessionId = parts[2];
-                const newName = parts.slice(3).join(" ");
-                if (!sessionId || !newName) {
+            case "info": {
+                const current = await api.conversationGetCurrent();
+                if (!current) {
+                    sink.addSystemMessage("No active conversation.");
+                } else {
                     sink.addSystemMessage(
-                        "Usage: <code>/conversation rename &lt;id&gt; &lt;newName&gt;</code>",
+                        `<b>Current conversation:</b> ${escapeHtml(current.name)} (${escapeHtml(current.conversationId)})`,
+                    );
+                }
+                return true;
+            }
+
+            case "rename": {
+                // /conversation rename <id|name> <new name>
+                const target = parts[2];
+                const newName = parts.slice(3).join(" ");
+                if (!target || !newName) {
+                    sink.addSystemMessage(
+                        "Usage: <code>/conversation rename &lt;id|name&gt; &lt;newName&gt;</code>",
                     );
                     return true;
                 }
-                await api.sessionRename(sessionId, newName);
+                const conversationId = await resolveConversationTarget(target);
+                await api.conversationRename(conversationId, newName);
                 sink.addSystemMessage(
-                    `✅ Renamed conversation ${escapeHtml(sessionId)} to "<b>${escapeHtml(newName)}</b>"`,
+                    `✅ Renamed conversation ${escapeHtml(conversationId)} to "<b>${escapeHtml(newName)}</b>"`,
                 );
                 return true;
             }
@@ -122,8 +139,8 @@ export async function handleConversationCommand(
                     );
                     return true;
                 }
-                const sessionId = await resolveSessionTarget(target);
-                await api.sessionDelete(sessionId);
+                const conversationId = await resolveConversationTarget(target);
+                await api.conversationDelete(conversationId);
                 sink.addSystemMessage(
                     `🗑️ Deleted conversation ${escapeHtml(target)}`,
                 );
@@ -145,14 +162,15 @@ export async function handleConversationCommand(
     }
 }
 
-function showConversationHelp(sink: SessionMessageSink): void {
+function showConversationHelp(sink: ConversationMessageSink): void {
     sink.addSystemMessage(
         [
             "<b>Conversation Commands</b>",
             "<code>/conversation list</code> — List all conversations",
             "<code>/conversation new [name]</code> — Create a new conversation",
             "<code>/conversation switch &lt;id|name&gt;</code> — Switch to a conversation",
-            "<code>/conversation rename &lt;id&gt; &lt;name&gt;</code> — Rename a conversation",
+            "<code>/conversation info</code> — Show current conversation info",
+            "<code>/conversation rename &lt;id|name&gt; &lt;name&gt;</code> — Rename a conversation",
             "<code>/conversation delete &lt;id|name&gt;</code> — Delete a conversation",
             "",
             "Tip: <code>@conversation</code> is accepted as an alias for <code>/conversation</code>.",
@@ -160,28 +178,29 @@ function showConversationHelp(sink: SessionMessageSink): void {
     );
 }
 
-function formatSessionList(
-    sessions: SessionInfo[],
+function formatConversationList(
+    conversations: ConversationInfo[],
     currentId: string | undefined,
-    sink: SessionMessageSink,
+    sink: ConversationMessageSink,
 ): void {
-    if (sessions.length === 0) {
+    if (conversations.length === 0) {
         sink.addSystemMessage("No conversations found.");
         return;
     }
 
-    const lines = sessions.map((s) => {
-        const marker = s.sessionId === currentId ? " ← <b>current</b>" : "";
+    const lines = conversations.map((s) => {
+        const marker =
+            s.conversationId === currentId ? " ← <b>current</b>" : "";
         const date = new Date(s.createdAt).toLocaleDateString();
-        return `• <b>${escapeHtml(s.name)}</b> (${escapeHtml(s.sessionId)}) — ${s.clientCount} client(s), created ${date}${marker}`;
+        return `• <b>${escapeHtml(s.name)}</b> (${escapeHtml(s.conversationId)}) — ${s.clientCount} client(s), created ${date}${marker}`;
     });
 
     sink.addSystemMessage(
-        `<b>Conversations (${sessions.length})</b><br>${lines.join("<br>")}`,
+        `<b>Conversations (${conversations.length})</b><br>${lines.join("<br>")}`,
     );
 }
 
-async function resolveSessionTarget(target: string): Promise<string> {
+async function resolveConversationTarget(target: string): Promise<string> {
     // If it looks like a UUID, use it directly
     if (
         target.match(
@@ -194,12 +213,12 @@ async function resolveSessionTarget(target: string): Promise<string> {
 
     // Otherwise try to match by name
     const api = getClientAPI();
-    const sessions = await api.sessionList();
-    const match = sessions.find(
+    const conversations = await api.conversationList();
+    const match = conversations.find(
         (s) => s.name.toLowerCase() === target.toLowerCase(),
     );
     if (match) {
-        return match.sessionId;
+        return match.conversationId;
     }
 
     // Fall back to using it as-is (let the backend reject if invalid)

@@ -3,7 +3,10 @@
 
 import { createWebSocketChannelServer } from "websocket-channel-server";
 import { createDispatcherRpcServer } from "@typeagent/dispatcher-rpc/dispatcher/server";
-import { createSessionManager, SessionManager } from "./sessionManager.js";
+import {
+    createConversationManager,
+    ConversationManager,
+} from "./conversationManager.js";
 import {
     getInstanceDirAsync,
     getTraceIdAsync,
@@ -45,38 +48,39 @@ async function main() {
     const configName =
         configIdx !== -1 ? process.argv[configIdx + 1] : undefined;
 
-    debugStartup("creating session manager (will lockInstanceDir)");
-    const sessionManager: SessionManager = await createSessionManager(
-        "agent server",
-        {
-            appAgentProviders: getDefaultAppAgentProviders(
-                instanceDir,
-                configName,
-            ),
-            persistSession: true,
-            storageProvider: getFsStorageProvider(),
-            metrics: true,
-            dblogging: false,
-            traceId,
-            indexingServiceRegistry: await getIndexingServiceRegistry(
-                instanceDir,
-                configName,
-            ),
-            constructionProvider: getDefaultConstructionProvider(),
-            conversationMemorySettings: {
-                requestKnowledgeExtraction: false,
-                actionResultKnowledgeExtraction: false,
+    debugStartup("creating conversation manager (will lockInstanceDir)");
+    const conversationManager: ConversationManager =
+        await createConversationManager(
+            "agent server",
+            {
+                appAgentProviders: getDefaultAppAgentProviders(
+                    instanceDir,
+                    configName,
+                ),
+                persistSession: true,
+                storageProvider: getFsStorageProvider(),
+                metrics: true,
+                dblogging: false,
+                traceId,
+                indexingServiceRegistry: await getIndexingServiceRegistry(
+                    instanceDir,
+                    configName,
+                ),
+                constructionProvider: getDefaultConstructionProvider(),
+                conversationMemorySettings: {
+                    requestKnowledgeExtraction: false,
+                    actionResultKnowledgeExtraction: false,
+                },
+                collectCommandResult: true,
             },
-            collectCommandResult: true,
-        },
-        instanceDir,
-    );
+            instanceDir,
+        );
 
-    debugStartup("session manager ready; prewarming default session");
-    // Pre-initialize the default session dispatcher before accepting clients,
-    // so the first joinSession call is fast and concurrent joinSession calls
+    debugStartup("conversation manager ready; prewarming default conversation");
+    // Pre-initialize the default conversation dispatcher before accepting clients,
+    // so the first joinConversation call is fast and concurrent joinConversation calls
     // don't race to initialize the same dispatcher.
-    await sessionManager.prewarmMostRecentSession();
+    await conversationManager.prewarmMostRecentConversation();
     debugStartup("prewarm complete");
 
     const portIdx = process.argv.indexOf("--port");
@@ -107,7 +111,7 @@ async function main() {
                     "s. Stopping agent server...",
             );
             wss.close();
-            await sessionManager.close();
+            await conversationManager.close();
             process.exit(0);
         }, idleShutdownMs);
     }
@@ -121,51 +125,57 @@ async function main() {
                 idleShutdownTimer = undefined;
             }
 
-            // Track which sessions this WebSocket connection has joined
-            // sessionId → { dispatcher, connectionId }
-            const joinedSessions = new Map<
+            // Track which conversations this WebSocket connection has joined
+            // conversationId → { dispatcher, connectionId }
+            const joinedConversations = new Map<
                 string,
                 { dispatcher: Dispatcher; connectionId: string }
             >();
 
             const invokeFunctions: AgentServerInvokeFunctions = {
-                joinSession: async (options?: DispatcherConnectOptions) => {
-                    // Resolve session ID first (may auto-create default)
-                    const sessionId = await sessionManager.resolveSessionId(
-                        options?.sessionId,
-                    );
+                joinConversation: async (
+                    options?: DispatcherConnectOptions,
+                ) => {
+                    // Resolve conversation ID first (may auto-create default)
+                    const conversationId =
+                        await conversationManager.resolveConversationId(
+                            options?.conversationId,
+                        );
 
-                    if (joinedSessions.has(sessionId)) {
+                    if (joinedConversations.has(conversationId)) {
                         throw new Error(
-                            `Already joined session '${sessionId}'. Call leaveSession() before joining again.`,
+                            `Already joined conversation '${conversationId}'. Call leaveConversation() before joining again.`,
                         );
                     }
 
-                    // Create session-namespaced channels
+                    // Create conversation-namespaced channels
                     const clientIOChannel = channelProvider.createChannel(
-                        getClientIOChannelName(sessionId),
+                        getClientIOChannelName(conversationId),
                     );
                     try {
                         const clientIORpcClient =
                             createClientIORpcClient(clientIOChannel);
 
-                        const result = await sessionManager.joinSession(
-                            sessionId,
-                            clientIORpcClient,
-                            () => {
-                                channelProvider.deleteChannel(
-                                    getDispatcherChannelName(sessionId),
-                                );
-                                channelProvider.deleteChannel(
-                                    getClientIOChannelName(sessionId),
-                                );
-                                joinedSessions.delete(sessionId);
-                            },
-                            options,
-                        );
+                        const result =
+                            await conversationManager.joinConversation(
+                                conversationId,
+                                clientIORpcClient,
+                                () => {
+                                    channelProvider.deleteChannel(
+                                        getDispatcherChannelName(
+                                            conversationId,
+                                        ),
+                                    );
+                                    channelProvider.deleteChannel(
+                                        getClientIOChannelName(conversationId),
+                                    );
+                                    joinedConversations.delete(conversationId);
+                                },
+                                options,
+                            );
 
                         const dispatcherChannel = channelProvider.createChannel(
-                            getDispatcherChannelName(sessionId),
+                            getDispatcherChannelName(conversationId),
                         );
                         try {
                             createDispatcherRpcServer(
@@ -174,99 +184,109 @@ async function main() {
                             );
                         } catch (e) {
                             channelProvider.deleteChannel(
-                                getDispatcherChannelName(sessionId),
+                                getDispatcherChannelName(conversationId),
                             );
                             throw e;
                         }
 
-                        joinedSessions.set(sessionId, {
+                        joinedConversations.set(conversationId, {
                             dispatcher: result.dispatcher,
                             connectionId: result.connectionId,
                         });
 
                         return {
                             connectionId: result.connectionId,
-                            sessionId,
+                            conversationId,
                             name: result.name,
                             pendingInteractions:
                                 result.pendingInteractions ?? [],
                         };
                     } catch (e) {
                         channelProvider.deleteChannel(
-                            getClientIOChannelName(sessionId),
+                            getClientIOChannelName(conversationId),
                         );
                         throw e;
                     }
                 },
 
-                leaveSession: async (sessionId: string) => {
-                    const entry = joinedSessions.get(sessionId);
+                leaveConversation: async (conversationId: string) => {
+                    const entry = joinedConversations.get(conversationId);
                     if (entry === undefined) {
-                        throw new Error(`Not joined to session: ${sessionId}`);
+                        throw new Error(
+                            `Not joined to conversation: ${conversationId}`,
+                        );
                     }
                     channelProvider.deleteChannel(
-                        getDispatcherChannelName(sessionId),
+                        getDispatcherChannelName(conversationId),
                     );
                     channelProvider.deleteChannel(
-                        getClientIOChannelName(sessionId),
+                        getClientIOChannelName(conversationId),
                     );
-                    joinedSessions.delete(sessionId);
-                    await sessionManager.leaveSession(
-                        sessionId,
+                    joinedConversations.delete(conversationId);
+                    await conversationManager.leaveConversation(
+                        conversationId,
                         entry.connectionId,
                     );
                 },
 
-                createSession: async (name: string) => {
-                    return sessionManager.createSession(name);
+                createConversation: async (name: string) => {
+                    return conversationManager.createConversation(name);
                 },
 
-                listSessions: async (name?: string) => {
-                    return sessionManager.listSessions(name);
+                listConversations: async (name?: string) => {
+                    return conversationManager.listConversations(name);
                 },
 
-                renameSession: async (sessionId: string, newName: string) => {
-                    return sessionManager.renameSession(sessionId, newName);
+                renameConversation: async (
+                    conversationId: string,
+                    newName: string,
+                ) => {
+                    return conversationManager.renameConversation(
+                        conversationId,
+                        newName,
+                    );
                 },
 
-                deleteSession: async (sessionId: string) => {
-                    // If this client is in the session being deleted,
+                deleteConversation: async (conversationId: string) => {
+                    // If this client is in the conversation being deleted,
                     // clean up local channels first
-                    const entry = joinedSessions.get(sessionId);
+                    const entry = joinedConversations.get(conversationId);
                     if (entry !== undefined) {
                         channelProvider.deleteChannel(
-                            getDispatcherChannelName(sessionId),
+                            getDispatcherChannelName(conversationId),
                         );
                         channelProvider.deleteChannel(
-                            getClientIOChannelName(sessionId),
+                            getClientIOChannelName(conversationId),
                         );
-                        joinedSessions.delete(sessionId);
+                        joinedConversations.delete(conversationId);
                     }
-                    return sessionManager.deleteSession(sessionId);
+                    return conversationManager.deleteConversation(
+                        conversationId,
+                    );
                 },
                 shutdown: async () => {
                     console.log("Shutdown requested, stopping agent server...");
                     wss.close();
-                    await sessionManager.close();
+                    await conversationManager.close();
                     process.exit(0);
                 },
             };
 
-            // Clean up all sessions on WebSocket disconnect
+            // Clean up all conversations on WebSocket disconnect
             channelProvider.on("disconnect", () => {
                 connectionCount--;
                 scheduleIdleShutdown();
                 for (const [
-                    sessionId,
+                    conversationId,
                     { connectionId },
-                ] of joinedSessions.entries()) {
-                    sessionManager
-                        .leaveSession(sessionId, connectionId)
+                ] of joinedConversations.entries()) {
+                    conversationManager
+                        .leaveConversation(conversationId, connectionId)
                         .catch(() => {
                             // Best effort on disconnect
                         });
                 }
-                joinedSessions.clear();
+                joinedConversations.clear();
             });
 
             createRpc(

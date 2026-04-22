@@ -78,14 +78,14 @@ export default class ReplayCommand extends Command {
         await ensureAgentServer(flags.port, !flags.show, 600);
         const connection = await connectAgentServer(url);
 
-        // Create an ephemeral session for replay isolation
+        // Create an ephemeral conversation for replay isolation
         const ephemeralName = `cli-replay-${crypto.randomUUID()}`;
-        const created = await connection.createSession(ephemeralName);
+        const created = await connection.createConversation(ephemeralName);
 
         try {
             await withConsoleClientIO(async (clientIO) => {
-                const session = await connection.joinSession(clientIO, {
-                    sessionId: created.sessionId,
+                const session = await connection.joinConversation(clientIO, {
+                    conversationId: created.conversationId,
                 });
 
                 const entries = Array.isArray(history) ? history : [history];
@@ -120,9 +120,9 @@ export default class ReplayCommand extends Command {
                 }
             });
         } finally {
-            // Delete the ephemeral session on exit for isolation
+            // Delete the ephemeral conversation on exit for isolation
             try {
-                await connection.deleteSession(created.sessionId);
+                await connection.deleteConversation(created.conversationId);
             } catch {
                 // Best effort cleanup
             }

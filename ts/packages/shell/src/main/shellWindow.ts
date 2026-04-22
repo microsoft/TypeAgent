@@ -496,10 +496,14 @@ export class ShellWindow {
     }
 
     /**
-     * Notify the renderer that the active session has changed.
+     * Notify the renderer that the active conversation has changed.
      */
-    public sendSessionChanged(sessionId: string, name: string): void {
-        this.chatView.webContents.send("session-changed", sessionId, name);
+    public sendConversationChanged(conversationId: string, name: string): void {
+        this.chatView.webContents.send(
+            "conversation-changed",
+            conversationId,
+            name,
+        );
     }
 
     public sendMarkHistory(): void {
