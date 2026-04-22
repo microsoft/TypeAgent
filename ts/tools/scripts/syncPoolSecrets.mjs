@@ -584,7 +584,7 @@ async function main() {
     );
 }
 
-main().catch((e) => {
-    err(`ERROR: ${e.message}`);
+main().catch((_e) => {
+    err("ERROR: syncPoolSecrets failed.");
     process.exit(1);
 });
