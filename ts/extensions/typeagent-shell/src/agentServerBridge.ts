@@ -90,6 +90,10 @@ export class AgentServerBridge {
     private reconnectTimer: NodeJS.Timeout | undefined;
     // Suppress disconnect handler during intentional reconnects
     private isSwitching = false;
+    // Track which session we've already replayed history for, so we
+    // don't replay again on simple websocket reconnects (which would
+    // create muted duplicates of live messages).
+    private lastReplayedSessionId: string | undefined;
 
     constructor() {
         this.statusBarItem = vscode.window.createStatusBarItem(
@@ -171,8 +175,14 @@ export class AgentServerBridge {
                 sessionName: this.session.name,
             });
 
-            // Replay any existing history for this session
-            await this.replayHistory(this.session);
+            // Replay history only the first time we join this session.
+            // On simple reconnects we already have the bubbles in the DOM
+            // and re-replaying would create muted duplicates and (worse)
+            // race against any live messages still in flight.
+            if (this.lastReplayedSessionId !== this.session.sessionId) {
+                this.lastReplayedSessionId = this.session.sessionId;
+                await this.replayHistory(this.session);
+            }
         } catch (e: any) {
             const msg = e?.message ?? String(e);
             this.broadcastToWebviews({ type: "error", message: msg });
@@ -444,6 +454,7 @@ export class AgentServerBridge {
                 sessionName: newSession.name,
             });
             await this.replayHistory(newSession);
+            this.lastReplayedSessionId = newSession.sessionId;
         } finally {
             this.isSwitching = false;
             this.broadcastToWebviews({
