@@ -501,6 +501,7 @@ function createCapturingClientIO(buffer: string[]): ClientIO {
     return {
         clear: noop,
         exit: () => process.exit(0),
+        shutdown: () => process.exit(0),
         setUserRequest: noop,
         setDisplayInfo: noop,
         setDisplay(message: IAgentMessage) {

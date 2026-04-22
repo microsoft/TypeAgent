@@ -10,7 +10,10 @@ import {
     replayDisplayHistory,
     withEnhancedConsoleClientIO,
 } from "../enhancedConsole.js";
-import { setConversationCommandContext } from "../slashCommands.js";
+import {
+    setConversationCommandContext,
+    setServerPort,
+} from "../slashCommands.js";
 import type { ConversationCommandContext } from "../conversationCommands.js";
 import {
     connectAgentServer,
@@ -372,6 +375,7 @@ export default class Connect extends Command {
                     },
                 };
                 setConversationCommandContext(convCtx);
+                setServerPort(flags.port);
             }
 
             try {

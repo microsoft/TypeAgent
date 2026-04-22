@@ -633,6 +633,13 @@ export function createEnhancedClientIO(
             }
             process.exit(0);
         },
+        shutdown(): void {
+            if (currentSpinner) {
+                currentSpinner.stop();
+                currentSpinner = null;
+            }
+            process.exit(0);
+        },
 
         // Display
         setUserRequest(requestId: RequestId) {

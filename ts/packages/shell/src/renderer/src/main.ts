@@ -23,7 +23,13 @@ import { CameraView } from "./cameraView";
 import { createWebSocket, webapi } from "./webSocketAPI";
 import * as jose from "jose";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
-import { ClientIO, Dispatcher, RequestId } from "agent-dispatcher";
+import {
+    ClientIO,
+    Dispatcher,
+    PendingInteractionRequest,
+    PendingInteractionResponse,
+    RequestId,
+} from "agent-dispatcher";
 import { swapContent } from "./setContent";
 import { remoteSearchMenuUIOnCompletion } from "./searchMenuUI/remoteSearchMenuUI";
 import { ChatInput } from "./chat/chatInput";
@@ -139,11 +145,22 @@ function registerClient(
     cameraView: CameraView,
     chatHistoryReady: Promise<void>,
 ) {
+    // Dispatcher reference set in dispatcherInitialized; needed for
+    // respondToInteraction calls from deferred interaction handlers.
+    let dispatcher: Dispatcher | undefined;
+
+    // Track pending deferred interactions so they can be dismissed when
+    // resolved or cancelled by another client / timeout.
+    const pendingInteractions = new Map<string, () => void>();
+
     const clientIO: ClientIO = {
         clear: () => {
             chatView.clear();
         },
         exit: () => {
+            window.close();
+        },
+        shutdown: () => {
             window.close();
         },
         setUserRequest: (requestId, command, seq?) => {
@@ -321,24 +338,102 @@ function registerClient(
         closeLocalView: async () => {
             throw new Error("Main process should have handled closeLocalView");
         },
-        requestInteraction: () => {
-            // TODO: Implement deferred interaction support for agent-server connect mode.
-            // When the shell connects to a SharedDispatcher, requestInteraction is pushed
-            // from the server. Without handling it, the server-side promise hangs for the
-            // full 10-minute timeout before resolving with the defaultId (question) or
-            // rejecting (proposeAction).
-            //
-            // The fix (Option A): on requestInteraction, dispatch into the existing
-            // chatView.askYesNo / chatView.proposeAction / dialog.showMessageBox UI (all
-            // already implemented for direct mode), await the result, then call
-            // dispatcher.respondToInteraction({ interactionId, type, value }). Hold a
-            // Map<interactionId, cancelFn> and dismiss open prompts on interactionCancelled.
+        requestInteraction: (interaction: PendingInteractionRequest) => {
+            if (!dispatcher) {
+                console.warn(
+                    "requestInteraction: dispatcher not yet initialized",
+                );
+                return;
+            }
+
+            const interactionId = interaction.interactionId;
+
+            // Cancellation mechanism: race the UI promise against a
+            // locally-controlled cancellation promise.
+            let cancelReject: (() => void) | undefined;
+            const cancelPromise = new Promise<never>((_, reject) => {
+                cancelReject = () => reject(new Error("interaction dismissed"));
+            });
+            pendingInteractions.set(interactionId, cancelReject!);
+
+            const handle = async () => {
+                try {
+                    let response: PendingInteractionResponse;
+
+                    if (interaction.type === "question") {
+                        const { message, choices } = interaction;
+                        const requestId =
+                            interaction.requestId ??
+                            (`pending-${interactionId}` as unknown as RequestId);
+                        const source = interaction.source;
+
+                        if (
+                            choices.length === 2 &&
+                            choices[0] === "Yes" &&
+                            choices[1] === "No"
+                        ) {
+                            const yes = await Promise.race([
+                                chatView.askYesNo(requestId, message, source),
+                                cancelPromise,
+                            ]);
+                            response = {
+                                interactionId,
+                                type: "question",
+                                value: yes ? 0 : 1,
+                            };
+                        } else {
+                            // TODO: implement general multi-choice UI;
+                            // falling back to default for now.
+                            console.warn(
+                                `requestInteraction: multi-choice questions not yet supported in Shell (${choices.length} choices)`,
+                            );
+                            return;
+                        }
+                    } else if (interaction.type === "proposeAction") {
+                        const requestId =
+                            interaction.requestId ??
+                            (`pending-${interactionId}` as unknown as RequestId);
+                        const result = await Promise.race([
+                            chatView.proposeAction(
+                                requestId,
+                                interaction.actionTemplates,
+                                interaction.source,
+                            ),
+                            cancelPromise,
+                        ]);
+                        response = {
+                            interactionId,
+                            type: "proposeAction",
+                            value: result,
+                        };
+                    } else {
+                        console.warn(`requestInteraction: unknown type`);
+                        return;
+                    }
+
+                    await dispatcher!.respondToInteraction(response);
+                } catch {
+                    // Dismissed via cancel — no response needed.
+                } finally {
+                    pendingInteractions.delete(interactionId);
+                }
+            };
+
+            handle();
         },
-        interactionResolved: () => {
-            // Shell does not yet support deferred interactions
+        interactionResolved: (interactionId: string) => {
+            const cancel = pendingInteractions.get(interactionId);
+            if (cancel) {
+                cancel();
+                pendingInteractions.delete(interactionId);
+            }
         },
-        interactionCancelled: () => {
-            // Shell does not yet support deferred interactions
+        interactionCancelled: (interactionId: string) => {
+            const cancel = pendingInteractions.get(interactionId);
+            if (cancel) {
+                cancel();
+                pendingInteractions.delete(interactionId);
+            }
         },
         takeAction: (_, action, data) => {
             // Android object gets injected on Android devices, otherwise unavailable
@@ -673,8 +768,9 @@ function registerClient(
 
     const client: Client = {
         clientIO,
-        async dispatcherInitialized(dispatcher: Dispatcher): Promise<void> {
-            chatView.initializeDispatcher(dispatcher);
+        async dispatcherInitialized(d: Dispatcher): Promise<void> {
+            dispatcher = d;
+            chatView.initializeDispatcher(d);
             await chatHistoryReady;
 
             // Signal that the dispatcher is fully initialised.

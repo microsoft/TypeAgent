@@ -172,6 +172,7 @@ function createMcpClientIO(
     return {
         clear(): void {},
         exit(): void {},
+        shutdown(): void {},
         setUserRequest(): void {},
         setDisplayInfo(): void {},
         setDisplay(message: IAgentMessage): void {

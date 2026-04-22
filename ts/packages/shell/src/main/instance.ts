@@ -43,6 +43,7 @@ import { getFsStorageProvider } from "dispatcher-node-providers";
 import {
     ensureAgentServer,
     connectAgentServer,
+    stopAgentServer,
 } from "@typeagent/agent-server-client";
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
 import { loadUserSettings } from "agent-dispatcher/helpers/userSettings";
@@ -152,6 +153,16 @@ async function initializeDispatcher(
             exit: () => {
                 app.quit();
             },
+            shutdown: async () => {
+                if (connect !== undefined) {
+                    try {
+                        await stopAgentServer(connect);
+                    } catch {
+                        // Best-effort: server may already be stopped.
+                    }
+                }
+                app.quit();
+            },
         };
 
         const browserControl = createInlineBrowserControl(shellWindow);
@@ -165,7 +176,17 @@ async function initializeDispatcher(
         if (connect !== undefined) {
             // Connect to remote dispatcher — use connectAgentServer directly
             // so we retain the connection reference for multi-session support.
-            await ensureAgentServer(connect, true);
+            const userSettings = loadUserSettings();
+            const effectiveHidden = hidden ?? userSettings.server.hidden;
+            const effectiveIdleTimeout =
+                idleTimeout !== undefined
+                    ? idleTimeout
+                    : userSettings.server.idleTimeout;
+            await ensureAgentServer(
+                connect,
+                effectiveHidden,
+                effectiveIdleTimeout,
+            );
             const url = `ws://localhost:${connect}`;
             connection = await connectAgentServer(url, () => {
                 if (!quitting) {
