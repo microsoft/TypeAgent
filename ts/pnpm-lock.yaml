@@ -2324,6 +2324,9 @@ importers:
       '@types/express':
         specifier: ^4.17.17
         version: 4.17.21
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
       '@types/spotify-api':
         specifier: ^0.0.25
         version: 0.0.25
@@ -2333,6 +2336,9 @@ importers:
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
