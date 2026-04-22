@@ -247,7 +247,7 @@ export class PartialCompletionSession implements CompletionController {
     ): void {
         // Deduplicate: if the input and direction haven't changed and
         // the session is already active or pending, there is no new
-        // work to do.  The shell's lastControllerInput guard prevents
+        // work to do.  The shell's previousInput guard prevents
         // selectionchange echoes from reaching here, so direction is
         // safe to compare.
         if (

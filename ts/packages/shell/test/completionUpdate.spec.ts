@@ -48,9 +48,17 @@ test.describe("Partial completion update suppression", () => {
                 mainWindow,
                 "content changed",
             );
-            const onUpdateCalls = collectConsoleMessages(
+            const updateEntries = collectConsoleMessages(
                 mainWindow,
-                "onUpdate:",
+                "update entry:",
+            );
+            const updateSkipped = collectConsoleMessages(
+                mainWindow,
+                "update skipped:",
+            );
+            const updateHidden = collectConsoleMessages(
+                mainWindow,
+                "selection not at end",
             );
 
             const input = mainWindow.locator(inputSelector);
@@ -65,9 +73,13 @@ test.describe("Partial completion update suppression", () => {
             // Wait a beat for any straggling selectionchange echoes.
             await mainWindow.waitForTimeout(500);
 
-            // The controller should have fired onUpdate at most once
-            // for this keystroke (the dedup guard suppresses echoes).
-            expect(onUpdateCalls.length).toBeLessThanOrEqual(1);
+            // Every update() call must either be the content-change
+            // path, deduped by the previousInput guard, or hidden
+            // because selection moved away from the end.  No call
+            // may slip through to recompute direction.
+            expect(updateEntries.length).toBe(
+                contentTrue.length + updateSkipped.length + updateHidden.length,
+            );
 
             await mainWindow.keyboard.press("Escape");
         });
@@ -98,9 +110,17 @@ test.describe("Partial completion update suppression", () => {
                 mainWindow,
                 "content changed",
             );
-            const onUpdateCalls = collectConsoleMessages(
+            const updateEntries = collectConsoleMessages(
                 mainWindow,
-                "onUpdate:",
+                "update entry:",
+            );
+            const updateSkipped = collectConsoleMessages(
+                mainWindow,
+                "update skipped:",
+            );
+            const updateHidden = collectConsoleMessages(
+                mainWindow,
+                "selection not at end",
             );
 
             await mainWindow.keyboard.type("l", { delay: 0 });
@@ -112,9 +132,11 @@ test.describe("Partial completion update suppression", () => {
             // Wait a beat for any straggling selectionchange echoes.
             await mainWindow.waitForTimeout(500);
 
-            // The controller should have fired onUpdate at most once
-            // for this keystroke.
-            expect(onUpdateCalls.length).toBeLessThanOrEqual(1);
+            // Every update() call must either be the content-change
+            // path, deduped by the previousInput guard, or hidden.
+            expect(updateEntries.length).toBe(
+                contentTrue.length + updateSkipped.length + updateHidden.length,
+            );
 
             await mainWindow.keyboard.press("Escape");
         });
@@ -145,9 +167,17 @@ test.describe("Partial completion update suppression", () => {
                 mainWindow,
                 "content changed",
             );
-            const onUpdateCalls = collectConsoleMessages(
+            const updateEntries = collectConsoleMessages(
                 mainWindow,
-                "onUpdate:",
+                "update entry:",
+            );
+            const updateSkipped = collectConsoleMessages(
+                mainWindow,
+                "update skipped:",
+            );
+            const updateHidden = collectConsoleMessages(
+                mainWindow,
+                "selection not at end",
             );
 
             await mainWindow.keyboard.press("Backspace");
@@ -159,9 +189,11 @@ test.describe("Partial completion update suppression", () => {
             // Wait a beat for any straggling selectionchange echoes.
             await mainWindow.waitForTimeout(500);
 
-            // The controller should have fired onUpdate at most once
-            // for this keystroke.
-            expect(onUpdateCalls.length).toBeLessThanOrEqual(1);
+            // Every update() call must either be the content-change
+            // path, deduped by the previousInput guard, or hidden.
+            expect(updateEntries.length).toBe(
+                contentTrue.length + updateSkipped.length + updateHidden.length,
+            );
 
             await mainWindow.keyboard.press("Escape");
         });

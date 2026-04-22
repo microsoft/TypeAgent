@@ -139,6 +139,7 @@ export class PartialCompletion {
         if (this.closed) {
             throw new Error("Using a closed PartialCompletion");
         }
+        debug(`update entry: contentChanged=${contentChanged}`);
         if (contentChanged) {
             // Normalize the input text to ensure selection at end is correct.
             this.input.getTextEntry().normalize();
@@ -162,7 +163,7 @@ export class PartialCompletion {
             return;
         }
         debug(
-            `Partial completion input: '${input}: ${contentChanged ? "content changed" : "selection changed"}'`,
+            `Partial completion input: '${input}' (${contentChanged ? "content changed" : "selection changed"})`,
         );
 
         // Only use "backward" when the user is genuinely backspacing:
