@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * Tests for executeSessionAction in sessionActionHandler.ts.
+ * Tests for executeConversationAction in sessionActionHandler.ts.
  *
  * getRequestId is mocked to return a stable RequestId, and
  * clientIO.takeAction is a mock on the context stub.
@@ -20,8 +20,8 @@ jest.unstable_mockModule("../src/context/commandHandlerContext.js", () => ({
 
 // ── Dynamic import after mocks are installed ──────────────────────────────────
 
-const { executeSessionAction } = await import(
-    "../src/context/system/action/sessionActionHandler.js"
+const { executeConversationAction } = await import(
+    "../src/context/system/action/conversationActionHandler.js"
 );
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -45,13 +45,13 @@ function makeContext() {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe("executeSessionAction — newSession", () => {
+describe("executeConversationAction — newConversation", () => {
     it("sends manage-conversation with subcommand new and name", async () => {
         const ctx = makeContext();
-        await executeSessionAction(
+        await executeConversationAction(
             {
-                schemaName: "system.session",
-                actionName: "newSession",
+                schemaName: "system.conversation",
+                actionName: "newConversation",
                 parameters: { name: "research" },
             },
             ctx,
@@ -65,10 +65,10 @@ describe("executeSessionAction — newSession", () => {
 
     it("sends manage-conversation with subcommand new without name when omitted", async () => {
         const ctx = makeContext();
-        await executeSessionAction(
+        await executeConversationAction(
             {
-                schemaName: "system.session",
-                actionName: "newSession",
+                schemaName: "system.conversation",
+                actionName: "newConversation",
                 parameters: {},
             },
             ctx,
@@ -80,12 +80,12 @@ describe("executeSessionAction — newSession", () => {
         );
     });
 
-    it("preserves session names that contain spaces", async () => {
+    it("preserves conversation names that contain spaces", async () => {
         const ctx = makeContext();
-        await executeSessionAction(
+        await executeConversationAction(
             {
-                schemaName: "system.session",
-                actionName: "newSession",
+                schemaName: "system.conversation",
+                actionName: "newConversation",
                 parameters: { name: "my work project" },
             },
             ctx,
@@ -98,11 +98,14 @@ describe("executeSessionAction — newSession", () => {
     });
 });
 
-describe("executeSessionAction — listSession", () => {
+describe("executeConversationAction — listConversation", () => {
     it("sends manage-conversation with subcommand list", async () => {
         const ctx = makeContext();
-        await executeSessionAction(
-            { schemaName: "system.session", actionName: "listSession" },
+        await executeConversationAction(
+            {
+                schemaName: "system.conversation",
+                actionName: "listConversation",
+            },
             ctx,
         );
         expect(mockTakeAction).toHaveBeenCalledWith(
@@ -113,12 +116,12 @@ describe("executeSessionAction — listSession", () => {
     });
 });
 
-describe("executeSessionAction — showConversationInfo", () => {
+describe("executeConversationAction — showConversationInfo", () => {
     it("sends manage-conversation with subcommand info", async () => {
         const ctx = makeContext();
-        await executeSessionAction(
+        await executeConversationAction(
             {
-                schemaName: "system.session",
+                schemaName: "system.conversation",
                 actionName: "showConversationInfo",
             },
             ctx,
@@ -131,13 +134,13 @@ describe("executeSessionAction — showConversationInfo", () => {
     });
 });
 
-describe("executeSessionAction — switchSession", () => {
+describe("executeConversationAction — switchConversation", () => {
     it("sends manage-conversation with subcommand switch", async () => {
         const ctx = makeContext();
-        await executeSessionAction(
+        await executeConversationAction(
             {
-                schemaName: "system.session",
-                actionName: "switchSession",
+                schemaName: "system.conversation",
+                actionName: "switchConversation",
                 parameters: { name: "work" },
             },
             ctx,
@@ -149,12 +152,12 @@ describe("executeSessionAction — switchSession", () => {
         );
     });
 
-    it("preserves session names that contain spaces", async () => {
+    it("preserves conversation names that contain spaces", async () => {
         const ctx = makeContext();
-        await executeSessionAction(
+        await executeConversationAction(
             {
-                schemaName: "system.session",
-                actionName: "switchSession",
+                schemaName: "system.conversation",
+                actionName: "switchConversation",
                 parameters: { name: "my work project" },
             },
             ctx,
@@ -167,13 +170,13 @@ describe("executeSessionAction — switchSession", () => {
     });
 });
 
-describe("executeSessionAction — renameSession", () => {
-    it("sends manage-conversation with subcommand rename and newName (current session)", async () => {
+describe("executeConversationAction — renameConversation", () => {
+    it("sends manage-conversation with subcommand rename and newName (current conversation)", async () => {
         const ctx = makeContext();
-        await executeSessionAction(
+        await executeConversationAction(
             {
-                schemaName: "system.session",
-                actionName: "renameSession",
+                schemaName: "system.conversation",
+                actionName: "renameConversation",
                 parameters: { newName: "my project" },
             },
             ctx,
@@ -185,12 +188,12 @@ describe("executeSessionAction — renameSession", () => {
         );
     });
 
-    it("sends manage-conversation with subcommand rename, name, and newName (targeted session)", async () => {
+    it("sends manage-conversation with subcommand rename, name, and newName (targeted conversation)", async () => {
         const ctx = makeContext();
-        await executeSessionAction(
+        await executeConversationAction(
             {
-                schemaName: "system.session",
-                actionName: "renameSession",
+                schemaName: "system.conversation",
+                actionName: "renameConversation",
                 parameters: { name: "test7", newName: "test5" },
             },
             ctx,
@@ -203,13 +206,13 @@ describe("executeSessionAction — renameSession", () => {
     });
 });
 
-describe("executeSessionAction — deleteSession", () => {
+describe("executeConversationAction — deleteConversation", () => {
     it("sends manage-conversation with subcommand delete", async () => {
         const ctx = makeContext();
-        await executeSessionAction(
+        await executeConversationAction(
             {
-                schemaName: "system.session",
-                actionName: "deleteSession",
+                schemaName: "system.conversation",
+                actionName: "deleteConversation",
                 parameters: { name: "old-project" },
             },
             ctx,
@@ -221,12 +224,12 @@ describe("executeSessionAction — deleteSession", () => {
         );
     });
 
-    it("preserves session names that contain spaces", async () => {
+    it("preserves conversation names that contain spaces", async () => {
         const ctx = makeContext();
-        await executeSessionAction(
+        await executeConversationAction(
             {
-                schemaName: "system.session",
-                actionName: "deleteSession",
+                schemaName: "system.conversation",
+                actionName: "deleteConversation",
                 parameters: { name: "old work project" },
             },
             ctx,
@@ -239,13 +242,13 @@ describe("executeSessionAction — deleteSession", () => {
     });
 });
 
-describe("executeSessionAction — invalid action", () => {
+describe("executeConversationAction — invalid action", () => {
     it("throws on an unrecognized action name", async () => {
         const ctx = makeContext();
         await expect(
-            executeSessionAction(
+            executeConversationAction(
                 {
-                    schemaName: "system.session",
+                    schemaName: "system.conversation",
                     actionName: "unknownAction",
                 } as any,
                 ctx,

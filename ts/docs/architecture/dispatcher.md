@@ -512,21 +512,21 @@ subcommands, and help text.
 The system agent also has sub-agents with LLM-translated action schemas:
 
 - **`system.config`** — Natural language configuration changes.
-- **`system.session`** — Natural language management of **agentServer client-connection
+- **`system.conversation`** — Natural language management of **agentServer client-connection
   conversations** (the named, GUID-keyed sessions described in
-  [agentServerSessions.md](agentServerSessions.md)). Despite the name, this has
+  [agentServerConversations.md](agentServerConversations.md)). Despite the name, this has
   **no relation** to the dispatcher's own internal `@session` command, which manages
   local dispatcher state (agent settings, construction cache, config) stored under
-  `~/.typeagent/profiles/<profile>/sessions/`. `system.session` is the NL front-end
+  `~/.typeagent/profiles/<profile>/sessions/`. `system.conversation` is the NL front-end
   for `@conversation`; `@session` is a separate, lower-level command for dispatcher
   internals.
 
-  `system.session` supports six action types: `newSession`, `listSession`,
-  `showConversationInfo`, `switchSession`, `renameSession`, and `deleteSession`.
+  `system.conversation` supports six action types: `newConversation`, `listConversation`,
+  `showConversationInfo`, `switchConversation`, `renameConversation`, and `deleteConversation`.
   These let users say things like "switch to my work conversation", "rename this
-  conversation to project notes", or "delete the old project session" instead of
+  conversation to project notes", or "delete the old project conversation" instead of
   using `@conversation` commands directly. Because the dispatcher cannot access
-  the agent-server RPC layer directly, `executeSessionAction` bridges to the client
+  the agent-server RPC layer directly, `executeConversationAction` bridges to the client
   via `ClientIO.takeAction(requestId, "manage-conversation", payload)` where
   `payload` is one of:
 

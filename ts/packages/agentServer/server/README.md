@@ -1,6 +1,6 @@
 # agent-server
 
-Long-running WebSocket server that hosts TypeAgent dispatchers with full session management.
+Long-running WebSocket server that hosts TypeAgent dispatchers with full conversation management.
 
 ## Starting the server
 
@@ -43,26 +43,26 @@ Listens on `ws://localhost:8999`. The server also starts automatically when clie
 
 ### `server.ts` — WebSocket listener
 
-1. Creates a `SessionManager` at startup with agent providers and storage options.
+1. Creates a `ConversationManager` at startup with agent providers and storage options.
 2. Calls `createWebSocketChannelServer(8999)` to accept connections.
 3. For each connection, exposes `AgentServerInvokeFunctions` over the `agent-server` RPC channel:
-   - `joinSession` / `leaveSession` — join or leave a named session
-   - `createSession` / `listSessions` / `renameSession` / `deleteSession` — session CRUD
-   - `shutdown` — graceful server shutdown via `sessionManager.close()`
+   - `joinConversation` / `leaveConversation` — join or leave a named conversation
+   - `createConversation` / `listConversations` / `renameConversation` / `deleteConversation` — conversation CRUD
+   - `shutdown` — graceful server shutdown via `conversationManager.close()`
 
-### `sessionManager.ts` — Session pool
+### `conversationManager.ts` — Conversation pool
 
-Maintains a pool of per-session `SharedDispatcher` instances. Key behaviors:
+Maintains a pool of per-conversation `SharedDispatcher` instances. Key behaviors:
 
-- **Persistence:** session metadata stored in `~/.typeagent/server-sessions/sessions.json`; each session's data in `~/.typeagent/server-sessions/<sessionId>/`
-- **Lazy init:** each session's `SharedDispatcher` is created on first `joinSession()` and torn down after 5 minutes of inactivity
-- **Auto-create:** if no session exists and no `sessionId` is provided, a `"default"` session is created automatically
-- **Startup sweep:** on server start, sessions prefixed `cli-ephemeral-` or `cli-replay-` are automatically deleted to reclaim any orphaned ephemeral sessions left over from crashed CLI processes
+- **Persistence:** conversation metadata stored in `~/.typeagent/profiles/dev/conversations/conversations.json`; each conversation's data in `~/.typeagent/profiles/dev/conversations/<conversationId>/`
+- **Lazy init:** each conversation's `SharedDispatcher` is created on first `joinConversation()` and torn down after 5 minutes of inactivity
+- **Auto-create:** if no conversation exists and no `conversationId` is provided, a `"default"` conversation is created automatically
+- **Startup sweep:** on server start, conversations prefixed `cli-ephemeral-` or `cli-replay-` are automatically deleted to reclaim any orphaned ephemeral conversations left over from crashed CLI processes
 - **Idle shutdown:** when `--idle-timeout <seconds>` is passed, the server calls `process.exit(0)` after that many seconds with no WebSocket connections. The timer resets whenever a new client connects.
 
 ### `sharedDispatcher.ts` — Routing layer
 
-`createSharedDispatcher()` wraps a single underlying dispatcher context and manages multiple client connections within one session.
+`createSharedDispatcher()` wraps a single underlying dispatcher context and manages multiple client connections within one conversation.
 
 **On `join(clientIO, closeFn, options)`:**
 
@@ -73,7 +73,7 @@ Maintains a pool of per-session `SharedDispatcher` instances. Key behaviors:
 
 **Routing ClientIO:**
 
-When the dispatcher or an agent calls a `ClientIO` method, the routing layer uses `requestId.connectionId` to forward the call to the correct client. This isolates each client's display output even though they share one dispatcher and session context.
+When the dispatcher or an agent calls a `ClientIO` method, the routing layer uses `requestId.connectionId` to forward the call to the correct client. This isolates each client's display output even though they share one dispatcher and conversation context.
 
 | Method type                                                         | Routing                                                      |
 | ------------------------------------------------------------------- | ------------------------------------------------------------ |

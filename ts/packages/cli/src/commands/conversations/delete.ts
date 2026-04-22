@@ -5,9 +5,9 @@ import { Args, Command, Flags } from "@oclif/core";
 import { connectAgentServer } from "@typeagent/agent-server-client";
 import { createInterface } from "readline/promises";
 
-export default class SessionsDelete extends Command {
+export default class ConversationsDelete extends Command {
     static description =
-        "Delete a session and its persisted data from the agent server. Usage: sessions delete <id>";
+        "Delete a conversation and its persisted data from the agent server. Usage: conversations delete <id>";
     static flags = {
         port: Flags.integer({
             description: "Port for type agent server",
@@ -21,13 +21,13 @@ export default class SessionsDelete extends Command {
     };
     static args = {
         id: Args.string({
-            description: "Session ID to delete",
+            description: "Conversation ID to delete",
             required: true,
         }),
     };
 
     async run(): Promise<void> {
-        const { args, flags } = await this.parse(SessionsDelete);
+        const { args, flags } = await this.parse(ConversationsDelete);
 
         if (!flags.yes) {
             const rl = createInterface({
@@ -36,7 +36,7 @@ export default class SessionsDelete extends Command {
                 terminal: true,
             });
             const answer = await rl.question(
-                `Delete session ${args.id} and all its data? (y/N) `,
+                `Delete conversation ${args.id} and all its data? (y/N) `,
             );
             rl.close();
             if (
@@ -51,8 +51,8 @@ export default class SessionsDelete extends Command {
         const url = `ws://localhost:${flags.port}`;
         const connection = await connectAgentServer(url);
         try {
-            await connection.deleteSession(args.id);
-            this.log(`Deleted session ${args.id}`);
+            await connection.deleteConversation(args.id);
+            this.log(`Deleted conversation ${args.id}`);
         } finally {
             await connection.close();
         }

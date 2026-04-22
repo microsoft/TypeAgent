@@ -4,17 +4,17 @@
 export {
     connectAgentServer,
     AgentServerConnection,
-    SessionDispatcher,
+    ConversationDispatcher,
     connectDispatcher,
     ensureAgentServer,
     ensureAndConnectDispatcher,
-    ensureAndConnectSession,
+    ensureAndConnectConversation,
     stopAgentServer,
     isServerRunning,
 } from "./agentServerClient.js";
 export type * from "@typeagent/dispatcher-rpc/types";
 export type {
-    SessionInfo,
-    JoinSessionResult,
+    ConversationInfo,
+    JoinConversationResult,
     DispatcherConnectOptions,
 } from "@typeagent/agent-server-protocol";

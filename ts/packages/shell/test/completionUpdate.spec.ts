@@ -40,17 +40,25 @@ function collectConsoleMessages(page: Page, substring: string) {
 }
 
 test.describe("Partial completion update suppression", () => {
-    test("typing triggers exactly one update per keystroke", async () => {
+    test("typing triggers exactly one content-change update per keystroke", async () => {
         await runTestCallback(async (mainWindow: Page) => {
             await enablePartialDebug(mainWindow);
 
             const contentTrue = collectConsoleMessages(
                 mainWindow,
-                "update(contentChanged=true)",
+                "content changed",
             );
-            const contentFalse = collectConsoleMessages(
+            const updateEntries = collectConsoleMessages(
                 mainWindow,
-                "update(contentChanged=false)",
+                "update entry:",
+            );
+            const updateSkipped = collectConsoleMessages(
+                mainWindow,
+                "update skipped:",
+            );
+            const updateHidden = collectConsoleMessages(
+                mainWindow,
+                "selection not at end",
             );
 
             const input = mainWindow.locator(inputSelector);
@@ -61,13 +69,23 @@ test.describe("Partial completion update suppression", () => {
             await expect(async () => {
                 expect(contentTrue.length).toBe(1);
             }).toPass({ timeout: 2000 });
-            expect(contentFalse.length).toBe(0);
+
+            // Wait a beat for any straggling selectionchange echoes.
+            await mainWindow.waitForTimeout(500);
+
+            // Every update() call must either be the content-change
+            // path, deduped by the previousInput guard, or hidden
+            // because selection moved away from the end.  No call
+            // may slip through to recompute direction.
+            expect(updateEntries.length).toBe(
+                contentTrue.length + updateSkipped.length + updateHidden.length,
+            );
 
             await mainWindow.keyboard.press("Escape");
         });
     });
 
-    test("second keystroke also triggers exactly one update", async () => {
+    test("second keystroke also triggers exactly one content-change update", async () => {
         await runTestCallback(async (mainWindow: Page) => {
             await enablePartialDebug(mainWindow);
 
@@ -90,11 +108,19 @@ test.describe("Partial completion update suppression", () => {
             // Start collecting after the first keystroke has settled.
             const contentTrue = collectConsoleMessages(
                 mainWindow,
-                "update(contentChanged=true)",
+                "content changed",
             );
-            const contentFalse = collectConsoleMessages(
+            const updateEntries = collectConsoleMessages(
                 mainWindow,
-                "update(contentChanged=false)",
+                "update entry:",
+            );
+            const updateSkipped = collectConsoleMessages(
+                mainWindow,
+                "update skipped:",
+            );
+            const updateHidden = collectConsoleMessages(
+                mainWindow,
+                "selection not at end",
             );
 
             await mainWindow.keyboard.type("l", { delay: 0 });
@@ -102,13 +128,21 @@ test.describe("Partial completion update suppression", () => {
             await expect(async () => {
                 expect(contentTrue.length).toBe(1);
             }).toPass({ timeout: 2000 });
-            expect(contentFalse.length).toBe(0);
+
+            // Wait a beat for any straggling selectionchange echoes.
+            await mainWindow.waitForTimeout(500);
+
+            // Every update() call must either be the content-change
+            // path, deduped by the previousInput guard, or hidden.
+            expect(updateEntries.length).toBe(
+                contentTrue.length + updateSkipped.length + updateHidden.length,
+            );
 
             await mainWindow.keyboard.press("Escape");
         });
     });
 
-    test("backspace triggers exactly one update", async () => {
+    test("backspace triggers exactly one content-change update", async () => {
         await runTestCallback(async (mainWindow: Page) => {
             await enablePartialDebug(mainWindow);
 
@@ -131,11 +165,19 @@ test.describe("Partial completion update suppression", () => {
             // Start collecting after the initial typing has settled.
             const contentTrue = collectConsoleMessages(
                 mainWindow,
-                "update(contentChanged=true)",
+                "content changed",
             );
-            const contentFalse = collectConsoleMessages(
+            const updateEntries = collectConsoleMessages(
                 mainWindow,
-                "update(contentChanged=false)",
+                "update entry:",
+            );
+            const updateSkipped = collectConsoleMessages(
+                mainWindow,
+                "update skipped:",
+            );
+            const updateHidden = collectConsoleMessages(
+                mainWindow,
+                "selection not at end",
             );
 
             await mainWindow.keyboard.press("Backspace");
@@ -143,7 +185,15 @@ test.describe("Partial completion update suppression", () => {
             await expect(async () => {
                 expect(contentTrue.length).toBe(1);
             }).toPass({ timeout: 2000 });
-            expect(contentFalse.length).toBe(0);
+
+            // Wait a beat for any straggling selectionchange echoes.
+            await mainWindow.waitForTimeout(500);
+
+            // Every update() call must either be the content-change
+            // path, deduped by the previousInput guard, or hidden.
+            expect(updateEntries.length).toBe(
+                contentTrue.length + updateSkipped.length + updateHidden.length,
+            );
 
             await mainWindow.keyboard.press("Escape");
         });

@@ -11,7 +11,7 @@ import {
     CommandHandlerTable,
     getCommandInterface,
 } from "@typeagent/agent-sdk/helpers/command";
-import { executeSessionAction } from "./action/sessionActionHandler.js";
+import { executeConversationAction } from "./action/conversationActionHandler.js";
 import { executeConfigAction } from "./action/configActionHandler.js";
 import {
     type CommandHandlerContext,
@@ -29,7 +29,7 @@ import { executeGrammarAction } from "./action/grammarActionHandler.js";
 import { ConfigAction } from "./schema/configActionSchema.js";
 import { NotificationAction } from "./schema/notificationActionSchema.js";
 import { HistoryAction } from "./schema/historyActionSchema.js";
-import { SessionAction } from "./schema/sessionActionSchema.js";
+import { ConversationAction } from "./schema/conversationActionSchema.js";
 import { GrammarAction } from "./schema/grammarActionSchema.js";
 
 // handlers
@@ -96,7 +96,7 @@ export const systemHandlers: CommandHandlerTable = {
 
 function executeSystemAction(
     action:
-        | TypeAgentAction<SessionAction, "system.session">
+        | TypeAgentAction<ConversationAction, "system.conversation">
         | TypeAgentAction<ConfigAction, "system.config">
         | TypeAgentAction<NotificationAction, "system.notify">
         | TypeAgentAction<HistoryAction, "system.history">
@@ -104,8 +104,8 @@ function executeSystemAction(
     context: ActionContext<CommandHandlerContext>,
 ) {
     switch (action.schemaName) {
-        case "system.session":
-            return executeSessionAction(action, context);
+        case "system.conversation":
+            return executeConversationAction(action, context);
         case "system.config":
             return executeConfigAction(action, context);
         case "system.notify":
@@ -123,7 +123,8 @@ function executeSystemAction(
 
 export const systemManifest: AppAgentManifest = {
     emojiChar: "🔧",
-    description: "Built-in agent to manage system configuration and sessions",
+    description:
+        "Built-in agent to manage system configuration and conversations",
     subActionManifests: {
         config: {
             schema: {
@@ -133,20 +134,20 @@ export const systemManifest: AppAgentManifest = {
                 schemaType: "ConfigAction",
             },
         },
-        session: {
+        conversation: {
             schema: {
                 description:
-                    "System agent that manages sessions/conversations. " +
+                    "System agent that manages conversations. " +
                     "Use this agent when the user wants to: " +
                     "CREATE a new conversation (e.g. 'create a new conversation', 'start a new conversation called test', 'new conversation named work', 'open a new conversation test'), " +
                     "LIST conversations (e.g. 'list our conversations', 'show all conversations', 'what conversations do I have'), " +
                     "SWITCH to an existing conversation (e.g. 'switch to conversation test', 'go to my work conversation', 'switch to test'), " +
-                    "DELETE a conversation (e.g. 'delete conversation test', 'remove the work session'), " +
+                    "DELETE a conversation (e.g. 'delete conversation test', 'remove the work conversation'), " +
                     "RENAME the current conversation, " +
                     "or SHOW info about the current conversation.",
                 schemaFile:
-                    "./src/context/system/schema/sessionActionSchema.ts",
-                schemaType: "SessionAction",
+                    "./src/context/system/schema/conversationActionSchema.ts",
+                schemaType: "ConversationAction",
             },
         },
         notify: {

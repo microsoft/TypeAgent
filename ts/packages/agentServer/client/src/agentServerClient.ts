@@ -19,8 +19,8 @@ import {
     AgentServerInvokeFunctions,
     AgentServerChannelName,
     DispatcherConnectOptions,
-    SessionInfo,
-    JoinSessionResult,
+    ConversationInfo,
+    JoinConversationResult,
     getDispatcherChannelName,
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
@@ -28,28 +28,28 @@ import {
 const debug = registerDebug("typeagent:agent-server-client");
 const debugErr = registerDebug("typeagent:agent-server-client:error");
 
-export type SessionDispatcher = {
+export type ConversationDispatcher = {
     dispatcher: Dispatcher;
-    sessionId: string;
+    conversationId: string;
     name: string;
 };
 
 export type AgentServerConnection = {
-    joinSession(
+    joinConversation(
         clientIO: ClientIO,
         options?: DispatcherConnectOptions,
-    ): Promise<SessionDispatcher>;
-    leaveSession(sessionId: string): Promise<void>;
-    createSession(name: string): Promise<SessionInfo>;
-    listSessions(name?: string): Promise<SessionInfo[]>;
-    renameSession(sessionId: string, newName: string): Promise<void>;
-    deleteSession(sessionId: string): Promise<void>;
+    ): Promise<ConversationDispatcher>;
+    leaveConversation(conversationId: string): Promise<void>;
+    createConversation(name: string): Promise<ConversationInfo>;
+    listConversations(name?: string): Promise<ConversationInfo[]>;
+    renameConversation(conversationId: string, newName: string): Promise<void>;
+    deleteConversation(conversationId: string): Promise<void>;
     close(): Promise<void>;
 };
 
 /**
  * Connect to an agent server and return a connection object that supports
- * multiple sessions over a single WebSocket.
+ * multiple conversations over a single WebSocket.
  */
 export async function connectAgentServer(
     url: string | URL,
@@ -70,8 +70,8 @@ export async function connectAgentServer(
             channel.createChannel(AgentServerChannelName),
         );
 
-        // Track joined sessions for cleanup on close
-        const joinedSessions = new Map<
+        // Track joined conversations for cleanup on close
+        const joinedConversations = new Map<
             string,
             { dispatcher: Dispatcher; connectionId: string }
         >();
@@ -81,90 +81,104 @@ export async function connectAgentServer(
         let closed = false;
 
         const connection: AgentServerConnection = {
-            async joinSession(
+            async joinConversation(
                 clientIO: ClientIO,
                 options?: DispatcherConnectOptions,
-            ): Promise<SessionDispatcher> {
-                const requestedSessionId = options?.sessionId;
+            ): Promise<ConversationDispatcher> {
+                const requestedConversationId = options?.conversationId;
                 if (
-                    requestedSessionId !== undefined &&
-                    joinedSessions.has(requestedSessionId)
+                    requestedConversationId !== undefined &&
+                    joinedConversations.has(requestedConversationId)
                 ) {
                     throw new Error(
-                        `Already joined session '${requestedSessionId}'. Call leaveSession() before joining again.`,
+                        `Already joined conversation '${requestedConversationId}'. Call leaveConversation() before joining again.`,
                     );
                 }
 
-                const result: JoinSessionResult = await rpc.invoke(
-                    "joinSession",
+                const result: JoinConversationResult = await rpc.invoke(
+                    "joinConversation",
                     options,
                 );
 
-                const sessionId = result.sessionId;
+                const conversationId = result.conversationId;
 
-                // Create session-namespaced channels
+                // Create conversation-namespaced channels
                 createClientIORpcServer(
                     clientIO,
-                    channel.createChannel(getClientIOChannelName(sessionId)),
+                    channel.createChannel(
+                        getClientIOChannelName(conversationId),
+                    ),
                 );
 
                 const dispatcher = createDispatcherRpcClient(
-                    channel.createChannel(getDispatcherChannelName(sessionId)),
+                    channel.createChannel(
+                        getDispatcherChannelName(conversationId),
+                    ),
                     result.connectionId,
                 );
 
-                // Override close to leave the session rather than close the WebSocket
+                // Override close to leave the conversation rather than close the WebSocket
                 dispatcher.close = async () => {
-                    await connection.leaveSession(sessionId);
+                    await connection.leaveConversation(conversationId);
                 };
 
-                joinedSessions.set(sessionId, {
+                joinedConversations.set(conversationId, {
                     dispatcher,
                     connectionId: result.connectionId,
                 });
 
                 return {
                     dispatcher,
-                    sessionId,
+                    conversationId,
                     name: result.name,
                 };
             },
 
-            async leaveSession(sessionId: string): Promise<void> {
-                const entry = joinedSessions.get(sessionId);
+            async leaveConversation(conversationId: string): Promise<void> {
+                const entry = joinedConversations.get(conversationId);
                 if (entry === undefined) {
                     return;
                 }
-                joinedSessions.delete(sessionId);
-                channel.deleteChannel(getDispatcherChannelName(sessionId));
-                channel.deleteChannel(getClientIOChannelName(sessionId));
-                await rpc.invoke("leaveSession", sessionId);
+                joinedConversations.delete(conversationId);
+                channel.deleteChannel(getDispatcherChannelName(conversationId));
+                channel.deleteChannel(getClientIOChannelName(conversationId));
+                await rpc.invoke("leaveConversation", conversationId);
             },
 
-            async createSession(name: string): Promise<SessionInfo> {
-                return rpc.invoke("createSession", name);
+            async createConversation(name: string): Promise<ConversationInfo> {
+                return rpc.invoke("createConversation", name);
             },
 
-            async listSessions(name?: string): Promise<SessionInfo[]> {
-                return rpc.invoke("listSessions", name);
+            async listConversations(
+                name?: string,
+            ): Promise<ConversationInfo[]> {
+                return rpc.invoke("listConversations", name);
             },
 
-            async renameSession(
-                sessionId: string,
+            async renameConversation(
+                conversationId: string,
                 newName: string,
             ): Promise<void> {
-                return rpc.invoke("renameSession", sessionId, newName);
+                return rpc.invoke(
+                    "renameConversation",
+                    conversationId,
+                    newName,
+                );
             },
 
-            async deleteSession(sessionId: string): Promise<void> {
-                // Clean up local channels if we're in this session
-                const entry = joinedSessions.get(sessionId);
+            async deleteConversation(conversationId: string): Promise<void> {
+                // Clean up local channels if we're in this conversation
+                const entry = joinedConversations.get(conversationId);
                 if (entry !== undefined) {
-                    joinedSessions.delete(sessionId);
-                    channel.deleteChannel(getDispatcherChannelName(sessionId));
-                    channel.deleteChannel(getClientIOChannelName(sessionId));
+                    joinedConversations.delete(conversationId);
+                    channel.deleteChannel(
+                        getDispatcherChannelName(conversationId),
+                    );
+                    channel.deleteChannel(
+                        getClientIOChannelName(conversationId),
+                    );
                 }
-                return rpc.invoke("deleteSession", sessionId);
+                return rpc.invoke("deleteConversation", conversationId);
             },
 
             async close(): Promise<void> {
@@ -190,7 +204,7 @@ export async function connectAgentServer(
         ws.onclose = (event: WebSocket.CloseEvent) => {
             debug("WebSocket connection closed", event.code, event.reason);
             channel.notifyDisconnected();
-            joinedSessions.clear();
+            joinedConversations.clear();
             if (!opened) {
                 // Closed before onopen fired — reject the pending promise.
                 if (!resolved) {
@@ -285,9 +299,6 @@ function spawnAgentServer(
         const isWindows = process.platform === "win32";
         if (isWindows) {
             if (hidden) {
-                // Hidden mode: spawn node directly with windowsHide so no
-                // console window appears. The process is detached so it
-                // survives the parent exiting.
                 const child = spawn(
                     "node",
                     [serverPath, "--port", String(port), ...extraArgs],
@@ -302,12 +313,6 @@ function spawnAgentServer(
                     `Agent server process spawned hidden (pid: ${child.pid})`,
                 );
             } else {
-                // Visible mode: spawn a PowerShell window so the user can see
-                // server output and any errors. Try PowerShell 7 (pwsh.exe)
-                // first, falling back to Windows PowerShell 5 (powershell.exe).
-                // We wrap in `cmd /c start` to force CREATE_NEW_CONSOLE — without
-                // this, the child inherits the parent's console and no new window
-                // appears when the CLI is itself running inside a console host.
                 const pwsh7 = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
                 const psExe = fs.existsSync(pwsh7) ? pwsh7 : "powershell.exe";
                 const psCommand = `node "${serverPath}" --port ${port}${idleTimeout > 0 ? ` --idle-timeout ${idleTimeout}` : ""}`;
@@ -326,8 +331,6 @@ function spawnAgentServer(
                 );
             }
         } else {
-            // On Unix, detached creates a new session so the child survives
-            // parent exit. Background node process, no visible window.
             const child = spawn(
                 "node",
                 [serverPath, "--port", String(port), ...extraArgs],
@@ -401,22 +404,22 @@ export async function ensureAndConnectDispatcher(
     return connectDispatcher(clientIO, url, options, onDisconnect);
 }
 
-export async function ensureAndConnectSession(
+export async function ensureAndConnectConversation(
     clientIO: ClientIO,
     port: number = 8999,
     options?: DispatcherConnectOptions,
     onDisconnect?: () => void,
     hidden: boolean = false,
     idleTimeout: number = 0,
-): Promise<SessionDispatcher> {
+): Promise<ConversationDispatcher> {
     await ensureAgentServer(port, hidden, idleTimeout);
     const url = `ws://localhost:${port}`;
     const connection = await connectAgentServer(url, onDisconnect);
-    const session = await connection.joinSession(clientIO, options);
-    session.dispatcher.close = async () => {
+    const conversation = await connection.joinConversation(clientIO, options);
+    conversation.dispatcher.close = async () => {
         await connection.close();
     };
-    return session;
+    return conversation;
 }
 
 export async function stopAgentServer(port: number = 8999): Promise<void> {
@@ -465,9 +468,9 @@ export async function stopAgentServer(port: number = 8999): Promise<void> {
 
 /**
  * Convenience wrapper: connect to an agent server and immediately join a
- * session. Returns a single Dispatcher (backward compatible with old API).
+ * conversation. Returns a single Dispatcher (backward compatible with old API).
  *
- * @deprecated Use `connectAgentServer()` for full multi-session support.
+ * @deprecated Use `connectAgentServer()` for full multi-conversation support.
  */
 export async function connectDispatcher(
     clientIO: ClientIO,
@@ -476,7 +479,7 @@ export async function connectDispatcher(
     onDisconnect?: () => void,
 ): Promise<Dispatcher> {
     const connection = await connectAgentServer(url, onDisconnect);
-    const { dispatcher } = await connection.joinSession(clientIO, options);
+    const { dispatcher } = await connection.joinConversation(clientIO, options);
     // Override close to also close the WebSocket (old behavior)
     dispatcher.close = async () => {
         await connection.close();

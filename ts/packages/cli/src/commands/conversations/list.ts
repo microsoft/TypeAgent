@@ -3,32 +3,32 @@
 
 import { Command, Flags } from "@oclif/core";
 import { connectAgentServer } from "@typeagent/agent-server-client";
-import type { SessionInfo } from "@typeagent/agent-server-client";
+import type { ConversationInfo } from "@typeagent/agent-server-client";
 
-function formatTable(sessions: SessionInfo[]): string {
-    if (sessions.length === 0) {
-        return "No sessions found.";
+function formatTable(conversations: ConversationInfo[]): string {
+    if (conversations.length === 0) {
+        return "No conversations found.";
     }
 
     const idWidth = Math.max(
-        "SESSION ID".length,
-        ...sessions.map((s) => s.sessionId.length),
+        "CONVERSATION ID".length,
+        ...conversations.map((s) => s.conversationId.length),
     );
     const nameWidth = Math.max(
         "NAME".length,
-        ...sessions.map((s) => (s.name ?? "").length),
+        ...conversations.map((s) => (s.name ?? "").length),
     );
     const clientsWidth = Math.max(
         "CLIENTS".length,
-        ...sessions.map((s) => String(s.clientCount).length),
+        ...conversations.map((s) => String(s.clientCount).length),
     );
     const createdWidth = Math.max(
         "CREATED AT".length,
-        ...sessions.map((s) => s.createdAt.length),
+        ...conversations.map((s) => s.createdAt.length),
     );
 
     const header = [
-        "SESSION ID".padEnd(idWidth),
+        "CONVERSATION ID".padEnd(idWidth),
         "NAME".padEnd(nameWidth),
         "CLIENTS".padEnd(clientsWidth),
         "CREATED AT",
@@ -41,9 +41,9 @@ function formatTable(sessions: SessionInfo[]): string {
         "-".repeat(createdWidth),
     ].join("  ");
 
-    const rows = sessions.map((s) =>
+    const rows = conversations.map((s) =>
         [
-            s.sessionId.padEnd(idWidth),
+            s.conversationId.padEnd(idWidth),
             (s.name ?? "").padEnd(nameWidth),
             String(s.clientCount).padEnd(clientsWidth),
             s.createdAt,
@@ -53,27 +53,30 @@ function formatTable(sessions: SessionInfo[]): string {
     return [header, separator, ...rows].join("\n");
 }
 
-export default class SessionsList extends Command {
+export default class ConversationsList extends Command {
     static description =
-        "List sessions on the agent server. Usage: sessions list [--name <filter>]";
+        "List conversations on the agent server. Usage: conversations list [--name <filter>]";
     static flags = {
         port: Flags.integer({
             description: "Port for type agent server",
             default: 8999,
         }),
         name: Flags.string({
-            description: "Filter sessions by name substring (case-insensitive)",
+            description:
+                "Filter conversations by name substring (case-insensitive)",
             required: false,
         }),
     };
 
     async run(): Promise<void> {
-        const { flags } = await this.parse(SessionsList);
+        const { flags } = await this.parse(ConversationsList);
         const url = `ws://localhost:${flags.port}`;
         const connection = await connectAgentServer(url);
         try {
-            const sessions = await connection.listSessions(flags.name);
-            this.log(formatTable(sessions));
+            const conversations = await connection.listConversations(
+                flags.name,
+            );
+            this.log(formatTable(conversations));
         } finally {
             await connection.close();
         }

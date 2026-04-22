@@ -85,7 +85,7 @@ To list all available agents and their status, just the command without any para
 |player              |✅     |✅     |✅      |
 |system              |       |       |✅      |
 |  system.config     |✅     |✅     |        |
-|  system.session    |✅     |✅     |        |
+|  system.conversation|✅    |✅     |        |
 ```
 
 ### Explainer
@@ -117,16 +117,16 @@ There are other short cut commands to exercise specify part of the TypeAgent Dis
 - `@translate <request>` - Only do the translation (no follow up explanation )
 - `@explain <request> => <action>` - only do the explanation of the request/action combo
 
-### Sessions
+### Conversations
 
-Session management commands can also be invoked via natural language through the `system.session` agent. Examples:
+Conversation management commands can also be invoked via natural language through the `system.conversation` agent. Examples:
 
 - "create a new conversation called research"
 - "switch to my work conversation"
 - "rename this conversation to project notes"
-- "delete the old project session"
+- "delete the old project conversation"
 - "list my conversations"
-- "show session info"
+- "show conversation info"
 
 The dispatcher translates these requests into structured payloads and forwards them to the client via `ClientIO.takeAction(requestId, "manage-conversation", payload)` where `payload` is one of:
 
@@ -139,7 +139,7 @@ The dispatcher translates these requests into structured payloads and forwards t
 { subcommand: "delete"; name: string }
 ```
 
-`name` identifies the conversation to act on (by name); for `rename`, `name` is optional and defaults to the current conversation. `newName` is the desired name after renaming. The CLI handles these by delegating to the `@conversation` command machinery (`handleConversationCommand`); the Shell calls the corresponding `ClientAPI` session methods (`sessionCreate`, `sessionList`, `sessionSwitch`, `sessionRename`, `sessionDelete`, `sessionGetCurrent`) over Electron IPC. This bridge allows the NL agent — which runs inside the dispatcher and has no direct access to the agent-server RPC layer — to manage server-side client-connection sessions in both clients.
+`name` identifies the conversation to act on (by name); for `rename`, `name` is optional and defaults to the current conversation. `newName` is the desired name after renaming. The CLI handles these by delegating to the `@conversation` command machinery (`handleConversationCommand`); the Shell calls the corresponding `ClientAPI` conversation methods (`conversationCreate`, `conversationList`, `conversationSwitch`, `conversationRename`, `conversationDelete`, `conversationGetCurrent`) over Electron IPC. This bridge allows the NL agent — which runs inside the dispatcher and has no direct access to the agent-server RPC layer — to manage server-side client-connection conversations in both clients.
 
 TypeAgent dispatcher settings, such as translator, explainer, etc., are stored in sessions, and sessions can be persisted across activation on a per user basis and restored when the app restarts. Use `@session <args>` command to do run operations. Additionally data such as construction store are saved in the sessions as well by default unless an explicit path are provided. The last cache file used is preserved thru reload.
 

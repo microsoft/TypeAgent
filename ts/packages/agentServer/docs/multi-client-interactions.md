@@ -5,13 +5,13 @@ title: Multi-Client Interaction Protocol
 
 ## Overview
 
-When multiple clients are connected to the same session via the AgentServer, the dispatcher needs to present interactive prompts (yes/no confirmations, choice menus, template editing) to the user. Because any connected client could be the active one, these interactions follow a **broadcast-and-race** pattern: the server sends the prompt to all clients simultaneously, and the first client to respond wins.
+When multiple clients are connected to the same conversation via the AgentServer, the dispatcher needs to present interactive prompts (yes/no confirmations, choice menus, template editing) to the user. Because any connected client could be the active one, these interactions follow a **broadcast-and-race** pattern: the server sends the prompt to all clients simultaneously, and the first client to respond wins.
 
 This document describes the protocol, the server-side machinery, and the responsibilities of each client implementation.
 
 ## Server-Side: SharedDispatcher
 
-A `SharedDispatcher` is a single dispatcher instance shared among all clients connected to the same session. It owns a `PendingInteractionManager` — a map of in-flight interactions, each backed by a deferred promise that the dispatcher awaits to unblock execution.
+A `SharedDispatcher` is a single dispatcher instance shared among all clients connected to the same conversation. It owns a `PendingInteractionManager` — a map of in-flight interactions, each backed by a deferred promise that the dispatcher awaits to unblock execution.
 
 ### Interaction lifecycle
 
@@ -36,7 +36,7 @@ The same flow applies to `proposeAction`.
 
 Most `ClientIO` calls are **targeted**: they carry a `requestId.connectionId` that identifies which client initiated the request, and the server routes the call only to that client.
 
-Interaction calls are **broadcast** to all clients, regardless of which client initiated the originating request. This is intentional: in a multi-client session the active user may be on any client.
+Interaction calls are **broadcast** to all clients, regardless of which client initiated the originating request. This is intentional: in a multi-client conversation the active user may be on any client.
 
 | ClientIO method        | Routing                           | Notes                                                              |
 | ---------------------- | --------------------------------- | ------------------------------------------------------------------ |
@@ -53,7 +53,7 @@ Pending interactions have a 10-minute timeout (configurable per-type in `sharedD
 
 ### Reconnects
 
-Each `join()` call mints a new ephemeral `connectionId`. On reconnect a client receives a fresh `connectionId`, so interactions created before the disconnect (whose `requestId.connectionId` names the old connection) are not re-broadcast to the new connection. A joining client receives any still-pending interactions via `JoinSessionResult.pendingInteractions` and is responsible for displaying them and potentially responding.
+Each `join()` call mints a new ephemeral `connectionId`. On reconnect a client receives a fresh `connectionId`, so interactions created before the disconnect (whose `requestId.connectionId` names the old connection) are not re-broadcast to the new connection. A joining client receives any still-pending interactions via `JoinConversationResult.pendingInteractions` and is responsible for displaying them and potentially responding.
 
 ## Interaction Types
 

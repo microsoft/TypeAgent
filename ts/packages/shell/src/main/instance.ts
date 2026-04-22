@@ -24,11 +24,11 @@ import { createShellAgentProvider } from "./agent.js";
 import { createInlineBrowserControl } from "./inlineBrowserControl.js";
 import { BrowserAgentIpc } from "./browserIpc.js";
 import {
-    createLocalSessionBackend,
-    createRemoteSessionBackend,
-    registerSessionIpcHandlers,
+    createLocalConversationBackend,
+    createRemoteConversationBackend,
+    registerConversationIpcHandlers,
     replayDisplayHistory,
-} from "./sessionManager.js";
+} from "./conversationManager.js";
 import {
     ClientIO,
     createDispatcher,
@@ -59,8 +59,8 @@ type InitResult = {
     dispatcher: Dispatcher;
     clientIO: ClientIO;
     connection?: AgentServerConnection;
-    initialSessionId?: string;
-    initialSessionName?: string;
+    initialConversationId?: string;
+    initialConversationName?: string;
     rebindDispatcher?: (freshDispatcher: Dispatcher) => void;
 };
 
@@ -157,11 +157,11 @@ async function initializeDispatcher(
         // Use 'let' so that session switches can rebind the active dispatcher.
         let newDispatcher: Dispatcher;
         let connection: AgentServerConnection | undefined;
-        let initialSessionId: string | undefined;
-        let initialSessionName: string | undefined;
+        let initialConversationId: string | undefined;
+        let initialConversationName: string | undefined;
         if (connect !== undefined) {
             // Connect to remote dispatcher — use connectAgentServer directly
-            // so we retain the connection reference for multi-session support.
+            // so we retain the connection reference for multi-conversation support.
             await ensureAgentServer(connect, true);
             const url = `ws://localhost:${connect}`;
             connection = await connectAgentServer(url, () => {
@@ -173,40 +173,48 @@ async function initializeDispatcher(
                     app.quit();
                 }
             });
-            // Find-or-create the default "Shell" session, matching CLI behavior.
-            // Case-insensitive match mirrors the server's getDefaultSessionId().
-            const SHELL_SESSION_NAME = "Shell";
-            const existing = await connection.listSessions(SHELL_SESSION_NAME);
+            // Find-or-create the default "Shell" conversation, matching CLI behavior.
+            const SHELL_CONVERSATION_NAME = "Shell";
+            const existing = await connection.listConversations(
+                SHELL_CONVERSATION_NAME,
+            );
             const match = existing.find(
                 (s) =>
-                    s.name.toLowerCase() === SHELL_SESSION_NAME.toLowerCase(),
+                    s.name.toLowerCase() ===
+                    SHELL_CONVERSATION_NAME.toLowerCase(),
             );
-            const shellSessionId =
+            const shellConversationId =
                 match !== undefined
-                    ? match.sessionId
-                    : (await connection.createSession(SHELL_SESSION_NAME))
-                          .sessionId;
-            let session: Awaited<ReturnType<typeof connection.joinSession>>;
+                    ? match.conversationId
+                    : (
+                          await connection.createConversation(
+                              SHELL_CONVERSATION_NAME,
+                          )
+                      ).conversationId;
+            let conversation: Awaited<
+                ReturnType<typeof connection.joinConversation>
+            >;
             try {
-                session = await connection.joinSession(clientIO, {
-                    sessionId: shellSessionId,
+                conversation = await connection.joinConversation(clientIO, {
+                    conversationId: shellConversationId,
                 });
             } catch (e: any) {
-                // The session may have been deleted between listSessions and
-                // joinSession (race condition). Fall back to creating a fresh one.
+                // The conversation may have been deleted between listConversations and
+                // joinConversation (race condition). Fall back to creating a fresh one.
                 debugShellInit(
-                    "joinSession failed for Shell session, creating new one:",
+                    "joinConversation failed for Shell conversation, creating new one:",
                     e.message,
                 );
-                const fresh =
-                    await connection.createSession(SHELL_SESSION_NAME);
-                session = await connection.joinSession(clientIO, {
-                    sessionId: fresh.sessionId,
+                const fresh = await connection.createConversation(
+                    SHELL_CONVERSATION_NAME,
+                );
+                conversation = await connection.joinConversation(clientIO, {
+                    conversationId: fresh.conversationId,
                 });
             }
-            newDispatcher = session.dispatcher;
-            initialSessionId = session.sessionId;
-            initialSessionName = session.name;
+            newDispatcher = conversation.dispatcher;
+            initialConversationId = conversation.conversationId;
+            initialConversationName = conversation.name;
             // Note: connection.close() is called by closeDispatcher() on
             // shutdown, so no override here — it would double-close the WebSocket.
 
@@ -356,8 +364,8 @@ async function initializeDispatcher(
             dispatcher,
             clientIO,
             connection,
-            initialSessionId,
-            initialSessionName,
+            initialConversationId,
+            initialConversationName,
             rebindDispatcher,
         };
     } catch (e: any) {
@@ -390,10 +398,11 @@ export function initializeInstance(
 
     const shellWindow = new ShellWindow(shellSettings, inputOnly);
 
-    // Register session management IPC handlers (local-only backend for now;
-    // remote backend would be wired in when connect mode gains multi-session).
-    const sessionBackend = createLocalSessionBackend();
-    let cleanupSessionIpc = registerSessionIpcHandlers(sessionBackend);
+    // Register conversation management IPC handlers (local-only backend for now;
+    // remote backend would be wired in when connect mode gains multi-conversation).
+    const conversationBackend = createLocalConversationBackend();
+    let cleanupConversationIpc =
+        registerConversationIpcHandlers(conversationBackend);
 
     // Set up notification callback for browser agent IPC early,
     // so messages queued during tab restoration can trigger notifications
@@ -449,39 +458,40 @@ export function initializeInstance(
             dispatcher,
             clientIO,
             connection,
-            initialSessionId,
-            initialSessionName,
+            initialConversationId,
+            initialConversationName,
             rebindDispatcher,
         } = result;
 
-        // If connected to a remote server, wire up the remote session backend
+        // If connected to a remote server, wire up the remote conversation backend
         // and replace the local-only IPC handlers.
         if (
             connection !== undefined &&
-            initialSessionId !== undefined &&
-            initialSessionName !== undefined
+            initialConversationId !== undefined &&
+            initialConversationName !== undefined
         ) {
             // Remove local handlers first — ipcMain.handle() throws if a
             // channel already has a handler, and both operations are synchronous
             // so there is no async gap between remove and re-register.
-            cleanupSessionIpc();
-            const remoteBackend = createRemoteSessionBackend(
+            cleanupConversationIpc();
+            const remoteBackend = createRemoteConversationBackend(
                 connection,
                 clientIO,
-                initialSessionId,
-                initialSessionName,
-                (sessionId, name) => {
-                    shellWindow.sendSessionChanged(sessionId, name);
+                initialConversationId,
+                initialConversationName,
+                (conversationId, name) => {
+                    shellWindow.sendConversationChanged(conversationId, name);
                 },
                 rebindDispatcher,
                 () => shellWindow.sendMarkHistory(),
             );
-            cleanupSessionIpc = registerSessionIpcHandlers(remoteBackend);
+            cleanupConversationIpc =
+                registerConversationIpcHandlers(remoteBackend);
 
-            // Notify renderer of the initial session
-            shellWindow.sendSessionChanged(
-                initialSessionId,
-                initialSessionName,
+            // Notify renderer of the initial conversation
+            shellWindow.sendConversationChanged(
+                initialConversationId,
+                initialConversationName,
             );
 
             updateTitle(dispatcher);
@@ -502,7 +512,7 @@ export function initializeInstance(
             chatView.webContents.focus();
 
             // Clear the stale local HTML snapshot and replay the server's
-            // authoritative display history, just as switchSession does.
+            // authoritative display history, just as switchConversation does.
             clientIO.clear({
                 requestId: "",
                 clientRequestId: "initial-connect",
@@ -510,7 +520,7 @@ export function initializeInstance(
             await replayDisplayHistory(
                 dispatcher,
                 clientIO,
-                initialSessionName,
+                initialConversationName,
                 () => shellWindow.sendMarkHistory(),
             );
 
@@ -555,7 +565,7 @@ export function initializeInstance(
 
     shellWindow.mainWindow.on("closed", () => {
         ensureCleanupInstance();
-        cleanupSessionIpc();
+        cleanupConversationIpc();
         ipcMain.removeListener("chat-view-ready", onChatViewReady);
     });
 

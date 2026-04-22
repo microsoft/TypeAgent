@@ -3,7 +3,11 @@
 
 import registerDebug from "debug";
 import { AppAgent } from "@typeagent/agent-sdk";
-import { createAgentRpcServer } from "@typeagent/agent-rpc/server";
+import {
+    AgentControlMessage,
+    AgentInterfaceFunctionName,
+    createAgentRpcServer,
+} from "@typeagent/agent-rpc/server";
 import { createChannelProvider } from "@typeagent/agent-rpc/channel";
 import { createRequire } from "node:module";
 
@@ -36,6 +40,11 @@ process.on("disconnect", () => {
     process.exit(-1);
 });
 
+process.on("SIGTERM", () => {
+    debug(`SIGTERM received, exiting '${agentName}': ${modulePath}`);
+    process.exit(-2);
+});
+
 //=================================================================
 // Load the module.
 //=================================================================
@@ -47,7 +56,7 @@ if (typeof module.instantiate !== "function") {
 }
 
 //=================================================================
-// Instantiate agent and  Create agent RPC server
+// Instantiate agent and create agent RPC server
 //=================================================================
 const agent: AppAgent = module.instantiate();
 const channelProvider = createChannelProvider(
@@ -60,7 +69,18 @@ const { agentInterface } = createAgentRpcServer(
     channelProvider,
 );
 
-channelProvider.createChannel("initialize").send(agentInterface);
+const controlChannel = channelProvider.createChannel<
+    AgentControlMessage,
+    AgentInterfaceFunctionName[]
+>("control");
+
+controlChannel.on("message", () => {
+    debug(
+        `Parent process requested exit, exiting '${agentName}': ${modulePath}`,
+    );
+    process.exit(0);
+});
+controlChannel.send(agentInterface);
 
 //=================================================================
 // Set up debug trace coordination

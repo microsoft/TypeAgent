@@ -6,7 +6,7 @@
 
 ## Overview
 
-Two `ClientIO` methods — `question` and `proposeAction` — use a **non-blocking, deferred-promise pattern** in the agent-server's `SharedDispatcher`. Rather than blocking on a synchronous RPC round-trip to the originating client, the server broadcasts a fire-and-forget notification, suspends execution via a stored `Promise`, and resumes when any connected client responds. This allows commands to survive client disconnects, supports multi-client sessions, and integrates with the `DisplayLog` for session replay.
+Two `ClientIO` methods — `question` and `proposeAction` — use a **non-blocking, deferred-promise pattern** in the agent-server's `SharedDispatcher`. Rather than blocking on a synchronous RPC round-trip to the originating client, the server broadcasts a fire-and-forget notification, suspends execution via a stored `Promise`, and resumes when any connected client responds. This allows commands to survive client disconnects, supports multi-client conversations, and integrates with the `DisplayLog` for conversation replay.
 
 The `ClientIO` interface signatures are unchanged — callers receive a `Promise<number | unknown>` as before. Only the server-side fulfillment mechanism differs.
 
@@ -35,7 +35,7 @@ Agent code → askYesNoWithContext() → context.clientIO.question()
 
 ### Key invariant: always log
 
-`logPendingInteraction` is called unconditionally for both interaction types — even when no clients are currently connected. This ensures that a client which reconnects within the timeout window can see the pending interaction in `JoinSessionResult.pendingInteractions` and respond to it. The log and `PendingInteractionManager` entry are created before the broadcast so the interaction is visible to any client joining concurrently.
+`logPendingInteraction` is called unconditionally for both interaction types — even when no clients are currently connected. This ensures that a client which reconnects within the timeout window can see the pending interaction in `JoinConversationResult.pendingInteractions` and respond to it. The log and `PendingInteractionManager` entry are created before the broadcast so the interaction is visible to any client joining concurrently.
 
 ### Routing
 
@@ -63,7 +63,7 @@ Both types use a 10-minute timeout, kept as separate constants so they can be tu
 
 Disconnecting a client does **not** automatically cancel pending interactions. Interactions remain pending until they time out or a client explicitly calls `cancelInteraction`. This allows a reconnecting client to respond to the same interaction within the timeout window.
 
-Both interaction types log unconditionally and survive in the pending map if no client is connected, so a later-joining client will see them in `JoinSessionResult.pendingInteractions`. However, with the current ephemeral `connectionId` design, a reconnecting client's new `connectionId` will not match the stored one for `question`/`proposeAction` interactions and they will be filtered out — see Open Question 5.
+Both interaction types log unconditionally and survive in the pending map if no client is connected, so a later-joining client will see them in `JoinConversationResult.pendingInteractions`. However, with the current ephemeral `connectionId` design, a reconnecting client's new `connectionId` will not match the stored one for `question`/`proposeAction` interactions and they will be filtered out — see Open Question 5.
 
 Clients that want to cancel an interaction (e.g., on user dismissal) call `dispatcher.cancelInteraction(interactionId)`, which triggers:
 
@@ -78,9 +78,9 @@ Three entry types are logged to `DisplayLog`:
 - `interaction-resolved` — response is JSON-safe normalized before storage
 - `interaction-cancelled`
 
-### Session Join / Reconnection
+### Conversation Join / Reconnection
 
-`JoinSessionResult` includes `pendingInteractions: PendingInteractionRequest[]`, populated by `getPendingInteractions(connectionId, filter)`. This mirrors the `broadcast` eligibility rules exactly — a joining client only receives interactions it would have been sent during normal operation.
+`JoinConversationResult` includes `pendingInteractions: PendingInteractionRequest[]`, populated by `getPendingInteractions(connectionId, filter)`. This mirrors the `broadcast` eligibility rules exactly — a joining client only receives interactions it would have been sent during normal operation.
 
 Clients can immediately render UI for unresolved interactions on connect.
 
@@ -146,7 +146,7 @@ The shell and CLI `requestInteraction`/`interactionResolved`/`interactionCancell
 
    Architecturally similar but semantically distinct — `requestChoice` is agent-initiated via `ActionResult`, not system-initiated. Leave separate for now; revisit in a future iteration.
 
-4. **Grace period on disconnect** — disconnecting a client does not auto-cancel pending interactions. Interactions remain pending until they time out or a client explicitly calls `cancelInteraction`. Reconnecting clients see pending interactions in `JoinSessionResult.pendingInteractions` and can respond or cancel them.
+4. **Grace period on disconnect** — disconnecting a client does not auto-cancel pending interactions. Interactions remain pending until they time out or a client explicitly calls `cancelInteraction`. Reconnecting clients see pending interactions in `JoinConversationResult.pendingInteractions` and can respond or cancel them.
 
 5. **Stable client identity for reconnect routing** — `question`/`proposeAction` interactions capture `requestId.connectionId` at creation time, but `connectionId` is ephemeral: each `join()` call mints a new value. A reconnecting client therefore gets a new `connectionId` that never matches the stored one, so `getPendingInteractions()` filters those interactions out and they become permanently unresolvable until timeout.
 
