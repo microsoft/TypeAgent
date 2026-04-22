@@ -294,7 +294,7 @@ async function getAccountKeys(account) {
 
 async function vaultSetSecret(vault, name, value, commit) {
     if (!commit) {
-        info(`  [dry-run] set ${name}=${value.slice(0, 40)}...`);
+        info(`  [dry-run] set ${name}=[REDACTED]`);
         return;
     }
     return new Promise((resolve, reject) => {
