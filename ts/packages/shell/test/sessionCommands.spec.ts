@@ -38,7 +38,7 @@ test.describe("@session Commands", () => {
             );
             const newSessions: string[] = msg.split("\n");
 
-            expect(newSessions.length, "Conversation count mismatch!").toBe(
+            expect(newSessions.length, "Session count mismatch!").toBe(
                 sessions.length + 1,
             );
 
@@ -89,7 +89,7 @@ test.describe("@session Commands", () => {
                 mainWindow,
             );
             sessions = msg.split("\n");
-            expect(sessions.length, "Conversation accidentally deleted.").toBe(
+            expect(sessions.length, "Session accidentally deleted.").toBe(
                 originalSessionCount,
             );
 
@@ -111,7 +111,7 @@ test.describe("@session Commands", () => {
                 mainWindow,
             );
             sessions = msg.split("\n");
-            expect(sessions.length, "Conversation accidentally deleted.").toBe(
+            expect(sessions.length, "Session accidentally deleted.").toBe(
                 originalSessionCount - 1,
             );
 
@@ -121,7 +121,7 @@ test.describe("@session Commands", () => {
                 mainWindow,
             );
             sessions = msg.split("\n");
-            expect(sessions[1], "Wrong conversation selected.").toContain(
+            expect(sessions[1], "Wrong session selected.").toContain(
                 sessionName,
             );
         });
