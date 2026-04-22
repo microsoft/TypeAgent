@@ -64,7 +64,7 @@ The settings module lives in `packages/dispatcher/dispatcher/src/helpers/userSet
 
 - Read: returns merged defaults + saved settings
 - Write: deep-merges partial updates and persists
-- File locking: not currently implemented; reads and writes use synchronous `fs` calls without locking. If concurrent access becomes a concern (e.g. multiple shell instances), consider adopting the `proper-lockfile` pattern from `userData.ts`.
+- File locking: uses the same `proper-lockfile` pattern as `userData.ts`, acquiring a synchronous lock on the user data directory for all read/write/reset operations to prevent concurrent access races
 
 ## Migration Strategy
 

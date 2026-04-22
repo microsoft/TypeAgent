@@ -3,6 +3,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import lockfile from "proper-lockfile";
 import { DeepPartialUndefined } from "@typeagent/common-utils";
 import { getUserDataDir } from "./userData.js";
 import { ensureDirectory } from "../utils/fsUtils.js";
@@ -29,6 +30,27 @@ export const defaultUserSettings: UserSettings = {
 
 function getUserSettingsFilePath(): string {
     return path.join(getUserDataDir(), "user-settings.json");
+}
+
+/**
+ * Acquire a synchronous lock on the user data directory, matching the
+ * locking pattern in userData.ts.
+ */
+function lockUserSettings<T>(fn: () => T): T {
+    let release: () => void;
+    try {
+        release = lockfile.lockSync(getUserDataDir());
+    } catch (error: any) {
+        console.error(
+            `ERROR: Unable to lock user data directory: ${error.message}. Exiting.`,
+        );
+        process.exit(-1);
+    }
+    try {
+        return fn();
+    } finally {
+        release();
+    }
 }
 
 const unsafeKeys = new Set(["__proto__", "constructor", "prototype"]);
@@ -62,55 +84,72 @@ function deepMerge<T extends Record<string, any>>(
     return result;
 }
 
+function cloneDefaults(): UserSettings {
+    return structuredClone(defaultUserSettings);
+}
+
 /**
  * Load user settings, merging saved values over defaults.
+ * Acquires a file lock to prevent concurrent read/write races.
  */
 export function loadUserSettings(): UserSettings {
-    const filePath = getUserSettingsFilePath();
-    try {
-        if (fs.existsSync(filePath)) {
-            const content = fs.readFileSync(filePath, "utf-8");
-            const saved = JSON.parse(content);
-            return deepMerge(structuredClone(defaultUserSettings), saved);
+    return lockUserSettings(() => {
+        const filePath = getUserSettingsFilePath();
+        try {
+            if (fs.existsSync(filePath)) {
+                const content = fs.readFileSync(filePath, "utf-8");
+                const saved = JSON.parse(content);
+                return deepMerge(cloneDefaults(), saved);
+            }
+        } catch {
+            // Fall through to defaults on any read/parse error
         }
-    } catch {
-        // Fall through to defaults on any read/parse error
-    }
-    return {
-        ...defaultUserSettings,
-        server: { ...defaultUserSettings.server },
-        conversation: { ...defaultUserSettings.conversation },
-    };
+        return cloneDefaults();
+    });
 }
 
 /**
  * Save a partial settings update, deep-merging with existing saved settings.
+ * Acquires a file lock so concurrent writers don't corrupt state.
  */
 export function saveUserSettings(
     partial: DeepPartialUndefined<UserSettings>,
 ): UserSettings {
-    const filePath = getUserSettingsFilePath();
-    const current = loadUserSettings();
-    const merged = deepMerge(current, partial as Record<string, any>);
+    return lockUserSettings(() => {
+        const filePath = getUserSettingsFilePath();
+        // Read current inside the lock to get a consistent snapshot
+        let current: UserSettings;
+        try {
+            if (fs.existsSync(filePath)) {
+                const content = fs.readFileSync(filePath, "utf-8");
+                const saved = JSON.parse(content);
+                current = deepMerge(cloneDefaults(), saved);
+            } else {
+                current = cloneDefaults();
+            }
+        } catch {
+            current = cloneDefaults();
+        }
 
-    ensureDirectory(path.dirname(filePath));
-    fs.writeFileSync(filePath, JSON.stringify(merged, null, 2) + "\n");
-    return merged;
+        const merged = deepMerge(current, partial as Record<string, any>);
+        ensureDirectory(path.dirname(filePath));
+        fs.writeFileSync(filePath, JSON.stringify(merged, null, 2) + "\n");
+        return merged;
+    });
 }
 
 /**
  * Reset all user settings to defaults by removing the settings file.
+ * Acquires a file lock for consistency.
  */
 export function resetUserSettings(): UserSettings {
-    const filePath = getUserSettingsFilePath();
-    try {
-        fs.unlinkSync(filePath);
-    } catch {
-        // Ignore if already gone
-    }
-    return {
-        ...defaultUserSettings,
-        server: { ...defaultUserSettings.server },
-        conversation: { ...defaultUserSettings.conversation },
-    };
+    return lockUserSettings(() => {
+        const filePath = getUserSettingsFilePath();
+        try {
+            fs.unlinkSync(filePath);
+        } catch {
+            // Ignore if already gone
+        }
+        return cloneDefaults();
+    });
 }
