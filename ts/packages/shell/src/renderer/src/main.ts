@@ -354,6 +354,9 @@ function registerClient(
             const cancelPromise = new Promise<never>((_, reject) => {
                 cancelReject = () => reject(new Error("interaction dismissed"));
             });
+            // Prevent unhandled rejection if cancellation fires after the UI
+            // promise wins the race.
+            cancelPromise.catch(() => {});
             pendingInteractions.set(interactionId, cancelReject!);
 
             const handle = async () => {
@@ -412,8 +415,17 @@ function registerClient(
                     }
 
                     await dispatcher!.respondToInteraction(response);
-                } catch {
-                    // Dismissed via cancel — no response needed.
+                } catch (e: unknown) {
+                    // Only swallow dismissal errors; log unexpected failures.
+                    if (
+                        !(e instanceof Error) ||
+                        e.message !== "interaction dismissed"
+                    ) {
+                        console.error(
+                            "requestInteraction: unexpected error",
+                            e,
+                        );
+                    }
                 } finally {
                     pendingInteractions.delete(interactionId);
                 }

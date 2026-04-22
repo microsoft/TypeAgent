@@ -45,6 +45,7 @@ import {
     getVerboseIndicator,
     getConversationCommandContext,
     getSlashCompletions,
+    getServerPort,
 } from "./slashCommands.js";
 import { handleConversationCommand } from "./conversationCommands.js";
 import {
@@ -52,6 +53,7 @@ import {
     getDebugPanel,
     PromptRenderer,
 } from "./debugInterceptor.js";
+import { stopAgentServer } from "@typeagent/agent-server-client";
 
 // Track current processing state
 let currentSpinner: EnhancedSpinner | null = null;
@@ -637,6 +639,12 @@ export function createEnhancedClientIO(
             if (currentSpinner) {
                 currentSpinner.stop();
                 currentSpinner = null;
+            }
+            const port = getServerPort();
+            if (port !== undefined) {
+                stopAgentServer(port).catch(() => {
+                    // Best-effort: server may already be stopped.
+                });
             }
             process.exit(0);
         },

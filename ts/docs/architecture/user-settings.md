@@ -2,7 +2,7 @@
 
 ## Overview
 
-User settings provide persistent, cross-session defaults for startup behavior. They are stored in `~/.typeagent/user-settings.json` and surfaced via `/settings` commands in the dispatcher's system agent.
+User settings provide persistent, cross-session defaults for startup behavior. They are stored in `~/.typeagent/user-settings.json` and surfaced via `@system settings` commands in the dispatcher's system agent (`@settings` is available as an alias).
 
 ## Settings Data Model
 
@@ -38,13 +38,13 @@ interface UserSettings {
 
 All under `@system settings`:
 
-| Command                                          | Description                  |
-| ------------------------------------------------ | ---------------------------- |
-| `@system settings`                               | Show all current settings    |
-| `@system settings server hidden [on\|off]`       | Toggle hidden server startup |
-| `@system settings server idleTimeout <seconds>`  | Set idle timeout             |
-| `@system settings conversation resume [on\|off]` | Toggle conversation resume   |
-| `@system settings reset`                         | Reset all to defaults        |
+| Command                                              | Description                  |
+| ---------------------------------------------------- | ---------------------------- |
+| `@system settings`                                   | Show all current settings    |
+| `@system settings server hidden [true\|false]`       | Toggle hidden server startup |
+| `@system settings server idleTimeout <seconds>`      | Set idle timeout             |
+| `@system settings conversation resume [true\|false]` | Toggle conversation resume   |
+| `@system settings reset`                             | Reset all to defaults        |
 
 ## Startup Integration
 
@@ -64,7 +64,7 @@ The settings module lives in `packages/dispatcher/dispatcher/src/helpers/userSet
 
 - Read: returns merged defaults + saved settings
 - Write: deep-merges partial updates and persists
-- File locking: uses the same `proper-lockfile` pattern as `userData.ts`
+- File locking: not currently implemented; reads and writes use synchronous `fs` calls without locking. If concurrent access becomes a concern (e.g. multiple shell instances), consider adopting the `proper-lockfile` pattern from `userData.ts`.
 
 ## Migration Strategy
 

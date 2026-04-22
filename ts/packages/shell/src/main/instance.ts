@@ -153,13 +153,11 @@ async function initializeDispatcher(
             exit: () => {
                 app.quit();
             },
-            shutdown: async () => {
+            shutdown: () => {
                 if (connect !== undefined) {
-                    try {
-                        await stopAgentServer(connect);
-                    } catch {
+                    stopAgentServer(connect).catch(() => {
                         // Best-effort: server may already be stopped.
-                    }
+                    });
                 }
                 app.quit();
             },

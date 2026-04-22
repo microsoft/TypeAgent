@@ -31,12 +31,17 @@ function getUserSettingsFilePath(): string {
     return path.join(getUserDataDir(), "user-settings.json");
 }
 
+const unsafeKeys = new Set(["__proto__", "constructor", "prototype"]);
+
 function deepMerge<T extends Record<string, any>>(
     target: T,
     source: Record<string, any>,
 ): T {
     const result = { ...target };
     for (const key of Object.keys(source) as (keyof T)[]) {
+        if (unsafeKeys.has(key as string)) {
+            continue;
+        }
         const sourceVal = source[key as string];
         if (
             sourceVal !== undefined &&
@@ -66,7 +71,7 @@ export function loadUserSettings(): UserSettings {
         if (fs.existsSync(filePath)) {
             const content = fs.readFileSync(filePath, "utf-8");
             const saved = JSON.parse(content);
-            return deepMerge(defaultUserSettings, saved);
+            return deepMerge(structuredClone(defaultUserSettings), saved);
         }
     } catch {
         // Fall through to defaults on any read/parse error
