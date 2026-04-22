@@ -84,8 +84,9 @@ body {
 
 .message.agent {
     align-self: flex-start;
-    background: var(--vscode-editor-inactiveSelectionBackground);
+    background: var(--vscode-input-background);
     color: var(--vscode-foreground);
+    border: 1px solid var(--vscode-input-border, transparent);
     border-bottom-left-radius: 2px;
 }
 
@@ -226,25 +227,49 @@ body {
     background: var(--vscode-scrollbarSlider-hoverBackground);
 }
 
-/* ── ANSI color codes (from ansi_up with use_classes=true) ───── */
+/* ── ANSI color codes (from ansi_up with use_classes=true) ─────
+ * Tuned for contrast against the agent bubble background, using
+ * VS Code's body theme classes (vscode-light / vscode-dark /
+ * vscode-high-contrast) so colors stay readable in any theme.
+ */
 
-.message span.ansi-black-fg { color: var(--vscode-terminal-ansiBlack, #000); }
-.message span.ansi-red-fg { color: var(--vscode-terminal-ansiRed, #c00); }
-.message span.ansi-green-fg { color: var(--vscode-terminal-ansiGreen, #0c0); }
-.message span.ansi-yellow-fg { color: var(--vscode-terminal-ansiYellow, #cc0); }
-.message span.ansi-blue-fg { color: var(--vscode-terminal-ansiBlue, #00c); }
-.message span.ansi-magenta-fg { color: var(--vscode-terminal-ansiMagenta, #c0c); }
-.message span.ansi-cyan-fg { color: var(--vscode-terminal-ansiCyan, #0cc); }
-.message span.ansi-white-fg { color: var(--vscode-terminal-ansiWhite, #ccc); }
+/* Dark themes (default) — saturated mid-tones */
+.message span.ansi-black-fg { color: #6c6c6c; }
+.message span.ansi-red-fg { color: #f48771; }
+.message span.ansi-green-fg { color: #89d185; }
+.message span.ansi-yellow-fg { color: #dcdcaa; }
+.message span.ansi-blue-fg { color: #6796e6; }
+.message span.ansi-magenta-fg { color: #d670d6; }
+.message span.ansi-cyan-fg { color: #4ec9b0; }
+.message span.ansi-white-fg,
+.message span.ansi-bright-white-fg { color: var(--vscode-foreground); }
 .message span.ansi-bright-black-fg,
-.message span.ansi-gray-fg { color: var(--vscode-terminal-ansiBrightBlack, #888); }
-.message span.ansi-bright-red-fg { color: var(--vscode-terminal-ansiBrightRed, #f00); }
-.message span.ansi-bright-green-fg { color: var(--vscode-terminal-ansiBrightGreen, #0f0); }
-.message span.ansi-bright-yellow-fg { color: var(--vscode-terminal-ansiBrightYellow, #ff0); }
-.message span.ansi-bright-blue-fg { color: var(--vscode-terminal-ansiBrightBlue, #00f); }
-.message span.ansi-bright-magenta-fg { color: var(--vscode-terminal-ansiBrightMagenta, #f0f); }
-.message span.ansi-bright-cyan-fg { color: var(--vscode-terminal-ansiBrightCyan, #0ff); }
-.message span.ansi-bright-white-fg { color: var(--vscode-terminal-ansiBrightWhite, #fff); }
+.message span.ansi-gray-fg { color: var(--vscode-descriptionForeground); }
+.message span.ansi-bright-red-fg { color: #ff8a76; }
+.message span.ansi-bright-green-fg { color: #b5cea8; }
+.message span.ansi-bright-yellow-fg { color: #ffd700; }
+.message span.ansi-bright-blue-fg { color: #569cd6; }
+.message span.ansi-bright-magenta-fg { color: #d670d6; }
+.message span.ansi-bright-cyan-fg { color: #4ec9b0; }
+
+/* Light theme — darker, more saturated */
+body.vscode-light .message span.ansi-red-fg,
+body.vscode-light .message span.ansi-bright-red-fg { color: #a31515; }
+body.vscode-light .message span.ansi-green-fg,
+body.vscode-light .message span.ansi-bright-green-fg { color: #098658; }
+body.vscode-light .message span.ansi-yellow-fg,
+body.vscode-light .message span.ansi-bright-yellow-fg { color: #795e26; }
+body.vscode-light .message span.ansi-blue-fg,
+body.vscode-light .message span.ansi-bright-blue-fg { color: #0451a5; }
+body.vscode-light .message span.ansi-magenta-fg,
+body.vscode-light .message span.ansi-bright-magenta-fg { color: #af00db; }
+body.vscode-light .message span.ansi-cyan-fg,
+body.vscode-light .message span.ansi-bright-cyan-fg { color: #267f99; }
+body.vscode-light .message span.ansi-black-fg,
+body.vscode-light .message span.ansi-white-fg,
+body.vscode-light .message span.ansi-bright-white-fg { color: var(--vscode-foreground); }
+body.vscode-light .message span.ansi-bright-black-fg,
+body.vscode-light .message span.ansi-gray-fg { color: var(--vscode-descriptionForeground); }
 
 .message span.ansi-bold { font-weight: bold; }
 .message span.ansi-italic { font-style: italic; }
