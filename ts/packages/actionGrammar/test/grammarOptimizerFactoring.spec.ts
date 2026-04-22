@@ -117,4 +117,30 @@ describe("Grammar Optimizer - Common prefix factoring", () => {
             match(baseline, "a x a y"),
         );
     });
+
+    it("factors common prefixes across top-level rules", () => {
+        // Three top-level alternatives all share "play the ".
+        // Top-level factoring should reduce the rule count and preserve
+        // match results.
+        const text = `<Start> = play the song -> "song"
+         | play the track -> "track"
+         | play the album -> "album";`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { factorCommonPrefixes: true },
+        });
+        // Factoring collapses the 3 top-level alternatives into 1
+        // (a shared-prefix rule with a 3-alternative suffix RulesPart).
+        expect(optimized.rules.length).toBeLessThan(baseline.rules.length);
+        for (const input of [
+            "play the song",
+            "play the track",
+            "play the album",
+        ]) {
+            const baseRes = match(baseline, input);
+            const optRes = match(optimized, input);
+            expect(optRes.length).toBe(baseRes.length);
+            expect(optRes).toEqual(expect.arrayContaining(baseRes));
+        }
+    });
 });

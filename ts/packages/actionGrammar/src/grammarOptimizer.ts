@@ -129,9 +129,20 @@ function inlineRulesArray(
     if (cached !== undefined) return cached;
     // Reserve the slot before recursing so cycles (if any) terminate.
     memo.set(rules, rules);
-    const next = rules.map((r) => inlineRule(r, counter, memo, refCounts));
-    const changed = next.some((r, i) => r !== rules[i]);
-    const result = changed ? next : rules;
+    // Single-pass: only allocate `next` once an element actually changes,
+    // then back-fill prior unchanged entries.  Avoids the wasted map+some
+    // walk when no rule in this array is rewritten.
+    let next: GrammarRule[] | undefined;
+    for (let i = 0; i < rules.length; i++) {
+        const r = inlineRule(rules[i], counter, memo, refCounts);
+        if (next !== undefined) {
+            next.push(r);
+        } else if (r !== rules[i]) {
+            next = rules.slice(0, i);
+            next.push(r);
+        }
+    }
+    const result = next ?? rules;
     memo.set(rules, result);
     return result;
 }
@@ -435,9 +446,14 @@ function findExistingVariable(
 
 /**
  * Walk all RulesParts and factor common leading parts shared by two or
- * more alternatives within the same RulesPart.  The top-level
- * Grammar.rules array is not factored because each top-level alternative
- * is reported separately by the matcher.
+ * more alternatives within the same RulesPart.  After nested factoring
+ * completes, the top-level `Grammar.rules` array is also factored against
+ * itself: the matcher treats top-level alternatives the same way it
+ * treats inner `RulesPart` alternatives (each is queued as its own
+ * `MatchState` and produces its own result), so factoring is semantically
+ * safe.  This intentionally destroys the 1:1 correspondence between
+ * top-level rule indices and the original source — that mapping must be
+ * recovered via separate metadata if needed downstream.
  *
  * Uses an identity memo over `GrammarRule[]` arrays so shared named
  * rules (multiple `RulesPart`s pointing at the same array) still share
@@ -446,7 +462,22 @@ function findExistingVariable(
 export function factorCommonPrefixes(rules: GrammarRule[]): GrammarRule[] {
     const counter = { factored: 0 };
     const memo: RulesArrayMemo = new Map();
-    const result = factorRulesArray(rules, counter, memo);
+    let result = factorRulesArray(rules, counter, memo);
+
+    // Top-level factoring: wrap the (already nested-factored) top-level
+    // rules in a synthetic `RulesPart` so we can reuse `factorRulesPart`
+    // unchanged.  Iterate to a fixed point exactly like `factorParts`
+    // does for nested groups.  Newly synthesized suffix `RulesPart`s
+    // produced here are not themselves re-walked, matching the existing
+    // behavior for nested factoring.
+    let working: RulesPart = { type: "rules", rules: result };
+    for (let i = 0; i < 8; i++) {
+        const next = factorRulesPart(working, counter);
+        if (next === working) break;
+        working = next;
+    }
+    result = working.rules;
+
     if (counter.factored > 0) {
         debug(`factored ${counter.factored} common prefix groups`);
     }
@@ -461,9 +492,19 @@ function factorRulesArray(
     const cached = memo.get(rules);
     if (cached !== undefined) return cached;
     memo.set(rules, rules);
-    const next = rules.map((r) => factorRule(r, counter, memo));
-    const changed = next.some((r, i) => r !== rules[i]);
-    const result = changed ? next : rules;
+    // Single-pass: only allocate `next` once an element actually changes
+    // (see inlineRulesArray for rationale).
+    let next: GrammarRule[] | undefined;
+    for (let i = 0; i < rules.length; i++) {
+        const r = factorRule(rules[i], counter, memo);
+        if (next !== undefined) {
+            next.push(r);
+        } else if (r !== rules[i]) {
+            next = rules.slice(0, i);
+            next.push(r);
+        }
+    }
+    const result = next ?? rules;
     memo.set(rules, result);
     return result;
 }
