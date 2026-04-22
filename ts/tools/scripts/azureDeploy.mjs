@@ -343,7 +343,11 @@ function getKeys(vaultName, commit) {
         return;
     }
     status(`Populating keys from ${nameColor(vaultName)}...`);
-    const args = [path.resolve(__dirname, "./getKeys.mjs"), "--vault", vaultName];
+    const args = [
+        path.resolve(__dirname, "./getKeys.mjs"),
+        "--vault",
+        vaultName,
+    ];
     if (commit) args.push("--commit");
     child_process.execFileSync(process.execPath, args);
     success(`Keys populated from ${nameColor(vaultName)}.`);
@@ -397,7 +401,10 @@ async function main() {
                     );
                 }
                 for (const region of extraRegions) {
-                    if (!options["skip-primary"] && region === options.location) {
+                    if (
+                        !options["skip-primary"] &&
+                        region === options.location
+                    ) {
                         status(
                             `Skipping ${nameColor(region)} — already deployed as primary.`,
                         );

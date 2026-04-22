@@ -153,13 +153,16 @@ describe("endpointPool.discoverEndpointPool", () => {
             AZURE_OPENAI_ENDPOINT_EMBEDDING_EASTUS: "https://ada-eastus",
             AZURE_OPENAI_API_KEY_EMBEDDING_EASTUS: "k",
             // Should be excluded — different model:
-            AZURE_OPENAI_ENDPOINT_EMBEDDING_3_LARGE_EASTUS: "https://3-large-eastus",
+            AZURE_OPENAI_ENDPOINT_EMBEDDING_3_LARGE_EASTUS:
+                "https://3-large-eastus",
             AZURE_OPENAI_API_KEY_EMBEDDING_3_LARGE_EASTUS: "k",
-            AZURE_OPENAI_ENDPOINT_EMBEDDING_3_SMALL_SWEDENCENTRAL: "https://3-small-sweden",
+            AZURE_OPENAI_ENDPOINT_EMBEDDING_3_SMALL_SWEDENCENTRAL:
+                "https://3-small-sweden",
             AZURE_OPENAI_API_KEY_EMBEDDING_3_SMALL_SWEDENCENTRAL: "k",
             // Should also be excluded from the bare pool — tagged variant
             // belongs to its own pool (EMBEDDING_INDEXING):
-            AZURE_OPENAI_ENDPOINT_EMBEDDING_INDEXING_WESTUS: "https://indexing-westus",
+            AZURE_OPENAI_ENDPOINT_EMBEDDING_INDEXING_WESTUS:
+                "https://indexing-westus",
             AZURE_OPENAI_API_KEY_EMBEDDING_INDEXING_WESTUS: "k",
         };
         const pool = discoverEndpointPool(
@@ -176,7 +179,8 @@ describe("endpointPool.discoverEndpointPool", () => {
         const env = {
             AZURE_OPENAI_ENDPOINT_GPT_4_O_EASTUS: "https://4o-eastus",
             AZURE_OPENAI_API_KEY_GPT_4_O_EASTUS: "k",
-            AZURE_OPENAI_ENDPOINT_GPT_4_O_SWEDENCENTRAL_PTU: "https://4o-sweden-ptu",
+            AZURE_OPENAI_ENDPOINT_GPT_4_O_SWEDENCENTRAL_PTU:
+                "https://4o-sweden-ptu",
             AZURE_OPENAI_API_KEY_GPT_4_O_SWEDENCENTRAL_PTU: "k",
             AZURE_OPENAI_ENDPOINT_GPT_4_O_MINI_EASTUS: "https://4o-mini-eastus",
             AZURE_OPENAI_API_KEY_GPT_4_O_MINI_EASTUS: "k",

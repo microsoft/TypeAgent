@@ -134,10 +134,7 @@ function modelNameToSuffix(modelName) {
     // chat — replace dots/dashes with _ to match existing suffix convention
     // gpt-4o -> GPT_4_O; gpt-4o-mini -> GPT_4_O_MINI; gpt-35-turbo-16k -> GPT_35_TURBO_16K;
     // gpt-5 -> GPT_5; gpt-5-mini -> GPT_5_MINI; gpt-5.4-pro -> GPT_5_4_PRO
-    const upper = n
-        .replace(/[.\-]/g, "_")
-        .replace(/__+/g, "_")
-        .toUpperCase();
+    const upper = n.replace(/[.\-]/g, "_").replace(/__+/g, "_").toUpperCase();
     // normalise gpt-35-turbo-16k → GPT_35_TURBO (drop explicit context length)
     if (upper === "GPT_35_TURBO_16K") return "GPT_35_TURBO";
     return upper;
@@ -255,8 +252,7 @@ async function listOpenAiAccounts(subscriptionId, regionFilter) {
     const matching = all.filter(
         (a) =>
             (a.kind === "OpenAI" || a.kind === "AIServices") &&
-            (!regionFilter ||
-                regionFilter.includes(a.location.toLowerCase())),
+            (!regionFilter || regionFilter.includes(a.location.toLowerCase())),
     );
     return matching;
 }
@@ -407,13 +403,10 @@ async function main() {
         info(
             `\n${chalk.cyanBright(account.location)} — ${chalk.yellow(account.name)} (${account.kind})`,
         );
-        const localAuthDisabled =
-            account.properties?.disableLocalAuth === true;
+        const localAuthDisabled = account.properties?.disableLocalAuth === true;
         const endpoint = account.properties?.endpoint;
         if (!endpoint) {
-            warn(
-                `  skip: account has no endpoint (custom subdomain missing?)`,
-            );
+            warn(`  skip: account has no endpoint (custom subdomain missing?)`);
             continue;
         }
         const keys =
@@ -438,8 +431,7 @@ async function main() {
             const family = classifyFamily(suffix);
             const endpointUrl = buildEndpointUrl(endpoint, d.name, family);
             const skuName = d.sku?.name;
-            const capacity =
-                d.sku?.capacity ?? d.properties?.currentCapacity;
+            const capacity = d.sku?.capacity ?? d.properties?.currentCapacity;
             const mode = skuMode(skuName);
             // PTU deployments get a trailing -PTU in the secret name so they
             // can coexist with a PAYG deployment of the same model in the
@@ -512,9 +504,7 @@ async function main() {
 
     // Write the deduped secrets.
     for (const c of bySecret.values()) {
-        info(
-            `  ${c.d.name.padEnd(24)} → ${chalk.gray(c.endpointSecretName)}`,
-        );
+        info(`  ${c.d.name.padEnd(24)} → ${chalk.gray(c.endpointSecretName)}`);
         await vaultSetSecret(
             options.vault,
             c.endpointSecretName,
@@ -533,9 +523,7 @@ async function main() {
         // "indexing" ada-002 variant) are kept in their OWN pool so callers
         // that want the indexing endpoint don't get mixed with the query
         // endpoint. Their pool key uses the tagged suffix.
-        const poolKey = c.deployTag
-            ? `${c.suffix}_${c.deployTag}`
-            : c.suffix;
+        const poolKey = c.deployTag ? `${c.suffix}_${c.deployTag}` : c.suffix;
         const entry = {
             suffix: `${poolKey}_${c.region}${c.mode === "PTU" ? "_PTU" : ""}`,
             region: c.region.toLowerCase(),

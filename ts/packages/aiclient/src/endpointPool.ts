@@ -373,7 +373,10 @@ export function discoverEndpointPool(
         // happens to share the same prefix. Skip it here; the correct pool
         // for that model will pick it up when the caller requests it by
         // name (e.g. createEmbeddingModel("EMBEDDING_3_LARGE")).
-        if (suffix !== (endpointName ?? "") && !tailLooksLikeRegionSuffix(tail)) {
+        if (
+            suffix !== (endpointName ?? "") &&
+            !tailLooksLikeRegionSuffix(tail)
+        ) {
             debugPool(
                 `skipping ${provider} ${endpointName ?? "<bare>"} member "${suffix}": tail "${tail}" doesn't look like a region — belongs to a different model`,
             );

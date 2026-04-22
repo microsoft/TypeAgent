@@ -353,8 +353,7 @@ describe("callJsonApiWithPool — multi-member rotation", () => {
             calls.push(url);
             return jsonResponse(200, { ok: true });
         };
-        const failingBuild = async () =>
-            error("token acquisition failed");
+        const failingBuild = async () => error("token acquisition failed");
 
         const pool = makePool([
             { suffix: "A", priority: 1, endpoint: "https://a.example/x" },

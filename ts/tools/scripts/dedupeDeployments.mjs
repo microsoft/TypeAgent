@@ -111,10 +111,7 @@ function modelNameToSuffix(modelName) {
     // Preserve the repo's "GPT_4_O" separator convention (see note in
     // syncPoolSecrets.mjs).
     n = n.replace(/gpt-4o/g, "gpt-4-o");
-    const upper = n
-        .replace(/[.\-]/g, "_")
-        .replace(/__+/g, "_")
-        .toUpperCase();
+    const upper = n.replace(/[.\-]/g, "_").replace(/__+/g, "_").toUpperCase();
     if (upper === "GPT_35_TURBO_16K") return "GPT_35_TURBO";
     return upper;
 }
@@ -512,8 +509,10 @@ function planSecretRewrites(secrets, dupes) {
     const repoints = [];
     const drops = [];
     for (const dupe of dupes) {
-        const accountEndpoint =
-            dupe.account.properties?.endpoint?.replace(/\/+$/, "");
+        const accountEndpoint = dupe.account.properties?.endpoint?.replace(
+            /\/+$/,
+            "",
+        );
         if (!accountEndpoint) continue;
         const winner = dupe.winner;
         const winnerPath = winner
@@ -676,7 +675,9 @@ async function main() {
     }
 
     // Read shared vault secrets to plan re-points.
-    status(`\nReading secrets from vault ${chalk.cyanBright(options.vault)}...`);
+    status(
+        `\nReading secrets from vault ${chalk.cyanBright(options.vault)}...`,
+    );
     const names = await listVaultSecretNames(options.vault);
     const secrets = [];
     const concurrency = 5;
@@ -685,7 +686,10 @@ async function main() {
         const vals = await Promise.all(
             batch.map(async (n) => {
                 try {
-                    return { name: n, value: await readSecret(options.vault, n) };
+                    return {
+                        name: n,
+                        value: await readSecret(options.vault, n),
+                    };
                 } catch (e) {
                     warn(`  could not read ${n}: ${e.message}`);
                     return { name: n, value: undefined };

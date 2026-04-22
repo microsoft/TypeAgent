@@ -286,7 +286,14 @@ function pickInferenceSku(availableSkus, preferredSku) {
     return [...availableSkus][0];
 }
 
-async function createDeployment(account, deploymentName, modelName, modelVersion, sku, capacity) {
+async function createDeployment(
+    account,
+    deploymentName,
+    modelName,
+    modelVersion,
+    sku,
+    capacity,
+) {
     const args = [
         "cognitiveservices",
         "account",
@@ -515,7 +522,9 @@ async function main() {
                 const targetAccounts = accountsByRegion.get(region);
                 const acctName =
                     targetAccounts?.[0]?.account.name ?? "(no account?)";
-                info(`      [${chalk.green("+")}] ${region.padEnd(18)} → ${acctName}`);
+                info(
+                    `      [${chalk.green("+")}] ${region.padEnd(18)} → ${acctName}`,
+                );
             }
         }
         if (toAddViaNewRegions > 0) {
@@ -681,8 +690,9 @@ async function main() {
                 const firstLine =
                     (e.message || String(e))
                         .split("\n")
-                        .find((l) => /ERROR|InvalidResourceProperties|Quota/i.test(l)) ??
-                    (e.message || String(e)).split("\n")[0];
+                        .find((l) =>
+                            /ERROR|InvalidResourceProperties|Quota/i.test(l),
+                        ) ?? (e.message || String(e)).split("\n")[0];
                 errLog(`    ✗ ${account.name}/${deployName} — ${firstLine}`);
                 failed++;
             }

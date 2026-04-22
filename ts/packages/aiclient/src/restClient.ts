@@ -639,10 +639,7 @@ async function fetchWithPool(
             // Parse Retry-After and pass it to the pool-level cooldown so
             // the member isn't revisited before the server is ready.
             const retryAfterMs = getRetryAfterMs(response, 0);
-            markThrottled(
-                member,
-                retryAfterMs > 0 ? retryAfterMs : undefined,
-            );
+            markThrottled(member, retryAfterMs > 0 ? retryAfterMs : undefined);
             lastError = error(
                 `fetch error: ${await getErrorMessage(response, attempts, Date.now() - startTime)}`,
             );
