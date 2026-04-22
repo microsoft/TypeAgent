@@ -546,7 +546,7 @@ export class AgentServerBridge {
     ): Promise<void> {
         switch (msg.type) {
             case "sendCommand":
-                await this.sendCommand(msg.command);
+                await this.sendCommand(msg.command, msg.requestId);
                 break;
             case "connect":
                 await this.connect();
@@ -564,7 +564,10 @@ export class AgentServerBridge {
         }
     }
 
-    private async sendCommand(command: string): Promise<void> {
+    private async sendCommand(
+        command: string,
+        requestId?: string,
+    ): Promise<void> {
         if (!this.session) {
             this.broadcastToWebviews({
                 type: "error",
@@ -574,15 +577,22 @@ export class AgentServerBridge {
         }
 
         try {
-            const result =
-                await this.session.dispatcher.processCommand(command);
+            const result = await this.session.dispatcher.processCommand(
+                command,
+                requestId,
+            );
             // Command finished — tell webview to clean up temporary status
             this.broadcastToWebviews({
                 type: "commandComplete",
-                requestId: "",
+                requestId: requestId ?? "",
                 result: result ?? null,
             });
         } catch (e: any) {
+            this.broadcastToWebviews({
+                type: "commandComplete",
+                requestId: requestId ?? "",
+                result: null,
+            });
             this.broadcastToWebviews({
                 type: "error",
                 message: e?.message ?? String(e),

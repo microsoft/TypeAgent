@@ -65,7 +65,7 @@ window.addEventListener("message", (event) => {
             break;
         case "commandComplete":
             // Command finished — clean up any remaining temporary status
-            chatUI.onCommandComplete();
+            chatUI.onCommandComplete(msg.requestId);
             break;
         case "switching":
             chatUI.setSwitching(msg.switching, msg.targetName);
@@ -77,8 +77,8 @@ window.addEventListener("message", (event) => {
 });
 
 // Wire up the send button and input
-chatUI.onSend((text) => {
-    vscode.postMessage({ type: "sendCommand", command: text });
+chatUI.onSend((text, requestId) => {
+    vscode.postMessage({ type: "sendCommand", command: text, requestId });
 });
 
 // Ask the extension host to connect

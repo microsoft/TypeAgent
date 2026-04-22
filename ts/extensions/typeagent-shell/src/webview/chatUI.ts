@@ -37,7 +37,7 @@ export class ChatUI {
     private _inputEl: HTMLTextAreaElement;
     private _sendBtn: HTMLButtonElement;
     private _statusEl: HTMLElement;
-    private _sendCallback?: (text: string) => void;
+    private _sendCallback?: (text: string, requestId: string) => void;
 
     // Track the active response bubble for setDisplay/appendDisplay
     private _activeResponseEl?: HTMLElement;
@@ -53,8 +53,11 @@ export class ChatUI {
     private _userName = "you";
     private _userInitial = "T";
 
-    // Queue of live user bubbles awaiting a commandComplete to mark done
-    private _pendingUserBubbles: HTMLElement[] = [];
+    // Map from requestId → user bubble element awaiting commandComplete
+    private _pendingUserBubbles = new Map<string, HTMLElement>();
+
+    // Counter for generating unique request IDs
+    private _nextRequestId = 1;
 
     constructor() {
         this._messagesEl = document.getElementById("messages")!;
@@ -82,7 +85,7 @@ export class ChatUI {
         });
     }
 
-    public onSend(callback: (text: string) => void): void {
+    public onSend(callback: (text: string, requestId: string) => void): void {
         this._sendCallback = callback;
     }
 
@@ -100,6 +103,7 @@ export class ChatUI {
         text: string,
         timestamp?: number,
         status: "pending" | "done" = "done",
+        requestId?: string,
     ): void {
         this._removeStatusIndicator();
         this._removeTemporary();
@@ -108,6 +112,9 @@ export class ChatUI {
 
         const row = document.createElement("div");
         row.className = "message user";
+        if (requestId) {
+            row.dataset.requestId = requestId;
+        }
 
         const body = document.createElement("div");
         body.className = "message-body";
@@ -134,8 +141,8 @@ export class ChatUI {
         row.appendChild(this._createAvatar("user"));
 
         this._messagesEl.appendChild(row);
-        if (status === "pending") {
-            this._pendingUserBubbles.push(row);
+        if (status === "pending" && requestId) {
+            this._pendingUserBubbles.set(requestId, row);
         }
         this._scrollToBottom();
     }
@@ -235,22 +242,34 @@ export class ChatUI {
         this._messagesEl.innerHTML = "";
         this._activeResponseEl = undefined;
         this._statusIndicatorEl = undefined;
-        this._pendingUserBubbles = [];
+        this._pendingUserBubbles.clear();
     }
 
     /**
      * Called when a command finishes processing.
      * Cleans up temporary status messages.
      */
-    public onCommandComplete(): void {
+    public onCommandComplete(requestId?: string): void {
         this._removeTemporary();
         this._removeStatusIndicator();
         this._activeResponseEl = undefined;
         this._lastAppendedContent = undefined;
-        // Mark the oldest pending user bubble as done
-        const pending = this._pendingUserBubbles.shift();
-        if (pending) {
-            const icon = pending.querySelector(".status-icon");
+
+        // Mark the matching pending user bubble as done.
+        let bubble: HTMLElement | undefined;
+        if (requestId && this._pendingUserBubbles.has(requestId)) {
+            bubble = this._pendingUserBubbles.get(requestId);
+            this._pendingUserBubbles.delete(requestId);
+        } else if (!requestId && this._pendingUserBubbles.size > 0) {
+            // Fallback for missing requestId — pop the oldest pending one
+            const firstKey = this._pendingUserBubbles.keys().next().value;
+            if (firstKey !== undefined) {
+                bubble = this._pendingUserBubbles.get(firstKey);
+                this._pendingUserBubbles.delete(firstKey);
+            }
+        }
+        if (bubble) {
+            const icon = bubble.querySelector(".status-icon");
             if (icon) {
                 icon.textContent = "✅";
                 (icon as HTMLElement).title = "Done";
@@ -396,11 +415,12 @@ export class ChatUI {
     private _handleSend(): void {
         const text = this._inputEl.value.trim();
         if (!text) return;
+        const requestId = `webview-${this._nextRequestId++}-${Date.now()}`;
         // Show user message immediately (don't wait for server echo)
-        this.addUserMessage(text, undefined, "pending");
+        this.addUserMessage(text, undefined, "pending", requestId);
         this._inputEl.value = "";
         this._inputEl.style.height = "auto";
-        this._sendCallback?.(text);
+        this._sendCallback?.(text, requestId);
     }
 
     private _createAgentBubble(
