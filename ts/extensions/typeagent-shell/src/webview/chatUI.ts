@@ -22,6 +22,9 @@ export class ChatUI {
     // Track switching state to keep input disabled
     private _isSwitching = false;
 
+    // Track history-replay mode
+    private _isHistoryMode = false;
+
     constructor() {
         this._messagesEl = document.getElementById("messages")!;
         this._inputEl = document.getElementById(
@@ -232,10 +235,52 @@ export class ChatUI {
 
     /**
      * Called when the user switches to a different conversation.
+     * Just clears the UI — history will be replayed via beginHistory/endHistory.
      */
-    public onSessionChanged(sessionName: string): void {
+    public onSessionChanged(_sessionName: string): void {
         this.clearMessages();
-        this.addSystemMessage(`Switched to conversation: ${sessionName}`);
+    }
+
+    /** Whether replay-of-history is currently in progress. */
+    public isHistoryMode(): boolean {
+        return this._isHistoryMode;
+    }
+
+    /**
+     * Begin replaying server-side display history.  Inserts a separator and
+     * sets a flag so the webview accepts setUserRequest events (which are
+     * normally ignored because live user messages are added on send).
+     */
+    public beginHistory(): void {
+        this._isHistoryMode = true;
+        this._activeResponseEl = undefined;
+        this._lastAppendedContent = undefined;
+        const sep = document.createElement("div");
+        sep.className = "message system separator history-start";
+        sep.textContent = "─── conversation history ───";
+        this._messagesEl.appendChild(sep);
+    }
+
+    /**
+     * End history replay.  Marks all replayed message bubbles with the
+     * `.history` class so they render in a muted style, then inserts a
+     * "now" separator and resets active-bubble tracking so live messages
+     * start a fresh bubble.
+     */
+    public endHistory(): void {
+        // Mark every message currently in the DOM as historical
+        const messages = this._messagesEl.querySelectorAll(".message");
+        messages.forEach((el) => el.classList.add("history"));
+
+        const sep = document.createElement("div");
+        sep.className = "message system separator history-end";
+        sep.textContent = "─── now ───";
+        this._messagesEl.appendChild(sep);
+
+        this._isHistoryMode = false;
+        this._activeResponseEl = undefined;
+        this._lastAppendedContent = undefined;
+        this._scrollToBottom();
     }
 
     public addSystemMessage(text: string): void {

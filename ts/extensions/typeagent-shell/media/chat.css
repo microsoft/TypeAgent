@@ -93,6 +93,20 @@ body {
     opacity: 0.8;
 }
 
+/* Replayed history messages — muted/grayscale */
+.message.history {
+    opacity: 0.55;
+    filter: grayscale(0.4);
+}
+
+.message.system.separator {
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 10px;
+    color: var(--vscode-descriptionForeground);
+    margin: 8px 0;
+}
+
 .message.system {
     align-self: center;
     font-size: 11px;

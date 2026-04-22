@@ -46,7 +46,9 @@ export type BridgeToWebviewMessage =
     | { type: "commandResult"; requestId: string; result: any }
     | { type: "commandComplete"; requestId: string; result: any }
     | { type: "error"; message: string }
-    | { type: "switching"; switching: boolean; targetName?: string };
+    | { type: "switching"; switching: boolean; targetName?: string }
+    | { type: "historyStart" }
+    | { type: "historyEnd" };
 
 /**
  * Messages from webview → extension host
@@ -150,6 +152,9 @@ export class AgentServerBridge {
                 sessionId: this.session.sessionId,
                 sessionName: this.session.name,
             });
+
+            // Replay any existing history for this session
+            await this.replayHistory(this.session);
         } catch (e: any) {
             const msg = e?.message ?? String(e);
             this.broadcastToWebviews({ type: "error", message: msg });
@@ -354,11 +359,22 @@ export class AgentServerBridge {
     /**
      * Leave the current conversation and join a different one.
      */
+    /**
+     * Switch to a different conversation using the join-before-leave pattern.
+     * - Phase 1: join the new session. If this fails, the old session is
+     *   still active so we report failure cleanly.
+     * - Phase 2: leave the old session (best-effort).
+     * - Phase 3: replay the new session's display history.
+     */
     private async joinSpecificSession(
         sessionId: string,
         targetName?: string,
     ): Promise<void> {
         if (!this.connection) {
+            return;
+        }
+
+        if (this.session?.sessionId === sessionId) {
             return;
         }
 
@@ -369,48 +385,47 @@ export class AgentServerBridge {
             targetName,
         });
         try {
-            // Leave current session (cleans up its channels)
-            if (this.session) {
-                try {
-                    await this.connection.leaveSession(this.session.sessionId);
-                } catch {
-                    // Best effort — session may already be gone
-                }
-                this.session = undefined;
-            }
-
-            // Join the new session
+            // Phase 1: join new session first
+            const clientIO = this.createClientIO();
+            let newSession: SessionDispatcher;
             try {
-                const clientIO = this.createClientIO();
-                this.session = await this.connection.joinSession(clientIO, {
+                newSession = await this.connection.joinSession(clientIO, {
                     clientType: "extension",
                     filter: true,
                     sessionId,
                 });
             } catch (e: any) {
-                // Channel conflict — reconnect from scratch
-                const msg = e?.message ?? String(e);
-                if (msg.includes("already exists")) {
-                    await this.reconnectAndJoin(sessionId);
-                } else {
-                    throw e;
+                vscode.window.showErrorMessage(
+                    `Failed to switch conversation: ${e?.message ?? String(e)}`,
+                );
+                return;
+            }
+
+            const oldSession = this.session;
+            this.session = newSession;
+
+            // Phase 2: leave the old session (best-effort)
+            if (oldSession) {
+                try {
+                    await this.connection.leaveSession(oldSession.sessionId);
+                } catch {
+                    // Best effort
                 }
             }
 
-            // Notify webviews
-            if (this.session) {
-                this.broadcastToWebviews({
-                    type: "sessionChanged",
-                    sessionId: this.session.sessionId,
-                    sessionName: this.session.name,
-                });
-                this.broadcastToWebviews({
-                    type: "status",
-                    connected: true,
-                    sessionId: this.session.sessionId,
-                    sessionName: this.session.name,
-                });
-            }
+            // Phase 3: clear UI and replay history
+            this.broadcastToWebviews({
+                type: "sessionChanged",
+                sessionId: newSession.sessionId,
+                sessionName: newSession.name,
+            });
+            this.broadcastToWebviews({
+                type: "status",
+                connected: true,
+                sessionId: newSession.sessionId,
+                sessionName: newSession.name,
+            });
+            await this.replayHistory(newSession);
         } finally {
             this.isSwitching = false;
             this.broadcastToWebviews({
@@ -421,47 +436,63 @@ export class AgentServerBridge {
     }
 
     /**
-     * Full reconnect to resolve channel conflicts, then join a session.
+     * Replay the display history for the given session through the same
+     * channels live messages use, wrapped in historyStart/historyEnd
+     * markers so the webview can style replayed entries differently.
      */
-    private async reconnectAndJoin(sessionId: string): Promise<void> {
-        // Cancel any pending auto-reconnect
-        if (this.reconnectTimer) {
-            clearTimeout(this.reconnectTimer);
-            this.reconnectTimer = undefined;
+    private async replayHistory(session: SessionDispatcher): Promise<void> {
+        let entries: Array<any>;
+        try {
+            entries = await session.dispatcher.getDisplayHistory();
+        } catch (e: any) {
+            // Best-effort: history is non-critical
+            return;
         }
 
-        if (this.connection) {
-            await this.connection.close();
-            this.connection = undefined;
-            this.session = undefined;
+        if (entries.length === 0) {
+            return;
         }
 
-        const config = vscode.workspace.getConfiguration("typeagent");
-        const serverUrl = config.get<string>(
-            "serverUrl",
-            "ws://localhost:8999",
-        );
-
-        this.connection = await connectAgentServer(serverUrl, () => {
-            if (this.isSwitching) {
-                return;
+        this.broadcastToWebviews({ type: "historyStart" });
+        for (const entry of entries) {
+            switch (entry.type) {
+                case "user-request":
+                    this.broadcastToWebviews({
+                        type: "setUserRequest",
+                        requestId: entry.requestId,
+                        command: entry.command,
+                        seq: entry.seq,
+                    });
+                    break;
+                case "set-display":
+                    this.broadcastToWebviews({
+                        type: "setDisplay",
+                        message: entry.message,
+                        seq: entry.seq,
+                    });
+                    break;
+                case "append-display":
+                    this.broadcastToWebviews({
+                        type: "appendDisplay",
+                        message: entry.message,
+                        mode: entry.mode,
+                        seq: entry.seq,
+                    });
+                    break;
+                case "set-display-info":
+                    this.broadcastToWebviews({
+                        type: "setDisplayInfo",
+                        requestId: entry.requestId,
+                        source: entry.source,
+                        actionIndex: entry.actionIndex,
+                        action: entry.action,
+                        seq: entry.seq,
+                    });
+                    break;
+                // pending-interaction / interaction-* / notify entries skipped
             }
-            this.isConnected = false;
-            this.session = undefined;
-            this.updateStatusBar(false);
-            this.broadcastToWebviews({ type: "status", connected: false });
-            this.scheduleReconnect();
-        });
-
-        const clientIO = this.createClientIO();
-        this.session = await this.connection.joinSession(clientIO, {
-            clientType: "extension",
-            filter: true,
-            sessionId,
-        });
-
-        this.isConnected = true;
-        this.updateStatusBar(true);
+        }
+        this.broadcastToWebviews({ type: "historyEnd" });
     }
 
     private async handleWebviewMessage(
