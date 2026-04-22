@@ -12,28 +12,28 @@ import {
 // Annotate entire file as serial.
 test.describe.configure({ mode: "serial" });
 
-test.describe("@conversation Commands", () => {
-    test("@conversation new/list", async ({}, testInfo) => {
+test.describe("@session Commands", () => {
+    test("@session new/list", async ({}, testInfo) => {
         console.log(`Running test '${testInfo.title}'`);
 
         // launch the app
         await runTestCallback(async (mainWindow: Page) => {
             // get the session count
             let msg = await sendUserRequestAndWaitForCompletion(
-                `@conversation list`,
+                `@session list`,
                 mainWindow,
             );
 
             const sessions: string[] = msg.split("\n");
 
             msg = await sendUserRequestAndWaitForCompletion(
-                `@conversation new`,
+                `@session new`,
                 mainWindow,
             );
-            expect(msg.toLowerCase()).toContain("new conversation created: ");
+            expect(msg.toLowerCase()).toContain("new session created: ");
 
             msg = await sendUserRequestAndWaitForCompletion(
-                `@conversation list`,
+                `@session list`,
                 mainWindow,
             );
             const newSessions: string[] = msg.split("\n");
@@ -50,21 +50,21 @@ test.describe("@conversation Commands", () => {
         });
     });
 
-    test("@conversation new/delete/list/info", async ({}, testInfo) => {
+    test("@session new/delete/list/info", async ({}, testInfo) => {
         console.log(`Running test '${testInfo.title}'`);
 
         // launch the app
         await runTestCallback(async (mainWindow: Page) => {
             // create a new session so we have at least two
             let msg = await sendUserRequestAndWaitForCompletion(
-                `@conversation new`,
+                `@session new`,
                 mainWindow,
             );
-            expect(msg.toLowerCase()).toContain("new conversation created: ");
+            expect(msg.toLowerCase()).toContain("new session created: ");
 
             // get the session count
             msg = await sendUserRequestAndWaitForCompletion(
-                `@conversation list`,
+                `@session list`,
                 mainWindow,
             );
             let sessions = msg.split("\n");
@@ -73,7 +73,7 @@ test.describe("@conversation Commands", () => {
 
             // issue delete session command
             msg = await sendUserRequestAndWaitForResponse(
-                `@conversation delete ${sessions[0]}`,
+                `@session delete ${sessions[0]}`,
                 mainWindow,
             );
             expect(msg.toLowerCase()).toContain("are you sure");
@@ -85,7 +85,7 @@ test.describe("@conversation Commands", () => {
 
             // verify session not deleted
             msg = await sendUserRequestAndWaitForCompletion(
-                `@conversation list`,
+                `@session list`,
                 mainWindow,
             );
             sessions = msg.split("\n");
@@ -95,7 +95,7 @@ test.describe("@conversation Commands", () => {
 
             // reissue delete session command
             msg = await sendUserRequestAndWaitForResponse(
-                `@conversation delete ${sessions[0]}`,
+                `@session delete ${sessions[0]}`,
                 mainWindow,
             );
             expect(msg.toLowerCase()).toContain("are you sure");
@@ -107,7 +107,7 @@ test.describe("@conversation Commands", () => {
 
             // get new session count
             msg = await sendUserRequestAndWaitForCompletion(
-                `@conversation list`,
+                `@session list`,
                 mainWindow,
             );
             sessions = msg.split("\n");
@@ -117,7 +117,7 @@ test.describe("@conversation Commands", () => {
 
             // get session info
             msg = await sendUserRequestAndWaitForCompletion(
-                `@conversation info`,
+                `@session info`,
                 mainWindow,
             );
             sessions = msg.split("\n");
@@ -127,7 +127,7 @@ test.describe("@conversation Commands", () => {
         });
     });
 
-    test("@conversation reset/clear", async ({}, testInfo) => {
+    test("@session reset/clear", async ({}, testInfo) => {
         console.log(`Running test '${testInfo.title}'`);
 
         // launch the app
@@ -137,14 +137,14 @@ test.describe("@conversation Commands", () => {
 
             // reset
             let msg = await sendUserRequestAndWaitForCompletion(
-                `@conversation reset`,
+                `@session reset`,
                 mainWindow,
             );
-            expect(msg).toContain("Conversation settings revert to default.");
+            expect(msg).toContain("Session settings revert to default.");
 
             // issue clear session command
             msg = await sendUserRequestAndWaitForResponse(
-                `@conversation clear`,
+                `@session clear`,
                 mainWindow,
             );
             expect(msg.toLowerCase()).toContain("are you sure");
@@ -158,32 +158,32 @@ test.describe("@conversation Commands", () => {
         });
     });
 
-    test("@conversation open", async ({}, testInfo) => {
+    test("@session open", async ({}, testInfo) => {
         console.log(`Running test '${testInfo.title}'`);
 
         // launch the app
         await runTestCallback(async (mainWindow: Page) => {
             // create a new session
             let msg = await sendUserRequestAndWaitForCompletion(
-                `@conversation new`,
+                `@session new`,
                 mainWindow,
             );
-            expect(msg.toLowerCase()).toContain("new conversation created: ");
+            expect(msg.toLowerCase()).toContain("new session created: ");
 
             // get the session list
             msg = await sendUserRequestAndWaitForCompletion(
-                `@conversation list`,
+                `@session list`,
                 mainWindow,
             );
             const sessions: string[] = msg.split("\n");
 
             // open the earlier session
             msg = await sendUserRequestAndWaitForCompletion(
-                `@conversation open ${sessions[0]}`,
+                `@session open ${sessions[0]}`,
                 mainWindow,
             );
-            expect(msg, `Unexpected conversation opened!`).toBe(
-                `Conversation opened: ${sessions[0]}`,
+            expect(msg, `Unexpected session opened!`).toBe(
+                `Session opened: ${sessions[0]}`,
             );
 
             // close the application
