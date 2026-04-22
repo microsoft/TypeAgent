@@ -22,9 +22,6 @@ export class ChatUI {
     // Track switching state to keep input disabled
     private _isSwitching = false;
 
-    // Track history-replay mode
-    private _isHistoryMode = false;
-
     constructor() {
         this._messagesEl = document.getElementById("messages")!;
         this._inputEl = document.getElementById(
@@ -251,35 +248,59 @@ export class ChatUI {
         this.clearMessages();
     }
 
-    /** Whether replay-of-history is currently in progress. */
-    public isHistoryMode(): boolean {
-        return this._isHistoryMode;
-    }
-
     /**
-     * Begin replaying server-side display history.  Sets a flag so the
-     * webview accepts setUserRequest events (which are normally ignored
-     * because live user messages are added on send).
+     * Replay the given display history entries atomically.  Processing is
+     * done synchronously so no live message can be interleaved mid-replay,
+     * and all replayed bubbles are marked with the `.history` class for
+     * muted styling.
      */
-    public beginHistory(): void {
-        this._isHistoryMode = true;
+    public replayHistory(entries: Array<any>): void {
+        if (!entries || entries.length === 0) {
+            return;
+        }
+        // Track where history begins so we can mark only those bubbles
+        const firstHistoryIdx = this._messagesEl.children.length;
+
         this._activeResponseEl = undefined;
         this._lastAppendedContent = undefined;
-    }
 
-    /**
-     * End history replay.  Marks all replayed message bubbles with the
-     * `.history` class so they render in a muted style, then resets
-     * active-bubble tracking so live messages start a fresh bubble.
-     */
-    public endHistory(): void {
-        // Mark every message currently in the DOM as historical
-        const messages = this._messagesEl.querySelectorAll(".message");
-        messages.forEach((el) => el.classList.add("history"));
+        for (const e of entries) {
+            switch (e.type) {
+                case "user-request":
+                    this.addUserMessage(e.command, e.timestamp);
+                    break;
+                case "set-display":
+                    this.setAgentDisplay(
+                        e.message?.message,
+                        e.message?.source,
+                        e.timestamp,
+                    );
+                    break;
+                case "append-display":
+                    this.appendAgentDisplay(
+                        e.message?.message,
+                        e.message?.source,
+                        e.mode,
+                        e.timestamp,
+                    );
+                    break;
+                case "set-display-info":
+                    // Skip status indicators during replay — they'd pollute
+                    // the rendered history with transient "processing..." text
+                    break;
+            }
+        }
 
-        this._isHistoryMode = false;
+        // Mark everything we just appended as history
+        for (let i = firstHistoryIdx; i < this._messagesEl.children.length; i++) {
+            this._messagesEl.children[i].classList.add("history");
+        }
+
+        // Reset state so the next live message starts a fresh bubble
         this._activeResponseEl = undefined;
         this._lastAppendedContent = undefined;
+        this._removeTemporary();
+        this._removeStatusIndicator();
         this._scrollToBottom();
     }
 

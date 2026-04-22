@@ -43,10 +43,7 @@ window.addEventListener("message", (event) => {
             break;
         case "setUserRequest":
             // Live: user message shown immediately on send — skip echo.
-            // History replay: must show it (no live send happened).
-            if (chatUI.isHistoryMode()) {
-                chatUI.addUserMessage(msg.command, msg.timestamp);
-            }
+            // History now comes through historyReplay batch, not here.
             break;
         case "setDisplayInfo":
             chatUI.setDisplayInfo(msg.source, msg.action);
@@ -70,11 +67,8 @@ window.addEventListener("message", (event) => {
         case "switching":
             chatUI.setSwitching(msg.switching, msg.targetName);
             break;
-        case "historyStart":
-            chatUI.beginHistory();
-            break;
-        case "historyEnd":
-            chatUI.endHistory();
+        case "historyReplay":
+            chatUI.replayHistory(msg.entries);
             break;
     }
 });

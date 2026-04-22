@@ -49,8 +49,24 @@ export type BridgeToWebviewMessage =
     | { type: "commandComplete"; requestId: string; result: any }
     | { type: "error"; message: string }
     | { type: "switching"; switching: boolean; targetName?: string }
-    | { type: "historyStart" }
-    | { type: "historyEnd" };
+    | {
+          type: "historyReplay";
+          entries: Array<{
+              type: string;
+              seq: number;
+              timestamp?: number;
+              // user-request
+              command?: string;
+              // set-display / append-display
+              message?: IAgentMessage;
+              mode?: DisplayAppendMode;
+              // set-display-info
+              source?: string;
+              action?: TypeAgentAction | string[];
+              actionIndex?: number;
+              requestId?: RequestId;
+          }>;
+      };
 
 /**
  * Messages from webview → extension host
@@ -446,8 +462,7 @@ export class AgentServerBridge {
         let entries: Array<any>;
         try {
             entries = await session.dispatcher.getDisplayHistory();
-        } catch (e: any) {
-            // Best-effort: history is non-critical
+        } catch {
             return;
         }
 
@@ -455,49 +470,51 @@ export class AgentServerBridge {
             return;
         }
 
-        this.broadcastToWebviews({ type: "historyStart" });
-        for (const entry of entries) {
-            switch (entry.type) {
-                case "user-request":
-                    this.broadcastToWebviews({
-                        type: "setUserRequest",
-                        requestId: entry.requestId,
-                        command: entry.command,
-                        seq: entry.seq,
-                        timestamp: entry.timestamp,
-                    });
-                    break;
-                case "set-display":
-                    this.broadcastToWebviews({
-                        type: "setDisplay",
-                        message: entry.message,
-                        seq: entry.seq,
-                        timestamp: entry.timestamp,
-                    });
-                    break;
-                case "append-display":
-                    this.broadcastToWebviews({
-                        type: "appendDisplay",
-                        message: entry.message,
-                        mode: entry.mode,
-                        seq: entry.seq,
-                        timestamp: entry.timestamp,
-                    });
-                    break;
-                case "set-display-info":
-                    this.broadcastToWebviews({
-                        type: "setDisplayInfo",
-                        requestId: entry.requestId,
-                        source: entry.source,
-                        actionIndex: entry.actionIndex,
-                        action: entry.action,
-                        seq: entry.seq,
-                    });
-                    break;
-                // pending-interaction / interaction-* / notify entries skipped
-            }
-        }
-        this.broadcastToWebviews({ type: "historyEnd" });
+        // Send the whole history as a single message — avoids slow per-entry
+        // postMessage round trips and prevents live events from being
+        // interleaved mid-replay.
+        this.broadcastToWebviews({
+            type: "historyReplay",
+            entries: entries.map((e) => {
+                switch (e.type) {
+                    case "user-request":
+                        return {
+                            type: "user-request",
+                            seq: e.seq,
+                            timestamp: e.timestamp,
+                            requestId: e.requestId,
+                            command: e.command,
+                        };
+                    case "set-display":
+                        return {
+                            type: "set-display",
+                            seq: e.seq,
+                            timestamp: e.timestamp,
+                            message: e.message,
+                        };
+                    case "append-display":
+                        return {
+                            type: "append-display",
+                            seq: e.seq,
+                            timestamp: e.timestamp,
+                            message: e.message,
+                            mode: e.mode,
+                        };
+                    case "set-display-info":
+                        return {
+                            type: "set-display-info",
+                            seq: e.seq,
+                            timestamp: e.timestamp,
+                            requestId: e.requestId,
+                            source: e.source,
+                            actionIndex: e.actionIndex,
+                            action: e.action,
+                        };
+                    default:
+                        return { type: "skip", seq: e.seq };
+                }
+            }),
+        });
     }
 
     private async handleWebviewMessage(
