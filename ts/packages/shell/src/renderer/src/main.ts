@@ -367,7 +367,16 @@ function registerClient(
                             value,
                         };
                     } else {
-                        const requestId = interaction.requestId!;
+                        const requestId = interaction.requestId;
+                        if (requestId === undefined) {
+                            console.error(
+                                `[requestInteraction] proposeAction interaction ${interaction.interactionId} has no requestId — skipping`,
+                            );
+                            activeInteractions.delete(
+                                interaction.interactionId,
+                            );
+                            return;
+                        }
                         const value = await chatView.proposeAction(
                             requestId,
                             interaction.actionTemplates,

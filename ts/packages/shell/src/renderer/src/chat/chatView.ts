@@ -823,7 +823,8 @@ export class ChatView {
         const effectiveRequestId =
             requestId ??
             ({
-                requestId: `interaction-${interaction.interactionId}`,
+                requestId: "",
+                clientRequestId: `agent-interaction-${interaction.interactionId}`,
             } as RequestId);
 
         const agentMessage = this.ensureAgentMessage({
@@ -876,25 +877,6 @@ export class ChatView {
         }
 
         return new Promise<number>((resolve, reject) => {
-            const onAbort = () => {
-                choicePanel.remove();
-                // Append a dismissal notice inline in the message bubble.
-                const reason = signal?.reason;
-                const text =
-                    reason &&
-                    typeof reason === "object" &&
-                    reason.kind === "resolved-by-other"
-                        ? "answered by another client"
-                        : "interaction cancelled";
-                agentMessage.setMessage(`[${text}]`, source, "inline");
-                // signal is guaranteed non-null here: onAbort is only registered
-                // via signal?.addEventListener, so it can only fire when signal
-                // is defined.
-                reject(signal!.reason);
-            };
-
-            signal?.addEventListener("abort", onAbort, { once: true });
-
             // addChoicePanel removes the panel automatically on selection, but
             // we need the ChoicePanel reference for the abort path.  We capture
             // it by reaching into the ChoicePanel constructor directly here.
@@ -912,6 +894,31 @@ export class ChatView {
                     resolve(choice.value as number);
                 },
             );
+
+            const onAbort = () => {
+                choicePanel.remove();
+                // Append a dismissal notice inline in the message bubble.
+                const reason = signal?.reason;
+                const text =
+                    reason &&
+                    typeof reason === "object" &&
+                    reason.kind === "resolved-by-other"
+                        ? "answered by another client"
+                        : "interaction cancelled";
+                agentMessage.setMessage(`  [${text}]`, source, "inline");
+                // signal is guaranteed non-null here: onAbort is only registered
+                // when signal is defined (either via addEventListener or the
+                // already-aborted check below).
+                reject(signal!.reason);
+            };
+
+            if (signal?.aborted) {
+                // Signal was already aborted before we could register — dismiss
+                // the panel immediately rather than leaving it permanently open.
+                onAbort();
+            } else {
+                signal?.addEventListener("abort", onAbort, { once: true });
+            }
 
             this.updateScroll();
         });

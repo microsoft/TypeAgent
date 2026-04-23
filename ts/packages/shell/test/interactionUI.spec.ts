@@ -78,7 +78,7 @@ async function cancelInteraction(page: Page, id: string): Promise<void> {
 test.describe("Shell deferred-interaction UI", () => {
     test("binary yes/no question renders Yes and No buttons", async ({}) => {
         await runTestCallback(async (page: Page) => {
-            await pushInteraction("int-yesno-1", ["Yes", "No"]);
+            await pushInteraction(page, "int-yesno-1", ["Yes", "No"]);
 
             // The Yes/No choice panel should appear inside the chat scroll region.
             const choicePanel = page.locator(".choice-panel").first();
@@ -92,7 +92,11 @@ test.describe("Shell deferred-interaction UI", () => {
 
     test("multi-choice question renders all choice buttons", async ({}) => {
         await runTestCallback(async (page: Page) => {
-            await pushInteraction("int-multi-1", ["Alpha", "Beta", "Gamma"]);
+            await pushInteraction(page, "int-multi-1", [
+                "Alpha",
+                "Beta",
+                "Gamma",
+            ]);
 
             const choicePanel = page.locator(".choice-panel").last();
             await choicePanel.waitFor({ state: "visible", timeout: 5000 });
@@ -104,7 +108,7 @@ test.describe("Shell deferred-interaction UI", () => {
 
     test("clicking a choice button dismisses the panel", async ({}) => {
         await runTestCallback(async (page: Page) => {
-            await pushInteraction("int-click-1", ["Yes", "No"]);
+            await pushInteraction(page, "int-click-1", ["Yes", "No"]);
 
             const choicePanel = page.locator(".choice-panel").last();
             await choicePanel.waitFor({ state: "visible", timeout: 5000 });
@@ -119,7 +123,7 @@ test.describe("Shell deferred-interaction UI", () => {
 
     test("interactionResolved dismisses the pending panel", async ({}) => {
         await runTestCallback(async (page: Page) => {
-            await pushInteraction("int-resolved-1", ["Yes", "No"]);
+            await pushInteraction(page, "int-resolved-1", ["Yes", "No"]);
 
             const choicePanel = page.locator(".choice-panel").last();
             await choicePanel.waitFor({ state: "visible", timeout: 5000 });
@@ -139,7 +143,7 @@ test.describe("Shell deferred-interaction UI", () => {
 
     test("interactionCancelled dismisses the pending panel", async ({}) => {
         await runTestCallback(async (page: Page) => {
-            await pushInteraction("int-cancel-1", ["Yes", "No"]);
+            await pushInteraction(page, "int-cancel-1", ["Yes", "No"]);
 
             const choicePanel = page.locator(".choice-panel").last();
             await choicePanel.waitFor({ state: "visible", timeout: 5000 });
@@ -193,8 +197,8 @@ test.describe("Shell deferred-interaction UI", () => {
     test("resolving one interaction does not affect a concurrent one", async ({}) => {
         await runTestCallback(async (page: Page) => {
             // Start two interactions simultaneously.
-            await pushInteraction("int-concurrent-A", ["Yes", "No"]);
-            await pushInteraction("int-concurrent-B", ["Yes", "No"]);
+            await pushInteraction(page, "int-concurrent-A", ["Yes", "No"]);
+            await pushInteraction(page, "int-concurrent-B", ["Yes", "No"]);
 
             // Wait for both panels to appear.
             const panels = page.locator(".choice-panel");
