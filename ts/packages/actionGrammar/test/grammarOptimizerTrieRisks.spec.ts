@@ -232,4 +232,92 @@ describe("Grammar Optimizer - Trie risks", () => {
             );
         }
     });
+
+    // ── Risk: outer-name shadow.  With first-inserter-wins canonical
+    //         naming, a non-lead alternative whose value happens to use
+    //         a name that matches the lead's local binding would have
+    //         the local renamed onto the lead's canonical, silently
+    //         changing what name the value resolves against.  With
+    //         opaque canonicals (`__opt_v_<n>`) this collision class is
+    //         impossible by construction; the emitted variable name is
+    //         synthetic and cannot collide with any user-named ref.
+    it("opaque canonicals avoid outer-name shadowing", () => {
+        // Both alternatives bind their wildcard but the *non-lead* one
+        // happens to spell its local with the same name (`x`) the lead
+        // would have used as canonical.  Under first-inserter-wins the
+        // second's value `{tag: "B", v: x}` would alias the lead's `x`;
+        // under opaque canonicals each side keeps its own remap and the
+        // emitted output is unambiguous.
+        const text = `<Start> = <X>;
+<X> = play $(x:string) once -> { tag: "A", v: x }
+    | play $(x:string) twice -> { tag: "B", v: x };`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { factorCommonPrefixes: true },
+        });
+        for (const input of ["play hello once", "play world twice"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    // ── Risk: bound vs. unbound RulesPart references at the same edge.
+    //         Without binding-presence parity they would merge, either
+    //         inventing a binding the unbound side never had or
+    //         dropping a binding the bound side depends on.
+    it("does not merge bound and unbound <Inner> references", () => {
+        // Two alternatives both reference <Inner>; the second binds it
+        // and uses the binding in its value.  Parity check should keep
+        // them as separate trie children.
+        const text = `<Start> = <X>;
+<Inner> = a -> 1 | b -> 2;
+<X> = play <Inner> -> "no-bind"
+    | play $(v:<Inner>) -> { kind: "bound", v };`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { factorCommonPrefixes: true },
+        });
+        for (const input of ["play a", "play b"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    // ── Risk: under "first-inserter-wins" canonical naming, the lead's
+    //         local becomes the canonical for the merged prefix edge.
+    //         A NON-LEAD alternative can have a SUFFIX binding whose
+    //         name happens to match the lead's local — and whose value
+    //         expression references that name.  Under the broken
+    //         scheme, the non-lead's value references the suffix
+    //         binding, but matcher resolution hits the prefix binding
+    //         first (the suffix binding is in the wrapper's nested
+    //         scope and the value would *not* see it correctly).
+    //
+    //         Under the opaque scheme: prefix canonical is `__opt_v_0`
+    //         (synthetic, cannot collide with user names), and the
+    //         non-lead's suffix binding `x` stays `x` after remap (its
+    //         local doesn't get renamed because the suffix binding is
+    //         on a DIFFERENT trie edge from the prefix).  Value `{x}`
+    //         resolves to the suffix binding correctly.
+    //
+    //         Critically, this also exercises the "lead must record
+    //         its own remap" property: the lead's `x` local in its
+    //         value expression must be remapped to `__opt_v_0`.
+    //         Without that remap, the matcher fails to resolve `x`.
+    it("opaque canonicals + lead remap handle prefix/suffix name reuse", () => {
+        const text = `<Start> = <X>;
+<X> = play $(x:string) -> { kind: "lead", v: x }
+    | play $(a:string) then $(x:string) -> { kind: "alt", v: x };`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { factorCommonPrefixes: true },
+        });
+        for (const input of ["play hello", "play first then second"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
 });

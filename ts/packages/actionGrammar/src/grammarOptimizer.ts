@@ -579,9 +579,10 @@ function factorRulesPart(
     }
     if (part.rules.length < 2) return part;
 
+    const buildState: BuildState = { nextCanonicalId: 0 };
     const root: TrieRoot = { children: [], terminals: [] };
     for (let i = 0; i < part.rules.length; i++) {
-        insertRuleIntoTrie(root, part.rules[i], i);
+        insertRuleIntoTrie(root, part.rules[i], i, buildState);
     }
 
     const state: EmitState = { didFactor: false };
@@ -599,22 +600,67 @@ function factorRulesPart(
 
 // ── Trie data structures ─────────────────────────────────────────────────
 
-type TrieEdge =
+// Variable handling notes
+// ------------------------
+// Variable-bearing edges (wildcard/number, and bound rules) carry an
+// **opaque canonical** name (`__opt_v_<n>`) allocated at insertion
+// time, *not* the source's variable name.  This avoids two collision
+// classes that any "first inserter wins" scheme is vulnerable to:
+//
+//   (a) A non-lead inserter's value expression references an outer-
+//       scope variable whose name happens to match the lead's local
+//       binding.  Renaming the local onto the lead would silently
+//       shadow the outer name.
+//
+//   (b) A `rules` edge is bound on one inserter and unbound on
+//       another; merging would either invent a binding the unbound
+//       inserter never had or drop a binding the bound inserter
+//       depends on.
+//
+// (a) is solved by canonicals being opaque: `__opt_v_<n>` cannot
+// collide with any user-named variable.  (b) is solved by the parity
+// check in `edgeKeyMatches` for the `rules` kind: bound and unbound
+// references no longer merge into the same trie edge.
+//
+// `partsToEdgeSteps` yields *steps* describing the source (with
+// `local` field), `insertRuleIntoTrie` matches steps against existing
+// edges and either reuses an edge (recording `local → canonical` in
+// the per-rule remap) or allocates a new edge with a fresh canonical.
+// Every inserter — *including the lead* — records its remap; the lead
+// is no longer an exception because its local also differs from the
+// canonical.
+
+type TrieStep =
     | { kind: "string"; token: string }
-    | {
-          kind: "wildcard";
-          typeName: string;
-          optional: boolean;
-          canonicalVariable: string;
-      }
-    | { kind: "number"; optional: boolean; canonicalVariable: string }
+    | { kind: "wildcard"; typeName: string; optional: boolean; local: string }
+    | { kind: "number"; optional: boolean; local: string }
     | {
           kind: "rules";
           rules: GrammarRule[];
           optional: boolean;
           repeat: boolean;
           name: string | undefined;
-          canonicalVariable: string | undefined;
+          local: string | undefined;
+      }
+    | { kind: "phraseSet"; matcherName: string };
+
+type TrieEdge =
+    | { kind: "string"; token: string }
+    | {
+          kind: "wildcard";
+          typeName: string;
+          optional: boolean;
+          canonical: string;
+      }
+    | { kind: "number"; optional: boolean; canonical: string }
+    | {
+          kind: "rules";
+          rules: GrammarRule[];
+          optional: boolean;
+          repeat: boolean;
+          name: string | undefined;
+          /** undefined iff every inserter at this edge was unbound. */
+          canonical: string | undefined;
       }
     | { kind: "phraseSet"; matcherName: string };
 
@@ -625,6 +671,14 @@ type Terminal = {
     /** local→canonical variable rename accumulated along the path. */
     remap: Map<string, string>;
 };
+
+type BuildState = {
+    nextCanonicalId: number;
+};
+
+function freshCanonical(state: BuildState): string {
+    return `__opt_v_${state.nextCanonicalId++}`;
+}
 
 /**
  * Root of the trie.  Distinct from `TrieNode` so that `edge` can be
@@ -658,29 +712,29 @@ function insertRuleIntoTrie(
     root: TrieRoot,
     rule: GrammarRule,
     idx: number,
+    buildState: BuildState,
 ): void {
     let children = root.children;
     let terminals = root.terminals;
     const remap = new Map<string, string>();
-    for (const stepEdge of partsToEdgeSteps(rule.parts)) {
+    for (const step of partsToEdgeSteps(rule.parts)) {
         let matched: TrieNode | undefined;
         for (const c of children) {
-            if (edgeKeyMatches(c.edge, stepEdge)) {
+            if (edgeKeyMatches(c.edge, step)) {
                 matched = c;
                 break;
             }
         }
-        if (matched !== undefined) {
-            collectStepRemap(matched.edge, stepEdge, remap);
-        } else {
+        if (matched === undefined) {
             matched = {
-                edge: stepEdge,
+                edge: stepToEdge(step, buildState),
                 children: [],
                 terminals: [],
                 firstIdx: idx,
             };
             children.push(matched);
         }
+        recordStepRemap(matched.edge, step, remap);
         children = matched.children;
         terminals = matched.terminals;
     }
@@ -692,8 +746,8 @@ function insertRuleIntoTrie(
     });
 }
 
-/** Yield each rule.parts as a sequence of trie edges (StringPart explodes). */
-function* partsToEdgeSteps(parts: GrammarPart[]): Generator<TrieEdge> {
+/** Yield each rule.parts as a sequence of trie steps (StringPart explodes). */
+function* partsToEdgeSteps(parts: GrammarPart[]): Generator<TrieStep> {
     for (const p of parts) {
         switch (p.type) {
             case "string":
@@ -704,14 +758,14 @@ function* partsToEdgeSteps(parts: GrammarPart[]): Generator<TrieEdge> {
                     kind: "wildcard",
                     typeName: p.typeName,
                     optional: !!p.optional,
-                    canonicalVariable: p.variable,
+                    local: p.variable,
                 };
                 break;
             case "number":
                 yield {
                     kind: "number",
                     optional: !!p.optional,
-                    canonicalVariable: p.variable,
+                    local: p.variable,
                 };
                 break;
             case "rules":
@@ -721,7 +775,7 @@ function* partsToEdgeSteps(parts: GrammarPart[]): Generator<TrieEdge> {
                     optional: !!p.optional,
                     repeat: !!p.repeat,
                     name: p.name,
-                    canonicalVariable: p.variable,
+                    local: p.variable,
                 };
                 break;
             case "phraseSet":
@@ -731,46 +785,103 @@ function* partsToEdgeSteps(parts: GrammarPart[]): Generator<TrieEdge> {
     }
 }
 
-/** True if step's key fields match the existing edge (ignoring variable). */
-function edgeKeyMatches(edge: TrieEdge, step: TrieEdge): boolean {
+/** Allocate a new trie edge from a step, minting a fresh canonical when needed. */
+function stepToEdge(step: TrieStep, buildState: BuildState): TrieEdge {
+    switch (step.kind) {
+        case "string":
+        case "phraseSet":
+            return step;
+        case "wildcard":
+            return {
+                kind: "wildcard",
+                typeName: step.typeName,
+                optional: step.optional,
+                canonical: freshCanonical(buildState),
+            };
+        case "number":
+            return {
+                kind: "number",
+                optional: step.optional,
+                canonical: freshCanonical(buildState),
+            };
+        case "rules":
+            return {
+                kind: "rules",
+                rules: step.rules,
+                optional: step.optional,
+                repeat: step.repeat,
+                name: step.name,
+                canonical:
+                    step.local !== undefined
+                        ? freshCanonical(buildState)
+                        : undefined,
+            };
+    }
+}
+
+/**
+ * True if `step`'s key fields match `edge` for trie merging.  For
+ * variable-bearing kinds the *names* are ignored (they get remapped),
+ * but for `rules` edges binding *presence* must agree — see notes
+ * above the `TrieStep`/`TrieEdge` types.
+ */
+function edgeKeyMatches(edge: TrieEdge, step: TrieStep): boolean {
     if (edge.kind !== step.kind) return false;
     // After the kind check, `step` has the same variant as `edge`; the
     // cast inside each branch narrows it accordingly.
     switch (edge.kind) {
         case "string":
-            return edge.token === (step as typeof edge).token;
+            return edge.token === (step as { token: string }).token;
         case "wildcard": {
-            const s = step as typeof edge;
+            const s = step as { typeName: string; optional: boolean };
             return edge.typeName === s.typeName && edge.optional === s.optional;
         }
         case "number":
-            return edge.optional === (step as typeof edge).optional;
+            return edge.optional === (step as { optional: boolean }).optional;
         case "rules": {
-            const s = step as typeof edge;
+            const s = step as {
+                rules: GrammarRule[];
+                optional: boolean;
+                repeat: boolean;
+                local: string | undefined;
+            };
             return (
                 edge.rules === s.rules &&
                 edge.optional === s.optional &&
-                edge.repeat === s.repeat
+                edge.repeat === s.repeat &&
+                (edge.canonical === undefined) === (s.local === undefined)
             );
         }
         case "phraseSet":
-            return edge.matcherName === (step as typeof edge).matcherName;
+            return (
+                edge.matcherName ===
+                (step as { matcherName: string }).matcherName
+            );
     }
 }
 
-function collectStepRemap(
-    canonicalEdge: TrieEdge,
-    stepEdge: TrieEdge,
+/**
+ * Record the `local → canonical` rename for one inserter at one trie
+ * step.  Throws on conflict (same local mapped to two canonicals on
+ * the same path), which would indicate either a malformed source rule
+ * with duplicate local names or a bug in the trie insertion logic.
+ */
+function recordStepRemap(
+    edge: TrieEdge,
+    step: TrieStep,
     remap: Map<string, string>,
 ): void {
-    if (canonicalEdge.kind === "string" || canonicalEdge.kind === "phraseSet") {
-        return;
+    if (edge.kind === "string" || edge.kind === "phraseSet") return;
+    const local = (step as { local: string | undefined }).local;
+    const canonical = edge.canonical;
+    if (local === undefined || canonical === undefined) return;
+    const prior = remap.get(local);
+    if (prior !== undefined && prior !== canonical) {
+        throw new Error(
+            `Internal optimizer error: variable '${local}' bound to multiple canonicals ('${prior}' then '${canonical}')`,
+        );
     }
-    const canonical = canonicalEdge.canonicalVariable;
-    const local = (stepEdge as typeof canonicalEdge).canonicalVariable;
-    if (canonical !== undefined && local !== undefined && canonical !== local) {
-        remap.set(local, canonical);
-    }
+    remap.set(local, canonical);
 }
 
 // ── Trie emission ────────────────────────────────────────────────────────
@@ -783,7 +894,7 @@ function edgeToPart(edge: TrieEdge): GrammarPart {
             const out: GrammarPart = {
                 type: "wildcard",
                 typeName: edge.typeName,
-                variable: edge.canonicalVariable,
+                variable: edge.canonical,
             };
             if (edge.optional) out.optional = true;
             return out;
@@ -791,15 +902,15 @@ function edgeToPart(edge: TrieEdge): GrammarPart {
         case "number": {
             const out: GrammarPart = {
                 type: "number",
-                variable: edge.canonicalVariable,
+                variable: edge.canonical,
             };
             if (edge.optional) out.optional = true;
             return out;
         }
         case "rules": {
             const out: RulesPart = { type: "rules", rules: edge.rules };
-            if (edge.canonicalVariable !== undefined) {
-                out.variable = edge.canonicalVariable;
+            if (edge.canonical !== undefined) {
+                out.variable = edge.canonical;
             }
             if (edge.optional) out.optional = true;
             if (edge.repeat) out.repeat = true;
@@ -935,16 +1046,24 @@ function checkFactoringEligible(
     if (noneHaveValue && members.some((m) => m.parts.length > 1)) {
         return "implicit-default-multipart";
     }
-    const canonicalNames = collectVariableNames(prefix);
-    if (canonicalNames.size > 0) {
+    // Cross-scope-ref: nested rule scope is fresh at the matcher level
+    // (entering a `RulesPart` resets `valueIds`).  If a member's value
+    // references a name that the wrapper's prefix binds, that reference
+    // would resolve to nothing at runtime.  Detect and bail out so each
+    // member is emitted at the wrapper's level instead, putting the
+    // binding back in scope.
+    //
+    // Binding-shadow (a member's own binding colliding with a prefix
+    // binding) is no longer reachable: canonicals are opaque
+    // `__opt_v_<n>` names allocated globally per `factorRulesPart` call,
+    // so two distinct edges always get distinct canonicals.
+    const prefixCanonicals = collectVariableNames(prefix);
+    if (prefixCanonicals.size > 0) {
         for (const m of members) {
             if (m.value !== undefined) {
                 for (const v of collectVariableReferences(m.value)) {
-                    if (canonicalNames.has(v)) return "cross-scope-ref";
+                    if (prefixCanonicals.has(v)) return "cross-scope-ref";
                 }
-            }
-            for (const v of collectVariableNames(m.parts)) {
-                if (canonicalNames.has(v)) return "binding-shadow";
             }
         }
     }
