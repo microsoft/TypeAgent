@@ -13,6 +13,7 @@ import {
 import {
     setConversationCommandContext,
     setServerPort,
+    setServerConnection,
 } from "../slashCommands.js";
 import type { ConversationCommandContext } from "../conversationCommands.js";
 import {
@@ -375,6 +376,7 @@ export default class Connect extends Command {
                 };
                 setConversationCommandContext(convCtx);
                 setServerPort(flags.port);
+                setServerConnection(connection);
             }
 
             try {

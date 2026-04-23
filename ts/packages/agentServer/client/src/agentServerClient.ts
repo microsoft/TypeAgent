@@ -99,6 +99,7 @@ export type AgentServerConnection = {
     listConversations(name?: string): Promise<ConversationInfo[]>;
     renameConversation(conversationId: string, newName: string): Promise<void>;
     deleteConversation(conversationId: string): Promise<void>;
+    shutdown(): Promise<void>;
     close(): Promise<void>;
 };
 
@@ -234,6 +235,11 @@ export async function connectAgentServer(
                     );
                 }
                 return rpc.invoke("deleteConversation", conversationId);
+            },
+
+            async shutdown(): Promise<void> {
+                debug("Requesting server shutdown via existing connection");
+                await rpc.invoke("shutdown");
             },
 
             async close(): Promise<void> {

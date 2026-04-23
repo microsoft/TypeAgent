@@ -46,6 +46,7 @@ import {
     getConversationCommandContext,
     getSlashCompletions,
     getServerPort,
+    getServerConnection,
 } from "./slashCommands.js";
 import { handleConversationCommand } from "./conversationCommands.js";
 import {
@@ -640,18 +641,27 @@ export function createEnhancedClientIO(
                 currentSpinner.stop();
                 currentSpinner = null;
             }
+            const conn = getServerConnection();
             const port = getServerPort();
-            if (port !== undefined) {
-                stopAgentServer(port, true)
-                    .catch(() => {
-                        // Best-effort: server may already be stopped.
-                    })
-                    .finally(() => {
-                        process.exit(0);
-                    });
-            } else {
-                process.exit(0);
-            }
+            const doShutdown = conn
+                ? conn.shutdown().catch(() => {
+                      // Graceful via existing connection failed —
+                      // fall back to force kill via PID file.
+                      if (port !== undefined) {
+                          return stopAgentServer(port, true);
+                      }
+                  })
+                : port !== undefined
+                  ? stopAgentServer(port, true)
+                  : Promise.resolve();
+
+            doShutdown
+                .catch(() => {
+                    // Best-effort: server may already be stopped.
+                })
+                .finally(() => {
+                    process.exit(0);
+                });
         },
 
         // Display

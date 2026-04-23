@@ -50,6 +50,7 @@ export function getConversationCommandContext():
 // Late-binding server port for shutdown command.
 // Set from connect.ts after the connection is established.
 let serverPort: number | undefined;
+let serverConnection: { shutdown(): Promise<void> } | undefined;
 
 export function setServerPort(port: number): void {
     serverPort = port;
@@ -57,6 +58,18 @@ export function setServerPort(port: number): void {
 
 export function getServerPort(): number | undefined {
     return serverPort;
+}
+
+export function setServerConnection(
+    conn: { shutdown(): Promise<void> } | undefined,
+): void {
+    serverConnection = conn;
+}
+
+export function getServerConnection():
+    | { shutdown(): Promise<void> }
+    | undefined {
+    return serverConnection;
 }
 
 export function getVerboseIndicator(): string {
@@ -178,7 +191,11 @@ const slashCommands: SlashCommand[] = [
                 ),
             );
             try {
-                await stopAgentServer(port, true);
+                if (serverConnection) {
+                    await serverConnection.shutdown();
+                } else {
+                    await stopAgentServer(port, true);
+                }
                 console.log(chalk.green("Agent server stopped."));
             } catch (e: any) {
                 console.log(

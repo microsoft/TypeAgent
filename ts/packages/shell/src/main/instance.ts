@@ -154,8 +154,13 @@ async function initializeDispatcher(
                 app.quit();
             },
             shutdown: () => {
-                if (connect !== undefined) {
-                    stopAgentServer(connect, true)
+                if (connection !== undefined) {
+                    connection
+                        .shutdown()
+                        .catch(() => {
+                            // Graceful failed — force kill via PID file
+                            return stopAgentServer(connect!, true);
+                        })
                         .catch(() => {
                             // Best-effort: server may already be stopped.
                         })
