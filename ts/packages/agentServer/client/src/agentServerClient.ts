@@ -360,11 +360,15 @@ function spawnAgentServer(
         const isWindows = process.platform === "win32";
         if (isWindows) {
             if (hidden) {
+                // On Windows, detached: true creates a new console window
+                // for the child and any processes it spawns. To avoid this,
+                // spawn via cmd /c start /B which runs the process truly in
+                // the background with no visible windows.
+                const args = [serverPath, "--port", String(port), ...extraArgs];
                 const child = spawn(
-                    "node",
-                    [serverPath, "--port", String(port), ...extraArgs],
+                    "cmd.exe",
+                    ["/c", "start", "/B", "node", ...args],
                     {
-                        detached: true,
                         stdio: "ignore",
                         windowsHide: true,
                     },

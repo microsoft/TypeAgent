@@ -89,4 +89,40 @@ describe("userSettings", () => {
         });
         expect(result.server.idleTimeout).toBe(120);
     });
+
+    test("saveUserSettings deep-merges without overwriting siblings", () => {
+        saveUserSettings({
+            server: { hidden: true, idleTimeout: 60 },
+        });
+        // Update only hidden — idleTimeout should be preserved
+        const result = saveUserSettings({ server: { hidden: false } });
+        expect(result.server.hidden).toBe(false);
+        expect(result.server.idleTimeout).toBe(60);
+    });
+
+    test("loadUserSettings does not share references with defaults", () => {
+        const a = loadUserSettings();
+        const b = loadUserSettings();
+        expect(a).toEqual(b);
+        // Mutating one should not affect the other or the defaults
+        a.server.hidden = true;
+        expect(b.server.hidden).toBe(false);
+        expect(defaultUserSettings.server.hidden).toBe(false);
+    });
+
+    test("loadUserSettings ignores prototype pollution keys in saved file", () => {
+        const settingsPath = path.join(testDir, "user-settings.json");
+        fs.writeFileSync(
+            settingsPath,
+            JSON.stringify({
+                __proto__: { polluted: true },
+                server: { hidden: true },
+            }),
+        );
+        const settings = loadUserSettings();
+        expect(settings.server.hidden).toBe(true);
+        // Ensure __proto__ was not merged
+        expect((settings as any).polluted).toBeUndefined();
+        expect(({} as any).polluted).toBeUndefined();
+    });
 });
