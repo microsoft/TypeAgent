@@ -17,12 +17,13 @@ import {
     Dispatcher,
     IAgentMessage,
     NotifyExplainedData,
+    PendingInteractionRequest,
     RequestId,
     TemplateEditConfig,
 } from "agent-dispatcher";
 
 import { PartialCompletion } from "../partial";
-import { InputChoice } from "../choicePanel";
+import { ChoicePanel, InputChoice } from "../choicePanel";
 import { MessageGroup } from "./messageGroup";
 import { SettingsView } from "../settingsView";
 import { uint8ArrayToBase64 } from "@typeagent/common-utils";
@@ -141,7 +142,7 @@ export class ChatView {
         };
     }
 
-    private getDispatcher(): Dispatcher {
+    public getDispatcher(): Dispatcher {
         if (this._dispatcher === undefined) {
             throw new Error("Dispatcher is not initialized");
         }
@@ -783,6 +784,127 @@ export class ChatView {
         });
         this.updateScroll();
         return p;
+    }
+
+    /**
+     * Show an inline choice panel for a deferred interaction question.
+     *
+     * This is the unified entry point for both yes/no and multi-choice prompts
+     * arriving via the `requestInteraction` deferred-broadcast path (connected
+     * mode). The former `askYesNoWithContext` / `popupQuestion` distinction no
+     * longer exists at the protocol level — both arrive as a `"question"`
+     * interaction with an explicit `choices` array.
+     *
+     * For the binary `["Yes", "No"]` case we reuse the existing `askYesNo` UI.
+     * All other choice sets render a numbered button panel inline.
+     *
+     * @param interaction The full pending interaction request.
+     * @param signal      AbortSignal that dismisses the panel when another
+     *                    client answers or the server cancels the interaction.
+     */
+    public async showInteractionQuestion(
+        interaction: Extract<PendingInteractionRequest, { type: "question" }>,
+        signal?: AbortSignal,
+    ): Promise<number> {
+        const { requestId, message, choices, defaultId } = interaction;
+        const source = interaction.source ?? "";
+
+        const effectiveRequestId =
+            requestId ??
+            ({
+                requestId: `interaction-${interaction.interactionId}`,
+            } as RequestId);
+
+        const agentMessage = this.ensureAgentMessage({
+            message: "",
+            requestId: effectiveRequestId,
+            source,
+        });
+        if (agentMessage === undefined) {
+            throw new Error(
+                `Could not create agent message for interaction ${interaction.interactionId}`,
+            );
+        }
+        agentMessage.setMessage(message, source, "inline");
+
+        // Build InputChoice[] for all choices.  For the binary ["Yes","No"] case
+        // reuse the same icon elements that askYesNo() uses so the panel looks
+        // identical — but we keep the panel reference here so the AbortSignal
+        // can remove it when another client answers or the server cancels.
+        const isYesNo =
+            choices.length === 2 && choices[0] === "Yes" && choices[1] === "No";
+
+        const inputChoices: InputChoice[] = isYesNo
+            ? [
+                  {
+                      text: "Yes",
+                      element: iconCheckMarkCircle(),
+                      selectKey: ["Enter"],
+                      value: 0,
+                  },
+                  {
+                      text: "No",
+                      element: iconX(),
+                      selectKey: ["Delete"],
+                      value: 1,
+                  },
+              ]
+            : choices.map((label, index) => ({
+                  text: label,
+                  element: (() => {
+                      const span = document.createElement("span");
+                      span.textContent = String(index + 1);
+                      return span;
+                  })(),
+                  selectKey: [String(index + 1)],
+                  value: index,
+              }));
+
+        // Mark the default choice with an additional Enter key binding.
+        if (!isYesNo && defaultId !== undefined && inputChoices[defaultId]) {
+            inputChoices[defaultId].selectKey = [
+                ...(inputChoices[defaultId].selectKey ?? []),
+                "Enter",
+            ];
+        }
+
+        return new Promise<number>((resolve, reject) => {
+            const onAbort = () => {
+                choicePanel.remove();
+                // Append a dismissal notice inline in the message bubble.
+                const reason = signal?.reason;
+                const text =
+                    reason &&
+                    typeof reason === "object" &&
+                    reason.kind === "resolved-by-other"
+                        ? "answered by another client"
+                        : "interaction cancelled";
+                agentMessage.setMessage(`[${text}]`, source, "inline");
+                reject(signal!.reason);
+            };
+
+            signal?.addEventListener("abort", onAbort, { once: true });
+
+            // addChoicePanel removes the panel automatically on selection, but
+            // we need the ChoicePanel reference for the abort path.  We capture
+            // it by reaching into the ChoicePanel constructor directly here.
+            const choicePanel = new ChoicePanel(
+                agentMessage.getMessageDiv(),
+                inputChoices,
+                (choice: InputChoice) => {
+                    signal?.removeEventListener("abort", onAbort);
+                    choicePanel.remove();
+                    agentMessage.setMessage(
+                        `  ${choice.text}`,
+                        source,
+                        "inline",
+                    );
+                    resolve(choice.value as number);
+                },
+            );
+
+            this.updateScroll();
+        });
     }
 
     public showChoice(

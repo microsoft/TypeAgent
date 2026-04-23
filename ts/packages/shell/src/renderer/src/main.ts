@@ -23,7 +23,12 @@ import { CameraView } from "./cameraView";
 import { createWebSocket, webapi } from "./webSocketAPI";
 import * as jose from "jose";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
-import { ClientIO, Dispatcher, RequestId } from "agent-dispatcher";
+import {
+    ClientIO,
+    Dispatcher,
+    PendingInteractionResponse,
+    RequestId,
+} from "agent-dispatcher";
 import { swapContent } from "./setContent";
 import { remoteSearchMenuUIOnCompletion } from "./searchMenuUI/remoteSearchMenuUI";
 import { ChatInput } from "./chat/chatInput";
@@ -139,6 +144,10 @@ function registerClient(
     cameraView: CameraView,
     chatHistoryReady: Promise<void>,
 ) {
+    // Tracks open deferred interaction prompts so they can be dismissed when
+    // another client answers or the server cancels the interaction.
+    const activeInteractions = new Map<string, AbortController>();
+
     const clientIO: ClientIO = {
         clear: () => {
             chatView.clear();
@@ -193,21 +202,25 @@ function registerClient(
                 nextRefreshMs,
             );
         },
-        question: async (requestId, message, choices) => {
-            // For binary Yes/No with a known requestId, delegate to the existing chatView UI.
-            if (
-                requestId !== undefined &&
-                choices.length === 2 &&
-                choices[0] === "Yes" &&
-                choices[1] === "No"
-            ) {
-                const yes = await chatView.askYesNo(requestId, message, "");
-                return yes ? 0 : 1;
+        question: async (requestId, message, choices, defaultId) => {
+            if (requestId !== undefined) {
+                // Route through the unified interaction question UI which handles
+                // both binary Yes/No and arbitrary multi-choice prompts.
+                return chatView.showInteractionQuestion({
+                    interactionId: "",
+                    type: "question",
+                    requestId,
+                    source: "",
+                    timestamp: Date.now(),
+                    message,
+                    choices,
+                    defaultId,
+                });
             }
-            // General multi-choice and broadcast (no requestId) are not yet implemented
-            // in the Shell renderer — the main process handles those via dialog.showMessageBox.
+            // No requestId — main process should have handled this via
+            // dialog.showMessageBox before it reached the renderer.
             throw new Error(
-                "Main process should have handled multi-choice question",
+                "Main process should have handled question with no requestId",
             );
         },
         requestChoice: (
@@ -320,24 +333,64 @@ function registerClient(
         closeLocalView: async () => {
             throw new Error("Main process should have handled closeLocalView");
         },
-        requestInteraction: () => {
-            // TODO: Implement deferred interaction support for agent-server connect mode.
-            // When the shell connects to a SharedDispatcher, requestInteraction is pushed
-            // from the server. Without handling it, the server-side promise hangs for the
-            // full 10-minute timeout before resolving with the defaultId (question) or
-            // rejecting (proposeAction).
-            //
-            // The fix (Option A): on requestInteraction, dispatch into the existing
-            // chatView.askYesNo / chatView.proposeAction / dialog.showMessageBox UI (all
-            // already implemented for direct mode), await the result, then call
-            // dispatcher.respondToInteraction({ interactionId, type, value }). Hold a
-            // Map<interactionId, cancelFn> and dismiss open prompts on interactionCancelled.
+        requestInteraction: (interaction) => {
+            const ac = new AbortController();
+            activeInteractions.set(interaction.interactionId, ac);
+            (async () => {
+                let response: PendingInteractionResponse;
+                try {
+                    if (interaction.type === "question") {
+                        const value = await chatView.showInteractionQuestion(
+                            interaction,
+                            ac.signal,
+                        );
+                        response = {
+                            interactionId: interaction.interactionId,
+                            type: "question",
+                            value,
+                        };
+                    } else {
+                        const requestId = interaction.requestId!;
+                        const value = await chatView.proposeAction(
+                            requestId,
+                            interaction.actionTemplates,
+                            interaction.source,
+                        );
+                        response = {
+                            interactionId: interaction.interactionId,
+                            type: "proposeAction",
+                            value,
+                        };
+                    }
+                } catch {
+                    // Aborted by interactionResolved / interactionCancelled —
+                    // the UI has already been dismissed.
+                    activeInteractions.delete(interaction.interactionId);
+                    return;
+                }
+                activeInteractions.delete(interaction.interactionId);
+                try {
+                    await chatView
+                        .getDispatcher()
+                        .respondToInteraction(response);
+                } catch {
+                    // Interaction may have already timed out on the server.
+                }
+            })();
         },
-        interactionResolved: () => {
-            // Shell does not yet support deferred interactions
+        interactionResolved: (interactionId) => {
+            const ac = activeInteractions.get(interactionId);
+            if (ac) {
+                activeInteractions.delete(interactionId);
+                ac.abort({ kind: "resolved-by-other" });
+            }
         },
-        interactionCancelled: () => {
-            // Shell does not yet support deferred interactions
+        interactionCancelled: (interactionId) => {
+            const ac = activeInteractions.get(interactionId);
+            if (ac) {
+                activeInteractions.delete(interactionId);
+                ac.abort("cancelled");
+            }
         },
         takeAction: (_, action, data) => {
             // Android object gets injected on Android devices, otherwise unavailable
@@ -780,6 +833,11 @@ function registerClient(
     };
 
     getClientAPI().registerClient(client);
+
+    // Expose the clientIO object on window for integration tests so that tests
+    // can trigger requestInteraction / interactionResolved / interactionCancelled
+    // without requiring a live agent-server connection.
+    (window as any).__clientIO__ = clientIO;
 }
 
 function showNotifications(

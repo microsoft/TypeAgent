@@ -270,6 +270,10 @@ export class MessageContainer {
         return this.messageDiv.innerText;
     }
 
+    public getMessageDiv() {
+        return this.messageDiv;
+    }
+
     public setMessage(
         content: DisplayContent,
         source: string,
