@@ -18,6 +18,7 @@ import {
     IAgentMessage,
     NotifyExplainedData,
     PendingInteractionRequest,
+    PendingInteractionResponse,
     RequestId,
     TemplateEditConfig,
 } from "agent-dispatcher";
@@ -142,7 +143,7 @@ export class ChatView {
         };
     }
 
-    public getDispatcher(): Dispatcher {
+    private getDispatcher(): Dispatcher {
         if (this._dispatcher === undefined) {
             throw new Error("Dispatcher is not initialized");
         }
@@ -787,6 +788,15 @@ export class ChatView {
     }
 
     /**
+     * Creates a numbered span element for use as a choice button label.
+     */
+    private static makeNumberSpan(n: number): HTMLSpanElement {
+        const span = document.createElement("span");
+        span.textContent = String(n);
+        return span;
+    }
+
+    /**
      * Show an inline choice panel for a deferred interaction question.
      *
      * This is the unified entry point for both yes/no and multi-choice prompts
@@ -795,8 +805,9 @@ export class ChatView {
      * longer exists at the protocol level — both arrive as a `"question"`
      * interaction with an explicit `choices` array.
      *
-     * For the binary `["Yes", "No"]` case we reuse the existing `askYesNo` UI.
-     * All other choice sets render a numbered button panel inline.
+     * For the binary `["Yes", "No"]` case we reuse the same icon elements as
+     * `askYesNo()` for visual consistency.  All other choice sets render a
+     * numbered button panel inline.
      *
      * @param interaction The full pending interaction request.
      * @param signal      AbortSignal that dismisses the panel when another
@@ -851,11 +862,7 @@ export class ChatView {
               ]
             : choices.map((label, index) => ({
                   text: label,
-                  element: (() => {
-                      const span = document.createElement("span");
-                      span.textContent = String(index + 1);
-                      return span;
-                  })(),
+                  element: ChatView.makeNumberSpan(index + 1),
                   selectKey: [String(index + 1)],
                   value: index,
               }));
@@ -880,6 +887,9 @@ export class ChatView {
                         ? "answered by another client"
                         : "interaction cancelled";
                 agentMessage.setMessage(`[${text}]`, source, "inline");
+                // signal is guaranteed non-null here: onAbort is only registered
+                // via signal?.addEventListener, so it can only fire when signal
+                // is defined.
                 reject(signal!.reason);
             };
 
@@ -975,6 +985,18 @@ export class ChatView {
             actionTemplates,
         );
     }
+
+    /**
+     * Forwards a client interaction response to the dispatcher.
+     * Delegates to `Dispatcher.respondToInteraction` while keeping the
+     * dispatcher reference private to ChatView.
+     */
+    public respondToInteraction(
+        response: PendingInteractionResponse,
+    ): Promise<void> {
+        return this.getDispatcher().respondToInteraction(response);
+    }
+
     public setVoiceMode(enabled: boolean): void {
         if (enabled) {
             document.body.classList.add("voice-mode");

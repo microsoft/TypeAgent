@@ -3,6 +3,15 @@
 
 /// <reference path="../../lib/lib.android.d.ts" />
 
+// Augment Window with the test hook exposed by registerClient() so that
+// Playwright tests can inject interactions without requiring a live
+// agent-server connection.
+declare global {
+    interface Window {
+        __clientIO__?: import("agent-dispatcher").ClientIO;
+    }
+}
+
 import {
     ClientAPI,
     NotifyCommands,
@@ -202,10 +211,18 @@ function registerClient(
                 nextRefreshMs,
             );
         },
+        // Called only in standalone mode (shell running its own dispatcher).
+        // In connected mode the SharedDispatcher implements question() by
+        // assigning an interactionId and broadcasting requestInteraction() to
+        // all connected clients — so the shell receives requestInteraction(),
+        // not question(), when attached to an agent-server.
         question: async (requestId, message, choices, defaultId) => {
             if (requestId !== undefined) {
                 // Route through the unified interaction question UI which handles
                 // both binary Yes/No and arbitrary multi-choice prompts.
+                // interactionId is left empty because this path has no
+                // server-assigned lifecycle — there are no other clients that
+                // could call interactionResolved/Cancelled for this prompt.
                 return chatView.showInteractionQuestion({
                     interactionId: "",
                     type: "question",
@@ -362,17 +379,27 @@ function registerClient(
                             value,
                         };
                     }
-                } catch {
-                    // Aborted by interactionResolved / interactionCancelled —
-                    // the UI has already been dismissed.
+                } catch (e) {
+                    // Expected: aborted by interactionResolved / interactionCancelled.
+                    // The abort reason is either { kind: "resolved-by-other" } or
+                    // the string "cancelled".  Anything else is unexpected and logged.
+                    const isKnownAbort =
+                        e === "cancelled" ||
+                        (e !== null &&
+                            typeof e === "object" &&
+                            (e as any).kind === "resolved-by-other");
+                    if (!isKnownAbort) {
+                        console.error(
+                            `[requestInteraction] unexpected error for ${interaction.interactionId}:`,
+                            e,
+                        );
+                    }
                     activeInteractions.delete(interaction.interactionId);
                     return;
                 }
                 activeInteractions.delete(interaction.interactionId);
                 try {
-                    await chatView
-                        .getDispatcher()
-                        .respondToInteraction(response);
+                    await chatView.respondToInteraction(response);
                 } catch {
                     // Interaction may have already timed out on the server.
                 }
@@ -837,7 +864,7 @@ function registerClient(
     // Expose the clientIO object on window for integration tests so that tests
     // can trigger requestInteraction / interactionResolved / interactionCancelled
     // without requiring a live agent-server connection.
-    (window as any).__clientIO__ = clientIO;
+    window.__clientIO__ = clientIO;
 }
 
 function showNotifications(
