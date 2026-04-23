@@ -607,7 +607,7 @@ export async function createTopicIndexOnStorage<
         timestamp?: Date,
     ): Promise<TopicId[]> {
         const topicIds = await asyncArray.mapAsync(topics, 1, (t) =>
-            topicIndex.put(t.value),
+            topicIndex.addUpdate(t.value),
         );
         topicIds.sort();
         await sequence.put(topicIds, timestamp);
@@ -621,15 +621,18 @@ export async function createTopicIndexOnStorage<
     ): Promise<TopicId> {
         let topicId: TopicId | undefined;
         if (typeof topic === "string") {
-            topicId = id ? id : await topicIndex.put(topic);
+            topicId = id ? id : await topicIndex.addUpdate(topic);
         } else {
             if (id) {
                 topicId = id;
                 if (topic.sourceIds) {
-                    await topicIndex.addSources(topicId, topic.sourceIds);
+                    await topicIndex.addUpdateSources(topicId, topic.sourceIds);
                 }
             } else {
-                topicId = await topicIndex.put(topic.value, topic.sourceIds);
+                topicId = await topicIndex.addUpdate(
+                    topic.value,
+                    topic.sourceIds,
+                );
             }
         }
 
@@ -679,11 +682,12 @@ export async function createTopicIndexOnStorage<
                 results.topicIds = undefined;
             }
             if (results.topicIds) {
+                const idsToIntersect: (
+                    | TopicId[]
+                    | IterableIterator<TopicId>
+                )[] = [];
                 if (possibleIds && possibleIds.length > 0) {
-                    // TODO: combine this and the one below
-                    results.topicIds = [
-                        ...intersect(results.topicIds, possibleIds),
-                    ];
+                    idsToIntersect.push(possibleIds);
                 }
                 if (sourceName) {
                     const entityNames = await getNameIndex();
@@ -694,10 +698,16 @@ export async function createTopicIndexOnStorage<
                         options,
                     );
                     if (topicIdsWithSource) {
-                        results.topicIds = [
-                            ...intersect(results.topicIds, topicIdsWithSource),
-                        ];
+                        idsToIntersect.push(topicIdsWithSource);
                     }
+                }
+                if (idsToIntersect.length > 0) {
+                    results.topicIds = [
+                        ...intersectMultiple(
+                            results.topicIds,
+                            ...idsToIntersect,
+                        ),
+                    ];
                 }
             }
         }

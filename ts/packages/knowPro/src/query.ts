@@ -1434,7 +1434,7 @@ export class RankMessagesBySimilarityExpr extends QueryOpExpr<MessageAccumulator
                     this.thresholdScore,
                 );
                 for (const match of rankedMessages) {
-                    matches.add(match.messageOrdinal, match.score);
+                    matches.addExact(match.messageOrdinal, match.score);
                 }
                 return matches;
             }

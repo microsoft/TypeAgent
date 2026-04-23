@@ -70,7 +70,7 @@ export async function createThreadIndexOnStorage(
 
     async function add(threadDef: ConversationThread): Promise<ThreadId> {
         const entryId = await threadStore.put(threadDef);
-        await textIndex.put(threadDef.description, [entryId]);
+        await textIndex.addUpdate(threadDef.description, [entryId]);
         return entryId;
     }
 

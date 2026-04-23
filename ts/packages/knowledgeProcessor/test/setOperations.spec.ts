@@ -1,7 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { createHitTable, unionMerge } from "../src/setOperations.js";
+import {
+    createHitTable,
+    intersectMultiple,
+    unionMerge,
+} from "../src/setOperations.js";
 
 describe("Set Operations", () => {
     test("UnionMerge_String", () => {
@@ -18,6 +22,43 @@ describe("Set Operations", () => {
         let merged = [...unionMerge(x, y)];
         let expected = [1, 2, 1234, 1235, 1236, 2100];
         expect(merged).toEqual(expected);
+    });
+});
+
+describe("intersectMultiple", () => {
+    test("intersecting two arrays returns common elements", () => {
+        const result = [...intersectMultiple(["a", "b", "c"], ["b", "c", "d"])];
+        expect(result.sort()).toEqual(["b", "c"]);
+    });
+
+    test("intersecting three arrays returns elements in all three", () => {
+        const result = [
+            ...intersectMultiple(["a", "b", "c"], ["b", "c", "d"], ["c", "d"]),
+        ];
+        expect(result).toEqual(["c"]);
+    });
+
+    test("matches sequential intersect(intersect(a,b),c) semantics", () => {
+        // Verify combined behaviour equals two sequential intersects:
+        // intersect(intersect(a, b), c)
+        const a = ["x", "y", "z"];
+        const b = ["y", "z", "w"];
+        const c = ["z", "w"];
+        const sequential = [...intersectMultiple(a, b)].filter((v) =>
+            c.includes(v),
+        );
+        const combined = [...intersectMultiple(a, b, c)];
+        expect(combined.sort()).toEqual(sequential.sort());
+    });
+
+    test("no common elements returns empty", () => {
+        const result = [...intersectMultiple(["a", "b"], ["c", "d"])];
+        expect(result).toEqual([]);
+    });
+
+    test("single array passes through unchanged", () => {
+        const result = [...intersectMultiple(["a", "b", "c"])];
+        expect(result.sort()).toEqual(["a", "b", "c"]);
     });
 });
 

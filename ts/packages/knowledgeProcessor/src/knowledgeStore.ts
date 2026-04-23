@@ -113,7 +113,10 @@ export async function createKnowledgeStoreOnStorage<T>(
 
     async function addTag(tag: string, tIds: TId | TId[]): Promise<TagId> {
         const tagIndex = await getTagIndex();
-        return await tagIndex.put(tag, Array.isArray(tIds) ? tIds : [tIds]);
+        return await tagIndex.addUpdate(
+            tag,
+            Array.isArray(tIds) ? tIds : [tIds],
+        );
     }
 
     async function getByTag(
@@ -206,7 +209,7 @@ export async function createTagIndexOnStorage(
     }
 
     async function addTag(tag: string, id: TId): Promise<TagId> {
-        const tagId = await tagIndex.put(tag, [id]);
+        const tagId = await tagIndex.addUpdate(tag, [id]);
         await sourceIndex.put([tagId], id);
         return tagId;
     }
