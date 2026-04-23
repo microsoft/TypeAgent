@@ -332,18 +332,22 @@ export class ChatUI {
         if (requestId) {
             const agentBubble = this._agentBubblesByRequestId.get(requestId);
             if (agentBubble) {
-                this._renderMetrics(agentBubble, result?.metrics);
+                this._renderMetrics(agentBubble, result?.metrics, "agent");
             }
             const userBubble = this._pendingUserBubbles.get(requestId);
             if (userBubble) {
-                this._renderMetrics(userBubble, result?.metrics);
+                this._renderMetrics(userBubble, result?.metrics, "user");
             }
             this._pendingUserBubbles.delete(requestId);
             this._agentBubblesByRequestId.delete(requestId);
         }
     }
 
-    private _renderMetrics(bubbleRow: HTMLElement, metrics: any): void {
+    private _renderMetrics(
+        bubbleRow: HTMLElement,
+        metrics: any,
+        kind: "user" | "agent",
+    ): void {
         if (!metrics || typeof metrics !== "object") return;
 
         const bubble = bubbleRow.querySelector(".bubble") as HTMLElement | null;
@@ -364,26 +368,34 @@ export class ChatUI {
         const left: string[] = [];
         const right: string[] = [];
 
-        if (metrics.parse?.duration != null) {
-            left.push(item("First Message", fmt(metrics.parse.duration))!);
-        }
-
-        if (Array.isArray(metrics.actions) && metrics.actions.length > 0) {
-            const actionTotal = metrics.actions.reduce(
-                (acc: number, a: any) =>
-                    acc + (typeof a?.duration === "number" ? a.duration : 0),
-                0,
-            );
-            if (actionTotal > 0) {
-                right.push(item("Action Elapsed Time", fmt(actionTotal))!);
+        if (kind === "user") {
+            // Mirror the shell's user-bubble metrics: Translation phase.
+            if (metrics.parse?.duration != null) {
+                left.push(item("Translation", fmt(metrics.parse.duration))!);
             }
-        } else if (metrics.command?.duration != null) {
-            right.push(
-                item("Command Elapsed Time", fmt(metrics.command.duration))!,
-            );
-        }
-        if (metrics.duration != null) {
-            right.push(item("Total Elapsed Time", fmt(metrics.duration))!);
+        } else {
+            // Agent bubble: Action time (sum of per-action durations or
+            // command phase) + Total elapsed time.
+            let actionTotal: number | undefined;
+            if (
+                Array.isArray(metrics.actions) &&
+                metrics.actions.length > 0
+            ) {
+                actionTotal = metrics.actions.reduce(
+                    (acc: number, a: any) =>
+                        acc +
+                        (typeof a?.duration === "number" ? a.duration : 0),
+                    0,
+                );
+            } else if (metrics.command?.duration != null) {
+                actionTotal = metrics.command.duration;
+            }
+            if (actionTotal != null && actionTotal > 0) {
+                left.push(item("Action Elapsed Time", fmt(actionTotal))!);
+            }
+            if (metrics.duration != null) {
+                right.push(item("Total Elapsed Time", fmt(metrics.duration))!);
+            }
         }
 
         if (left.length === 0 && right.length === 0) return;
@@ -610,9 +622,11 @@ export class ChatUI {
                     if (rid) {
                         const agent =
                             this._agentBubblesByRequestId.get(rid);
-                        if (agent) this._renderMetrics(agent, e.metrics);
+                        if (agent)
+                            this._renderMetrics(agent, e.metrics, "agent");
                         const user = this._pendingUserBubbles.get(rid);
-                        if (user) this._renderMetrics(user, e.metrics);
+                        if (user)
+                            this._renderMetrics(user, e.metrics, "user");
                     }
                     break;
                 }
