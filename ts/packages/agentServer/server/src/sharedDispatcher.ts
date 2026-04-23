@@ -283,6 +283,25 @@ export async function createSharedDispatcher(
             log.logAppendDisplay(message, mode);
             log.saveQueued();
         };
+
+        const origSetDisplayInfo = orig.setDisplayInfo.bind(orig);
+        orig.setDisplayInfo = (
+            requestId,
+            source,
+            actionIndex,
+            action,
+            ...rest
+        ) => {
+            origSetDisplayInfo(
+                requestId,
+                source,
+                actionIndex,
+                action,
+                ...rest,
+            );
+            log.logSetDisplayInfo(requestId, source, actionIndex, action);
+            log.saveQueued();
+        };
     }
 
     const dispatchers = new Map<string, Dispatcher>();
@@ -346,6 +365,44 @@ export async function createSharedDispatcher(
                 interactionId: string,
             ): void => {
                 shared.cancelInteraction(interactionId);
+            };
+
+            // Wrap processCommand so each completed request logs a
+            // command-result entry into the DisplayLog (carrying its
+            // metrics). This lets history replay re-render timing data
+            // exactly the way live commandComplete does.
+            const origProcessCommand =
+                dispatcher.processCommand.bind(dispatcher);
+            dispatcher.processCommand = async (
+                command: any,
+                clientRequestId?: any,
+                attachments?: any,
+                processOptions?: any,
+            ) => {
+                const result = await origProcessCommand(
+                    command,
+                    clientRequestId,
+                    attachments,
+                    processOptions,
+                );
+                try {
+                    context.displayLog.logCommandResult(
+                        {
+                            connectionId,
+                            // The actual server-side requestId UUID is
+                            // generated inside processCommand and not
+                            // exposed to the wrapper, so leave it empty;
+                            // consumers correlate via clientRequestId.
+                            requestId: "",
+                            clientRequestId,
+                        },
+                        result?.metrics,
+                    );
+                    context.displayLog.saveQueued();
+                } catch {
+                    // best effort
+                }
+                return result;
             };
 
             return dispatcher;

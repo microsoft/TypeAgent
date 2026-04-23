@@ -7,7 +7,7 @@ import type {
     NotifyExplainedData,
     TemplateEditConfig,
 } from "./clientIO.js";
-import type { RequestId } from "./dispatcher.js";
+import type { RequestId, RequestMetrics } from "./dispatcher.js";
 import type { PendingInteractionType } from "./pendingInteraction.js";
 
 export type SetDisplayEntry = {
@@ -84,6 +84,20 @@ export type InteractionCancelledEntry = {
     interactionId: string;
 };
 
+/**
+ * Logged when a command completes. Carries the full RequestMetrics so
+ * that consumers replaying history can re-render timing information
+ * (e.g. hover tooltip on the agent bubble) just like they would for a
+ * live command.
+ */
+export type CommandResultEntry = {
+    type: "command-result";
+    seq: number;
+    timestamp: number;
+    requestId: RequestId;
+    metrics?: RequestMetrics;
+};
+
 export type DisplayLogEntry =
     | SetDisplayEntry
     | AppendDisplayEntry
@@ -92,4 +106,5 @@ export type DisplayLogEntry =
     | UserRequestEntry
     | PendingInteractionEntry
     | InteractionResolvedEntry
-    | InteractionCancelledEntry;
+    | InteractionCancelledEntry
+    | CommandResultEntry;

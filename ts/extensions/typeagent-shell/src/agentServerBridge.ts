@@ -67,6 +67,8 @@ export type BridgeToWebviewMessage =
               action?: TypeAgentAction | string[];
               actionIndex?: number;
               requestId?: RequestId;
+              // command-result
+              metrics?: any;
           }>;
       };
 
@@ -532,6 +534,14 @@ export class AgentServerBridge {
                             source: e.source,
                             actionIndex: e.actionIndex,
                             action: e.action,
+                        };
+                    case "command-result":
+                        return {
+                            type: "command-result",
+                            seq: e.seq,
+                            timestamp: e.timestamp,
+                            requestId: e.requestId,
+                            metrics: e.metrics,
                         };
                     default:
                         return { type: "skip", seq: e.seq };

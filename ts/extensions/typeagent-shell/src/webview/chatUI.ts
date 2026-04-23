@@ -603,6 +603,19 @@ export class ChatUI {
                         clientId(e.requestId),
                     );
                     break;
+                case "command-result": {
+                    // Render timing footer for this historical request on
+                    // both its agent bubble and user bubble (if known).
+                    const rid = clientId(e.requestId);
+                    if (rid) {
+                        const agent =
+                            this._agentBubblesByRequestId.get(rid);
+                        if (agent) this._renderMetrics(agent, e.metrics);
+                        const user = this._pendingUserBubbles.get(rid);
+                        if (user) this._renderMetrics(user, e.metrics);
+                    }
+                    break;
+                }
             }
         }
 
