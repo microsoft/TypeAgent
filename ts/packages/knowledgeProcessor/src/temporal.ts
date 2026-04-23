@@ -85,6 +85,8 @@ export async function createTemporalLog<T>(
         folderSettings,
         fSys,
     );
+    // null = not yet computed; undefined = computed, collection is empty
+    let cachedTimeRange: DateRange | undefined | null = null;
     return {
         size: sequence.size,
         all,
@@ -101,7 +103,7 @@ export async function createTemporalLog<T>(
         getUrl,
         remove,
         removeInRange,
-        clear: sequence.clear,
+        clear: clearAll,
     };
 
     async function* all(): AsyncIterableIterator<
@@ -184,35 +186,48 @@ export async function createTemporalLog<T>(
     }
 
     async function getTimeRange(): Promise<DateRange | undefined> {
-        // TODO: cache the time range.
+        if (cachedTimeRange !== null) {
+            return cachedTimeRange;
+        }
         const allIds = await sequence.allNames();
         if (allIds.length === 0) {
+            cachedTimeRange = undefined;
             return undefined;
         }
         const first = await get(allIds[0]);
         if (!first) {
+            cachedTimeRange = undefined;
             return undefined;
         }
         const last = await get(allIds[allIds.length - 1]);
-        return {
+        cachedTimeRange = {
             startDate: first?.timestamp,
             stopDate: last?.timestamp,
         };
+        return cachedTimeRange;
     }
 
     async function put(value: T, timestamp?: Date, id?: string): Promise<TId> {
+        cachedTimeRange = null;
         return putTimestampedObject(sequence, value, timestamp);
     }
 
     async function remove(id: TId): Promise<void> {
+        cachedTimeRange = null;
         sequence.remove(id);
     }
 
     async function removeInRange(startAt: Date, stopAt: Date): Promise<void> {
+        cachedTimeRange = null;
         const idsToRemove = await getIdsInRange(startAt, stopAt);
         for (const id of idsToRemove) {
             await sequence.remove(id);
         }
+    }
+
+    async function clearAll(): Promise<void> {
+        cachedTimeRange = null;
+        return sequence.clear();
     }
 
     function getUrl(id: string): URL {

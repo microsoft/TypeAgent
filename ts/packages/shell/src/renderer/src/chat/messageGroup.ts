@@ -94,6 +94,16 @@ export class MessageGroup {
         agentMessage.updateActionData(data);
     }
 
+    public appendDiagnosticData(_requestId: RequestId, data: any) {
+        const agentMessage = this.ensureAgentMessage({
+            message: "",
+            source: "",
+            actionIndex: undefined,
+        });
+
+        agentMessage.appendDiagnosticData(data);
+    }
+
     private requestCompleted(result: CommandResult | undefined) {
         this.updateMetrics(result?.metrics);
         if (result?.cancelled) {

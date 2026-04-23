@@ -603,23 +603,26 @@ export function createHitTable<T>(
         return top;
     }
 
-    // TODO: Optimize.
     /**
      * Return the items with the 'k' highest scores
      * @param k if <= 0, returns all
      * @returns array of items
      */
     function getTopK(k: number): T[] {
+        if (k < 1) {
+            // All items requested; skip the expensive sort
+            return [...map.values()].map((i) => i.item);
+        }
         const topItems = byHighestScore();
-        if (k === map.size || k <= 0) {
+        if (k >= map.size) {
             return topItems.map((i) => i.item);
         }
 
         const topK: T[] = [];
-        if (k < 1 || topItems.length === 0) {
+        if (topItems.length === 0) {
             return topK;
         }
-        // Stop when we have matched k highest scores
+        // Stop when we have matched k highest score levels
         let prevScore = topItems[0].score;
         let kCount = 1;
         for (let i = 0; i < topItems.length; ++i) {

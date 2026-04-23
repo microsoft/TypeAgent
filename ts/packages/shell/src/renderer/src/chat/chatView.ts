@@ -646,6 +646,10 @@ export class ChatView {
         this.getMessageGroup(requestId)?.setActionData(requestId, data);
     }
 
+    appendDiagnosticData(requestId: RequestId, data: any) {
+        this.getMessageGroup(requestId)?.appendDiagnosticData(requestId, data);
+    }
+
     private getNotificationMessageGroupId(
         requestId: string | RequestId | undefined,
         source: string,

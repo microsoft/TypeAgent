@@ -931,7 +931,7 @@ export class WebsiteCollection
         if (data.semanticIndexData) {
             this.semanticRefIndex = new (
                 await import("knowpro")
-            ).ConversationIndex(data.semanticIndexData);
+            ).TermToSemanticRefIndex(data.semanticIndexData);
         }
         if (data.relatedTermsIndexData) {
             this.secondaryIndexes.termToRelatedTermsIndex.deserialize(
