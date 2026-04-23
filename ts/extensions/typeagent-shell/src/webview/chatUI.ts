@@ -297,13 +297,7 @@ export class ChatUI {
                     pre.innerHTML = ChatUI._highlightJson(
                         JSON.stringify(action, null, 2),
                     );
-                    // Insert before .bubble-metrics if present, else append
-                    const metricsRow = body.querySelector(".bubble-metrics");
-                    if (metricsRow) {
-                        body.insertBefore(pre, metricsRow);
-                    } else {
-                        body.appendChild(pre);
-                    }
+                    body.appendChild(pre);
                 }
                 this._scrollToBottom();
             };
@@ -348,11 +342,11 @@ export class ChatUI {
     private _renderMetrics(bubbleRow: HTMLElement, metrics: any): void {
         if (!metrics || typeof metrics !== "object") return;
 
-        const body = bubbleRow.querySelector(".message-body");
-        if (!body) return;
+        const bubble = bubbleRow.querySelector(".bubble") as HTMLElement | null;
+        if (!bubble) return;
 
         // Remove any prior metrics row (idempotent)
-        body.querySelector(".bubble-metrics")?.remove();
+        bubble.querySelector(".bubble-metrics")?.remove();
 
         const fmt = (ms?: number) => {
             if (typeof ms !== "number") return undefined;
@@ -399,7 +393,7 @@ export class ChatUI {
         rightEl.className = "metrics-right";
         rightEl.innerHTML = right.filter(Boolean).join("<br>");
         row.append(leftEl, rightEl);
-        body.appendChild(row);
+        bubble.appendChild(row);
         this._scrollToBottom();
     }
 

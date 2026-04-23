@@ -164,41 +164,57 @@ body {
     opacity: 0.7;
 }
 
-/* Inline metrics row at the bottom of an agent bubble.
+/* Inline metrics row — rendered inside the bubble at the bottom.
    Hidden by default; revealed when the user hovers the bubble. */
 .bubble-metrics {
     display: flex;
     justify-content: space-between;
+    align-items: flex-start;
     gap: 16px;
-    margin-top: 4px;
-    padding: 0 4px;
+    margin: 8px -12px -8px -12px; /* extend to bubble edges (negate .bubble padding) */
+    padding: 6px 12px;
+    border-top: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.25));
+    background: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.08));
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
     font-size: 11px;
+    color: var(--vscode-descriptionForeground);
     opacity: 0;
     max-height: 0;
     overflow: hidden;
     transition:
         opacity 120ms ease-in,
-        max-height 120ms ease-in;
+        max-height 120ms ease-in,
+        padding 120ms ease-in;
     pointer-events: none;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-top-width: 0;
 }
 
 .message.agent:hover .bubble-metrics,
 .message.user:hover .bubble-metrics {
-    opacity: 0.8;
-    max-height: 60px;
+    opacity: 1;
+    max-height: 80px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    border-top-width: 1px;
     pointer-events: auto;
 }
 
 .bubble-metrics .metrics-left {
     text-align: left;
+    flex: 0 0 auto;
 }
 
 .bubble-metrics .metrics-right {
     text-align: right;
+    flex: 0 0 auto;
 }
 
 .bubble-metrics b {
     font-weight: 600;
+    color: var(--vscode-foreground);
 }
 
 .message-timestamp {
