@@ -9,7 +9,7 @@
 
 import { conversation as kpLib } from "knowledge-processor";
 import { ConversationSettings } from "./conversation.js";
-import { ConversationIndex } from "./conversationIndex.js";
+import { TermToSemanticRefIndex } from "./conversationIndex.js";
 import { DateTimeRange } from "./dateTimeSchema.js";
 import {
     DateRange,
@@ -168,7 +168,7 @@ export async function createConversationFromData(
         messages: new MessageCollection(data.messages),
         semanticRefs: new SemanticRefCollection(data.semanticRefs),
         semanticRefIndex: data.semanticIndexData
-            ? new ConversationIndex(data.semanticIndexData)
+            ? new TermToSemanticRefIndex(data.semanticIndexData)
             : undefined,
     };
     const secondaryIndexes = new ConversationSecondaryIndexes(

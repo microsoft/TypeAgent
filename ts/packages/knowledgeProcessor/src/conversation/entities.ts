@@ -270,14 +270,15 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
         if (ids && ids.length !== entities.length) {
             throw Error("Id length mismatch");
         }
-        // TODO: parallelize
-        return asyncArray.mapAsync(entities, 1, (entity, i) =>
-            add(entity, ids ? ids[i] : undefined),
+        return asyncArray.mapAsync(
+            entities,
+            settings.concurrency,
+            (entity, i) => add(entity, ids ? ids[i] : undefined),
         );
     }
 
     async function addName(name: string, sourceIds: EntityId[]): Promise<void> {
-        await nameIndex.put(name, sourceIds);
+        await nameIndex.addUpdate(name, sourceIds);
     }
 
     async function addTypes(
@@ -291,7 +292,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
                 type: TextBlockType.Word,
             };
         });
-        await typeIndex.putMultiple(typeEntries);
+        await typeIndex.addUpdateMultiple(typeEntries);
     }
 
     async function addFacets(
@@ -306,7 +307,7 @@ export async function createEntityIndexOnStorage<TSourceId = string>(
                     type: TextBlockType.Word,
                 };
             });
-            await facetIndex.putMultiple(facetEntries);
+            await facetIndex.addUpdateMultiple(facetEntries);
         }
     }
 

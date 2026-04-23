@@ -377,12 +377,24 @@ export function swapContent(
         return;
     }
 
-    if (targetElement.classList.contains("chat-message-action-data")) {
-        targetElement.classList.remove("chat-message-action-data");
-    } else {
+    const showingData = !targetElement.classList.contains(
+        "chat-message-action-data",
+    );
+    if (showingData) {
         targetElement.classList.add("chat-message-action-data");
+    } else {
+        targetElement.classList.remove("chat-message-action-data");
     }
 
     sourceElement.setAttribute("action-data", originalMessage);
-    targetElement.innerHTML = data;
+    if (showingData) {
+        // Render raw JSON data safely via textContent to prevent XSS.
+        targetElement.innerHTML = "";
+        const pre = document.createElement("pre");
+        pre.textContent = data;
+        targetElement.appendChild(pre);
+    } else {
+        // Restore the original trusted message HTML.
+        targetElement.innerHTML = data;
+    }
 }

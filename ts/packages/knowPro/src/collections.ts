@@ -91,35 +91,35 @@ export class MatchAccumulator<T = any> {
         return maxHitCount;
     }
 
-    // TODO: make this 2 methods: addExact and addRelated
-    public add(value: T, score: number, isExactMatch: boolean) {
+    public addExact(value: T, score: number) {
         const existingMatch = this.getMatch(value);
         if (existingMatch) {
-            if (isExactMatch) {
-                existingMatch.hitCount++;
-                existingMatch.score += score;
-            } else {
-                existingMatch.relatedHitCount++;
-                existingMatch.relatedScore += score;
-            }
+            existingMatch.hitCount++;
+            existingMatch.score += score;
         } else {
-            if (isExactMatch) {
-                this.setMatch({
-                    value,
-                    hitCount: 1,
-                    score,
-                    relatedHitCount: 0,
-                    relatedScore: 0,
-                });
-            } else {
-                this.setMatch({
-                    value,
-                    hitCount: 1,
-                    score: 0,
-                    relatedHitCount: 1,
-                    relatedScore: score,
-                });
-            }
+            this.setMatch({
+                value,
+                hitCount: 1,
+                score,
+                relatedHitCount: 0,
+                relatedScore: 0,
+            });
+        }
+    }
+
+    public addRelated(value: T, score: number) {
+        const existingMatch = this.getMatch(value);
+        if (existingMatch) {
+            existingMatch.relatedHitCount++;
+            existingMatch.relatedScore += score;
+        } else {
+            this.setMatch({
+                value,
+                hitCount: 1,
+                score: 0,
+                relatedHitCount: 1,
+                relatedScore: score,
+            });
         }
     }
 
@@ -257,8 +257,8 @@ export class MatchAccumulator<T = any> {
     private matchesWithMinHitCount(
         minHitCount: number | undefined,
     ): IterableIterator<Match<T>> {
-        // TODO: this should be minHitCount > 1
-        return minHitCount !== undefined && minHitCount > 0
+        // Skip filtering when minHitCount is 0 or 1 — all matches have hitCount >= 1 by design
+        return minHitCount !== undefined && minHitCount > 1
             ? this.getMatches((m) => m.hitCount >= minHitCount)
             : this.matches.values();
     }
@@ -338,11 +338,12 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefOrdinal>
         if (scoredRefs) {
             weight ??= searchTerm.weight ?? 1;
             for (const scoredRef of scoredRefs) {
-                this.add(
-                    scoredRef.semanticRefOrdinal,
-                    scoredRef.score * weight,
-                    isExactMatch,
-                );
+                const score = scoredRef.score * weight;
+                if (isExactMatch) {
+                    this.addExact(scoredRef.semanticRefOrdinal, score);
+                } else {
+                    this.addRelated(scoredRef.semanticRefOrdinal, score);
+                }
             }
             this.searchTermMatches.add(searchTerm.text);
         }
@@ -361,11 +362,12 @@ export class SemanticRefAccumulator extends MatchAccumulator<SemanticRefOrdinal>
             weight ??= searchTerm.weight ?? 1;
             for (const scoredRef of scoredRefs) {
                 if (!this.has(scoredRef.semanticRefOrdinal)) {
-                    this.add(
-                        scoredRef.semanticRefOrdinal,
-                        scoredRef.score * weight,
-                        isExactMatch,
-                    );
+                    const score = scoredRef.score * weight;
+                    if (isExactMatch) {
+                        this.addExact(scoredRef.semanticRefOrdinal, score);
+                    } else {
+                        this.addRelated(scoredRef.semanticRefOrdinal, score);
+                    }
                 }
             }
             this.searchTermMatches.add(searchTerm.text);
@@ -488,7 +490,7 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
         }
     }
 
-    public override add(value: number, score: number): void {
+    public override addExact(value: number, score: number): void {
         let match = this.getMatch(value);
         if (match === undefined) {
             match = {
@@ -513,7 +515,7 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
         scoredTextLocations: ScoredTextLocation[],
     ): void {
         for (const sl of scoredTextLocations) {
-            this.add(sl.textLocation.messageOrdinal, sl.score);
+            this.addExact(sl.textLocation.messageOrdinal, sl.score);
         }
     }
 
@@ -529,27 +531,27 @@ export class MessageAccumulator extends MatchAccumulator<MessageOrdinal> {
                 messageOrdinal < messageOrdinalEnd;
                 ++messageOrdinal
             ) {
-                this.add(messageOrdinal, score);
+                this.addExact(messageOrdinal, score);
             }
         } else {
-            this.add(messageOrdinalStart, score);
+            this.addExact(messageOrdinalStart, score);
         }
     }
 
     public addRange(range: TextRange, score: number): void {
-        this.add(range.start.messageOrdinal, score);
+        this.addExact(range.start.messageOrdinal, score);
         if (range.end) {
             let ordinal = range.start.messageOrdinal + 1;
             let endOrdinal = range.end.messageOrdinal;
             for (; ordinal < endOrdinal; ++ordinal) {
-                this.add(ordinal, score);
+                this.addExact(ordinal, score);
             }
         }
     }
 
     public addScoredMatches(matches: ScoredMessageOrdinal[]): void {
         for (const match of matches) {
-            this.add(match.messageOrdinal, match.score);
+            this.addExact(match.messageOrdinal, match.score);
         }
     }
 

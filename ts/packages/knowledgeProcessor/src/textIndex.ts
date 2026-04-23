@@ -77,23 +77,21 @@ export interface TextIndex<TTextId = any, TSourceId = any> {
     /**
      * Add postings for the given text.
      * Merges the new postings with the existing postings
-     * TODO: rename to addUpdate
      * @param text
      * @param postings
      */
-    put(text: string, postings?: TSourceId[]): Promise<TTextId>;
+    addUpdate(text: string, postings?: TSourceId[]): Promise<TTextId>;
     /**
-     *  TODO: rename to addUpdateMultiple
+     * Add postings for multiple text blocks.
      * @param values
      */
-    putMultiple(values: TextBlock<TSourceId>[]): Promise<TTextId[]>;
+    addUpdateMultiple(values: TextBlock<TSourceId>[]): Promise<TTextId[]>;
     /**
      * Add source Ids for the given text Id
-     * TODO: rename to addUpdateSources
      * @param id
      * @param postings
      */
-    addSources(id: TTextId, postings: TSourceId[]): Promise<void>;
+    addUpdateSources(id: TTextId, postings: TSourceId[]): Promise<void>;
     /**
      * Get the sourceIds for the texts in this index that are nearest to the given value
      * Ids are returned in sorted order, with duplicates removed
@@ -235,9 +233,9 @@ export async function createTextIndex<TSourceId = any>(
         getId,
         getIds,
         getText,
-        put,
-        putMultiple,
-        addSources,
+        addUpdate: put,
+        addUpdateMultiple: putMultiple,
+        addUpdateSources: addSources,
         getNearest,
         getNearestHits,
         getNearestHitsMultiple,

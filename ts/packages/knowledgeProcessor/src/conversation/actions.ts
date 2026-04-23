@@ -220,8 +220,7 @@ export async function createActionIndexOnStorage<TSourceId = any>(
         if (ids && items.length !== ids?.length) {
             throw Error("Id length mismatch");
         }
-        // TODO: parallelize
-        return asyncArray.mapAsync(items, 1, (action, i) =>
+        return asyncArray.mapAsync(items, settings.concurrency, (action, i) =>
             add(action, ids ? ids[i] : undefined),
         );
     }
@@ -256,7 +255,7 @@ export async function createActionIndexOnStorage<TSourceId = any>(
         actionIds: ActionId[],
     ): Promise<void> {
         const fullVerb = actionVerbsToString(action.verbs, action.verbTense);
-        await verbIndex.put(fullVerb, actionIds);
+        await verbIndex.addUpdate(fullVerb, actionIds);
     }
 
     async function addName(

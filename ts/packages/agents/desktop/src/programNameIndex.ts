@@ -6,6 +6,7 @@ import {
     NormalizedEmbedding,
     SimilarityType,
     generateEmbedding,
+    generateEmbeddingWithRetry,
     ScoredItem,
     NameValue,
 } from "typeagent";
@@ -48,18 +49,20 @@ export function loadProgramNameIndex(
 export function createProgramNameIndex(
     vals: Record<string, string | undefined>,
     initialEmbeddings?: Record<string, Float32Array>,
+    modelOverride?: TextEmbeddingModel,
 ) {
     let programEmbeddings: Record<string, NormalizedEmbedding> =
         initialEmbeddings ?? {};
-    let embeddingModel: TextEmbeddingModel;
-    const configValues = vals;
 
-    const aiSettings = openai.apiSettingsFromEnv(
-        openai.ModelType.Embedding,
-        configValues,
-    );
-
-    embeddingModel = openai.createEmbeddingModel(aiSettings);
+    const embeddingModel: TextEmbeddingModel =
+        modelOverride ??
+        (() => {
+            const aiSettings = openai.apiSettingsFromEnv(
+                openai.ModelType.Embedding,
+                vals,
+            );
+            return openai.createEmbeddingModel(aiSettings);
+        })();
 
     return {
         addOrUpdate,
@@ -84,7 +87,7 @@ export function createProgramNameIndex(
             return;
         }
         try {
-            const embedding = await generateEmbedding(
+            const embedding = await generateEmbeddingWithRetry(
                 embeddingModel,
                 programName,
             );
@@ -93,7 +96,6 @@ export function createProgramNameIndex(
             debugError(
                 `Could not create embedding for ${programName}. ${e.message}`,
             );
-            // TODO: Retry with back-off for 429 responses
         }
     }
 
