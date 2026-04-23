@@ -17,6 +17,13 @@ const vscode = acquireVsCodeApi();
 const chatUI = new ChatUI();
 
 // Listen for messages from the extension host (bridged from agent server)
+// Helper: pull clientRequestId out of a RequestId object/string.
+function clientIdOf(requestId: any): string | undefined {
+    if (!requestId) return undefined;
+    if (typeof requestId === "string") return requestId;
+    return requestId.clientRequestId as string | undefined;
+}
+
 window.addEventListener("message", (event) => {
     const msg = event.data;
     switch (msg.type) {
@@ -34,6 +41,7 @@ window.addEventListener("message", (event) => {
                 msg.message.message,
                 msg.message.source,
                 msg.timestamp,
+                clientIdOf(msg.message.requestId),
             );
             break;
         case "appendDisplay":
@@ -42,6 +50,7 @@ window.addEventListener("message", (event) => {
                 msg.message.source,
                 msg.mode,
                 msg.timestamp,
+                clientIdOf(msg.message.requestId),
             );
             break;
         case "setUserRequest":
@@ -49,7 +58,11 @@ window.addEventListener("message", (event) => {
             // History now comes through historyReplay batch, not here.
             break;
         case "setDisplayInfo":
-            chatUI.setDisplayInfo(msg.source, msg.action);
+            chatUI.setDisplayInfo(
+                msg.source,
+                msg.action,
+                clientIdOf(msg.requestId),
+            );
             break;
         case "clear":
             chatUI.clearMessages();
@@ -70,7 +83,7 @@ window.addEventListener("message", (event) => {
             break;
         case "commandComplete":
             // Command finished — clean up any remaining temporary status
-            chatUI.onCommandComplete(msg.requestId);
+            chatUI.onCommandComplete(msg.requestId, msg.result);
             break;
         case "switching":
             chatUI.setSwitching(msg.switching, msg.targetName);

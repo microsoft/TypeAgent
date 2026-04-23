@@ -116,6 +116,31 @@ body {
     font-weight: 600;
 }
 
+.source-label.clickable {
+    cursor: pointer;
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+}
+
+.source-label.clickable:hover {
+    color: var(--vscode-textLink-activeForeground);
+}
+
+.action-json {
+    margin: 4px 0 0 0;
+    padding: 8px 10px;
+    background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.15));
+    border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.3));
+    border-radius: 6px;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--vscode-foreground);
+    overflow-x: auto;
+    white-space: pre;
+    max-height: 320px;
+}
+
 .message-timestamp {
     opacity: 0.7;
 }

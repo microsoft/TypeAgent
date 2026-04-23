@@ -61,6 +61,10 @@ export class ChatUI {
     // Map from requestId → user bubble element awaiting commandComplete
     private _pendingUserBubbles = new Map<string, HTMLElement>();
 
+    // Map from clientRequestId → the agent bubble for that request, so
+    // setDisplayInfo and commandComplete metrics can find their target.
+    private _agentBubblesByRequestId = new Map<string, HTMLElement>();
+
     // Counter for generating unique request IDs
     private _nextRequestId = 1;
 
@@ -162,20 +166,18 @@ export class ChatUI {
         content: any,
         source?: string,
         timestamp?: number,
+        requestId?: string,
     ): void {
         this._removeStatusIndicator();
         this._removeTemporary();
-        if (!this._activeResponseEl) {
-            this._activeResponseEl = this._createAgentBubble(source, timestamp);
-        }
+        const bubble = this._getOrCreateAgentBubble(source, timestamp, requestId);
         if (source) {
-            const sourceEl = this._activeResponseEl.querySelector(".source-label");
-            if (sourceEl) {
+            const sourceEl = bubble.querySelector(".source-label");
+            if (sourceEl && !sourceEl.classList.contains("has-action")) {
                 sourceEl.textContent = source;
             }
         }
-        const contentEl =
-            this._activeResponseEl.querySelector(".agent-content");
+        const contentEl = bubble.querySelector(".agent-content");
         if (contentEl) {
             contentEl.innerHTML = this._renderDisplayContent(content);
         }
@@ -192,6 +194,7 @@ export class ChatUI {
         source?: string,
         mode?: string,
         timestamp?: number,
+        requestId?: string,
     ): void {
         this._removeStatusIndicator();
 
@@ -216,33 +219,92 @@ export class ChatUI {
         }
         this._lastAppendedContent = rendered;
 
-        if (!this._activeResponseEl) {
-            // Remove temporary when first real content arrives
+        // Remove temporary when first real content arrives
+        const hadBubble =
+            (requestId && this._agentBubblesByRequestId.has(requestId)) ||
+            !!this._activeResponseEl;
+        if (!hadBubble) {
             this._removeTemporary();
-            this._activeResponseEl = this._createAgentBubble(source, timestamp);
         }
-        const contentEl =
-            this._activeResponseEl.querySelector(".agent-content");
+        const bubble = this._getOrCreateAgentBubble(source, timestamp, requestId);
+        const contentEl = bubble.querySelector(".agent-content");
         if (contentEl) {
             contentEl.innerHTML += rendered;
         }
         this._scrollToBottom();
     }
 
-    /**
-     * setDisplayInfo: show which agent is processing (status indicator).
-     * Replaces previous status indicator rather than accumulating.
-     */
-    public setDisplayInfo(source: string, action?: any): void {
-        if (!source) return;
-
-        if (!this._statusIndicatorEl) {
-            this._statusIndicatorEl = document.createElement("div");
-            this._statusIndicatorEl.className = "message system status-indicator";
-            this._messagesEl.appendChild(this._statusIndicatorEl);
+    private _getOrCreateAgentBubble(
+        source?: string,
+        timestamp?: number,
+        requestId?: string,
+    ): HTMLElement {
+        if (requestId && this._agentBubblesByRequestId.has(requestId)) {
+            return this._agentBubblesByRequestId.get(requestId)!;
         }
-        const label = action ? `[${source}] processing...` : `[${source}] processing...`;
-        this._statusIndicatorEl.textContent = label;
+        if (!requestId && this._activeResponseEl) {
+            return this._activeResponseEl;
+        }
+        const bubble = this._createAgentBubble(source, timestamp, requestId);
+        this._activeResponseEl = bubble;
+        if (requestId) {
+            this._agentBubblesByRequestId.set(requestId, bubble);
+        }
+        return bubble;
+    }
+
+    /**
+     * setDisplayInfo: update the agent bubble for this request to show
+     * the action that's being executed. The header label becomes a
+     * clickable "schemaName.actionName" — clicking it expands a JSON
+     * panel with the action payload.
+     */
+    public setDisplayInfo(
+        source: string,
+        action?: any,
+        requestId?: string,
+    ): void {
+        if (!source && !action) return;
+
+        const bubble = this._getOrCreateAgentBubble(source, undefined, requestId);
+        const label = bubble.querySelector(".source-label") as HTMLElement | null;
+        if (!label) return;
+
+        let actionLabel: string | undefined;
+        if (Array.isArray(action)) {
+            actionLabel = `${source} ${action.join(" ")}`;
+        } else if (action && typeof action === "object" && action.actionName) {
+            actionLabel = action.schemaName
+                ? `${action.schemaName}.${action.actionName}`
+                : action.actionName;
+        }
+
+        if (actionLabel) {
+            label.textContent = actionLabel;
+            label.classList.add("has-action", "clickable");
+            label.title = "Click to view action JSON";
+
+            // Toggle a JSON panel below the bubble's content
+            const handler = () => {
+                const body = bubble.querySelector(".message-body");
+                if (!body) return;
+                let pre = body.querySelector(".action-json") as HTMLElement | null;
+                if (pre) {
+                    pre.remove();
+                } else {
+                    pre = document.createElement("pre");
+                    pre.className = "action-json";
+                    pre.textContent = JSON.stringify(action, null, 2);
+                    body.appendChild(pre);
+                }
+                this._scrollToBottom();
+            };
+            // Replace any prior listener by cloning is overkill — store
+            // the handler on the element so we can detach if needed
+            label.onclick = handler;
+        } else if (source) {
+            label.textContent = source;
+        }
         this._scrollToBottom();
     }
 
@@ -251,23 +313,61 @@ export class ChatUI {
         this._activeResponseEl = undefined;
         this._statusIndicatorEl = undefined;
         this._pendingUserBubbles.clear();
+        this._agentBubblesByRequestId.clear();
     }
 
     /**
      * Called when a command finishes processing.
-     * Cleans up temporary status messages.
+     * Cleans up temporary status messages and applies timing metrics
+     * (visible as a hover tooltip on the bubbles for this request).
      */
-    public onCommandComplete(requestId?: string): void {
+    public onCommandComplete(requestId?: string, result?: any): void {
         this._removeTemporary();
         this._removeStatusIndicator();
         this._activeResponseEl = undefined;
         this._lastAppendedContent = undefined;
-        // Note: we deliberately don't flip the roadrunner here. The
-        // roadrunner reflects translation/cache state, which is signaled
-        // separately via the "explained" notify event (see onNotify).
+
         if (requestId) {
+            const tooltip = this._formatMetricsTooltip(result?.metrics);
+            if (tooltip) {
+                const userBubble = this._pendingUserBubbles.get(requestId);
+                if (userBubble) {
+                    const b = userBubble.querySelector(".bubble") as HTMLElement | null;
+                    if (b) b.title = tooltip;
+                }
+                const agentBubble = this._agentBubblesByRequestId.get(requestId);
+                if (agentBubble) {
+                    const b = agentBubble.querySelector(".bubble") as HTMLElement | null;
+                    if (b) b.title = tooltip;
+                }
+            }
             this._pendingUserBubbles.delete(requestId);
+            this._agentBubblesByRequestId.delete(requestId);
         }
+    }
+
+    private _formatMetricsTooltip(metrics: any): string | undefined {
+        if (!metrics || typeof metrics !== "object") return undefined;
+        const fmt = (ms?: number) =>
+            typeof ms === "number" ? `${ms.toFixed(0)}ms` : "—";
+        const lines: string[] = [];
+        if (typeof metrics.duration === "number") {
+            lines.push(`Total: ${fmt(metrics.duration)}`);
+        }
+        if (metrics.parse?.duration != null) {
+            lines.push(`  Parse: ${fmt(metrics.parse.duration)}`);
+        }
+        if (metrics.command?.duration != null) {
+            lines.push(`  Command: ${fmt(metrics.command.duration)}`);
+        }
+        if (Array.isArray(metrics.actions) && metrics.actions.length > 0) {
+            metrics.actions.forEach((a: any, i: number) => {
+                if (a?.duration != null) {
+                    lines.push(`  Action ${i + 1}: ${fmt(a.duration)}`);
+                }
+            });
+        }
+        return lines.length > 0 ? lines.join("\n") : undefined;
     }
 
     /**
@@ -491,9 +591,11 @@ export class ChatUI {
     private _createAgentBubble(
         source?: string,
         timestamp?: number,
+        requestId?: string,
     ): HTMLElement {
         const row = document.createElement("div");
         row.className = "message agent";
+        if (requestId) row.dataset.requestId = requestId;
 
         row.appendChild(this._createAvatar("agent", source));
 
@@ -521,12 +623,10 @@ export class ChatUI {
     ): HTMLElement {
         const header = document.createElement("div");
         header.className = "message-header";
-        if (label) {
-            const labelEl = document.createElement("span");
-            labelEl.className = "source-label";
-            labelEl.textContent = label;
-            header.appendChild(labelEl);
-        }
+        const labelEl = document.createElement("span");
+        labelEl.className = "source-label";
+        if (label) labelEl.textContent = label;
+        header.appendChild(labelEl);
         const tsEl = this._createTimestampEl(timestamp);
         header.appendChild(tsEl);
         return header;
