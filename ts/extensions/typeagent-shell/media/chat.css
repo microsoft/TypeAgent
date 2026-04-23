@@ -141,6 +141,53 @@ body {
     max-height: 320px;
 }
 
+/* JSON syntax highlighting (uses VS Code token colors with fallbacks). */
+.action-json .json-key {
+    color: var(--vscode-symbolIcon-propertyForeground, #9cdcfe);
+}
+.action-json .json-string {
+    color: var(--vscode-symbolIcon-stringForeground, #ce9178);
+}
+.action-json .json-number {
+    color: var(--vscode-symbolIcon-numberForeground, #b5cea8);
+}
+.action-json .json-bool {
+    color: var(--vscode-symbolIcon-booleanForeground, #569cd6);
+    font-weight: 600;
+}
+.action-json .json-null {
+    color: var(--vscode-symbolIcon-nullForeground, #569cd6);
+    font-style: italic;
+}
+.action-json .json-punct {
+    color: var(--vscode-foreground);
+    opacity: 0.7;
+}
+
+/* Inline metrics row at the bottom of an agent bubble. */
+.bubble-metrics {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 4px;
+    padding: 0 4px;
+    font-size: 11px;
+    opacity: 0.75;
+}
+
+.bubble-metrics .metrics-left {
+    text-align: left;
+}
+
+.bubble-metrics .metrics-right {
+    text-align: right;
+}
+
+.bubble-metrics b {
+    font-weight: 600;
+    opacity: 1;
+}
+
 .message-timestamp {
     opacity: 0.7;
 }

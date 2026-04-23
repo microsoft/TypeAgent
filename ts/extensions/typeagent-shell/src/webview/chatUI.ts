@@ -294,8 +294,16 @@ export class ChatUI {
                 } else {
                     pre = document.createElement("pre");
                     pre.className = "action-json";
-                    pre.textContent = JSON.stringify(action, null, 2);
-                    body.appendChild(pre);
+                    pre.innerHTML = ChatUI._highlightJson(
+                        JSON.stringify(action, null, 2),
+                    );
+                    // Insert before .bubble-metrics if present, else append
+                    const metricsRow = body.querySelector(".bubble-metrics");
+                    if (metricsRow) {
+                        body.insertBefore(pre, metricsRow);
+                    } else {
+                        body.appendChild(pre);
+                    }
                 }
                 this._scrollToBottom();
             };
@@ -328,46 +336,71 @@ export class ChatUI {
         this._lastAppendedContent = undefined;
 
         if (requestId) {
-            const tooltip = this._formatMetricsTooltip(result?.metrics);
-            if (tooltip) {
-                const userBubble = this._pendingUserBubbles.get(requestId);
-                if (userBubble) {
-                    const b = userBubble.querySelector(".bubble") as HTMLElement | null;
-                    if (b) b.title = tooltip;
-                }
-                const agentBubble = this._agentBubblesByRequestId.get(requestId);
-                if (agentBubble) {
-                    const b = agentBubble.querySelector(".bubble") as HTMLElement | null;
-                    if (b) b.title = tooltip;
-                }
+            const agentBubble = this._agentBubblesByRequestId.get(requestId);
+            if (agentBubble) {
+                this._renderMetrics(agentBubble, result?.metrics);
             }
             this._pendingUserBubbles.delete(requestId);
             this._agentBubblesByRequestId.delete(requestId);
         }
     }
 
-    private _formatMetricsTooltip(metrics: any): string | undefined {
-        if (!metrics || typeof metrics !== "object") return undefined;
-        const fmt = (ms?: number) =>
-            typeof ms === "number" ? `${ms.toFixed(0)}ms` : "—";
-        const lines: string[] = [];
-        if (typeof metrics.duration === "number") {
-            lines.push(`Total: ${fmt(metrics.duration)}`);
-        }
+    private _renderMetrics(bubbleRow: HTMLElement, metrics: any): void {
+        if (!metrics || typeof metrics !== "object") return;
+
+        const body = bubbleRow.querySelector(".message-body");
+        if (!body) return;
+
+        // Remove any prior metrics row (idempotent)
+        body.querySelector(".bubble-metrics")?.remove();
+
+        const fmt = (ms?: number) => {
+            if (typeof ms !== "number") return undefined;
+            if (ms < 1) return `${ms.toFixed(3)}ms`;
+            if (ms > 1000) return `${(ms / 1000).toFixed(1)}s`;
+            return `${ms.toFixed(1)}ms`;
+        };
+        const item = (label: string, value?: string) =>
+            value ? `${label}: <b>${value}</b>` : "";
+
+        const left: string[] = [];
+        const right: string[] = [];
+
         if (metrics.parse?.duration != null) {
-            lines.push(`  Parse: ${fmt(metrics.parse.duration)}`);
+            left.push(item("First Message", fmt(metrics.parse.duration))!);
         }
-        if (metrics.command?.duration != null) {
-            lines.push(`  Command: ${fmt(metrics.command.duration)}`);
-        }
+
         if (Array.isArray(metrics.actions) && metrics.actions.length > 0) {
-            metrics.actions.forEach((a: any, i: number) => {
-                if (a?.duration != null) {
-                    lines.push(`  Action ${i + 1}: ${fmt(a.duration)}`);
-                }
-            });
+            const actionTotal = metrics.actions.reduce(
+                (acc: number, a: any) =>
+                    acc + (typeof a?.duration === "number" ? a.duration : 0),
+                0,
+            );
+            if (actionTotal > 0) {
+                right.push(item("Action Elapsed Time", fmt(actionTotal))!);
+            }
+        } else if (metrics.command?.duration != null) {
+            right.push(
+                item("Command Elapsed Time", fmt(metrics.command.duration))!,
+            );
         }
-        return lines.length > 0 ? lines.join("\n") : undefined;
+        if (metrics.duration != null) {
+            right.push(item("Total Elapsed Time", fmt(metrics.duration))!);
+        }
+
+        if (left.length === 0 && right.length === 0) return;
+
+        const row = document.createElement("div");
+        row.className = "bubble-metrics";
+        const leftEl = document.createElement("div");
+        leftEl.className = "metrics-left";
+        leftEl.innerHTML = left.filter(Boolean).join("<br>");
+        const rightEl = document.createElement("div");
+        rightEl.className = "metrics-right";
+        rightEl.innerHTML = right.filter(Boolean).join("<br>");
+        row.append(leftEl, rightEl);
+        body.appendChild(row);
+        this._scrollToBottom();
     }
 
     /**
@@ -646,6 +679,45 @@ export class ChatUI {
             if (source) el.title = source;
         }
         return el;
+    }
+
+    private static _escapeHtml(s: string): string {
+        return s
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+    }
+
+    /**
+     * Tokenize a JSON.stringify(obj, null, 2) string and wrap tokens in
+     * spans with classes (json-key, json-string, json-number, json-bool,
+     * json-null, json-punct) for CSS styling.
+     */
+    private static _highlightJson(json: string): string {
+        const escaped = ChatUI._escapeHtml(json);
+        // Order matters: match strings (and following ":" => key) before numbers.
+        const re =
+            /("(?:\\.|[^"\\])*")(\s*:)?|\b(true|false)\b|\bnull\b|(-?\d+(?:\.\d+)?(?:[eE][+\-]?\d+)?)/g;
+        return escaped.replace(
+            re,
+            (
+                _m,
+                strLit?: string,
+                colon?: string,
+                bool?: string,
+                num?: string,
+            ) => {
+                if (strLit) {
+                    if (colon) {
+                        return `<span class="json-key">${strLit}</span><span class="json-punct">${colon}</span>`;
+                    }
+                    return `<span class="json-string">${strLit}</span>`;
+                }
+                if (bool) return `<span class="json-bool">${bool}</span>`;
+                if (num) return `<span class="json-number">${num}</span>`;
+                return `<span class="json-null">null</span>`;
+            },
+        );
     }
 
     private _avatarForSource(source?: string): string {
