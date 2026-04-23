@@ -143,20 +143,20 @@ body {
 
 /* JSON syntax highlighting (uses VS Code token colors with fallbacks). */
 .action-json .json-key {
-    color: var(--vscode-symbolIcon-propertyForeground, #9cdcfe);
+    color: var(--vscode-debugTokenExpression-name, #9cdcfe);
 }
 .action-json .json-string {
-    color: var(--vscode-symbolIcon-stringForeground, #ce9178);
+    color: var(--vscode-debugTokenExpression-string, #ce9178);
 }
 .action-json .json-number {
-    color: var(--vscode-symbolIcon-numberForeground, #b5cea8);
+    color: var(--vscode-debugTokenExpression-number, #b5cea8);
 }
 .action-json .json-bool {
-    color: var(--vscode-symbolIcon-booleanForeground, #569cd6);
+    color: var(--vscode-debugTokenExpression-boolean, #569cd6);
     font-weight: 600;
 }
 .action-json .json-null {
-    color: var(--vscode-symbolIcon-nullForeground, #569cd6);
+    color: var(--vscode-debugTokenExpression-value, #569cd6);
     font-style: italic;
 }
 .action-json .json-punct {
@@ -164,7 +164,8 @@ body {
     opacity: 0.7;
 }
 
-/* Inline metrics row at the bottom of an agent bubble. */
+/* Inline metrics row at the bottom of an agent bubble.
+   Hidden by default; revealed when the user hovers the bubble. */
 .bubble-metrics {
     display: flex;
     justify-content: space-between;
@@ -172,7 +173,20 @@ body {
     margin-top: 4px;
     padding: 0 4px;
     font-size: 11px;
-    opacity: 0.75;
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition:
+        opacity 120ms ease-in,
+        max-height 120ms ease-in;
+    pointer-events: none;
+}
+
+.message.agent:hover .bubble-metrics,
+.message.user:hover .bubble-metrics {
+    opacity: 0.8;
+    max-height: 60px;
+    pointer-events: auto;
 }
 
 .bubble-metrics .metrics-left {
@@ -185,7 +199,6 @@ body {
 
 .bubble-metrics b {
     font-weight: 600;
-    opacity: 1;
 }
 
 .message-timestamp {
