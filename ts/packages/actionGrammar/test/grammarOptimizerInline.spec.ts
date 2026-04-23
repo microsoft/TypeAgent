@@ -223,23 +223,27 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         );
     });
 
-    it("skips value-substitution inline when child binding collides with parent binding", () => {
+    it("α-renames colliding child bindings during value-substitution inline", () => {
         // Parent already has `name` as a binding; child also binds
-        // `name`.  After inlining, two `name` bindings would collide in
-        // the same scope, so the inliner must refuse.
+        // `name`.  Rather than refuse, the inliner α-renames the
+        // child's colliding top-level binding (and its references in
+        // child.value) to a fresh opaque name before substituting.
         const text = `<Start> = $(name:string) says $(t:<Inner>) -> { speaker: name, said: t };
 <Inner> = $(name:string) loud -> name;`;
         const baseline = loadGrammarRules("t.grammar", text);
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        // No inline of the value-bearing child.
-        expect(countRulesParts(optimized.rules)).toBe(
+        // Inlining proceeded (one fewer RulesPart layer).
+        expect(countRulesParts(optimized.rules)).toBeLessThan(
             countRulesParts(baseline.rules),
         );
         expect(match(optimized, "alice says bob loud")).toStrictEqual(
             match(baseline, "alice says bob loud"),
         );
+        expect(match(optimized, "alice says bob loud")).toStrictEqual([
+            { speaker: "alice", said: "bob" },
+        ]);
     });
 
     it("inlines and drops child value when parent value does not reference the captured variable", () => {
@@ -260,6 +264,58 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         );
         expect(match(optimized, "play hello loud")).toStrictEqual([
             { kind: "play" },
+        ]);
+    });
+
+    it("α-renames child bindings when dropping child value (branch 3 collision)", () => {
+        // Parent has its own binding `name` and uses it in the value
+        // expression.  The unbound <Inner> falls through to branch (3)
+        // (drop child.value, inline child.parts).  Without renaming,
+        // child's `name` binding would collide with parent's `name` and
+        // the matcher's last-write-wins value resolution would shadow
+        // parent's `name` with the inlined child's, giving the wrong
+        // result.  With α-rename, the inlined binding gets a fresh
+        // opaque name and parent's `name` resolves correctly.
+        const text = `<Start> = $(name:string) says <Inner> -> { said: name };
+<Inner> = $(name:string) loud -> name;`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { inlineSingleAlternatives: true },
+        });
+        // Inlining still proceeds.
+        expect(countRulesParts(optimized.rules)).toBeLessThan(
+            countRulesParts(baseline.rules),
+        );
+        expect(match(optimized, "alice says bob loud")).toStrictEqual(
+            match(baseline, "alice says bob loud"),
+        );
+        expect(match(optimized, "alice says bob loud")).toStrictEqual([
+            { said: "alice" },
+        ]);
+    });
+
+    it("mints unique fresh names across multiple inlines into the same parent", () => {
+        // Two distinct child rules are inlined into the same parent via
+        // branch (1) substitution.  Each child binds `name` at the top
+        // level.  The per-parent rename counter must produce distinct
+        // fresh names for the two inlined bindings; otherwise the two
+        // bindings would collide in the parent's parts list and the
+        // value substitutions would resolve to the wrong source.
+        const text = `<Start> = $(a:<X>) and $(b:<Y>) -> { x: a, y: b };
+<X> = $(name:string) here -> name;
+<Y> = $(name:string) there -> name;`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { inlineSingleAlternatives: true },
+        });
+        expect(countRulesParts(optimized.rules)).toBeLessThan(
+            countRulesParts(baseline.rules),
+        );
+        expect(match(optimized, "alice here and bob there")).toStrictEqual(
+            match(baseline, "alice here and bob there"),
+        );
+        expect(match(optimized, "alice here and bob there")).toStrictEqual([
+            { x: "alice", y: "bob" },
         ]);
     });
 });

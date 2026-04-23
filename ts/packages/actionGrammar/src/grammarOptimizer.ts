@@ -154,12 +154,17 @@ function inlineRule(
     memo: RulesArrayMemo,
     refCounts: Map<GrammarRule[], number>,
 ): GrammarRule {
+    // Per-parent-rule counter for opaque α-rename names.  Shared
+    // across every `tryInlineRulesPart` call for this rule so two
+    // inlinings into the same parent never mint the same fresh name.
+    const renameState: RenameState = { next: 0 };
     const { parts, changed, valueSubstitutions, valueAssignment } = inlineParts(
         rule.parts,
         rule,
         counter,
         memo,
         refCounts,
+        renameState,
     );
     if (!changed) {
         return rule;
@@ -169,13 +174,11 @@ function inlineRule(
         value = valueAssignment;
     }
     if (valueSubstitutions.length > 0 && value !== undefined) {
+        const subs = new Map<string, CompiledValueNode>();
         for (const sub of valueSubstitutions) {
-            value = substituteValueVariable(
-                value,
-                sub.variable,
-                sub.replacement,
-            );
+            subs.set(sub.variable, sub.replacement);
         }
+        value = substituteValueVariables(value, subs);
     }
     if (value === rule.value) {
         return { ...rule, parts };
@@ -202,12 +205,16 @@ type TryInlineResult = {
     valueAssignment?: CompiledValueNode;
 };
 
+/** Per-parent-rule fresh-name counter used by α-renaming. */
+type RenameState = { next: number };
+
 function inlineParts(
     parts: GrammarPart[],
     parentRule: GrammarRule,
     counter: { inlined: number },
     memo: RulesArrayMemo,
     refCounts: Map<GrammarRule[], number>,
+    renameState: RenameState,
 ): {
     parts: GrammarPart[];
     changed: boolean;
@@ -245,7 +252,7 @@ function inlineParts(
         const shared = (refCounts.get(p.rules) ?? 1) > 1;
         const replacement = shared
             ? undefined
-            : tryInlineRulesPart(rewritten, parentRule);
+            : tryInlineRulesPart(rewritten, parentRule, renameState);
         if (replacement !== undefined) {
             counter.inlined++;
             changed = true;
@@ -286,6 +293,7 @@ function inlineParts(
 function tryInlineRulesPart(
     part: RulesPart,
     parentRule: GrammarRule,
+    renameState: RenameState,
 ): TryInlineResult | undefined {
     if (part.repeat || part.optional) {
         return undefined;
@@ -314,55 +322,38 @@ function tryInlineRulesPart(
     // The child rule may carry its own value expression.  After
     // inlining, child.parts move into the parent and the explicit
     // child.value can no longer fire on its own.  child.value is
-    // observable to the matcher in exactly two ways — handle each,
+    // observable to the matcher in two ways; we handle each, and
     // otherwise the value is dead and can be dropped:
     //
-    //   (1) Substitute: parent captures via `part.variable` AND
-    //       parent.value references that variable.  Substitute
-    //       child.value for the variable in parent.value.
+    //   (Hoist)        parent has no value of its own and exactly one
+    //                  part (this RulesPart).  Synthesize a value
+    //                  assignment from child.value onto the parent —
+    //                  this is what the matcher's single-part
+    //                  default-value rule would have computed at
+    //                  runtime.
     //
-    //   (2) Hoist: parent has no value of its own and exactly one
-    //       part (this RulesPart).  The matcher's single-part
-    //       default-value rule would have promoted the captured
-    //       child.value into the parent's value at runtime.
-    //       Synthesize that assignment explicitly on the parent.
+    //   (Substitute)   parent captures via `part.variable` AND has
+    //                  its own value expression.  Substitute
+    //                  child.value for the captured variable in
+    //                  parent.value.
     //
-    //   (3) Drop: child.value is unobservable; inline child.parts
-    //       and forget the value.
+    //   (Drop)         child.value is unobservable: inline child.parts
+    //                  and forget the value.
     //
-    // child.value's references to child's own part bindings remain
-    // in scope after inlining since those bindings move from
-    // child.parts → parent.parts.  Only case (1) needs an additional
-    // collision check against the parent's *other* parts.
+    // The Substitute and Drop cases share the same parts handling —
+    // child's top-level bindings are α-renamed (so they can't collide
+    // with parent's other parts) and the renamed child.value is
+    // either folded into parent.value (Substitute) or discarded
+    // (Drop).  child.value's references to child's own part bindings
+    // remain in scope after inlining since those bindings move from
+    // child.parts → parent.parts.
     if (child.value !== undefined) {
-        // (1) Substitution.
-        if (part.variable !== undefined && parentRule.value !== undefined) {
-            const parentRefs = collectVariableReferences(parentRule.value);
-            if (parentRefs.has(part.variable)) {
-                // Refuse if child's top-level bindings would collide
-                // with bindings already in parent's other parts.
-                const childBindings = collectVariableNames(child.parts);
-                for (const otherPart of parentRule.parts) {
-                    if (otherPart === part) continue;
-                    const v = bindingName(otherPart);
-                    if (v !== undefined && childBindings.has(v)) {
-                        return undefined;
-                    }
-                }
-                return {
-                    parts: child.parts,
-                    valueSubstitution: {
-                        variable: part.variable,
-                        replacement: child.value,
-                    },
-                };
-            }
-            // Parent has its own value and doesn't reference the
-            // captured variable — fall through to drop.
-        }
-
-        // (2) Hoist onto a single-part parent without its own value.
-        // No collision check needed: parent has no other parts.
+        // (Hoist) Parent has no value of its own and exactly one
+        // part (this RulesPart).  The matcher's single-part
+        // default-value rule would have promoted the captured
+        // child.value into the parent's value at runtime; synthesize
+        // that assignment explicitly.  No α-rename needed: parent has
+        // no other parts for child.parts' bindings to collide with.
         if (parentRule.value === undefined && parentRule.parts.length === 1) {
             return {
                 parts: child.parts,
@@ -370,8 +361,28 @@ function tryInlineRulesPart(
             };
         }
 
-        // (3) Drop: child.value is unobservable at runtime.
-        return { parts: child.parts };
+        // Otherwise: α-rename child's top-level bindings to fresh
+        // opaque names so they can't collide with parent's other
+        // parts, and apply the same remap to child.value.  Then:
+        //   - if the parent captures via `part.variable` AND has its
+        //     own value expression, fold the renamed child.value into
+        //     it (substitution).  When parent.value doesn't reference
+        //     `part.variable` the substitution is a no-op walk and we
+        //     get the same result as the drop case.
+        //   - otherwise child.value is unobservable at runtime; drop
+        //     it and inline only the renamed child.parts.
+        const { parts: renamedParts, value: renamedValue } =
+            renameAllChildBindings(child.parts, child.value, renameState);
+        if (part.variable !== undefined && parentRule.value !== undefined) {
+            return {
+                parts: renamedParts,
+                valueSubstitution: {
+                    variable: part.variable,
+                    replacement: renamedValue!,
+                },
+            };
+        }
+        return { parts: renamedParts };
     }
 
     // If the parent expects to capture this RulesPart into a variable, the
@@ -1119,11 +1130,47 @@ function collectVariableNames(parts: GrammarPart[]): Set<string> {
     return out;
 }
 
-function bindingName(p: GrammarPart): string | undefined {
-    if (p.type === "wildcard" || p.type === "number" || p.type === "rules") {
-        return p.variable;
+/**
+ * α-rename every top-level binding in `parts` to a fresh opaque name
+ * (`__opt_inline_<n>`), and apply the same remap to `value` if given.
+ * Returns the original arrays/nodes when there are no top-level
+ * bindings to rename.
+ *
+ * Only top-level bindings are touched: nested rule scopes are not
+ * visible from outside their nested rule and therefore can't collide
+ * with anything in the parent we're inlining into.
+ */
+function renameAllChildBindings(
+    parts: GrammarPart[],
+    value: CompiledValueNode | undefined,
+    renameState: RenameState,
+): { parts: GrammarPart[]; value: CompiledValueNode | undefined } {
+    let remap: Map<string, string> | undefined;
+    let outParts: GrammarPart[] | undefined;
+    for (let i = 0; i < parts.length; i++) {
+        const p = parts[i];
+        if (
+            (p.type !== "wildcard" &&
+                p.type !== "number" &&
+                p.type !== "rules") ||
+            p.variable === undefined
+        ) {
+            if (outParts !== undefined) outParts.push(p);
+            continue;
+        }
+        const fresh = `__opt_inline_${renameState.next++}`;
+        if (remap === undefined) remap = new Map();
+        remap.set(p.variable, fresh);
+        if (outParts === undefined) outParts = parts.slice(0, i);
+        outParts.push({ ...p, variable: fresh });
     }
-    return undefined;
+    if (remap === undefined) {
+        return { parts, value };
+    }
+    return {
+        parts: outParts ?? parts,
+        value: value !== undefined ? remapValueVariables(value, remap) : value,
+    };
 }
 
 function collectVariableReferences(node: CompiledValueNode): Set<string> {
@@ -1187,218 +1234,92 @@ function remapValueVariables(
     remap: Map<string, string>,
 ): CompiledValueNode {
     if (remap.size === 0) return node;
-    switch (node.type) {
-        case "literal":
-            return node;
-        case "variable":
-            if (remap.has(node.name)) {
-                return { ...node, name: remap.get(node.name)! };
-            }
-            return node;
-        case "object": {
-            const value: CompiledObjectElement[] = node.value.map((el) => {
-                if (el.type === "spread") {
-                    return {
-                        ...el,
-                        argument: remapValueVariables(el.argument, remap),
-                    };
-                }
-                if (el.value === null) {
-                    // Shorthand { foo } = { foo: foo }.  If the key is
-                    // being remapped, expand to a full property so the
-                    // key (object field name) stays the same while the
-                    // value references the new variable name.
-                    if (remap.has(el.key)) {
-                        return {
-                            ...el,
-                            value: {
-                                type: "variable" as const,
-                                name: remap.get(el.key)!,
-                            },
-                        };
-                    }
-                    return el;
-                }
-                return {
-                    ...el,
-                    value: remapValueVariables(el.value, remap),
-                };
-            });
-            return { ...node, value };
-        }
-        case "array":
-            return {
-                ...node,
-                value: node.value.map((v) => remapValueVariables(v, remap)),
-            };
-        case "binaryExpression":
-            return {
-                ...node,
-                left: remapValueVariables(node.left, remap),
-                right: remapValueVariables(node.right, remap),
-            };
-        case "unaryExpression":
-            return {
-                ...node,
-                operand: remapValueVariables(node.operand, remap),
-            };
-        case "conditionalExpression":
-            return {
-                ...node,
-                test: remapValueVariables(node.test, remap),
-                consequent: remapValueVariables(node.consequent, remap),
-                alternate: remapValueVariables(node.alternate, remap),
-            };
-        case "memberExpression":
-            return {
-                ...node,
-                object: remapValueVariables(node.object, remap),
-                property:
-                    typeof node.property === "string"
-                        ? node.property
-                        : remapValueVariables(node.property, remap),
-            };
-        case "callExpression":
-            return {
-                ...node,
-                callee: remapValueVariables(node.callee, remap),
-                arguments: node.arguments.map((a) =>
-                    remapValueVariables(a, remap),
-                ),
-            };
-        case "spreadElement":
-            return {
-                ...node,
-                argument: remapValueVariables(node.argument, remap),
-            };
-        case "templateLiteral":
-            return {
-                ...node,
-                expressions: node.expressions.map((e) =>
-                    remapValueVariables(e, remap),
-                ),
-            };
+    // Renaming is just substitution where each replacement is a fresh
+    // variable node carrying the new name.
+    const subs = new Map<string, CompiledValueNode>();
+    for (const [from, to] of remap) {
+        subs.set(from, { type: "variable", name: to });
     }
+    return substituteValueVariables(node, subs);
 }
 
 /**
- * Replace every reference to the variable `name` in `node` with a deep
- * copy of `replacement`.  Used by the inliner when a child rule with an
- * explicit value expression is folded into its parent: the parent's
- * value expression's reference to the captured variable is substituted
- * with the child's own value expression.
+ * Replace each reference to a variable in `node` with the matching
+ * replacement node from `substitutions`.  Variables not present in the
+ * map are left untouched.
+ *
+ * Used in two ways by the inliner / factorer:
+ *   - α-rename (via `remapValueVariables`): replacements are fresh
+ *     `{ type: "variable", name: <new> }` nodes.
+ *   - Value-expression substitution: replacements are arbitrary value
+ *     expressions copied from a child rule's `value`.
+ *
+ * Object shorthand `{ foo }` (which means `{ foo: foo }`) is expanded
+ * to a full property `{ foo: <replacement> }` whenever the shorthand
+ * key matches a substitution, so the field name on the resulting
+ * object stays the same.
  */
-function substituteValueVariable(
+function substituteValueVariables(
     node: CompiledValueNode,
-    name: string,
-    replacement: CompiledValueNode,
+    substitutions: Map<string, CompiledValueNode>,
 ): CompiledValueNode {
+    if (substitutions.size === 0) return node;
+    const sub = (n: CompiledValueNode): CompiledValueNode =>
+        substituteValueVariables(n, substitutions);
     switch (node.type) {
         case "literal":
             return node;
-        case "variable":
-            return node.name === name ? replacement : node;
+        case "variable": {
+            const r = substitutions.get(node.name);
+            return r !== undefined ? r : node;
+        }
         case "object": {
             const value: CompiledObjectElement[] = node.value.map((el) => {
                 if (el.type === "spread") {
-                    return {
-                        ...el,
-                        argument: substituteValueVariable(
-                            el.argument,
-                            name,
-                            replacement,
-                        ),
-                    };
+                    return { ...el, argument: sub(el.argument) };
                 }
                 if (el.value === null) {
-                    // Shorthand { foo } = { foo: foo }.  If the key is
-                    // the variable being substituted, expand to the
-                    // full property form { foo: <replacement> }.
-                    if (el.key === name) {
-                        return { ...el, value: replacement };
+                    const r = substitutions.get(el.key);
+                    if (r !== undefined) {
+                        return { ...el, value: r };
                     }
                     return el;
                 }
-                return {
-                    ...el,
-                    value: substituteValueVariable(el.value, name, replacement),
-                };
+                return { ...el, value: sub(el.value) };
             });
             return { ...node, value };
         }
         case "array":
-            return {
-                ...node,
-                value: node.value.map((v) =>
-                    substituteValueVariable(v, name, replacement),
-                ),
-            };
+            return { ...node, value: node.value.map(sub) };
         case "binaryExpression":
-            return {
-                ...node,
-                left: substituteValueVariable(node.left, name, replacement),
-                right: substituteValueVariable(node.right, name, replacement),
-            };
+            return { ...node, left: sub(node.left), right: sub(node.right) };
         case "unaryExpression":
-            return {
-                ...node,
-                operand: substituteValueVariable(
-                    node.operand,
-                    name,
-                    replacement,
-                ),
-            };
+            return { ...node, operand: sub(node.operand) };
         case "conditionalExpression":
             return {
                 ...node,
-                test: substituteValueVariable(node.test, name, replacement),
-                consequent: substituteValueVariable(
-                    node.consequent,
-                    name,
-                    replacement,
-                ),
-                alternate: substituteValueVariable(
-                    node.alternate,
-                    name,
-                    replacement,
-                ),
+                test: sub(node.test),
+                consequent: sub(node.consequent),
+                alternate: sub(node.alternate),
             };
         case "memberExpression":
             return {
                 ...node,
-                object: substituteValueVariable(node.object, name, replacement),
+                object: sub(node.object),
                 property:
                     typeof node.property === "string"
                         ? node.property
-                        : substituteValueVariable(
-                              node.property,
-                              name,
-                              replacement,
-                          ),
+                        : sub(node.property),
             };
         case "callExpression":
             return {
                 ...node,
-                callee: substituteValueVariable(node.callee, name, replacement),
-                arguments: node.arguments.map((a) =>
-                    substituteValueVariable(a, name, replacement),
-                ),
+                callee: sub(node.callee),
+                arguments: node.arguments.map(sub),
             };
         case "spreadElement":
-            return {
-                ...node,
-                argument: substituteValueVariable(
-                    node.argument,
-                    name,
-                    replacement,
-                ),
-            };
+            return { ...node, argument: sub(node.argument) };
         case "templateLiteral":
-            return {
-                ...node,
-                expressions: node.expressions.map((e) =>
-                    substituteValueVariable(e, name, replacement),
-                ),
-            };
+            return { ...node, expressions: node.expressions.map(sub) };
     }
 }
