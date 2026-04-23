@@ -45,7 +45,7 @@ export type BridgeToWebviewMessage =
           timestamp?: number;
       }
     | { type: "clear"; requestId: RequestId }
-    | { type: "notify"; event: string; data: any; source: string; seq?: number; requestId?: RequestId }
+    | { type: "notify"; event: string; data: any; source: string; seq?: number; requestId?: string }
     | { type: "commandResult"; requestId: string; result: any }
     | { type: "commandComplete"; requestId: string; result: any }
     | { type: "error"; message: string }
@@ -695,13 +695,22 @@ export class AgentServerBridge {
                 source: string,
                 seq?: number,
             ) => {
+                // RequestId is an object {requestId, clientRequestId};
+                // we tag bubbles by the clientRequestId we generated.
+                let clientRequestId: string | undefined;
+                if (typeof notificationId === "string") {
+                    clientRequestId = notificationId;
+                } else if (notificationId && typeof notificationId === "object") {
+                    clientRequestId = (notificationId as any)
+                        .clientRequestId as string | undefined;
+                }
                 this.broadcastToWebviews({
                     type: "notify",
                     event,
                     data,
                     source,
                     seq,
-                    requestId: notificationId as RequestId | undefined,
+                    requestId: clientRequestId,
                 });
             },
             requestChoice: () => {},

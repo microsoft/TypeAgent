@@ -128,6 +128,7 @@ body {
 
 /* The actual chat bubble */
 .bubble {
+    position: relative;
     padding: 8px 12px;
     border-radius: 12px;
     word-wrap: break-word;
@@ -139,6 +140,8 @@ body {
     background: var(--vscode-button-background);
     color: var(--vscode-button-foreground);
     border-top-right-radius: 4px;
+    /* Reserve space in the top-right corner for the roadrunner icon */
+    padding-right: 24px;
 }
 
 .message.agent .bubble {
@@ -187,15 +190,18 @@ body {
     display: block;
 }
 
-/* Status icon inside user bubble (roadrunner: translation/cache state) */
+/* Status icon inside user bubble (roadrunner: translation/cache state).
+   Positioned in the top-right corner of the bubble like the Electron shell. */
 .status-icon {
+    position: absolute;
+    top: 4px;
+    right: 6px;
     display: inline-flex;
     align-items: center;
-    margin-left: 6px;
-    vertical-align: baseline;
     user-select: none;
     color: var(--vscode-descriptionForeground);
     cursor: help;
+    line-height: 0;
 }
 .status-icon.hidden {
     visibility: hidden;
