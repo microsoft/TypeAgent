@@ -134,15 +134,13 @@ export class ChatUI {
         textEl.textContent = text;
         bubble.appendChild(textEl);
 
-        // Roadrunner: starts grey with a "translating…" tooltip, gets
-        // recolored + retooltipped when an "explained" notify arrives
-        // (for action translations) and falls back to a sensible
-        // "no translation" tooltip on commandComplete for pure chat
-        // responses that never emit "explained".
+        // Roadrunner: hidden until an "explained" notify arrives (which
+        // only fires for action translations — pure chat responses never
+        // emit it, so the icon stays hidden for those). Mirrors the
+        // Electron shell's translation/cache indicator.
         const icon = document.createElement("span");
-        icon.className = "status-icon roadrunner";
+        icon.className = "status-icon roadrunner hidden";
         icon.innerHTML = ROADRUNNER_SVG;
-        icon.title = "Translating…";
         bubble.appendChild(icon);
 
         body.appendChild(bubble);
@@ -264,19 +262,10 @@ export class ChatUI {
         this._removeStatusIndicator();
         this._activeResponseEl = undefined;
         this._lastAppendedContent = undefined;
-
-        // If the bubble's roadrunner never received an "explained" event
-        // (e.g. a pure chat-agent response, or a system command like
-        // @config), update its tooltip to reflect that translation
-        // wasn't applicable. Color stays at the default muted color.
+        // Note: we deliberately don't flip the roadrunner here. The
+        // roadrunner reflects translation/cache state, which is signaled
+        // separately via the "explained" notify event (see onNotify).
         if (requestId) {
-            const bubble = this._findUserBubble(requestId);
-            const icon = bubble?.querySelector(
-                ".roadrunner",
-            ) as HTMLElement | null;
-            if (icon && icon.dataset.explained !== "true") {
-                icon.title = "No translation (handled directly)";
-            }
             this._pendingUserBubbles.delete(requestId);
         }
     }
@@ -335,7 +324,7 @@ export class ChatUI {
             colorVar = "lightblue";
         }
 
-        icon.dataset.explained = "true";
+        icon.classList.remove("hidden");
         icon.style.color = colorVar;
         icon.title = tooltip;
     }
