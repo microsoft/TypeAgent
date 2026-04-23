@@ -4,6 +4,7 @@
 import registerDebug from "debug";
 import {
     CompiledObjectElement,
+    CompiledSpacingMode,
     CompiledValueNode,
     Grammar,
     GrammarPart,
@@ -539,8 +540,33 @@ function factorParts(
 }
 
 /**
- * One pass of common-prefix factoring inside a single RulesPart.
- * Returns the same object if nothing changed.
+ * Common-prefix factoring inside a single RulesPart, implemented as a
+ * trie-build + post-order emission.
+ *
+ * Each rule is inserted as a sequence of "atomic" steps:
+ *   - StringPart explodes into one ("string", token) edge per token in
+ *     `value[]` (so `["play", "song"]` and `["play", "album"]` share the
+ *     "play" edge but branch at "song"/"album");
+ *   - VarStringPart, VarNumberPart, RulesPart, PhraseSetPart each yield
+ *     one edge.  RulesPart edges key by `rules` array identity so that
+ *     two `<RuleName>` references share the same edge — preserving the
+ *     dedup invariant `grammarSerializer.ts` relies on.
+ *
+ * Variables on wildcard/number/rules edges are carried by the first
+ * inserter; later inserters with different names accumulate a per-rule
+ * remap (local→canonical) that is applied to the terminal's `value` at
+ * emission time.
+ *
+ * Emission walks the trie post-order: single-child / no-terminal chains
+ * are path-compressed back into a flat parts array (with adjacent
+ * StringParts re-merged), and multi-member nodes become wrapper
+ * `RulesPart`s.  Per-fork eligibility checks are applied at each wrapper
+ * site; failure causes a *local* bailout — the would-be members are
+ * emitted as separate full rules with the canonical prefix prepended,
+ * losing factoring at that fork only (factoring above and below the
+ * fork still applies).
+ *
+ * Returns the same object if no factoring took place.
  */
 function factorRulesPart(
     part: RulesPart,
@@ -551,347 +577,406 @@ function factorRulesPart(
         // such groups untouched to stay safe.
         return part;
     }
-    const rules = part.rules;
-    if (rules.length < 2) return part;
+    if (part.rules.length < 2) return part;
 
-    // Group alternatives that share at least one leading part (or at
-    // least one leading string token) with the group's lead alternative.
-    // Preserve original ordering.
-    const groups: { members: number[] }[] = [];
-    const consumed = new Set<number>();
-    for (let i = 0; i < rules.length; i++) {
-        if (consumed.has(i)) continue;
-        const group: { members: number[] } = { members: [i] };
-        consumed.add(i);
-        for (let j = i + 1; j < rules.length; j++) {
-            if (consumed.has(j)) continue;
-            const sp = sharedPrefixShape(rules[i], rules[j]);
-            if (sp.fullParts > 0 || sp.stringTokens > 0) {
-                group.members.push(j);
-                consumed.add(j);
-            }
-        }
-        groups.push(group);
+    const root: TrieNode = { children: [], terminals: [], firstIdx: 0 };
+    for (let i = 0; i < part.rules.length; i++) {
+        insertRuleIntoTrie(root, part.rules[i], i);
     }
 
-    if (groups.every((g) => g.members.length < 2)) return part;
-
+    const state: EmitState = { didFactor: false };
+    const items: { idx: number; rules: GrammarRule[] }[] = [];
+    for (const c of root.children) {
+        items.push({ idx: c.firstIdx, rules: emitFromNode(c, state) });
+    }
+    items.sort((a, b) => a.idx - b.idx);
     const newRules: GrammarRule[] = [];
-    let didFactor = false;
-    for (const g of groups) {
-        if (g.members.length < 2) {
-            newRules.push(rules[g.members[0]]);
-            continue;
-        }
-        const members = g.members.map((i) => rules[i]);
-        // Intersect prefix shapes across all members (using member[0] as
-        // canonical reference).
-        let shape: PrefixShape = {
-            fullParts: members[0].parts.length,
-            stringTokens: 0,
-        };
-        for (let mi = 1; mi < members.length; mi++) {
-            const s = sharedPrefixShape(members[0], members[mi]);
-            if (s.fullParts < shape.fullParts) {
-                shape = {
-                    fullParts: s.fullParts,
-                    stringTokens: s.stringTokens,
-                };
-            } else if (
-                s.fullParts === shape.fullParts &&
-                s.stringTokens < shape.stringTokens
-            ) {
-                shape = {
-                    fullParts: s.fullParts,
-                    stringTokens: s.stringTokens,
-                };
-            }
-        }
-        if (shape.fullParts === 0 && shape.stringTokens === 0) {
-            for (const m of members) newRules.push(m);
-            continue;
-        }
+    for (const it of items) newRules.push(...it.rules);
 
-        // Refuse to factor if any alternative would be wholly consumed by
-        // the shared prefix AND has a value expression — the suffix
-        // alternative would become empty-parts.
-        const wholeConsumed = (m: GrammarRule): boolean => {
-            if (
-                m.parts.length !==
-                shape.fullParts + (shape.stringTokens > 0 ? 1 : 0)
-            ) {
-                return false;
-            }
-            if (shape.stringTokens === 0) {
-                return m.parts.length === shape.fullParts;
-            }
-            const last = m.parts[shape.fullParts];
-            return (
-                last.type === "string" &&
-                last.value.length === shape.stringTokens
-            );
-        };
-        if (members.some((m) => wholeConsumed(m) && m.value !== undefined)) {
-            for (const m of members) newRules.push(m);
-            continue;
-        }
-
-        // Build canonical prefix parts.
-        const canonicalParts: GrammarPart[] = members[0].parts.slice(
-            0,
-            shape.fullParts,
-        );
-        if (shape.stringTokens > 0) {
-            const lead = members[0].parts[shape.fullParts];
-            if (lead.type !== "string") {
-                // Shouldn't happen (shape guarantees string), bail safely.
-                for (const m of members) newRules.push(m);
-                continue;
-            }
-            canonicalParts.push({
-                type: "string",
-                value: lead.value.slice(0, shape.stringTokens),
-            });
-        }
-        const canonicalNames = collectVariableNames(canonicalParts);
-
-        // Build per-member variable remap from member-local prefix names
-        // to canonical names taken from the lead alternative.  Only the
-        // full-parts range carries variables (partial string tokens have
-        // no variable bindings).
-        const memberRemaps: Map<string, string>[] = members.map((m) =>
-            buildPrefixRemap(canonicalParts, m.parts, shape.fullParts),
-        );
-
-        // Compute per-member suffix parts, splitting the partial
-        // StringPart if needed.
-        const memberSuffixParts: GrammarPart[][] = members.map((m) => {
-            if (shape.stringTokens === 0) {
-                return m.parts.slice(shape.fullParts);
-            }
-            const lead = m.parts[shape.fullParts];
-            if (lead.type !== "string") {
-                return m.parts.slice(shape.fullParts); // defensive
-            }
-            const remaining = lead.value.slice(shape.stringTokens);
-            const rest = m.parts.slice(shape.fullParts + 1);
-            if (remaining.length === 0) {
-                return rest;
-            }
-            return [
-                { type: "string", value: remaining } as GrammarPart,
-                ...rest,
-            ];
-        });
-
-        // Verify suffix bindings won't shadow shared canonical names.
-        let collision = false;
-        for (let mi = 0; mi < members.length && !collision; mi++) {
-            const suffixVars = collectVariableNames(memberSuffixParts[mi]);
-            const remap = memberRemaps[mi];
-            for (const v of suffixVars) {
-                const renamed = remap.get(v) ?? v;
-                if (canonicalNames.has(renamed)) {
-                    collision = true;
-                    break;
-                }
-            }
-        }
-        if (collision) {
-            for (const m of members) newRules.push(m);
-            continue;
-        }
-
-        // Refuse to factor when any member's value expression references
-        // a variable bound in the shared prefix.  The matcher scopes
-        // value variables per nested rule, so the suffix's value cannot
-        // see canonical-prefix bindings — factoring would break match
-        // results.
-        let crossScopeRef = false;
-        for (let mi = 0; mi < members.length && !crossScopeRef; mi++) {
-            const m = members[mi];
-            if (m.value === undefined) continue;
-            const remap = memberRemaps[mi];
-            const referenced = collectVariableReferences(m.value);
-            for (const v of referenced) {
-                const renamed = remap.get(v) ?? v;
-                if (canonicalNames.has(renamed)) {
-                    crossScopeRef = true;
-                    break;
-                }
-            }
-        }
-        if (crossScopeRef) {
-            for (const m of members) newRules.push(m);
-            continue;
-        }
-
-        // Refuse to factor when value-presence pattern is mixed across
-        // members.  Mixing explicit-value and implicit-default alternatives
-        // inside a new wrapper rule changes the matcher's default-value
-        // semantics for the implicit cases.
-        const valuePresence = members.map((m) => m.value !== undefined);
-        const allHaveValue = valuePresence.every((v) => v);
-        const noneHaveValue = valuePresence.every((v) => !v);
-        if (!allHaveValue && !noneHaveValue) {
-            for (const m of members) newRules.push(m);
-            continue;
-        }
-
-        // Refuse to factor when (no member has explicit value) and any
-        // suffix would end up with a multi-part shape: the matcher's
-        // single-part default-value rule no longer applies, silently
-        // turning a valid default into `undefined`.
-        if (noneHaveValue) {
-            const anySuffixMultipart = members.some((m) => {
-                const suffixLen =
-                    m.parts.length -
-                    shape.fullParts -
-                    (shape.stringTokens > 0 &&
-                    m.parts[shape.fullParts]?.type === "string" &&
-                    (m.parts[shape.fullParts] as any).value.length ===
-                        shape.stringTokens
-                        ? 1
-                        : 0);
-                return suffixLen > 1;
-            });
-            if (anySuffixMultipart) {
-                for (const m of members) newRules.push(m);
-                continue;
-            }
-        }
-
-        const suffixRules: GrammarRule[] = members.map((m, mi) => {
-            const remap = memberRemaps[mi];
-            const suffixParts = memberSuffixParts[mi].map((p) =>
-                remapPartVariables(p, remap),
-            );
-            const suffixValue =
-                m.value !== undefined
-                    ? remapValueVariables(m.value, remap)
-                    : undefined;
-            const out: GrammarRule = { parts: suffixParts };
-            if (suffixValue !== undefined) out.value = suffixValue;
-            if (m.spacingMode !== undefined) out.spacingMode = m.spacingMode;
-            return out;
-        });
-
-        // If any suffix carries a value expression, the factored wrapper
-        // rule must capture it — otherwise the matcher's value-tracking
-        // policy would drop the nested value (parent has > 1 part with no
-        // explicit value).  Generate a fresh variable name that does not
-        // collide with the shared prefix or any suffix.
-        const anySuffixHasValue = suffixRules.some(
-            (r) => r.value !== undefined,
-        );
-        const suffixRulesPart: RulesPart = {
-            type: "rules",
-            rules: suffixRules,
-        };
-        const factoredAlt: GrammarRule = {
-            parts: [...canonicalParts, suffixRulesPart],
-        };
-        if (anySuffixHasValue) {
-            const reserved = new Set<string>(canonicalNames);
-            for (const r of suffixRules) {
-                for (const v of collectVariableNames(r.parts)) reserved.add(v);
-            }
-            let gen = "__opt_factor";
-            let i = 0;
-            while (reserved.has(gen)) {
-                i++;
-                gen = `__opt_factor_${i}`;
-            }
-            suffixRulesPart.variable = gen;
-            factoredAlt.value = { type: "variable", name: gen };
-        }
-        const firstSpacing = members[0].spacingMode;
-        if (
-            members.every((m) => m.spacingMode === firstSpacing) &&
-            firstSpacing !== undefined
-        ) {
-            factoredAlt.spacingMode = firstSpacing;
-        }
-
-        newRules.push(factoredAlt);
-        didFactor = true;
-        counter.factored++;
-    }
-
-    if (!didFactor) return part;
+    if (!state.didFactor) return part;
+    counter.factored++;
     return { ...part, rules: newRules };
 }
 
-// Compare two parts for "structurally equal modulo variable name".
-function partsEqualForFactoring(a: GrammarPart, b: GrammarPart): boolean {
-    if (a.type !== b.type) return false;
-    switch (a.type) {
-        case "string": {
-            const bs = b as typeof a;
-            if (a.value.length !== bs.value.length) return false;
-            for (let i = 0; i < a.value.length; i++) {
-                if (a.value[i] !== bs.value[i]) return false;
-            }
-            return true;
-        }
-        case "phraseSet":
-            return a.matcherName === (b as typeof a).matcherName;
-        case "wildcard": {
-            const bw = b as typeof a;
-            return (
-                a.typeName === bw.typeName &&
-                (a.optional ?? false) === (bw.optional ?? false)
-            );
-        }
-        case "number": {
-            const bn = b as typeof a;
-            return (a.optional ?? false) === (bn.optional ?? false);
-        }
-        case "rules": {
-            const br = b as typeof a;
-            return (
-                a.rules === br.rules &&
-                (a.optional ?? false) === (br.optional ?? false) &&
-                (a.repeat ?? false) === (br.repeat ?? false)
-            );
-        }
-    }
-}
+// ── Trie data structures ─────────────────────────────────────────────────
 
-function sharedPrefixLength(a: GrammarRule, b: GrammarRule): number {
-    const max = Math.min(a.parts.length, b.parts.length);
-    let i = 0;
-    while (i < max && partsEqualForFactoring(a.parts[i], b.parts[i])) i++;
-    return i;
-}
+type TrieEdge =
+    | { kind: "string"; token: string }
+    | {
+          kind: "wildcard";
+          typeName: string;
+          optional: boolean;
+          canonicalVariable: string;
+      }
+    | { kind: "number"; optional: boolean; canonicalVariable: string }
+    | {
+          kind: "rules";
+          rules: GrammarRule[];
+          optional: boolean;
+          repeat: boolean;
+          name: string | undefined;
+          canonicalVariable: string | undefined;
+      }
+    | { kind: "phraseSet"; matcherName: string };
 
-type PrefixShape = {
-    // Number of leading parts where both rules match via
-    // partsEqualForFactoring.
-    fullParts: number;
-    // If the next part on both sides is a StringPart with a non-empty
-    // common leading token sequence, this records its length.
-    stringTokens: number;
+type Terminal = {
+    idx: number;
+    value: CompiledValueNode | undefined;
+    spacingMode: CompiledSpacingMode | undefined;
+    /** local→canonical variable rename accumulated along the path. */
+    remap: Map<string, string>;
 };
 
-function sharedPrefixShape(a: GrammarRule, b: GrammarRule): PrefixShape {
-    const full = sharedPrefixLength(a, b);
-    let stringTokens = 0;
-    if (full < a.parts.length && full < b.parts.length) {
-        const pa = a.parts[full];
-        const pb = b.parts[full];
-        if (pa.type === "string" && pb.type === "string") {
-            const max = Math.min(pa.value.length, pb.value.length);
-            while (
-                stringTokens < max &&
-                pa.value[stringTokens] === pb.value[stringTokens]
-            ) {
-                stringTokens++;
+type TrieNode = {
+    /** undefined only at the root. */
+    edge?: TrieEdge;
+    children: TrieNode[];
+    terminals: Terminal[];
+    /** Lowest insertion index of any rule passing through this node. */
+    firstIdx: number;
+};
+
+type EmitState = { didFactor: boolean };
+
+/** A node is "linear" iff it has no terminals and exactly one child. */
+function isLinearNode(n: TrieNode): boolean {
+    return n.terminals.length === 0 && n.children.length === 1;
+}
+
+// ── Trie insertion ───────────────────────────────────────────────────────
+
+function insertRuleIntoTrie(
+    root: TrieNode,
+    rule: GrammarRule,
+    idx: number,
+): void {
+    let node = root;
+    const remap = new Map<string, string>();
+    for (const stepEdge of partsToEdgeSteps(rule.parts)) {
+        let matched: TrieNode | undefined;
+        for (const c of node.children) {
+            if (c.edge && edgeKeyMatches(c.edge, stepEdge)) {
+                matched = c;
+                break;
+            }
+        }
+        if (matched !== undefined) {
+            collectStepRemap(matched.edge!, stepEdge, remap);
+            node = matched;
+        } else {
+            const newChild: TrieNode = {
+                edge: stepEdge,
+                children: [],
+                terminals: [],
+                firstIdx: idx,
+            };
+            node.children.push(newChild);
+            node = newChild;
+        }
+    }
+    node.terminals.push({
+        idx,
+        value: rule.value,
+        spacingMode: rule.spacingMode,
+        remap,
+    });
+}
+
+/** Yield each rule.parts as a sequence of trie edges (StringPart explodes). */
+function* partsToEdgeSteps(parts: GrammarPart[]): Generator<TrieEdge> {
+    for (const p of parts) {
+        switch (p.type) {
+            case "string":
+                for (const tok of p.value) yield { kind: "string", token: tok };
+                break;
+            case "wildcard":
+                yield {
+                    kind: "wildcard",
+                    typeName: p.typeName,
+                    optional: !!p.optional,
+                    canonicalVariable: p.variable,
+                };
+                break;
+            case "number":
+                yield {
+                    kind: "number",
+                    optional: !!p.optional,
+                    canonicalVariable: p.variable,
+                };
+                break;
+            case "rules":
+                yield {
+                    kind: "rules",
+                    rules: p.rules,
+                    optional: !!p.optional,
+                    repeat: !!p.repeat,
+                    name: p.name,
+                    canonicalVariable: p.variable,
+                };
+                break;
+            case "phraseSet":
+                yield { kind: "phraseSet", matcherName: p.matcherName };
+                break;
+        }
+    }
+}
+
+/** True if step's key fields match the existing edge (ignoring variable). */
+function edgeKeyMatches(edge: TrieEdge, step: TrieEdge): boolean {
+    if (edge.kind !== step.kind) return false;
+    switch (edge.kind) {
+        case "string":
+            return edge.token === (step as typeof edge).token;
+        case "wildcard": {
+            const s = step as typeof edge;
+            return edge.typeName === s.typeName && edge.optional === s.optional;
+        }
+        case "number": {
+            const s = step as typeof edge;
+            return edge.optional === s.optional;
+        }
+        case "rules": {
+            const s = step as typeof edge;
+            return (
+                edge.rules === s.rules &&
+                edge.optional === s.optional &&
+                edge.repeat === s.repeat
+            );
+        }
+        case "phraseSet": {
+            const s = step as typeof edge;
+            return edge.matcherName === s.matcherName;
+        }
+    }
+}
+
+function collectStepRemap(
+    canonicalEdge: TrieEdge,
+    stepEdge: TrieEdge,
+    remap: Map<string, string>,
+): void {
+    if (canonicalEdge.kind === "string" || canonicalEdge.kind === "phraseSet") {
+        return;
+    }
+    const canonical = canonicalEdge.canonicalVariable;
+    const local = (stepEdge as typeof canonicalEdge).canonicalVariable;
+    if (canonical !== undefined && local !== undefined && canonical !== local) {
+        remap.set(local, canonical);
+    }
+}
+
+// ── Trie emission ────────────────────────────────────────────────────────
+
+function edgeToPart(edge: TrieEdge): GrammarPart {
+    switch (edge.kind) {
+        case "string":
+            return { type: "string", value: [edge.token] };
+        case "wildcard": {
+            const out: GrammarPart = {
+                type: "wildcard",
+                typeName: edge.typeName,
+                variable: edge.canonicalVariable,
+            };
+            if (edge.optional) out.optional = true;
+            return out;
+        }
+        case "number": {
+            const out: GrammarPart = {
+                type: "number",
+                variable: edge.canonicalVariable,
+            };
+            if (edge.optional) out.optional = true;
+            return out;
+        }
+        case "rules": {
+            const out: RulesPart = { type: "rules", rules: edge.rules };
+            if (edge.canonicalVariable !== undefined) {
+                out.variable = edge.canonicalVariable;
+            }
+            if (edge.optional) out.optional = true;
+            if (edge.repeat) out.repeat = true;
+            if (edge.name !== undefined) out.name = edge.name;
+            return out;
+        }
+        case "phraseSet":
+            return { type: "phraseSet", matcherName: edge.matcherName };
+    }
+}
+
+/** Append `part` to `prefix`, folding when both ends are StringParts. */
+function appendPart(prefix: GrammarPart[], part: GrammarPart): GrammarPart[] {
+    if (prefix.length === 0) return [part];
+    const last = prefix[prefix.length - 1];
+    if (last.type === "string" && part.type === "string") {
+        const merged: GrammarPart = {
+            type: "string",
+            value: [...last.value, ...part.value],
+        };
+        return [...prefix.slice(0, prefix.length - 1), merged];
+    }
+    return [...prefix, part];
+}
+
+/** Concatenate two parts arrays, folding at the seam if both ends are strings. */
+function concatParts(a: GrammarPart[], b: GrammarPart[]): GrammarPart[] {
+    if (a.length === 0) return b.slice();
+    if (b.length === 0) return a.slice();
+    const last = a[a.length - 1];
+    const first = b[0];
+    if (last.type === "string" && first.type === "string") {
+        const merged: GrammarPart = {
+            type: "string",
+            value: [...last.value, ...first.value],
+        };
+        return [...a.slice(0, a.length - 1), merged, ...b.slice(1)];
+    }
+    return [...a, ...b];
+}
+
+function terminalToRule(t: Terminal): GrammarRule {
+    let value = t.value;
+    if (value !== undefined && t.remap.size > 0) {
+        value = remapValueVariables(value, t.remap);
+    }
+    const out: GrammarRule = { parts: [] };
+    if (value !== undefined) out.value = value;
+    if (t.spacingMode !== undefined) out.spacingMode = t.spacingMode;
+    return out;
+}
+
+/**
+ * Emit the subtree rooted at `node` (whose edge becomes the first part).
+ *   - Returns one rule when the subtree is a single linear path or
+ *     factors cleanly at the first fork.
+ *   - Returns multiple when a fork's eligibility check failed (bailout):
+ *     each would-be member is emitted as a full rule with the canonical
+ *     prefix prepended.
+ */
+function emitFromNode(node: TrieNode, state: EmitState): GrammarRule[] {
+    // Path-compress: walk down single-child / no-terminal chain, but
+    // stop *before* entering a node that would itself be a fork — that
+    // way the fork's edge becomes the first part of each emitted member
+    // (avoiding empty-parts members at the fork, which would defeat
+    // factoring via the wholeConsumed-with-value check below).
+    let prefix: GrammarPart[] = [edgeToPart(node.edge!)];
+    let current = node;
+    while (
+        current.terminals.length === 0 &&
+        current.children.length === 1 &&
+        isLinearNode(current.children[0])
+    ) {
+        current = current.children[0];
+        prefix = appendPart(prefix, edgeToPart(current.edge!));
+    }
+
+    // Members at this fork = its terminals (each as an empty-parts rule)
+    // plus each child's emitted subtree (in original insertion order).
+    const items: { idx: number; rules: GrammarRule[] }[] = [];
+    for (const t of current.terminals) {
+        items.push({ idx: t.idx, rules: [terminalToRule(t)] });
+    }
+    for (const c of current.children) {
+        items.push({ idx: c.firstIdx, rules: emitFromNode(c, state) });
+    }
+    items.sort((a, b) => a.idx - b.idx);
+    const members: GrammarRule[] = [];
+    for (const it of items) members.push(...it.rules);
+
+    if (members.length === 0) {
+        // Defensive: every reachable node has terminals or children.
+        return [{ parts: prefix }];
+    }
+    if (members.length === 1) {
+        const m = members[0];
+        return [{ ...m, parts: concatParts(prefix, m.parts) }];
+    }
+
+    // Multi-member fork: try to wrap; bail out if any check fails.
+    if (checkFactoringEligible(prefix, members) !== undefined) {
+        return members.map((m) => ({
+            ...m,
+            parts: concatParts(prefix, m.parts),
+        }));
+    }
+    state.didFactor = true;
+    return [buildWrapperRule(prefix, members)];
+}
+
+/**
+ * Per-fork eligibility checks (lifted from the previous implementation).
+ * Returns `undefined` when factoring is safe, or a short reason string.
+ */
+function checkFactoringEligible(
+    prefix: GrammarPart[],
+    members: GrammarRule[],
+): string | undefined {
+    // Empty-parts members never compose cleanly inside a wrapped
+    // RulesPart: with a value, the matcher would have to treat
+    // `{parts:[], value: V}` as a degenerate match (today's algorithm
+    // refuses this); without a value, the matcher's default-value
+    // resolver throws ("missing value for default") because the
+    // empty-parts rule has nothing to default from.
+    if (members.some((m) => m.parts.length === 0)) {
+        return "whole-consumed";
+    }
+    const valuePresence = members.map((m) => m.value !== undefined);
+    const allHaveValue = valuePresence.every((v) => v);
+    const noneHaveValue = valuePresence.every((v) => !v);
+    if (!allHaveValue && !noneHaveValue) {
+        return "mixed-value-presence";
+    }
+    if (noneHaveValue && members.some((m) => m.parts.length > 1)) {
+        return "implicit-default-multipart";
+    }
+    const canonicalNames = collectVariableNames(prefix);
+    if (canonicalNames.size > 0) {
+        for (const m of members) {
+            if (m.value !== undefined) {
+                for (const v of collectVariableReferences(m.value)) {
+                    if (canonicalNames.has(v)) return "cross-scope-ref";
+                }
+            }
+            for (const v of collectVariableNames(m.parts)) {
+                if (canonicalNames.has(v)) return "binding-shadow";
             }
         }
     }
-    return { fullParts: full, stringTokens };
+    return undefined;
 }
+
+function buildWrapperRule(
+    prefix: GrammarPart[],
+    members: GrammarRule[],
+): GrammarRule {
+    const suffixRulesPart: RulesPart = { type: "rules", rules: members };
+    const factoredAlt: GrammarRule = {
+        parts: [...prefix, suffixRulesPart],
+    };
+    if (members.some((m) => m.value !== undefined)) {
+        const reserved = new Set<string>(collectVariableNames(prefix));
+        for (const m of members) {
+            for (const v of collectVariableNames(m.parts)) reserved.add(v);
+        }
+        let gen = "__opt_factor";
+        let i = 0;
+        while (reserved.has(gen)) {
+            i++;
+            gen = `__opt_factor_${i}`;
+        }
+        suffixRulesPart.variable = gen;
+        factoredAlt.value = { type: "variable", name: gen };
+    }
+    const firstSpacing = members[0].spacingMode;
+    if (
+        firstSpacing !== undefined &&
+        members.every((m) => m.spacingMode === firstSpacing)
+    ) {
+        factoredAlt.spacingMode = firstSpacing;
+    }
+    return factoredAlt;
+}
+
+// ── Variable name / value-expression utilities (shared with inliner) ─────
 
 function collectVariableNames(parts: GrammarPart[]): Set<string> {
     const out = new Set<string>();
@@ -969,47 +1054,6 @@ function collectVariableReferences(node: CompiledValueNode): Set<string> {
     };
     walk(node);
     return out;
-}
-
-function buildPrefixRemap(
-    canonicalParts: GrammarPart[],
-    memberParts: GrammarPart[],
-    sharedLen: number,
-): Map<string, string> {
-    const remap = new Map<string, string>();
-    for (let i = 0; i < sharedLen; i++) {
-        const cv = bindingName(canonicalParts[i]);
-        const mv = bindingName(memberParts[i]);
-        if (cv !== undefined && mv !== undefined && cv !== mv) {
-            remap.set(mv, cv);
-        }
-    }
-    return remap;
-}
-
-function remapPartVariables(
-    part: GrammarPart,
-    remap: Map<string, string>,
-): GrammarPart {
-    if (remap.size === 0) return part;
-    switch (part.type) {
-        case "wildcard":
-        case "number":
-            if (part.variable && remap.has(part.variable)) {
-                return { ...part, variable: remap.get(part.variable)! };
-            }
-            return part;
-        case "rules":
-            // Rename this part's own variable; do NOT recurse into nested
-            // rules — those have their own scope.
-            if (part.variable && remap.has(part.variable)) {
-                return { ...part, variable: remap.get(part.variable)! };
-            }
-            return part;
-        case "string":
-        case "phraseSet":
-            return part;
-    }
 }
 
 function remapValueVariables(

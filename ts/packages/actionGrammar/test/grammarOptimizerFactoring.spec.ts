@@ -118,6 +118,45 @@ describe("Grammar Optimizer - Common prefix factoring", () => {
         );
     });
 
+    it("factors shared sub-prefixes inside the suffix group", () => {
+        // Two of the three alternatives share a longer prefix (`play song`)
+        // beyond the global shared prefix (`play `).  The optimizer should
+        // factor the deeper sharing as well, not just the outermost.
+        const text = `<Start> = <C>;
+<C> = play song $(x:string) -> { kind: "song-x", x }
+    | play song $(y:string) -> { kind: "song-y", y }
+    | play album $(z:string) -> { kind: "album", z };`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { factorCommonPrefixes: true },
+        });
+        for (const input of [
+            "play song hello",
+            "play album world",
+            "play unknown",
+        ]) {
+            const baseRes = match(baseline, input);
+            const optRes = match(optimized, input);
+            expect(optRes.length).toBe(baseRes.length);
+            expect(optRes).toEqual(expect.arrayContaining(baseRes));
+        }
+        // Structural: the optimized AST should have nested factoring —
+        // top-level RulesPart with one alternative whose suffix RulesPart
+        // itself contains a further factored rule for `song`.
+        const optChoice = findFirstRulesPart(optimized.rules);
+        expect(optChoice).toBeDefined();
+        // <C> reduces to a single shared-prefix wrapper.
+        expect(optChoice!.rules.length).toBe(1);
+        const factored = optChoice!.rules[0];
+        // Find the inner RulesPart (the suffix group).
+        const innerWrapper = factored.parts.find((p) => p.type === "rules");
+        expect(innerWrapper).toBeDefined();
+        // The inner suffix group should have collapsed `song x | song y` so
+        // its rule count is 2 (one combined `song …` alt + the `album …`
+        // alt) rather than 3.
+        expect((innerWrapper as { rules: unknown[] }).rules.length).toBe(2);
+    });
+
     it("factors common prefixes across top-level rules", () => {
         // Three top-level alternatives all share "play the ".
         // Top-level factoring should reduce the rule count and preserve
