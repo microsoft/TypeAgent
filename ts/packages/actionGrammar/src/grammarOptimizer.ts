@@ -579,7 +579,7 @@ function factorRulesPart(
     }
     if (part.rules.length < 2) return part;
 
-    const root: TrieNode = { children: [], terminals: [], firstIdx: 0 };
+    const root: TrieRoot = { children: [], terminals: [] };
     for (let i = 0; i < part.rules.length; i++) {
         insertRuleIntoTrie(root, part.rules[i], i);
     }
@@ -590,8 +590,7 @@ function factorRulesPart(
         items.push({ idx: c.firstIdx, rules: emitFromNode(c, state) });
     }
     items.sort((a, b) => a.idx - b.idx);
-    const newRules: GrammarRule[] = [];
-    for (const it of items) newRules.push(...it.rules);
+    const newRules: GrammarRule[] = items.flatMap((it) => it.rules);
 
     if (!state.didFactor) return part;
     counter.factored++;
@@ -627,9 +626,19 @@ type Terminal = {
     remap: Map<string, string>;
 };
 
+/**
+ * Root of the trie.  Distinct from `TrieNode` so that `edge` can be
+ * required on every non-root node — eliminating non-null assertions in
+ * the insertion and emission code.  Terminals on the root represent
+ * empty-parts input rules (rare but legal).
+ */
+type TrieRoot = {
+    children: TrieNode[];
+    terminals: Terminal[];
+};
+
 type TrieNode = {
-    /** undefined only at the root. */
-    edge?: TrieEdge;
+    edge: TrieEdge;
     children: TrieNode[];
     terminals: Terminal[];
     /** Lowest insertion index of any rule passing through this node. */
@@ -646,35 +655,36 @@ function isLinearNode(n: TrieNode): boolean {
 // ── Trie insertion ───────────────────────────────────────────────────────
 
 function insertRuleIntoTrie(
-    root: TrieNode,
+    root: TrieRoot,
     rule: GrammarRule,
     idx: number,
 ): void {
-    let node = root;
+    let children = root.children;
+    let terminals = root.terminals;
     const remap = new Map<string, string>();
     for (const stepEdge of partsToEdgeSteps(rule.parts)) {
         let matched: TrieNode | undefined;
-        for (const c of node.children) {
-            if (c.edge && edgeKeyMatches(c.edge, stepEdge)) {
+        for (const c of children) {
+            if (edgeKeyMatches(c.edge, stepEdge)) {
                 matched = c;
                 break;
             }
         }
         if (matched !== undefined) {
-            collectStepRemap(matched.edge!, stepEdge, remap);
-            node = matched;
+            collectStepRemap(matched.edge, stepEdge, remap);
         } else {
-            const newChild: TrieNode = {
+            matched = {
                 edge: stepEdge,
                 children: [],
                 terminals: [],
                 firstIdx: idx,
             };
-            node.children.push(newChild);
-            node = newChild;
+            children.push(matched);
         }
+        children = matched.children;
+        terminals = matched.terminals;
     }
-    node.terminals.push({
+    terminals.push({
         idx,
         value: rule.value,
         spacingMode: rule.spacingMode,
@@ -724,6 +734,8 @@ function* partsToEdgeSteps(parts: GrammarPart[]): Generator<TrieEdge> {
 /** True if step's key fields match the existing edge (ignoring variable). */
 function edgeKeyMatches(edge: TrieEdge, step: TrieEdge): boolean {
     if (edge.kind !== step.kind) return false;
+    // After the kind check, `step` has the same variant as `edge`; the
+    // cast inside each branch narrows it accordingly.
     switch (edge.kind) {
         case "string":
             return edge.token === (step as typeof edge).token;
@@ -731,10 +743,8 @@ function edgeKeyMatches(edge: TrieEdge, step: TrieEdge): boolean {
             const s = step as typeof edge;
             return edge.typeName === s.typeName && edge.optional === s.optional;
         }
-        case "number": {
-            const s = step as typeof edge;
-            return edge.optional === s.optional;
-        }
+        case "number":
+            return edge.optional === (step as typeof edge).optional;
         case "rules": {
             const s = step as typeof edge;
             return (
@@ -743,10 +753,8 @@ function edgeKeyMatches(edge: TrieEdge, step: TrieEdge): boolean {
                 edge.repeat === s.repeat
             );
         }
-        case "phraseSet": {
-            const s = step as typeof edge;
-            return edge.matcherName === s.matcherName;
-        }
+        case "phraseSet":
+            return edge.matcherName === (step as typeof edge).matcherName;
     }
 }
 
@@ -858,7 +866,7 @@ function emitFromNode(node: TrieNode, state: EmitState): GrammarRule[] {
     // way the fork's edge becomes the first part of each emitted member
     // (avoiding empty-parts members at the fork, which would defeat
     // factoring via the wholeConsumed-with-value check below).
-    let prefix: GrammarPart[] = [edgeToPart(node.edge!)];
+    let prefix: GrammarPart[] = [edgeToPart(node.edge)];
     let current = node;
     while (
         current.terminals.length === 0 &&
@@ -866,7 +874,7 @@ function emitFromNode(node: TrieNode, state: EmitState): GrammarRule[] {
         isLinearNode(current.children[0])
     ) {
         current = current.children[0];
-        prefix = appendPart(prefix, edgeToPart(current.edge!));
+        prefix = appendPart(prefix, edgeToPart(current.edge));
     }
 
     // Members at this fork = its terminals (each as an empty-parts rule)
@@ -879,8 +887,7 @@ function emitFromNode(node: TrieNode, state: EmitState): GrammarRule[] {
         items.push({ idx: c.firstIdx, rules: emitFromNode(c, state) });
     }
     items.sort((a, b) => a.idx - b.idx);
-    const members: GrammarRule[] = [];
-    for (const it of items) members.push(...it.rules);
+    const members: GrammarRule[] = items.flatMap((it) => it.rules);
 
     if (members.length === 0) {
         // Defensive: every reachable node has terminals or children.
