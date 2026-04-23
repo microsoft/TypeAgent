@@ -134,16 +134,13 @@ export class ChatUI {
         textEl.textContent = text;
         bubble.appendChild(textEl);
 
-        // Roadrunner: hidden until an "explained" notify arrives. Mirrors
-        // the Electron shell's translation/cache indicator. For replayed
-        // messages we just leave it hidden — we don't replay notify events.
+        // Roadrunner: hidden until an "explained" notify arrives (which
+        // only fires for action translations — pure chat responses never
+        // emit it, so the icon stays hidden for those). Mirrors the
+        // Electron shell's translation/cache indicator.
         const icon = document.createElement("span");
-        icon.className = "status-icon roadrunner";
+        icon.className = "status-icon roadrunner hidden";
         icon.innerHTML = ROADRUNNER_SVG;
-        if (status !== "pending") {
-            icon.classList.add("hidden");
-        }
-        icon.title = "Waiting for translation…";
         bubble.appendChild(icon);
 
         body.appendChild(bubble);
