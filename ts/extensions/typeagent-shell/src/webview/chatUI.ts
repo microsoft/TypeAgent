@@ -334,6 +334,10 @@ export class ChatUI {
             if (agentBubble) {
                 this._renderMetrics(agentBubble, result?.metrics);
             }
+            const userBubble = this._pendingUserBubbles.get(requestId);
+            if (userBubble) {
+                this._renderMetrics(userBubble, result?.metrics);
+            }
             this._pendingUserBubbles.delete(requestId);
             this._agentBubblesByRequestId.delete(requestId);
         }
@@ -556,16 +560,29 @@ export class ChatUI {
         this._activeResponseEl = undefined;
         this._lastAppendedContent = undefined;
 
+        const clientId = (rid: any): string | undefined => {
+            if (!rid) return undefined;
+            if (typeof rid === "string") return rid;
+            return rid.clientRequestId as string | undefined;
+        };
+
         for (const e of entries) {
             switch (e.type) {
-                case "user-request":
-                    this.addUserMessage(e.command, e.timestamp);
+                case "user-request": {
+                    const rid = clientId(e.requestId);
+                    this.addUserMessage(e.command, e.timestamp, "pending", rid);
+                    // Reset active agent bubble between turns so a new one
+                    // is created for each user request during replay.
+                    this._activeResponseEl = undefined;
+                    this._lastAppendedContent = undefined;
                     break;
+                }
                 case "set-display":
                     this.setAgentDisplay(
                         e.message?.message,
                         e.message?.source,
                         e.timestamp,
+                        clientId(e.message?.requestId),
                     );
                     break;
                 case "append-display":
@@ -574,11 +591,17 @@ export class ChatUI {
                         e.message?.source,
                         e.mode,
                         e.timestamp,
+                        clientId(e.message?.requestId),
                     );
                     break;
                 case "set-display-info":
-                    // Skip status indicators during replay — they'd pollute
-                    // the rendered history with transient "processing..." text
+                    // Apply during replay so historical action labels are
+                    // also clickable + reveal their JSON.
+                    this.setDisplayInfo(
+                        e.source,
+                        e.action,
+                        clientId(e.requestId),
+                    );
                     break;
             }
         }
@@ -591,6 +614,10 @@ export class ChatUI {
         // Reset state so the next live message starts a fresh bubble
         this._activeResponseEl = undefined;
         this._lastAppendedContent = undefined;
+        // Drop tracking maps — history entries shouldn't intercept future
+        // live commandComplete events.
+        this._pendingUserBubbles.clear();
+        this._agentBubblesByRequestId.clear();
         this._removeTemporary();
         this._removeStatusIndicator();
         this._scrollToBottom();
