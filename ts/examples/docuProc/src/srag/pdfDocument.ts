@@ -205,7 +205,7 @@ export class PdfChunkMessage implements kp.IMessage {
 export class PdfKnowproIndex implements kp.IConversation<PdfChunkMessage> {
     public settings: kp.ConversationSettings;
     private embeddingModel: TextEmbeddingModelWithCache | undefined;
-    public semanticRefIndex: kp.ConversationIndex;
+    public semanticRefIndex: kp.TermToSemanticRefIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
     public semanticRefs: kp.SemanticRefCollection;
     public messages: kp.MessageCollection<PdfChunkMessage>;
@@ -218,7 +218,7 @@ export class PdfKnowproIndex implements kp.IConversation<PdfChunkMessage> {
         const [model, embeddingSize] = this.createEmbeddingModel();
         this.embeddingModel = model;
         this.settings = kp.createConversationSettings(model, embeddingSize);
-        this.semanticRefIndex = new kp.ConversationIndex();
+        this.semanticRefIndex = new kp.TermToSemanticRefIndex();
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
             this.settings,
         );
@@ -324,7 +324,7 @@ export class PdfKnowproIndex implements kp.IConversation<PdfChunkMessage> {
         );
         this.tags = pdfChunkData.tags;
         if (pdfChunkData.semanticIndexData) {
-            this.semanticRefIndex = new kp.ConversationIndex(
+            this.semanticRefIndex = new kp.TermToSemanticRefIndex(
                 pdfChunkData.semanticIndexData,
             );
         }

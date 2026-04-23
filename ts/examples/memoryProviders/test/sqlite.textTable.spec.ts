@@ -93,7 +93,7 @@ describe("sqlite.textTable", () => {
 
             // Add composers
             const composerBlocks = composers();
-            await table.putMultiple(composerBlocks);
+            await table.addUpdateMultiple(composerBlocks);
             // Get all ids of what we added
             const allIds = await asyncArray.toArray(table.ids());
             // Each id should be a number
@@ -142,7 +142,7 @@ describe("sqlite.textTable", () => {
                 "INTEGER",
             );
             const blocks = composers();
-            await table.putMultiple(blocks);
+            await table.addUpdateMultiple(blocks);
 
             const names = blocks.map((b) => b.value);
             const allTextIds = await asyncArray.toArray(table.ids());
@@ -186,10 +186,10 @@ describe("sqlite.textTable", () => {
             );
 
             const composerBlocks = composers();
-            await table.putMultiple(composerBlocks);
+            await table.addUpdateMultiple(composerBlocks);
 
             const fruitBlocks = fruits();
-            await table.putMultiple(fruitBlocks);
+            await table.addUpdateMultiple(fruitBlocks);
 
             let matches = await table.getNearest("Mango", fruitBlocks.length);
             expect(matches.length).toBeGreaterThan(0);
@@ -237,7 +237,7 @@ describe("sqlite.textTable", () => {
                 "INTEGER",
             );
             const blocks = composers();
-            await table.putMultiple(blocks);
+            await table.addUpdateMultiple(blocks);
 
             const texts = blocks.map((b) => b.value);
 
@@ -281,7 +281,7 @@ describe("sqlite.textTable", () => {
                 "INTEGER",
             );
             const blocks = composers();
-            await table.putMultiple(blocks);
+            await table.addUpdateMultiple(blocks);
 
             // No values returns nothing
             const emptyHits = [...table.getExactHits([])];
@@ -395,7 +395,7 @@ describe("sqlite.textTable", () => {
     ): Promise<Date> {
         const timestamp = new Date(2024, 2, day);
         for (const block of blocks) {
-            await index.put(block.value, block.sourceIds);
+            await index.addUpdate(block.value, block.sourceIds);
             for (const id of block.sourceIds!) {
                 await log.put(id, timestamp);
             }

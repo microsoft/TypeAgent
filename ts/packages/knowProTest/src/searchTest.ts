@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 import { KnowproContext } from "./knowproContext.js";
-import { dateTime, readJsonFile, writeJsonFile } from "typeagent";
+import { dateTime, readJsonFile } from "typeagent";
 import { error, Result, success } from "typechat";
 import {
     BatchCallback,
@@ -23,7 +23,7 @@ import {
     runTestBatch,
 } from "./common.js";
 import { getLangSearchResult } from "./knowproCommands.js";
-import { getBatchFileLines, parseTypedArguments } from "interactive-app";
+import { parseTypedArguments } from "interactive-app";
 import { execSearchRequest } from "./knowproCommands.js";
 import * as kp from "knowpro";
 import { TestRunReport } from "./logging.js";
@@ -43,7 +43,6 @@ export type LangSearchResult = {
     actionMatches?: kp.SemanticRefOrdinal[] | undefined;
 };
 
-// TODO: convert this to use runBatch from common.ts
 export async function runSearchBatch(
     context: KnowproContext,
     batchFilePath: string,
@@ -51,33 +50,19 @@ export async function runSearchBatch(
     cb?: BatchCallback<Result<LangSearchResults>>,
     stopOnError: boolean = false,
 ): Promise<Result<LangSearchResults[]>> {
-    const batchLines = getBatchFileLines(batchFilePath);
-    const results: LangSearchResults[] = [];
-    for (let i = 0; i < batchLines.length; ++i) {
-        const cmd = batchLines[i];
-        const args = getCommandArgs(cmd);
-        if (args.length === 0) {
-            continue;
-        }
-        let response = await getSearchResults(context, args);
-        if (response.success) {
-            response.data.cmd = cmd;
-        } else {
-            response = queryError(cmd, response);
-        }
-        if (cb) {
-            cb(response, i, batchLines.length);
-        }
-        if (response.success) {
-            results.push(response.data);
-        } else if (stopOnError) {
+    return runTestBatch(
+        batchFilePath,
+        async (cmd, args) => {
+            const response = await getSearchResults(context, args);
+            if (response.success) {
+                response.data.cmd = cmd;
+            }
             return response;
-        }
-    }
-    if (destFilePath) {
-        await writeJsonFile(destFilePath, results);
-    }
-    return success(results);
+        },
+        destFilePath,
+        cb,
+        stopOnError,
+    );
 }
 
 async function getSearchResults(

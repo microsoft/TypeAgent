@@ -20,7 +20,7 @@ describe("KnowledgeIndex", () => {
         async () => {
             const textIndex = await createIndex("textIndex_exact", false);
             const fruitBlocks = makeBlocks(fruitItems);
-            const textIds = await textIndex.putMultiple(fruitBlocks);
+            const textIds = await textIndex.addUpdateMultiple(fruitBlocks);
             const textIds2 = await textIndex.getIds(fruitItems);
             expect(textIds.sort()).toEqual(textIds2.sort());
         },
@@ -33,7 +33,7 @@ describe("KnowledgeIndex", () => {
         async () => {
             const textIndex = await createIndex("textIndex_nearest", true);
             const fruitBlocks = makeBlocks(fruitItems);
-            await textIndex.putMultiple(fruitBlocks);
+            await textIndex.addUpdateMultiple(fruitBlocks);
             const matchedText = await textIndex.getNearestText("Mango", 3);
             expect(matchedText.length).toBeGreaterThan(0);
             const matches = await textIndex.getNearest("Mango", 3);

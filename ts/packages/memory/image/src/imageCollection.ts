@@ -5,7 +5,7 @@ import {
     IConversation,
     IMessage,
     SemanticRef,
-    ConversationIndex,
+    TermToSemanticRefIndex,
     IndexingResults,
     ConversationSettings,
     createConversationSettings,
@@ -43,7 +43,7 @@ export class ImageCollection
     public messages: MessageCollection<Image>;
     public semanticRefs: SemanticRefCollection;
     public settings: ConversationSettings;
-    public semanticRefIndex: ConversationIndex;
+    public semanticRefIndex: TermToSemanticRefIndex;
     public secondaryIndexes: ConversationSecondaryIndexes;
 
     // Data frames for typed image meta data
@@ -63,7 +63,7 @@ export class ImageCollection
         this.semanticRefs = new SemanticRefCollection(semanticRefs);
         const [model, embeddingSize] = this.createEmbeddingModel();
         this.settings = createConversationSettings(model, embeddingSize);
-        this.semanticRefIndex = new ConversationIndex();
+        this.semanticRefIndex = new TermToSemanticRefIndex();
         this.secondaryIndexes = new ConversationSecondaryIndexes(this.settings);
 
         // create dataFrames (tables)
@@ -139,8 +139,8 @@ export class ImageCollection
     public async buildIndex(
         eventHandler?: IndexingEventHandlers,
     ): Promise<IndexingResults> {
-        //const result = await buildConversationIndex(this, eventHandler);
-        this.semanticRefIndex = new ConversationIndex();
+        //const result = await buildTermToSemanticRefIndex(this, eventHandler);
+        this.semanticRefIndex = new TermToSemanticRefIndex();
         if (this.semanticRefs === undefined) {
             this.semanticRefs = new SemanticRefCollection();
         }
@@ -189,7 +189,7 @@ export class ImageCollection
         this.semanticRefs = new SemanticRefCollection(data.semanticRefs);
         this.tags = data.tags;
         if (data.semanticIndexData) {
-            this.semanticRefIndex = new ConversationIndex(
+            this.semanticRefIndex = new TermToSemanticRefIndex(
                 data.semanticIndexData,
             );
         }

@@ -211,7 +211,53 @@ async function runTests() {
         console.log("✓ Correctly returned null for invalid location");
     }
 
+    console.log("\n\n=== Testing validateLocation ===");
+    await testValidateLocation();
+
     console.log("\n=== All Tests Complete ===\n");
+}
+
+async function validateLocation(location) {
+    if (!location || location.trim().length === 0) {
+        return false;
+    }
+    const coords = await geocodeLocation(location);
+    return coords !== null;
+}
+
+async function testValidateLocation() {
+    let passed = 0;
+    let failed = 0;
+
+    async function check(location, expected, label) {
+        const result = await validateLocation(location);
+        if (result === expected) {
+            console.log(`   ✓ ${label}`);
+            passed++;
+        } else {
+            console.error(
+                `   ❌ ${label}: expected ${expected}, got ${result}`,
+            );
+            failed++;
+        }
+    }
+
+    // Valid locations
+    await check("Seattle", true, "city name 'Seattle'");
+    await check("London", true, "city name 'London'");
+    await check("Tokyo", true, "city name 'Tokyo'");
+    await check("New York", true, "multi-word city 'New York'");
+    await check("98101", true, "valid US zip code (Seattle)");
+
+    // Invalid locations
+    await check("", false, "empty string");
+    await check("   ", false, "whitespace only");
+    await check("XYZ123NotAPlace", false, "nonsense location");
+
+    console.log(`\n   validateLocation: ${passed} passed, ${failed} failed`);
+    if (failed > 0) {
+        process.exitCode = 1;
+    }
 }
 
 runTests().catch(console.error);

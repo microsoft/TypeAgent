@@ -241,7 +241,7 @@ export class DataFrame implements IDataFrame {
                 term.columnValue.term.text,
                 term.compareOp,
             )) {
-                matches.add(ordinal, 1.0, true);
+                matches.addExact(ordinal, 1.0);
             }
         }
         if (matches.size === 0) {

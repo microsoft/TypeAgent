@@ -409,7 +409,7 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
     public nameTag: string = "description";
     public tags: string[] = [];
     public semanticRefs: kp.SemanticRefCollection;
-    public semanticRefIndex: kp.ConversationIndex;
+    public semanticRefIndex: kp.TermToSemanticRefIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
 
     constructor(
@@ -420,7 +420,7 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
         this.semanticRefs = new kp.SemanticRefCollection();
         settings ??= kp.createConversationSettings();
         this.settings = settings;
-        this.semanticRefIndex = new kp.ConversationIndex();
+        this.semanticRefIndex = new kp.TermToSemanticRefIndex();
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
             this.settings,
         );
@@ -468,7 +468,7 @@ export class RestaurantStructuredRagIndex implements kp.IConversation {
         this.semanticRefs = new kp.SemanticRefCollection(data.semanticRefs);
         this.tags = data.tags;
         if (data.semanticIndexData) {
-            this.semanticRefIndex = new kp.ConversationIndex(
+            this.semanticRefIndex = new kp.TermToSemanticRefIndex(
                 data.semanticIndexData,
             );
         }

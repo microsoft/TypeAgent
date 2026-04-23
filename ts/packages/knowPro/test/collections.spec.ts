@@ -169,11 +169,11 @@ function makeMessagesTextRanges(
     return ranges;
 }
 
-// Tests for MatchAccumulator - covers TODO:94 (addExact/addRelated split) and TODO:260 (minHitCount > 1)
+// Tests for MatchAccumulator
 describe("MatchAccumulator", () => {
-    test("add exact match creates entry with hitCount 1", () => {
+    test("addExact creates entry with hitCount 1", () => {
         const acc = new MatchAccumulator<string>();
-        acc.add("hello", 0.9, true);
+        acc.addExact("hello", 0.9);
         const match = acc.getMatch("hello");
         expect(match).toBeDefined();
         expect(match!.hitCount).toBe(1);
@@ -182,22 +182,21 @@ describe("MatchAccumulator", () => {
         expect(match!.relatedScore).toBe(0);
     });
 
-    test("add related match creates entry with relatedHitCount 1 and zero score", () => {
+    test("addRelated creates entry with relatedHitCount 1 and zero score", () => {
         const acc = new MatchAccumulator<string>();
-        acc.add("hello", 0.8, false);
+        acc.addRelated("hello", 0.8);
         const match = acc.getMatch("hello");
         expect(match).toBeDefined();
-        // TODO:94 - when add() is split into addExact/addRelated, these semantics should be preserved
         expect(match!.hitCount).toBe(1);
         expect(match!.score).toBe(0);
         expect(match!.relatedHitCount).toBe(1);
         expect(match!.relatedScore).toBe(0.8);
     });
 
-    test("add exact match twice accumulates hitCount and score", () => {
+    test("addExact twice accumulates hitCount and score", () => {
         const acc = new MatchAccumulator<string>();
-        acc.add("hello", 0.5, true);
-        acc.add("hello", 0.3, true);
+        acc.addExact("hello", 0.5);
+        acc.addExact("hello", 0.3);
         const match = acc.getMatch("hello");
         expect(match).toBeDefined();
         expect(match!.hitCount).toBe(2);
@@ -205,22 +204,21 @@ describe("MatchAccumulator", () => {
         expect(match!.relatedHitCount).toBe(0);
     });
 
-    test("add related match twice accumulates relatedHitCount and relatedScore", () => {
+    test("addRelated twice accumulates relatedHitCount and relatedScore", () => {
         const acc = new MatchAccumulator<string>();
-        acc.add("hello", 0.5, false);
-        acc.add("hello", 0.3, false);
+        acc.addRelated("hello", 0.5);
+        acc.addRelated("hello", 0.3);
         const match = acc.getMatch("hello");
         expect(match).toBeDefined();
-        // TODO:94 - hitCount is always at least 1 per the Match interface comment
         expect(match!.hitCount).toBe(1);
         expect(match!.relatedHitCount).toBe(2);
         expect(match!.relatedScore).toBeCloseTo(0.8);
     });
 
-    test("add exact then related on same value accumulates both", () => {
+    test("addExact then addRelated on same value accumulates both", () => {
         const acc = new MatchAccumulator<string>();
-        acc.add("hello", 0.9, true);
-        acc.add("hello", 0.4, false);
+        acc.addExact("hello", 0.9);
+        acc.addRelated("hello", 0.4);
         const match = acc.getMatch("hello");
         expect(match).toBeDefined();
         expect(match!.hitCount).toBe(1);
@@ -232,16 +230,16 @@ describe("MatchAccumulator", () => {
     test("size reflects number of unique values", () => {
         const acc = new MatchAccumulator<string>();
         expect(acc.size).toBe(0);
-        acc.add("a", 1.0, true);
-        acc.add("b", 0.5, true);
-        acc.add("a", 0.3, true); // duplicate - should not increase size
+        acc.addExact("a", 1.0);
+        acc.addExact("b", 0.5);
+        acc.addExact("a", 0.3); // duplicate - should not increase size
         expect(acc.size).toBe(2);
     });
 
     test("getWithHitCount returns all matches when minHitCount is 0", () => {
         const acc = new MatchAccumulator<string>();
-        acc.add("a", 1.0, true);
-        acc.add("b", 0.5, false);
+        acc.addExact("a", 1.0);
+        acc.addRelated("b", 0.5);
         const results = acc.getWithHitCount(0);
         // All matches have hitCount >= 1 >= 0, so all should be returned
         expect(results).toHaveLength(2);
@@ -249,22 +247,19 @@ describe("MatchAccumulator", () => {
 
     test("getWithHitCount with minHitCount 1 returns all matches (all have hitCount >= 1)", () => {
         const acc = new MatchAccumulator<string>();
-        acc.add("a", 1.0, true);
-        acc.add("b", 0.5, true);
-        acc.add("c", 0.3, false);
-        // TODO:260 - this should be minHitCount > 1 (optimization: minHitCount=1 is a no-op since all matches have hitCount >= 1)
-        // Whether condition is `> 0` (current) or `> 1` (intended), the result is the same
-        // because all matches have hitCount >= 1 by design
+        acc.addExact("a", 1.0);
+        acc.addExact("b", 0.5);
+        acc.addRelated("c", 0.3);
+        // minHitCount=1 is a no-op since all matches have hitCount >= 1 by design
         const results = acc.getWithHitCount(1);
         expect(results).toHaveLength(3);
     });
 
     test("getWithHitCount with minHitCount 2 filters out single-hit matches", () => {
         const acc = new MatchAccumulator<string>();
-        acc.add("a", 1.0, true);
-        acc.add("a", 0.5, true); // hitCount becomes 2
-        acc.add("b", 0.8, true); // hitCount stays at 1
-        // TODO:260 - after fix to use `> 1`, minHitCount=2 should still behave correctly
+        acc.addExact("a", 1.0);
+        acc.addExact("a", 0.5); // hitCount becomes 2
+        acc.addExact("b", 0.8); // hitCount stays at 1
         const results = acc.getWithHitCount(2);
         expect(results).toHaveLength(1);
         expect(results[0].value).toBe("a");
@@ -272,12 +267,12 @@ describe("MatchAccumulator", () => {
 
     test("getWithHitCount with minHitCount 3 returns only highly-hit matches", () => {
         const acc = new MatchAccumulator<string>();
-        acc.add("a", 0.5, true);
-        acc.add("a", 0.5, true);
-        acc.add("a", 0.5, true); // hitCount = 3
-        acc.add("b", 0.5, true);
-        acc.add("b", 0.5, true); // hitCount = 2
-        acc.add("c", 0.5, true); // hitCount = 1
+        acc.addExact("a", 0.5);
+        acc.addExact("a", 0.5);
+        acc.addExact("a", 0.5); // hitCount = 3
+        acc.addExact("b", 0.5);
+        acc.addExact("b", 0.5); // hitCount = 2
+        acc.addExact("c", 0.5); // hitCount = 1
         const results = acc.getWithHitCount(3);
         expect(results).toHaveLength(1);
         expect(results[0].value).toBe("a");
@@ -285,9 +280,9 @@ describe("MatchAccumulator", () => {
 
     test("getSortedByScore returns matches in descending score order", () => {
         const acc = new MatchAccumulator<string>();
-        acc.add("low", 0.2, true);
-        acc.add("high", 0.9, true);
-        acc.add("mid", 0.5, true);
+        acc.addExact("low", 0.2);
+        acc.addExact("high", 0.9);
+        acc.addExact("mid", 0.5);
         const sorted = acc.getSortedByScore();
         expect(sorted).toHaveLength(3);
         expect(sorted[0].value).toBe("high");
@@ -297,10 +292,10 @@ describe("MatchAccumulator", () => {
 
     test("getSortedByScore with minHitCount filters before sorting", () => {
         const acc = new MatchAccumulator<string>();
-        acc.add("a", 0.9, true); // hitCount=1
-        acc.add("b", 0.7, true);
-        acc.add("b", 0.3, true); // hitCount=2
-        acc.add("c", 0.5, true); // hitCount=1
+        acc.addExact("a", 0.9); // hitCount=1
+        acc.addExact("b", 0.7);
+        acc.addExact("b", 0.3); // hitCount=2
+        acc.addExact("c", 0.5); // hitCount=1
         const sorted = acc.getSortedByScore(2);
         expect(sorted).toHaveLength(1);
         expect(sorted[0].value).toBe("b");
@@ -308,10 +303,10 @@ describe("MatchAccumulator", () => {
 
     test("selectWithHitCount retains only matches meeting threshold", () => {
         const acc = new MatchAccumulator<string>();
-        acc.add("a", 1.0, true);
-        acc.add("a", 0.5, true); // hitCount=2
-        acc.add("b", 0.8, true); // hitCount=1
-        acc.add("c", 0.6, true); // hitCount=1
+        acc.addExact("a", 1.0);
+        acc.addExact("a", 0.5); // hitCount=2
+        acc.addExact("b", 0.8); // hitCount=1
+        acc.addExact("c", 0.6); // hitCount=1
         const retained = acc.selectWithHitCount(2);
         expect(retained).toBe(1);
         expect(acc.size).toBe(1);
@@ -321,12 +316,12 @@ describe("MatchAccumulator", () => {
 
     test("addUnion combines two accumulators", () => {
         const acc1 = new MatchAccumulator<string>();
-        acc1.add("a", 1.0, true);
-        acc1.add("b", 0.5, true);
+        acc1.addExact("a", 1.0);
+        acc1.addExact("b", 0.5);
 
         const acc2 = new MatchAccumulator<string>();
-        acc2.add("b", 0.3, true); // overlaps with acc1
-        acc2.add("c", 0.7, true); // new
+        acc2.addExact("b", 0.3); // overlaps with acc1
+        acc2.addExact("c", 0.7); // new
 
         acc1.addUnion(acc2);
         expect(acc1.size).toBe(3);
@@ -338,12 +333,12 @@ describe("MatchAccumulator", () => {
 
     test("intersect returns only common values with combined scores", () => {
         const acc1 = new MatchAccumulator<string>();
-        acc1.add("a", 1.0, true);
-        acc1.add("b", 0.5, true);
+        acc1.addExact("a", 1.0);
+        acc1.addExact("b", 0.5);
 
         const acc2 = new MatchAccumulator<string>();
-        acc2.add("b", 0.3, true);
-        acc2.add("c", 0.7, true);
+        acc2.addExact("b", 0.3);
+        acc2.addExact("c", 0.7);
 
         const intersection = new MatchAccumulator<string>();
         acc1.intersect(acc2, intersection);
@@ -355,10 +350,10 @@ describe("MatchAccumulator", () => {
 
     test("getTopNScoring returns limited number of highest scoring matches", () => {
         const acc = new MatchAccumulator<string>();
-        acc.add("a", 0.3, true);
-        acc.add("b", 0.9, true);
-        acc.add("c", 0.6, true);
-        acc.add("d", 0.1, true);
+        acc.addExact("a", 0.3);
+        acc.addExact("b", 0.9);
+        acc.addExact("c", 0.6);
+        acc.addExact("d", 0.1);
         const top2 = acc.getTopNScoring(2);
         expect(top2).toHaveLength(2);
         const values = top2.map((m) => m.value);
@@ -368,12 +363,12 @@ describe("MatchAccumulator", () => {
 
     test("getTopNScoring with minHitCount filters before selecting top N", () => {
         const acc = new MatchAccumulator<string>();
-        acc.add("a", 0.9, true); // hitCount=1
-        acc.add("b", 0.7, true);
-        acc.add("b", 0.3, true); // hitCount=2
-        acc.add("c", 0.5, true);
-        acc.add("c", 0.5, true); // hitCount=2
-        acc.add("d", 0.1, true); // hitCount=1
+        acc.addExact("a", 0.9); // hitCount=1
+        acc.addExact("b", 0.7);
+        acc.addExact("b", 0.3); // hitCount=2
+        acc.addExact("c", 0.5);
+        acc.addExact("c", 0.5); // hitCount=2
+        acc.addExact("d", 0.1); // hitCount=1
         // Only b and c have hitCount >= 2
         const top = acc.getTopNScoring(undefined, 2);
         expect(top).toHaveLength(2);
@@ -384,19 +379,19 @@ describe("MatchAccumulator", () => {
 
     test("getMaxHitCount returns the highest hitCount across all matches", () => {
         const acc = new MatchAccumulator<string>();
-        acc.add("a", 1.0, true); // hitCount=1
-        acc.add("b", 0.5, true);
-        acc.add("b", 0.5, true);
-        acc.add("b", 0.5, true); // hitCount=3
-        acc.add("c", 0.3, true);
-        acc.add("c", 0.3, true); // hitCount=2
+        acc.addExact("a", 1.0); // hitCount=1
+        acc.addExact("b", 0.5);
+        acc.addExact("b", 0.5);
+        acc.addExact("b", 0.5); // hitCount=3
+        acc.addExact("c", 0.3);
+        acc.addExact("c", 0.3); // hitCount=2
         expect(acc.getMaxHitCount()).toBe(3);
     });
 
     test("clearMatches removes all matches", () => {
         const acc = new MatchAccumulator<string>();
-        acc.add("a", 1.0, true);
-        acc.add("b", 0.5, true);
+        acc.addExact("a", 1.0);
+        acc.addExact("b", 0.5);
         expect(acc.size).toBe(2);
         acc.clearMatches();
         expect(acc.size).toBe(0);
