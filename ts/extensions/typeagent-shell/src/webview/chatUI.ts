@@ -51,6 +51,11 @@ export class ChatUI {
     // Dedup: track last appended content to avoid duplicates
     private _lastAppendedContent?: string;
 
+    // Timestamp of last commandComplete; used to drop late-arriving
+    // "temporary" status messages (e.g. when WebSocket RPC arrives after
+    // commandComplete went through faster postMessage).
+    private _lastCompletedAt?: number;
+
     // Track switching state to keep input disabled
     private _isSwitching = false;
 
@@ -118,6 +123,9 @@ export class ChatUI {
         this._removeTemporary();
         this._activeResponseEl = undefined;
         this._lastAppendedContent = undefined;
+        // New user request — clear the late-temp guard so legitimate
+        // status messages for this command can render.
+        this._lastCompletedAt = undefined;
 
         const row = document.createElement("div");
         row.className = "message user";
@@ -194,6 +202,10 @@ export class ChatUI {
         if (contentEl) {
             const html = this._renderDisplayContent(content);
             contentEl.innerHTML = html;
+            // Track what's now in the bubble so a follow-up appendDisplay with
+            // the same content (e.g., a chat agent emitting setDisplay after
+            // streaming the same text) doesn't double up.
+            this._lastAppendedContent = html;
             if (html && html.trim().length > 0) {
                 bubble.classList.remove("empty");
             }
@@ -216,6 +228,15 @@ export class ChatUI {
         this._removeStatusIndicator();
 
         if (mode === "temporary") {
+            // Drop late-arriving status messages that race in after the
+            // command already completed (otherwise they'd be orphaned with
+            // nothing to clear them until the next interaction).
+            if (
+                this._lastCompletedAt !== undefined &&
+                Date.now() - this._lastCompletedAt < 2000
+            ) {
+                return;
+            }
             // Show as a replaceable status line — each new temporary replaces the last
             this._removeTemporary();
             const el = document.createElement("div");
@@ -348,6 +369,7 @@ export class ChatUI {
         this._removeStatusIndicator();
         this._activeResponseEl = undefined;
         this._lastAppendedContent = undefined;
+        this._lastCompletedAt = Date.now();
 
         if (requestId) {
             const agentBubble = this._agentBubblesByRequestId.get(requestId);
@@ -634,6 +656,14 @@ export class ChatUI {
                     );
                     break;
                 case "append-display":
+                    // Skip temporary status messages (e.g. "Translating...",
+                    // "Executing action ..."). They're meant to be ephemeral
+                    // and were already replaced by real content during the
+                    // original interaction. Replaying them leaves orphan
+                    // status lines in the transcript.
+                    if (e.mode === "temporary") {
+                        break;
+                    }
                     this.appendAgentDisplay(
                         e.message?.message,
                         e.message?.source,
