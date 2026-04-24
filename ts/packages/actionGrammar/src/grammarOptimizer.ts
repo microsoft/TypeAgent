@@ -197,10 +197,13 @@ type TryInlineResult = {
     /**
      * When set, the parent rule had no value expression of its own and
      * this inlining synthesizes one — copying what the matcher would
-     * have computed via the single-part default-value rule (i.e. the
-     * captured child rule's value).  Only valid when the parent had a
-     * single part and no `value`; in that situation no other inlining
-     * decision in the same parent can collide.
+     * have computed via its default-value rule (i.e. the captured child
+     * rule's value).  At most one assignment is possible per parent
+     * rule: the matcher's default-value rule requires exactly one
+     * variable on the parent, so two inlinings each producing a
+     * valueAssignment would mean the parent originally had two
+     * variables and `hasValue=false` — a grammar the compiler
+     * rejects (or warns about).
      */
     valueAssignment?: CompiledValueNode;
 };
@@ -264,9 +267,10 @@ function inlineParts(
             }
             if (replacement.valueAssignment !== undefined) {
                 // valueAssignment is only produced when the parent had
-                // exactly one part (this RulesPart) and no value of its
-                // own — so at most one assignment is possible per
-                // parent rule.
+                // no value of its own and the matcher's default-value
+                // rule would have used child.value as the parent's
+                // result — see TryInlineResult.valueAssignment for why
+                // this can fire at most once per parent rule.
                 valueAssignment = replacement.valueAssignment;
             }
         } else {
@@ -348,31 +352,38 @@ function tryInlineRulesPart(
     // remain in scope after inlining since those bindings move from
     // child.parts → parent.parts.
     if (child.value !== undefined) {
-        // (Hoist) Parent has no value of its own and exactly one
-        // part (this RulesPart).  The matcher's single-part
-        // default-value rule would have promoted the captured
-        // child.value into the parent's value at runtime; synthesize
-        // that assignment explicitly.  No α-rename needed: parent has
-        // no other parts for child.parts' bindings to collide with.
-        if (parentRule.value === undefined && parentRule.parts.length === 1) {
+        // α-rename child's top-level bindings to fresh opaque names so
+        // they can't collide with any other top-level bindings the
+        // parent already has, and apply the same remap to child.value.
+        // Skipped when parent has only this RulesPart as its single
+        // part — there are no siblings to collide with.
+        const { parts: renamedParts, value: renamedValue } =
+            parentRule.parts.length === 1
+                ? { parts: child.parts, value: child.value }
+                : renameAllChildBindings(child.parts, child.value, renameState);
+
+        // (Hoist) Parent has no value of its own and the matcher
+        // would have computed the parent's value via its
+        // default-value rule using `child.value` — either because
+        // parent has a single part (this RulesPart) or because
+        // parent's only variable is `part.variable` (which captured
+        // child.value at runtime).  Synthesize that assignment
+        // explicitly.
+        if (
+            parentRule.value === undefined &&
+            (parentRule.parts.length === 1 || part.variable !== undefined)
+        ) {
             return {
-                parts: child.parts,
-                valueAssignment: child.value,
+                parts: renamedParts,
+                valueAssignment: renamedValue!,
             };
         }
 
-        // Otherwise: α-rename child's top-level bindings to fresh
-        // opaque names so they can't collide with parent's other
-        // parts, and apply the same remap to child.value.  Then:
-        //   - if the parent captures via `part.variable` AND has its
-        //     own value expression, fold the renamed child.value into
-        //     it (substitution).  When parent.value doesn't reference
-        //     `part.variable` the substitution is a no-op walk and we
-        //     get the same result as the drop case.
-        //   - otherwise child.value is unobservable at runtime; drop
-        //     it and inline only the renamed child.parts.
-        const { parts: renamedParts, value: renamedValue } =
-            renameAllChildBindings(child.parts, child.value, renameState);
+        // (Substitute) parent captures via `part.variable` AND has
+        // its own value expression — fold the renamed child.value
+        // into it.  When parent.value doesn't reference
+        // `part.variable` the substitution is a no-op walk and we
+        // get the same result as the drop case.
         if (part.variable !== undefined && parentRule.value !== undefined) {
             return {
                 parts: renamedParts,
@@ -382,74 +393,54 @@ function tryInlineRulesPart(
                 },
             };
         }
+
+        // (Drop) child.value is unobservable at runtime; drop it and
+        // inline only the renamed child.parts.
         return { parts: renamedParts };
     }
 
     // If the parent expects to capture this RulesPart into a variable, the
-    // child rule must provide a single binding-friendly part to take the
-    // variable name; otherwise we'd silently drop the binding.
+    // child rule must provide exactly one binding-friendly part to take
+    // the variable name; otherwise we'd silently drop the binding.
+    // Multiple variable-bearing parts would mean child relied on an
+    // explicit value expression (which the no-value branch rules out)
+    // or violated the matcher's default-value contract; either way we
+    // can't safely re-target the parent's binding.  Other parts in
+    // child (string / phraseSet literals) come along unchanged.
     if (part.variable !== undefined) {
-        if (child.parts.length !== 1) {
+        let bindingIdx = -1;
+        let bindingCp:
+            | Extract<GrammarPart, { type: "wildcard" | "number" | "rules" }>
+            | undefined;
+        for (let i = 0; i < child.parts.length; i++) {
+            const cp = child.parts[i];
+            if (
+                cp.type === "wildcard" ||
+                cp.type === "number" ||
+                cp.type === "rules"
+            ) {
+                if (bindingIdx !== -1) {
+                    return undefined;
+                }
+                bindingIdx = i;
+                bindingCp = cp;
+            }
+        }
+        if (bindingCp === undefined) {
             return undefined;
         }
-        const only = child.parts[0];
-        const bound = withPropagatedVariable(only, part.variable);
-        if (bound === undefined) {
-            return undefined;
-        }
-        // Guard against duplicate variable names being introduced into the
-        // parent's parts list.
-        if (findExistingVariable(parentRule.parts, part.variable, part)) {
-            return undefined;
-        }
-        return { parts: [bound] };
+        const newParts = child.parts.slice();
+        newParts[bindingIdx] = { ...bindingCp, variable: part.variable };
+        // No duplicate-name guard here: if the parent already had two
+        // top-level parts bound to `part.variable` (the RulesPart and
+        // some sibling), that collision predates inlining and the
+        // matcher's behavior on it is unchanged when we replace the
+        // RulesPart with a wildcard/number/rules part bound to the
+        // same name.
+        return { parts: newParts };
     }
 
     return { parts: child.parts };
-}
-
-/**
- * Return a clone of `part` with `variable` set, or undefined if the part
- * cannot safely carry a variable binding via inlining.
- *
- * We only propagate onto direct-capture parts (wildcard/number).  Pushing
- * a variable onto a nested RulesPart is unsafe in the general case: the
- * inner rule may compute its value via an expression that references
- * names not reachable from the new parent scope, or it may provide no
- * structural value at all, causing the parent's binding to miss.
- */
-function withPropagatedVariable(
-    part: GrammarPart,
-    variable: string,
-): GrammarPart | undefined {
-    switch (part.type) {
-        case "wildcard":
-        case "number":
-            return { ...part, variable };
-        case "rules":
-        case "string":
-        case "phraseSet":
-            return undefined;
-    }
-}
-
-function findExistingVariable(
-    parts: GrammarPart[],
-    name: string,
-    skip: GrammarPart,
-): boolean {
-    for (const p of parts) {
-        if (p === skip) continue;
-        if (
-            (p.type === "wildcard" ||
-                p.type === "number" ||
-                p.type === "rules") &&
-            p.variable === name
-        ) {
-            return true;
-        }
-    }
-    return false;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

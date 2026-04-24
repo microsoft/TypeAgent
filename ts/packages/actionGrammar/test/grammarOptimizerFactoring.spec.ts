@@ -182,4 +182,93 @@ describe("Grammar Optimizer - Common prefix factoring", () => {
             expect(optRes).toEqual(expect.arrayContaining(baseRes));
         }
     });
+
+    // ── Eligibility-bailout coverage ────────────────────────────────────
+
+    it("bails out (implicit-default-multipart) when value-less members differ in part count", () => {
+        // All three alternatives lack an explicit `value` and the
+        // matcher's default-value rule applies.  Two of them are
+        // multi-part (more than one inlined part after factoring the
+        // shared `play `).  The factorer's eligibility check refuses
+        // wrapping because a wrapped `RulesPart` whose members default
+        // would feed the matcher's "missing value for default" path.
+        // Match results must still agree.
+        const text = `<Start> = $(t:<C>) -> { v: t };
+<C> = play $(a:string) | play $(b:string) loud | play $(c:string) softly;`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { factorCommonPrefixes: true },
+        });
+        for (const input of [
+            "play hello",
+            "play hello loud",
+            "play hello softly",
+        ]) {
+            const baseRes = match(baseline, input);
+            const optRes = match(optimized, input);
+            expect(optRes.length).toBe(baseRes.length);
+            expect(optRes).toEqual(expect.arrayContaining(baseRes));
+        }
+    });
+
+    it("bails out (mixed-value-presence) when some members have value and others don't", () => {
+        // Two alternatives share a literal prefix.  One has an
+        // explicit value, the other doesn't.  The factorer's
+        // eligibility check refuses to wrap a fork with mixed
+        // value-presence: a wrapper RulesPart binds either everything
+        // or nothing, not both.
+        const text = `<Start> = $(t:<C>) -> { v: t };
+<C> = play $(a:string) -> { kind: "a", a } | play $(b:string);`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { factorCommonPrefixes: true },
+        });
+        const baseRes = match(baseline, "play hello");
+        const optRes = match(optimized, "play hello");
+        expect(optRes.length).toBe(baseRes.length);
+        expect(optRes).toEqual(expect.arrayContaining(baseRes));
+    });
+
+    // ── Trie-edge variant coverage ──────────────────────────────────────
+
+    it("does not merge wildcards with different optional flags into one edge", () => {
+        // Two alternatives share `play $(x:string)` shape but one
+        // marks the wildcard optional.  `edgeKeyMatches` requires
+        // matching `optional` flags, so the factorer must keep them as
+        // distinct edges.  Match results agree.
+        const text = `<Start> = play $(x:string) here -> { kind: "here", x }
+         | play $(y:string)? there -> { kind: "there", y };`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { factorCommonPrefixes: true },
+        });
+        for (const input of [
+            "play hello here",
+            "play hello there",
+            "play there",
+        ]) {
+            const baseRes = match(baseline, input);
+            const optRes = match(optimized, input);
+            expect(optRes.length).toBe(baseRes.length);
+            expect(optRes).toEqual(expect.arrayContaining(baseRes));
+        }
+    });
+
+    it("does not merge wildcards with different typeNames into one edge", () => {
+        // `string` and `wildcard` typeNames produce distinct trie
+        // edges (different runtime entity-type semantics).  Match
+        // results agree.
+        const text = `<Start> = play $(x:string) once -> { kind: "s", x }
+         | play $(y:wildcard) twice -> { kind: "w", y };`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { factorCommonPrefixes: true },
+        });
+        for (const input of ["play hello once", "play hello twice"]) {
+            const baseRes = match(baseline, input);
+            const optRes = match(optimized, input);
+            expect(optRes.length).toBe(baseRes.length);
+            expect(optRes).toEqual(expect.arrayContaining(baseRes));
+        }
+    });
 });
