@@ -101,3 +101,16 @@ chatUI.onSend((text, requestId) => {
 
 // Ask the extension host to connect
 vscode.postMessage({ type: "connect" });
+
+// Report focus changes so the extension can drive a context key for keybindings.
+const reportFocus = (focused: boolean) => {
+    vscode.postMessage({ type: "focus", focused });
+};
+window.addEventListener("focus", () => reportFocus(true));
+window.addEventListener("blur", () => reportFocus(false));
+document.addEventListener("focusin", () => reportFocus(true));
+document.addEventListener("focusout", (e: FocusEvent) => {
+    // Only report blur if focus left the document entirely
+    if (!document.hasFocus()) reportFocus(false);
+});
+if (document.hasFocus()) reportFocus(true);

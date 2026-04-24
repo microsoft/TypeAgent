@@ -11,6 +11,8 @@ interface ChatEntry {
     panel?: vscode.WebviewPanel;
     sidebarView?: vscode.WebviewView;
     statusDisposable: vscode.Disposable;
+    focusDisposable: vscode.Disposable;
+    focused: boolean;
 }
 
 let sidebarBridge: AgentServerBridge | undefined;
@@ -51,19 +53,26 @@ export function activate(context: vscode.ExtensionContext): void {
             statusDisposable: sidebarBridge!.onStatusChange(() =>
                 refreshStatusBar(),
             ),
+            focusDisposable: sidebarBridge!.onWebviewFocus((f) => {
+                setEntryFocused(entry, f);
+            }),
+            focused: false,
         };
         chats.add(entry);
         setActive(entry);
         view.onDidChangeVisibility(() => {
             if (view.visible) setActive(entry);
+            else setEntryFocused(entry, false);
         });
         view.onDidDispose(() => {
             chats.delete(entry);
             entry.statusDisposable.dispose();
+            entry.focusDisposable.dispose();
             if (activeChat === entry) {
                 activeChat = chats.values().next().value;
                 refreshStatusBar();
             }
+            refreshFocusContext();
         });
         refreshStatusBar();
     });
@@ -123,6 +132,22 @@ export function activate(context: vscode.ExtensionContext): void {
 function setActive(entry: ChatEntry): void {
     activeChat = entry;
     refreshStatusBar();
+}
+
+function setEntryFocused(entry: ChatEntry, focused: boolean): void {
+    if (entry.focused === focused) return;
+    entry.focused = focused;
+    if (focused) setActive(entry);
+    refreshFocusContext();
+}
+
+function refreshFocusContext(): void {
+    const anyFocused = [...chats].some((c) => c.focused);
+    vscode.commands.executeCommand(
+        "setContext",
+        "typeagent-shell.chatFocused",
+        anyFocused,
+    );
 }
 
 function refreshStatusBar(): void {
@@ -196,6 +221,10 @@ function openNewChatPanel(
         bridge,
         panel,
         statusDisposable: bridge.onStatusChange(() => refreshStatusBar()),
+        focusDisposable: bridge.onWebviewFocus((f) => {
+            setEntryFocused(entry, f);
+        }),
+        focused: false,
     };
     chats.add(entry);
     setActive(entry);
@@ -205,6 +234,8 @@ function openNewChatPanel(
     panel.onDidChangeViewState((e) => {
         if (e.webviewPanel.active) {
             setActive(entry);
+        } else {
+            setEntryFocused(entry, false);
         }
     });
 
@@ -212,12 +243,14 @@ function openNewChatPanel(
         bridgeDisposable.dispose();
         bridge.dispose();
         entry.statusDisposable.dispose();
+        entry.focusDisposable.dispose();
         chats.delete(entry);
         if (activeChat === entry) {
             // Fall back to any remaining chat (sidebar, if open)
             activeChat = chats.values().next().value;
             refreshStatusBar();
         }
+        refreshFocusContext();
     });
 }
 

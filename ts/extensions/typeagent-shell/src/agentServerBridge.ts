@@ -79,7 +79,8 @@ export type BridgeFromWebviewMessage =
     | { type: "sendCommand"; command: string; requestId?: string }
     | { type: "connect" }
     | { type: "disconnect" }
-    | { type: "getStatus" };
+    | { type: "getStatus" }
+    | { type: "focus"; focused: boolean };
 
 /**
  * Manages the RPC connection to the agent server from the extension host
@@ -109,6 +110,7 @@ export class AgentServerBridge {
     // Notify when this bridge's status/session changes — used by extension
     // to update the shared status bar when this bridge is active.
     private onStatusChanged?: () => void;
+    private onWebviewFocusChanged?: (focused: boolean) => void;
 
     constructor(opts?: {
         ownsStatusBar?: boolean;
@@ -152,6 +154,11 @@ export class AgentServerBridge {
     onStatusChange(cb: () => void): vscode.Disposable {
         this.onStatusChanged = cb;
         return { dispose: () => { this.onStatusChanged = undefined; } };
+    }
+
+    onWebviewFocus(cb: (focused: boolean) => void): vscode.Disposable {
+        this.onWebviewFocusChanged = cb;
+        return { dispose: () => { this.onWebviewFocusChanged = undefined; } };
     }
 
     /**
@@ -682,6 +689,9 @@ export class AgentServerBridge {
                     connected: this.isConnected,
                     sessionId: this.session?.sessionId,
                 });
+                break;
+            case "focus":
+                this.onWebviewFocusChanged?.(msg.focused);
                 break;
         }
     }
