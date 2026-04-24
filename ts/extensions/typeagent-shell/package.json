@@ -85,8 +85,8 @@
         "keybindings": [
             {
                 "command": "typeagent-shell.newChatPanel",
-                "key": "ctrl+k ctrl+shift+t",
-                "mac": "cmd+k cmd+shift+t",
+                "key": "ctrl+k ctrl+t",
+                "mac": "cmd+k cmd+t",
                 "when": "focusedView == typeagent-shell.chatView || activeWebviewPanelId == typeagent-shell.chatPanel"
             },
             {
