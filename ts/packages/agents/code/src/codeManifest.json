@@ -61,6 +61,7 @@
       }
     },
     "code-typeagent-shell": {
+      "defaultEnabled": true,
       "schema": {
         "description": "Manage TypeAgent Shell conversations from chat: create a new conversation, rename the current conversation, or switch to an existing conversation by name. Only meaningful inside the TypeAgent Shell VSCode extension.",
         "originalSchemaFile": "./vscode/typeAgentShellActionsSchema.ts",
