@@ -84,31 +84,27 @@
         ],
         "keybindings": [
             {
-                "command": "typeagent-shell.focusChat",
-                "key": "ctrl+alt+t",
-                "mac": "cmd+alt+t"
-            },
-            {
                 "command": "typeagent-shell.newChatPanel",
-                "key": "ctrl+alt+shift+t",
-                "mac": "cmd+alt+shift+t"
+                "key": "ctrl+k ctrl+shift+t",
+                "mac": "cmd+k cmd+shift+t",
+                "when": "focusedView == typeagent-shell.chatView || activeWebviewPanelId == typeagent-shell.chatPanel"
             },
             {
                 "command": "typeagent-shell.newSession",
-                "key": "ctrl+alt+n",
-                "mac": "cmd+alt+n",
+                "key": "ctrl+k ctrl+n",
+                "mac": "cmd+k cmd+n",
                 "when": "focusedView == typeagent-shell.chatView || activeWebviewPanelId == typeagent-shell.chatPanel"
             },
             {
                 "command": "typeagent-shell.switchSession",
-                "key": "ctrl+alt+s",
-                "mac": "cmd+alt+s",
+                "key": "ctrl+k ctrl+s",
+                "mac": "cmd+k cmd+s",
                 "when": "focusedView == typeagent-shell.chatView || activeWebviewPanelId == typeagent-shell.chatPanel"
             },
             {
                 "command": "typeagent-shell.clearChat",
-                "key": "ctrl+alt+l",
-                "mac": "cmd+alt+l",
+                "key": "ctrl+k ctrl+l",
+                "mac": "cmd+k cmd+l",
                 "when": "focusedView == typeagent-shell.chatView || activeWebviewPanelId == typeagent-shell.chatPanel"
             }
         ],
