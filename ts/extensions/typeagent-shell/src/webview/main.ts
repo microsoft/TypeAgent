@@ -97,6 +97,11 @@ window.addEventListener("message", (event) => {
             // Command finished — clean up any remaining temporary status
             chatUI.onCommandComplete(msg.requestId, msg.result);
             break;
+        case "peerMetrics":
+            // Forwarded from a peer tab on the same session — apply the
+            // timing tooltip to our local bubble for that requestId.
+            chatUI.applyPeerMetrics(msg.requestId, msg.result);
+            break;
         case "switching":
             chatUI.setSwitching(msg.switching, msg.targetName);
             break;

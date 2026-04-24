@@ -48,6 +48,7 @@ export type BridgeToWebviewMessage =
     | { type: "notify"; event: string; data: any; source: string; seq?: number; requestId?: string }
     | { type: "commandResult"; requestId: string; result: any }
     | { type: "commandComplete"; requestId: string; result: any }
+    | { type: "peerMetrics"; requestId: string; result: any }
     | { type: "error"; message: string }
     | { type: "switching"; switching: boolean; targetName?: string }
     | { type: "userInfo"; name: string }
@@ -89,6 +90,36 @@ export type BridgeFromWebviewMessage =
  * and bridges messages to/from webview panels.
  */
 export class AgentServerBridge {
+    // Static registry: bridges grouped by sessionId, so the originator of a
+    // command can broadcast its result/metrics to peer tabs sharing the same
+    // session (the agent-server clientIO doesn't carry per-request metrics).
+    private static bridgesBySession: Map<string, Set<AgentServerBridge>> =
+        new Map();
+
+    private static registerForSession(
+        sessionId: string,
+        bridge: AgentServerBridge,
+    ): void {
+        let set = AgentServerBridge.bridgesBySession.get(sessionId);
+        if (!set) {
+            set = new Set();
+            AgentServerBridge.bridgesBySession.set(sessionId, set);
+        }
+        set.add(bridge);
+    }
+
+    private static unregisterForSession(
+        sessionId: string,
+        bridge: AgentServerBridge,
+    ): void {
+        const set = AgentServerBridge.bridgesBySession.get(sessionId);
+        if (!set) return;
+        set.delete(bridge);
+        if (set.size === 0) {
+            AgentServerBridge.bridgesBySession.delete(sessionId);
+        }
+    }
+
     private connection: AgentServerConnection | undefined;
     private session: SessionDispatcher | undefined;
     private webviews: Set<vscode.Webview> = new Set();
@@ -224,6 +255,12 @@ export class AgentServerBridge {
                     return;
                 }
                 this.isConnected = false;
+                if (this.session) {
+                    AgentServerBridge.unregisterForSession(
+                        this.session.sessionId,
+                        this,
+                    );
+                }
                 this.session = undefined;
                 this.updateStatusBar(false);
                 this.broadcastToWebviews({ type: "status", connected: false });
@@ -284,6 +321,11 @@ export class AgentServerBridge {
                 joinOpts,
             );
 
+            AgentServerBridge.registerForSession(
+                this.session.sessionId,
+                this,
+            );
+
             this.isConnected = true;
             this.updateStatusBar(true);
             this.broadcastToWebviews({
@@ -321,6 +363,12 @@ export class AgentServerBridge {
         if (this.connection) {
             await this.connection.close();
             this.connection = undefined;
+            if (this.session) {
+                AgentServerBridge.unregisterForSession(
+                    this.session.sessionId,
+                    this,
+                );
+            }
             this.session = undefined;
             this.isConnected = false;
             this.updateStatusBar(false);
@@ -587,6 +635,14 @@ export class AgentServerBridge {
             this.session = newSession;
             this.nameOverride = undefined;
 
+            if (oldSession) {
+                AgentServerBridge.unregisterForSession(
+                    oldSession.sessionId,
+                    this,
+                );
+            }
+            AgentServerBridge.registerForSession(newSession.sessionId, this);
+
             // Phase 2: leave the old session (best-effort).
             // If we were on an ephemeral session and we're moving away from
             // it, also delete it so it doesn't pile up on the server.
@@ -818,6 +874,9 @@ export class AgentServerBridge {
                 requestId: requestId ?? "",
                 result: result ?? null,
             });
+            // Forward metrics to peer tabs sharing this session so their
+            // bubbles for this requestId also pick up the timing tooltip.
+            this.broadcastMetricsToPeers(requestId, result ?? null);
         } catch (e: any) {
             this.broadcastToWebviews({
                 type: "commandComplete",
@@ -827,6 +886,25 @@ export class AgentServerBridge {
             this.broadcastToWebviews({
                 type: "error",
                 message: e?.message ?? String(e),
+            });
+        }
+    }
+
+    private broadcastMetricsToPeers(
+        requestId: string | undefined,
+        result: any,
+    ): void {
+        if (!requestId || !this.session) return;
+        const peers = AgentServerBridge.bridgesBySession.get(
+            this.session.sessionId,
+        );
+        if (!peers) return;
+        for (const peer of peers) {
+            if (peer === this) continue;
+            peer.broadcastToWebviews({
+                type: "peerMetrics",
+                requestId,
+                result,
             });
         }
     }

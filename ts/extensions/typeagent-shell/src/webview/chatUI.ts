@@ -267,6 +267,17 @@ export class ChatUI {
         const bubble = this._getOrCreateAgentBubble(source, timestamp, requestId);
         const contentEl = bubble.querySelector(".agent-content");
         if (contentEl) {
+            // Defensive dedup: if the bubble's current content already ends
+            // with this rendered chunk, skip. Catches cases where setDisplay
+            // and a follow-up appendDisplay carry the same payload.
+            const existing = contentEl.innerHTML;
+            if (
+                rendered.length > 0 &&
+                existing.length >= rendered.length &&
+                existing.endsWith(rendered)
+            ) {
+                return;
+            }
             contentEl.innerHTML += rendered;
             if (rendered && rendered.trim().length > 0) {
                 bubble.classList.remove("empty");
@@ -382,6 +393,26 @@ export class ChatUI {
             }
             this._pendingUserBubbles.delete(requestId);
             this._agentBubblesByRequestId.delete(requestId);
+        }
+    }
+
+    /**
+     * Apply timing metrics for a request that originated in a peer tab.
+     * Like onCommandComplete but does NOT touch our local activeResponse,
+     * temporary status, or pending-user-bubble state — those belong to
+     * commands issued by THIS tab.
+     */
+    public applyPeerMetrics(requestId: string, result: any): void {
+        if (!requestId) return;
+        const agentBubble = this._agentBubblesByRequestId.get(requestId);
+        if (agentBubble) {
+            this._renderMetrics(agentBubble, result?.metrics, "agent");
+        }
+        const userRow = this._messagesEl.querySelector(
+            `.message.user[data-request-id="${CSS.escape(requestId)}"]`,
+        ) as HTMLElement | null;
+        if (userRow) {
+            this._renderMetrics(userRow, result?.metrics, "user");
         }
     }
 
