@@ -1,0 +1,63 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// PowerShell Network Namespace Grammar
+// Network diagnostics and configuration
+
+import { PowerShellNetworkActions } from "./networkActionsSchema.ts";
+
+<Start> : PowerShellNetworkActions = <TestConnection>
+          | <PortListeners>
+          | <NetworkAdapters>
+          | <IpConfig>
+          | <DnsLookup>;
+
+<TestConnection> =
+    ping $(computerName:wildcard)
+      -> { actionName: "testConnection", parameters: { computerName } }
+  | (test|check) connection to $(computerName:wildcard)
+      -> { actionName: "testConnection", parameters: { computerName } }
+  | (is|can I reach) $(computerName:wildcard) (up|online|reachable)?
+      -> { actionName: "testConnection", parameters: { computerName } }
+  | ping $(computerName:wildcard) (on)? port $(port:number)
+      -> { actionName: "testConnection", parameters: { computerName, port } }
+  | (test|check) $(computerName:wildcard) port $(port:number)
+      -> { actionName: "testConnection", parameters: { computerName, port } };
+
+<PortListeners> =
+    (what's|what is) listening on port $(port:number)
+      -> { actionName: "portListeners", parameters: { port } }
+  | (show|list) (open)? (network)? ports
+      -> { actionName: "portListeners", parameters: {} }
+  | (show|list) port listeners
+      -> { actionName: "portListeners", parameters: {} }
+  | (which|what) (process|program) is (using|on) port $(port:number)
+      -> { actionName: "portListeners", parameters: { port } }
+  | netstat
+      -> { actionName: "portListeners", parameters: {} };
+
+<NetworkAdapters> =
+    (show|list|get) network adapters
+      -> { actionName: "networkAdapters", parameters: {} }
+  | (show|list) (network)? (interfaces|NICs|adapters)
+      -> { actionName: "networkAdapters", parameters: {} }
+  | (show|get) adapter $(name:wildcard)
+      -> { actionName: "networkAdapters", parameters: { name } };
+
+<IpConfig> =
+    (show|get|my) ip (address|config|configuration)?
+      -> { actionName: "ipConfig", parameters: {} }
+  | ipconfig
+      -> { actionName: "ipConfig", parameters: {} }
+  | (what is|what's) my ip (address)?
+      -> { actionName: "ipConfig", parameters: {} }
+  | (show|get) ip (for)? $(interfaceAlias:wildcard)
+      -> { actionName: "ipConfig", parameters: { interfaceAlias } };
+
+<DnsLookup> =
+    (resolve|lookup|nslookup) $(name:wildcard)
+      -> { actionName: "dnsLookup", parameters: { name } }
+  | dns (lookup)? (for)? $(name:wildcard)
+      -> { actionName: "dnsLookup", parameters: { name } }
+  | (resolve|lookup) $(name:wildcard) (record)? $(type:wildcard)
+      -> { actionName: "dnsLookup", parameters: { name, type } };

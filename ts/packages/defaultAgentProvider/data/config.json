@@ -62,8 +62,8 @@
       "name": "taskflow-typeagent",
       "execMode": "dispatcher"
     },
-    "scriptflow": {
-      "name": "scriptflow-typeagent"
+    "powershell": {
+      "name": "powershell-typeagent"
     },
     "utility": {
       "name": "utility-typeagent"

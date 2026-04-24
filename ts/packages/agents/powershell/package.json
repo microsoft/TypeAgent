@@ -1,0 +1,274 @@
+{
+  "name": "powershell-typeagent",
+  "version": "0.0.1",
+  "private": true,
+  "description": "TypeAgent PowerShell — reusable PowerShell scripts from reasoning traces",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/agents/powershell"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/manifest.json",
+    "./agent/handlers": "./dist/actionHandler.mjs",
+    "./recipe": "./dist/types/scriptRecipe.js"
+  },
+  "scripts": {
+    "agc": "agc -i ./src/powershellSchema.agr -o ./dist/powershellSchema.ag.json",
+    "agc:all": "concurrently npm:agc npm:agc:files npm:agc:processes npm:agc:system npm:agc:services npm:agc:network npm:agc:data npm:agc:archives",
+    "agc:archives": "agc -i ./src/namespaces/archives/archivesSchema.agr -o ./dist/archivesSchema.ag.json",
+    "agc:data": "agc -i ./src/namespaces/data/dataSchema.agr -o ./dist/dataSchema.ag.json",
+    "agc:files": "agc -i ./src/namespaces/files/filesSchema.agr -o ./dist/filesSchema.ag.json",
+    "agc:network": "agc -i ./src/namespaces/network/networkSchema.agr -o ./dist/networkSchema.ag.json",
+    "agc:processes": "agc -i ./src/namespaces/processes/processesSchema.agr -o ./dist/processesSchema.ag.json",
+    "agc:services": "agc -i ./src/namespaces/services/servicesSchema.agr -o ./dist/servicesSchema.ag.json",
+    "agc:system": "agc -i ./src/namespaces/system/systemSchema.agr -o ./dist/systemSchema.ag.json",
+    "asc": "asc -i ./src/schema/scriptActions.mts -o ./dist/powershellSchema.pas.json -t PowerShellActions",
+    "asc:all": "concurrently npm:asc npm:asc:files npm:asc:processes npm:asc:system npm:asc:services npm:asc:network npm:asc:data npm:asc:archives",
+    "asc:archives": "asc -i ./src/namespaces/archives/archivesActionsSchema.ts -o ./dist/archivesSchema.pas.json -t PowerShellArchivesActions",
+    "asc:data": "asc -i ./src/namespaces/data/dataActionsSchema.ts -o ./dist/dataSchema.pas.json -t PowerShellDataActions",
+    "asc:files": "asc -i ./src/namespaces/files/filesActionsSchema.ts -o ./dist/filesSchema.pas.json -t PowerShellFilesActions",
+    "asc:network": "asc -i ./src/namespaces/network/networkActionsSchema.ts -o ./dist/networkSchema.pas.json -t PowerShellNetworkActions",
+    "asc:processes": "asc -i ./src/namespaces/processes/processesActionsSchema.ts -o ./dist/processesSchema.pas.json -t PowerShellProcessesActions",
+    "asc:services": "asc -i ./src/namespaces/services/servicesActionsSchema.ts -o ./dist/servicesSchema.pas.json -t PowerShellServicesActions",
+    "asc:system": "asc -i ./src/namespaces/system/systemActionsSchema.ts -o ./dist/systemSchema.pas.json -t PowerShellSystemActions",
+    "benchmark": "npx tsx benchmark/run-benchmark.mts",
+    "benchmark:dry": "npx tsx benchmark/run-benchmark.mts --dry-run",
+    "build": "concurrently npm:tsc npm:asc:all npm:agc:all",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "compile": "node scripts/compileRecipes.mjs",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.92",
+    "@typeagent/agent-sdk": "workspace:*",
+    "debug": "^4.3.4"
+  },
+  "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
+    "@types/debug": "^4.1.12",
+    "action-grammar-compiler": "workspace:*",
+    "concurrently": "^9.1.2",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  },
+  "fluidBuild": {
+    "tasks": {
+      "agc": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/powershellSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/powershellSchema.ag.json"
+          ]
+        }
+      },
+      "agc:files": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/namespaces/files/filesSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/filesSchema.ag.json"
+          ]
+        }
+      },
+      "agc:processes": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/namespaces/processes/processesSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/processesSchema.ag.json"
+          ]
+        }
+      },
+      "agc:system": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/namespaces/system/systemSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/systemSchema.ag.json"
+          ]
+        }
+      },
+      "agc:services": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/namespaces/services/servicesSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/servicesSchema.ag.json"
+          ]
+        }
+      },
+      "agc:network": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/namespaces/network/networkSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/networkSchema.ag.json"
+          ]
+        }
+      },
+      "agc:data": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/namespaces/data/dataSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/dataSchema.ag.json"
+          ]
+        }
+      },
+      "agc:archives": {
+        "dependsOn": [
+          "action-grammar-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/namespaces/archives/archivesSchema.agr"
+          ],
+          "outputGlobs": [
+            "dist/archivesSchema.ag.json"
+          ]
+        }
+      },
+      "asc": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/schema/scriptActions.mts"
+          ],
+          "outputGlobs": [
+            "dist/powershellSchema.pas.json"
+          ]
+        }
+      },
+      "asc:files": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/namespaces/files/filesActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/filesSchema.pas.json"
+          ]
+        }
+      },
+      "asc:processes": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/namespaces/processes/processesActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/processesSchema.pas.json"
+          ]
+        }
+      },
+      "asc:system": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/namespaces/system/systemActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/systemSchema.pas.json"
+          ]
+        }
+      },
+      "asc:services": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/namespaces/services/servicesActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/servicesSchema.pas.json"
+          ]
+        }
+      },
+      "asc:network": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/namespaces/network/networkActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/networkSchema.pas.json"
+          ]
+        }
+      },
+      "asc:data": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/namespaces/data/dataActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/dataSchema.pas.json"
+          ]
+        }
+      },
+      "asc:archives": {
+        "dependsOn": [
+          "@typeagent/action-schema-compiler#tsc"
+        ],
+        "files": {
+          "inputGlobs": [
+            "src/namespaces/archives/archivesActionsSchema.ts"
+          ],
+          "outputGlobs": [
+            "dist/archivesSchema.pas.json"
+          ]
+        }
+      }
+    }
+  }
+}
