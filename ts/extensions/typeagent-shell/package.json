@@ -19,7 +19,9 @@
     "categories": [
         "Other"
     ],
-    "activationEvents": [],
+    "activationEvents": [
+        "onWebviewPanel:typeagent-shell.chatPanel"
+    ],
     "main": "./dist/extension.js",
     "contributes": {
         "viewsContainers": {

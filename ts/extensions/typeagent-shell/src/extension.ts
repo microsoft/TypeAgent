@@ -92,6 +92,39 @@ export function activate(context: vscode.ExtensionContext): void {
         ),
     );
 
+    // Serializer: restore previously-open chat panels on window reopen.
+    context.subscriptions.push(
+        vscode.window.registerWebviewPanelSerializer(
+            "typeagent-shell.chatPanel",
+            {
+                async deserializeWebviewPanel(
+                    panel: vscode.WebviewPanel,
+                    state: any,
+                ): Promise<void> {
+                    panelCounter += 1;
+                    const n = panelCounter;
+                    const sessionId =
+                        state && typeof state === "object"
+                            ? (state.sessionId as string | undefined)
+                            : undefined;
+                    const sessionName =
+                        state && typeof state === "object"
+                            ? (state.sessionName as string | undefined)
+                            : undefined;
+                    const friendly = sessionName ?? `Chat ${n}`;
+                    panel.title = `TypeAgent ${friendly}`;
+                    attachChatPanel(context, provider, panel, {
+                        displayName: friendly,
+                        ephemeralSessionName: sessionId
+                            ? undefined
+                            : `cli-ephemeral-vscode-${n}-${Date.now()}`,
+                        restoreSessionId: sessionId,
+                    });
+                },
+            },
+        ),
+    );
+
     // Command: focus the sidebar chat
     context.subscriptions.push(
         vscode.commands.registerCommand("typeagent-shell.focusChat", () => {
@@ -213,19 +246,33 @@ function openNewChatPanel(
             ],
         },
     );
+    attachChatPanel(context, provider, panel, {
+        displayName: friendly,
+        ephemeralSessionName: `cli-ephemeral-vscode-${n}-${Date.now()}`,
+    });
+}
+
+function attachChatPanel(
+    context: vscode.ExtensionContext,
+    provider: ChatViewProvider,
+    panel: vscode.WebviewPanel,
+    opts: {
+        displayName: string;
+        ephemeralSessionName?: string;
+        restoreSessionId?: string;
+    },
+): void {
     panel.iconPath = vscode.Uri.joinPath(
         context.extensionUri,
         "media",
         "typeagent-icon.svg",
     );
 
-    // Each panel: own bridge + ephemeral session deleted on close.
-    // Server name uses the cli-ephemeral- prefix so the startup sweep
-    // catches orphans from crashes; the user-visible name is "Chat N".
     const bridge = new AgentServerBridge({
         ownsStatusBar: false,
-        ephemeralSessionName: `cli-ephemeral-vscode-${n}-${Date.now()}`,
-        displayName: friendly,
+        ephemeralSessionName: opts.ephemeralSessionName,
+        displayName: opts.displayName,
+        restoreSessionId: opts.restoreSessionId,
     });
 
     const entry: ChatEntry = {
@@ -257,7 +304,6 @@ function openNewChatPanel(
         entry.focusDisposable.dispose();
         chats.delete(entry);
         if (activeChat === entry) {
-            // Fall back to any remaining chat (sidebar, if open)
             activeChat = undefined;
             const next = chats.values().next().value;
             if (next) setActive(next);

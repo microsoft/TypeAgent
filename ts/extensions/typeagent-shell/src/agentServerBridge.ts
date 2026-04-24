@@ -112,15 +112,19 @@ export class AgentServerBridge {
     // to update the shared status bar when this bridge is active.
     private onStatusChanged?: () => void;
     private onWebviewFocusChanged?: (focused: boolean) => void;
+    /** If set, connect() will join this existing session instead of creating one. */
+    private restoreSessionId: string | undefined;
 
     constructor(opts?: {
         ownsStatusBar?: boolean;
         ephemeralSessionName?: string;
         displayName?: string;
+        restoreSessionId?: string;
     }) {
         this.ownsStatusBar = opts?.ownsStatusBar ?? true;
         this.ephemeralSessionName = opts?.ephemeralSessionName;
         this.displayName = opts?.displayName ?? "TypeAgent";
+        this.restoreSessionId = opts?.restoreSessionId;
         if (this.ownsStatusBar) {
             this.statusBarItem = vscode.window.createStatusBarItem(
                 vscode.StatusBarAlignment.Left,
@@ -233,7 +237,24 @@ export class AgentServerBridge {
                 clientType: "extension",
                 filter: true,
             };
+            if (this.restoreSessionId) {
+                // Try to rejoin a session restored from a saved panel.
+                // If it no longer exists on the server, fall through to the
+                // ephemeral / default behavior so we still have a chat.
+                try {
+                    const sessions = await this.connection.listSessions();
+                    if (sessions.some((s) => s.sessionId === this.restoreSessionId)) {
+                        joinOpts.sessionId = this.restoreSessionId;
+                    } else {
+                        this.restoreSessionId = undefined;
+                    }
+                } catch {
+                    // listSessions failed — try to join anyway
+                    joinOpts.sessionId = this.restoreSessionId;
+                }
+            }
             if (
+                joinOpts.sessionId === undefined &&
                 this.ephemeralSessionName &&
                 this.ephemeralSessionId === undefined
             ) {
@@ -246,7 +267,10 @@ export class AgentServerBridge {
                 } catch {
                     // Fall back to default join if creation fails
                 }
-            } else if (this.ephemeralSessionId) {
+            } else if (
+                joinOpts.sessionId === undefined &&
+                this.ephemeralSessionId
+            ) {
                 joinOpts.sessionId = this.ephemeralSessionId;
             }
 

@@ -29,6 +29,12 @@ window.addEventListener("message", (event) => {
     switch (msg.type) {
         case "status":
             chatUI.setStatus(msg.connected, msg.sessionId, msg.sessionName);
+            if (msg.connected && msg.sessionId) {
+                vscode.setState({
+                    sessionId: msg.sessionId,
+                    sessionName: msg.sessionName,
+                });
+            }
             break;
         case "userInfo":
             chatUI.setUserInfo(msg.name);
