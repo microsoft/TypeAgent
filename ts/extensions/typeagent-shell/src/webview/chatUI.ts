@@ -255,11 +255,15 @@ export class ChatUI {
         }
         this._lastAppendedContent = rendered;
 
-        // Remove temporary when first real content arrives
-        const hadBubble =
-            (requestId && this._agentBubblesByRequestId.has(requestId)) ||
-            !!this._activeResponseEl;
-        if (!hadBubble) {
+        // Remove temporary when first real content arrives (either no bubble
+        // yet, or an empty bubble that was pre-created by setDisplayInfo).
+        const existingBubble =
+            requestId && this._agentBubblesByRequestId.has(requestId)
+                ? this._agentBubblesByRequestId.get(requestId)!
+                : this._activeResponseEl;
+        const existingContent =
+            existingBubble?.querySelector(".agent-content")?.innerHTML ?? "";
+        if (existingContent.trim() === "") {
             this._removeTemporary();
         }
         const bubble = this._getOrCreateAgentBubble(source, timestamp, requestId);
