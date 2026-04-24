@@ -228,13 +228,11 @@ export class ChatUI {
         this._removeStatusIndicator();
 
         if (mode === "temporary") {
-            // Drop late-arriving status messages that race in after the
-            // command already completed (otherwise they'd be orphaned with
-            // nothing to clear them until the next interaction).
-            if (
-                this._lastCompletedAt !== undefined &&
-                Date.now() - this._lastCompletedAt < 2000
-            ) {
+            // Drop status messages after the command already completed —
+            // they're stale (race-arrived after commandComplete) and would
+            // otherwise be orphaned with nothing to clear them. Reset on
+            // the next user message via addUserMessage.
+            if (this._lastCompletedAt !== undefined) {
                 return;
             }
             // Show as a replaceable status line — each new temporary replaces the last
