@@ -44,6 +44,12 @@ function benchmarkFile(
 function main(): void {
     registerBuiltInEntities();
 
+    // Grammar paths are resolved relative to this file's compiled
+    // location (`dist/bench/`).  They point at sibling agent packages
+    // via `../../../agents/<name>/...` and assume the standard
+    // `packages/` layout in the workspace.  If an agent grammar moves
+    // or the dist layout changes, the `[skip]` branch in `benchmarkFile`
+    // keeps the script running and prints a clear diagnostic.
     benchmarkFile(
         "player",
         path.resolve(

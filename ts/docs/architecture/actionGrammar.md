@@ -394,15 +394,16 @@ through `LoadGrammarRulesOptions.optimizations`:
 
 ```typescript
 loadGrammarRules("agent.agr", text, {
-    optimizations: {
-        inlineSingleAlternatives: true,
-        factorCommonPrefixes: true,
-    },
+  optimizations: {
+    inlineSingleAlternatives: true,
+    factorCommonPrefixes: true,
+  },
 });
 ```
 
 The optimizer runs after value-expression validation, so it operates on
-fully-compiled `CompiledValueNode`s.
+fully-compiled `CompiledValueNode`s. It is skipped entirely when the
+compile produced any errors (the AST may be partial).
 
 #### Pass 1 — Inline single-alternative `RulesPart`
 
@@ -412,22 +413,47 @@ rule's parts. This removes one layer of `ParentMatchState` push/pop and
 `finalizeNestedRule` in the matcher, which is common for named rules
 that simply delegate to a single sub-rule.
 
-A `RulesPart` is inlined only when **all** of the following hold:
+A `RulesPart` is inlined only when **all** structural preconditions
+hold:
 
-- `part.rules.length === 1`
-- `!part.repeat` and `!part.optional` (loop-back / optional semantics
-  must be preserved)
-- The child rule has no explicit `value` expression (an inlined value
-  would no longer fire under the parent's value-tracking policy)
-- The child rule's `spacingMode` is compatible with the parent
-  (either `undefined` to inherit, or identical to the parent's mode)
-- If `part.variable` is set, the child must consist of a single
-  direct-capture part (`wildcard` or `number`) so the variable name
-  can be propagated onto it. Variable propagation is **never** pushed
-  onto a nested `RulesPart` — that scope is structurally distinct from
-  the parent's and would silently drop the binding for cases like
-  `$(x:<Inner>)` where `<Inner>` produces a nested object via its own
-  value expression.
+- `part.rules.length === 1` and `!part.repeat && !part.optional`
+- The child rule has at least one part
+- `child.spacingMode === parentRule.spacingMode` (exact equality;
+  `undefined` is treated as a distinct "auto" mode at the matcher
+  level, not as "inherit from parent")
+- The body of the child's `rules` array is not shared by any other
+  `RulesPart` in the input AST. A pre-pass reference-counts every
+  `GrammarRule[]` array; inlining a shared body would duplicate the
+  child's parts at every call site and defeat the serializer's
+  identity-based dedup (see "shared-rule identity preservation"
+  below).
+
+When the child carries an explicit `value` expression, one of three
+sub-strategies fires:
+
+- **Hoist** — parent has no value of its own and either has a single
+  part (this `RulesPart`) or captures via `part.variable`. The matcher
+  would have computed the parent's value at runtime via its
+  default-value rule using `child.value`; we synthesize that
+  assignment explicitly onto the parent's `value`.
+- **Substitute** — parent captures via `part.variable` AND has its
+  own value expression. The (α-renamed) `child.value` is substituted
+  for the captured variable in `parent.value`.
+- **Drop** — `child.value` is unobservable at runtime; inline only the
+  child's parts.
+
+For Substitute and Drop the child's top-level bindings are α-renamed
+to fresh opaque names (`__opt_inline_<n>`, per-parent counter) so
+they cannot collide with sibling parts the parent already has. Hoist
+into a single-part parent skips the rename — there are no siblings.
+
+When the child has no value expression and the parent captures via
+`part.variable`, the child must contain exactly one binding-friendly
+part (`wildcard`, `number`, or `rules`). The parent's variable name
+is re-targeted onto that single part in place. (This is the only
+case where a binding may legitimately move onto a nested
+`RulesPart` — the absence of a child value rules out the silent-drop
+hazard that the value-bearing branches handle via Hoist/Substitute.)
 
 #### Pass 2 — Common prefix factoring
 
@@ -442,79 +468,113 @@ play the track -> "track"  ⇒              | track -> "track"
 play the album -> "album"                 | album -> "album")
 ```
 
-**Prefix shape.** Two alternatives share a prefix of `(fullParts,
-stringTokens)` shape: `fullParts` parts that are structurally equal
-(via `partsEqualForFactoring`), optionally followed by `stringTokens`
-matching leading tokens of a shared `StringPart`. The partial-string
-case lets `play the song | play the track` factor even though
-`play the song` and `play the track` are each tokenized into a single
-multi-token `StringPart`.
+**Top-level factoring.** After nested factoring completes, the
+top-level `Grammar.rules` array is factored against itself — the
+matcher treats top-level alternatives the same way it treats inner
+`RulesPart` alternatives. The trie build/emit core (`factorRules`)
+operates on a flat `GrammarRule[]`, so it is reused directly at the
+top level without wrapping the array in a synthetic `RulesPart`.
+This intentionally **destroys the 1:1 correspondence between
+top-level rule indices and the original source**; downstream consumers
+that depend on that mapping must capture it before enabling
+`factorCommonPrefixes`.
 
-**Variable remapping.** `partsEqualForFactoring` treats variable parts
-(`wildcard`, `number`, `rules`) as equal when their type/shape matches
-even if the variable names differ. The lead alternative provides the
-canonical names; for each non-lead member a `remap: Map<string,
-string>` is built and applied to the suffix's parts and value
-expression via `remapPartVariables` and `remapValueVariables`. Object
-shorthand `{ x }` (compiled as `{ key: "x", value: null }`) is
-expanded to `{ key: "x", value: variable("renamed") }` during remap so
-the object field name stays the same.
+**Implementation.** Factoring is implemented as a trie build +
+post-order emission inside `factorRules` (with `factorRulesPart` as a
+thin `RulesPart`-aware wrapper that handles the `repeat`/`optional`
+bailout):
 
-**Wrapper value capture.** When any suffix carries a value expression,
-the new wrapper rule has more than one part and the matcher's default
-single-part value-tracking policy no longer fires. The optimizer
-generates a fresh variable name (`__opt_factor`, `__opt_factor_1`, …),
-binds the suffix `RulesPart` to it, and produces a wrapper value
+- Each rule is inserted as a sequence of "atomic" steps. `StringPart`
+  explodes into one `(string, token)` edge per token in `value[]`,
+  so `["play", "song"]` and `["play", "album"]` share the `"play"`
+  edge but branch at the next token. `wildcard`, `number`, `rules`,
+  and `phraseSet` parts each yield one edge. `rules` edges key by
+  `rules` array identity.
+- `edgeKeyMatches` ignores variable _names_ on variable-bearing edges
+  but requires binding _presence parity_ on `rules` edges (so
+  `<Inner>` and `$(v:<Inner>)` do not silently merge into the same
+  child). In the current implementation this comparison is encoded
+  into a primitive `stepMergeKey` so that the trie children map can
+  perform an O(1) lookup instead of an O(siblings) scan.
+- Emission walks the trie post-order. Single-child / no-terminal
+  chains are path-compressed back into a flat parts array (with
+  adjacent `StringPart`s re-merged at the seam), and multi-member
+  nodes become wrapper `RulesPart`s.
+
+**Opaque canonical names.** Variable-bearing trie edges carry a fresh
+opaque canonical name (`__opt_v_<n>`) allocated per `factorRules`
+invocation, _not_ the first inserter's user-supplied variable name. This eliminates two collision classes
+that any "first inserter wins" scheme is vulnerable to: outer-scope
+shadow (a non-lead's value referencing an outer name that happens to
+match the lead's local) and bound-vs-unbound `rules` parity. Each
+inserter accumulates a `local → canonical` remap that is applied to
+its terminal's `value` expression at emission time. `remapValueVariables`
+expands object-shorthand `{ foo }` to `{ foo: <renamed> }` so the
+object field name stays the same.
+
+**Wrapper value capture.** When any factored member carries a value
+expression, the wrapper rule has more than one part and the matcher's
+default single-part value rule no longer fires. The optimizer
+generates a fresh `__opt_factor` / `__opt_factor_<n>` name (avoiding
+any name already bound in prefix or members), binds the suffix
+`RulesPart` to it, and sets the wrapper's `value` to
 `{ type: "variable", name: "__opt_factor" }` — preserving the suffix
 value through the new nesting level.
 
-**Iteration.** Factoring is applied to a fixed point per `RulesPart`
-(capped at 8 rounds) since a freshly-factored suffix may itself share
-a new prefix among its members. When both passes are enabled, Pass 1
-runs again after factoring so that any single-alternative wrappers
-produced by factoring collapse away.
+**Local bailout on eligibility failure.** Per-fork eligibility checks
+run before each wrapper is built; on failure the would-be members
+are emitted as separate full rules with the canonical prefix
+prepended, losing factoring at _that fork only_. Factoring above and
+below the failing fork still applies. Failure reasons:
+
+- **Whole-consumed.** A member's parts were entirely consumed by the
+  prefix (empty-parts suffix) — the matcher cannot default-value
+  resolve an empty-parts rule inside a wrapped `RulesPart`.
+- **Mixed value presence.** Some members carry explicit `value`,
+  others rely on default-value semantics; wrapping would silently
+  drop the implicit values.
+- **Implicit-default multipart.** All members rely on default values
+  but at least one suffix would end up with more than one part,
+  where the matcher's single-part default-value policy no longer
+  applies.
+- **Cross-scope reference.** A suffix's value expression references
+  a canonical name bound by the prefix. Nested rule scope is fresh
+  in the matcher (entering a `RulesPart` resets `valueIds`), so the
+  suffix cannot see prefix bindings — bail out so each member emits
+  at the wrapper's level instead.
+
+The earlier "binding shadow" guard is no longer needed: opaque
+canonicals allocated globally per `factorRules` call cannot
+collide with each other.
+
+**No fixed-point loop.** Factoring is applied once per group of
+alternatives — the trie's grouping converges in a single pass and
+freshly synthesized suffix `RulesPart`s are intentionally not
+re-walked. When both passes are enabled, the optimizer runs Pass 1
+once more after Pass 2 so that any sub-`RulesPart`s inside the
+emitted suffixes that have become inline-eligible can collapse.
 
 **Shared-rule identity preservation.** Both passes memoize their
 output by `GrammarRule[]` array identity. The compiler points every
 reference to the same named rule (`<X>`) at the same underlying
-`rules` array so [grammarSerializer.ts](packages/actionGrammar/src/grammarSerializer.ts)
+`rules` array so [grammarSerializer.ts](../../packages/actionGrammar/src/grammarSerializer.ts)
 can dedupe via `rulesToIndex.get(p.rules)`. The optimizer preserves
 that invariant: two `RulesPart`s that originally pointed at the same
 array still point at the same (possibly new) array after the pass —
-keeping `.ag.json` size proportional to unique rule bodies, and
-allowing `partsEqualForFactoring`'s `a.rules === b.rules` check to
-keep matching across multiple references.
-
-**Safety guards.** The optimizer refuses to factor when any of the
-following would change semantics:
-
-- **Mixed value presence.** Some members have an explicit value, others
-  rely on default-value semantics. Wrapping changes the parent shape
-  and would silently drop the implicit values.
-- **Multi-part defaulted suffix.** All members rely on default values
-  but at least one suffix would end up with more than one part, where
-  the matcher's single-part default-value policy no longer applies.
-- **Cross-scope value reference.** A suffix's value expression
-  references (after remap) a variable bound in the canonical prefix.
-  The matcher scopes value variables per nested rule, so the suffix
-  cannot see prefix bindings.
-- **Suffix–prefix variable collision.** A suffix-bound variable name
-  collides with a canonical-prefix name after remap — would shadow the
-  outer binding.
-- **Wholly-consumed alternative with explicit value.** The shared
-  prefix consumes every part of some alternative that also has an
-  explicit value — leaves an empty-parts suffix that cannot carry the
-  value cleanly.
+keeping `.ag.json` size proportional to unique rule bodies.
 
 #### Equivalence and benchmarks
 
-The new `grammarOptimizer*` test specs cover unit behavior, structural
-equivalence (every flag combination produces identical `matchGrammar`
-output across a set of curated and real-agent grammars), and an
-informational `grammarOptimizerBenchmark.spec.ts` patterned on
-`dfaBenchmark.spec.ts` that prints matcher-time numbers per
-configuration. Set `TYPEAGENT_SKIP_BENCHMARKS=1` to skip the
-benchmark spec.
+The `grammarOptimizer*.spec.ts` test suite covers unit behavior of
+both passes, regression repros for previously broken factoring
+patterns, structural-equivalence checks (every flag combination
+produces identical `matchGrammar` output across curated and
+real-agent grammars), and shared-array preservation. Standalone
+informational benchmarks live under
+[packages/actionGrammar/src/bench/](../../packages/actionGrammar/src/bench/);
+run them via `pnpm run bench:synthetic` and `pnpm run bench:real`
+from the package directory (a `pnpm run tsc` build is required first
+since the bench scripts execute the compiled `dist/bench/` output).
 
 ### Matching backend
 

@@ -25,6 +25,12 @@ export type GrammarOptimizationOptions = {
     /**
      * Factor common leading parts shared across alternatives in a RulesPart.
      * Avoids re-matching the shared prefix while exploring each alternative.
+     *
+     * Also factors the top-level `Grammar.rules` array against itself,
+     * which **destroys the 1:1 correspondence between top-level rule
+     * indices and the original source**.  Downstream consumers that
+     * depend on that mapping (e.g. for diagnostics that quote a source
+     * rule by index) must capture it before this pass runs.
      */
     factorCommonPrefixes?: boolean;
 };
@@ -51,8 +57,12 @@ export function optimizeGrammar(
     if (options.factorCommonPrefixes) {
         rules = factorCommonPrefixes(rules);
         if (options.inlineSingleAlternatives) {
-            // Factoring can produce new single-alternative wrapper rules;
-            // run the inliner once more so they collapse.
+            // Factoring never emits a single-alternative wrapper itself
+            // (factorRulesPart only wraps when members.length >= 2), but
+            // the suffix RulesParts it builds can contain inner
+            // single-alternative RulesParts that were not visible to
+            // Pass 1 in their pre-factored shape.  Re-run the inliner so
+            // those collapse.
             rules = inlineSingleAlternativeRules(rules);
         }
     }
@@ -467,13 +477,13 @@ export function factorCommonPrefixes(rules: GrammarRule[]): GrammarRule[] {
     const memo: RulesArrayMemo = new Map();
     let result = factorRulesArray(rules, counter, memo);
 
-    // Top-level factoring: wrap the (already nested-factored) top-level
-    // rules in a synthetic `RulesPart` so we can reuse `factorRulesPart`
-    // unchanged.  Newly synthesized suffix `RulesPart`s produced here are
-    // not themselves re-walked, matching the existing behavior for nested
-    // factoring.
-    const wrapper: RulesPart = { type: "rules", rules: result };
-    result = factorRulesPart(wrapper, counter).rules;
+    // Top-level factoring: the matcher treats top-level alternatives the
+    // same way it treats inner `RulesPart` alternatives (each is queued
+    // as its own `MatchState` and produces its own result), so the same
+    // trie-based factoring applies.  Newly synthesized suffix
+    // `RulesPart`s produced here are not themselves re-walked, matching
+    // the existing behavior for nested factoring.
+    result = factorRules(result, counter);
 
     if (counter.factored > 0) {
         debug(`factored ${counter.factored} common prefix groups`);
@@ -542,8 +552,32 @@ function factorParts(
 }
 
 /**
- * Common-prefix factoring inside a single RulesPart, implemented as a
- * trie-build + post-order emission.
+ * Common-prefix factoring inside a single RulesPart.  Thin wrapper
+ * around `factorRules` that respects the `RulesPart`'s repeat/optional
+ * flags (which change matcher loop-back semantics and so block
+ * factoring) and re-wraps the factored alternatives back into the
+ * `RulesPart` shape on success.
+ */
+function factorRulesPart(
+    part: RulesPart,
+    counter: { factored: number },
+): RulesPart {
+    if (part.repeat || part.optional) {
+        // Repeat/optional change the matcher's loop-back semantics; leave
+        // such groups untouched to stay safe.
+        return part;
+    }
+    const factored = factorRules(part.rules, counter);
+    if (factored === part.rules) return part;
+    return { ...part, rules: factored };
+}
+
+/**
+ * Common-prefix factoring over a flat list of alternatives, implemented
+ * as a trie-build + post-order emission.  Used both for the
+ * alternatives inside a single `RulesPart` (via `factorRulesPart`) and
+ * for the top-level `Grammar.rules` array (which the matcher treats
+ * the same way as inner alternatives).
  *
  * Each rule is inserted as a sequence of "atomic" steps:
  *   - StringPart explodes into one ("string", token) edge per token in
@@ -568,36 +602,35 @@ function factorParts(
  * losing factoring at that fork only (factoring above and below the
  * fork still applies).
  *
- * Returns the same object if no factoring took place.
+ * Returns the same array if no factoring took place.
  */
-function factorRulesPart(
-    part: RulesPart,
+function factorRules(
+    rules: GrammarRule[],
     counter: { factored: number },
-): RulesPart {
-    if (part.repeat || part.optional) {
-        // Repeat/optional change the matcher's loop-back semantics; leave
-        // such groups untouched to stay safe.
-        return part;
-    }
-    if (part.rules.length < 2) return part;
+): GrammarRule[] {
+    if (rules.length < 2) return rules;
 
-    const buildState: BuildState = { nextCanonicalId: 0 };
-    const root: TrieRoot = { children: [], terminals: [] };
-    for (let i = 0; i < part.rules.length; i++) {
-        insertRuleIntoTrie(root, part.rules[i], i, buildState);
+    const buildState: BuildState = {
+        nextCanonicalId: 0,
+        rulesArrayIds: new WeakMap(),
+        nextRulesArrayId: 0,
+    };
+    const root: TrieRoot = { children: new Map(), terminals: [] };
+    for (let i = 0; i < rules.length; i++) {
+        insertRuleIntoTrie(root, rules[i], i, buildState);
     }
 
     const state: EmitState = { didFactor: false };
     const items: { idx: number; rules: GrammarRule[] }[] = [];
-    for (const c of root.children) {
+    for (const c of root.children.values()) {
         items.push({ idx: c.firstIdx, rules: emitFromNode(c, state) });
     }
     items.sort((a, b) => a.idx - b.idx);
     const newRules: GrammarRule[] = items.flatMap((it) => it.rules);
 
-    if (!state.didFactor) return part;
+    if (!state.didFactor) return rules;
     counter.factored++;
-    return { ...part, rules: newRules };
+    return newRules;
 }
 
 // ── Trie data structures ─────────────────────────────────────────────────
@@ -674,12 +707,69 @@ type Terminal = {
     remap: Map<string, string>;
 };
 
+/**
+ * Per-`factorRulesPart`-invocation counter used to mint opaque canonical
+ * variable names (`__opt_v_<n>`) on variable-bearing trie edges, plus
+ * an interner for `GrammarRule[]` array identities (used to build a
+ * primitive-keyed children Map without losing array-identity merging
+ * for `<RuleName>` references).
+ *
+ * Scope is one `RulesPart` because canonicals never escape the wrapper
+ * rule we're about to emit — a fresh BuildState per invocation is
+ * enough to guarantee within-RulesPart uniqueness.  Distinct from
+ * `RenameState` (which scopes per-parent-rule and produces
+ * `__opt_inline_<n>` names for the inliner pass).
+ */
+/**
+ * Per-`factorRulesPart`-invocation counter used to mint opaque canonical
+ * variable names (`__opt_v_<n>`) on variable-bearing trie edges, plus
+ * an interner for `GrammarRule[]` array identities (used to build a
+ * primitive-keyed children Map without losing array-identity merging
+ * for `<RuleName>` references).
+ */
 type BuildState = {
     nextCanonicalId: number;
+    rulesArrayIds: WeakMap<GrammarRule[], number>;
+    nextRulesArrayId: number;
 };
 
 function freshCanonical(state: BuildState): string {
     return `__opt_v_${state.nextCanonicalId++}`;
+}
+
+function rulesArrayId(state: BuildState, rules: GrammarRule[]): number {
+    let id = state.rulesArrayIds.get(rules);
+    if (id === undefined) {
+        id = state.nextRulesArrayId++;
+        state.rulesArrayIds.set(rules, id);
+    }
+    return id;
+}
+
+/**
+ * Compute a primitive merge key for a trie step.  Two steps with
+ * the same key share a child node at insertion time — the same
+ * pairing `edgeKeyMatches` performs by walking sibling edges, but
+ * O(1) via a `Map<string, TrieNode>` lookup.  For variable-bearing
+ * kinds the variable *name* is omitted (names are remapped); for
+ * `rules` edges the binding presence (bound vs. unbound) is encoded
+ * so they don't merge — mirrors the parity check in `edgeKeyMatches`.
+ */
+function stepMergeKey(step: TrieStep, state: BuildState): string {
+    switch (step.kind) {
+        case "string":
+            return `s:${step.token}`;
+        case "wildcard":
+            return `w:${step.typeName}:${step.optional ? 1 : 0}`;
+        case "number":
+            return `n:${step.optional ? 1 : 0}`;
+        case "rules": {
+            const id = rulesArrayId(state, step.rules);
+            return `r:${id}:${step.optional ? 1 : 0}:${step.repeat ? 1 : 0}:${step.local !== undefined ? 1 : 0}`;
+        }
+        case "phraseSet":
+            return `p:${step.matcherName}`;
+    }
 }
 
 /**
@@ -687,15 +777,20 @@ function freshCanonical(state: BuildState): string {
  * required on every non-root node — eliminating non-null assertions in
  * the insertion and emission code.  Terminals on the root represent
  * empty-parts input rules (rare but legal).
+ *
+ * `children` is a `Map<mergeKey, TrieNode>` keyed by `stepMergeKey` so
+ * insertion is O(1) per step rather than O(siblings); JS Maps preserve
+ * insertion order, so emission still walks children in the order they
+ * were first inserted.
  */
 type TrieRoot = {
-    children: TrieNode[];
+    children: Map<string, TrieNode>;
     terminals: Terminal[];
 };
 
 type TrieNode = {
     edge: TrieEdge;
-    children: TrieNode[];
+    children: Map<string, TrieNode>;
     terminals: Terminal[];
     /** Lowest insertion index of any rule passing through this node. */
     firstIdx: number;
@@ -705,7 +800,14 @@ type EmitState = { didFactor: boolean };
 
 /** A node is "linear" iff it has no terminals and exactly one child. */
 function isLinearNode(n: TrieNode): boolean {
-    return n.terminals.length === 0 && n.children.length === 1;
+    return n.terminals.length === 0 && n.children.size === 1;
+}
+
+/** Return the sole child of a linear node (caller must guarantee linearity). */
+function onlyChild(n: TrieNode): TrieNode {
+    // Map iteration order is insertion order; for size===1 there is
+    // exactly one entry to read.
+    return n.children.values().next().value!;
 }
 
 // ── Trie insertion ───────────────────────────────────────────────────────
@@ -720,21 +822,16 @@ function insertRuleIntoTrie(
     let terminals = root.terminals;
     const remap = new Map<string, string>();
     for (const step of partsToEdgeSteps(rule.parts)) {
-        let matched: TrieNode | undefined;
-        for (const c of children) {
-            if (edgeKeyMatches(c.edge, step)) {
-                matched = c;
-                break;
-            }
-        }
+        const key = stepMergeKey(step, buildState);
+        let matched = children.get(key);
         if (matched === undefined) {
             matched = {
                 edge: stepToEdge(step, buildState),
-                children: [],
+                children: new Map(),
                 terminals: [],
                 firstIdx: idx,
             };
-            children.push(matched);
+            children.set(key, matched);
         }
         recordStepRemap(matched.edge, step, remap);
         children = matched.children;
@@ -822,47 +919,6 @@ function stepToEdge(step: TrieStep, buildState: BuildState): TrieEdge {
 }
 
 /**
- * True if `step`'s key fields match `edge` for trie merging.  For
- * variable-bearing kinds the *names* are ignored (they get remapped),
- * but for `rules` edges binding *presence* must agree — see notes
- * above the `TrieStep`/`TrieEdge` types.
- */
-function edgeKeyMatches(edge: TrieEdge, step: TrieStep): boolean {
-    if (edge.kind !== step.kind) return false;
-    // After the kind check, `step` has the same variant as `edge`; the
-    // cast inside each branch narrows it accordingly.
-    switch (edge.kind) {
-        case "string":
-            return edge.token === (step as { token: string }).token;
-        case "wildcard": {
-            const s = step as { typeName: string; optional: boolean };
-            return edge.typeName === s.typeName && edge.optional === s.optional;
-        }
-        case "number":
-            return edge.optional === (step as { optional: boolean }).optional;
-        case "rules": {
-            const s = step as {
-                rules: GrammarRule[];
-                optional: boolean;
-                repeat: boolean;
-                local: string | undefined;
-            };
-            return (
-                edge.rules === s.rules &&
-                edge.optional === s.optional &&
-                edge.repeat === s.repeat &&
-                (edge.canonical === undefined) === (s.local === undefined)
-            );
-        }
-        case "phraseSet":
-            return (
-                edge.matcherName ===
-                (step as { matcherName: string }).matcherName
-            );
-    }
-}
-
-/**
  * Record the `local → canonical` rename for one inserter at one trie
  * step.  Throws on conflict (same local mapped to two canonicals on
  * the same path), which would indicate either a malformed source rule
@@ -924,18 +980,27 @@ function edgeToPart(edge: TrieEdge): GrammarPart {
     }
 }
 
-/** Append `part` to `prefix`, folding when both ends are StringParts. */
-function appendPart(prefix: GrammarPart[], part: GrammarPart): GrammarPart[] {
-    if (prefix.length === 0) return [part];
+/**
+ * Append `part` to `prefix` in place, folding when both ends are
+ * StringParts (i.e. merging `last.value` and `part.value` into one
+ * `StringPart`).  Mutating in place keeps path-compression linear in
+ * chain depth — returning a fresh array on every step would be
+ * O(depth²).
+ */
+function appendPartInPlace(prefix: GrammarPart[], part: GrammarPart): void {
+    if (prefix.length === 0) {
+        prefix.push(part);
+        return;
+    }
     const last = prefix[prefix.length - 1];
     if (last.type === "string" && part.type === "string") {
-        const merged: GrammarPart = {
+        prefix[prefix.length - 1] = {
             type: "string",
             value: [...last.value, ...part.value],
         };
-        return [...prefix.slice(0, prefix.length - 1), merged];
+        return;
     }
-    return [...prefix, part];
+    prefix.push(part);
 }
 
 /** Concatenate two parts arrays, folding at the seam if both ends are strings. */
@@ -979,15 +1044,15 @@ function emitFromNode(node: TrieNode, state: EmitState): GrammarRule[] {
     // way the fork's edge becomes the first part of each emitted member
     // (avoiding empty-parts members at the fork, which would defeat
     // factoring via the wholeConsumed-with-value check below).
-    let prefix: GrammarPart[] = [edgeToPart(node.edge)];
+    const prefix: GrammarPart[] = [edgeToPart(node.edge)];
     let current = node;
     while (
         current.terminals.length === 0 &&
-        current.children.length === 1 &&
-        isLinearNode(current.children[0])
+        current.children.size === 1 &&
+        isLinearNode(onlyChild(current))
     ) {
-        current = current.children[0];
-        prefix = appendPart(prefix, edgeToPart(current.edge));
+        current = onlyChild(current);
+        appendPartInPlace(prefix, edgeToPart(current.edge));
     }
 
     // Members at this fork = its terminals (each as an empty-parts rule)
@@ -996,7 +1061,7 @@ function emitFromNode(node: TrieNode, state: EmitState): GrammarRule[] {
     for (const t of current.terminals) {
         items.push({ idx: t.idx, rules: [terminalToRule(t)] });
     }
-    for (const c of current.children) {
+    for (const c of current.children.values()) {
         items.push({ idx: c.firstIdx, rules: emitFromNode(c, state) });
     }
     items.sort((a, b) => a.idx - b.idx);
