@@ -75,6 +75,41 @@
                 "command": "typeagent-shell.deleteSession",
                 "title": "Delete Conversation",
                 "category": "TypeAgent"
+            },
+            {
+                "command": "typeagent-shell.clearChat",
+                "title": "Clear Chat View",
+                "category": "TypeAgent"
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "typeagent-shell.focusChat",
+                "key": "ctrl+alt+t",
+                "mac": "cmd+alt+t"
+            },
+            {
+                "command": "typeagent-shell.newChatPanel",
+                "key": "ctrl+alt+shift+t",
+                "mac": "cmd+alt+shift+t"
+            },
+            {
+                "command": "typeagent-shell.newSession",
+                "key": "ctrl+alt+n",
+                "mac": "cmd+alt+n",
+                "when": "focusedView == typeagent-shell.chatView || activeWebviewPanelId == typeagent-shell.chatPanel"
+            },
+            {
+                "command": "typeagent-shell.switchSession",
+                "key": "ctrl+alt+s",
+                "mac": "cmd+alt+s",
+                "when": "focusedView == typeagent-shell.chatView || activeWebviewPanelId == typeagent-shell.chatPanel"
+            },
+            {
+                "command": "typeagent-shell.clearChat",
+                "key": "ctrl+alt+l",
+                "mac": "cmd+alt+l",
+                "when": "focusedView == typeagent-shell.chatView || activeWebviewPanelId == typeagent-shell.chatPanel"
             }
         ],
         "configuration": {

@@ -310,6 +310,17 @@ export class AgentServerBridge {
         this.statusBarItem.dispose();
     }
 
+    /**
+     * Clear the visible chat UI for this bridge's webviews.
+     * Server-side history is left untouched; reload to replay.
+     */
+    clearChatUI(): void {
+        this.broadcastToWebviews({
+            type: "clear",
+            requestId: "user-clear" as RequestId,
+        });
+    }
+
     // ── Conversation management ─────────────────────────────────
 
     /**

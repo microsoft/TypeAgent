@@ -113,6 +113,10 @@ export function activate(context: vscode.ExtensionContext): void {
             "typeagent-shell.deleteSession",
             () => activeChat?.bridge.deleteSession(),
         ),
+        vscode.commands.registerCommand(
+            "typeagent-shell.clearChat",
+            () => activeChat?.bridge.clearChatUI(),
+        ),
     );
 }
 
