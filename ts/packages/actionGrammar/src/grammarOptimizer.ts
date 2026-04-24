@@ -36,6 +36,21 @@ export type GrammarOptimizationOptions = {
 };
 
 /**
+ * Recommended preset enabling all optimizations.  Use this when callers
+ * want every safe pass on without naming each flag individually \u2014 future
+ * passes added here will be picked up automatically.
+ *
+ * Caveat: enabling `factorCommonPrefixes` destroys the 1:1
+ * correspondence between top-level rule indices and the original
+ * source.  Callers that need that mapping for diagnostics must capture
+ * it before optimization runs.
+ */
+export const recommendedOptimizations: GrammarOptimizationOptions = {
+    inlineSingleAlternatives: true,
+    factorCommonPrefixes: true,
+};
+
+/**
  * Run enabled optimization passes against the compiled grammar AST.
  * The returned grammar is semantically equivalent to the input — only the
  * shape of the parts/rules tree changes.
@@ -531,11 +546,13 @@ function factorParts(
     counter: { factored: number },
     memo: RulesArrayMemo,
 ): { parts: GrammarPart[]; changed: boolean } {
-    let changed = false;
-    const out: GrammarPart[] = [];
-    for (const p of parts) {
+    // Single-pass: only allocate `out` once an element actually changes
+    // (mirrors `factorRulesArray` / `inlineRulesArray`).
+    let out: GrammarPart[] | undefined;
+    for (let i = 0; i < parts.length; i++) {
+        const p = parts[i];
         if (p.type !== "rules") {
-            out.push(p);
+            if (out !== undefined) out.push(p);
             continue;
         }
         // Recurse into nested rules first, preserving shared-array
@@ -545,10 +562,16 @@ function factorParts(
             recursedRules !== p.rules ? { ...p, rules: recursedRules } : p;
 
         const working = factorRulesPart(recursed, counter);
-        if (working !== p) changed = true;
-        out.push(working);
+        if (out !== undefined) {
+            out.push(working);
+        } else if (working !== p) {
+            out = parts.slice(0, i);
+            out.push(working);
+        }
     }
-    return { parts: changed ? out : parts, changed };
+    return out !== undefined
+        ? { parts: out, changed: true }
+        : { parts, changed: false };
 }
 
 /**
@@ -623,7 +646,10 @@ function factorRules(
     const state: EmitState = { didFactor: false };
     const items: { idx: number; rules: GrammarRule[] }[] = [];
     for (const c of root.children.values()) {
-        items.push({ idx: c.firstIdx, rules: emitFromNode(c, state) });
+        items.push({
+            idx: c.firstIdx,
+            rules: emitFromNode(c, state, buildState),
+        });
     }
     items.sort((a, b) => a.idx - b.idx);
     const newRules: GrammarRule[] = items.flatMap((it) => it.rules);
@@ -709,9 +735,10 @@ type Terminal = {
 
 /**
  * Per-`factorRulesPart`-invocation counter used to mint opaque canonical
- * variable names (`__opt_v_<n>`) on variable-bearing trie edges, plus
- * an interner for `GrammarRule[]` array identities (used to build a
- * primitive-keyed children Map without losing array-identity merging
+ * variable names (`__opt_v_<n>` and `__opt_factor_<n>`) on
+ * variable-bearing trie edges and on synthesized wrapper bindings,
+ * plus an interner for `GrammarRule[]` array identities (used to build
+ * a primitive-keyed children Map without losing array-identity merging
  * for `<RuleName>` references).
  *
  * Scope is one `RulesPart` because canonicals never escape the wrapper
@@ -719,13 +746,6 @@ type Terminal = {
  * enough to guarantee within-RulesPart uniqueness.  Distinct from
  * `RenameState` (which scopes per-parent-rule and produces
  * `__opt_inline_<n>` names for the inliner pass).
- */
-/**
- * Per-`factorRulesPart`-invocation counter used to mint opaque canonical
- * variable names (`__opt_v_<n>`) on variable-bearing trie edges, plus
- * an interner for `GrammarRule[]` array identities (used to build a
- * primitive-keyed children Map without losing array-identity merging
- * for `<RuleName>` references).
  */
 type BuildState = {
     nextCanonicalId: number;
@@ -735,6 +755,16 @@ type BuildState = {
 
 function freshCanonical(state: BuildState): string {
     return `__opt_v_${state.nextCanonicalId++}`;
+}
+
+/**
+ * Mint a fresh wrapper-binding name for `buildWrapperRule`.  Uses the
+ * same counter as `freshCanonical` so the names are guaranteed unique
+ * across the whole `factorRules` invocation; the distinct prefix makes
+ * synthesized wrapper bindings easy to spot in serialized grammars.
+ */
+function freshWrapperBinding(state: BuildState): string {
+    return `__opt_factor_${state.nextCanonicalId++}`;
 }
 
 function rulesArrayId(state: BuildState, rules: GrammarRule[]): number {
@@ -805,9 +835,10 @@ function isLinearNode(n: TrieNode): boolean {
 
 /** Return the sole child of a linear node (caller must guarantee linearity). */
 function onlyChild(n: TrieNode): TrieNode {
-    // Map iteration order is insertion order; for size===1 there is
-    // exactly one entry to read.
-    return n.children.values().next().value!;
+    // Caller guarantees `n.children.size === 1` via `isLinearNode`.
+    // Map iteration is insertion order; for size===1 there's one entry.
+    const first = n.children.values().next().value;
+    return first as TrieNode;
 }
 
 // ── Trie insertion ───────────────────────────────────────────────────────
@@ -1038,7 +1069,11 @@ function terminalToRule(t: Terminal): GrammarRule {
  *     each would-be member is emitted as a full rule with the canonical
  *     prefix prepended.
  */
-function emitFromNode(node: TrieNode, state: EmitState): GrammarRule[] {
+function emitFromNode(
+    node: TrieNode,
+    state: EmitState,
+    buildState: BuildState,
+): GrammarRule[] {
     // Path-compress: walk down single-child / no-terminal chain, but
     // stop *before* entering a node that would itself be a fork — that
     // way the fork's edge becomes the first part of each emitted member
@@ -1062,7 +1097,10 @@ function emitFromNode(node: TrieNode, state: EmitState): GrammarRule[] {
         items.push({ idx: t.idx, rules: [terminalToRule(t)] });
     }
     for (const c of current.children.values()) {
-        items.push({ idx: c.firstIdx, rules: emitFromNode(c, state) });
+        items.push({
+            idx: c.firstIdx,
+            rules: emitFromNode(c, state, buildState),
+        });
     }
     items.sort((a, b) => a.idx - b.idx);
     const members: GrammarRule[] = items.flatMap((it) => it.rules);
@@ -1084,7 +1122,7 @@ function emitFromNode(node: TrieNode, state: EmitState): GrammarRule[] {
         }));
     }
     state.didFactor = true;
-    return [buildWrapperRule(prefix, members)];
+    return [buildWrapperRule(prefix, members, buildState)];
 }
 
 /**
@@ -1110,8 +1148,19 @@ function checkFactoringEligible(
     if (!allHaveValue && !noneHaveValue) {
         return "mixed-value-presence";
     }
-    if (noneHaveValue && members.some((m) => m.parts.length > 1)) {
-        return "implicit-default-multipart";
+    if (noneHaveValue) {
+        // The matcher synthesizes an implicit text-concatenation
+        // default value only for single-part rules whose sole part
+        // is a StringPart (`matchStringPartWithoutWildcard` fast
+        // path).  After factoring, the wrapper rule becomes
+        // `[prefix..., suffixRulesPart]` with parts.length >= 2 and
+        // no value expression — the implicit default no longer
+        // fires and `createValue` throws "missing value for default"
+        // at finalize time.  Without a wrapper variable to
+        // synthesize a value into, factoring at this fork breaks
+        // matcher behavior whenever the parent rule relied on the
+        // implicit default.  Bail out unconditionally.
+        return "no-value-implicit-default";
     }
     // Cross-scope-ref: nested rule scope is fresh at the matcher level
     // (entering a `RulesPart` resets `valueIds`).  If a member's value
@@ -1140,22 +1189,18 @@ function checkFactoringEligible(
 function buildWrapperRule(
     prefix: GrammarPart[],
     members: GrammarRule[],
+    buildState: BuildState,
 ): GrammarRule {
     const suffixRulesPart: RulesPart = { type: "rules", rules: members };
     const factoredAlt: GrammarRule = {
         parts: [...prefix, suffixRulesPart],
     };
     if (members.some((m) => m.value !== undefined)) {
-        const reserved = new Set<string>(collectVariableNames(prefix));
-        for (const m of members) {
-            for (const v of collectVariableNames(m.parts)) reserved.add(v);
-        }
-        let gen = "__opt_factor";
-        let i = 0;
-        while (reserved.has(gen)) {
-            i++;
-            gen = `__opt_factor_${i}`;
-        }
+        // Opaque counter-based name shares `BuildState.nextCanonicalId`
+        // with `freshCanonical`, so it can never collide with any
+        // canonical edge binding in this `factorRules` invocation — no
+        // reserved-set scan needed.
+        const gen = freshWrapperBinding(buildState);
         suffixRulesPart.variable = gen;
         factoredAlt.value = { type: "variable", name: gen };
     }
