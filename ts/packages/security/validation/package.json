@@ -1,0 +1,27 @@
+{
+  "name": "validation",
+  "version": "0.0.1",
+  "description": "Plan-validated agent execution: core library. AgentPlan DSL, 13-pass plan validator, org policy engine, runtime predicate evaluator.",
+  "license": "MIT",
+  "author": "Microsoft",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rimraf dist",
+    "dev": "tsc && node dist/validationTests.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.92"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.5.4"
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "version": "1.0",
+  "name": "plan-validation-demo",
+  "description": "Policy for the landing-page demo. Read/write scoped to this example directory. Capabilities-only bash (validated_bash blocked; validated_npm/git/node/tsc allowed). Network denied. Common secrets paths denied.",
+  "deniedTools": ["WebFetch", "WebSearch"],
+  "paths": {
+    "allowedReadPatterns": ["{{projectDir}}/**"],
+    "allowedWritePatterns": ["{{projectDir}}/**"],
+    "deniedPatterns": [
+      "**/.env",
+      "**/.env.*",
+      "**/credentials*",
+      "**/secrets/**",
+      "**/*.pem",
+      "**/*.key"
+    ]
+  },
+  "bash": {
+    "mode": "capabilities-only",
+    "deniedCommands": [
+      "curl",
+      "wget",
+      "ssh",
+      "scp",
+      "nc",
+      "ncat",
+      "telnet",
+      "ftp",
+      "sftp",
+      "nmap"
+    ],
+    "network": { "denyAll": true },
+    "maxTimeoutMs": 30000
+  },
+  "container": {
+    "enabled": false
+  },
+  "limitCaps": {
+    "maxTotalSteps": 20,
+    "maxDurationMs": 180000,
+    "maxFileWrites": 10,
+    "maxBytesWritten": 524288
+  }
+}

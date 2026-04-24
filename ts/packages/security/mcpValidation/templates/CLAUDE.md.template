@@ -1,0 +1,74 @@
+# Plan-Validated Agent Execution
+
+This project uses plan-validated execution. All tool calls are mediated by a validation
+MCP server that checks every action against a declared plan and organization policy.
+
+## Required Workflow
+
+**You MUST follow this protocol for every task:**
+
+### 1. Read the plan schema
+Call `get_plan_schema` to understand the AgentPlan format.
+
+### 2. Create and submit a plan
+Analyze the task, then create an AgentPlan JSON object and call `submit_plan`.
+
+The plan must include:
+- `version: "1.1"`, a unique `id`, and a `goal` description
+- `steps`: ordered array of PlanStep nodes with tool, inputSpec, dependsOn, and effect
+- `limits`: resource limits (maxTotalSteps, maxDurationMs, etc.)
+- `permissions`: allowedReadPaths, allowedWritePaths, deniedPaths
+- `metadata`: with createdAt timestamp and allowedTools list
+
+Optional (recommended for verification):
+- `postconditions`: predicates checked after the last step completes
+- `bindings`: declared data flow between steps
+
+If validation fails, fix the errors and resubmit.
+
+### 3. Execute using validated tools
+Use ONLY the `validated_*` tools in the exact order specified by your plan:
+
+| Tool | Purpose |
+|---|---|
+| `validated_read` | Read file contents |
+| `validated_write` | Create or overwrite a file |
+| `validated_edit` | String replacement in a file |
+| `validated_glob` | Find files by pattern |
+| `validated_grep` | Search file contents |
+| `validated_bash` | Execute shell command (may be restricted by policy) |
+| `validated_npm` | Run npm/pnpm commands (structured, safe) |
+| `validated_git` | Run git commands (structured, safe) |
+| `validated_node` | Run a Node.js script file (structured, safe) |
+| `validated_tsc` | Run TypeScript compiler (structured, safe) |
+
+Each tool call is checked against:
+- **Plan step**: correct tool, input constraints, dependencies
+- **Organization policy**: allowed tools, paths, bash restrictions
+- **Plan permissions**: declared read/write paths
+
+### 4. Handle violations
+- **Plan violation** (wrong tool, wrong input): plan is aborted. Call `plan_reset` and start over.
+- **Policy violation** (restricted command, denied path): call is blocked but plan continues. Adjust your approach.
+- **Permission denied** (path not in plan's allowed paths): call is blocked. Reset and re-plan with broader permissions.
+
+## Utility Tools
+
+| Tool | Purpose |
+|---|---|
+| `get_plan_schema` | Read the AgentPlan TypeScript schema |
+| `submit_plan` | Validate and activate a plan |
+| `plan_status` | Check current execution state |
+| `plan_reset` | Clear the plan to start over |
+| `container_status` | Check Docker sandbox configuration |
+
+## Policy
+
+{{policyDescription}}
+
+## Rules
+- NEVER use raw tools (Read, Write, Edit, etc.) — always use `validated_*` versions
+- NEVER skip the planning step — every task needs a submitted plan
+- Read files before editing them
+- Follow existing code style
+- Keep plans minimal — fewer steps means less that can go wrong
