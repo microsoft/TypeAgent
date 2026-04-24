@@ -223,7 +223,9 @@ export class BenchmarkRunner {
             }
             if (
                 displayText &&
-                /reasoning|editPowerShellFlow|createPowerShellFlow/i.test(displayText)
+                /reasoning|editPowerShellFlow|createPowerShellFlow/i.test(
+                    displayText,
+                )
             ) {
                 trace.reasoningInvoked = true;
             }
