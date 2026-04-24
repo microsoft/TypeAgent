@@ -876,13 +876,12 @@ function isSubpathOfAny(path: string, paths: Set<string>): boolean {
 
 /** Creates a safe mount name from a path */
 function safeName(path: string): string {
-    // Trim with two anchored patterns instead of one alternation to keep
-    // the match linear under the ReDoS check.
-    const sanitized = path
-        .replace(/[^a-zA-Z0-9]/g, "_")
-        .replace(/^_+/, "")
-        .replace(/_+$/, "");
-    return sanitized.slice(-30) || "vol";
+    const sanitized = path.replace(/[^a-zA-Z0-9]/g, "_");
+    let start = 0;
+    let end = sanitized.length;
+    while (start < end && sanitized.charCodeAt(start) === 95 /* _ */) start++;
+    while (end > start && sanitized.charCodeAt(end - 1) === 95) end--;
+    return sanitized.slice(start, end).slice(-30) || "vol";
 }
 
 /**
