@@ -135,10 +135,13 @@ export class AgentServerBridge {
 
     /** Display name used in webview status bar / for routing UX. */
     getDisplayName(): string {
-        if (this.ephemeralSessionName) {
+        if (this.nameOverride) return this.nameOverride;
+        const sn = this.session?.name;
+        // Auto-generated ephemeral names are ugly — show the friendly label
+        if (sn && sn.startsWith("cli-ephemeral-vscode-")) {
             return this.displayName;
         }
-        return this.nameOverride ?? this.session?.name ?? this.displayName;
+        return sn ?? this.displayName;
     }
 
     isConnectedNow(): boolean {
@@ -528,12 +531,27 @@ export class AgentServerBridge {
             this.session = newSession;
             this.nameOverride = undefined;
 
-            // Phase 2: leave the old session (best-effort)
+            // Phase 2: leave the old session (best-effort).
+            // If we were on an ephemeral session and we're moving away from
+            // it, also delete it so it doesn't pile up on the server.
             if (oldSession) {
                 try {
                     await this.connection.leaveSession(oldSession.sessionId);
                 } catch {
                     // Best effort
+                }
+                if (
+                    this.ephemeralSessionId &&
+                    oldSession.sessionId === this.ephemeralSessionId &&
+                    newSession.sessionId !== this.ephemeralSessionId
+                ) {
+                    const epId = this.ephemeralSessionId;
+                    this.ephemeralSessionId = undefined;
+                    try {
+                        await this.connection.deleteSession(epId);
+                    } catch {
+                        // Best effort
+                    }
                 }
             }
 

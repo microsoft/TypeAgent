@@ -122,6 +122,15 @@ function setActive(entry: ChatEntry): void {
 }
 
 function refreshStatusBar(): void {
+    // Keep panel titles in sync with their bridge's display name
+    for (const e of chats) {
+        if (e.panel) {
+            const desired = `TypeAgent ${e.bridge.getDisplayName()}`;
+            if (e.panel.title !== desired) {
+                e.panel.title = desired;
+            }
+        }
+    }
     if (!activeChat) {
         statusBarItem.text = "$(debug-disconnect) TypeAgent";
         statusBarItem.tooltip = "TypeAgent — no active chat";

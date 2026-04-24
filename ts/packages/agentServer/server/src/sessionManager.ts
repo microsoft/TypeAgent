@@ -379,7 +379,7 @@ export async function createSessionManager(
             // Notify existing clients that a new client has joined
             if (sharedDispatcher.clientCount > 1 && dispatcher.connectionId) {
                 sharedDispatcher.broadcastSystemMessage(
-                    `[A new client has joined this conversation. You are connected to '${record.name}'.]`,
+                    `[A new client has joined this conversation.]`,
                     dispatcher.connectionId,
                 );
             }
@@ -413,7 +413,7 @@ export async function createSessionManager(
             // Notify remaining clients before this client leaves
             if (record.sharedDispatcher.clientCount > 1) {
                 record.sharedDispatcher.broadcastSystemMessage(
-                    `[A client has left this conversation. You remain connected to '${record.name}'.]`,
+                    `[A client has left this conversation.]`,
                     connectionId,
                 );
             }
