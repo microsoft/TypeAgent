@@ -1,9 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-export type ScriptFlowArchivesActions =
-    | CompressAction
-    | ExpandAction;
+export type ScriptFlowArchivesActions = CompressAction | ExpandAction;
 
 // Compress files into a zip archive
 export type CompressAction = {
