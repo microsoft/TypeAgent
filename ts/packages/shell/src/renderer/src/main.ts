@@ -164,6 +164,9 @@ function registerClient(
         exit: () => {
             window.close();
         },
+        shutdown: () => {
+            window.close();
+        },
         setUserRequest: (requestId, command, seq?) => {
             if (seq !== undefined) {
                 maxSeqSeen = Math.max(maxSeqSeen, seq);
@@ -412,7 +415,13 @@ function registerClient(
                 } catch {
                     // Interaction may have already timed out on the server.
                 }
-            })();
+            })().catch((e) => {
+                console.error(
+                    `[requestInteraction] unhandled error for ${interaction.interactionId}:`,
+                    e,
+                );
+                activeInteractions.delete(interaction.interactionId);
+            });
         },
         interactionResolved: (interactionId) => {
             const ac = activeInteractions.get(interactionId);
@@ -761,8 +770,8 @@ function registerClient(
 
     const client: Client = {
         clientIO,
-        async dispatcherInitialized(dispatcher: Dispatcher): Promise<void> {
-            chatView.initializeDispatcher(dispatcher);
+        async dispatcherInitialized(d: Dispatcher): Promise<void> {
+            chatView.initializeDispatcher(d);
             await chatHistoryReady;
 
             // Signal that the dispatcher is fully initialised.
@@ -873,6 +882,11 @@ function registerClient(
     // Expose the clientIO object on window for integration tests so that tests
     // can trigger requestInteraction / interactionResolved / interactionCancelled
     // without requiring a live agent-server connection.
+    if (window.__clientIO__ !== undefined) {
+        console.warn(
+            "[registerClient] window.__clientIO__ is already set — registerClient() called more than once. The previous activeInteractions map will be orphaned.",
+        );
+    }
     window.__clientIO__ = clientIO;
 }
 

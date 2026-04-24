@@ -68,6 +68,9 @@ function createChatPanelClientIO(): ClientIO {
         exit(requestId) {
             rpcSend?.("dispatcherExit", { requestId });
         },
+        shutdown(requestId) {
+            rpcSend?.("dispatcherExit", { requestId });
+        },
         setUserRequest() {},
         setDisplayInfo(requestId, source, actionIndex, action) {
             rpcSend?.("dispatcherSetDisplayInfo", {

@@ -26,11 +26,13 @@ import {
 import { executeNotificationAction } from "./action/notificationActionHandler.js";
 import { executeHistoryAction } from "./action/historyActionHandler.js";
 import { executeGrammarAction } from "./action/grammarActionHandler.js";
+import { executeSettingsAction } from "./action/settingsActionHandler.js";
 import { ConfigAction } from "./schema/configActionSchema.js";
 import { NotificationAction } from "./schema/notificationActionSchema.js";
 import { HistoryAction } from "./schema/historyActionSchema.js";
 import { ConversationAction } from "./schema/conversationActionSchema.js";
 import { GrammarAction } from "./schema/grammarActionSchema.js";
+import { UserSettingsAction } from "./schema/settingsActionSchema.js";
 
 // handlers
 import { getConfigCommandHandlers } from "./handlers/configCommandHandlers.js";
@@ -54,6 +56,7 @@ import { HelpCommandHandler } from "./handlers/helpCommandHandler.js";
 import { OpenCommandHandler } from "./handlers/openCommandHandler.js";
 import { getIndexCommandHandlers } from "./handlers/indexCommandHandler.js";
 import { getMemoryCommandHandlers } from "../memory.js";
+import { getSettingsCommandHandlers } from "./handlers/settingsCommandHandlers.js";
 
 export const systemHandlers: CommandHandlerTable = {
     description: "Type Agent System Commands",
@@ -83,6 +86,13 @@ export const systemHandlers: CommandHandlerTable = {
                 systemContext.clientIO.exit(getRequestId(systemContext));
             },
         },
+        shutdown: {
+            description: "Shut down the agent server and exit",
+            async run(context: ActionContext<CommandHandlerContext>) {
+                const systemContext = context.sessionContext.agentContext;
+                systemContext.clientIO.shutdown(getRequestId(systemContext));
+            },
+        },
         random: getRandomCommandHandlers(),
         notify: getNotifyCommandHandlers(),
         token: getTokenCommandHandlers(),
@@ -91,6 +101,7 @@ export const systemHandlers: CommandHandlerTable = {
         uninstall: new UninstallCommandHandler(),
         open: new OpenCommandHandler(),
         index: getIndexCommandHandlers(),
+        settings: getSettingsCommandHandlers(),
     },
 };
 
@@ -100,7 +111,8 @@ function executeSystemAction(
         | TypeAgentAction<ConfigAction, "system.config">
         | TypeAgentAction<NotificationAction, "system.notify">
         | TypeAgentAction<HistoryAction, "system.history">
-        | TypeAgentAction<GrammarAction, "system.grammar">,
+        | TypeAgentAction<GrammarAction, "system.grammar">
+        | TypeAgentAction<UserSettingsAction, "system.settings">,
     context: ActionContext<CommandHandlerContext>,
 ) {
     switch (action.schemaName) {
@@ -114,6 +126,8 @@ function executeSystemAction(
             return executeHistoryAction(action, context);
         case "system.grammar":
             return executeGrammarAction(action, context);
+        case "system.settings":
+            return executeSettingsAction(action, context);
         default:
             throw new Error(
                 `Invalid system sub-translator: ${(action as TypeAgentAction).schemaName}`,
@@ -179,12 +193,28 @@ export const systemManifest: AppAgentManifest = {
                 schemaType: "GrammarAction",
             },
         },
+        settings: {
+            schema: {
+                description:
+                    "Manage persistent user settings for the TypeAgent system. " +
+                    "Set whether the agent server starts hidden in the background (e.g. 'start the server hidden', 'run the server in the background', 'show the server window'). " +
+                    "Set the idle timeout for the agent server (e.g. 'shut down the server after 5 minutes of inactivity', 'set idle timeout to 300 seconds', 'disable idle timeout'). " +
+                    "Set whether to resume the last conversation on startup (e.g. 'always resume my last conversation', 'pick up where I left off', 'start fresh each time').",
+                schemaFile:
+                    "./src/context/system/schema/settingsActionSchema.ts",
+                schemaType: "UserSettingsAction",
+            },
+        },
     },
 };
+
+const commandInterface = getCommandInterface(systemHandlers);
 
 export const systemAgent: AppAgent = {
     getTemplateSchema: getSystemTemplateSchema,
     getTemplateCompletion: getSystemTemplateCompletion,
-    executeAction: executeSystemAction,
-    ...getCommandInterface(systemHandlers),
-};
+    executeAction: executeSystemAction as unknown as AppAgent["executeAction"],
+    getCommands: commandInterface.getCommands,
+    getCommandCompletion: commandInterface.getCommandCompletion,
+    executeCommand: commandInterface.executeCommand,
+} as AppAgent;

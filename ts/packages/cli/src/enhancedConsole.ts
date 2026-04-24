@@ -45,6 +45,8 @@ import {
     getVerboseIndicator,
     getConversationCommandContext,
     getSlashCompletions,
+    getServerPort,
+    getServerConnection,
 } from "./slashCommands.js";
 import { handleConversationCommand } from "./conversationCommands.js";
 import {
@@ -52,6 +54,7 @@ import {
     getDebugPanel,
     PromptRenderer,
 } from "./debugInterceptor.js";
+import { stopAgentServer } from "@typeagent/agent-server-client";
 
 // Track current processing state
 let currentSpinner: EnhancedSpinner | null = null;
@@ -632,6 +635,33 @@ export function createEnhancedClientIO(
                 currentSpinner = null;
             }
             process.exit(0);
+        },
+        shutdown(): void {
+            if (currentSpinner) {
+                currentSpinner.stop();
+                currentSpinner = null;
+            }
+            const conn = getServerConnection();
+            const port = getServerPort();
+            const doShutdown = conn
+                ? conn.shutdown().catch(() => {
+                      // Graceful via existing connection failed —
+                      // fall back to force kill via PID file.
+                      if (port !== undefined) {
+                          return stopAgentServer(port, true);
+                      }
+                  })
+                : port !== undefined
+                  ? stopAgentServer(port, true)
+                  : Promise.resolve();
+
+            doShutdown
+                .catch(() => {
+                    // Best-effort: server may already be stopped.
+                })
+                .finally(() => {
+                    process.exit(0);
+                });
         },
 
         // Display

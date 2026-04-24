@@ -168,6 +168,9 @@ function createConsoleClientIO(
         exit(): void {
             process.exit(0);
         },
+        shutdown(): void {
+            process.exit(0);
+        },
 
         // Display
         setUserRequest() {

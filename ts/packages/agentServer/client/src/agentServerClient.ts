@@ -28,6 +28,61 @@ import {
 const debug = registerDebug("typeagent:agent-server-client");
 const debugErr = registerDebug("typeagent:agent-server-client:error");
 
+function getServerPidPath(port: number): string {
+    return path.join(os.homedir(), ".typeagent", `server-${port}.pid`);
+}
+
+export function writeServerPid(port: number, pid: number): void {
+    const pidPath = getServerPidPath(port);
+    const dir = path.dirname(pidPath);
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(pidPath, String(pid));
+}
+
+export function removeServerPid(port: number): void {
+    try {
+        fs.unlinkSync(getServerPidPath(port));
+    } catch {
+        // Already gone
+    }
+}
+
+function readServerPid(port: number): number | undefined {
+    try {
+        const content = fs.readFileSync(getServerPidPath(port), "utf-8").trim();
+        const pid = parseInt(content, 10);
+        return isNaN(pid) ? undefined : pid;
+    } catch {
+        return undefined;
+    }
+}
+
+function isProcessAlive(pid: number): boolean {
+    try {
+        process.kill(pid, 0); // signal 0 = existence check
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function forceKillServer(port: number): boolean {
+    const pid = readServerPid(port);
+    if (pid === undefined || !isProcessAlive(pid)) {
+        removeServerPid(port);
+        return false;
+    }
+    try {
+        process.kill(pid, "SIGKILL");
+    } catch {
+        // Already dead
+    }
+    removeServerPid(port);
+    return true;
+}
+
 export type ConversationDispatcher = {
     dispatcher: Dispatcher;
     conversationId: string;
@@ -44,6 +99,7 @@ export type AgentServerConnection = {
     listConversations(name?: string): Promise<ConversationInfo[]>;
     renameConversation(conversationId: string, newName: string): Promise<void>;
     deleteConversation(conversationId: string): Promise<void>;
+    shutdown(): Promise<void>;
     close(): Promise<void>;
 };
 
@@ -181,6 +237,11 @@ export async function connectAgentServer(
                 return rpc.invoke("deleteConversation", conversationId);
             },
 
+            async shutdown(): Promise<void> {
+                debug("Requesting server shutdown via existing connection");
+                await rpc.invoke("shutdown");
+            },
+
             async close(): Promise<void> {
                 if (closed) {
                     return;
@@ -299,11 +360,15 @@ function spawnAgentServer(
         const isWindows = process.platform === "win32";
         if (isWindows) {
             if (hidden) {
+                // On Windows, detached: true creates a new console window
+                // for the child and any processes it spawns. To avoid this,
+                // spawn via cmd /c start /B which runs the process truly in
+                // the background with no visible windows.
+                const args = [serverPath, "--port", String(port), ...extraArgs];
                 const child = spawn(
-                    "node",
-                    [serverPath, "--port", String(port), ...extraArgs],
+                    "cmd.exe",
+                    ["/c", "start", "/B", "node", ...args],
                     {
-                        detached: true,
                         stdio: "ignore",
                         windowsHide: true,
                     },
@@ -422,48 +487,80 @@ export async function ensureAndConnectConversation(
     return conversation;
 }
 
-export async function stopAgentServer(port: number = 8999): Promise<void> {
+export async function stopAgentServer(
+    port: number = 8999,
+    force: boolean = false,
+): Promise<void> {
     const url = `ws://localhost:${port}`;
-    if (!(await isServerRunning(url))) {
-        console.log("Agent server is not running.");
-        return;
+
+    // Try graceful shutdown first
+    const gracefulShutdown = (): Promise<void> => {
+        return new Promise((resolve, reject) => {
+            const ws = new WebSocket(url);
+            const channel = createChannelProviderAdapter(
+                "agent-server:stop",
+                (message: any) => {
+                    ws.send(JSON.stringify(message));
+                },
+            );
+            const rpc = createRpc<AgentServerInvokeFunctions>(
+                "agent-server:stop",
+                channel.createChannel(AgentServerChannelName),
+            );
+
+            ws.onopen = () => {
+                rpc.invoke("shutdown")
+                    .then(() => {
+                        debug("Shutdown request sent");
+                        resolve();
+                    })
+                    .catch((err: any) => {
+                        debugErr("Failed to send shutdown:", err);
+                        reject(err);
+                    });
+            };
+            ws.onmessage = (event: WebSocket.MessageEvent) => {
+                channel.notifyMessage(JSON.parse(event.data.toString()));
+            };
+            ws.onclose = () => {
+                resolve();
+            };
+            ws.onerror = (error: WebSocket.ErrorEvent) => {
+                debugErr("WebSocket error during shutdown:", error);
+                reject(
+                    new Error(`Failed to connect to agent server at ${url}`),
+                );
+            };
+        });
+    };
+
+    if (!force) {
+        if (!(await isServerRunning(url))) {
+            console.log("Agent server is not running.");
+            return;
+        }
+        return gracefulShutdown();
     }
 
-    return new Promise((resolve, reject) => {
-        const ws = new WebSocket(url);
-        const channel = createChannelProviderAdapter(
-            "agent-server:stop",
-            (message: any) => {
-                ws.send(JSON.stringify(message));
-            },
+    // Force mode: try graceful with a timeout, then force-kill
+    try {
+        const timeout = new Promise<never>((_, reject) =>
+            setTimeout(
+                () => reject(new Error("Graceful shutdown timed out")),
+                5000,
+            ),
         );
-        const rpc = createRpc<AgentServerInvokeFunctions>(
-            "agent-server:stop",
-            channel.createChannel(AgentServerChannelName),
-        );
-
-        ws.onopen = () => {
-            rpc.invoke("shutdown")
-                .then(() => {
-                    debug("Shutdown request sent");
-                    resolve();
-                })
-                .catch((err: any) => {
-                    debugErr("Failed to send shutdown:", err);
-                    reject(err);
-                });
-        };
-        ws.onmessage = (event: WebSocket.MessageEvent) => {
-            channel.notifyMessage(JSON.parse(event.data.toString()));
-        };
-        ws.onclose = () => {
-            resolve();
-        };
-        ws.onerror = (error: WebSocket.ErrorEvent) => {
-            debugErr("WebSocket error during shutdown:", error);
-            reject(new Error(`Failed to connect to agent server at ${url}`));
-        };
-    });
+        await Promise.race([gracefulShutdown(), timeout]);
+        return;
+    } catch {
+        // Graceful failed — force kill
+        debug("Graceful shutdown failed, attempting force kill");
+        if (forceKillServer(port)) {
+            console.log("Agent server force-stopped via PID file.");
+        } else {
+            console.log("Agent server is not running (no live process found).");
+        }
+    }
 }
 
 /**

@@ -820,6 +820,12 @@ export class ChatView {
         const { requestId, message, choices, defaultId } = interaction;
         const source = interaction.source ?? "";
 
+        if (choices.length === 0) {
+            throw new Error(
+                `Interaction ${interaction.interactionId} has no choices`,
+            );
+        }
+
         const effectiveRequestId =
             requestId ??
             ({
@@ -877,6 +883,11 @@ export class ChatView {
         }
 
         return new Promise<number>((resolve, reject) => {
+            // Capture signal as a non-optional local so onAbort can reference
+            // it without a non-null assertion.  onAbort is only reachable when
+            // signal is defined (via addEventListener or the aborted early-out).
+            const abortSignal = signal!;
+
             // addChoicePanel removes the panel automatically on selection, but
             // we need the ChoicePanel reference for the abort path.  We capture
             // it by reaching into the ChoicePanel constructor directly here.
@@ -898,7 +909,7 @@ export class ChatView {
             const onAbort = () => {
                 choicePanel.remove();
                 // Append a dismissal notice inline in the message bubble.
-                const reason = signal?.reason;
+                const reason = abortSignal.reason;
                 const text =
                     reason &&
                     typeof reason === "object" &&
@@ -906,10 +917,7 @@ export class ChatView {
                         ? "answered by another client"
                         : "interaction cancelled";
                 agentMessage.setMessage(`  [${text}]`, source, "inline");
-                // signal is guaranteed non-null here: onAbort is only registered
-                // when signal is defined (either via addEventListener or the
-                // already-aborted check below).
-                reject(signal!.reason);
+                reject(abortSignal.reason);
             };
 
             if (signal?.aborted) {

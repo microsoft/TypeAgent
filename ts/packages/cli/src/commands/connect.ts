@@ -10,7 +10,11 @@ import {
     replayDisplayHistory,
     withEnhancedConsoleClientIO,
 } from "../enhancedConsole.js";
-import { setConversationCommandContext } from "../slashCommands.js";
+import {
+    setConversationCommandContext,
+    setServerPort,
+    setServerConnection,
+} from "../slashCommands.js";
 import type { ConversationCommandContext } from "../conversationCommands.js";
 import {
     connectAgentServer,
@@ -24,6 +28,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as readline from "readline";
+import { loadUserSettings } from "agent-dispatcher/helpers/userSettings";
 
 const CLI_STATE_FILE = path.join(os.homedir(), ".typeagent", "cli-state.json");
 const CLI_CONVERSATION_NAME = "CLI";
@@ -96,8 +101,8 @@ export default class Connect extends Command {
         resume: Flags.boolean({
             char: "r",
             description:
-                "Resume the last used conversation instead of defaulting to 'CLI'. Ignored if --conversation is provided.",
-            default: false,
+                "Resume the last used conversation instead of defaulting to 'CLI'. Ignored if --conversation is provided. Use --no-resume to override a saved user setting.",
+            allowNo: true,
         }),
         conversation: Flags.string({
             char: "c",
@@ -118,13 +123,12 @@ export default class Connect extends Command {
         }),
         hidden: Flags.boolean({
             description:
-                "Start the agent server without a visible window (background mode). Only applies when the server is not already running.",
-            default: false,
+                "Start the agent server without a visible window (background mode). Only applies when the server is not already running. Use --no-hidden to override a saved user setting.",
+            allowNo: true,
         }),
         idleTimeout: Flags.integer({
             description:
-                "Shut down the agent server after this many seconds with no connected clients. 0 disables (default). Only applies when the server is spawned by this command.",
-            default: 0,
+                "Shut down the agent server after this many seconds with no connected clients. 0 disables. Only applies when the server is spawned by this command. Omit to use saved user setting.",
         }),
     };
     static args = {
@@ -135,7 +139,19 @@ export default class Connect extends Command {
         }),
     };
     async run(): Promise<void> {
-        const { args, flags } = await this.parse(Connect);
+        const { args, flags: rawFlags } = await this.parse(Connect);
+
+        // Merge persistent user settings as defaults for flags not explicitly set.
+        // With allowNo / no default, omitted flags are undefined, so ?? falls
+        // through to the saved user setting. Explicit --flag or --no-flag wins.
+        const userSettings = loadUserSettings();
+        const flags = {
+            ...rawFlags,
+            hidden: rawFlags.hidden ?? userSettings.server.hidden,
+            idleTimeout:
+                rawFlags.idleTimeout ?? userSettings.server.idleTimeout,
+            resume: rawFlags.resume ?? userSettings.conversation.resume,
+        };
 
         if (flags.verbose !== undefined) {
             const { default: registerDebug } = await import("debug");
@@ -359,6 +375,8 @@ export default class Connect extends Command {
                     },
                 };
                 setConversationCommandContext(convCtx);
+                setServerPort(flags.port);
+                setServerConnection(connection);
             }
 
             try {

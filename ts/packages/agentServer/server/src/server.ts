@@ -29,6 +29,10 @@ import {
 import type { ChannelProvider } from "@typeagent/agent-rpc/channel";
 import type { Dispatcher } from "agent-dispatcher";
 import dotenv from "dotenv";
+import {
+    writeServerPid,
+    removeServerPid,
+} from "@typeagent/agent-server-client";
 import registerDebug from "debug";
 const envPath = new URL("../../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
@@ -100,6 +104,17 @@ async function main() {
     let connectionCount = 0;
     let idleShutdownTimer: ReturnType<typeof setTimeout> | undefined;
 
+    // Shared shutdown logic — used by RPC handler, idle timer, and clientIO intercept.
+    // The wss variable is assigned after createWebSocketChannelServer resolves below.
+    let wss: Awaited<ReturnType<typeof createWebSocketChannelServer>>;
+    async function shutdownServer() {
+        console.log("Shutdown requested, stopping agent server...");
+        wss.close();
+        await conversationManager.close();
+        removeServerPid(port);
+        process.exit(0);
+    }
+
     function scheduleIdleShutdown() {
         if (idleShutdownMs <= 0 || connectionCount > 0) {
             return;
@@ -110,13 +125,11 @@ async function main() {
                     idleShutdownMs / 1000 +
                     "s. Stopping agent server...",
             );
-            wss.close();
-            await conversationManager.close();
-            process.exit(0);
+            await shutdownServer();
         }, idleShutdownMs);
     }
 
-    const wss = await createWebSocketChannelServer(
+    wss = await createWebSocketChannelServer(
         { port },
         (channelProvider: ChannelProvider, closeFn: () => void) => {
             connectionCount++;
@@ -156,10 +169,21 @@ async function main() {
                         const clientIORpcClient =
                             createClientIORpcClient(clientIOChannel);
 
+                        // Intercept shutdown: when the dispatcher calls
+                        // clientIO.shutdown(), shut down the server directly
+                        // instead of forwarding the request to the client.
+                        // Closing the WebSocket server disconnects all clients.
+                        const wrappedClientIO = {
+                            ...clientIORpcClient,
+                            shutdown: () => {
+                                shutdownServer();
+                            },
+                        };
+
                         const result =
                             await conversationManager.joinConversation(
                                 conversationId,
-                                clientIORpcClient,
+                                wrappedClientIO,
                                 () => {
                                     channelProvider.deleteChannel(
                                         getDispatcherChannelName(
@@ -264,12 +288,7 @@ async function main() {
                         conversationId,
                     );
                 },
-                shutdown: async () => {
-                    console.log("Shutdown requested, stopping agent server...");
-                    wss.close();
-                    await conversationManager.close();
-                    process.exit(0);
-                },
+                shutdown: shutdownServer,
             };
 
             // Clean up all conversations on WebSocket disconnect
@@ -298,6 +317,7 @@ async function main() {
     );
 
     console.log(`Agent server started at ws://localhost:${port}`);
+    writeServerPid(port, process.pid);
     scheduleIdleShutdown();
 }
 
