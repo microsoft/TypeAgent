@@ -371,6 +371,56 @@ describe("Grammar Optimizer - Factoring Repro", () => {
             );
         }
     });
+
+    // Regression for the playerSchema bug.  The failing trie shape:
+    //
+    //     play <TrackPhrase> by <ArtistName>                                  (alt1)
+    //     play <TrackPhrase> from album <AlbumName>                           (alt2)
+    //     play <TrackPhrase> by <ArtistName> from album <AlbumName>           (alt3)
+    //
+    // The trie at <TrackPhrase> forks ("by" vs "from"); inside the "by"
+    // branch, alt1's terminal lands at <ArtistName> with empty parts
+    // alongside alt3's "from album <AlbumName>" subtree.  That deeper
+    // fork bails ("whole-consumed") and prepends the <ArtistName> edge
+    // to each member.  The outer "by" fork's eligibility check then sees
+    // members whose values reference the *outer* <TrackPhrase> canonical
+    // — but that canonical isn't bound in the members' own parts.  The
+    // pre-fix check missed this (it only compared against the immediate
+    // "by" prefix, which has no canonicals), factored anyway, and the
+    // matcher threw at runtime:
+    //   "Internal error: No value for variable '__opt_v_*'".
+    it("does not factor when members reference ancestor-prefix bindings", () => {
+        const text = `<Start> = <PlaySpecificTrack>;
+<TrackPhrase> = $(trackName:string) -> trackName
+              | the $(trackName:string) -> trackName;
+<PlaySpecificTrack> =
+    play $(trackName:<TrackPhrase>) by $(artist:string) ->
+        { kind: "byArtist", trackName, artist }
+    | play $(trackName:<TrackPhrase>) from album $(albumName:string) ->
+        { kind: "fromAlbum", trackName, albumName }
+    | play $(trackName:<TrackPhrase>) by $(artist:string) from album $(albumName:string) ->
+        { kind: "byArtistFromAlbum", trackName, artist, albumName };`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { factorCommonPrefixes: true },
+        });
+        for (const input of [
+            "play hello by alice",
+            "play the hello by alice",
+            "play hello from album greats",
+            "play hello by alice from album greats",
+            "play the hello by alice from album greats",
+        ]) {
+            // No "Internal error" thrown at runtime, and the same set
+            // of matches is produced (order may differ, since factoring
+            // can interleave alternatives at the wrapper level).
+            const baseRes = match(baseline, input);
+            const optRes = match(optimized, input);
+            expect(optRes).toHaveLength(baseRes.length);
+            expect(optRes).toEqual(expect.arrayContaining(baseRes));
+            expect(baseRes).toEqual(expect.arrayContaining(optRes));
+        }
+    });
 });
 
 // ─── Merged from grammarOptimizerTrieRisks.spec.ts ──────────────────────────

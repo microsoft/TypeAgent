@@ -1115,7 +1115,7 @@ function emitFromNode(
     }
 
     // Multi-member fork: try to wrap; bail out if any check fails.
-    if (checkFactoringEligible(prefix, members) !== undefined) {
+    if (checkFactoringEligible(members) !== undefined) {
         return members.map((m) => ({
             ...m,
             parts: concatParts(prefix, m.parts),
@@ -1129,10 +1129,7 @@ function emitFromNode(
  * Per-fork eligibility checks (lifted from the previous implementation).
  * Returns `undefined` when factoring is safe, or a short reason string.
  */
-function checkFactoringEligible(
-    prefix: GrammarPart[],
-    members: GrammarRule[],
-): string | undefined {
+function checkFactoringEligible(members: GrammarRule[]): string | undefined {
     // Empty-parts members never compose cleanly inside a wrapped
     // RulesPart: with a value, the matcher would have to treat
     // `{parts:[], value: V}` as a degenerate match (today's algorithm
@@ -1163,24 +1160,30 @@ function checkFactoringEligible(
         return "no-value-implicit-default";
     }
     // Cross-scope-ref: nested rule scope is fresh at the matcher level
-    // (entering a `RulesPart` resets `valueIds`).  If a member's value
-    // references a name that the wrapper's prefix binds, that reference
-    // would resolve to nothing at runtime.  Detect and bail out so each
-    // member is emitted at the wrapper's level instead, putting the
-    // binding back in scope.
+    // (entering a `RulesPart` resets `valueIds`).  When members are
+    // lifted into a wrapper rule's `suffixRulesPart`, each member
+    // becomes an isolated inner rule whose value can only see
+    // variables bound in its own `parts` — bindings in the wrapper's
+    // prefix, *or* in any ancestor's prefix that has already been
+    // incorporated upstream, are no longer visible.
+    //
+    // We therefore require every variable referenced by a member's
+    // value to appear in that member's own top-level part bindings.
+    // This subsumes the simpler "member references prefix binding"
+    // check, and additionally catches the case where a deeper bailout
+    // dragged ancestor-prefix canonical references into a member that
+    // doesn't bind them (the bailout-then-factor scenario in
+    // playerSchema's `play <TrackPhrase> by <ArtistName> [...]`).
     //
     // Binding-shadow (a member's own binding colliding with a prefix
-    // binding) is no longer reachable: canonicals are opaque
-    // `__opt_v_<n>` names allocated globally per `factorRulesPart` call,
-    // so two distinct edges always get distinct canonicals.
-    const prefixCanonicals = collectVariableNames(prefix);
-    if (prefixCanonicals.size > 0) {
-        for (const m of members) {
-            if (m.value !== undefined) {
-                for (const v of collectVariableReferences(m.value)) {
-                    if (prefixCanonicals.has(v)) return "cross-scope-ref";
-                }
-            }
+    // binding) is not reachable: canonicals are opaque `__opt_v_<n>`
+    // names allocated globally per `factorRulesPart` call, so two
+    // distinct edges always get distinct canonicals.
+    for (const m of members) {
+        if (m.value === undefined) continue;
+        const memberBindings = collectVariableNames(m.parts);
+        for (const v of collectVariableReferences(m.value)) {
+            if (!memberBindings.has(v)) return "cross-scope-ref";
         }
     }
     return undefined;
