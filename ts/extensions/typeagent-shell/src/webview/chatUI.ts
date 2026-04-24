@@ -400,12 +400,15 @@ export class ChatUI {
 
     /**
      * Apply timing metrics for a request that originated in a peer tab.
-     * Like onCommandComplete but does NOT touch our local activeResponse,
-     * temporary status, or pending-user-bubble state — those belong to
-     * commands issued by THIS tab.
+     * Renders metrics like onCommandComplete, and also clears any
+     * lingering temporary status + engages the late-temp guard, since
+     * the originator has finished and any further temporary status for
+     * this request would be stale.
      */
     public applyPeerMetrics(requestId: string, result: any): void {
         if (!requestId) return;
+        this._removeTemporary();
+        this._lastCompletedAt = Date.now();
         const agentBubble = this._agentBubblesByRequestId.get(requestId);
         if (agentBubble) {
             this._renderMetrics(agentBubble, result?.metrics, "agent");
