@@ -12,11 +12,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = "typeagent-shell.chatView";
 
     private _sidebarView?: vscode.WebviewView;
+    private _onSidebarResolved?: (view: vscode.WebviewView) => void;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
         private readonly _primaryBridge: AgentServerBridge,
     ) {}
+
+    public onSidebarResolved(cb: (view: vscode.WebviewView) => void): void {
+        this._onSidebarResolved = cb;
+        if (this._sidebarView) cb(this._sidebarView);
+    }
 
     public resolveWebviewView(
         webviewView: vscode.WebviewView,
@@ -29,6 +35,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         webviewView.onDidDispose(() => {
             this._sidebarView = undefined;
         });
+
+        this._onSidebarResolved?.(webviewView);
     }
 
     /**

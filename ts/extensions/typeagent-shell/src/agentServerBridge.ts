@@ -101,16 +101,23 @@ export class AgentServerBridge {
 
     // Configuration
     private readonly ownsStatusBar: boolean;
-    private readonly autoCreateSessionPrefix: string | undefined;
+    private readonly ephemeralSessionName: string | undefined;
+    private displayName: string;
     // Track ephemeral session we created so we can delete on dispose
     private ephemeralSessionId: string | undefined;
+    private nameOverride: string | undefined;
+    // Notify when this bridge's status/session changes — used by extension
+    // to update the shared status bar when this bridge is active.
+    private onStatusChanged?: () => void;
 
     constructor(opts?: {
         ownsStatusBar?: boolean;
-        autoCreateSessionPrefix?: string;
+        ephemeralSessionName?: string;
+        displayName?: string;
     }) {
         this.ownsStatusBar = opts?.ownsStatusBar ?? true;
-        this.autoCreateSessionPrefix = opts?.autoCreateSessionPrefix;
+        this.ephemeralSessionName = opts?.ephemeralSessionName;
+        this.displayName = opts?.displayName ?? "TypeAgent";
         if (this.ownsStatusBar) {
             this.statusBarItem = vscode.window.createStatusBarItem(
                 vscode.StatusBarAlignment.Left,
@@ -120,11 +127,28 @@ export class AgentServerBridge {
             this.updateStatusBar(false);
             this.statusBarItem.show();
         } else {
-            // Dummy stand-in so existing code paths don't crash
             this.statusBarItem = {
                 dispose: () => {},
             } as unknown as vscode.StatusBarItem;
         }
+    }
+
+    /** Display name used in webview status bar / for routing UX. */
+    getDisplayName(): string {
+        if (this.ephemeralSessionName) {
+            return this.displayName;
+        }
+        return this.nameOverride ?? this.session?.name ?? this.displayName;
+    }
+
+    isConnectedNow(): boolean {
+        return this.isConnected;
+    }
+
+    /** Subscribe to connection / session-name changes. */
+    onStatusChange(cb: () => void): vscode.Disposable {
+        this.onStatusChanged = cb;
+        return { dispose: () => { this.onStatusChanged = undefined; } };
     }
 
     /**
@@ -187,34 +211,28 @@ export class AgentServerBridge {
                 this.session = undefined;
                 this.updateStatusBar(false);
                 this.broadcastToWebviews({ type: "status", connected: false });
+                this.onStatusChanged?.();
                 this.scheduleReconnect();
             });
 
-            // Join the default session with our ClientIO implementation
-            // filter: true ensures we only see responses to our own requests
+            // Join the session with our ClientIO implementation
             const clientIO = this.createClientIO();
 
-            // If configured for an ephemeral panel session, create one first
-            // and join it; otherwise join the default session.
             let joinOpts: any = {
                 clientType: "extension",
                 filter: true,
             };
             if (
-                this.autoCreateSessionPrefix &&
+                this.ephemeralSessionName &&
                 this.ephemeralSessionId === undefined
             ) {
-                const ts = new Date()
-                    .toISOString()
-                    .replace(/[:.]/g, "-")
-                    .replace("T", "_")
-                    .substring(0, 19);
-                const name = `${this.autoCreateSessionPrefix}${ts}`;
                 try {
-                    const info = await this.connection.createSession(name);
+                    const info = await this.connection.createSession(
+                        this.ephemeralSessionName,
+                    );
                     this.ephemeralSessionId = info.sessionId;
                     joinOpts.sessionId = info.sessionId;
-                } catch (e) {
+                } catch {
                     // Fall back to default join if creation fails
                 }
             } else if (this.ephemeralSessionId) {
@@ -232,8 +250,9 @@ export class AgentServerBridge {
                 type: "status",
                 connected: true,
                 sessionId: this.session.sessionId,
-                sessionName: this.session.name,
+                sessionName: this.getDisplayName(),
             });
+            this.onStatusChanged?.();
 
             // Replay history only the first time we join this session.
             // On simple reconnects we already have the bubbles in the DOM
@@ -266,6 +285,7 @@ export class AgentServerBridge {
             this.isConnected = false;
             this.updateStatusBar(false);
             this.broadcastToWebviews({ type: "status", connected: false });
+            this.onStatusChanged?.();
         }
     }
 
@@ -397,12 +417,14 @@ export class AgentServerBridge {
             this.session.sessionId,
             newName.trim(),
         );
+        this.nameOverride = newName.trim();
         this.broadcastToWebviews({
             type: "status",
             connected: true,
             sessionId: this.session.sessionId,
-            sessionName: newName.trim(),
+            sessionName: this.getDisplayName(),
         });
+        this.onStatusChanged?.();
         vscode.window.showInformationMessage(
             `Renamed conversation to "${newName.trim()}"`,
         );
@@ -504,6 +526,7 @@ export class AgentServerBridge {
 
             const oldSession = this.session;
             this.session = newSession;
+            this.nameOverride = undefined;
 
             // Phase 2: leave the old session (best-effort)
             if (oldSession) {
@@ -518,14 +541,15 @@ export class AgentServerBridge {
             this.broadcastToWebviews({
                 type: "sessionChanged",
                 sessionId: newSession.sessionId,
-                sessionName: newSession.name,
+                sessionName: this.getDisplayName(),
             });
             this.broadcastToWebviews({
                 type: "status",
                 connected: true,
                 sessionId: newSession.sessionId,
-                sessionName: newSession.name,
+                sessionName: this.getDisplayName(),
             });
+            this.onStatusChanged?.();
             await this.replayHistory(newSession);
             this.lastReplayedSessionId = newSession.sessionId;
         } finally {

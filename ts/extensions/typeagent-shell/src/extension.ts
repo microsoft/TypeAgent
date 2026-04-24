@@ -5,15 +5,34 @@ import * as vscode from "vscode";
 import { ChatViewProvider } from "./chatViewProvider";
 import { AgentServerBridge } from "./agentServerBridge";
 
-let primaryBridge: AgentServerBridge | undefined;
-// Track per-panel bridges so we can dispose them on extension deactivate
-const panelBridges = new Set<AgentServerBridge>();
+interface ChatEntry {
+    bridge: AgentServerBridge;
+    /** UI handle for promoting to active. undefined means sidebar. */
+    panel?: vscode.WebviewPanel;
+    sidebarView?: vscode.WebviewView;
+    statusDisposable: vscode.Disposable;
+}
+
+let sidebarBridge: AgentServerBridge | undefined;
+const chats = new Set<ChatEntry>();
+let activeChat: ChatEntry | undefined;
 let panelCounter = 0;
+let statusBarItem: vscode.StatusBarItem;
 
 export function activate(context: vscode.ExtensionContext): void {
-    primaryBridge = new AgentServerBridge({ ownsStatusBar: true });
+    statusBarItem = vscode.window.createStatusBarItem(
+        vscode.StatusBarAlignment.Left,
+        100,
+    );
+    statusBarItem.command = "typeagent-shell.focusChat";
+    context.subscriptions.push(statusBarItem);
 
-    const provider = new ChatViewProvider(context.extensionUri, primaryBridge);
+    sidebarBridge = new AgentServerBridge({
+        ownsStatusBar: false,
+        displayName: "Sidebar",
+    });
+
+    const provider = new ChatViewProvider(context.extensionUri, sidebarBridge);
 
     // Sidebar webview provider
     context.subscriptions.push(
@@ -24,16 +43,37 @@ export function activate(context: vscode.ExtensionContext): void {
         ),
     );
 
-    // Command: open a NEW chat in an editor tab beside the current view.
-    // Each invocation creates a fresh ephemeral session + bridge so panels
-    // are independent of each other and of the sidebar.
+    // Track sidebar as a chat entry once it resolves
+    provider.onSidebarResolved((view) => {
+        const entry: ChatEntry = {
+            bridge: sidebarBridge!,
+            sidebarView: view,
+            statusDisposable: sidebarBridge!.onStatusChange(() =>
+                refreshStatusBar(),
+            ),
+        };
+        chats.add(entry);
+        setActive(entry);
+        view.onDidChangeVisibility(() => {
+            if (view.visible) setActive(entry);
+        });
+        view.onDidDispose(() => {
+            chats.delete(entry);
+            entry.statusDisposable.dispose();
+            if (activeChat === entry) {
+                activeChat = chats.values().next().value;
+                refreshStatusBar();
+            }
+        });
+        refreshStatusBar();
+    });
+
+    // Command: open NEW chat in editor tab beside
     context.subscriptions.push(
         vscode.commands.registerCommand("typeagent-shell.openChat", () => {
             openNewChatPanel(context, provider);
         }),
     );
-
-    // Alias for clarity
     context.subscriptions.push(
         vscode.commands.registerCommand(
             "typeagent-shell.newChatPanel",
@@ -44,32 +84,63 @@ export function activate(context: vscode.ExtensionContext): void {
     // Command: focus the sidebar chat
     context.subscriptions.push(
         vscode.commands.registerCommand("typeagent-shell.focusChat", () => {
-            vscode.commands.executeCommand(
-                "typeagent-shell.chatView.focus",
-            );
+            // If active chat is a panel, reveal it; otherwise focus sidebar
+            if (activeChat?.panel) {
+                activeChat.panel.reveal();
+            } else {
+                vscode.commands.executeCommand(
+                    "typeagent-shell.chatView.focus",
+                );
+            }
         }),
     );
 
-    // Conversation management commands — operate on the primary (sidebar)
-    // bridge. Per-panel chats are intentionally ephemeral.
+    // Conversation management commands — operate on the ACTIVE chat
     context.subscriptions.push(
         vscode.commands.registerCommand(
             "typeagent-shell.switchSession",
-            () => primaryBridge?.switchSession(),
+            () => activeChat?.bridge.switchSession(),
         ),
         vscode.commands.registerCommand(
             "typeagent-shell.newSession",
-            () => primaryBridge?.newSession(),
+            () => activeChat?.bridge.newSession(),
         ),
         vscode.commands.registerCommand(
             "typeagent-shell.renameSession",
-            () => primaryBridge?.renameCurrentSession(),
+            () => activeChat?.bridge.renameCurrentSession(),
         ),
         vscode.commands.registerCommand(
             "typeagent-shell.deleteSession",
-            () => primaryBridge?.deleteSession(),
+            () => activeChat?.bridge.deleteSession(),
         ),
     );
+}
+
+function setActive(entry: ChatEntry): void {
+    activeChat = entry;
+    refreshStatusBar();
+}
+
+function refreshStatusBar(): void {
+    if (!activeChat) {
+        statusBarItem.text = "$(debug-disconnect) TypeAgent";
+        statusBarItem.tooltip = "TypeAgent — no active chat";
+        statusBarItem.show();
+        return;
+    }
+    const bridge = activeChat.bridge;
+    const name = bridge.getDisplayName();
+    if (bridge.isConnectedNow()) {
+        statusBarItem.text = `$(plug) TypeAgent: ${name}`;
+        statusBarItem.backgroundColor = undefined;
+    } else {
+        statusBarItem.text = `$(debug-disconnect) TypeAgent: ${name}`;
+        statusBarItem.backgroundColor = new vscode.ThemeColor(
+            "statusBarItem.warningBackground",
+        );
+    }
+    statusBarItem.tooltip = `Active chat: ${name}\nClick to focus`;
+    statusBarItem.show();
 }
 
 function openNewChatPanel(
@@ -77,7 +148,9 @@ function openNewChatPanel(
     provider: ChatViewProvider,
 ): void {
     panelCounter += 1;
-    const title = `TypeAgent Chat ${panelCounter}`;
+    const n = panelCounter;
+    const friendly = `Chat ${n}`;
+    const title = `TypeAgent ${friendly}`;
     const panel = vscode.window.createWebviewPanel(
         "typeagent-shell.chatPanel",
         title,
@@ -97,27 +170,49 @@ function openNewChatPanel(
         "typeagent-icon.svg",
     );
 
-    // Each panel gets its own bridge, its own connection, and its own
-    // ephemeral session that's deleted when the panel closes.
+    // Each panel: own bridge + ephemeral session deleted on close.
+    // Server name uses the cli-ephemeral- prefix so the startup sweep
+    // catches orphans from crashes; the user-visible name is "Chat N".
     const bridge = new AgentServerBridge({
         ownsStatusBar: false,
-        autoCreateSessionPrefix: "cli-ephemeral-vscode-",
+        ephemeralSessionName: `cli-ephemeral-vscode-${n}-${Date.now()}`,
+        displayName: friendly,
     });
-    panelBridges.add(bridge);
+
+    const entry: ChatEntry = {
+        bridge,
+        panel,
+        statusDisposable: bridge.onStatusChange(() => refreshStatusBar()),
+    };
+    chats.add(entry);
+    setActive(entry);
 
     const bridgeDisposable = provider.wireWebview(panel.webview, bridge);
+
+    panel.onDidChangeViewState((e) => {
+        if (e.webviewPanel.active) {
+            setActive(entry);
+        }
+    });
 
     panel.onDidDispose(() => {
         bridgeDisposable.dispose();
         bridge.dispose();
-        panelBridges.delete(bridge);
+        entry.statusDisposable.dispose();
+        chats.delete(entry);
+        if (activeChat === entry) {
+            // Fall back to any remaining chat (sidebar, if open)
+            activeChat = chats.values().next().value;
+            refreshStatusBar();
+        }
     });
 }
 
 export function deactivate(): void {
-    primaryBridge?.dispose();
-    for (const b of panelBridges) {
-        b.dispose();
+    sidebarBridge?.dispose();
+    for (const e of chats) {
+        e.bridge.dispose();
     }
-    panelBridges.clear();
+    chats.clear();
+    statusBarItem?.dispose();
 }
