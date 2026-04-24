@@ -9,7 +9,9 @@ import {
     Grammar,
     GrammarPart,
     GrammarRule,
+    PhraseSetPart,
     RulesPart,
+    StringPart,
 } from "./grammarTypes.js";
 
 const debug = registerDebug("typeagent:grammar:opt");
@@ -471,7 +473,7 @@ function tryInlineRulesPart(
             bindingIdx = i;
         }
         if (bindingIdx === -1) {
-            // Unreachable: we're past the `child.value !== undefined`
+            // Invariant: we're past the `child.value !== undefined`
             // branch, so child has no explicit value, and parent binds
             // it via `part.variable`.  The compiler enforces
             // `child.hasValue === true` at any bound rule reference
@@ -481,21 +483,14 @@ function tryInlineRulesPart(
             // (some top-level part is variable-bearing → friendly in
             // the multi-part branch) or `parts.length === 1 &&
             // defaultValue` (single-part → any type is friendly).
-            // Either way at least one friendly part exists.  Trace
-            // and bail out conservatively if the invariant is ever
-            // violated (e.g. a future compiler change loosens
-            // hasValue).
-            debug(
-                `tryInlineRulesPart: no binding-friendly part in child of bound RulesPart (variable='${part.variable}'); refusing to inline`,
+            // Either way at least one friendly part exists.  Throw
+            // loudly if a future compiler change ever loosens
+            // hasValue and reaches this point.
+            throw new Error(
+                `Internal: bound RulesPart child has no binding-friendly part (variable='${part.variable}')`,
             );
-            return undefined;
         }
-        const bindingCp = child.parts[bindingIdx] as Extract<
-            GrammarPart,
-            {
-                type: "wildcard" | "number" | "rules" | "string" | "phraseSet";
-            }
-        >;
+        const bindingCp = child.parts[bindingIdx];
         const newParts = child.parts.slice();
         newParts[bindingIdx] = { ...bindingCp, variable: part.variable };
         // No duplicate-name guard here: if the parent already had two
@@ -848,11 +843,14 @@ function rulesArrayId(state: BuildState, rules: GrammarRule[]): number {
  * so they don't merge — mirrors the parity check in `edgeKeyMatches`.
  */
 function stepMergeKey(step: TrieStep, state: BuildState): string {
+    // Use JSON.stringify for any field that could contain unrestricted text
+    // (token values, matcher names) so that delimiters / colons / quotes
+    // inside the field can't collide with the key's structural separators.
     switch (step.kind) {
         case "string":
-            return `s:${step.tokens.join(" ")}:${step.local !== undefined ? 1 : 0}`;
+            return `s:${JSON.stringify(step.tokens)}:${step.local !== undefined ? 1 : 0}`;
         case "wildcard":
-            return `w:${step.typeName}:${step.optional ? 1 : 0}`;
+            return `w:${JSON.stringify(step.typeName)}:${step.optional ? 1 : 0}`;
         case "number":
             return `n:${step.optional ? 1 : 0}`;
         case "rules": {
@@ -860,7 +858,7 @@ function stepMergeKey(step: TrieStep, state: BuildState): string {
             return `r:${id}:${step.optional ? 1 : 0}:${step.repeat ? 1 : 0}:${step.local !== undefined ? 1 : 0}`;
         }
         case "phraseSet":
-            return `p:${step.matcherName}:${step.local !== undefined ? 1 : 0}`;
+            return `p:${JSON.stringify(step.matcherName)}:${step.local !== undefined ? 1 : 0}`;
     }
 }
 
@@ -949,6 +947,14 @@ function insertRuleIntoTrie(
  * be moved to the last token alone without changing semantics) and
  * would also leak the binding-presence bit into intermediate edges,
  * preventing legitimate factoring with unbound prefix tokens.
+ *
+ * TODO: bound StringParts that share a token prefix (e.g.
+ * `[good, morning]` and `[good, evening]`, both bound) currently
+ * cannot factor.  The same trick `compileStringPart` uses — emit
+ * sub-token transitions for the shared prefix and write the slot
+ * only on the final transition — would let the trie share the
+ * `good` edge if we tracked "binding emitted on last sub-step
+ * only" parity.  Not yet worth the complexity.
  */
 function* partsToEdgeSteps(parts: GrammarPart[]): Generator<TrieStep> {
     for (const p of parts) {
@@ -1083,10 +1089,8 @@ function recordStepRemap(
 function edgeToPart(edge: TrieEdge): GrammarPart {
     switch (edge.kind) {
         case "string": {
-            const out: GrammarPart = { type: "string", value: edge.tokens };
-            if (edge.canonical !== undefined) {
-                (out as { variable?: string }).variable = edge.canonical;
-            }
+            const out: StringPart = { type: "string", value: edge.tokens };
+            if (edge.canonical !== undefined) out.variable = edge.canonical;
             return out;
         }
         case "wildcard": {
@@ -1117,13 +1121,11 @@ function edgeToPart(edge: TrieEdge): GrammarPart {
             return out;
         }
         case "phraseSet": {
-            const out: GrammarPart = {
+            const out: PhraseSetPart = {
                 type: "phraseSet",
                 matcherName: edge.matcherName,
             };
-            if (edge.canonical !== undefined) {
-                (out as { variable?: string }).variable = edge.canonical;
-            }
+            if (edge.canonical !== undefined) out.variable = edge.canonical;
             return out;
         }
     }

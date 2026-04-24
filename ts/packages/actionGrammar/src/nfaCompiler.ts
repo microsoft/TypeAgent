@@ -313,6 +313,25 @@ function isSingleVariableRule(rule: GrammarRule): { variable: string } | false {
 }
 
 /**
+ * Return the capture-variable name for any GrammarPart kind that
+ * supports one (wildcard / number / rules / string / phraseSet — the
+ * last two carry an optimizer-introduced binding).  Centralized so
+ * that adding a future capture-bearing part type only needs one edit.
+ */
+function getCapturedVariableName(part: GrammarPart): string | undefined {
+    switch (part.type) {
+        case "wildcard":
+        case "number":
+        case "rules":
+        case "string":
+        case "phraseSet":
+            return part.variable;
+        default:
+            return undefined;
+    }
+}
+
+/**
  * Collect all variable names from a rule's parts
  * Returns them in order of appearance
  *
@@ -329,39 +348,16 @@ function collectVariables(rule: GrammarRule): string[] {
         return variables;
     }
 
-    function collectFromPart(part: GrammarPart): void {
-        switch (part.type) {
-            case "wildcard":
-            case "number":
-                if (part.variable && !seen.has(part.variable)) {
-                    seen.add(part.variable);
-                    variables.push(part.variable);
-                }
-                break;
-            case "rules":
-                // For nested rules, if the RulesPart has a variable, that's what gets captured
-                if (part.variable && !seen.has(part.variable)) {
-                    seen.add(part.variable);
-                    variables.push(part.variable);
-                }
-                // Don't recurse into nested rule's inner variables - they use their own slots
-                break;
-            case "string":
-            case "phraseSet":
-                // Optimizer-introduced capture: parent rule binds the matched
-                // literal text (string) or matched phrase (phraseSet) to a
-                // named slot.  Source-syntax bindings on these part types are
-                // not yet supported.
-                if (part.variable && !seen.has(part.variable)) {
-                    seen.add(part.variable);
-                    variables.push(part.variable);
-                }
-                break;
-        }
-    }
-
     for (const part of rule.parts) {
-        collectFromPart(part);
+        // For nested rules, only the RulesPart's own variable is captured
+        // here — the matcher writes the nested rule's value into that slot.
+        // We don't recurse into the nested rule's inner parts; they live
+        // in their own slot maps.
+        const v = getCapturedVariableName(part);
+        if (v && !seen.has(v)) {
+            seen.add(v);
+            variables.push(v);
+        }
     }
 
     return variables;

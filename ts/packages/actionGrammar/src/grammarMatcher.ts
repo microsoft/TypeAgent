@@ -600,12 +600,9 @@ function addValue(
 
 // True when this rule/state would synthesize its result from the lone
 // captured value of its single part (no explicit value expression and
-// exactly one part).  Both parameters are read; pass either a MatchState
-// or ParentMatchState.
-function usesImplicitDefault(s: {
-    value: CompiledValueNode | undefined;
-    parts: GrammarPart[];
-}): boolean {
+// exactly one part).  Pass either a MatchState or ParentMatchState.
+type ImplicitDefaultCarrier = Pick<MatchState, "value" | "parts">;
+function usesImplicitDefault(s: ImplicitDefaultCarrier): boolean {
     return s.value === undefined && s.parts.length === 1;
 }
 

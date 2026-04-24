@@ -44,12 +44,14 @@ export interface NFATransition {
     slotIndex?: number | undefined;
     // If true, append to existing value (for multi-word wildcards)
     appendToSlot?: boolean | undefined;
-    // For token / phraseSet transitions: when set together with slotIndex,
-    // overrides the matched value written to the slot.  Used for StringPart
-    // captures so the slot receives the joined fixed string (`value.join(" ")`)
-    // rather than the single normalized token from the consumed transition.
-    // PhraseSet captures don't set this — the matcher writes the joined matched
-    // phrase tokens at runtime (the matched phrase varies per input).
+    // For token transitions only: when set together with slotIndex,
+    // overrides the matched value written to the slot.  Used for
+    // StringPart captures so the slot receives the joined fixed string
+    // (`value.join(" ")`) rather than the single normalized token from
+    // the consumed transition.  PhraseSet transitions don't carry this
+    // (no parameter on `addPhraseSetTransition`); for phraseSet
+    // captures the matcher writes the joined matched phrase tokens at
+    // runtime (the matched phrase varies per input).
     slotValue?: string | undefined;
 
     // For epsilon transitions exiting nested rules:
@@ -205,13 +207,16 @@ export class NFABuilder {
         slotIndex?: number,
         slotValue?: string,
     ): void {
-        this.addTransition(from, to, "token", tokens);
+        const state = this.states[from];
+        if (!state) {
+            throw new Error(`State ${from} does not exist`);
+        }
+        const trans: NFATransition = { type: "token", to, tokens };
         if (slotIndex !== undefined) {
-            const state = this.states[from];
-            const trans = state.transitions[state.transitions.length - 1];
             trans.slotIndex = slotIndex;
             if (slotValue !== undefined) trans.slotValue = slotValue;
         }
+        state.transitions.push(trans);
     }
 
     addEpsilonTransition(from: number, to: number): void {
