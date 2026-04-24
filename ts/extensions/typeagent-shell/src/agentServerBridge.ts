@@ -675,6 +675,48 @@ export class AgentServerBridge {
         }
     }
 
+    /**
+     * If the current session is the bridge's ephemeral session and the user
+     * has just produced activity, give it a real (persistent) name so it is
+     * not deleted on panel close or by the server's startup sweep.
+     */
+    private async promoteEphemeralIfNeeded(): Promise<void> {
+        if (!this.connection || !this.session) return;
+        if (!this.ephemeralSessionId) return;
+        if (this.session.sessionId !== this.ephemeralSessionId) return;
+
+        const stamp = new Date()
+            .toISOString()
+            .replace("T", " ")
+            .slice(0, 16);
+        const base = `${this.displayName} ${stamp}`;
+        let name = base;
+        try {
+            const sessions = await this.connection.listSessions();
+            const taken = new Set(sessions.map((s) => s.name));
+            let n = 2;
+            while (taken.has(name)) {
+                name = `${base} (${n++})`;
+            }
+            await this.connection.renameSession(
+                this.session.sessionId,
+                name,
+            );
+            this.nameOverride = name;
+            this.ephemeralSessionId = undefined;
+            this.broadcastToWebviews({
+                type: "status",
+                connected: true,
+                sessionId: this.session.sessionId,
+                sessionName: this.getDisplayName(),
+            });
+            this.onStatusChanged?.();
+        } catch {
+            // Best effort — if rename fails (e.g. server rejects), the
+            // session stays ephemeral and will still be cleaned up.
+        }
+    }
+
     private async sendCommand(
         command: string,
         requestId?: string,
@@ -686,6 +728,11 @@ export class AgentServerBridge {
             });
             return;
         }
+
+        // Once the user actually engages with an ephemeral panel session,
+        // promote it to a persistent named session so it survives panel
+        // close and the server's startup sweep of cli-ephemeral-* sessions.
+        await this.promoteEphemeralIfNeeded();
 
         try {
             const result = await this.session.dispatcher.processCommand(
