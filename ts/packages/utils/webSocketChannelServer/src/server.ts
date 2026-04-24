@@ -54,19 +54,27 @@ export async function createWebSocketChannelServer(
                     }
                     return;
                 }
-                ws.send(
-                    data,
-                    cb
-                        ? (err) => {
-                              if (err) {
-                                  debugError(`send error callback: ${err}`);
-                                  cb(err);
-                              } else {
-                                  cb(null);
-                              }
-                          }
-                        : undefined,
-                );
+                try {
+                    ws.send(
+                        data,
+                        (err) => {
+                            if (err) {
+                                debugError(`send error callback: ${err}`);
+                            }
+                            if (cb) {
+                                cb(err ?? null);
+                            }
+                        },
+                    );
+                } catch (err) {
+                    // Synchronous failures from ws.send (e.g. socket closed
+                    // mid-write) — surface to the caller if it asked, but
+                    // don't escalate to an uncaughtException.
+                    debugError(`send threw: ${err}`);
+                    if (cb) {
+                        cb(err as Error);
+                    }
+                }
             },
         );
         ws.on("message", (data: Buffer) => {
