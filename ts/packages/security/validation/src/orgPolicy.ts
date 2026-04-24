@@ -464,7 +464,7 @@ function globMatch(path: string, pattern: string): boolean {
 
     // Convert glob to regex
     const regexStr = normalizedPattern
-        .replace(/[.+^${}()|[\]]/g, "\\$&") // escape regex chars except * and ?
+        .replace(/[\\.+^${}()|[\]]/g, "\\$&") // escape regex chars (incl. \) except * and ?
         .replace(/\*\*/g, "{{DOUBLESTAR}}") // temp placeholder
         .replace(/\*/g, "[^/]*") // * matches within a segment
         .replace(/{{DOUBLESTAR}}/g, ".*") // ** matches across segments
@@ -876,12 +876,13 @@ function isSubpathOfAny(path: string, paths: Set<string>): boolean {
 
 /** Creates a safe mount name from a path */
 function safeName(path: string): string {
-    return (
-        path
-            .replace(/[^a-zA-Z0-9]/g, "_")
-            .replace(/^_+|_+$/g, "")
-            .slice(-30) || "vol"
-    );
+    // Trim with two anchored patterns instead of one alternation to keep
+    // the match linear under the ReDoS check.
+    const sanitized = path
+        .replace(/[^a-zA-Z0-9]/g, "_")
+        .replace(/^_+/, "")
+        .replace(/_+$/, "");
+    return sanitized.slice(-30) || "vol";
 }
 
 /**

@@ -1,10 +1,26 @@
 {
   "name": "mcp-plan-validation",
   "version": "0.1.0",
+  "private": true,
   "description": "Plan-validated agent execution via MCP. Self-checking model loops with org policy enforcement.",
+  "keywords": [
+    "mcp",
+    "validation",
+    "agent",
+    "plan",
+    "policy",
+    "claude",
+    "copilot",
+    "cursor"
+  ],
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/security/mcpValidation"
+  },
   "license": "MIT",
   "author": "Microsoft",
-  "private": true,
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -24,15 +40,15 @@
     "dev": "tsc && node dist/index.js",
     "init": "tsc && node dist/init.js",
     "test": "tsc && node dist/mcpValidationTest.js",
-    "test:happy": "tsc && node dist/mcpValidationTest.js happy",
     "test:block": "tsc && node dist/mcpValidationTest.js block",
-    "test:constraint": "tsc && node dist/mcpValidationTest.js constraint",
-    "test:policy-unit": "tsc && node dist/mcpValidationTest.js policy-unit",
-    "test:policy-integration": "tsc && node dist/mcpValidationTest.js policy-integration",
-    "test:postcond-unit": "tsc && node dist/mcpValidationTest.js postcond-unit",
-    "test:postcond-integration": "tsc && node dist/mcpValidationTest.js postcond-integration",
     "test:capability": "tsc && node dist/mcpValidationTest.js capability",
-    "test:container": "tsc && node dist/mcpValidationTest.js container"
+    "test:constraint": "tsc && node dist/mcpValidationTest.js constraint",
+    "test:container": "tsc && node dist/mcpValidationTest.js container",
+    "test:happy": "tsc && node dist/mcpValidationTest.js happy",
+    "test:policy-integration": "tsc && node dist/mcpValidationTest.js policy-integration",
+    "test:policy-unit": "tsc && node dist/mcpValidationTest.js policy-unit",
+    "test:postcond-integration": "tsc && node dist/mcpValidationTest.js postcond-integration",
+    "test:postcond-unit": "tsc && node dist/mcpValidationTest.js postcond-unit"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
@@ -46,15 +62,5 @@
     "rimraf": "^6.0.1",
     "tsx": "^4.21.0",
     "typescript": "^5.5.4"
-  },
-  "keywords": [
-    "mcp",
-    "validation",
-    "agent",
-    "plan",
-    "policy",
-    "claude",
-    "copilot",
-    "cursor"
-  ]
+  }
 }

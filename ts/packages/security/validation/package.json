@@ -1,10 +1,16 @@
 {
   "name": "validation",
   "version": "0.0.1",
+  "private": true,
   "description": "Plan-validated agent execution: core library. AgentPlan DSL, 13-pass plan validator, org policy engine, runtime predicate evaluator.",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/security/validation"
+  },
   "license": "MIT",
   "author": "Microsoft",
-  "private": true,
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

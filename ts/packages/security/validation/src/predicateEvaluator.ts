@@ -712,7 +712,7 @@ export function checkPlanPermission(
 function globMatch(path: string, pattern: string): boolean {
     const normalizedPattern = pattern.replace(/\\/g, "/");
     const regexStr = normalizedPattern
-        .replace(/[.+^${}()|[\]]/g, "\\$&")
+        .replace(/[\\.+^${}()|[\]]/g, "\\$&")
         .replace(/\*\*/g, "{{DOUBLESTAR}}")
         .replace(/\*/g, "[^/]*")
         .replace(/{{DOUBLESTAR}}/g, ".*")
