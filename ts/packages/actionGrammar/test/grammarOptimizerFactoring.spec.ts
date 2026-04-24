@@ -680,3 +680,83 @@ describe("Grammar Optimizer - Trie risks", () => {
         }
     });
 });
+
+describe("Grammar Optimizer - Trie edge variants (number, phraseSet, optional)", () => {
+    // ── Number-edge factoring: `stepMergeKey` keys number edges by
+    //    optional flag only; both alternatives share the same
+    //    number-with-no-optional edge and should merge.
+    it("factors a shared number wildcard prefix across alternatives", () => {
+        const text = `<Start> = <C>;
+<C> = volume $(n:number) up -> { dir: "up", n }
+    | volume $(n:number) down -> { dir: "down", n };`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { factorCommonPrefixes: true },
+        });
+        const optChoice = findFirstRulesPart(optimized.rules);
+        const baseChoice = findFirstRulesPart(baseline.rules);
+        // Factoring collapses 2 alternatives into 1 wrapper.
+        expect(optChoice!.rules.length).toBeLessThan(baseChoice!.rules.length);
+        for (const input of ["volume 5 up", "volume 7 down"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    it("factors with optional-number edges merging only with matching flag", () => {
+        // Two alternatives that share `set $(n:number)?` (optional
+        // number).  The optional flag on the number edge is part of
+        // the merge key; both sides agree, so factoring fires.
+        const text = `<Start> = <C>;
+<C> = set $(n:number)? on -> { state: "on", n }
+    | set $(n:number)? off -> { state: "off", n };`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { factorCommonPrefixes: true },
+        });
+        for (const input of ["set on", "set 5 on", "set off", "set 7 off"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+});
+
+describe("Grammar Optimizer - Wrapper rule spacingMode propagation", () => {
+    // When all factored members share a non-default `spacingMode`, the
+    // synthesized wrapper rule inherits it.  Top-level <Start> has
+    // multiple definitions each annotated `[spacing=required]`; the
+    // top-level factorer factors across them and the resulting
+    // wrapper rule must carry `spacingMode: "required"`.
+    it("propagates shared explicit spacingMode onto the wrapper rule", () => {
+        const text = `<Start> [spacing=required] = play hello -> 1;
+<Start> [spacing=required] = play world -> 2;`;
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { factorCommonPrefixes: true },
+        });
+        // Top-level reduces to a single shared-prefix wrapper.
+        expect(optimized.rules.length).toBe(1);
+        expect(optimized.rules[0].spacingMode).toBe("required");
+
+        // And matching still respects the required-spacing semantics.
+        const baseline = loadGrammarRules("t.grammar", text);
+        for (const input of ["play hello", "play world", "playhello"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    it("does not set wrapper spacingMode when members disagree", () => {
+        // Members with differing spacingMode → wrapper stays default
+        // (auto / undefined).
+        const text = `<Start> [spacing=required] = play hello -> 1;
+<Start> [spacing=optional] = play world -> 2;`;
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { factorCommonPrefixes: true },
+        });
+        expect(optimized.rules.length).toBe(1);
+        expect(optimized.rules[0].spacingMode).toBeUndefined();
+    });
+});
