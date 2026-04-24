@@ -91,7 +91,7 @@ export function printScorecard(scorecard: Scorecard): void {
     const passRate = s.total > 0 ? ((s.passed / s.total) * 100).toFixed(1) : 0;
 
     console.log("\n========================================");
-    console.log("  ScriptFlow Reliability Benchmark");
+    console.log("  PowerShell Reliability Benchmark");
     console.log("========================================");
     console.log(
         `  Total: ${s.total} | Passed: ${s.passed} | Failed: ${s.failed} | Pass Rate: ${passRate}%`,

@@ -19,16 +19,16 @@ export function evaluateGrammarMatch(
     if (expected.matchedFlow !== undefined) {
         const actualFlow = extractFlowName(commandResult, trace);
         if (expected.matchedFlow === null) {
-            // Negative test: should NOT match any scriptflow
+            // Negative test: should NOT match any powershell
             results.push({
                 passed:
-                    actualFlow === null || trace.matchedAgent !== "scriptflow",
+                    actualFlow === null || trace.matchedAgent !== "powershell",
                 component: "grammar",
-                expected: "no scriptflow match",
+                expected: "no powershell match",
                 actual: actualFlow ?? "no match",
                 message:
-                    actualFlow && trace.matchedAgent === "scriptflow"
-                        ? `Expected no scriptflow match but matched '${actualFlow}'`
+                    actualFlow && trace.matchedAgent === "powershell"
+                        ? `Expected no powershell match but matched '${actualFlow}'`
                         : undefined,
             });
         } else {
@@ -108,10 +108,10 @@ function extractFlowName(
     const firstAction = result?.actions?.[0];
     if (firstAction) {
         // Per-flow action types: actionName IS the flow name
-        if (firstAction.schemaName === "scriptflow") {
+        if (firstAction.schemaName === "powershell") {
             return firstAction.actionName;
         }
-        // Legacy: executeScriptFlow with flowName param
+        // Legacy: executePowerShellFlow with flowName param
         if (firstAction.parameters?.flowName) {
             return firstAction.parameters.flowName;
         }

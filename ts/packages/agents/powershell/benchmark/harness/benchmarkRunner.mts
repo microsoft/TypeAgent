@@ -172,11 +172,11 @@ export class BenchmarkRunner {
             // Expand variables in utterance text
             let text = utterance.text;
             const benchmarkDir = process.env.TEMP
-                ? join(process.env.TEMP, "scriptflow-benchmark")
+                ? join(process.env.TEMP, "powershell-benchmark")
                 : "";
-            const scriptflowPkg = join(this.options.benchmarkDir, "..");
+            const powershellPkg = join(this.options.benchmarkDir, "..");
             text = text.replace(/\$\{BENCHMARK_DIR\}/g, benchmarkDir);
-            text = text.replace(/\$\{SCRIPTFLOW_PKG\}/g, scriptflowPkg);
+            text = text.replace(/\$\{POWERSHELL_PKG\}/g, powershellPkg);
 
             debug(`Running [${scenario.id}]: "${text}"`);
 
@@ -223,7 +223,7 @@ export class BenchmarkRunner {
             }
             if (
                 displayText &&
-                /reasoning|editScriptFlow|createScriptFlow/i.test(displayText)
+                /reasoning|editPowerShellFlow|createPowerShellFlow/i.test(displayText)
             ) {
                 trace.reasoningInvoked = true;
             }
@@ -232,8 +232,8 @@ export class BenchmarkRunner {
             if (
                 actions?.some(
                     (a: any) =>
-                        a.actionName === "editScriptFlow" ||
-                        a.actionName === "createScriptFlow",
+                        a.actionName === "editPowerShellFlow" ||
+                        a.actionName === "createPowerShellFlow",
                 )
             ) {
                 trace.reasoningInvoked = true;

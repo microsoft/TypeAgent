@@ -1,5 +1,5 @@
 param(
-    [string]$TestRoot = "$env:TEMP\scriptflow-benchmark"
+    [string]$TestRoot = "$env:TEMP\powershell-benchmark"
 )
 
 if (-not (Test-Path $TestRoot)) {

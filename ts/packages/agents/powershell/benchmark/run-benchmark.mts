@@ -2,7 +2,7 @@
 // Licensed under the MIT License.
 
 /**
- * ScriptFlow Reliability Benchmark
+ * PowerShell Reliability Benchmark
  *
  * Usage:
  *   npx tsx benchmark/run-benchmark.mts [options]
@@ -90,7 +90,7 @@ async function createLiveDispatcher(
     persistDir: string,
 ): Promise<DispatcherAdapter> {
     // Resolve dispatcher and provider via relative paths to avoid cyclic
-    // workspace dependencies (scriptflow -> defaultAgentProvider -> scriptflow)
+    // workspace dependencies (powershell -> defaultAgentProvider -> powershell)
     const tsRoot = join(__dirname, "..", "..", "..", "..");
     const dispatcherPath = join(
         tsRoot,
@@ -130,7 +130,7 @@ async function createLiveDispatcher(
             nodeProvidersPath.replace(/\\/g, "/")
     );
 
-    const dispatcher = await createDispatcher("scriptflow-benchmark", {
+    const dispatcher = await createDispatcher("powershell-benchmark", {
         appAgentProviders: providers,
         agents: { actions: true, commands: true },
         execution: { history: false },
@@ -249,7 +249,7 @@ function createStubDispatcher(): DispatcherAdapter {
 async function main() {
     const options = parseArgs();
 
-    console.log("ScriptFlow Reliability Benchmark");
+    console.log("PowerShell Reliability Benchmark");
     console.log("================================");
 
     if (options.category) {
@@ -295,7 +295,7 @@ async function main() {
     // Check if benchmark environment is set up
     const benchmarkEnvDir = join(
         process.env.TEMP ?? "",
-        "scriptflow-benchmark",
+        "powershell-benchmark",
     );
     if (!existsSync(benchmarkEnvDir)) {
         console.log(`\nBenchmark environment not found at ${benchmarkEnvDir}`);
@@ -310,7 +310,7 @@ async function main() {
 
     const persistDir = join(
         process.env.TEMP ?? "/tmp",
-        "scriptflow-benchmark-session",
+        "powershell-benchmark-session",
     );
 
     // Clean previous session state so we start fresh

@@ -6,7 +6,7 @@ import type { ScriptRecipe } from "../types/scriptRecipe.js";
 import { basename } from "path";
 import registerDebug from "debug";
 
-const debug = registerDebug("typeagent:scriptflow:analyzer");
+const debug = registerDebug("typeagent:powershell:analyzer");
 
 const ANALYSIS_MODEL = "claude-sonnet-4-5-20250929";
 const MAX_SCRIPT_SIZE = 100 * 1024; // 100KB

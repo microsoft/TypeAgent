@@ -382,11 +382,11 @@
   {
     "id": "gm-25",
     "category": "grammar-match",
-    "description": "Negative: meta question about scriptflow",
+    "description": "Negative: meta question about powershell",
     "setup": { "requiredFlows": ["listFiles"] },
     "utterances": [
       {
-        "text": "explain how scriptflow works",
+        "text": "explain how powershell works",
         "expected": {
           "routedTo": "grammar",
           "matchedFlow": null

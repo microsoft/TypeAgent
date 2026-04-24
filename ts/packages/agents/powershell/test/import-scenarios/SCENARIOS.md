@@ -1,20 +1,20 @@
-# ScriptFlow Import — Test Scenario Guide
+# PowerShell Import — Test Scenario Guide
 
 ## Setup
 
 Run the setup script to create the test environment:
 
 ```powershell
-cd C:\src\TypeAgent\ts\packages\agents\scriptflow\test\import-scenarios
+cd C:\src\TypeAgent\ts\packages\agents\powershell\test\import-scenarios
 .\Setup-TestEnvironment.ps1
 ```
 
-Default location: `$env:TEMP\scriptflow-test`. Override with `-TestRoot D:\my\path`.
+Default location: `$env:TEMP\powershell-test`. Override with `-TestRoot D:\my\path`.
 
 After setup, all paths below use `$T` as shorthand for the test root.
 
 ```powershell
-$T = "$env:TEMP\scriptflow-test"
+$T = "$env:TEMP\powershell-test"
 ```
 
 ---
@@ -24,7 +24,7 @@ $T = "$env:TEMP\scriptflow-test"
 **Import:**
 
 ```
-@scriptflow import $T\scripts\staleBranches.ps1
+@powershell import $T\scripts\staleBranches.ps1
 ```
 
 **Verify recipe:** actionName should be something like `staleBranches` or `findStaleBranches`. Three parameters (RepoPath: path, DaysStale: number, Delete: boolean). Description pulled from .SYNOPSIS.
@@ -54,7 +54,7 @@ This scenario uses live filesystem data — no test data setup needed.
 **Import:**
 
 ```
-@scriptflow import $T\scripts\findLargeFiles.ps1
+@powershell import $T\scripts\findLargeFiles.ps1
 ```
 
 **Verify recipe:** Three parameters (Directory: path, MinSizeMB: number, TopN: number). Descriptions inferred from names.
@@ -106,7 +106,7 @@ New-Item -Path C:\Logs\AppServer -ItemType Junction -Target $T\logs
 Then import:
 
 ```
-@scriptflow import $T\scripts\logErrorGrep.ps1
+@powershell import $T\scripts\logErrorGrep.ps1
 ```
 
 **Verify recipe:** Analyzer should infer parameters for logDir, date pattern, and error regex. Description should mention scanning logs for errors/warnings.
@@ -132,7 +132,7 @@ scan the logs for errors
 **Import:**
 
 ```
-@scriptflow import $T\scripts\serviceHealth.ps1
+@powershell import $T\scripts\serviceHealth.ps1
 ```
 
 **Verify recipe:** Two parameters (ServiceList: string, OutputFormat: string). ValidateSet values (table/list/summary) should appear in description or parameter metadata.
@@ -164,7 +164,7 @@ Should show "Services: 3 checked | 2 running | 0 stopped | 1 missing" plus atten
 **Import:**
 
 ```
-@scriptflow import $T\scripts\portListeners.ps1
+@powershell import $T\scripts\portListeners.ps1
 ```
 
 **Verify recipe:** Single parameter (Ports: string). networkAccess should be false.
@@ -192,7 +192,7 @@ check ports 135,445,3389
 **Import:**
 
 ```
-@scriptflow import $T\scripts\diskSpaceAlert.ps1
+@powershell import $T\scripts\diskSpaceAlert.ps1
 ```
 
 **Verify recipe:** Analyzer should infer parameters for thresholdGB (number, default 10) and thresholdPct (number, default 15). actionName like `checkDiskSpace` or `diskSpaceAlert`.
@@ -214,7 +214,7 @@ check disk space
 **Import:**
 
 ```
-@scriptflow import $T\scripts\csvTransform.ps1
+@powershell import $T\scripts\csvTransform.ps1
 ```
 
 **Verify recipe:** Six parameters (InputFile: path, OutputFile: path, FilterColumn: string, FilterPattern: string, SelectColumns: string, NoHeader: boolean).
@@ -248,13 +248,13 @@ With flowParametersJson: `{"InputFile":"$T\\csv\\sensor_readings.csv","FilterCol
 Run all 7 imports in sequence to verify the full pipeline:
 
 ```
-@scriptflow import $T\scripts\staleBranches.ps1
-@scriptflow import $T\scripts\findLargeFiles.ps1
-@scriptflow import $T\scripts\logErrorGrep.ps1
-@scriptflow import $T\scripts\serviceHealth.ps1
-@scriptflow import $T\scripts\portListeners.ps1
-@scriptflow import $T\scripts\diskSpaceAlert.ps1
-@scriptflow import $T\scripts\csvTransform.ps1
+@powershell import $T\scripts\staleBranches.ps1
+@powershell import $T\scripts\findLargeFiles.ps1
+@powershell import $T\scripts\logErrorGrep.ps1
+@powershell import $T\scripts\serviceHealth.ps1
+@powershell import $T\scripts\portListeners.ps1
+@powershell import $T\scripts\diskSpaceAlert.ps1
+@powershell import $T\scripts\csvTransform.ps1
 ```
 
 Then verify all are registered:

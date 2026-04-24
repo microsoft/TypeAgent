@@ -1,5 +1,5 @@
 param(
-    [string]$TestRoot = "$env:TEMP\scriptflow-benchmark",
+    [string]$TestRoot = "$env:TEMP\powershell-benchmark",
     [switch]$Force
 )
 
@@ -21,7 +21,7 @@ $filesDir = Join-Path $TestRoot "files"
 New-Item -Path $filesDir -ItemType Directory -Force | Out-Null
 
 @("readme.txt", "config.json", "data.csv", "notes.md", "script.ps1") | ForEach-Object {
-    $content = "Test file: $_ - created for scriptflow benchmark"
+    $content = "Test file: $_ - created for powershell benchmark"
     Set-Content -Path (Join-Path $filesDir $_) -Value $content
 }
 

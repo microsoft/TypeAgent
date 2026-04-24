@@ -101,12 +101,12 @@ export class TraceCollector {
         }
 
         // Agent/action detection from grammar match
-        if (msg.includes("scriptflow") && msg.includes("executeAction")) {
-            trace.matchedAgent = "scriptflow";
+        if (msg.includes("powershell") && msg.includes("executeAction")) {
+            trace.matchedAgent = "powershell";
         }
 
         // Execution detection
-        if (msg.includes("scriptflow:handler")) {
+        if (msg.includes("powershell:handler")) {
             trace.executionAttempted = true;
         }
 

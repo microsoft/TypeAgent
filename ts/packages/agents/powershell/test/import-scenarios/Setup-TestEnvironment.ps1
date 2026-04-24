@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Sets up the test environment for ScriptFlow import scenario testing.
+    Sets up the test environment for PowerShell import scenario testing.
 
 .DESCRIPTION
     Creates all necessary test data at a target root directory:
@@ -11,20 +11,20 @@
     Scenarios 2, 4, 5, 6 query live system state and need no test data.
 
     Also copies the 7 test .ps1 scripts to a scripts/ directory for easy
-    import with @scriptflow import <path>.
+    import with @powershell import <path>.
 
 .PARAMETER TestRoot
-    Root directory for all test data. Default: $env:TEMP\scriptflow-test
+    Root directory for all test data. Default: $env:TEMP\powershell-test
 
 .PARAMETER Force
     If set, deletes any existing test environment at TestRoot before setup.
 
 .EXAMPLE
     .\Setup-TestEnvironment.ps1
-    .\Setup-TestEnvironment.ps1 -TestRoot D:\test\scriptflow -Force
+    .\Setup-TestEnvironment.ps1 -TestRoot D:\test\powershell -Force
 #>
 param(
-    [string]$TestRoot = "$env:TEMP\scriptflow-test",
+    [string]$TestRoot = "$env:TEMP\powershell-test",
     [switch]$Force
 )
 
@@ -202,6 +202,6 @@ Write-Host "  Scenario 6: Disk Space     — uses real disk volumes"
 Write-Host ""
 Write-Host "Quick start:" -ForegroundColor White
 Write-Host "  # In TypeAgent shell or CLI:" -ForegroundColor DarkGray
-Write-Host "  @scriptflow import $TestRoot\scripts\findLargeFiles.ps1" -ForegroundColor DarkGray
+Write-Host "  @powershell import $TestRoot\scripts\findLargeFiles.ps1" -ForegroundColor DarkGray
 Write-Host "  find large files in C:\Windows" -ForegroundColor DarkGray
 Write-Host ""

@@ -2,14 +2,14 @@
 // Licensed under the MIT License.
 
 /**
- * Seeds scriptflow flows into instance storage by importing .ps1 scripts
+ * Seeds powershell flows into instance storage by importing .ps1 scripts
  * through the live dispatcher. This tests the real import pipeline
  * (ScriptAnalyzer LLM analysis) and validates that LLM-generated grammar
  * patterns are good enough for matching.
  *
  * The approach:
  * 1. Create a temporary dispatcher with persistDir + storageProvider
- * 2. Run `@scriptflow import <path>` for each .ps1 script
+ * 2. Run `@powershell import <path>` for each .ps1 script
  * 3. Close the dispatcher (flows are now in instance storage on disk)
  * 4. The caller creates a fresh dispatcher that loads the flows at startup
  *
@@ -33,7 +33,7 @@ export interface SeedResult {
  * action names. Maps by matching description keywords to canonical names.
  */
 export function buildFlowNameMap(persistDir: string): Record<string, string> {
-    const indexPath = join(persistDir, "scriptflow", "index.json");
+    const indexPath = join(persistDir, "powershell", "index.json");
     if (!existsSync(indexPath)) return {};
 
     const index = JSON.parse(readFileSync(indexPath, "utf-8"));
@@ -105,7 +105,7 @@ export async function seedViaImport(
     }
 
     console.log(
-        `\nImporting ${scripts.length} script(s) via @scriptflow import...`,
+        `\nImporting ${scripts.length} script(s) via @powershell import...`,
     );
 
     const dispatcher = await createDispatcherFn();
@@ -119,7 +119,7 @@ export async function seedViaImport(
     try {
         for (const script of scripts) {
             const scriptPath = join(scriptsDir, script);
-            const cmd = `@scriptflow import ${scriptPath}`;
+            const cmd = `@powershell import ${scriptPath}`;
             try {
                 await dispatcher.processCommand(cmd);
                 const display = dispatcher.getDisplayText();

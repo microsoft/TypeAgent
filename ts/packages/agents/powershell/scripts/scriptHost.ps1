@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT License.
 
-# scriptHost.ps1 — Sandboxed PowerShell execution host for ScriptFlow
+# scriptHost.ps1 — Sandboxed PowerShell execution host for PowerShell agent
 # Creates a runspace with cmdlet whitelisting, module loading, and timeout enforcement.
 # Security: Path restrictions, network controls, cmdlet whitelisting.
 # Language: FullLanguage mode (allows [PSCustomObject], [math]::Round, etc.)

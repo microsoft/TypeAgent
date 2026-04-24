@@ -9,7 +9,7 @@
     },
     "utterances": [
       {
-        "text": "@scriptflow import ${SCRIPTFLOW_PKG}\\test\\import-scenarios\\scripts\\staleBranches.ps1",
+        "text": "@powershell import ${POWERSHELL_PKG}\\test\\import-scenarios\\scripts\\staleBranches.ps1",
         "expected": {
           "routedTo": "grammar",
           "execution": {
@@ -50,7 +50,7 @@
         }
       },
       {
-        "text": "@scriptflow import ${SCRIPTFLOW_PKG}\\test\\import-scenarios\\scripts\\findLargeFiles.ps1",
+        "text": "@powershell import ${POWERSHELL_PKG}\\test\\import-scenarios\\scripts\\findLargeFiles.ps1",
         "expected": {
           "routedTo": "grammar",
           "execution": {
@@ -114,7 +114,7 @@
         "text": "list script flows",
         "expected": {
           "routedTo": "grammar",
-          "matchedFlow": "listScriptFlows",
+          "matchedFlow": "listPowerShellFlows",
           "execution": {
             "shouldSucceed": true,
             "outputContains": ["listFiles", "findLargeFiles", "checkDiskSpace"]

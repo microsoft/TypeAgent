@@ -2,10 +2,10 @@
 // Licensed under the MIT License.
 
 /**
- * ScriptFlow recipe compiler — reads pending/*.recipe.json and generates:
+ * PowerShell recipe compiler — reads pending/*.recipe.json and generates:
  *   - flows/ACTION_NAME.flow.json (with script step type)
  *   - TypeScript type appended to src/schema/scriptActions.mts
- *   - Grammar rule appended to src/scriptflowSchema.agr
+ *   - Grammar rule appended to src/powershellSchema.agr
  *   - manifest.json flows entry
  *
  * Then runs: pnpm run asc && pnpm run agc && npx tsc -b
@@ -177,10 +177,10 @@ for (const recipeFile of recipeFiles) {
     } else {
         const tsType = buildTsType(recipe);
         schema = schema.replace(
-            /\nexport type ScriptFlowActions =/,
-            `${tsType}\n\nexport type ScriptFlowActions =`,
+            /\nexport type PowerShellActions =/,
+            `${tsType}\n\nexport type PowerShellActions =`,
         );
-        const unionStart = schema.indexOf("export type ScriptFlowActions =");
+        const unionStart = schema.indexOf("export type PowerShellActions =");
         const unionEnd = schema.indexOf(";", unionStart);
         const before = schema.substring(0, unionEnd);
         const after = schema.substring(unionEnd);
@@ -190,7 +190,7 @@ for (const recipeFile of recipeFiles) {
     }
 
     // 3. Update grammar: add to <Start> and append rules
-    const grammarPath = join(PKG, "src", "scriptflowSchema.agr");
+    const grammarPath = join(PKG, "src", "powershellSchema.agr");
     let grammar = readFileSync(grammarPath, "utf8");
 
     if (grammar.includes(`<${recipe.actionName}>`)) {
@@ -217,7 +217,7 @@ for (const recipeFile of recipeFiles) {
         grammar += rules.join("");
         writeFileSync(grammarPath, grammar);
         console.log(
-            `  ✓ src/scriptflowSchema.agr (added <${recipe.actionName}>)`,
+            `  ✓ src/powershellSchema.agr (added <${recipe.actionName}>)`,
         );
     }
 
