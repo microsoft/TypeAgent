@@ -69,8 +69,10 @@ export function activate(context: vscode.ExtensionContext): void {
             entry.statusDisposable.dispose();
             entry.focusDisposable.dispose();
             if (activeChat === entry) {
-                activeChat = chats.values().next().value;
-                refreshStatusBar();
+                activeChat = undefined;
+                const next = chats.values().next().value;
+                if (next) setActive(next);
+                else refreshStatusBar();
             }
             refreshFocusContext();
         });
@@ -130,7 +132,16 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 function setActive(entry: ChatEntry): void {
+    if (activeChat === entry) {
+        // Even if no change, ensure webview state matches (handles initial)
+        entry.bridge.setActive(true);
+        refreshStatusBar();
+        return;
+    }
+    const prev = activeChat;
     activeChat = entry;
+    prev?.bridge.setActive(false);
+    entry.bridge.setActive(true);
     refreshStatusBar();
 }
 
@@ -247,8 +258,10 @@ function openNewChatPanel(
         chats.delete(entry);
         if (activeChat === entry) {
             // Fall back to any remaining chat (sidebar, if open)
-            activeChat = chats.values().next().value;
-            refreshStatusBar();
+            activeChat = undefined;
+            const next = chats.values().next().value;
+            if (next) setActive(next);
+            else refreshStatusBar();
         }
         refreshFocusContext();
     });

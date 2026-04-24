@@ -55,6 +55,17 @@ body {
     font-style: italic;
 }
 
+/* When this chat is not the active one, mute the status ribbon so it's
+   visually clear which chat the global commands / status bar refer to. */
+body.chat-inactive .status.connected,
+body.chat-inactive .status.connecting,
+body.chat-inactive .status.disconnected,
+body.chat-inactive .status.switching {
+    background: var(--vscode-disabledForeground, #888);
+    color: var(--vscode-editor-background);
+    opacity: 0.7;
+}
+
 /* ── Messages area ───────────────────────────────────────────── */
 
 #messages {

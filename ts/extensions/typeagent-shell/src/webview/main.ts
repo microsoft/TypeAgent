@@ -91,6 +91,9 @@ window.addEventListener("message", (event) => {
         case "historyReplay":
             chatUI.replayHistory(msg.entries);
             break;
+        case "setActive":
+            document.body.classList.toggle("chat-inactive", !msg.active);
+            break;
     }
 });
 

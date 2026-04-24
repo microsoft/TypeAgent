@@ -51,6 +51,7 @@ export type BridgeToWebviewMessage =
     | { type: "error"; message: string }
     | { type: "switching"; switching: boolean; targetName?: string }
     | { type: "userInfo"; name: string }
+    | { type: "setActive"; active: boolean }
     | {
           type: "historyReplay";
           entries: Array<{
@@ -315,6 +316,14 @@ export class AgentServerBridge {
             this.disconnect();
         }
         this.statusBarItem.dispose();
+    }
+
+    /**
+     * Tell webviews bound to this bridge whether they are the active chat.
+     * Used to visually mute non-active chats.
+     */
+    setActive(active: boolean): void {
+        this.broadcastToWebviews({ type: "setActive", active });
     }
 
     /**
