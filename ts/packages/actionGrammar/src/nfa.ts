@@ -180,6 +180,7 @@ export class NFABuilder {
         appendToSlot?: boolean,
         actionName?: string,
         propertyPath?: string,
+        slotValue?: string,
     ): void {
         const state = this.states[from];
         if (!state) {
@@ -197,6 +198,7 @@ export class NFABuilder {
         };
         if (actionName) trans.actionName = actionName;
         if (propertyPath) trans.propertyPath = propertyPath;
+        if (slotValue !== undefined) trans.slotValue = slotValue;
         state.transitions.push(trans);
     }
 
@@ -207,16 +209,25 @@ export class NFABuilder {
         slotIndex?: number,
         slotValue?: string,
     ): void {
-        const state = this.states[from];
-        if (!state) {
-            throw new Error(`State ${from} does not exist`);
-        }
-        const trans: NFATransition = { type: "token", to, tokens };
-        if (slotIndex !== undefined) {
-            trans.slotIndex = slotIndex;
-            if (slotValue !== undefined) trans.slotValue = slotValue;
-        }
-        state.transitions.push(trans);
+        // Route through addTransition so token transitions have the
+        // same property shape as wildcard / epsilon transitions
+        // (variable / typeName / checked / appendToSlot keys present
+        // as `undefined`).  Avoids divergence in any consumer that
+        // fingerprints transitions by `Object.keys`.
+        this.addTransition(
+            from,
+            to,
+            "token",
+            tokens,
+            undefined, // variable
+            undefined, // typeName
+            undefined, // checked
+            slotIndex,
+            undefined, // appendToSlot
+            undefined, // actionName
+            undefined, // propertyPath
+            slotValue,
+        );
     }
 
     addEpsilonTransition(from: number, to: number): void {

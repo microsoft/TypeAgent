@@ -6,9 +6,11 @@ import {
     CompiledObjectElement,
     CompiledSpacingMode,
     CompiledValueNode,
+    getCapturedVariableName,
     Grammar,
     GrammarPart,
     GrammarRule,
+    isCaptureBearingPart,
     PhraseSetPart,
     RulesPart,
     StringPart,
@@ -35,6 +37,20 @@ export type GrammarOptimizationOptions = {
      * rule by index) must capture it before this pass runs.
      */
     factorCommonPrefixes?: boolean;
+
+    /**
+     * Behavior when the inliner reaches an internal invariant violation
+     * (a bound `RulesPart` whose child has no binding-friendly part —
+     * see `tryInlineRulesPart`).  This indicates either a compiler bug
+     * upstream or a future change to `hasValue` semantics.
+     *
+     * - `"debug"` (default): log via `debug` and refuse the inlining
+     *   (returns `undefined`, leaving the AST unchanged at this site).
+     *   Safe for production.
+     * - `"throw"`: throw an `Error`.  Useful in tests / CI to surface
+     *   regressions immediately.
+     */
+    onInvariantViolation?: "debug" | "throw";
 };
 
 /**
@@ -68,8 +84,11 @@ export function optimizeGrammar(
         return grammar;
     }
     let rules = grammar.rules;
+    const inlineConfig: InlineConfig = {
+        onInvariantViolation: options.onInvariantViolation ?? "debug",
+    };
     if (options.inlineSingleAlternatives) {
-        rules = inlineSingleAlternativeRules(rules);
+        rules = inlineSingleAlternativeRules(rules, inlineConfig);
     }
     if (options.factorCommonPrefixes) {
         rules = factorCommonPrefixes(rules);
@@ -80,7 +99,7 @@ export function optimizeGrammar(
             // single-alternative RulesParts that were not visible to
             // Pass 1 in their pre-factored shape.  Re-run the inliner so
             // those collapse.
-            rules = inlineSingleAlternativeRules(rules);
+            rules = inlineSingleAlternativeRules(rules, inlineConfig);
         }
     }
     if (rules === grammar.rules) {
@@ -103,8 +122,14 @@ export function optimizeGrammar(
  * after the pass.  Preserves the dedup invariant that
  * `grammarSerializer.ts` relies on (`rulesToIndex.get(p.rules)`).
  */
+/** Configuration for a single inline pass. */
+type InlineConfig = {
+    onInvariantViolation: "debug" | "throw";
+};
+
 export function inlineSingleAlternativeRules(
     rules: GrammarRule[],
+    config: InlineConfig = { onInvariantViolation: "debug" },
 ): GrammarRule[] {
     const counter = { inlined: 0 };
     const memo: RulesArrayMemo = new Map();
@@ -114,7 +139,7 @@ export function inlineSingleAlternativeRules(
     // call site and bloat the serialized grammar (the serializer dedups
     // by array identity).
     const refCounts = countRulesArrayRefs(rules);
-    const result = inlineRulesArray(rules, counter, memo, refCounts);
+    const result = inlineRulesArray(rules, counter, memo, refCounts, config);
     if (counter.inlined > 0) {
         debug(`inlined ${counter.inlined} single-alternative RulesParts`);
     }
@@ -152,6 +177,7 @@ function inlineRulesArray(
     counter: { inlined: number },
     memo: RulesArrayMemo,
     refCounts: Map<GrammarRule[], number>,
+    config: InlineConfig,
 ): GrammarRule[] {
     const cached = memo.get(rules);
     if (cached !== undefined) return cached;
@@ -162,7 +188,7 @@ function inlineRulesArray(
     // walk when no rule in this array is rewritten.
     let next: GrammarRule[] | undefined;
     for (let i = 0; i < rules.length; i++) {
-        const r = inlineRule(rules[i], counter, memo, refCounts);
+        const r = inlineRule(rules[i], counter, memo, refCounts, config);
         if (next !== undefined) {
             next.push(r);
         } else if (r !== rules[i]) {
@@ -180,6 +206,7 @@ function inlineRule(
     counter: { inlined: number },
     memo: RulesArrayMemo,
     refCounts: Map<GrammarRule[], number>,
+    config: InlineConfig,
 ): GrammarRule {
     // Per-parent-rule counter for opaque α-rename names.  Shared
     // across every `tryInlineRulesPart` call for this rule so two
@@ -192,6 +219,7 @@ function inlineRule(
         memo,
         refCounts,
         renameState,
+        config,
     );
     if (!changed) {
         return rule;
@@ -245,6 +273,7 @@ function inlineParts(
     memo: RulesArrayMemo,
     refCounts: Map<GrammarRule[], number>,
     renameState: RenameState,
+    config: InlineConfig,
 ): {
     parts: GrammarPart[];
     changed: boolean;
@@ -267,6 +296,7 @@ function inlineParts(
             counter,
             memo,
             refCounts,
+            config,
         );
         const rewritten: RulesPart =
             inlinedRules !== p.rules ? { ...p, rules: inlinedRules } : p;
@@ -282,7 +312,7 @@ function inlineParts(
         const shared = (refCounts.get(p.rules) ?? 1) > 1;
         const replacement = shared
             ? undefined
-            : tryInlineRulesPart(rewritten, parentRule, renameState);
+            : tryInlineRulesPart(rewritten, parentRule, renameState, config);
         if (replacement !== undefined) {
             counter.inlined++;
             changed = true;
@@ -325,6 +355,7 @@ function tryInlineRulesPart(
     part: RulesPart,
     parentRule: GrammarRule,
     renameState: RenameState,
+    config: InlineConfig,
 ): TryInlineResult | undefined {
     if (part.repeat || part.optional) {
         return undefined;
@@ -483,12 +514,16 @@ function tryInlineRulesPart(
             // (some top-level part is variable-bearing → friendly in
             // the multi-part branch) or `parts.length === 1 &&
             // defaultValue` (single-part → any type is friendly).
-            // Either way at least one friendly part exists.  Throw
-            // loudly if a future compiler change ever loosens
-            // hasValue and reaches this point.
-            throw new Error(
-                `Internal: bound RulesPart child has no binding-friendly part (variable='${part.variable}')`,
-            );
+            // Either way at least one friendly part exists.  If a
+            // future compiler change ever loosens hasValue and reaches
+            // this point, the configured policy decides whether to
+            // throw (tests / CI) or just bail out and log (production).
+            const msg = `Internal: bound RulesPart child has no binding-friendly part (variable='${part.variable}')`;
+            if (config.onInvariantViolation === "throw") {
+                throw new Error(msg);
+            }
+            debug(`${msg} — refusing to inline (onInvariantViolation=debug)`);
+            return undefined;
         }
         const bindingCp = child.parts[bindingIdx];
         const newParts = child.parts.slice();
@@ -846,6 +881,12 @@ function stepMergeKey(step: TrieStep, state: BuildState): string {
     // Use JSON.stringify for any field that could contain unrestricted text
     // (token values, matcher names) so that delimiters / colons / quotes
     // inside the field can't collide with the key's structural separators.
+    //
+    // Note: tokens are encoded as a JSON array, so atomic-bound vs.
+    // exploded-unbound StringPart encodings stay on separate edges by
+    // construction — `JSON.stringify(["foo"])` ≠ `JSON.stringify(["fo","o"])`,
+    // and the `local` parity bit further guarantees bound and unbound
+    // single-token forms also never collide.
     switch (step.kind) {
         case "string":
             return `s:${JSON.stringify(step.tokens)}:${step.local !== undefined ? 1 : 0}`;
@@ -1352,15 +1393,9 @@ function buildWrapperRule(
 function collectVariableNames(parts: GrammarPart[]): Set<string> {
     const out = new Set<string>();
     for (const p of parts) {
-        if (
-            (p.type === "wildcard" ||
-                p.type === "number" ||
-                p.type === "rules" ||
-                p.type === "string" ||
-                p.type === "phraseSet") &&
-            p.variable !== undefined
-        ) {
-            out.add(p.variable);
+        const v = getCapturedVariableName(p);
+        if (v !== undefined) {
+            out.add(v);
         }
     }
     return out;
@@ -1385,14 +1420,7 @@ function renameAllChildBindings(
     let outParts: GrammarPart[] | undefined;
     for (let i = 0; i < parts.length; i++) {
         const p = parts[i];
-        if (
-            (p.type !== "wildcard" &&
-                p.type !== "number" &&
-                p.type !== "rules" &&
-                p.type !== "string" &&
-                p.type !== "phraseSet") ||
-            p.variable === undefined
-        ) {
+        if (!isCaptureBearingPart(p) || p.variable === undefined) {
             if (outParts !== undefined) outParts.push(p);
             continue;
         }

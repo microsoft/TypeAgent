@@ -11,6 +11,7 @@ import {
     RulesPart,
     PhraseSetPart,
     CompiledSpacingMode,
+    getCapturedVariableName,
 } from "./grammarTypes.js";
 import { NFA, NFABuilder } from "./nfa.js";
 import {
@@ -310,25 +311,6 @@ function isSingleVariableRule(rule: GrammarRule): { variable: string } | false {
         }
     }
     return false;
-}
-
-/**
- * Return the capture-variable name for any GrammarPart kind that
- * supports one (wildcard / number / rules / string / phraseSet — the
- * last two carry an optimizer-introduced binding).  Centralized so
- * that adding a future capture-bearing part type only needs one edit.
- */
-function getCapturedVariableName(part: GrammarPart): string | undefined {
-    switch (part.type) {
-        case "wildcard":
-        case "number":
-        case "rules":
-        case "string":
-        case "phraseSet":
-            return part.variable;
-        default:
-            return undefined;
-    }
 }
 
 /**
@@ -657,6 +639,18 @@ function compilePart(
     checkedVariables?: Set<string>,
     overrideVariableName?: string,
 ): number {
+    // Deprecated path has no slot context, so optimizer-introduced
+    // captures on string / phraseSet parts (which require a slot to
+    // write into) cannot be honored.  Reject loudly rather than silently
+    // dropping the binding and producing a wrong action result.
+    if (
+        (part.type === "string" || part.type === "phraseSet") &&
+        part.variable !== undefined
+    ) {
+        throw new Error(
+            `compilePart (deprecated, no slot context) cannot honor capture variable '${part.variable}' on ${part.type}Part — caller must use compilePartWithSlots`,
+        );
+    }
     switch (part.type) {
         case "string":
             return compileStringPart(builder, part, fromState, toState);
@@ -686,7 +680,12 @@ function compilePart(
             );
 
         case "phraseSet":
-            return compilePhraseSetPart(builder, part, fromState, toState);
+            return compilePhraseSetPartNoSlots(
+                builder,
+                part,
+                fromState,
+                toState,
+            );
 
         default:
             throw new Error(`Unknown part type: ${(part as any).type}`);
@@ -748,7 +747,7 @@ function compilePartWithSlots(
             );
 
         case "phraseSet":
-            return compilePhraseSetPart(
+            return compilePhraseSetPartWithSlots(
                 builder,
                 part,
                 fromState,
@@ -772,19 +771,34 @@ function compilePartWithSlots(
  * PhraseSetParts are always non-optional at this level; optionality is handled
  * by the enclosing RulesPart (e.g., from "(<Polite>)?").
  *
- * When `part.variable` is set (an optimizer-introduced capture), the matched
- * phrase tokens are written as a joined string into the named slot.  See
- * `tryTransition` in `nfaInterpreter.ts` for the runtime side.
+ * Two callers exist:
+ *  - `compilePhraseSetPartNoSlots` for the deprecated, slot-less compile
+ *    path (rejects optimizer-introduced captures upstream — see
+ *    `compilePart`).
+ *  - `compilePhraseSetPartWithSlots` for the slot-aware path; when
+ *    `part.variable` is set the matched phrase tokens are written as a
+ *    joined string into the named slot.  See `tryTransition` in
+ *    `nfaInterpreter.ts` for the runtime side.
  */
-function compilePhraseSetPart(
+function compilePhraseSetPartNoSlots(
     builder: NFABuilder,
     part: PhraseSetPart,
     fromState: number,
     toState: number,
-    context?: RuleCompilationContext,
+): number {
+    builder.addPhraseSetTransition(fromState, toState, part.matcherName);
+    return toState;
+}
+
+function compilePhraseSetPartWithSlots(
+    builder: NFABuilder,
+    part: PhraseSetPart,
+    fromState: number,
+    toState: number,
+    context: RuleCompilationContext,
 ): number {
     const slotIndex =
-        part.variable !== undefined && context !== undefined
+        part.variable !== undefined
             ? context.slotMap.get(part.variable)
             : undefined;
     builder.addPhraseSetTransition(

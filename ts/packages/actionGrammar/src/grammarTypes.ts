@@ -247,6 +247,47 @@ export type GrammarPart =
     | VarNumberPart
     | RulesPart
     | PhraseSetPart;
+
+/**
+ * GrammarPart kinds that can carry an optional capture `variable`.
+ * Centralized so adding a future capture-bearing part type only needs
+ * one edit here plus the predicate / accessor below.
+ *
+ * - wildcard / number: source-level captures (`$(name:string)`, `$(n:number)`).
+ * - rules:             nested rule capture (`$(x:<Inner>)`).
+ * - string / phraseSet: optimizer-introduced captures only — no `.agr` source syntax.
+ */
+export type CaptureBearingPart =
+    | VarStringPart
+    | VarNumberPart
+    | RulesPart
+    | StringPart
+    | PhraseSetPart;
+
+/** Type guard: does this part kind support a capture `variable`? */
+export function isCaptureBearingPart(
+    part: GrammarPart,
+): part is CaptureBearingPart {
+    switch (part.type) {
+        case "wildcard":
+        case "number":
+        case "rules":
+        case "string":
+        case "phraseSet":
+            return true;
+        default:
+            return false;
+    }
+}
+
+/**
+ * Return the capture-variable name for any GrammarPart kind that
+ * supports one.  Returns `undefined` when the part either doesn't
+ * support captures or carries no binding.
+ */
+export function getCapturedVariableName(part: GrammarPart): string | undefined {
+    return isCaptureBearingPart(part) ? part.variable : undefined;
+}
 export type GrammarRule = {
     parts: GrammarPart[];
     value?: CompiledValueNode | undefined;

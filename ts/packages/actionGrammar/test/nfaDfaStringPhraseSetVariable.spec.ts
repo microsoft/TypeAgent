@@ -32,7 +32,20 @@ import type { Grammar } from "../src/grammarTypes.js";
 function bestNfaActionValue(grammar: Grammar, request: string): unknown {
     const nfa = compileGrammarToNFA(grammar, "test.grammar");
     const results = matchGrammarWithNFA(grammar, nfa, request);
-    return results[0]?.match;
+    // Each test grammar here has exactly one rule, so any successful
+    // match must have produced the same action value regardless of
+    // result ordering.  Return the first match (or undefined when the
+    // grammar didn't match).  Asserting via the set of all matches
+    // would be more robust against future ordering changes — but with
+    // a single-rule grammar there's at most one distinct value.
+    if (results.length === 0) return undefined;
+    const distinct = new Set(results.map((r) => JSON.stringify(r.match)));
+    if (distinct.size > 1) {
+        throw new Error(
+            `Expected a single distinct action value, got ${distinct.size}: ${[...distinct].join(", ")}`,
+        );
+    }
+    return results[0].match;
 }
 
 function bestDfaActionValue(grammar: Grammar, request: string): unknown {
