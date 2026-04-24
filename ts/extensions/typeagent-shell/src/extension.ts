@@ -233,10 +233,24 @@ function openNewChatPanel(
     const n = panelCounter;
     const friendly = `Chat ${n}`;
     const title = `TypeAgent ${friendly}`;
+
+    // Open in the column right of the right-most existing chat panel so
+    // multiple panels lay out side-by-side instead of stacking as tabs.
+    let targetColumn: vscode.ViewColumn = vscode.ViewColumn.Beside;
+    let max = 0;
+    for (const c of chats) {
+        const col = c.panel?.viewColumn;
+        if (typeof col === "number" && col > max) max = col;
+    }
+    if (max > 0) {
+        // ViewColumn.One = 1, Two = 2, Three = 3, ... up to Nine = 9.
+        targetColumn = Math.min(max + 1, 9) as vscode.ViewColumn;
+    }
+
     const panel = vscode.window.createWebviewPanel(
         "typeagent-shell.chatPanel",
         title,
-        vscode.ViewColumn.Beside,
+        targetColumn,
         {
             enableScripts: true,
             retainContextWhenHidden: true,
