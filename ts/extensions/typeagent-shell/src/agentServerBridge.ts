@@ -1026,8 +1026,151 @@ export class AgentServerBridge {
             requestInteraction: (_interaction: PendingInteractionRequest) => {},
             interactionResolved: () => {},
             interactionCancelled: () => {},
-            takeAction: () => {},
+            takeAction: (_requestId, action, data) => {
+                if (action === "vscode-shell-action") {
+                    this.handleShellAction(data).catch((e: any) => {
+                        vscode.window.showErrorMessage(
+                            `Shell action failed: ${e?.message ?? String(e)}`,
+                        );
+                    });
+                }
+            },
         };
+    }
+
+    /**
+     * Handle a "vscode-shell-action" routed from the code agent. Targeted
+     * to the originating client by the agent server's takeAction routing,
+     * so only this bridge (the originator's bridge) receives it.
+     */
+    private async handleShellAction(data: any): Promise<void> {
+        if (!data || typeof data !== "object") return;
+        const actionName = data.actionName as string | undefined;
+        const params = (data.parameters ?? {}) as {
+            name?: string;
+            newName?: string;
+        };
+
+        switch (actionName) {
+            case "newConversation":
+                await this.newConversationFromAgent(params.name);
+                break;
+            case "renameConversation":
+                if (params.newName) {
+                    await this.renameCurrentConversationFromAgent(
+                        params.newName,
+                    );
+                }
+                break;
+            case "switchConversation":
+                await this.switchConversationFromAgent(params.name);
+                break;
+        }
+    }
+
+    /**
+     * Create a new conversation programmatically (from a chat-issued
+     * action). If `name` is omitted, falls back to the interactive prompt.
+     */
+    private async newConversationFromAgent(name?: string): Promise<void> {
+        if (!this.connection) {
+            vscode.window.showWarningMessage("Not connected to agent server.");
+            return;
+        }
+        if (!name || !name.trim()) {
+            await this.newSession();
+            return;
+        }
+
+        const trimmed = name.trim();
+        const sessions = await this.connection.listSessions();
+        const existing = sessions.find(
+            (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
+        );
+        if (existing) {
+            vscode.window.showWarningMessage(
+                `A conversation named "${trimmed}" already exists; switching to it.`,
+            );
+            await this.joinSpecificSession(existing.sessionId, existing.name);
+            return;
+        }
+
+        const info = await this.connection.createSession(trimmed);
+        await this.joinSpecificSession(info.sessionId, trimmed);
+        vscode.window.showInformationMessage(
+            `Created and switched to conversation "${trimmed}"`,
+        );
+    }
+
+    /**
+     * Rename the current conversation programmatically (from chat).
+     */
+    private async renameCurrentConversationFromAgent(
+        newName: string,
+    ): Promise<void> {
+        if (!this.connection || !this.session) {
+            vscode.window.showWarningMessage("No active conversation.");
+            return;
+        }
+        const trimmed = newName.trim();
+        if (!trimmed) return;
+
+        const sessions = await this.connection.listSessions();
+        const collision = sessions.find(
+            (s) =>
+                s.sessionId !== this.session!.sessionId &&
+                s.name.toLowerCase() === trimmed.toLowerCase(),
+        );
+        if (collision) {
+            vscode.window.showErrorMessage(
+                `A conversation named "${trimmed}" already exists.`,
+            );
+            return;
+        }
+
+        await this.connection.renameSession(this.session.sessionId, trimmed);
+        this.nameOverride = trimmed;
+        this.broadcastToWebviews({
+            type: "status",
+            connected: true,
+            sessionId: this.session.sessionId,
+            sessionName: this.getDisplayName(),
+        });
+        this.onStatusChanged?.();
+        vscode.window.showInformationMessage(
+            `Renamed conversation to "${trimmed}"`,
+        );
+    }
+
+    /**
+     * Switch to a conversation by display name (from chat). Falls back to
+     * the interactive picker if no name was provided or no match found.
+     */
+    private async switchConversationFromAgent(name?: string): Promise<void> {
+        if (!this.connection) {
+            vscode.window.showWarningMessage("Not connected to agent server.");
+            return;
+        }
+        if (!name || !name.trim()) {
+            await this.switchSession();
+            return;
+        }
+
+        const trimmed = name.trim();
+        const sessions = await this.connection.listSessions();
+        const match = sessions.find(
+            (s) => s.name.toLowerCase() === trimmed.toLowerCase(),
+        );
+        if (!match) {
+            vscode.window.showWarningMessage(
+                `No conversation named "${trimmed}" found.`,
+            );
+            return;
+        }
+        if (match.sessionId === this.session?.sessionId) {
+            return;
+        }
+        await this.joinSpecificSession(match.sessionId, match.name);
     }
 
     private broadcastToWebviews(msg: BridgeToWebviewMessage): void {

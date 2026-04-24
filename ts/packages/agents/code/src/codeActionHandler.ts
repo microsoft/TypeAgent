@@ -267,6 +267,21 @@ async function executeCodeAction(
         return undefined;
     }
 
+    // TypeAgent Shell conversation-management actions are routed back to
+    // the originating extension webview via takeAction (which targets the
+    // requesting client only). They do NOT use the Coda WebSocket bridge.
+    if (
+        action.actionName === "newConversation" ||
+        action.actionName === "renameConversation" ||
+        action.actionName === "switchConversation"
+    ) {
+        context.actionIO.takeAction("vscode-shell-action" as any, {
+            actionName: action.actionName,
+            parameters: (action as any).parameters,
+        });
+        return undefined;
+    }
+
     const agentContext = context.sessionContext.agentContext;
     const webSocketServer = agentContext.webSocketServer;
 
