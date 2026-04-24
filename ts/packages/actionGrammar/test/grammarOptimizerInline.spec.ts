@@ -409,28 +409,28 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         ]);
     });
 
-    // ── default-value behaviors not handled by the propagate branch ─────
+    // ── Stage 2: implicit-default literal capture handled in propagate branch ──
     //
-    // The matcher's `defaultValue` flag also fires for single-part
-    // rules whose only part is a string literal or phraseSet — the
-    // matcher returns the literal text as the rule's value.  Neither
-    // string nor phraseSet parts can carry a `variable`, so the
-    // optimizer's propagate branch refuses to inline these.  Verify
-    // that the wrapper stays in place AND that the value still flows.
+    // The matcher's `defaultValue` flag fires for single-part rules
+    // whose only part is a string literal or phraseSet — the matcher
+    // returns the literal text as the rule's value.  Stage 2 made
+    // string and phraseSet parts variable-capable, so the propagate
+    // branch can now retarget the parent's variable onto the single
+    // literal part directly, collapsing the wrapper.
 
-    it("leaves single string-literal child nested when parent captures via variable", () => {
-        // `<Inner> = hello;` produces "hello" as its value; parent's
-        // `t` binds to that.  Inlining would require putting `t` onto
-        // the string part — which the type system forbids — so the
-        // optimizer must leave the wrapper rule alone.
+    it("inlines single string-literal child by injecting parent's variable onto the StringPart", () => {
+        // Parent's `t` binds the wrapped <Inner>; <Inner> is a single
+        // StringPart "hello".  Stage 2: the propagate branch injects
+        // `variable: "t"` onto the StringPart and inlines.  The
+        // matcher writes "hello" to the `t` slot at runtime.
         const text = `<Start> = play $(t:<Inner>) -> { what: t };
 <Inner> = hello;`;
         const baseline = loadGrammarRules("t.grammar", text);
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        // Wrapper stays — same rules-part count.
-        expect(countRulesParts(optimized.rules)).toBe(
+        // Wrapper collapsed.
+        expect(countRulesParts(optimized.rules)).toBeLessThan(
             countRulesParts(baseline.rules),
         );
         expect(match(optimized, "play hello")).toStrictEqual(
@@ -441,18 +441,18 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         ]);
     });
 
-    it("leaves multi-string-literal child nested when parent captures via variable", () => {
-        // `<Greeting> = hello world;` is a single-part rule (the two
-        // tokens compile into one StringPart).  Same situation as the
-        // single-token case: matcher returns the matched text as the
-        // value, but it can't be propagated onto the StringPart.
+    it("inlines multi-token string-literal child by injecting parent's variable onto the StringPart", () => {
+        // <Greeting> = hello world; is a single-part rule (the two
+        // tokens compile into one StringPart).  Same as the
+        // single-token case: injection + inline; matcher writes the
+        // joined text to the `x` slot.
         const text = `<Start> = $(x:<Greeting>) -> x;
 <Greeting> = hello world;`;
         const baseline = loadGrammarRules("t.grammar", text);
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        expect(countRulesParts(optimized.rules)).toBe(
+        expect(countRulesParts(optimized.rules)).toBeLessThan(
             countRulesParts(baseline.rules),
         );
         expect(match(optimized, "hello world")).toStrictEqual(
@@ -619,5 +619,82 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         expect(match(baseline, "play the hello")).toStrictEqual([
             { what: { who: "hello" } },
         ]);
+    });
+
+    // Stage 2: bound PhraseSetPart inlining.
+    // The propagate branch now accepts a single PhraseSetPart child
+    // as binding-friendly via the implicit-default fallback — the
+    // matcher writes the matched phrase tokens to the named slot.
+    // (The single-StringPart cases are covered by the two
+    // implicit-default tests above.)
+    it("inlines a single-PhraseSetPart child and retargets parent's variable", () => {
+        // <Polite> is intercepted by the grammar compiler and becomes
+        // a PhraseSetPart, so <Wrap> = <Polite>; is a single-PhraseSetPart
+        // child rule with no value.  matchGrammar (the interpreter)
+        // doesn't handle phraseSet, so we only assert structural
+        // collapse here; runtime capture is covered in
+        // grammarMatcherStringPhraseSetVariable.spec.ts.
+        const text = `<Start> = $(o:<Wrap>) go -> { opener: o };
+<Wrap> = <Polite>;`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { inlineSingleAlternatives: true },
+        });
+        expect(countRulesParts(optimized.rules)).toBeLessThan(
+            countRulesParts(baseline.rules),
+        );
+        const phraseSetPart = optimized.rules[0].parts.find(
+            (p) => p.type === "phraseSet",
+        );
+        expect(phraseSetPart).toBeDefined();
+        expect((phraseSetPart as { variable?: string }).variable).toBe("o");
+    });
+
+    it("retargets parent's variable onto a bound PhraseSetPart in a multi-part child", () => {
+        // After Stage 1 inlines <Wrap> into <Outer>, the latter
+        // becomes `please <PhraseSet:Polite,var=p>` — an unbound
+        // literal "please" plus a bound PhraseSetPart.  When the
+        // inliner then visits `$(o:<Outer>)`, the bound phraseSet is
+        // the lone value contributor at runtime; the binding-friendly
+        // check must recognize it (treating the unbound "please" as
+        // non-friendly) so that parent's `o` retargets onto the
+        // phraseSet rather than failing with false ambiguity.
+        const text = `<Start> = $(o:<Outer>) go -> { opener: o };
+<Outer> = please $(p:<Wrap>);
+<Wrap> = <Polite>;`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { inlineSingleAlternatives: true },
+        });
+        // <Wrap> wrapper collapsed; "please" + bound phraseSet sit
+        // directly in the start rule.
+        expect(countRulesParts(optimized.rules)).toBeLessThan(
+            countRulesParts(baseline.rules),
+        );
+        const collect = (parts: GrammarPart[], out: GrammarPart[]) => {
+            for (const p of parts) {
+                out.push(p);
+                if (p.type === "rules") {
+                    for (const r of p.rules) collect(r.parts, out);
+                }
+            }
+        };
+        const all: GrammarPart[] = [];
+        for (const r of optimized.rules) collect(r.parts, all);
+        const phraseSetPart = all.find((p) => p.type === "phraseSet");
+        expect(phraseSetPart).toBeDefined();
+        // Parent's `o` retargeted onto the bound phraseSet — the same
+        // user-named variable wins because the inliner doesn't
+        // α-rename the binding it injects.
+        expect((phraseSetPart as { variable?: string }).variable).toBe("o");
+        // The literal "please" comes along unchanged (no variable).
+        const stringPart = all.find(
+            (p) =>
+                p.type === "string" &&
+                Array.isArray(p.value) &&
+                p.value.includes("please"),
+        );
+        expect(stringPart).toBeDefined();
+        expect((stringPart as { variable?: string }).variable).toBeUndefined();
     });
 });

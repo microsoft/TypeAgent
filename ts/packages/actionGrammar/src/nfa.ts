@@ -44,6 +44,13 @@ export interface NFATransition {
     slotIndex?: number | undefined;
     // If true, append to existing value (for multi-word wildcards)
     appendToSlot?: boolean | undefined;
+    // For token / phraseSet transitions: when set together with slotIndex,
+    // overrides the matched value written to the slot.  Used for StringPart
+    // captures so the slot receives the joined fixed string (`value.join(" ")`)
+    // rather than the single normalized token from the consumed transition.
+    // PhraseSet captures don't set this — the matcher writes the joined matched
+    // phrase tokens at runtime (the matched phrase varies per input).
+    slotValue?: string | undefined;
 
     // For epsilon transitions exiting nested rules:
     // When true, evaluate the current rule's actionValue and write to parent slot
@@ -191,8 +198,20 @@ export class NFABuilder {
         state.transitions.push(trans);
     }
 
-    addTokenTransition(from: number, to: number, tokens: string[]): void {
+    addTokenTransition(
+        from: number,
+        to: number,
+        tokens: string[],
+        slotIndex?: number,
+        slotValue?: string,
+    ): void {
         this.addTransition(from, to, "token", tokens);
+        if (slotIndex !== undefined) {
+            const state = this.states[from];
+            const trans = state.transitions[state.transitions.length - 1];
+            trans.slotIndex = slotIndex;
+            if (slotValue !== undefined) trans.slotValue = slotValue;
+        }
     }
 
     addEpsilonTransition(from: number, to: number): void {
@@ -240,12 +259,15 @@ export class NFABuilder {
         from: number,
         to: number,
         matcherName: string,
+        slotIndex?: number,
     ): void {
         const state = this.states[from];
         if (!state) {
             throw new Error(`State ${from} does not exist`);
         }
-        state.transitions.push({ type: "phraseSet", matcherName, to });
+        const trans: NFATransition = { type: "phraseSet", matcherName, to };
+        if (slotIndex !== undefined) trans.slotIndex = slotIndex;
+        state.transitions.push(trans);
     }
 
     addWildcardTransition(

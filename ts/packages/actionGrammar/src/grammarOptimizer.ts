@@ -425,43 +425,85 @@ function tryInlineRulesPart(
     }
 
     // If the parent expects to capture this RulesPart into a variable, the
-    // child rule must provide exactly one binding-friendly part to take
-    // the variable name; otherwise we'd silently drop the binding.
-    // Multiple variable-bearing parts would mean child relied on an
-    // explicit value expression (which the no-value branch rules out)
-    // or violated the matcher's default-value contract; either way we
-    // can't safely re-target the parent's binding.  Other parts in
-    // child (string / phraseSet literals) come along unchanged.
+    // child must expose exactly one binding-friendly top-level part to take
+    // the parent's variable name; otherwise we'd silently drop the binding.
+    //
+    // "Binding-friendly" mirrors the matcher's implicit-default rule for
+    // a child with no explicit value:
+    //
+    //   - Single-part child: the lone part contributes the value (any
+    //     type — string / phraseSet via implicit text, wildcard /
+    //     number / rules via their captured value).  All five types
+    //     qualify.
+    //
+    //   - Multi-part child: the matcher requires exactly *one*
+    //     variable-bearing part (else its createValue throws
+    //     "missing/multiple values for default" at finalize time).
+    //     wildcard and number always carry a variable; rules /
+    //     string / phraseSet qualify only when bound (`cp.variable !==
+    //     undefined`).  An unbound rules / string / phraseSet
+    //     contributes nothing to the value at runtime, so it isn't a
+    //     binding target — and counting it would produce false
+    //     ambiguity rejections (e.g. child = `<X> $(n:string)` with
+    //     `<X>` unbound: only the wildcard is the real contributor).
+    //
+    // Multiple binding-friendly parts in the same child means child
+    // relied on an explicit value expression (which the no-value
+    // branch already rules out) or violated the matcher's
+    // default-value contract; either way we can't safely re-target
+    // the parent's binding.
     if (part.variable !== undefined) {
+        const isSinglePart = child.parts.length === 1;
         let bindingIdx = -1;
-        let bindingCp:
-            | Extract<GrammarPart, { type: "wildcard" | "number" | "rules" }>
-            | undefined;
         for (let i = 0; i < child.parts.length; i++) {
             const cp = child.parts[i];
-            if (
+            const friendly =
                 cp.type === "wildcard" ||
                 cp.type === "number" ||
-                cp.type === "rules"
-            ) {
-                if (bindingIdx !== -1) {
-                    return undefined;
-                }
-                bindingIdx = i;
-                bindingCp = cp;
+                ((cp.type === "rules" ||
+                    cp.type === "string" ||
+                    cp.type === "phraseSet") &&
+                    (isSinglePart || cp.variable !== undefined));
+            if (!friendly) continue;
+            if (bindingIdx !== -1) {
+                return undefined;
             }
+            bindingIdx = i;
         }
-        if (bindingCp === undefined) {
+        if (bindingIdx === -1) {
+            // Unreachable: we're past the `child.value !== undefined`
+            // branch, so child has no explicit value, and parent binds
+            // it via `part.variable`.  The compiler enforces
+            // `child.hasValue === true` at any bound rule reference
+            // (grammarCompiler "Referenced rule does not produce a
+            // value for variable" check); for a value-less child,
+            // hasValue=true requires either `variableCount === 1`
+            // (some top-level part is variable-bearing → friendly in
+            // the multi-part branch) or `parts.length === 1 &&
+            // defaultValue` (single-part → any type is friendly).
+            // Either way at least one friendly part exists.  Trace
+            // and bail out conservatively if the invariant is ever
+            // violated (e.g. a future compiler change loosens
+            // hasValue).
+            debug(
+                `tryInlineRulesPart: no binding-friendly part in child of bound RulesPart (variable='${part.variable}'); refusing to inline`,
+            );
             return undefined;
         }
+        const bindingCp = child.parts[bindingIdx] as Extract<
+            GrammarPart,
+            {
+                type: "wildcard" | "number" | "rules" | "string" | "phraseSet";
+            }
+        >;
         const newParts = child.parts.slice();
         newParts[bindingIdx] = { ...bindingCp, variable: part.variable };
         // No duplicate-name guard here: if the parent already had two
         // top-level parts bound to `part.variable` (the RulesPart and
         // some sibling), that collision predates inlining and the
         // matcher's behavior on it is unchanged when we replace the
-        // RulesPart with a wildcard/number/rules part bound to the
-        // same name.
+        // RulesPart with a wildcard/number/rules/string/phraseSet part
+        // bound to the same name.
         return { parts: newParts };
     }
 
@@ -692,7 +734,13 @@ function factorRules(
 // canonical.
 
 type TrieStep =
-    | { kind: "string"; token: string }
+    | {
+          kind: "string";
+          /** Single token for unbound (per-token explosion); full token
+           * sequence for bound (atomic, never split). */
+          tokens: string[];
+          local: string | undefined;
+      }
     | { kind: "wildcard"; typeName: string; optional: boolean; local: string }
     | { kind: "number"; optional: boolean; local: string }
     | {
@@ -703,10 +751,19 @@ type TrieStep =
           name: string | undefined;
           local: string | undefined;
       }
-    | { kind: "phraseSet"; matcherName: string };
+    | {
+          kind: "phraseSet";
+          matcherName: string;
+          local: string | undefined;
+      };
 
 type TrieEdge =
-    | { kind: "string"; token: string }
+    | {
+          kind: "string";
+          tokens: string[];
+          /** undefined iff every inserter at this edge was unbound. */
+          canonical: string | undefined;
+      }
     | {
           kind: "wildcard";
           typeName: string;
@@ -723,7 +780,12 @@ type TrieEdge =
           /** undefined iff every inserter at this edge was unbound. */
           canonical: string | undefined;
       }
-    | { kind: "phraseSet"; matcherName: string };
+    | {
+          kind: "phraseSet";
+          matcherName: string;
+          /** undefined iff every inserter at this edge was unbound. */
+          canonical: string | undefined;
+      };
 
 type Terminal = {
     idx: number;
@@ -788,7 +850,7 @@ function rulesArrayId(state: BuildState, rules: GrammarRule[]): number {
 function stepMergeKey(step: TrieStep, state: BuildState): string {
     switch (step.kind) {
         case "string":
-            return `s:${step.token}`;
+            return `s:${step.tokens.join(" ")}:${step.local !== undefined ? 1 : 0}`;
         case "wildcard":
             return `w:${step.typeName}:${step.optional ? 1 : 0}`;
         case "number":
@@ -798,7 +860,7 @@ function stepMergeKey(step: TrieStep, state: BuildState): string {
             return `r:${id}:${step.optional ? 1 : 0}:${step.repeat ? 1 : 0}:${step.local !== undefined ? 1 : 0}`;
         }
         case "phraseSet":
-            return `p:${step.matcherName}`;
+            return `p:${step.matcherName}:${step.local !== undefined ? 1 : 0}`;
     }
 }
 
@@ -876,12 +938,37 @@ function insertRuleIntoTrie(
     });
 }
 
-/** Yield each rule.parts as a sequence of trie steps (StringPart explodes). */
+/**
+ * Yield each rule.parts as a sequence of trie steps.
+ *
+ * Unbound StringParts explode into one step per token so that adjacent
+ * alternatives can factor on a shared prefix substring.  Bound
+ * StringParts emit a single atomic step containing the full token
+ * sequence — splitting would break the binding parity (the matcher
+ * captures the whole joined text into the slot, so the binding can't
+ * be moved to the last token alone without changing semantics) and
+ * would also leak the binding-presence bit into intermediate edges,
+ * preventing legitimate factoring with unbound prefix tokens.
+ */
 function* partsToEdgeSteps(parts: GrammarPart[]): Generator<TrieStep> {
     for (const p of parts) {
         switch (p.type) {
             case "string":
-                for (const tok of p.value) yield { kind: "string", token: tok };
+                if (p.variable !== undefined) {
+                    yield {
+                        kind: "string",
+                        tokens: p.value,
+                        local: p.variable,
+                    };
+                } else {
+                    for (const tok of p.value) {
+                        yield {
+                            kind: "string",
+                            tokens: [tok],
+                            local: undefined,
+                        };
+                    }
+                }
                 break;
             case "wildcard":
                 yield {
@@ -909,7 +996,11 @@ function* partsToEdgeSteps(parts: GrammarPart[]): Generator<TrieStep> {
                 };
                 break;
             case "phraseSet":
-                yield { kind: "phraseSet", matcherName: p.matcherName };
+                yield {
+                    kind: "phraseSet",
+                    matcherName: p.matcherName,
+                    local: p.variable,
+                };
                 break;
         }
     }
@@ -919,8 +1010,23 @@ function* partsToEdgeSteps(parts: GrammarPart[]): Generator<TrieStep> {
 function stepToEdge(step: TrieStep, buildState: BuildState): TrieEdge {
     switch (step.kind) {
         case "string":
+            return {
+                kind: "string",
+                tokens: step.tokens,
+                canonical:
+                    step.local !== undefined
+                        ? freshCanonical(buildState)
+                        : undefined,
+            };
         case "phraseSet":
-            return step;
+            return {
+                kind: "phraseSet",
+                matcherName: step.matcherName,
+                canonical:
+                    step.local !== undefined
+                        ? freshCanonical(buildState)
+                        : undefined,
+            };
         case "wildcard":
             return {
                 kind: "wildcard",
@@ -960,7 +1066,6 @@ function recordStepRemap(
     step: TrieStep,
     remap: Map<string, string>,
 ): void {
-    if (edge.kind === "string" || edge.kind === "phraseSet") return;
     const local = (step as { local: string | undefined }).local;
     const canonical = edge.canonical;
     if (local === undefined || canonical === undefined) return;
@@ -977,8 +1082,13 @@ function recordStepRemap(
 
 function edgeToPart(edge: TrieEdge): GrammarPart {
     switch (edge.kind) {
-        case "string":
-            return { type: "string", value: [edge.token] };
+        case "string": {
+            const out: GrammarPart = { type: "string", value: edge.tokens };
+            if (edge.canonical !== undefined) {
+                (out as { variable?: string }).variable = edge.canonical;
+            }
+            return out;
+        }
         case "wildcard": {
             const out: GrammarPart = {
                 type: "wildcard",
@@ -1006,8 +1116,16 @@ function edgeToPart(edge: TrieEdge): GrammarPart {
             if (edge.name !== undefined) out.name = edge.name;
             return out;
         }
-        case "phraseSet":
-            return { type: "phraseSet", matcherName: edge.matcherName };
+        case "phraseSet": {
+            const out: GrammarPart = {
+                type: "phraseSet",
+                matcherName: edge.matcherName,
+            };
+            if (edge.canonical !== undefined) {
+                (out as { variable?: string }).variable = edge.canonical;
+            }
+            return out;
+        }
     }
 }
 
@@ -1024,7 +1142,12 @@ function appendPartInPlace(prefix: GrammarPart[], part: GrammarPart): void {
         return;
     }
     const last = prefix[prefix.length - 1];
-    if (last.type === "string" && part.type === "string") {
+    if (
+        last.type === "string" &&
+        part.type === "string" &&
+        last.variable === undefined &&
+        part.variable === undefined
+    ) {
         prefix[prefix.length - 1] = {
             type: "string",
             value: [...last.value, ...part.value],
@@ -1040,7 +1163,12 @@ function concatParts(a: GrammarPart[], b: GrammarPart[]): GrammarPart[] {
     if (b.length === 0) return a.slice();
     const last = a[a.length - 1];
     const first = b[0];
-    if (last.type === "string" && first.type === "string") {
+    if (
+        last.type === "string" &&
+        first.type === "string" &&
+        last.variable === undefined &&
+        first.variable === undefined
+    ) {
         const merged: GrammarPart = {
             type: "string",
             value: [...last.value, ...first.value],
@@ -1225,7 +1353,9 @@ function collectVariableNames(parts: GrammarPart[]): Set<string> {
         if (
             (p.type === "wildcard" ||
                 p.type === "number" ||
-                p.type === "rules") &&
+                p.type === "rules" ||
+                p.type === "string" ||
+                p.type === "phraseSet") &&
             p.variable !== undefined
         ) {
             out.add(p.variable);
@@ -1256,7 +1386,9 @@ function renameAllChildBindings(
         if (
             (p.type !== "wildcard" &&
                 p.type !== "number" &&
-                p.type !== "rules") ||
+                p.type !== "rules" &&
+                p.type !== "string" &&
+                p.type !== "phraseSet") ||
             p.variable === undefined
         ) {
             if (outParts !== undefined) outParts.push(p);

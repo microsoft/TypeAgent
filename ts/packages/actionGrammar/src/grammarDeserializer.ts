@@ -8,6 +8,8 @@ import {
     GrammarPartJson,
     GrammarRule,
     GrammarRuleJson,
+    PhraseSetPart,
+    RulesPart,
 } from "./grammarTypes.js";
 
 export function grammarFromJson(json: GrammarJson): Grammar {
@@ -38,7 +40,7 @@ export function grammarFromJson(json: GrammarJson): Grammar {
                         rules.push(grammarRuleFromJson(r, json));
                     }
                 }
-                const part: import("./grammarTypes.js").RulesPart = {
+                const part: RulesPart = {
                     type: "rules",
                     name: p.name,
                     rules,
@@ -48,8 +50,14 @@ export function grammarFromJson(json: GrammarJson): Grammar {
                 if (p.repeat) part.repeat = true;
                 return part;
             }
-            case "phraseSet":
-                return { type: "phraseSet", matcherName: p.matcherName };
+            case "phraseSet": {
+                const part: PhraseSetPart = {
+                    type: "phraseSet",
+                    matcherName: p.matcherName,
+                };
+                if (p.variable !== undefined) part.variable = p.variable;
+                return part;
+            }
         }
     }
 

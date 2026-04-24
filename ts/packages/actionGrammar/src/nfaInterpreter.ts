@@ -176,6 +176,20 @@ function matchNFACore(
         let newState: NFAExecutionState | undefined;
         if (trans.type === "phraseSet" && matchedPhrase) {
             // PhraseSet: build result state directly (phrase was validated in seedQueue)
+            let environment = state.environment;
+            if (trans.slotIndex !== undefined && state.environment) {
+                // PhraseSet capture: write the actual matched phrase tokens
+                // joined with single spaces into the named slot.  Unlike
+                // StringPart, the matched phrase varies per input so the
+                // value can't be precomputed into trans.slotValue.
+                environment = cloneEnvironment(state.environment);
+                setSlotValue(
+                    environment,
+                    trans.slotIndex,
+                    matchedPhrase.join(" "),
+                    false,
+                );
+            }
             newState = {
                 stateId: trans.to,
                 tokenIndex: state.tokenIndex + 1,
@@ -186,7 +200,7 @@ function matchNFACore(
                 uncheckedWildcardCount: state.uncheckedWildcardCount,
                 ruleIndex: state.ruleIndex,
                 actionValue: state.actionValue,
-                environment: state.environment,
+                environment,
                 slotMap: state.slotMap,
                 skipCount:
                     matchedPhrase.length > 1
@@ -432,6 +446,20 @@ function tryTransition(
             // Match specific token(s); normalize input token so that
             // case and trailing punctuation don't prevent a match
             if (trans.tokens && trans.tokens.includes(normalizeToken(token))) {
+                let environment = currentState.environment;
+                if (trans.slotIndex !== undefined && currentState.environment) {
+                    // StringPart capture: the slot receives the
+                    // pre-computed joined StringPart text (slotValue),
+                    // not the consumed normalized token.  See
+                    // `compileStringPart` in `nfaCompiler.ts`.
+                    environment = cloneEnvironment(currentState.environment);
+                    setSlotValue(
+                        environment,
+                        trans.slotIndex,
+                        trans.slotValue ?? token,
+                        false,
+                    );
+                }
                 return {
                     stateId: trans.to,
                     tokenIndex: tokenIndex + 1,
@@ -441,7 +469,7 @@ function tryTransition(
                     uncheckedWildcardCount: currentState.uncheckedWildcardCount,
                     ruleIndex: currentState.ruleIndex,
                     actionValue: currentState.actionValue,
-                    environment: currentState.environment,
+                    environment,
                     slotMap: currentState.slotMap,
                 };
             }

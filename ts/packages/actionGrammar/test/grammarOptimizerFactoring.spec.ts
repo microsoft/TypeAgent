@@ -810,3 +810,155 @@ describe("Grammar Optimizer - Wrapper rule spacingMode propagation", () => {
         expect(optimized.rules[0].spacingMode).toBeUndefined();
     });
 });
+
+// ── Stage 3: factor pass for bound StringPart / PhraseSetPart ─────────
+//
+// Bound string/phraseSet edges in the trie carry a parity bit
+// (bound vs. unbound) and an opaque canonical when bound, so:
+//   - two unbound `play` tokens still merge into one prefix edge.
+//   - two bound `$(x:hello)` parts on different alternatives merge
+//     into one canonical edge with each alternative remapping its
+//     own local onto the shared canonical.
+//   - bound and unbound parts with the same token never merge
+//     (different parity).
+
+describe("Grammar Optimizer - bound StringPart / PhraseSetPart factoring", () => {
+    it("factors a shared bound multi-token StringPart prefix when members don't reference it", () => {
+        // Each alt has its own wrapper (refCount=1) so Stage 2
+        // collapses it into a bound StringPart "good morning".
+        // Member values are constants — no cross-scope-ref blocker —
+        // so Stage 3's atomic bound-string trie edge merges the
+        // prefix into one canonical edge in the wrapper.
+        const text = `<Start> = $(g:<G1>) world -> "w"
+        | $(g:<G2>) friend -> "f";
+<G1> = good morning;
+<G2> = good morning;`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: {
+                inlineSingleAlternatives: true,
+                factorCommonPrefixes: true,
+            },
+        });
+        // Top-level alternative count drops (factored under wrapper).
+        expect(optimized.rules.length).toBeLessThan(baseline.rules.length);
+        for (const input of ["good morning world", "good morning friend"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+        expect(match(optimized, "good morning world")).toStrictEqual(["w"]);
+        expect(match(optimized, "good morning friend")).toStrictEqual(["f"]);
+    });
+
+    it("preserves match correctness when bound prefix is referenced (factoring may bail)", () => {
+        // Stage 3 enables trie-level merging of the bound prefix,
+        // but the existing cross-scope-ref eligibility check bails
+        // out at the fork because each member's value references
+        // the now-prefix-bound `g`.  This test guarantees the
+        // bailout path stays correct (no garbled match results).
+        const text = `<Start> = $(g:<G1>) world -> { g: g, w: 1 }
+        | $(g:<G2>) friend -> { g: g, w: 2 };
+<G1> = good morning;
+<G2> = good morning;`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: {
+                inlineSingleAlternatives: true,
+                factorCommonPrefixes: true,
+            },
+        });
+        for (const input of ["good morning world", "good morning friend"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+        expect(match(optimized, "good morning world")).toStrictEqual([
+            { g: "good morning", w: 1 },
+        ]);
+    });
+
+    it("factors a shared bound PhraseSetPart prefix when members don't reference it", () => {
+        // Built-in phrase sets cannot be bound directly via .agr
+        // syntax (the parser treats `$(o:<Polite>)` as a sub-rule
+        // reference), so we use distinct wrapper rules around
+        // <Polite> and rely on the Stage 2 inliner to retarget
+        // the outer variable onto the bound PhraseSetPart.  Member
+        // values don't reference `o`, so the cross-scope-ref check
+        // passes and Stage 3 produces a single canonical phraseSet
+        // edge in the wrapper prefix.
+        const text = `<Start> = $(o:<W1>) play -> "p"
+        | $(o:<W2>) stop -> "s";
+<W1> = <Polite>;
+<W2> = <Polite>;`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: {
+                inlineSingleAlternatives: true,
+                factorCommonPrefixes: true,
+            },
+        });
+        expect(optimized.rules.length).toBeLessThan(baseline.rules.length);
+        // Structural check: only one phraseSet edge remains, and
+        // it's bound to a fresh canonical.
+        const phraseSetParts: GrammarPart[] = [];
+        const collect = (parts: GrammarPart[]) => {
+            for (const p of parts) {
+                if (p.type === "phraseSet") phraseSetParts.push(p);
+                else if (p.type === "rules") {
+                    for (const r of p.rules) collect(r.parts);
+                }
+            }
+        };
+        for (const r of optimized.rules) collect(r.parts);
+        expect(phraseSetParts.length).toBe(1);
+        expect((phraseSetParts[0] as { variable?: string }).variable).toMatch(
+            /^__opt_v_/,
+        );
+    });
+
+    it("does not merge bound and unbound StringParts with the same token", () => {
+        // After inlining, alt 1 has bound StringPart "play"; alt 2's
+        // literal "play" stays unbound.  Parity check keeps them on
+        // separate trie edges.
+        const text = `<Start> = $(p:<P>) hello -> { p: p }
+        | play world -> "world";
+<P> = play;`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: {
+                inlineSingleAlternatives: true,
+                factorCommonPrefixes: true,
+            },
+        });
+        for (const input of ["play hello", "play world"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    it("still factors unbound common prefix when one alt has a trailing bound StringPart", () => {
+        // Stage 3's atomic bound-StringPart edge sits AFTER the
+        // shared "play" prefix in alt 1, so it doesn't block the
+        // unbound "play" tokens from factoring across alts.
+        const text = `<Start> = play $(g:<Greeting>) -> { g: g }
+        | play song -> "song";
+<Greeting> = good morning;`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: {
+                inlineSingleAlternatives: true,
+                factorCommonPrefixes: true,
+            },
+        });
+        // Sanity: shared "play" prefix factored.
+        expect(optimized.rules.length).toBe(1);
+        expect(match(optimized, "play good morning")).toStrictEqual(
+            match(baseline, "play good morning"),
+        );
+        expect(match(optimized, "play song")).toStrictEqual(
+            match(baseline, "play song"),
+        );
+    });
+});

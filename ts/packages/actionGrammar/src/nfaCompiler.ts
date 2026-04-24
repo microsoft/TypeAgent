@@ -348,7 +348,14 @@ function collectVariables(rule: GrammarRule): string[] {
                 break;
             case "string":
             case "phraseSet":
-                // No variables in string or phraseSet parts
+                // Optimizer-introduced capture: parent rule binds the matched
+                // literal text (string) or matched phrase (phraseSet) to a
+                // named slot.  Source-syntax bindings on these part types are
+                // not yet supported.
+                if (part.variable && !seen.has(part.variable)) {
+                    seen.add(part.variable);
+                    variables.push(part.variable);
+                }
                 break;
         }
     }
@@ -404,8 +411,18 @@ function createRuleTypeMap(rule: GrammarRule): Map<string, string> {
                 }
                 break;
             case "string":
+                // Optimizer-introduced capture binds the joined literal
+                // tokens (a string) to the named slot.
+                if (part.variable) {
+                    typeMap.set(part.variable, "string");
+                }
+                break;
             case "phraseSet":
-                // No variables
+                // Optimizer-introduced capture binds the matched phrase
+                // (a string of joined matched tokens) to the named slot.
+                if (part.variable) {
+                    typeMap.set(part.variable, "string");
+                }
                 break;
         }
     }
@@ -701,6 +718,9 @@ function compilePartWithSlots(
                 toState,
                 context.spacingMode,
                 context.splitCandidatesCollector,
+                part.variable !== undefined
+                    ? context.slotMap.get(part.variable)
+                    : undefined,
             );
 
         case "wildcard":
@@ -732,7 +752,13 @@ function compilePartWithSlots(
             );
 
         case "phraseSet":
-            return compilePhraseSetPart(builder, part, fromState, toState);
+            return compilePhraseSetPart(
+                builder,
+                part,
+                fromState,
+                toState,
+                context,
+            );
 
         default:
             throw new Error(`Unknown part type: ${(part as any).type}`);
@@ -749,14 +775,28 @@ function compilePartWithSlots(
  *
  * PhraseSetParts are always non-optional at this level; optionality is handled
  * by the enclosing RulesPart (e.g., from "(<Polite>)?").
+ *
+ * When `part.variable` is set (an optimizer-introduced capture), the matched
+ * phrase tokens are written as a joined string into the named slot.  See
+ * `tryTransition` in `nfaInterpreter.ts` for the runtime side.
  */
 function compilePhraseSetPart(
     builder: NFABuilder,
     part: PhraseSetPart,
     fromState: number,
     toState: number,
+    context?: RuleCompilationContext,
 ): number {
-    builder.addPhraseSetTransition(fromState, toState, part.matcherName);
+    const slotIndex =
+        part.variable !== undefined && context !== undefined
+            ? context.slotMap.get(part.variable)
+            : undefined;
+    builder.addPhraseSetTransition(
+        fromState,
+        toState,
+        part.matcherName,
+        slotIndex,
+    );
     return toState;
 }
 
@@ -777,6 +817,15 @@ function compileStringPart(
     toState: number,
     spacingMode?: CompiledSpacingMode,
     splitCandidatesCollector?: Set<string>,
+    /**
+     * Optional slot to write the joined StringPart value into.  When set
+     * (an optimizer-introduced capture), the slot receives
+     * `part.value.join(" ")` on the FINAL emitted transition — a single
+     * write per StringPart, regardless of how many sub-token transitions
+     * the chain emits.  See `tryTransition` in `nfaInterpreter.ts` for the
+     * runtime side (slotValue overrides the consumed token).
+     */
+    captureSlotIndex?: number,
 ): number {
     // Normalize grammar tokens (lowercase + strip trailing punctuation) so they
     // compare correctly against the normalized input tokens from tokenizeRequest().
@@ -790,12 +839,24 @@ function compileStringPart(
         return toState;
     }
 
+    // The captured slot value is the joined ORIGINAL StringPart tokens (not
+    // the normalized ones); this matches what `grammarMatcher.ts` writes via
+    // `addValue(state, part.variable, part.value.join(" "))`.
+    const captureSlotValue =
+        captureSlotIndex !== undefined ? part.value.join(" ") : undefined;
+
     // spacing=none: concatenate all segments into a single fused token.
     // The grammar author expects the input to contain no spaces between these
     // segments, so we emit one token transition for the concatenated form.
     if (spacingMode === "none") {
         const fused = normalized.join("");
-        builder.addTokenTransition(fromState, toState, [fused]);
+        builder.addTokenTransition(
+            fromState,
+            toState,
+            [fused],
+            captureSlotIndex,
+            captureSlotValue,
+        );
         return toState;
     }
 
@@ -812,18 +873,37 @@ function compileStringPart(
 
     // Emit individual token transitions (same as before for required/optional/auto).
     if (normalized.length === 1) {
-        builder.addTokenTransition(fromState, toState, normalized);
+        builder.addTokenTransition(
+            fromState,
+            toState,
+            normalized,
+            captureSlotIndex,
+            captureSlotValue,
+        );
         return toState;
     }
 
     // For multiple tokens, create a sequence chain
     // Each token must match in order: state1 --token1--> state2 --token2--> ... --> toState
+    // The capture slot (if any) is written only on the final transition so the
+    // joined StringPart value is recorded once — same single-write semantics as
+    // grammarMatcher.ts's `addValue` for a multi-token literal.
     let currentState = fromState;
     for (let i = 0; i < normalized.length; i++) {
         const token = normalized[i];
         const isLast = i === normalized.length - 1;
         const nextState = isLast ? toState : builder.createState(false);
-        builder.addTokenTransition(currentState, nextState, [token]);
+        if (isLast) {
+            builder.addTokenTransition(
+                currentState,
+                nextState,
+                [token],
+                captureSlotIndex,
+                captureSlotValue,
+            );
+        } else {
+            builder.addTokenTransition(currentState, nextState, [token]);
+        }
         currentState = nextState;
     }
     return toState;

@@ -598,6 +598,17 @@ function addValue(
     }
 }
 
+// True when this rule/state would synthesize its result from the lone
+// captured value of its single part (no explicit value expression and
+// exactly one part).  Both parameters are read; pass either a MatchState
+// or ParentMatchState.
+function usesImplicitDefault(s: {
+    value: CompiledValueNode | undefined;
+    parts: GrammarPart[];
+}): boolean {
+    return s.value === undefined && s.parts.length === 1;
+}
+
 export function nextNonSeparatorIndex(request: string, index: number) {
     if (request.length <= index) {
         return request.length;
@@ -717,9 +728,7 @@ export function finalizeNestedRule(
         if (
             // Only process values if the parent rule is tracking values
             parent.valueIds !== null &&
-            (parent.variable !== undefined ||
-                parent.value !== undefined ||
-                parent.parts.length !== 1)
+            (parent.variable !== undefined || !usesImplicitDefault(parent))
         ) {
             state.value = parent.value;
             state.valueIds = parent.valueIds;
@@ -793,19 +802,16 @@ function matchStringPartWithWildcard(
         }
 
         if (captureWildcard(state, request, wildcardEnd, newIndex, pending)) {
-            // Assign default string value for single-part rules without
-            // an explicit value expression — same logic as the non-wildcard
-            // path in matchStringPartWithoutWildcard.  Without this, a
-            // pending wildcard from a parent rule that leaks into a
-            // single-part child rule would bypass the default value
-            // assignment and cause "No value assign to variable" at
-            // finalizeNestedRule time.
+            // If the StringPart has an explicit capture variable, write the
+            // joined matched tokens into that named slot.  Otherwise fall
+            // through to the implicit-default rule for single-part rules
+            // without a value expression — same logic as the non-wildcard
+            // path in matchStringPartWithoutWildcard.
             if (
-                state.value === undefined &&
-                state.parts.length === 1 &&
-                state.valueIds !== null
+                state.valueIds !== null &&
+                (part.variable !== undefined || usesImplicitDefault(state))
             ) {
-                addValue(state, undefined, part.value.join(" "));
+                addValue(state, part.variable, part.value.join(" "));
             }
             state.lastMatchedPartInfo = {
                 type: "string",
@@ -851,12 +857,14 @@ function matchStringPartWithoutWildcard(
     debugMatch(state, `Matched string ${part.value.join(" ")} to ${newIndex}`);
 
     if (
-        state.value === undefined &&
-        state.parts.length === 1 &&
-        state.valueIds !== null
+        state.valueIds !== null &&
+        (part.variable !== undefined || usesImplicitDefault(state))
     ) {
-        // default string part value
-        addValue(state, undefined, part.value.join(" "));
+        // Explicit capture variable on the StringPart — write the joined
+        // matched tokens into that named slot.  Otherwise fall through to
+        // the implicit-default rule for single-part rules without a value
+        // expression.
+        addValue(state, part.variable, part.value.join(" "));
     }
     state.lastMatchedPartInfo = {
         type: "string",
@@ -1232,8 +1240,7 @@ export function matchState(
                 // - the current rule has not explicit value and only has one part (default)
                 const requireValue =
                     state.valueIds !== null &&
-                    (part.variable !== undefined ||
-                        (state.value === undefined && parts.length === 1));
+                    (part.variable !== undefined || usesImplicitDefault(state));
 
                 // Update the current state to consider the first nested rule.
                 state.name = getNestedStateName(state, part, 0);

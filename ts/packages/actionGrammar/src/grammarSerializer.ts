@@ -9,6 +9,9 @@ import {
     GrammarRule,
     GrammarRuleJson,
     GrammarRulesJson,
+    PhraseSetPartJson,
+    RulePartJson,
+    StringPartJson,
 } from "./grammarTypes.js";
 
 export function grammarToJson(grammar: Grammar): GrammarJson {
@@ -18,8 +21,14 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
 
     function grammarPartToJson(p: GrammarPart): GrammarPartJson {
         switch (p.type) {
-            case "string":
-                return { type: "string", value: p.value };
+            case "string": {
+                const part: StringPartJson = {
+                    type: "string",
+                    value: p.value,
+                };
+                if (p.variable !== undefined) part.variable = p.variable;
+                return part;
+            }
             case "wildcard":
             case "number":
                 return p;
@@ -31,7 +40,7 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
                     json[index] = p.rules.map(grammarRuleToJson);
                 }
 
-                const part: import("./grammarTypes.js").RulePartJson = {
+                const part: RulePartJson = {
                     name: p.name,
                     type: "rules",
                     index,
@@ -41,8 +50,14 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
                 if (p.repeat) part.repeat = true;
                 return part;
             }
-            case "phraseSet":
-                return { type: "phraseSet", matcherName: p.matcherName };
+            case "phraseSet": {
+                const part: PhraseSetPartJson = {
+                    type: "phraseSet",
+                    matcherName: p.matcherName,
+                };
+                if (p.variable !== undefined) part.variable = p.variable;
+                return part;
+            }
         }
     }
 
