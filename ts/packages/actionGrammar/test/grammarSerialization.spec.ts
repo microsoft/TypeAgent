@@ -25,6 +25,17 @@ describe("Grammar Serialization", () => {
         expect(serialized2).toEqual(serialized);
     });
 
+    it("regexpCache is not included in serialized JSON", () => {
+        // Regression test: grammarPartToJson previously returned StringPart
+        // objects directly, so the regexpCache Map appeared as {} in JSON.
+        const grammarText = `<Start> = hello world -> true;`;
+        const grammar = loadGrammarRules("test", grammarText);
+        // Populate the cache by running a match.
+        testMatchGrammar(grammar, "hello world");
+        const json = grammarToJson(grammar);
+        expect(JSON.stringify(json)).not.toContain("regexpCache");
+    });
+
     describe("spacingMode preservation", () => {
         it("preserves optional mode through grammarToJson/grammarFromJson", () => {
             const g = `<Start> [spacing=optional] = hello world -> true;`;

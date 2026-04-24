@@ -16,9 +16,11 @@
     ".": "./dist/index.js",
     "./helpers/console": "./dist/helpers/console.js",
     "./helpers/data": "./dist/helpers/userData.js",
+    "./helpers/userSettings": "./dist/helpers/userSettings.js",
     "./helpers/config": "./dist/helpers/config.js",
     "./helpers/status": "./dist/helpers/status.js",
     "./helpers/command": "./dist/helpers/command.js",
+    "./helpers/completion": "./dist/helpers/completion/index.js",
     "./internal": "./dist/internal.js",
     "./explorer": "./dist/explorer.js"
   },
@@ -39,7 +41,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.92",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.101",
     "@azure/ai-agents": "^1.0.0-beta.3",
     "@azure/ai-projects": "^1.0.0-beta.8",
     "@azure/core-client": "^1.10.0",
@@ -78,6 +80,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
+    "@jest/globals": "^29.7.0",
     "@types/debug": "^4.1.12",
     "@types/file-size": "^1.0.3",
     "@types/html-to-text": "^9.0.4",

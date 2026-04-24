@@ -147,7 +147,7 @@ export function extractScriptsFromTrace(
 }
 
 /**
- * Generates ScriptFlow recipes from PowerShell scripts found in reasoning traces.
+ * Generates PowerShell recipes from PowerShell scripts found in reasoning traces.
  */
 export class ScriptRecipeGenerator {
     async generate(trace: ReasoningTrace): Promise<ScriptRecipe[]> {

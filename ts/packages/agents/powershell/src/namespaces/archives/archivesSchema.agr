@@ -1,0 +1,24 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// PowerShell Archives Namespace Grammar
+// Compression and extraction operations
+
+import { PowerShellArchivesActions } from "./archivesActionsSchema.ts";
+
+<Start> : PowerShellArchivesActions = <Compress>
+          | <Expand>;
+
+<Compress> =
+    (zip|compress|archive) $(sourcePath:wildcard) (to|as) $(destinationPath:wildcard)
+      -> { actionName: "compress", parameters: { sourcePath, destinationPath } }
+  | (create|make) (a)? (zip|archive) (of)? $(sourcePath:wildcard) (as|to)? $(destinationPath:wildcard)?
+      -> { actionName: "compress", parameters: { sourcePath, destinationPath } }
+  | zip $(sourcePath:wildcard)
+      -> { actionName: "compress", parameters: { sourcePath } };
+
+<Expand> =
+    (unzip|extract|expand) $(archivePath:wildcard) (to|in)? $(destinationPath:wildcard)?
+      -> { actionName: "expand", parameters: { archivePath, destinationPath } }
+  | (open|extract) archive $(archivePath:wildcard) (to|in)? $(destinationPath:wildcard)?
+      -> { actionName: "expand", parameters: { archivePath, destinationPath } };

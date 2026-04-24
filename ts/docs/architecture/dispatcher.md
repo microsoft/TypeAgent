@@ -349,6 +349,37 @@ entity references. Named entities (e.g., "that song", "the meeting") are
 looked up in conversation memory. Ambiguous references trigger a user
 clarification prompt via the `ClientIO` layer.
 
+Translated actions may also contain **entity placeholders** — explicit
+references the LLM emits as string values pointing back at entities
+provided in the prompt's history context. `resolveEntityPlaceholders()`
+in `pendingActions.ts` replaces them with the referenced values. Grammar:
+
+| Form                          | Example                       | Resolves to                                      |
+| ----------------------------- | ----------------------------- | ------------------------------------------------ |
+| Bare whole-value              | `${entity-0}`                 | `entity.name`                                    |
+| Embedded structured reference | `${entity-0}[Revenue]`        | `<entity.name>[Revenue]` (literal concatenation) |
+| Dotted path navigation        | `${entity-0.facets[0].value}` | Result of walking the path on the entity object  |
+
+Path navigation is controlled by the session config
+`translation.entity.pathNavigation` with four modes:
+
+| Mode                 | Behavior on a valid path                   | Behavior on miss                                                       |
+| -------------------- | ------------------------------------------ | ---------------------------------------------------------------------- |
+| `"off"`              | Not attempted — placeholder passes through | N/A                                                                    |
+| `"throw"` (default)  | Resolves and interpolates                  | Throws `Entity path did not resolve …`, surfaced to the reasoning loop |
+| `"fallback-to-name"` | Resolves and interpolates                  | Returns `entity.name` (same as the bare form)                          |
+| `"passthrough"`      | Resolves and interpolates                  | Leaves the literal `${entity-N.…}` placeholder intact                  |
+
+The `"throw"` default is intentional: a path miss is almost always an LLM
+mistake about the entity's shape (or a shape that changed under it), and
+the reasoning loop can retry with a corrected path. Silent fallbacks hide
+these mistakes as wrong-answer-looks-right failures downstream.
+
+When path navigation is enabled (any mode ≠ `"off"`), the translator
+system prompt includes a short line documenting the dotted syntax so the
+LLM knows it's an available form — see `createTypeAgentRequestPrompt()`
+in `chatHistoryPrompt.ts`.
+
 **Flow execution** — Some actions have registered flow definitions
 (multi-step recipes). When `getFlow(schemaName, actionName)` returns a
 flow, the `flowInterpreter` executes it step-by-step with parameter
@@ -392,6 +423,12 @@ provider.getAppAgentNames()     # Discover available agents
 │  │  - Register grammar in AgentGrammarRegistry │      │
 │  │  - Load flow definitions                    │      │
 │  └─────────────────────────────────────────────┘      │
+│                                                       │
+│  If manifest.localView = true:                        │
+│  - Reserve a port slot (assigned 0 = OS-chosen)       │
+│  - Agent's view server spawned on first activation    │
+│  - Server binds to OS-assigned port, reports back     │
+│    via IPC → stored via SessionContext.setLocalHostPort│
 │                                                       │
 └───────────────────────────────────────────────────────┘
 ```
@@ -471,6 +508,39 @@ Handles `@`-prefixed system commands:
 
 Each command has a `CommandDescriptor` that defines expected parameters,
 subcommands, and help text.
+
+The system agent also has sub-agents with LLM-translated action schemas:
+
+- **`system.config`** — Natural language configuration changes.
+- **`system.conversation`** — Natural language management of **agentServer client-connection
+  conversations** (the named, GUID-keyed sessions described in
+  [agentServerConversations.md](agentServerConversations.md)). Despite the name, this has
+  **no relation** to the dispatcher's own internal `@session` command, which manages
+  local dispatcher state (agent settings, construction cache, config) stored under
+  `~/.typeagent/profiles/<profile>/sessions/`. `system.conversation` is the NL front-end
+  for `@conversation`; `@session` is a separate, lower-level command for dispatcher
+  internals.
+
+  `system.conversation` supports six action types: `newConversation`, `listConversation`,
+  `showConversationInfo`, `switchConversation`, `renameConversation`, and `deleteConversation`.
+  These let users say things like "switch to my work conversation", "rename this
+  conversation to project notes", or "delete the old project conversation" instead of
+  using `@conversation` commands directly. Because the dispatcher cannot access
+  the agent-server RPC layer directly, `executeConversationAction` bridges to the client
+  via `ClientIO.takeAction(requestId, "manage-conversation", payload)` where
+  `payload` is one of:
+
+  ```
+  { subcommand: "new";    name?: string }
+  { subcommand: "list" }
+  { subcommand: "info" }
+  { subcommand: "switch"; name: string }
+  { subcommand: "rename"; name?: string; newName: string }
+  { subcommand: "delete"; name: string }
+  ```
+
+  The CLI handles this by calling `handleConversationCommand`; the Shell
+  calls the corresponding `ClientAPI` session methods over IPC.
 
 ### Dispatcher agent
 

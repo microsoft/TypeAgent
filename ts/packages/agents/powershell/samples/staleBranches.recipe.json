@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "actionName": "staleBranches",
+  "description": "Finds git branches that haven't been modified in a specified number of days",
+  "displayName": "Stale Branches",
+  "parameters": [
+    {
+      "name": "repoPath",
+      "type": "path",
+      "required": false,
+      "description": "Path to the git repository",
+      "default": "."
+    },
+    {
+      "name": "daysStale",
+      "type": "number",
+      "required": false,
+      "description": "Number of days since last commit to consider stale",
+      "default": "30"
+    }
+  ],
+  "script": {
+    "language": "powershell",
+    "body": "param([string]$RepoPath = '.', [int]$DaysStale = 30)\nPush-Location $RepoPath\ntry {\n    $cutoff = (Get-Date).AddDays(-$DaysStale)\n    Write-Output \"Branches not modified in the last $DaysStale days:`n\"\n    & git branch --format='%(refname:short)|%(committerdate:iso)' | ForEach-Object {\n        $parts = $_ -split '\\|'\n        $branchDate = [datetime]$parts[1]\n        if ($branchDate -lt $cutoff) {\n            [PSCustomObject]@{\n                Branch = $parts[0]\n                LastCommit = $branchDate.ToString('yyyy-MM-dd')\n                DaysOld = [math]::Floor(((Get-Date) - $branchDate).TotalDays)\n            }\n        }\n    } | Sort-Object DaysOld -Descending | Format-Table -AutoSize\n} finally {\n    Pop-Location\n}",
+    "expectedOutputFormat": "table"
+  },
+  "grammarPatterns": [
+    {
+      "pattern": "(find|show) stale (git)? branches (in)? $(repoPath:wildcard)?",
+      "isAlias": false,
+      "examples": ["find stale branches", "show stale git branches"]
+    },
+    {
+      "pattern": "(show|find) branches older than $(daysStale:number) days (in)? $(repoPath:wildcard)?",
+      "isAlias": false,
+      "examples": ["show branches older than 30 days"]
+    },
+    {
+      "pattern": "(old|inactive) (git)? branches (in)? $(repoPath:wildcard)?",
+      "isAlias": false,
+      "examples": ["old branches", "inactive git branches"]
+    }
+  ],
+  "sandbox": {
+    "allowedCmdlets": [
+      "Push-Location",
+      "Pop-Location",
+      "Write-Output",
+      "Get-Date",
+      "ForEach-Object",
+      "Sort-Object",
+      "Format-Table"
+    ],
+    "allowedPaths": ["$PWD", "$env:USERPROFILE"],
+    "allowedModules": [
+      "Microsoft.PowerShell.Management",
+      "Microsoft.PowerShell.Utility"
+    ],
+    "maxExecutionTime": 30,
+    "networkAccess": false
+  },
+  "source": {
+    "type": "manual",
+    "timestamp": "2026-04-23T00:00:00Z"
+  }
+}

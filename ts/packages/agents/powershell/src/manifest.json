@@ -1,0 +1,77 @@
+{
+  "emojiChar": "📜",
+  "description": "Agent to create and execute PowerShell workflows",
+  "defaultEnabled": true,
+  "schema": {
+    "description": "Core flow management actions for creating, listing, and executing PowerShell scripts.",
+    "originalSchemaFile": "./schema/scriptActions.mts",
+    "schemaFile": "../dist/powershellSchema.pas.json",
+    "grammarFile": "../dist/powershellSchema.ag.json",
+    "schemaType": "PowerShellActions"
+  },
+  "subActionManifests": {
+    "powershell-files": {
+      "schema": {
+        "description": "File system operations - list, read, write, copy, move, delete, and search files.",
+        "originalSchemaFile": "./namespaces/files/filesActionsSchema.ts",
+        "schemaFile": "../dist/filesSchema.pas.json",
+        "grammarFile": "../dist/filesSchema.ag.json",
+        "schemaType": "PowerShellFilesActions"
+      }
+    },
+    "powershell-processes": {
+      "schema": {
+        "description": "Process monitoring and management - list, stop, start processes, view memory and CPU usage.",
+        "originalSchemaFile": "./namespaces/processes/processesActionsSchema.ts",
+        "schemaFile": "../dist/processesSchema.pas.json",
+        "grammarFile": "../dist/processesSchema.ag.json",
+        "schemaType": "PowerShellProcessesActions"
+      }
+    },
+    "powershell-system": {
+      "schema": {
+        "description": "System information - disk usage, uptime, environment variables, installed updates.",
+        "originalSchemaFile": "./namespaces/system/systemActionsSchema.ts",
+        "schemaFile": "../dist/systemSchema.pas.json",
+        "grammarFile": "../dist/systemSchema.ag.json",
+        "schemaType": "PowerShellSystemActions"
+      }
+    },
+    "powershell-services": {
+      "schema": {
+        "description": "Windows service management - list, start, stop, restart services.",
+        "originalSchemaFile": "./namespaces/services/servicesActionsSchema.ts",
+        "schemaFile": "../dist/servicesSchema.pas.json",
+        "grammarFile": "../dist/servicesSchema.ag.json",
+        "schemaType": "PowerShellServicesActions"
+      }
+    },
+    "powershell-network": {
+      "schema": {
+        "description": "Network diagnostics - ping, port listeners, IP configuration, DNS lookup.",
+        "originalSchemaFile": "./namespaces/network/networkActionsSchema.ts",
+        "schemaFile": "../dist/networkSchema.pas.json",
+        "grammarFile": "../dist/networkSchema.ag.json",
+        "schemaType": "PowerShellNetworkActions"
+      }
+    },
+    "powershell-data": {
+      "schema": {
+        "description": "Data transformation - read and write JSON and CSV files, filter and convert data.",
+        "originalSchemaFile": "./namespaces/data/dataActionsSchema.ts",
+        "schemaFile": "../dist/dataSchema.pas.json",
+        "grammarFile": "../dist/dataSchema.ag.json",
+        "schemaType": "PowerShellDataActions"
+      }
+    },
+    "powershell-archives": {
+      "schema": {
+        "description": "Archive operations - compress and extract zip files.",
+        "originalSchemaFile": "./namespaces/archives/archivesActionsSchema.ts",
+        "schemaFile": "../dist/archivesSchema.pas.json",
+        "grammarFile": "../dist/archivesSchema.ag.json",
+        "schemaType": "PowerShellArchivesActions"
+      }
+    }
+  }
+}

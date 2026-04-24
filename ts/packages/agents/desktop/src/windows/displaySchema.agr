@@ -10,7 +10,9 @@ import { DesktopDisplayActions } from "./displayActionsSchema.ts";
           | <AdjustColorTemperature>
           | <DisplayScaling>
           | <AdjustScreenOrientation>
-          | <RotationLock>;
+          | <RotationLock>
+          | <ListResolutions>
+          | <DisplayResolution>;
 
 <EnableBlueLightFilter> =
     enable night light -> { actionName: "EnableBlueLightFilterSchedule", parameters: { schedule: "sunset to sunrise", nightLightScheduleDisabled: false } }
@@ -43,3 +45,14 @@ import { DesktopDisplayActions } from "./displayActionsSchema.ts";
   | unlock (screen)? rotation -> { actionName: "RotationLock", parameters: { enable: false } }
   | enable rotation lock -> { actionName: "RotationLock", parameters: { enable: true } }
   | disable rotation lock -> { actionName: "RotationLock", parameters: { enable: false } };
+
+<ListResolutions> =
+    list (display|screen|available)? resolutions -> { actionName: "ListResolutions", parameters: {} }
+  | show (display|screen|available)? resolutions -> { actionName: "ListResolutions", parameters: {} }
+  | what resolutions (are available|are supported|can I use)? -> { actionName: "ListResolutions", parameters: {} };
+
+<DisplayResolution> =
+    change (display|screen)? resolution -> { actionName: "DisplayResolutionAndAspectRatio", parameters: {} }
+  | adjust (display|screen)? resolution -> { actionName: "DisplayResolutionAndAspectRatio", parameters: {} }
+  | change aspect ratio -> { actionName: "DisplayResolutionAndAspectRatio", parameters: {} }
+  | open display settings -> { actionName: "DisplayResolutionAndAspectRatio", parameters: {} };

@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "actionName": "gitLog",
+  "description": "Shows recent git commit history with hash, author, date, and message",
+  "displayName": "Git Log",
+  "parameters": [
+    {
+      "name": "repoPath",
+      "type": "path",
+      "required": false,
+      "description": "Path to the git repository",
+      "default": "."
+    },
+    {
+      "name": "count",
+      "type": "number",
+      "required": false,
+      "description": "Number of commits to show",
+      "default": "10"
+    },
+    {
+      "name": "author",
+      "type": "string",
+      "required": false,
+      "description": "Filter by author name"
+    }
+  ],
+  "script": {
+    "language": "powershell",
+    "body": "param([string]$RepoPath = '.', [int]$Count = 10, [string]$Author)\nPush-Location $RepoPath\ntry {\n    $args = @('log', '--oneline', '-n', $Count, '--format=%h|%an|%ar|%s')\n    if ($Author) { $args += \"--author=$Author\" }\n    & git @args | ForEach-Object {\n        $parts = $_ -split '\\|', 4\n        [PSCustomObject]@{\n            Hash = $parts[0]\n            Author = $parts[1]\n            When = $parts[2]\n            Message = $parts[3]\n        }\n    } | Format-Table -AutoSize\n} finally {\n    Pop-Location\n}",
+    "expectedOutputFormat": "table"
+  },
+  "grammarPatterns": [
+    {
+      "pattern": "git log (in)? $(repoPath:wildcard)?",
+      "isAlias": false,
+      "examples": ["git log", "git log in myrepo"]
+    },
+    {
+      "pattern": "(show|list) (the)? (last|recent) $(count:number)? commits (in)? $(repoPath:wildcard)?",
+      "isAlias": false,
+      "examples": ["show recent commits", "list the last 5 commits"]
+    },
+    {
+      "pattern": "commit history (in)? $(repoPath:wildcard)?",
+      "isAlias": false,
+      "examples": ["commit history"]
+    }
+  ],
+  "sandbox": {
+    "allowedCmdlets": [
+      "Push-Location",
+      "Pop-Location",
+      "ForEach-Object",
+      "Format-Table"
+    ],
+    "allowedPaths": ["$PWD", "$env:USERPROFILE"],
+    "allowedModules": [
+      "Microsoft.PowerShell.Management",
+      "Microsoft.PowerShell.Utility"
+    ],
+    "maxExecutionTime": 30,
+    "networkAccess": false
+  },
+  "source": {
+    "type": "manual",
+    "timestamp": "2026-04-23T00:00:00Z"
+  }
+}

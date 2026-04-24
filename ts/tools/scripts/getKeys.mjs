@@ -20,8 +20,20 @@ const dotenvPath = path.resolve(__dirname, config.defaultDotEnvPath);
 const sharedKeys = config.env.shared;
 const privateKeys = config.env.private;
 const deleteKeys = config.env.delete;
+const sharedPatterns = (config.env.sharedPatterns ?? []).map(
+    (p) => new RegExp(p),
+);
 let paramSharedVault = undefined;
 let paramPrivateVault = undefined;
+let paramCommit = false;
+
+function matchesSharedPattern(envKey) {
+    return sharedPatterns.some((re) => re.test(envKey));
+}
+
+function isSharedKey(envKey) {
+    return sharedKeys.includes(envKey) || matchesSharedPattern(envKey);
+}
 
 async function getSecretListWithElevation(keyVaultClient, vaultName) {
     try {
@@ -91,23 +103,33 @@ async function getSecrets(keyVaultClient, vaultName, shared) {
         keyVaultClient,
         vaultName,
     );
-    const p = [];
-    for (const secret of secretList) {
-        if (secret.attributes.enabled) {
-            const secretName = secret.id.split("/").pop();
-            p.push(
-                (async () => {
+    const enabled = secretList
+        .filter((s) => s.attributes.enabled)
+        .map((s) => s.id.split("/").pop());
+
+    const results = [];
+    const failures = [];
+    const concurrency = 5;
+    for (let i = 0; i < enabled.length; i += concurrency) {
+        const batch = enabled.slice(i, i + concurrency);
+        const batchResults = await Promise.all(
+            batch.map(async (secretName) => {
+                try {
                     const response = await keyVaultClient.readSecret(
                         vaultName,
                         secretName,
                     );
                     return [secretName, response.value];
-                })(),
-            );
-        }
+                } catch (e) {
+                    failures.push({ name: secretName, error: e.message });
+                    return null;
+                }
+            }),
+        );
+        results.push(...batchResults.filter((r) => r !== null));
     }
 
-    return Promise.all(p);
+    return { results, failures };
 }
 
 async function execAsync(command, options) {
@@ -123,6 +145,27 @@ async function execAsync(command, options) {
             res(stdout);
         });
     });
+}
+
+async function execWithRetry(command, options, maxRetries = 3) {
+    const SSL_ERROR = "SSL: UNEXPECTED_EOF_WHILE_READING";
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await execAsync(command, options);
+        } catch (e) {
+            if (attempt < maxRetries && e.message.includes(SSL_ERROR)) {
+                const delay = attempt * 1000;
+                console.warn(
+                    chalk.yellow(
+                        `SSL error on attempt ${attempt}/${maxRetries}, retrying in ${delay}ms...`,
+                    ),
+                );
+                await new Promise((res) => setTimeout(res, delay));
+            } else {
+                throw e;
+            }
+        }
+    }
 }
 
 class AzCliKeyVaultClient {
@@ -144,7 +187,7 @@ class AzCliKeyVaultClient {
 
     async getSecrets(vaultName) {
         return JSON.parse(
-            await execAsync(
+            await execWithRetry(
                 `az keyvault secret list --vault-name ${vaultName}`,
             ),
         );
@@ -152,7 +195,7 @@ class AzCliKeyVaultClient {
 
     async readSecret(vaultName, secretName) {
         return JSON.parse(
-            await execAsync(
+            await execWithRetry(
                 `az keyvault secret show --vault-name ${vaultName} --name ${secretName}`,
             ),
         );
@@ -203,20 +246,26 @@ function toEnvKey(secretKey) {
     return secretKey.split("-").join("_");
 }
 
-// Return 0 if the value is the same. -1 if the user skipped. 1 if the value was updated.
-async function pushSecret(
-    stdio,
-    keyVaultClient,
-    vault,
-    secrets,
-    secretKey,
-    value,
-    shared = true,
-) {
+// Two-phase push: first decide what to do for each secret (possibly
+// prompting the user for overwrite confirmation — this MUST run serially so
+// prompts don't interleave), then execute the writes in parallel batches.
+
+// Returns { action: "skip" | "create" | "overwrite" | "noop", displayName }
+async function planPush(stdio, secrets, secretKey, value, shared = true) {
     const suffix = shared ? "" : " (private)";
     const secretValue = secrets.get(secretKey);
     if (secretValue === value) {
-        return 0;
+        return { action: "noop", displayName: secretKey };
+    }
+    if (!paramCommit) {
+        if (secrets.has(secretKey)) {
+            console.log(
+                `  [dry-run] would overwrite ${secretKey}${suffix} (was: ${secretValue?.slice(0, 30)}...)`,
+            );
+        } else {
+            console.log(`  [dry-run] would create ${secretKey}${suffix}`);
+        }
+        return { action: "noop", displayName: secretKey };
     }
     if (secrets.has(secretKey)) {
         const answer = await stdio.question(
@@ -224,14 +273,45 @@ async function pushSecret(
         );
         if (answer.toLowerCase() !== "y") {
             console.log("Skipping...");
-            return -1;
+            return { action: "skip", displayName: secretKey };
         }
-        console.log(`  Overwriting ${secretKey}${suffix}`);
-    } else {
-        console.log(`  Creating ${secretKey}${suffix}`);
+        return { action: "overwrite", displayName: secretKey + suffix };
     }
-    await keyVaultClient.writeSecret(vault, secretKey, value);
-    return 1;
+    return { action: "create", displayName: secretKey + suffix };
+}
+
+// Concurrency-5 parallel writer. `jobs` is an array of
+// { vault, secretKey, value, displayName, action }.
+async function writePlanInParallel(keyVaultClient, jobs) {
+    const concurrency = 5;
+    let updated = 0;
+    const failures = [];
+    for (let i = 0; i < jobs.length; i += concurrency) {
+        const batch = jobs.slice(i, i + concurrency);
+        const batchResults = await Promise.all(
+            batch.map(async (job) => {
+                const label =
+                    job.action === "create" ? "Creating" : "Overwriting";
+                console.log(`  ${label} ${job.displayName}`);
+                try {
+                    await keyVaultClient.writeSecret(
+                        job.vault,
+                        job.secretKey,
+                        job.value,
+                    );
+                    return { ok: true };
+                } catch (e) {
+                    failures.push({
+                        secretKey: job.secretKey,
+                        error: e.message,
+                    });
+                    return { ok: false };
+                }
+            }),
+        );
+        updated += batchResults.filter((r) => r.ok).length;
+    }
+    return { updated, failures };
 }
 
 function getVaultNames(dotEnv) {
@@ -261,45 +341,53 @@ async function pushSecrets() {
     );
 
     console.log(`Pushing secrets from ${dotenvPath} to key vault.`);
-    let updated = 0;
     let skipped = 0;
+    const jobs = [];
     const stdio = readline.createInterface(process.stdin, process.stdout);
     try {
+        // Phase 1: plan serially (prompts must not interleave).
         for (const [envKey, value] of dotEnv) {
             const secretKey = toSecretKey(envKey);
-            if (sharedKeys.includes(envKey)) {
-                const result = await pushSecret(
+            if (isSharedKey(envKey)) {
+                const plan = await planPush(
                     stdio,
-                    keyVaultClient,
-                    vaultNames.shared,
                     sharedSecrets,
                     secretKey,
                     value,
+                    true,
                 );
-                if (result === 1) {
-                    updated++;
-                }
-                if (result === -1) {
+                if (plan.action === "create" || plan.action === "overwrite") {
+                    jobs.push({
+                        vault: vaultNames.shared,
+                        secretKey,
+                        value,
+                        displayName: plan.displayName,
+                        action: plan.action,
+                    });
+                } else if (plan.action === "skip") {
                     skipped++;
                 }
             } else if (privateKeys.includes(envKey)) {
-                if (privateVault === undefined) {
+                if (vaultNames.private === undefined) {
                     console.log(`  Skipping private key ${envKey}.`);
                     continue;
                 }
-                const result = await pushSecret(
+                const plan = await planPush(
                     stdio,
-                    keyVaultClient,
-                    vaultNames.private,
                     privateSecrets,
                     secretKey,
                     value,
                     false,
                 );
-                if (result === 1) {
-                    updated++;
-                }
-                if (result === -1) {
+                if (plan.action === "create" || plan.action === "overwrite") {
+                    jobs.push({
+                        vault: vaultNames.private,
+                        secretKey,
+                        value,
+                        displayName: plan.displayName,
+                        action: plan.action,
+                    });
+                } else if (plan.action === "skip") {
                     skipped++;
                 }
             } else {
@@ -309,7 +397,13 @@ async function pushSecrets() {
     } finally {
         stdio.close();
     }
-    if (skipped === 0 && updated === 0) {
+
+    // Phase 2: execute writes in parallel (concurrency 5).
+    const { updated, failures } = paramCommit
+        ? await writePlanInParallel(keyVaultClient, jobs)
+        : { updated: 0, failures: [] };
+
+    if (skipped === 0 && updated === 0 && jobs.length === 0) {
         console.log("All values up to date in key vault.");
         return;
     }
@@ -319,30 +413,53 @@ async function pushSecrets() {
     if (updated !== 0) {
         console.log(`${updated} secrets updated.`);
     }
+    if (!paramCommit && jobs.length > 0) {
+        console.log(
+            `[dry-run] ${jobs.length} secret(s) would be written. Re-run with --commit.`,
+        );
+    }
+    if (failures.length > 0) {
+        console.warn(
+            chalk.yellow(
+                `\n${failures.length} secret write(s) FAILED — values not updated in vault:`,
+            ),
+        );
+        for (const { secretKey, error } of failures) {
+            console.warn(chalk.yellow(`  - ${secretKey}: ${error}`));
+        }
+        process.exitCode = 1;
+    }
 }
 
 async function pullSecretsFromVault(keyVaultClient, vaultName, shared, dotEnv) {
-    const keys = shared ? sharedKeys : privateKeys;
-    const secrets = await getSecrets(keyVaultClient, vaultName, shared);
+    const { results: secrets, failures } = await getSecrets(
+        keyVaultClient,
+        vaultName,
+        shared,
+    );
     if (secrets.length === 0) {
         console.log(
             chalk.yellow(
                 `WARNING: No secrets found in key vault ${chalk.cyanBright(vaultName)}.`,
             ),
         );
-        return undefined;
+        return { updated: undefined, failures };
     }
+
+    const matches = shared
+        ? (envKey) => isSharedKey(envKey)
+        : (envKey) => privateKeys.includes(envKey);
 
     let updated = 0;
     for (const [secretKey, value] of secrets) {
         const envKey = toEnvKey(secretKey);
-        if (keys.includes(envKey) && dotEnv.get(envKey) !== value) {
+        if (matches(envKey) && dotEnv.get(envKey) !== value) {
             console.log(`  Updating ${envKey}`);
             dotEnv.set(envKey, value);
             updated++;
         }
     }
-    return updated;
+    return { updated, failures };
 }
 
 async function pullSecrets() {
@@ -350,13 +467,13 @@ async function pullSecrets() {
     const keyVaultClient = await getKeyVaultClient();
     const vaultNames = getVaultNames(dotEnv);
     console.log(`Pulling secrets to ${chalk.cyanBright(dotenvPath)}`);
-    const sharedUpdated = await pullSecretsFromVault(
+    const sharedResult = await pullSecretsFromVault(
         keyVaultClient,
         vaultNames.shared,
         true,
         dotEnv,
     );
-    const privateUpdated = vaultNames.private
+    const privateResult = vaultNames.private
         ? await pullSecretsFromVault(
               keyVaultClient,
               vaultNames.private,
@@ -365,11 +482,19 @@ async function pullSecrets() {
           )
         : undefined;
 
-    if (sharedUpdated === undefined && privateUpdated === undefined) {
+    if (
+        sharedResult.updated === undefined &&
+        privateResult?.updated === undefined
+    ) {
         throw new Error("No secrets found in key vaults.");
     }
 
-    let updated = (sharedUpdated ?? 0) + (privateUpdated ?? 0);
+    const allFailures = [
+        ...(sharedResult.failures ?? []),
+        ...(privateResult?.failures ?? []),
+    ];
+
+    let updated = (sharedResult.updated ?? 0) + (privateResult?.updated ?? 0);
     for (const key of deleteKeys) {
         if (dotEnv.has(key)) {
             console.log(`  Deleting ${key}`);
@@ -391,9 +516,27 @@ async function pullSecrets() {
         updated++;
     }
 
+    if (allFailures.length > 0) {
+        console.warn(
+            chalk.yellow(
+                `\nWARNING: Failed to fetch ${allFailures.length} secret(s) — these values were not updated in .env:`,
+            ),
+        );
+        for (const { name, error } of allFailures) {
+            console.warn(chalk.yellow(`  - ${name}: ${error}`));
+        }
+        process.exitCode = 1;
+    }
+
     if (updated === 0) {
         console.log(
             `\nAll values up to date in ${chalk.cyanBright(dotenvPath)}`,
+        );
+        return;
+    }
+    if (!paramCommit) {
+        console.log(
+            `\n[dry-run] ${updated} value(s) would be updated in ${chalk.cyanBright(dotenvPath)}. Re-run with ${chalk.yellowBright("--commit")} to write.`,
         );
         return;
     }
@@ -432,6 +575,17 @@ const commands = ["push", "pull", "help"];
                 throw new Error("Missing value for --private");
             }
             i++;
+            continue;
+        }
+
+        if (arg === "--commit") {
+            paramCommit = true;
+            continue;
+        }
+
+        if (arg === "--dry-run") {
+            // Explicit no-op; dry-run is the default.
+            paramCommit = false;
             continue;
         }
 

@@ -19,8 +19,14 @@ const debug = registerDebug("typeagent:indexingService");
 // The type of data being indexed
 export type IndexSource = "image" | "email" | "website";
 
+// Token usage accumulated during knowledge extraction
+export type TokenStats = {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+};
+
 // The meta data about the index
-// TODO: add token stats
 export type IndexData = {
     source: IndexSource; // the data source of the index
     name: string; // the name of the index
@@ -30,6 +36,7 @@ export type IndexData = {
     state: "new" | "indexing" | "finished" | "stopped" | "idle" | "error"; // the state of the indexing service for this index
     progress: number; // the # of items processed for indexing (knowledge extraction)
     sizeOnDisk: number; // the amount of space on disk this index is consuming
+    tokenStats?: TokenStats | undefined; // token usage accumulated during indexing
 };
 
 // The different models being used for the index
@@ -129,11 +136,10 @@ if (
             incrementalBuildCheckPoint.lastBuildTimestamp = performance.now();
         }
 
-        // TODO: make this less chatty - maybe percentage based or something?
-        // only report when we get to the end of a folder
-        //    if (count === max) {
-        sendIndexStatus();
-        //    }
+        // Only report at the end of each folder to avoid flooding the host process
+        if (count === max) {
+            sendIndexStatus();
+        }
     }
 
     async function startIndexing() {

@@ -2245,9 +2245,20 @@ debug(`[SIGNAL] Y.js WebSocket server integrated`);
 
 // Start the HTTP server (which includes WebSocket support)
 server.listen(port, () => {
-    debug(`Express server with WebSocket support listening on port ${port}`);
-    debug(`Y.js collaboration available at ws://localhost:${port}/<room-name>`);
+    const boundPort = (server.address() as { port: number }).port;
+    debug(
+        `Express server with WebSocket support listening on port ${boundPort}`,
+    );
+    debug(
+        `Y.js collaboration available at ws://localhost:${boundPort}/<room-name>`,
+    );
 
     // Send success signal to parent process AFTER server is ready to accept WebSocket connections
-    process.send?.("Success");
+    process.send?.({ type: "Success", port: boundPort });
+});
+
+server.on("error", (err: NodeJS.ErrnoException) => {
+    console.error("Markdown view server failed to start:", err);
+    process.send?.("Failure");
+    process.exit(1);
 });

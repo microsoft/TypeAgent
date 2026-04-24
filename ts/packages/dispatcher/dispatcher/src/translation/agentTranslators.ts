@@ -19,7 +19,10 @@ import {
     MultipleActionOptions,
 } from "./multipleActionSchema.js";
 import { HistoryContext, ParamObjectType } from "agent-cache";
-import { createTypeAgentRequestPrompt } from "../context/chatHistoryPrompt.js";
+import {
+    createTypeAgentRequestPrompt,
+    EntityPromptShape,
+} from "../context/chatHistoryPrompt.js";
 import {
     composeActionSchema,
     ComposeSchemaOptions,
@@ -284,6 +287,7 @@ function createTypeAgentValidator<T extends TranslatedAction>(
                   composeOptions,
               ),
               generateOptions,
+              buildInjectedSchemaNameMap(actionConfigs, provider),
           )
         : createTypeScriptJsonValidator<T>(
               composeTranslatorSchemas(
@@ -296,6 +300,28 @@ function createTypeAgentValidator<T extends TranslatedAction>(
               ),
               "AllActions",
           );
+}
+
+// Build a fallback map: actionName → schemaName for injected sub-schemas that
+// are not already captured in the primary actionConfigs.  The LLM sees these
+// actions in its prompt (because they are injected) but they may not be in the
+// primary validation schema group, causing spurious "Unknown action name" errors.
+function buildInjectedSchemaNameMap(
+    actionConfigs: ActionConfig[],
+    provider: ActionConfigProvider,
+): Map<string, string> {
+    const primarySchemaNames = new Set(actionConfigs.map((c) => c.schemaName));
+    const map = new Map<string, string>();
+    for (const config of provider.getActionConfigs()) {
+        if (!config.injected || primarySchemaNames.has(config.schemaName)) {
+            continue;
+        }
+        const schemaFile = provider.getActionSchemaFileForConfig(config);
+        for (const actionName of schemaFile.parsedActionSchema.actionSchemas.keys()) {
+            map.set(actionName, config.schemaName);
+        }
+    }
+    return map;
 }
 
 function collectSchemaName(
@@ -350,6 +376,8 @@ export function loadAgentJsonTranslator<
     generateOptions?: GenerateSchemaOptions | null, // null means not generated
     model?: string,
     promptLogger?: PromptLogger,
+    entityPromptShape: EntityPromptShape = "facets",
+    entityPathNavigationEnabled: boolean = false,
 ): TypeAgentTranslator<T> {
     const validator = createTypeAgentValidator<T>(
         actionConfigs,
@@ -360,10 +388,16 @@ export function loadAgentJsonTranslator<
     );
     // Collect schema name mapping.
     const schemaNameMap = collectSchemaName(actionConfigs, provider);
-    return createTypeAgentTranslator<T>(validator, schemaNameMap, {
-        model,
-        promptLogger,
-    });
+    return createTypeAgentTranslator<T>(
+        validator,
+        schemaNameMap,
+        {
+            model,
+            promptLogger,
+        },
+        entityPromptShape,
+        entityPathNavigationEnabled,
+    );
 }
 
 function createTypeAgentTranslator<
@@ -372,6 +406,8 @@ function createTypeAgentTranslator<
     validator: TypeAgentJsonValidator<T>,
     schemaNameMap: Map<string, string>,
     options: JsonTranslatorOptions<T>,
+    entityPromptShape: EntityPromptShape = "facets",
+    entityPathNavigationEnabled: boolean = false,
 ): TypeAgentTranslator<T> {
     const translator = createJsonTranslatorWithValidator<T>(
         validator.getTypeName().toLowerCase(),
@@ -413,6 +449,9 @@ function createTypeAgentTranslator<
                 request,
                 history,
                 attachments,
+                true,
+                entityPromptShape,
+                entityPathNavigationEnabled,
             );
 
             return streamingTranslator.translate(
@@ -431,6 +470,8 @@ function createTypeAgentTranslator<
                 undefined,
                 undefined,
                 false,
+                entityPromptShape,
+                entityPathNavigationEnabled,
             );
             return altTranslator.translate(requestPrompt);
         },
@@ -453,6 +494,8 @@ export function createTypeAgentTranslatorForSelectedActions<
     options?: ComposeSchemaOptions,
     model?: string,
     promptLogger?: PromptLogger,
+    entityPromptShape: EntityPromptShape = "facets",
+    entityPathNavigationEnabled: boolean = false,
 ) {
     const validator = createActionSchemaJsonValidator<T>(
         composeSelectedActionSchema(
@@ -470,10 +513,16 @@ export function createTypeAgentTranslatorForSelectedActions<
         definitions,
         actionConfig,
     );
-    return createTypeAgentTranslator<T>(validator, schemaNameMap, {
-        model,
-        promptLogger,
-    });
+    return createTypeAgentTranslator<T>(
+        validator,
+        schemaNameMap,
+        {
+            model,
+            promptLogger,
+        },
+        entityPromptShape,
+        entityPathNavigationEnabled,
+    );
 }
 
 // For CLI, replicate the behavior of loadAgentJsonTranslator to get the schema

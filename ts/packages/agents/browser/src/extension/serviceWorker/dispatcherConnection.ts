@@ -20,7 +20,7 @@ import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
 import type {
     AgentServerInvokeFunctions,
     DispatcherConnectOptions,
-    JoinSessionResult,
+    JoinConversationResult,
 } from "@typeagent/agent-server-protocol";
 import {
     getDispatcherChannelName,
@@ -42,7 +42,7 @@ let connectionPromise: Promise<Dispatcher> | undefined;
 
 // RPC functions for communicating with the chat panel.
 // rpcSend: fire-and-forget (display updates)
-// rpcInvoke: awaited (askYesNo, proposeAction)
+// rpcInvoke: awaited (question, proposeAction)
 // Set by setChatPanelRpc() from the service worker index after the RPC server is created.
 let rpcSend: ((name: string, ...args: any[]) => void) | undefined;
 let rpcInvoke: ((name: string, ...args: any[]) => Promise<any>) | undefined;
@@ -66,6 +66,9 @@ function createChatPanelClientIO(): ClientIO {
             rpcSend?.("dispatcherClear", { requestId });
         },
         exit(requestId) {
+            rpcSend?.("dispatcherExit", { requestId });
+        },
+        shutdown(requestId) {
             rpcSend?.("dispatcherExit", { requestId });
         },
         setUserRequest() {},
@@ -102,18 +105,25 @@ function createChatPanelClientIO(): ClientIO {
             });
         },
 
-        async askYesNo(_requestId, message, defaultValue) {
-            if (rpcInvoke) {
+        async question(_requestId, message, choices, defaultId) {
+            // For Yes/No, delegate to the chat panel RPC.
+            if (
+                choices.length === 2 &&
+                choices[0] === "Yes" &&
+                choices[1] === "No" &&
+                rpcInvoke
+            ) {
                 try {
-                    return await rpcInvoke("chatPanelAskYesNo", {
+                    const yes = await rpcInvoke("chatPanelAskYesNo", {
                         message,
-                        defaultValue,
+                        defaultValue: defaultId === 0,
                     });
+                    return yes ? 0 : 1;
                 } catch {
-                    return defaultValue ?? true;
+                    return defaultId ?? 0;
                 }
             }
-            return defaultValue ?? true;
+            return defaultId ?? 0;
         },
         async proposeAction(_requestId, actionTemplates, source) {
             if (rpcInvoke) {
@@ -130,10 +140,6 @@ function createChatPanelClientIO(): ClientIO {
             }
             return undefined;
         },
-        async popupQuestion(_message, _choices, defaultId, _source) {
-            return defaultId ?? 0;
-        },
-
         notify(notificationId, event, data, source) {
             rpcSend?.("dispatcherNotify", {
                 notificationId,
@@ -151,6 +157,15 @@ function createChatPanelClientIO(): ClientIO {
         },
 
         requestChoice() {
+            // Not supported in extension
+        },
+        requestInteraction() {
+            // Not supported in extension
+        },
+        interactionResolved() {
+            // Not supported in extension
+        },
+        interactionCancelled() {
             // Not supported in extension
         },
         takeAction(requestId, action, data) {
@@ -216,11 +231,11 @@ async function doConnect(): Promise<Dispatcher> {
                 filter: true,
                 clientType: "extension",
             };
-            rpc.invoke("joinSession", options)
-                .then((result: JoinSessionResult) => {
+            rpc.invoke("joinConversation", options)
+                .then((result: JoinConversationResult) => {
                     debug(
-                        "Joined session=%s, connectionId=%s",
-                        result.sessionId,
+                        "Joined conversation=%s, connectionId=%s",
+                        result.conversationId,
                         result.connectionId,
                     );
                     resolved = true;
@@ -228,13 +243,13 @@ async function doConnect(): Promise<Dispatcher> {
                     createClientIORpcServer(
                         clientIO,
                         channel.createChannel(
-                            getClientIOChannelName(result.sessionId),
+                            getClientIOChannelName(result.conversationId),
                         ),
                     );
 
                     const d = createDispatcherRpcClient(
                         channel.createChannel(
-                            getDispatcherChannelName(result.sessionId),
+                            getDispatcherChannelName(result.conversationId),
                         ),
                         result.connectionId,
                     );

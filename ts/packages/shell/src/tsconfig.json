@@ -6,11 +6,5 @@
     "rootDir": ".",
     "moduleResolution": "node16"
   },
-  "include": [
-    "renderer/src/partialCompletionSession.ts",
-    "renderer/src/prefixTree.ts",
-    "renderer/src/searchMenuBase.ts",
-    "preload/electronTypes.ts",
-    "preload/shellSettingsType.ts"
-  ]
+  "include": ["preload/electronTypes.ts", "preload/shellSettingsType.ts"]
 }

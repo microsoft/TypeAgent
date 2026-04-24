@@ -70,16 +70,32 @@ export class ActionSchemaSemanticMap {
         debug(
             `Reused ${reuseCount}/${actionSchemaFile.parsedActionSchema.actionSchemas.size} embeddings for ${config.schemaName} ${cache === undefined}`,
         );
-        const embeddings = await generateTextEmbeddingsWithRetry(
-            this.model,
-            keys,
-        );
-        for (let i = 0; i < keys.length; i++) {
-            actionSemanticMap.set(keys[i], {
-                embedding: embeddings[i],
-                actionSchemaFile,
-                definition: definitions[i],
-            });
+        if (keys.length > 0) {
+            debug(
+                `Requesting ${keys.length} missing embeddings for ${config.schemaName}: [${keys.map((k) => JSON.stringify(k)).join(", ")}]`,
+            );
+            const start = Date.now();
+            try {
+                const embeddings = await generateTextEmbeddingsWithRetry(
+                    this.model,
+                    keys,
+                );
+                debug(
+                    `Received ${embeddings.length} embeddings for ${config.schemaName} in ${Date.now() - start}ms`,
+                );
+                for (let i = 0; i < keys.length; i++) {
+                    actionSemanticMap.set(keys[i], {
+                        embedding: embeddings[i],
+                        actionSchemaFile,
+                        definition: definitions[i],
+                    });
+                }
+            } catch (e: any) {
+                debug(
+                    `Failed to get embeddings for ${config.schemaName} after ${Date.now() - start}ms: ${e?.message ?? e}`,
+                );
+                throw e;
+            }
         }
     }
 

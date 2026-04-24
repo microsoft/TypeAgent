@@ -41,6 +41,7 @@ export type AppAgentManifest = {
     cachedActivities?: Record<string, ActivityCacheSpec>; // Key is activity name, default (if not specified) is false
     // Registered flow programs: actionName → path to .flow.json (relative to manifest file)
     flows?: Record<string, string>;
+    allowDynamicAgents?: boolean; // whether this agent can add/remove dynamic sub-agents at runtime, default is false
 } & ActionManifest;
 
 export type SchemaTypeNames = {
@@ -76,6 +77,7 @@ export type ActionManifest = {
     schemaDefaultEnabled?: boolean;
     actionDefaultEnabled?: boolean;
     transient?: boolean; // whether the translator is transient, default is false
+    errorReasoning?: boolean; // invoke reasoning on action error, default is false
 
     schema?: SchemaManifest;
     subActionManifests?: { [key: string]: ActionManifest };
@@ -227,6 +229,9 @@ export interface SessionContext<T = unknown> {
     // Experimental: get the shared local host port
     getSharedLocalHostPort(agentName: string): Promise<number>;
 
+    // Experimental: update this agent's bound local host port (used after OS port assignment)
+    setLocalHostPort(port: number): void;
+
     // Experimental: get the available indexes
     indexes(type: "image" | "email" | "website" | "all"): Promise<any[]>;
 }
@@ -278,6 +283,11 @@ export interface ActionContext<T = void> {
     readonly actionIO: ActionIO;
     readonly sessionContext: SessionContext<T>;
     readonly abortSignal?: AbortSignal | undefined;
+
+    // true when this action was dispatched from within the reasoning loop (via MCP execute_action),
+    // false when dispatched directly from the translator. Agents can use this to decide whether
+    // to execute immediately or redirect back to the reasoning loop.
+    readonly isFromReasoningLoop: boolean;
 
     // queue up toggle transient agent to be executed at the end of the commands
     queueToggleTransientAgent(

@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "actionName": "gitDiff",
+  "description": "Shows uncommitted changes in the git repository",
+  "displayName": "Git Diff",
+  "parameters": [
+    {
+      "name": "repoPath",
+      "type": "path",
+      "required": false,
+      "description": "Path to the git repository",
+      "default": "."
+    },
+    {
+      "name": "file",
+      "type": "string",
+      "required": false,
+      "description": "Specific file to show diff for"
+    }
+  ],
+  "script": {
+    "language": "powershell",
+    "body": "param([string]$RepoPath = '.', [string]$File)\nPush-Location $RepoPath\ntry {\n    $args = @('diff', '--stat')\n    if ($File) { $args += $File }\n    & git @args\n    Write-Output ''\n    $args = @('diff')\n    if ($File) { $args += $File }\n    & git @args\n} finally {\n    Pop-Location\n}",
+    "expectedOutputFormat": "text"
+  },
+  "grammarPatterns": [
+    {
+      "pattern": "git diff (in)? $(repoPath:wildcard)?",
+      "isAlias": false,
+      "examples": ["git diff", "git diff in myrepo"]
+    },
+    {
+      "pattern": "(show|what are) (the)? (git)? changes (in)? $(repoPath:wildcard)?",
+      "isAlias": false,
+      "examples": ["show the changes", "what are the git changes"]
+    },
+    {
+      "pattern": "diff $(file:wildcard)",
+      "isAlias": false,
+      "examples": ["diff myfile.ts"]
+    }
+  ],
+  "sandbox": {
+    "allowedCmdlets": ["Push-Location", "Pop-Location", "Write-Output"],
+    "allowedPaths": ["$PWD", "$env:USERPROFILE"],
+    "allowedModules": [
+      "Microsoft.PowerShell.Management",
+      "Microsoft.PowerShell.Utility"
+    ],
+    "maxExecutionTime": 30,
+    "networkAccess": false
+  },
+  "source": {
+    "type": "manual",
+    "timestamp": "2026-04-23T00:00:00Z"
+  }
+}

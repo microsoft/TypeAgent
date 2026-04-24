@@ -16,7 +16,6 @@ import registerDebug from "debug";
 import { getAppAgentName } from "../translation/agentTranslators.js";
 import {
     ActionResult,
-    ActionResultError,
     ActionContext,
     ParsedCommandParams,
     ParameterDefinitions,
@@ -112,7 +111,13 @@ export async function executeAction(
     }
 
     const schemaName = action.schemaName;
-    const systemContext = context.sessionContext.agentContext;
+    // For nested action calls (e.g., from TaskFlow scripts), agentContext may be
+    // the agent's own context rather than CommandHandlerContext. In that case,
+    // use _systemContext which exposes the CommandHandlerContext.
+    const sessionCtx = context.sessionContext as any;
+    const systemContext: CommandHandlerContext =
+        sessionCtx._systemContext ?? sessionCtx.agentContext;
+
     const appAgentName = getAppAgentName(schemaName);
     const requestId = getRequestId(systemContext);
     const appAgent = systemContext.agents.getAppAgent(appAgentName);
@@ -239,7 +244,9 @@ async function canExecute(
     actions: ExecutableAction[],
     context: ActionContext<CommandHandlerContext>,
 ): Promise<boolean> {
-    const systemContext = context.sessionContext.agentContext;
+    const sessionCtx = context.sessionContext as any;
+    const systemContext: CommandHandlerContext =
+        sessionCtx._systemContext ?? sessionCtx.agentContext;
     const unknown: UnknownAction[] = [];
     const disabled = new Set<string>();
     for (const { action } of actions) {
@@ -310,12 +317,20 @@ async function canExecute(
     return true;
 }
 
+export type ActionExecutionError = {
+    error: string;
+    failedAction: ExecutableAction;
+    fallbackToReasoning?: boolean;
+};
+
 export async function executeActions(
     actions: ExecutableAction[],
     entities: PromptEntity[] | undefined,
     context: ActionContext<CommandHandlerContext>,
-): Promise<ActionResultError | undefined> {
-    const systemContext = context.sessionContext.agentContext;
+): Promise<ActionExecutionError | undefined> {
+    const sessionCtx = context.sessionContext as any;
+    const systemContext: CommandHandlerContext =
+        sessionCtx._systemContext ?? sessionCtx.agentContext;
     const commandResult = getCommandResult(systemContext);
     if (commandResult !== undefined) {
         commandResult.actions = actions.map(({ action }) => action);
@@ -382,7 +397,10 @@ export async function executeActions(
         );
 
         // add the action result to memory whether it has error or not.
-        if (systemContext.actionResultKnowledgeExtraction === true) {
+        if (
+            systemContext.actionResultEntityStorage ||
+            systemContext.actionResultKnowledgeExtraction
+        ) {
             addActionResultToMemory(
                 systemContext,
                 executableAction,
@@ -394,7 +412,7 @@ export async function executeActions(
 
         if (result.error !== undefined) {
             // Stop executing further action on error.
-            return result as ActionResultError;
+            return { error: result.error, failedAction: executableAction };
         }
 
         const resultEntityId = executableAction.resultEntityId;
@@ -510,9 +528,14 @@ function getAdditionalExecutableActions(
         ) as FullAction;
 
         if (appAgentName !== DispatcherName) {
-            // For non-dispatcher, action can only be trigger within the same agent.
+            // For non-dispatcher, action can only be triggered within the same agent,
+            // with the exception of the reasoning action which is a meta-action that
+            // any agent may request to hand off complex tasks to the reasoning loop.
             const actionAppAgentName = getAppAgentName(fullAction.schemaName);
-            if (actionAppAgentName !== appAgentName) {
+            const isReasoningAction =
+                actionAppAgentName === DispatcherName &&
+                fullAction.actionName === "reasoningAction";
+            if (actionAppAgentName !== appAgentName && !isReasoningAction) {
                 throw new Error(
                     `Cannot invoke actions from other agent '${actionAppAgentName}'.`,
                 );

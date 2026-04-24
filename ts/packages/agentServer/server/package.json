@@ -15,12 +15,16 @@
   "exports": {
     ".": "./dist/server.js"
   },
+  "bin": {
+    "agent-server-status": "./dist/status.js",
+    "agent-server-stop": "./dist/stop.js"
+  },
   "files": [
     "dist",
     "!dist/test"
   ],
   "scripts": {
-    "build": "npm run tsc",
+    "build": "npm run tsc && node -e \"require('fs').writeFileSync('dist/.build-stamp', new Date().toISOString())\"",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
@@ -34,6 +38,7 @@
     "@typeagent/agent-server-protocol": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
+    "@typeagent/dispatcher-types": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "debug": "^4.4.0",
     "default-agent-provider": "workspace:*",

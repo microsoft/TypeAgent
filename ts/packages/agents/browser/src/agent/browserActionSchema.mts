@@ -24,7 +24,8 @@ export type BrowserActions =
     | OpenSearchResult
     | ChangeSearchProvider
     | SearchImageAction
-    | ExecuteAdHocScript;
+    | ExecuteAdHocScript
+    | CreateInferredFlow;
 
 export type WebSearchResult = string;
 export type BrowserEntities = WebPageMoniker | WebSearchResult;
@@ -250,5 +251,15 @@ export type ExecuteAdHocScript = {
         params?: string;
         // Execution timeout in milliseconds (default: 120000)
         timeout?: number;
+    };
+};
+
+// Create WebFlows from previously inferred actions.
+// Used after @browser actions infer to select which actions to create.
+export type CreateInferredFlow = {
+    actionName: "createInferredFlow";
+    parameters: {
+        // The indices of the inferred actions to create (1-based), or "all" to create all
+        selection: string;
     };
 };

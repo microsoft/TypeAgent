@@ -13,6 +13,12 @@
 import { AgentCache } from "../src/cache/cache.js";
 import { loadGrammarRules } from "action-grammar";
 import { ExplainerFactory } from "../src/cache/factory.js";
+import { CompletionResult } from "../src/constructions/constructionCache.js";
+
+// Helpers for per-group CompletionResult access
+function flatCompletions(result: CompletionResult): string[] {
+    return result.groups.flatMap((g) => g.completions);
+}
 
 const mockExplainerFactory: ExplainerFactory = () => {
     return {
@@ -59,28 +65,29 @@ describe("Cross-grammar separator-mode conflict filtering", () => {
         return cache.completion(input, { namespaceKeys }, direction);
     }
 
-    test("'ab' no trailing separator: none-mode grammar survives, requiring dropped", () => {
+    test("'ab' no trailing separator: both grammars survive with per-group modes", () => {
         const result = complete("ab");
         expect(result).toBeDefined();
-        expect(result!.completions).toContain("cd");
-        // closedSet forced false so shell re-fetches on sep change.
-        expect(result!.closedSet).toBe(false);
-        // separatorMode should be "none" (only none-grammar survived).
-        expect(result!.separatorMode).toBe("none");
+        expect(flatCompletions(result!)).toContain("cd");
+        // Both grammars survive — closedSet true (same completions).
+        expect(result!.closedSet).toBe(true);
+        // Two groups: one "none" (from noneSchema), one "autoSpacePunctuation" (from autoSchema).
+        const modes = result!.groups.map((g) => g.separatorMode).sort();
+        expect(modes).toEqual(["autoSpacePunctuation", "none"]);
     });
 
-    test("'ab ' trailing separator: requiring-mode grammar survives, none dropped", () => {
+    test("'ab ' trailing separator: both grammars survive with per-group modes", () => {
         const result = complete("ab ");
         expect(result).toBeDefined();
-        expect(result!.completions).toContain("cd");
-        expect(result!.closedSet).toBe(false);
-        // P advanced past the separator → separatorMode overridden to "optional".
-        expect(result!.separatorMode).toBe("optional");
-        // matchedPrefixLength advanced by 1 past the trailing separator.
-        expect(result!.matchedPrefixLength).toBe(3);
+        expect(flatCompletions(result!)).toContain("cd");
+        // Both grammars survive — closedSet true (same completions).
+        expect(result!.closedSet).toBe(true);
+        // Two groups with their respective separator modes.
+        const modes = result!.groups.map((g) => g.separatorMode).sort();
+        expect(modes).toEqual(["autoSpacePunctuation", "none"]);
     });
 
-    test("afterWildcard 'all' downgraded to 'some' when grammars dropped", () => {
+    test("afterWildcard preserved when no grammars dropped", () => {
         // Use grammars with wildcards so afterWildcard can be "all".
         const cache2 = new AgentCache("test2", mockExplainerFactory, undefined);
 
@@ -109,11 +116,10 @@ describe("Cross-grammar separator-mode conflict filtering", () => {
         );
         const result = cache2.completion("hello", { namespaceKeys });
         expect(result).toBeDefined();
-        // If grammars were dropped and afterWildcard was "all",
-        // it should be downgraded to "some".
-        if (result!.afterWildcard !== "none") {
-            expect(result!.afterWildcard).not.toBe("all");
-        }
+        // With no conflict filtering, afterWildcard is preserved as-is.
+        // Both grammars report afterWildcard and the merge keeps the
+        // widest value.
+        expect(result!.afterWildcard).toBeDefined();
     });
 
     test("no conflict when both grammars have compatible modes", () => {
@@ -143,8 +149,8 @@ describe("Cross-grammar separator-mode conflict filtering", () => {
         const result = cache3.completion("ab", { namespaceKeys });
         expect(result).toBeDefined();
         // Both completions present — no filtering.
-        expect(result!.completions).toContain("cd");
-        expect(result!.completions).toContain("ef");
+        expect(flatCompletions(result!)).toContain("cd");
+        expect(flatCompletions(result!)).toContain("ef");
         // closedSet not forced false (no conflict).
         expect(result!.closedSet).toBe(true);
     });

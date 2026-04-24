@@ -1028,7 +1028,18 @@ async function findRecentAnswers(
     }
     // Assume the name field (the internal key) is a timestamp.
     recentAnswers.sort((a, b) => b.name.localeCompare(a.name));
-    recentAnswers.splice(20); // TODO: Cut off by total size, not count.
+    // Cut off by total size (character count), not count.
+    let totalSize = 0;
+    const maxTotalSize = 100_000;
+    let cutoff = recentAnswers.length;
+    for (let i = 0; i < recentAnswers.length; i++) {
+        totalSize += JSON.stringify(recentAnswers[i]).length;
+        if (totalSize > maxTotalSize) {
+            cutoff = i;
+            break;
+        }
+    }
+    recentAnswers.splice(cutoff);
     recentAnswers.reverse(); // Most recent last.
     return recentAnswers;
 }
@@ -1148,7 +1159,6 @@ export function writeChunkLines(
     io: iapp.InteractiveIo,
     lineBudget = 10,
 ): void {
-    // TODO: limit how much we write per blob too (if there are multiple).
     writeMain(io, `\nCHUNK ID: ${chunk.id}`);
     const formatContent = (content: string | string[]): string => {
         if (Array.isArray(content)) {
@@ -1164,9 +1174,18 @@ export function writeChunkLines(
         return content;
     };
 
-    if (chunk.blobs[0].content) {
-        const content = formatContent(chunk.blobs[0].content);
-        writeMain(io, `Content: ${content}`);
+    const perBlobBudget = Math.ceil(lineBudget / chunk.blobs.length);
+    for (const blob of chunk.blobs) {
+        if (!blob.content) continue;
+        const content = formatContent(blob.content);
+        const blobLines = content.split(/\r?\n/);
+        const limit = Math.min(blobLines.length, perBlobBudget);
+        for (let i = 0; i < limit; i++) {
+            writeMain(io, blobLines[i]);
+        }
+        if (blobLines.length > perBlobBudget) {
+            writeNote(io, "   ...");
+        }
     }
 }
 
@@ -1175,10 +1194,9 @@ export function wordWrap(text: string, wrapLength: number = 80): string {
     const lines: string[] = [];
     const prefixRegex = /^\s*((-|\*|\d+\.)\s+)?/;
     for (let line of text.split(/[ ]*\r?\n/)) {
-        if (line.startsWith("```")) inCodeBlock = !inCodeBlock; // TODO: Colorize code blocks.
-        if (line.length <= wrapLength || inCodeBlock) {
-            // The whole line is deemed to fit.
-            lines.push(line);
+        if (line.startsWith("```")) inCodeBlock = !inCodeBlock;
+        if (inCodeBlock || line.startsWith("```")) {
+            lines.push(chalk.cyan(line));
             continue;
         }
         // We must try to break.

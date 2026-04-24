@@ -93,15 +93,16 @@ export function apiSettingsFromEnv(
  * Get the page object of the item with the supplied title.
  * @param title - The title of the page to retrieve
  * @param config - The wikipedia API configuration
+ * @param locale - The Wikipedia language edition (e.g. "en", "de", "fr"). Defaults to "en".
  * @returns The page object.
  */
 export async function getPageObject(
     title: string,
     config: wikipedia.WikipediaApiSettings,
+    locale: string = "en",
 ) {
-    // TODO: localization (e.g. en, de, fr, etc.)
     const response = await fetch(
-        `${config.endpoint}core/v1/wikipedia/en/page/${title}/bare`,
+        `${config.endpoint}core/v1/wikipedia/${locale}/page/${encodeWikipediaTitle(title)}/bare`,
         { method: "GET", headers: await config.getAPIHeaders() },
     );
 
@@ -116,14 +117,15 @@ export async function getPageObject(
  *
  * @param title - The title of the page whose content to get.
  * @param config - The wikipedia API configuration
- * @returns - The content of the requetsed page or undefined if there was a problem
+ * @param locale - The Wikipedia language edition (e.g. "en", "de", "fr"). Defaults to "en".
+ * @returns - The content of the requested page or undefined if there was a problem
  */
 export async function getPageMarkdown(
     title: string,
     config: wikipedia.WikipediaApiSettings,
+    locale: string = "en",
 ): Promise<string | undefined> {
-    // TODO: localization (e.g. en, de, fr, etc.)
-    const url: string = `${config.endpoint}en/page/${encodeWikipediaTitle(title)}`;
+    const url: string = `${config.endpoint}${locale}/page/${encodeWikipediaTitle(title)}`;
     const response = await fetch(url, {
         method: "GET",
         headers: await config.getAPIHeaders(),

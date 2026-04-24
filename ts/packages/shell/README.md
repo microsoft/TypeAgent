@@ -26,6 +26,47 @@ Additionally, if you are running MS Graph based sample agents like Calendar and 
 del %LOCALAPPDATA%\.IdentityService\typeagent-tokencache
 ```
 
+## Conversation Management
+
+When connected to the agent server (remote mode), TypeAgent Shell supports full multi-conversation management. Conversations persist across sessions and can be created, renamed, switched, and deleted from the UI.
+
+### Default conversation
+
+When the Shell connects to the agent server, it automatically joins a conversation named `"Shell"`, creating it if it does not already exist. This conversation persists across restarts — history is replayed on reconnect, with past messages shown in grayscale and a `─── now ───` separator marking where new activity begins.
+
+### Conversation commands
+
+Use `/conversation` (or the `@conversation` alias) to manage conversations from the chat input:
+
+| Command                            | Description               |
+| ---------------------------------- | ------------------------- |
+| `/conversation list`               | List all conversations    |
+| `/conversation new [name]`         | Create a new conversation |
+| `/conversation switch <id\|name>`  | Switch to a conversation  |
+| `/conversation rename <id> <name>` | Rename a conversation     |
+| `/conversation delete <id\|name>`  | Delete a conversation     |
+
+### Switching conversations
+
+When you switch to a different conversation:
+
+- The chat area clears and replays that conversation's history, shown in grayscale to distinguish it from new activity.
+- A `─── now ───` separator marks where new messages will appear.
+- A status message confirms which conversation you have joined: `Connected to conversation 'X'.`
+
+### Multi-client notifications
+
+If you have multiple clients connected (e.g., both a Shell and a CLI connected to the same conversation), you will see status messages when clients join or leave:
+
+```
+[A new client has joined this conversation. You are connected to 'my-chat'.]
+[A client has left this conversation. You remain connected to 'my-chat'.]
+```
+
+### Local mode
+
+In local mode (no agent server), only a single default conversation is available. Conversation switching and creation are not supported.
+
 ### Azure Speech to Text service (Optional)
 
 Currently, TypeAgent Shell optionally supports voice input via Azure Speech Services or [Local Whisper Service](../../../python/stt/whisperService/) in addition to keyboard input.

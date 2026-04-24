@@ -424,6 +424,8 @@ export type ChatPanelCallFunctions = {
     dispatcherConnectionStatus(data: { connected: boolean }): void;
     /** Inject a command into the chat panel as if the user typed it. */
     injectCommand(data: { command: string }): void;
+    /** Start the interactive macro authoring flow. */
+    startMacroAuthoring(data: {}): void;
 };
 
 // =============================================

@@ -10,6 +10,8 @@ export { grammarFromJson } from "./grammarDeserializer.js";
 export { grammarToJson } from "./grammarSerializer.js";
 export { loadGrammarRules, loadGrammarRulesNoThrow } from "./grammarLoader.js";
 export type { LoadGrammarRulesOptions } from "./grammarLoader.js";
+export type { GrammarOptimizationOptions } from "./grammarOptimizer.js";
+export { recommendedOptimizations } from "./grammarOptimizer.js";
 export type { SchemaLoader } from "./grammarCompiler.js";
 
 // Parser (for tooling — formatter, linters, etc.)
@@ -18,20 +20,25 @@ export type {
     GrammarParseResult,
     ImportStatement,
     RuleDefinition,
+    SpacingAnnotationComments,
 } from "./grammarRuleParser.js";
 
 // Writer / formatter
 export { writeGrammarRules } from "./grammarRuleWriter.js";
 
 export { matchGrammar, GrammarMatchResult } from "./grammarMatcher.js";
+export { needsSeparatorInAutoMode } from "./grammarMatcher.js";
 
 export {
     matchGrammarCompletion,
     GrammarCompletionResult,
-    isRequiringSepMode,
-    hasTrailingSeparator,
+    spacingModeToSeparatorMode,
 } from "./grammarCompletion.js";
-export type { AfterWildcard } from "./grammarCompletion.js";
+export type {
+    AfterWildcard,
+    GrammarCompletionGroup,
+    GrammarCompletionProperty,
+} from "./grammarCompletion.js";
 
 // Entity system
 export type { EntityValidator, EntityConverter } from "./entityRegistry.js";

@@ -103,6 +103,17 @@ function registerClient(client: Client) {
         },
     );
 
+    ipcRenderer.on(
+        "conversation-changed",
+        (_, conversationId: string, name: string) => {
+            client.conversationChanged?.(conversationId, name);
+        },
+    );
+
+    ipcRenderer.on("mark-history", () => {
+        client.markHistoryEntries?.();
+    });
+
     // Signal the main process that the client has been registered
     ipcRenderer.send("chat-view-ready");
 
@@ -160,6 +171,30 @@ const api: ClientAPI = {
     },
     continuousSpeechProcessing: (text: string) => {
         return ipcRenderer.invoke("continuous-speech-processing", text);
+    },
+
+    // Conversation management
+    conversationList: () => {
+        return ipcRenderer.invoke("conversation-list");
+    },
+    conversationCreate: (name: string) => {
+        return ipcRenderer.invoke("conversation-create", name);
+    },
+    conversationSwitch: (conversationId: string) => {
+        return ipcRenderer.invoke("conversation-switch", conversationId);
+    },
+    conversationRename: (conversationId: string, newName: string) => {
+        return ipcRenderer.invoke(
+            "conversation-rename",
+            conversationId,
+            newName,
+        );
+    },
+    conversationDelete: (conversationId: string) => {
+        return ipcRenderer.invoke("conversation-delete", conversationId);
+    },
+    conversationGetCurrent: () => {
+        return ipcRenderer.invoke("conversation-get-current");
     },
 };
 

@@ -155,6 +155,9 @@ class ClaudeReasoningSession implements ReasoningSession {
             mcpServers: {
                 [MCP_SERVER_NAME]: mcpServer,
             },
+            ...(this.config.resumeSessionId
+                ? { resume: this.config.resumeSessionId }
+                : {}),
             ...this.baseOptions,
         };
     }

@@ -133,6 +133,7 @@ export type CommandHandlerContext = {
     session: Session;
 
     readonly persistDir: string | undefined;
+    readonly instanceDir: string | undefined; // global instance root for cross-session agent storage (config, auth tokens, user preferences)
     readonly cacheDir: string | undefined;
     readonly embeddingCacheDir: string | undefined;
     readonly storageProvider: StorageProvider | undefined;
@@ -165,6 +166,7 @@ export type CommandHandlerContext = {
     currentAbortSignal: AbortSignal | undefined;
     activeRequests: Map<string, AbortController>;
     noReasoning: boolean;
+    isInsideReasoningLoop: boolean; // true while the MCP execute_action handler is dispatching a sub-action
     commandResult?: CommandResult | undefined;
     chatHistory: ChatHistory;
     constructionProvider?: ConstructionProvider | undefined;
@@ -187,7 +189,8 @@ export type CommandHandlerContext = {
     instanceDirLock: (() => Promise<void>) | undefined;
 
     userRequestKnowledgeExtraction: boolean;
-    actionResultKnowledgeExtraction: boolean;
+    actionResultEntityStorage: boolean; // store entities in chat history (fast)
+    actionResultKnowledgeExtraction: boolean; // also push to conversationManager/conversationMemory (slow LLM)
 };
 
 export function getRequestId(context: CommandHandlerContext): RequestId {
@@ -238,8 +241,9 @@ async function getAgentCache(
  * - persistSession: whether to save and restore session state across runs.
  *
  * Agent port assignments - for agents that host their own http server:
- * - portBase: The base port to use for the agents. Default is 9001.   Agents will be assigned ports starting from this value.
  * - allowSharedLocalView: The list of agent names that can get the ports of all other agent's port. Default is undefined.
+ *   Ports are assigned dynamically by the OS (listen on port 0) to avoid conflicts when multiple sessions start concurrently.
+ *   Each agent's view server reports its bound port back to the dispatcher via IPC, which stores it via setLocalHostPort().
  *
  * Logging options:
  * - metrics: whether to enable collection of timing metrics. Default is false.
@@ -251,6 +255,7 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
     // Core options
     appAgentProviders?: AppAgentProvider[];
     persistDir?: string | undefined; // the directory to save state.
+    instanceDir?: string | undefined; // global instance directory for cross-session agent storage (config, auth tokens, user preferences). When omitted, falls back to persistDir.
     persistSession?: boolean; // default to false,
     storageProvider?: StorageProvider | undefined;
 
@@ -261,7 +266,6 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
 
     // Agent port assignments
     allowSharedLocalView?: string[]; // agents that can access any shared local views, default to undefined
-    portBase?: number; // default to 9001
 
     // Indexing service discovery
     indexingServiceRegistry?: IndexingServiceRegistry; // registry for indexing service discovery
@@ -285,6 +289,7 @@ export type DispatcherOptions = DeepPartialUndefined<DispatcherConfig> & {
 
     conversationMemorySettings?: {
         requestKnowledgeExtraction?: boolean;
+        actionResultEntityStorage?: boolean;
         actionResultKnowledgeExtraction?: boolean;
     };
 };
@@ -519,19 +524,20 @@ export async function initializeCommandHandlerContext(
 
     const persistSession = options?.persistSession ?? false;
     const persistDir = options?.persistDir;
+    const instanceDir = options?.instanceDir; // global instance root; falls back to persistDir when absent
     const storageProvider = options?.storageProvider;
-    if (persistDir === undefined) {
-        if (persistSession) {
-            throw new Error(
-                "Persist session requires persistDir to be set in options.",
-            );
-        }
-    } else {
-        if (storageProvider === undefined) {
-            throw new Error(
-                "persistDir requires storageProvider to be set in options.",
-            );
-        }
+    if (persistSession && persistDir === undefined) {
+        throw new Error(
+            "Persist session requires persistDir to be set in options.",
+        );
+    }
+    if (
+        (persistDir !== undefined || instanceDir !== undefined) &&
+        storageProvider === undefined
+    ) {
+        throw new Error(
+            "persistDir and instanceDir require storageProvider to be set in options.",
+        );
     }
 
     const instanceDirLock = persistDir
@@ -567,10 +573,8 @@ export async function initializeCommandHandlerContext(
         if (embeddingCacheDir) {
             ensureDirectory(embeddingCacheDir);
         }
-        const portBase = options?.portBase ?? 9001;
         const agents = new AppAgentManager(
             cacheDir,
-            portBase,
             options?.allowSharedLocalView,
             options?.agentInitOptions,
         );
@@ -580,6 +584,7 @@ export async function initializeCommandHandlerContext(
             agentInstaller: options?.agentInstaller,
             session,
             persistDir,
+            instanceDir,
             cacheDir,
             embeddingCacheDir,
             storageProvider,
@@ -593,6 +598,7 @@ export async function initializeCommandHandlerContext(
             currentAbortSignal: undefined,
             activeRequests: new Map<string, AbortController>(),
             noReasoning: false,
+            isInsideReasoningLoop: false,
             pendingToggleTransientAgents: [],
             agentCache: await getAgentCache(
                 session,
@@ -625,6 +631,9 @@ export async function initializeCommandHandlerContext(
             userRequestKnowledgeExtraction:
                 options?.conversationMemorySettings
                     ?.requestKnowledgeExtraction ?? true,
+            actionResultEntityStorage:
+                options?.conversationMemorySettings
+                    ?.actionResultEntityStorage ?? true,
             actionResultKnowledgeExtraction:
                 options?.conversationMemorySettings
                     ?.actionResultKnowledgeExtraction ?? true,

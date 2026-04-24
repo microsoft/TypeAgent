@@ -183,6 +183,7 @@ export async function createAgentRpcClient(
             return fn({
                 actionContextId: actionContextMap.getId(actionContext),
                 activityContext: actionContext.activityContext,
+                isFromReasoningLoop: actionContext.isFromReasoningLoop,
                 ...getContextParam(actionContext.sessionContext),
             });
         } finally {
@@ -191,11 +192,15 @@ export async function createAgentRpcClient(
     }
     async function withActionContextAsync<T>(
         actionContext: ActionContext<ShimContext>,
-        fn: (contextParams: { actionContextId: number }) => Promise<T>,
+        fn: (contextParams: {
+            actionContextId: number;
+            isFromReasoningLoop: boolean;
+        }) => Promise<T>,
     ) {
         try {
             return await fn({
                 actionContextId: actionContextMap.getId(actionContext),
+                isFromReasoningLoop: actionContext.isFromReasoningLoop,
                 ...getContextParam(actionContext.sessionContext),
             });
         } finally {
@@ -276,6 +281,13 @@ export async function createAgentRpcClient(
         }) => {
             const context = contextMap.get(param.contextId);
             return context.getSharedLocalHostPort(param.agentName);
+        },
+        setLocalHostPort: async (param: {
+            contextId: number;
+            port: number;
+        }) => {
+            const context = contextMap.get(param.contextId);
+            context.setLocalHostPort(param.port);
         },
         indexes: async (param: { contextId: number; type: string }) => {
             const context = contextMap.get(param.contextId);
@@ -630,9 +642,15 @@ export async function createAgentRpcClient(
 
     const invokeCloseAgentContext = result.closeAgentContext;
     result.closeAgentContext = async (context: SessionContext<ShimContext>) => {
-        // TODO: Clean up the associated options.
         const result = await invokeCloseAgentContext?.(context);
         contextMap.close(context);
+        // Clean up the options RPC channel once this agent context is closed.
+        // Options are agent-scoped (created once per initializeAgentContext call)
+        // so they can be released when the context is torn down.
+        if (optionsRpc !== undefined) {
+            channelProvider.deleteChannel(`options:${name}`);
+            optionsRpc = undefined;
+        }
         return result;
     };
 

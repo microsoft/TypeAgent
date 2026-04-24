@@ -2,23 +2,14 @@
 // Licensed under the MIT License.
 
 import { Args, Command, Flags } from "@oclif/core";
-import { ClientIO, createDispatcher } from "agent-dispatcher";
 import {
-    getDefaultAppAgentProviders,
-    getIndexingServiceRegistry,
-} from "default-agent-provider";
-import { getChatModelNames } from "aiclient";
-import { getAllActionConfigProvider } from "agent-dispatcher/internal";
+    connectAgentServer,
+    ensureAgentServer,
+    AgentServerConnection,
+} from "@typeagent/agent-server-client";
 import { withConsoleClientIO } from "agent-dispatcher/helpers/console";
-import { getTraceId, getInstanceDir } from "agent-dispatcher/helpers/data";
-import { getFsStorageProvider } from "dispatcher-node-providers";
 
-const modelNames = await getChatModelNames();
-const instanceDir = getInstanceDir();
-const defaultAppAgentProviders = getDefaultAppAgentProviders(instanceDir);
-const { schemaNames } = await getAllActionConfigProvider(
-    defaultAppAgentProviders,
-);
+const CLI_CONVERSATION_NAME = "CLI";
 
 export default class TranslateCommand extends Command {
     static args = {
@@ -30,52 +21,21 @@ export default class TranslateCommand extends Command {
     };
 
     static flags = {
-        schema: Flags.string({
-            description: "Translator name",
-            options: schemaNames,
-            multiple: true,
+        port: Flags.integer({
+            char: "p",
+            description: "Port for type agent server",
+            default: 8999,
         }),
-        multiple: Flags.boolean({
-            description: "Include multiple action schema",
-            default: true, // follow DispatcherOptions default
-            allowNo: true,
-        }),
-        model: Flags.string({
-            description: "Translation model to use",
-            options: modelNames,
-        }),
-        jsonSchema: Flags.boolean({
-            description: "Output JSON schema",
-            default: false, // follow DispatcherOptions default
-        }),
-        jsonSchemaFunction: Flags.boolean({
-            description: "Output JSON schema function",
-            default: false, // follow DispatcherOptions default
-            exclusive: ["jsonSchema"],
-        }),
-        jsonSchemaValidate: Flags.boolean({
-            description: "Validate the output when JSON schema is enabled",
-            default: true, // follow DispatcherOptions default
-            allowNo: true,
-        }),
-        schemaOptimization: Flags.boolean({
-            description: "Enable schema optimization",
-        }),
-        switchEmbedding: Flags.boolean({
-            description: "Use embedding to determine the first schema to use",
-            default: true, // follow DispatcherOptions default
-            allowNo: true,
-        }),
-        switchInline: Flags.boolean({
-            description: "Use inline switch schema to select schema group",
-            default: true, // follow DispatcherOptions default
-            allowNo: true,
-        }),
-        switchSearch: Flags.boolean({
+        show: Flags.boolean({
             description:
-                "Enable second chance full switch schema to find schema group",
-            default: true, // follow DispatcherOptions default
-            allowNo: true,
+                "Start the agent server in a visible window if it is not already running. Default is to start it hidden.",
+            default: false,
+        }),
+        conversation: Flags.string({
+            char: "s",
+            description:
+                "Conversation ID to use. Defaults to the 'CLI' conversation if not specified.",
+            required: false,
         }),
     };
 
@@ -86,49 +46,51 @@ export default class TranslateCommand extends Command {
 
     async run(): Promise<void> {
         const { args, flags } = await this.parse(TranslateCommand);
-        await withConsoleClientIO(async (clientIO: ClientIO) => {
-            const dispatcher = await createDispatcher("cli run translate", {
-                appAgentProviders: defaultAppAgentProviders,
-                agents: {
-                    schemas: flags.schema,
-                    actions: false,
-                    commands: ["dispatcher"],
-                },
-                translation: {
-                    model: flags.model,
-                    multiple: { enabled: flags.multiple },
-                    schema: {
-                        generation: {
-                            jsonSchema: flags.jsonSchema,
-                            jsonSchemaFunction: flags.jsonSchemaFunction,
-                            jsonSchemaValidate: flags.jsonSchemaValidate,
-                        },
-                        optimize: {
-                            enabled: flags.schemaOptimization,
-                        },
+        const url = `ws://localhost:${flags.port}`;
+
+        await ensureAgentServer(flags.port, !flags.show, 600);
+        let connection: AgentServerConnection | undefined;
+        try {
+            connection = await connectAgentServer(url);
+
+            // Use --conversation directly if provided, otherwise find-or-create the "CLI" conversation
+            let conversationId: string;
+            if (flags.conversation !== undefined) {
+                conversationId = flags.conversation;
+            } else {
+                const existing = await connection.listConversations(
+                    CLI_CONVERSATION_NAME,
+                );
+                const match = existing.find(
+                    (s) =>
+                        s.name.toLowerCase() ===
+                        CLI_CONVERSATION_NAME.toLowerCase(),
+                );
+                conversationId =
+                    match !== undefined
+                        ? match.conversationId
+                        : (
+                              await connection.createConversation(
+                                  CLI_CONVERSATION_NAME,
+                              )
+                          ).conversationId;
+            }
+
+            await withConsoleClientIO(async (clientIO) => {
+                const conversation = await connection!.joinConversation(
+                    clientIO,
+                    {
+                        conversationId,
                     },
-                    switch: {
-                        embedding: flags.switchEmbedding,
-                        inline: flags.switchInline,
-                        search: flags.switchSearch,
-                    },
-                },
-                cache: { enabled: false },
-                clientIO,
-                persistDir: instanceDir,
-                storageProvider: getFsStorageProvider(),
-                dblogging: true,
-                indexingServiceRegistry:
-                    await getIndexingServiceRegistry(instanceDir),
-                traceId: getTraceId(),
-            });
-            try {
-                await dispatcher.processCommand(
+                );
+                await conversation.dispatcher.processCommand(
                     `@dispatcher translate ${args.request}`,
                 );
-            } finally {
-                await dispatcher.close();
-            }
-        });
+            });
+        } finally {
+            await connection?.close();
+        }
+
+        process.exit(0);
     }
 }

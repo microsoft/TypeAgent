@@ -14,7 +14,8 @@ import { BrowserActions } from "./browserActionSchema.mts";
           | <TabControl>
           | <Zoom>
           | <ReadPage>
-          | <Screenshot>;
+          | <Screenshot>
+          | <CreateFlow>;
 
 // ===== Open Web Page =====
 <OpenPage> = open $(site:wildcard) -> { actionName: "openWebPage", parameters: { site } }
@@ -67,3 +68,13 @@ import { BrowserActions } from "./browserActionSchema.mts";
 <Screenshot> = take (a)? screenshot -> { actionName: "captureScreenshot" }
                | capture (the)? screen -> { actionName: "captureScreenshot" }
                | screenshot -> { actionName: "captureScreenshot" };
+
+// ===== Create WebFlow from Inferred Actions =====
+// After running @browser actions infer, user can select which flows to create
+// Use "build" to avoid collision with onboarding agent's "create" patterns
+<CreateFlow> = build (web)? flow $(selection:wildcard) -> { actionName: "createInferredFlow", parameters: { selection } }
+               | build (web)? flows $(selection:wildcard) -> { actionName: "createInferredFlow", parameters: { selection } }
+               | build all (web)? flows -> { actionName: "createInferredFlow", parameters: { selection: "all" } }
+               | make (web)? flow $(selection:wildcard) -> { actionName: "createInferredFlow", parameters: { selection } }
+               | make (web)? flows $(selection:wildcard) -> { actionName: "createInferredFlow", parameters: { selection } }
+               | make all (web)? flows -> { actionName: "createInferredFlow", parameters: { selection: "all" } };

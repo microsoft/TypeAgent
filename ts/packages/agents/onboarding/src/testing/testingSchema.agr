@@ -1,0 +1,77 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Grammar for Phase 6 — Testing actions.
+
+<GenerateTests> = generate tests for $(integrationName:wildcard) -> {
+    actionName: "generateTests",
+    parameters: {
+        integrationName
+    }
+}
+  | (create | produce) (test cases | tests) for $(integrationName:wildcard) -> {
+    actionName: "generateTests",
+    parameters: {
+        integrationName
+    }
+};
+
+<RunTests> = run tests for $(integrationName:wildcard) -> {
+    actionName: "runTests",
+    parameters: {
+        integrationName
+    }
+}
+  | (execute | run) (the)? $(integrationName:wildcard) tests -> {
+    actionName: "runTests",
+    parameters: {
+        integrationName
+    }
+};
+
+<GetTestResults> = (get | show | display) (the)? $(integrationName:wildcard) test results -> {
+    actionName: "getTestResults",
+    parameters: {
+        integrationName
+    }
+}
+  | (what are | show me) (the)? (test)? results for $(integrationName:wildcard) -> {
+    actionName: "getTestResults",
+    parameters: {
+        integrationName
+    }
+};
+
+<ProposeRepair> = propose (a)? repair for $(integrationName:wildcard) -> {
+    actionName: "proposeRepair",
+    parameters: {
+        integrationName
+    }
+}
+  | (suggest | find) (a)? fix for (the)? $(integrationName:wildcard) (test)? failures -> {
+    actionName: "proposeRepair",
+    parameters: {
+        integrationName
+    }
+};
+
+<ApproveRepair> = approve (the)? $(integrationName:wildcard) repair -> {
+    actionName: "approveRepair",
+    parameters: {
+        integrationName
+    }
+}
+  | (apply | accept) (the)? $(integrationName:wildcard) (proposed)? (repair | fix) -> {
+    actionName: "approveRepair",
+    parameters: {
+        integrationName
+    }
+};
+
+import { TestingActions } from "./testingSchema.ts";
+
+<Start> : TestingActions = <GenerateTests>
+  | <RunTests>
+  | <GetTestResults>
+  | <ProposeRepair>
+  | <ApproveRepair>;

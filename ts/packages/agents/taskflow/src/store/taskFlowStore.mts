@@ -41,18 +41,17 @@ export interface TaskFlowIndexEntry {
 
 // ── Flow definition (stored in instance storage) ────────────────────────────
 
+export interface ParameterDefinition {
+    type: "string" | "number" | "boolean";
+    required?: boolean;
+    default?: unknown;
+    description?: string;
+}
+
 export interface TaskFlowDefinition {
     name: string;
     description: string;
-    parameters: Record<
-        string,
-        {
-            type: "string" | "number" | "boolean";
-            required?: boolean;
-            default?: unknown;
-            description?: string;
-        }
-    >;
+    parameters: Record<string, ParameterDefinition>;
     script?: string;
 }
 
@@ -132,6 +131,7 @@ export class TaskFlowStore {
         }
 
         this.initialized = true;
+        await this.writeDynamicGrammarFile();
     }
 
     // ── CRUD ───────────────────────────────────────────────────────────
@@ -182,6 +182,7 @@ export class TaskFlowStore {
         this.index.lastModified = now;
 
         await this.saveIndex();
+        await this.writeDynamicGrammarFile();
         debug(`Flow saved: ${name}`);
         return name;
     }
@@ -232,7 +233,75 @@ export class TaskFlowStore {
 
         this.index.lastModified = new Date().toISOString();
         await this.saveIndex();
+        await this.writeDynamicGrammarFile();
         debug(`Flow deleted: ${actionName}`);
+        return true;
+    }
+
+    async updateFlow(
+        actionName: string,
+        updates: {
+            script?: string;
+            description?: string;
+            grammarPatterns?: string[];
+            parameters?: Record<string, ParameterDefinition>;
+        },
+    ): Promise<boolean> {
+        this.ensureInitialized();
+
+        const entry = this.index.flows[actionName];
+        if (!entry) return false;
+
+        // Load existing flow
+        let flowDef: TaskFlowDefinition;
+        try {
+            const json = await this.storage.read(entry.flowPath, "utf8");
+            flowDef = JSON.parse(json) as TaskFlowDefinition;
+        } catch {
+            debug(`Failed to read flow for update: ${actionName}`);
+            return false;
+        }
+
+        // Apply updates
+        if (updates.description !== undefined) {
+            flowDef.description = updates.description;
+            entry.description = updates.description;
+        }
+
+        // Update parameters if provided
+        if (updates.parameters !== undefined) {
+            flowDef.parameters = updates.parameters;
+        }
+
+        // Write updated flow metadata
+        await this.storage.write(
+            entry.flowPath,
+            JSON.stringify(flowDef, null, 2),
+        );
+
+        // Update script if provided
+        if (updates.script !== undefined) {
+            await this.storage.write(entry.scriptPath, updates.script);
+        }
+
+        // Update grammar if provided
+        if (updates.grammarPatterns !== undefined) {
+            entry.grammarRuleText = generateGrammarRuleText(
+                actionName,
+                updates.grammarPatterns,
+            );
+        }
+
+        entry.updated = new Date().toISOString();
+        this.index.lastModified = entry.updated;
+        await this.saveIndex();
+        if (
+            updates.grammarPatterns !== undefined ||
+            updates.parameters !== undefined
+        ) {
+            await this.writeDynamicGrammarFile();
+        }
+        debug(`Flow updated: ${actionName}`);
         return true;
     }
 
@@ -264,10 +333,17 @@ export class TaskFlowStore {
     // ── Dynamic grammar ────────────────────────────────────────────────
 
     getDynamicGrammarText(): string {
-        const ruleNames: string[] = ["listTaskFlows", "deleteTaskFlow"];
+        const ruleNames: string[] = [
+            "listTaskFlows",
+            "deleteTaskFlow",
+            "createTaskFlow",
+            "editTaskFlow",
+        ];
         const ruleTexts: string[] = [
             '<listTaskFlows> = (show | list | display) (all)? (the)? (available)? task flows -> { actionName: "listTaskFlows" };',
             '<deleteTaskFlow> [spacing=optional] = (delete | remove) (the)? task flow $(name:wildcard) -> { actionName: "deleteTaskFlow", parameters: { name } };',
+            '<createTaskFlow> [spacing=optional] = create (a)? (new)? task flow (named | called)? $(name:wildcard) -> { actionName: "createTaskFlow", parameters: { name } };',
+            '<editTaskFlow> [spacing=optional] = (edit | update | modify) (the)? task flow $(name:wildcard) -> { actionName: "editTaskFlow", parameters: { name } };',
         ];
 
         for (const entry of Object.values(this.index.flows)) {
@@ -283,6 +359,12 @@ export class TaskFlowStore {
 
         const startRule = `<Start> = ${ruleNames.map((n) => `<${n}>`).join(" | ")};`;
         return `${startRule}\n\n${ruleTexts.join("\n\n")}`;
+    }
+
+    async writeDynamicGrammarFile(): Promise<void> {
+        const grammarText = this.getDynamicGrammarText();
+        await this.storage.write("grammar/dynamic.agr", grammarText);
+        debug(`Wrote grammar/dynamic.agr`);
     }
 
     // ── Dynamic schema ─────────────────────────────────────────────────
@@ -303,6 +385,40 @@ export class TaskFlowStore {
             '    actionName: "deleteTaskFlow";',
             "    parameters: {",
             "        name: string;",
+            "    };",
+            "};",
+            "",
+            "// Create a new task flow",
+            "export type CreateTaskFlow = {",
+            '    actionName: "createTaskFlow";',
+            "    parameters: {",
+            "        // camelCase action name for the flow",
+            "        name: string;",
+            "        // Description of what the flow does",
+            "        description: string;",
+            "        // JSON array of parameter definitions",
+            "        parameters: string;",
+            "        // TypeScript function source",
+            "        script: string;",
+            "        // JSON array of natural language patterns",
+            "        grammarPatterns: string;",
+            "    };",
+            "};",
+            "",
+            "// Edit an existing task flow",
+            "export type EditTaskFlow = {",
+            '    actionName: "editTaskFlow";',
+            "    parameters: {",
+            "        // Name of the flow to edit",
+            "        name: string;",
+            "        // New parameter definitions as JSON array (optional)",
+            "        parameters?: string;",
+            "        // New script (optional)",
+            "        script?: string;",
+            "        // New description (optional)",
+            "        description?: string;",
+            "        // New grammar patterns as JSON array (optional)",
+            "        grammarPatterns?: string;",
             "    };",
             "};",
         ];
@@ -345,6 +461,8 @@ export class TaskFlowStore {
         lines.push("export type TaskFlowActions =");
         lines.push("    | ListTaskFlows");
         lines.push("    | DeleteTaskFlow");
+        lines.push("    | CreateTaskFlow");
+        lines.push("    | EditTaskFlow");
         for (const typeName of flowTypeNames) {
             lines.push(`    | ${typeName}`);
         }

@@ -7,6 +7,8 @@ import { queue, QueueObject } from "async";
 import { parseTranscript } from "./transcript.js";
 import registerDebug from "debug";
 import { error, Result, success } from "typechat";
+import fs from "node:fs";
+import path from "node:path";
 import {
     createMemorySettings,
     IndexFileSettings,
@@ -111,7 +113,7 @@ export class ConversationMemory
     implements kp.IConversation<ConversationMessage>
 {
     public messages: kp.MessageCollection<ConversationMessage>;
-    public semanticRefIndex: kp.ConversationIndex;
+    public semanticRefIndex: kp.TermToSemanticRefIndex;
     public secondaryIndexes: kp.ConversationSecondaryIndexes;
     public semanticRefs: kp.SemanticRefCollection;
 
@@ -132,7 +134,7 @@ export class ConversationMemory
         this.messages = new kp.MessageCollection<ConversationMessage>(messages);
         this.semanticRefs = new kp.SemanticRefCollection();
 
-        this.semanticRefIndex = new kp.ConversationIndex();
+        this.semanticRefIndex = new kp.TermToSemanticRefIndex();
         this.secondaryIndexes = new kp.ConversationSecondaryIndexes(
             this.settings.conversationSettings,
         );
@@ -254,7 +256,7 @@ export class ConversationMemory
         this.semanticRefs = new kp.SemanticRefCollection(data.semanticRefs);
         this.tags = data.tags;
         if (data.semanticIndexData) {
-            this.semanticRefIndex = new kp.ConversationIndex(
+            this.semanticRefIndex = new kp.TermToSemanticRefIndex(
                 data.semanticIndexData,
             );
         }
@@ -298,7 +300,14 @@ export class ConversationMemory
                 .embeddingIndexSettings?.embeddingSize,
         );
         if (data) {
-            memory.deserialize(data);
+            try {
+                memory.deserialize(data);
+            } catch (e) {
+                console.warn(
+                    `[ConversationMemory] Failed to deserialize saved data (${e}). Starting with fresh memory.`,
+                );
+                return undefined;
+            }
         }
         return memory;
     }
@@ -307,10 +316,14 @@ export class ConversationMemory
         try {
             const fileSaveSettings = this.settings.fileSaveSettings;
             if (fileSaveSettings) {
-                // TODO: Optionally, back up previous file and do a safe read write
-                await this.writeToFile(
+                await safeWriteConversationFile(
                     fileSaveSettings.dirPath,
                     fileSaveSettings.baseFileName,
+                    () =>
+                        this.writeToFile(
+                            fileSaveSettings.dirPath,
+                            fileSaveSettings.baseFileName,
+                        ),
                 );
             }
             return success(true);
@@ -457,6 +470,60 @@ function assignMessageRecipients(
                 }
             }
             msg.metadata.recipients = recipients;
+        }
+    }
+}
+
+/**
+ * Write conversation files safely: back up any existing files, run the
+ * write, then clean up the backups on success or restore them on failure.
+ */
+async function safeWriteConversationFile(
+    dirPath: string,
+    baseFileName: string,
+    writeFn: () => Promise<void>,
+): Promise<void> {
+    const suffixes = ["_data.json", "_embeddings.bin"];
+    const backups: { src: string; bak: string }[] = [];
+
+    // Rename existing files to .bak
+    for (const suffix of suffixes) {
+        const src = path.join(dirPath, baseFileName + suffix);
+        const bak = src + ".bak";
+        try {
+            await fs.promises.rename(src, bak);
+            backups.push({ src, bak });
+        } catch (err: any) {
+            if (err?.code !== "ENOENT") {
+                throw err;
+            }
+            // File doesn't exist yet — no backup needed for this suffix.
+        }
+    }
+
+    try {
+        await writeFn();
+    } catch (err) {
+        // Restore backups if write failed.
+        for (const { src, bak } of backups) {
+            try {
+                await fs.promises.rename(bak, src);
+            } catch (restoreErr: any) {
+                if (restoreErr?.code !== "ENOENT") {
+                    throw restoreErr;
+                }
+                // Backup file not found — nothing to restore for this suffix.
+            }
+        }
+        throw err;
+    }
+
+    // Remove backups on success.
+    for (const { bak } of backups) {
+        try {
+            await fs.promises.unlink(bak);
+        } catch {
+            // Ignore cleanup errors.
         }
     }
 }

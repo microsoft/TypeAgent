@@ -297,8 +297,9 @@ export function getUserDataCompletions(
         );
         completions.push(...albumNames);
     }
-    if (playlist) {
-        // TODO: return names of playlists, sorted by timestamp
+    if (playlist && userData.playlists) {
+        const playlistNames = userData.playlists.map((p) => p.name);
+        completions.push(...playlistNames);
     }
     return completions;
 }

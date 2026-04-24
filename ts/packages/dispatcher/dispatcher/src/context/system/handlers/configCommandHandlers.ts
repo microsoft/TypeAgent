@@ -1494,6 +1494,38 @@ class ConfigExecutionScriptReuseCommandHandler implements CommandHandler {
     }
 }
 
+class ConfigExecutionEntityPromptShapeCommandHandler implements CommandHandler {
+    public readonly description =
+        "Shape used when serializing Entity objects into LLM prompts";
+    public readonly parameters = {
+        args: {
+            shape: {
+                description:
+                    "'facets' (default, name+value array), 'flat' (collapse facets into a properties object), or 'facets-with-schema' (facets + append the Entity TS type to the reasoning system prompt)",
+                type: "string" as const,
+                enum: ["facets", "flat", "facets-with-schema"],
+            },
+        },
+    } as const;
+
+    async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const shape = params.args.shape as
+            | "facets"
+            | "flat"
+            | "facets-with-schema";
+
+        await changeContextConfig(
+            { execution: { entityPromptShape: shape } },
+            context,
+        );
+
+        return displayResult(`Entity prompt shape: ${shape}`, context);
+    }
+}
+
 const configExecutionCommandHandlers: CommandHandlerTable = {
     description: "Execution configuration",
     commands: {
@@ -1509,6 +1541,7 @@ const configExecutionCommandHandlers: CommandHandlerTable = {
         reasoning: new ConfigExecutionReasoningCommandHandler(),
         planReuse: new ConfigExecutionPlanReuseCommandHandler(),
         scriptReuse: new ConfigExecutionScriptReuseCommandHandler(),
+        entityPromptShape: new ConfigExecutionEntityPromptShapeCommandHandler(),
     },
 };
 

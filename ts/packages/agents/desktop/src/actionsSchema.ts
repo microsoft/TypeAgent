@@ -9,12 +9,16 @@ export type DesktopActions =
     | MinimizeWindowAction
     | SwitchToWindowAction
     | SetVolumeAction
+    | AdjustVolumeAction
     | RestoreVolumeAction
     | MuteVolumeAction
     | SetWallpaperAction
     | ChangeThemeModeAction
+    | ApplyThemeAction
+    | ListThemesAction
     | ConnectWifiAction
     | DisconnectWifiAction
+    | ListWifiNetworksAction
     | ToggleAirplaneModeAction
     | CreateDesktopAction
     | MoveWindowToDesktopAction
@@ -95,6 +99,15 @@ export type SetVolumeAction = {
     };
 };
 
+// Adjusts system volume up or down by a relative amount
+export type AdjustVolumeAction = {
+    actionName: "AdjustVolume";
+    parameters: {
+        direction: "up" | "down"; // whether to increase or decrease volume
+        amount?: number; // percentage to adjust by (default 10)
+    };
+};
+
 export type RestoreVolumeAction = {
     actionName: "RestoreVolume";
 };
@@ -122,6 +135,20 @@ export type ChangeThemeModeAction = {
     };
 };
 
+// Applies a Windows theme by name (e.g. "Captured Motion", "Glow", "Sunrise") or file path. Use this when the user wants to switch to a specific named theme.
+export type ApplyThemeAction = {
+    actionName: "ApplyTheme";
+    parameters: {
+        filePath: string; // The theme name or .theme file path to apply (use "previous" to revert)
+    };
+};
+
+// Lists all installed Windows themes
+export type ListThemesAction = {
+    actionName: "ListThemes";
+    parameters: {};
+};
+
 export type ConnectWifiAction = {
     actionName: "ConnectWifi";
     parameters: {
@@ -136,6 +163,12 @@ export type DisconnectWifiAction = {
     parameters: {
         // No parameters required
     };
+};
+
+// Lists available WiFi networks
+export type ListWifiNetworksAction = {
+    actionName: "ListWifiNetworks";
+    parameters: {};
 };
 
 export type ToggleAirplaneModeAction = {
@@ -220,6 +253,7 @@ export type SetScreenResolutionAction = {
     parameters: {
         width: number; // width in pixels
         height: number; // height in pixels
+        refreshRate?: number; // refresh rate in Hz (e.g. 60, 144)
     };
 };
 

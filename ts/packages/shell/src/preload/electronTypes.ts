@@ -32,17 +32,12 @@ export type ClientActions =
 
 // end duplicate type section
 
+import type { SearchMenuItem } from "agent-dispatcher/helpers/completion";
+export type { SearchMenuItem };
+
 export type SearchMenuPosition = {
     left: number;
     bottom: number;
-};
-
-export type SearchMenuItem = {
-    matchText: string;
-    emojiChar?: string;
-    sortIndex?: number;
-    selectedText: string;
-    needQuotes?: boolean; // default is true, and will add quote to the selectedText if it has spaces.
 };
 
 export type SearchMenuUIUpdateData = {
@@ -77,6 +72,18 @@ export interface ClientAPI {
     searchMenuSelectCompletion(id: number): void;
     searchMenuClose(id: number): void;
     continuousSpeechProcessing(text: string): Promise<string | undefined>;
+
+    // Conversation management
+    conversationList(): Promise<ConversationInfo[]>;
+    conversationCreate(name: string): Promise<ConversationInfo>;
+    conversationSwitch(
+        conversationId: string,
+    ): Promise<ConversationSwitchResult>;
+    conversationRename(conversationId: string, newName: string): Promise<void>;
+    conversationDelete(conversationId: string): Promise<void>;
+    conversationGetCurrent(): Promise<
+        { conversationId: string; name: string } | undefined
+    >;
 }
 
 // Functions that are called from the main process to the renderer process.
@@ -97,6 +104,8 @@ export interface Client {
     continuousSpeechProcessed(userExpressions: UserExpression[]): void;
     tabRestoreStatus(count: number): void;
     systemNotification?(message: string, id: string, timestamp: number): void;
+    conversationChanged?(conversationId: string, name: string): void;
+    markHistoryEntries?(): void;
 }
 
 export interface ElectronWindowFields {
@@ -112,4 +121,19 @@ export type UserExpression = {
     confidence: "low" | "medium" | "high";
     complete_statement: boolean;
     text: string;
+};
+
+// Conversation management types
+export type ConversationInfo = {
+    conversationId: string;
+    name: string;
+    clientCount: number;
+    createdAt: string; // ISO 8601
+};
+
+export type ConversationSwitchResult = {
+    success: boolean;
+    conversationId?: string;
+    name?: string;
+    error?: string;
 };

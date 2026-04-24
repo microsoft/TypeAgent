@@ -121,6 +121,10 @@ export type AgentContextInvokeFunctions = {
         contextId: number;
         agentName: string;
     }) => Promise<number>;
+    setLocalHostPort: (param: {
+        contextId: number;
+        port: number;
+    }) => Promise<void>;
     indexes: (param: { contextId: number; type: string }) => Promise<any>;
     reloadAgentSchema: (param: { contextId: number }) => Promise<void>;
     popupQuestion: (param: {
@@ -244,6 +248,7 @@ export type ContextParams = {
 export type ActionContextParams = ContextParams & {
     actionContextId: number;
     activityContext: ActivityContext | undefined;
+    isFromReasoningLoop: boolean;
 };
 
 export type OptionsFunctionCallBack = {

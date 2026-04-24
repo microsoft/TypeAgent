@@ -66,8 +66,6 @@ const sharedScripts = {
     "views/chatPanel": "views/chatPanel.ts",
     uiEventsDispatcher: "uiEventsDispatcher.ts",
     "sites/crossword": "sites/crossword.ts",
-    "sites/commerce": "sites/commerce.ts",
-    "sites/instacart": "sites/instacart.ts",
     "sites/paleobiodb": "sites/paleobiodb.ts",
     "sites/webflow": "sites/webflow.ts",
     "offscreen/contentProcessor": "offscreen/contentProcessor.ts",

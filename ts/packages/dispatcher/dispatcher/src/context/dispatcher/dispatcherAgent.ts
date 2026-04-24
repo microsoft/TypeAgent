@@ -40,7 +40,10 @@ import { MatchCommandHandler } from "./handlers/matchCommandHandler.js";
 import { DispatcherEmoji } from "./dispatcherUtils.js";
 import { getHistoryContext } from "../../translation/interpretRequest.js";
 import { ReasoningAction } from "./schema/reasoningActionSchema.js";
-import { executeReasoningAction as executeClaudeReasoning } from "../../reasoning/claude.js";
+import {
+    executeReasoningAction as executeClaudeReasoning,
+    executeReasoning,
+} from "../../reasoning/claude.js";
 import { executeReasoningAction as executeCopilotReasoning } from "../../reasoning/copilot.js";
 import { ReasonCommandHandler } from "./handlers/reasonCommandHandler.js";
 
@@ -83,8 +86,21 @@ async function executeDispatcherAction(
             break;
         case "dispatcher.lookup":
             switch (action.actionName) {
-                case "lookupAndAnswerConversation":
-                    return lookupAndAnswer(action, context);
+                case "lookupAndAnswerConversation": {
+                    const lookupResult = await lookupAndAnswer(action, context);
+                    if (lookupResult.error !== undefined) {
+                        // Conversation lookup found nothing — fall back to reasoning
+                        const systemContext =
+                            context.sessionContext.agentContext;
+                        if (!systemContext.noReasoning) {
+                            return executeReasoning(
+                                action.parameters.originalRequest,
+                                context,
+                            );
+                        }
+                    }
+                    return lookupResult;
+                }
                 case "startLookup":
                     const location =
                         action.parameters.lookup.source === "internet"
@@ -169,6 +185,36 @@ function clarifyRequestAction(
     return result;
 }
 
+// Cache the lookup clarify translator per systemContext since it is expensive
+// to create and only depends on the agents + promptLogger for the session.
+const lookupClarifyTranslatorCache = new WeakMap<
+    CommandHandlerContext,
+    ReturnType<typeof loadAgentJsonTranslator>
+>();
+
+function getLookupClarifyTranslator(systemContext: CommandHandlerContext) {
+    const cached = lookupClarifyTranslatorCache.get(systemContext);
+    if (cached !== undefined) {
+        return cached;
+    }
+    const agents = systemContext.agents;
+    const actionConfigs = [
+        agents.getActionConfig("dispatcher.lookup"),
+        agents.getActionConfig("dispatcher"),
+    ];
+    const translator = loadAgentJsonTranslator(
+        actionConfigs,
+        [],
+        agents,
+        undefined,
+        undefined,
+        undefined,
+        systemContext.promptLogger,
+    );
+    lookupClarifyTranslatorCache.set(systemContext, translator);
+    return translator;
+}
+
 async function clarifyWithLookup(
     action: ClarifyUnresolvedReference,
     context: ActionContext<CommandHandlerContext>,
@@ -183,20 +229,7 @@ async function clarifyWithLookup(
         return undefined;
     }
 
-    const actionConfigs = [
-        agents.getActionConfig("dispatcher.lookup"),
-        agents.getActionConfig("dispatcher"),
-    ];
-    // TODO: cache this?
-    const translator = loadAgentJsonTranslator(
-        actionConfigs,
-        [],
-        agents,
-        undefined,
-        undefined,
-        undefined,
-        systemContext.promptLogger,
-    );
+    const translator = getLookupClarifyTranslator(systemContext);
 
     const question = `What is ${action.parameters.reference}?`;
     const result = await translator.translate(question);

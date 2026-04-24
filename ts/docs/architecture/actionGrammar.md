@@ -133,21 +133,23 @@ evaluated against the adjacent characters to produce a `separatorMode`
 [Completion matching](#completion-matching-matchgrammarcompletion) and
 `completion.md`):
 
-| Annotation           | `CompiledSpacingMode` | Resulting `separatorMode`                                                                                                                                             |
-| -------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| _(none / default)_   | `auto`                | `"spacePunctuation"` if both adjacent characters are word-boundary scripts (Latin, Cyrillic, etc.); `"optional"` if either is CJK or another non-word-boundary script |
-| `[spacing=required]` | `"required"`          | Always `"spacePunctuation"`                                                                                                                                           |
-| `[spacing=optional]` | `"optional"`          | Always `"optional"`                                                                                                                                                   |
-| `[spacing=none]`     | `"none"`              | Always `"none"` — no separator consumed or required                                                                                                                   |
+| Annotation           | `CompiledSpacingMode` | Resulting `separatorMode`                                                                                                                                                                                                                           |
+| -------------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| _(none / default)_   | `auto`                | `"autoSpacePunctuation"` — resolved per-item by the consumer: `"spacePunctuation"` if both adjacent characters are word-boundary scripts (Latin, Cyrillic, etc.); `"optionalSpacePunctuation"` if either is CJK or another non-word-boundary script |
+| `[spacing=required]` | `"required"`          | Always `"spacePunctuation"`                                                                                                                                                                                                                         |
+| `[spacing=optional]` | `"optional"`          | Always `"optionalSpacePunctuation"`                                                                                                                                                                                                                 |
+| `[spacing=none]`     | `"none"`              | Always `"none"` — no separator consumed or required                                                                                                                                                                                                 |
 
 **Note:** The table above describes the _baseline_ `separatorMode`
-from the spacing annotation. When the consumed prefix already ends with
-whitespace (i.e., the separator is already present in `matchedPrefixLength`),
-the grammar matcher overrides to `"optional"` because no additional
-separator is needed. Digits are Unicode script "Common" (not a
-word-boundary script), so `auto` spacing at a digit–Latin boundary
-(e.g., `$(n:number)` followed by a Latin keyword) also produces
-`"optional"`.
+from the spacing annotation. For `auto` mode, the grammar emits
+`"autoSpacePunctuation"` and the shell resolves each item to
+`"spacePunctuation"` or `"optionalSpacePunctuation"` based on the
+character pair (see `toPartitions()` in `session.ts`).
+At the command/flag level, the dispatcher may override to
+`"optionalSpace"` when trailing whitespace was already consumed.
+Digits are Unicode script "Common" (not a word-boundary script),
+so `auto` spacing at a digit–Latin boundary (e.g., `$(n:number)`
+followed by a Latin keyword) resolves to `"optionalSpacePunctuation"`.
 
 ### Entities
 
@@ -380,6 +382,199 @@ GrammarParseResult {
 6. Type-checks value expressions in two passes (see
    [Validation architecture](#validation-architecture) below)
 7. Produces the flat `Grammar` structure ready for matching
+8. Optionally runs the [Compile-time optimizer](#compile-time-optimizations)
+   to reshape the AST without changing match semantics
+
+### Compile-time optimizations
+
+`grammarOptimizer.ts` exposes opt-in AST passes that reshape the
+compiled `Grammar` to reduce matcher work without changing match
+results. Both passes are off by default and individually controllable
+through `LoadGrammarRulesOptions.optimizations`:
+
+```typescript
+loadGrammarRules("agent.agr", text, {
+  optimizations: {
+    inlineSingleAlternatives: true,
+    factorCommonPrefixes: true,
+  },
+});
+```
+
+The optimizer runs after value-expression validation, so it operates on
+fully-compiled `CompiledValueNode`s. It is skipped entirely when the
+compile produced any errors (the AST may be partial).
+
+#### Pass 1 — Inline single-alternative `RulesPart`
+
+`inlineSingleAlternativeRules` walks all rule alternatives post-order
+and replaces an eligible `RulesPart` with the spread of its child
+rule's parts. This removes one layer of `ParentMatchState` push/pop and
+`finalizeNestedRule` in the matcher, which is common for named rules
+that simply delegate to a single sub-rule.
+
+A `RulesPart` is inlined only when **all** structural preconditions
+hold:
+
+- `part.rules.length === 1` and `!part.repeat && !part.optional`
+- The child rule has at least one part
+- `child.spacingMode === parentRule.spacingMode` (exact equality;
+  `undefined` is treated as a distinct "auto" mode at the matcher
+  level, not as "inherit from parent")
+- The body of the child's `rules` array is not shared by any other
+  `RulesPart` in the input AST. A pre-pass reference-counts every
+  `GrammarRule[]` array; inlining a shared body would duplicate the
+  child's parts at every call site and defeat the serializer's
+  identity-based dedup (see "shared-rule identity preservation"
+  below).
+
+When the child carries an explicit `value` expression, one of three
+sub-strategies fires:
+
+- **Hoist** — parent has no value of its own and either has a single
+  part (this `RulesPart`) or captures via `part.variable`. The matcher
+  would have computed the parent's value at runtime via its
+  default-value rule using `child.value`; we synthesize that
+  assignment explicitly onto the parent's `value`.
+- **Substitute** — parent captures via `part.variable` AND has its
+  own value expression. The (α-renamed) `child.value` is substituted
+  for the captured variable in `parent.value`.
+- **Drop** — `child.value` is unobservable at runtime; inline only the
+  child's parts.
+
+For Substitute and Drop the child's top-level bindings are α-renamed
+to fresh opaque names (`__opt_inline_<n>`, per-parent counter) so
+they cannot collide with sibling parts the parent already has. Hoist
+into a single-part parent skips the rename — there are no siblings.
+
+When the child has no value expression and the parent captures via
+`part.variable`, the child must contain exactly one binding-friendly
+part (`wildcard`, `number`, or `rules`). The parent's variable name
+is re-targeted onto that single part in place. (This is the only
+case where a binding may legitimately move onto a nested
+`RulesPart` — the absence of a child value rules out the silent-drop
+hazard that the value-bearing branches handle via Hoist/Substitute.)
+
+#### Pass 2 — Common prefix factoring
+
+`factorCommonPrefixes` walks every `RulesPart` and groups alternatives
+that share a non-empty leading prefix. The shared prefix is hoisted
+into the alternative once, followed by a nested `RulesPart` containing
+the remaining suffixes:
+
+```
+play the song -> "song"        play the (song -> "song"
+play the track -> "track"  ⇒              | track -> "track"
+play the album -> "album"                 | album -> "album")
+```
+
+**Top-level factoring.** After nested factoring completes, the
+top-level `Grammar.rules` array is factored against itself — the
+matcher treats top-level alternatives the same way it treats inner
+`RulesPart` alternatives. The trie build/emit core (`factorRules`)
+operates on a flat `GrammarRule[]`, so it is reused directly at the
+top level without wrapping the array in a synthetic `RulesPart`.
+This intentionally **destroys the 1:1 correspondence between
+top-level rule indices and the original source**; downstream consumers
+that depend on that mapping must capture it before enabling
+`factorCommonPrefixes`.
+
+**Implementation.** Factoring is implemented as a trie build +
+post-order emission inside `factorRules` (with `factorRulesPart` as a
+thin `RulesPart`-aware wrapper that handles the `repeat`/`optional`
+bailout):
+
+- Each rule is inserted as a sequence of "atomic" steps. `StringPart`
+  explodes into one `(string, token)` edge per token in `value[]`,
+  so `["play", "song"]` and `["play", "album"]` share the `"play"`
+  edge but branch at the next token. `wildcard`, `number`, `rules`,
+  and `phraseSet` parts each yield one edge. `rules` edges key by
+  `rules` array identity.
+- `edgeKeyMatches` ignores variable _names_ on variable-bearing edges
+  but requires binding _presence parity_ on `rules` edges (so
+  `<Inner>` and `$(v:<Inner>)` do not silently merge into the same
+  child). In the current implementation this comparison is encoded
+  into a primitive `stepMergeKey` so that the trie children map can
+  perform an O(1) lookup instead of an O(siblings) scan.
+- Emission walks the trie post-order. Single-child / no-terminal
+  chains are path-compressed back into a flat parts array (with
+  adjacent `StringPart`s re-merged at the seam), and multi-member
+  nodes become wrapper `RulesPart`s.
+
+**Opaque canonical names.** Variable-bearing trie edges carry a fresh
+opaque canonical name (`__opt_v_<n>`) allocated per `factorRules`
+invocation, _not_ the first inserter's user-supplied variable name. This eliminates two collision classes
+that any "first inserter wins" scheme is vulnerable to: outer-scope
+shadow (a non-lead's value referencing an outer name that happens to
+match the lead's local) and bound-vs-unbound `rules` parity. Each
+inserter accumulates a `local → canonical` remap that is applied to
+its terminal's `value` expression at emission time. `remapValueVariables`
+expands object-shorthand `{ foo }` to `{ foo: <renamed> }` so the
+object field name stays the same.
+
+**Wrapper value capture.** When any factored member carries a value
+expression, the wrapper rule has more than one part and the matcher's
+default single-part value rule no longer fires. The optimizer
+generates a fresh `__opt_factor` / `__opt_factor_<n>` name (avoiding
+any name already bound in prefix or members), binds the suffix
+`RulesPart` to it, and sets the wrapper's `value` to
+`{ type: "variable", name: "__opt_factor" }` — preserving the suffix
+value through the new nesting level.
+
+**Local bailout on eligibility failure.** Per-fork eligibility checks
+run before each wrapper is built; on failure the would-be members
+are emitted as separate full rules with the canonical prefix
+prepended, losing factoring at _that fork only_. Factoring above and
+below the failing fork still applies. Failure reasons:
+
+- **Whole-consumed.** A member's parts were entirely consumed by the
+  prefix (empty-parts suffix) — the matcher cannot default-value
+  resolve an empty-parts rule inside a wrapped `RulesPart`.
+- **Mixed value presence.** Some members carry explicit `value`,
+  others rely on default-value semantics; wrapping would silently
+  drop the implicit values.
+- **Implicit-default multipart.** All members rely on default values
+  but at least one suffix would end up with more than one part,
+  where the matcher's single-part default-value policy no longer
+  applies.
+- **Cross-scope reference.** A suffix's value expression references
+  a canonical name bound by the prefix. Nested rule scope is fresh
+  in the matcher (entering a `RulesPart` resets `valueIds`), so the
+  suffix cannot see prefix bindings — bail out so each member emits
+  at the wrapper's level instead.
+
+The earlier "binding shadow" guard is no longer needed: opaque
+canonicals allocated globally per `factorRules` call cannot
+collide with each other.
+
+**No fixed-point loop.** Factoring is applied once per group of
+alternatives — the trie's grouping converges in a single pass and
+freshly synthesized suffix `RulesPart`s are intentionally not
+re-walked. When both passes are enabled, the optimizer runs Pass 1
+once more after Pass 2 so that any sub-`RulesPart`s inside the
+emitted suffixes that have become inline-eligible can collapse.
+
+**Shared-rule identity preservation.** Both passes memoize their
+output by `GrammarRule[]` array identity. The compiler points every
+reference to the same named rule (`<X>`) at the same underlying
+`rules` array so [grammarSerializer.ts](../../packages/actionGrammar/src/grammarSerializer.ts)
+can dedupe via `rulesToIndex.get(p.rules)`. The optimizer preserves
+that invariant: two `RulesPart`s that originally pointed at the same
+array still point at the same (possibly new) array after the pass —
+keeping `.ag.json` size proportional to unique rule bodies.
+
+#### Equivalence and benchmarks
+
+The `grammarOptimizer*.spec.ts` test suite covers unit behavior of
+both passes, regression repros for previously broken factoring
+patterns, structural-equivalence checks (every flag combination
+produces identical `matchGrammar` output across curated and
+real-agent grammars), and shared-array preservation. Standalone
+informational benchmarks live under
+[packages/actionGrammar/src/bench/](../../packages/actionGrammar/src/bench/);
+run them via `pnpm run bench:synthetic` and `pnpm run bench:real`
+from the package directory (a `pnpm run tsc` build is required first
+since the bench scripts execute the compiled `dist/bench/` output).
 
 ### Matching backend
 
@@ -483,7 +678,7 @@ match boundaries. `directionSensitive` is `true` when
 than `completion(input[0..P], "forward")` — where P is the returned
 `matchedPrefixLength`, not the full input length. The caller uses this
 to decide whether a direction change
-requires a re-fetch: the `partialCompletionSession` re-fetches only
+requires a re-fetch: the completion session re-fetches only
 when the user is still at the `matchedPrefixLength` position
 (`input === anchor`); once the user types past it, the cached
 completions remain usable via trie filtering regardless of direction.
@@ -777,7 +972,7 @@ Rationale:
    `separatorMode` accurately reflects the grammar's spacing annotation
    (e.g., `"spacePunctuation"` for Latin auto-spacing). If P advanced
    past the space, the separator is already present and `separatorMode`
-   collapses to `"optional"` — losing the information about what kind of
+   collapses to `"optionalSpace"` — losing the information about what kind of
    separator the grammar expects. The shell needs the un-collapsed mode
    to decide whether a non-space punctuation character should trigger a
    re-fetch.
@@ -822,16 +1017,16 @@ already covers this case.
 - `separatorMode` — determined by the grammar rule's `[spacing=...]`
   annotation (see [Spacing modes](#spacing-modes) above). Special cases:
   - When `matchedPrefixLength=0` (nothing consumed), `separatorMode` is
-    always `"optional"` (or `"none"` for `[spacing=none]` rules) because
+    always `"optionalSpace"` (or `"none"` for `[spacing=none]` rules) because
     there is no preceding character to require a separator against.
   - When the consumed prefix already ends with whitespace (e.g.,
-    `"play "`), `separatorMode` is `"optional"` because the separator is
+    `"play "`), `separatorMode` is `"optionalSpace"` because the separator is
     already present — no additional separator is needed.
   - For `auto` spacing, `"spacePunctuation"` is produced only when both
     the last consumed character and the first completion character are
     word-boundary scripts (Latin, Cyrillic, etc.) and no separator has
     been consumed; digit–Latin transitions (e.g., `"50"` → `"percent"`)
-    produce `"optional"` because digits are Unicode script "Common", not
+    produce `"optionalSpace"` because digits are Unicode script "Common", not
     a word-boundary script.
 - `closedSet` is `true` when all completions are grammar keywords
   (no entity/wildcard values).
@@ -853,70 +1048,25 @@ flow through the cache, dispatcher, and shell layers, and
 `completion.md` § Invariants for the full catalog of correctness
 invariants, their user-visible impact, and which tests verify them.
 
-### Separator-mode conflict filtering
+### Per-group separator modes (replaces conflict filtering)
 
-When fixed candidates at the same `maxPrefixLength` come from rules
-with different `spacingMode` values — for example, a `[spacing=none]`
-rule and a default-spacing rule that both match the same prefix — the
-single merged `separatorMode` cannot correctly represent all of them.
-A `"none"` candidate rejects any trailing separator, while a
-`"spacePunctuation"` candidate requires one. The conflict-filtering
-logic in `filterSepConflicts()` (called from `finalizeCandidates()`) resolves this:
+When candidates at the same `maxPrefixLength` come from rules with
+different `spacingMode` values — for example, a `[spacing=none]`
+rule and a default-spacing rule that both match the same prefix —
+each candidate's `separatorMode` is recorded in its own
+`GrammarCompletionGroup`. The grammar matcher no longer merges
+separator modes or filters conflicting candidates; instead, each
+group carries its own `separatorMode` and the shell's **SepLevel**
+model (see `session.ts`) shows or hides groups
+based on the user's trailing separator state.
 
-Three-way compatibility:
+This means:
 
-| Trailing sep? | `spacePunctuation` | `optional` | `none` |
-| ------------- | ------------------ | ---------- | ------ |
-| No            | drop               | keep       | keep   |
-| Yes           | keep               | keep       | drop   |
-
-1. **Detect:** Compute each candidate's individual `SeparatorMode` via
-   `computeCandidateSeparatorMode()`. A conflict exists when both
-   `isRequiringSepMode()` candidates (need separator) and `"none"`
-   candidates (reject separator) are present.
-
-2. **Filter by trailing separator state:** Inspect `input[maxPrefixLength]`:
-
-   - Trailing separator present → drop `"none"` candidates (they would
-     reject the existing separator).
-   - No trailing separator → drop requiring candidates (a separator
-     would need to be inserted).
-
-3. **Advance P by one character:** When trailing separator is present
-   and candidates were dropped, advance `maxPrefixLength` by exactly
-   one character (not past all consecutive separators). This ensures
-   backspace triggers a re-fetch (the anchor diverges). Override
-   `separatorMode` to `"optional"` since the separator is already
-   consumed into P.
-
-   Advance-1 is preferred over advance-all because:
-
-   - Each backspace in the separator run produces a distinct anchor,
-     giving the shell a re-fetch opportunity at every keystroke.
-   - With advance-all, deleting the _last_ separator in a multi-
-     separator run is the only keystroke that triggers a re-fetch;
-     intermediate deletes are invisible to the completion system.
-   - Advance-1 matches the shell's `separatorMode="optional"` contract:
-     the session sees one consumed separator and treats the rest as
-     ordinary prefix text. The shell strips leading whitespace for
-     `"optional"` mode (just as it does for requiring modes), so extra
-     separators do not pollute the trie — the menu stays visible with
-     an empty or narrowed prefix.
-   - The re-fetch cost is negligible — the grammar matcher runs in
-     sub-millisecond time.
-
-4. **Force `closedSet=false`:** When candidates are dropped, the
-   completion list is no longer exhaustive. The shell must re-fetch when
-   the separator state changes (typing or deleting a space).
-
-5. **Force `afterWildcard` `"all"` → `"some"`:** When candidates are
-   dropped and all surviving candidates are after a wildcard,
-   `afterWildcard` is downgraded from `"all"` to `"some"` to prevent
-   the shell from using the "slide" `noMatchPolicy` (which would
-   suppress the re-fetch).
-
-The same conflict-detection logic is applied cross-grammar in
-`grammarStore.ts` after collecting per-grammar results.
+- No candidates are dropped at the grammar level.
+- `closedSet` is not forced to `false` by separator conflicts.
+- `afterWildcard` is not downgraded by separator conflicts.
+- Cross-grammar conflict filtering in `grammarStore.ts` is no longer
+  needed — each grammar's groups are passed through directly.
 
 ### Direction asymmetry: why only Category 3b needs shadow candidates
 

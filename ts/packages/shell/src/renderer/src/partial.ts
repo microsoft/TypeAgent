@@ -6,16 +6,19 @@ import { CompletionDirection } from "@typeagent/agent-sdk";
 import { SearchMenu } from "./search";
 import { SearchMenuItem } from "./searchMenuUI/searchMenuUI";
 import {
-    ICompletionDispatcher,
-    ISearchMenu,
-    PartialCompletionSession,
-} from "./partialCompletionSession";
+    CompletionController,
+    createCompletionController,
+} from "agent-dispatcher/helpers/completion";
 
 import registerDebug from "debug";
 import { ExpandableTextArea } from "./chat/expandableTextArea";
 
 const debug = registerDebug("typeagent:shell:partial");
 const debugError = registerDebug("typeagent:shell:partial:error");
+
+// Expose the debug factory so that Playwright tests (and developers in
+// DevTools) can call  __debug.enable('typeagent:*')  at runtime.
+(globalThis as any).__debug = registerDebug;
 
 function getLeafNode(node: Node, offset: number) {
     let curr = 0;
@@ -52,36 +55,67 @@ function getLeafNode(node: Node, offset: number) {
 // Architecture: docs/architecture/completion.md — §6 Shell — DOM Adapter
 export class PartialCompletion {
     private readonly searchMenu: SearchMenu;
-    private readonly session: PartialCompletionSession;
+    private readonly controller: CompletionController;
     public closed: boolean = false;
     // Track previous input to determine direction: shorter = backspace
     // ("backward"), longer/same = forward action.
     private previousInput: string = "";
+    // Tracks the last generation and prefix seen from CompletionState to
+    // decide whether render() (items changed) or updatePosition() (same
+    // items) should be called on the SearchMenu.
+    private lastGeneration: number = -1;
+    private lastPrefix: string = "";
 
     private readonly cleanupEventListeners: () => void;
     constructor(
         private readonly container: HTMLDivElement,
         private readonly input: ExpandableTextArea,
         dispatcher: Dispatcher,
-        private readonly inline: boolean = true,
+        inline: boolean = true,
+        onToggleMode?: () => void,
     ) {
+        // Create controller first.
+        this.controller = createCompletionController(dispatcher);
+
         this.searchMenu = new SearchMenu(
             (item) => {
                 this.handleSelect(item);
             },
-            this.inline,
+            inline,
+            (prefix) => this.getSearchMenuPosition(prefix),
             this.input.getTextEntry(),
+            onToggleMode,
         );
 
-        // Wrap SearchMenu to implement ISearchMenu (same shape, just typed).
-        const menuAdapter: ISearchMenu = this.searchMenu;
-        // Wrap Dispatcher to implement ICompletionDispatcher.
-        const dispatcherAdapter: ICompletionDispatcher = dispatcher;
-
-        this.session = new PartialCompletionSession(
-            menuAdapter,
-            dispatcherAdapter,
-        );
+        // When completion state changes, re-render the search menu.
+        // CompletionState already contains filtered items and prefix —
+        // pass them directly to avoid a redundant trie query in render().
+        this.controller.setOnUpdate(() => {
+            const state = this.controller.getCompletionState();
+            debug(
+                `onUpdate: ${state ? `prefix='${state.prefix}' items=${state.items.length}` : "hidden"}`,
+            );
+            if (state) {
+                if (
+                    state.generation !== this.lastGeneration ||
+                    state.prefix !== this.lastPrefix
+                ) {
+                    this.lastGeneration = state.generation;
+                    this.lastPrefix = state.prefix;
+                    this.searchMenu.render(state.prefix, state.items);
+                } else {
+                    this.searchMenu.updatePosition(state.prefix);
+                }
+            } else {
+                // Reset trackers so that a future state with the same
+                // generation+prefix triggers a full render() instead of
+                // the lightweight updatePosition() (which no-ops when
+                // the menu is inactive).
+                this.lastGeneration = -1;
+                this.lastPrefix = "";
+                this.searchMenu.hide();
+            }
+        });
 
         const selectionChangeHandler = () => {
             debug("Partial completion update on selection changed");
@@ -105,16 +139,32 @@ export class PartialCompletion {
         if (this.closed) {
             throw new Error("Using a closed PartialCompletion");
         }
+        debug(`update entry: contentChanged=${contentChanged}`);
         if (contentChanged) {
             // Normalize the input text to ensure selection at end is correct.
             this.input.getTextEntry().normalize();
         }
         if (!this.isSelectionAtEnd(contentChanged)) {
-            this.session.hide();
+            this.previousInput = "";
+            this.controller.hide();
+            debug("update: selection not at end, hiding");
             return;
         }
         const input = this.getCurrentInputForCompletion();
-        debug(`Partial completion input: '${input}'`);
+
+        // Skip if input hasn't changed since the last call we forwarded
+        // to the controller.  This prevents selectionchange echoes from
+        // recomputing direction against the already-mutated previousInput
+        // (which would flip "backward" to "forward").
+        // Reset to "" on hide (cursor moved away) so re-focus always
+        // re-activates the controller.
+        if (input === this.previousInput) {
+            debug(`update skipped: input unchanged ('${input}')`);
+            return;
+        }
+        debug(
+            `Partial completion input: '${input}' (${contentChanged ? "content changed" : "selection changed"})`,
+        );
 
         // Only use "backward" when the user is genuinely backspacing:
         // the new input must be a strict prefix of the previous input.
@@ -125,31 +175,39 @@ export class PartialCompletion {
                 : "forward";
         this.previousInput = input;
 
-        this.session.update(
-            input,
-            (prefix) => this.getSearchMenuPosition(prefix),
-            direction,
-        );
+        this.controller.update(input, direction);
     }
 
     public hide() {
-        this.session.hide();
+        debug("hide");
+        this.controller.hide();
+    }
+
+    public switchMode(newInline: boolean) {
+        this.searchMenu.switchMode(newInline);
+        // Always full render after mode switch (new UI instance).
+        const state = this.controller.getCompletionState();
+        if (state) {
+            this.searchMenu.render(state.prefix, state.items);
+        }
     }
 
     public close() {
         this.closed = true;
-        this.session.hide();
+        this.controller.dispose();
         this.cleanupEventListeners();
     }
 
     private getCurrentInput() {
-        // Strip inline ghost text if present
+        // Strip inline completion area (ghost text + toggle) if present
         const textEntry = this.input.getTextEntry();
-        const ghost = textEntry.querySelector(".inline-ghost");
-        if (ghost) {
-            const ghostText = ghost.textContent ?? "";
+        const completionArea = textEntry.querySelector(
+            ".inline-completion-area",
+        );
+        if (completionArea) {
+            const areaText = completionArea.textContent ?? "";
             const raw = textEntry.textContent ?? "";
-            return raw.slice(0, raw.length - ghostText.length);
+            return raw.slice(0, raw.length - areaText.length);
         }
         return textEntry.textContent ?? "";
     }
@@ -184,26 +242,28 @@ export class PartialCompletion {
         }
 
         const textEntry = this.input.getTextEntry();
-        const ghost = textEntry.querySelector(".inline-ghost");
+        const completionArea = textEntry.querySelector(
+            ".inline-completion-area",
+        );
 
-        if (ghost) {
+        if (completionArea) {
             // With inline ghost text, "at end" means the cursor is right
-            // before the ghost span. setCursorBeforeGhost places the cursor
-            // using setStartBefore(ghost), so endContainer=textEntry and
-            // endOffset=ghost's child index.
+            // before the completion area wrapper. setCursorBeforeGhost
+            // places the cursor using setStartBefore(wrapper), so
+            // endContainer=textEntry and endOffset=wrapper's child index.
             if (r.endContainer === textEntry) {
-                const ghostIndex = Array.from(textEntry.childNodes).indexOf(
-                    ghost as ChildNode,
+                const areaIndex = Array.from(textEntry.childNodes).indexOf(
+                    completionArea as ChildNode,
                 );
-                if (r.endOffset === ghostIndex) {
+                if (r.endOffset === areaIndex) {
                     return true;
                 }
             }
             // Also handle: cursor at the end of a text node that is the
-            // immediate previous sibling of the ghost span.
+            // immediate previous sibling of the completion area wrapper.
             if (r.endContainer.nodeType === Node.TEXT_NODE) {
                 if (
-                    r.endContainer.nextSibling === ghost &&
+                    r.endContainer.nextSibling === completionArea &&
                     r.endOffset === (r.endContainer.textContent?.length ?? 0)
                 ) {
                     return true;
@@ -267,9 +327,8 @@ export class PartialCompletion {
         this.searchMenu.hide();
 
         // Compute the filter prefix relative to the current anchor.
-        // Must be read before resetToIdle() clears the session's anchor.
-        const currentInput = this.getCurrentInputForCompletion();
-        const completionPrefix = this.session.getCompletionPrefix(currentInput);
+        // Must be read before accept() clears the session's anchor.
+        const completionPrefix = this.controller.getCompletionState()?.prefix;
         if (completionPrefix === undefined) {
             debugError(`Partial completion abort select: prefix not found`);
             return;
@@ -327,7 +386,7 @@ export class PartialCompletion {
         textEntry.focus();
 
         // Reset completion state so the next update requests fresh completions.
-        this.session.resetToIdle();
+        this.controller.accept();
 
         debug(`Partial completion replaced: ${replaceText}`);
 
@@ -356,11 +415,7 @@ export class PartialCompletion {
             this.previousInput.startsWith(input)
                 ? "backward"
                 : "forward";
-        this.session.explicitHide(
-            input,
-            (prefix) => this.getSearchMenuPosition(prefix),
-            direction,
-        );
+        this.controller.dismiss(input, direction);
     }
 
     public handleMouseWheel(event: WheelEvent) {

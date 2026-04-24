@@ -288,18 +288,24 @@ export function setContent(
         }
 
         // after all stylesheets have been loaded craft the iframe source document
-        Promise.all(promises).then(() => {
-            iframe.srcdoc = `<html>
+        Promise.all(promises)
+            .then(() => {
+                iframe.srcdoc = `<html>
             <head>
             ${css}
             </head>
             <body style="height: auto; overflow: hidden; background: transparent;">${message}</body></html>`;
-        });
+            })
+            .catch((err) => {
+                console.error(`Failed to load CSS for iframe: ${err}`);
+                iframe.srcdoc = `<html>
+            <body style="height: auto; overflow: hidden; background: transparent;">${message}</body></html>`;
+            });
 
         contentElm.appendChild(iframe);
     } else {
         // vanilla, sanitized HTML only
-        contentElm.innerHTML += contentHtml;
+        contentElm.insertAdjacentHTML("beforeend", contentHtml);
 
         // Add click handlers for all links to open in browser tabs
         const allLinks = contentElm.querySelectorAll("a[href]");
@@ -371,12 +377,24 @@ export function swapContent(
         return;
     }
 
-    if (targetElement.classList.contains("chat-message-action-data")) {
-        targetElement.classList.remove("chat-message-action-data");
-    } else {
+    const showingData = !targetElement.classList.contains(
+        "chat-message-action-data",
+    );
+    if (showingData) {
         targetElement.classList.add("chat-message-action-data");
+    } else {
+        targetElement.classList.remove("chat-message-action-data");
     }
 
     sourceElement.setAttribute("action-data", originalMessage);
-    targetElement.innerHTML = data;
+    if (showingData) {
+        // Render raw JSON data safely via textContent to prevent XSS.
+        targetElement.innerHTML = "";
+        const pre = document.createElement("pre");
+        pre.textContent = data;
+        targetElement.appendChild(pre);
+    } else {
+        // Restore the original trusted message HTML.
+        targetElement.innerHTML = data;
+    }
 }

@@ -46,7 +46,7 @@ export function addToConversation(
 
 function beginIndexing(conversation: kp.IConversation) {
     if (conversation.semanticRefIndex === undefined) {
-        conversation.semanticRefIndex = new kp.ConversationIndex();
+        conversation.semanticRefIndex = new kp.TermToSemanticRefIndex();
     }
     if (conversation.semanticRefs === undefined) {
         conversation.semanticRefs = new kp.SemanticRefCollection();

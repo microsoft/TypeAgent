@@ -23,10 +23,17 @@ import { CameraView } from "./cameraView";
 import { createWebSocket, webapi } from "./webSocketAPI";
 import * as jose from "jose";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
-import { ClientIO, Dispatcher, RequestId } from "agent-dispatcher";
+import {
+    ClientIO,
+    Dispatcher,
+    PendingInteractionRequest,
+    PendingInteractionResponse,
+    RequestId,
+} from "agent-dispatcher";
 import { swapContent } from "./setContent";
 import { remoteSearchMenuUIOnCompletion } from "./searchMenuUI/remoteSearchMenuUI";
 import { ChatInput } from "./chat/chatInput";
+import { escapeHtml } from "./chat/conversationCommands";
 
 export function isElectron(): boolean {
     return globalThis.api !== undefined;
@@ -138,63 +145,55 @@ function registerClient(
     cameraView: CameraView,
     chatHistoryReady: Promise<void>,
 ) {
-    let replayPending = true;
-    const replayQueue: Array<() => void> = [];
-    function withReplayQueue(fn: () => void): void {
-        if (replayPending) {
-            replayQueue.push(fn);
-        } else {
-            fn();
-        }
-    }
+    // Dispatcher reference set in dispatcherInitialized; needed for
+    // respondToInteraction calls from deferred interaction handlers.
+    let dispatcher: Dispatcher | undefined;
+
+    // Track pending deferred interactions so they can be dismissed when
+    // resolved or cancelled by another client / timeout.
+    const pendingInteractions = new Map<string, () => void>();
 
     const clientIO: ClientIO = {
         clear: () => {
-            withReplayQueue(() => chatView.clear());
+            chatView.clear();
         },
         exit: () => {
             window.close();
         },
+        shutdown: () => {
+            window.close();
+        },
         setUserRequest: (requestId, command, seq?) => {
-            withReplayQueue(() => {
-                if (seq !== undefined) {
-                    maxSeqSeen = Math.max(maxSeqSeen, seq);
-                }
-                chatView.setActiveRequestId(requestId.requestId);
-                // For remote clients or replay, creates a new MessageGroup
-                // keyed by UUID. For local clients, this is a no-op because
-                // addRemoteUserMessage skips pending locals — they get promoted
-                // lazily by getMessageGroup when the first output arrives.
-                chatView.addRemoteUserMessage(requestId, command);
-            });
+            if (seq !== undefined) {
+                maxSeqSeen = Math.max(maxSeqSeen, seq);
+            }
+            chatView.setActiveRequestId(requestId.requestId);
+            // For remote clients or replay, creates a new MessageGroup
+            // keyed by UUID. For local clients, this is a no-op because
+            // addRemoteUserMessage skips pending locals — they get promoted
+            // lazily by getMessageGroup when the first output arrives.
+            chatView.addRemoteUserMessage(requestId, command);
         },
         setDisplayInfo: (requestId, source, actionIndex, action, seq?) => {
-            withReplayQueue(() => {
-                if (seq !== undefined) {
-                    maxSeqSeen = Math.max(maxSeqSeen, seq);
-                }
-                chatView.setDisplayInfo(requestId, source, actionIndex, action);
-            });
+            if (seq !== undefined) {
+                maxSeqSeen = Math.max(maxSeqSeen, seq);
+            }
+            chatView.setDisplayInfo(requestId, source, actionIndex, action);
         },
         setDisplay: (message, seq?) => {
-            withReplayQueue(() => {
-                if (seq !== undefined) {
-                    maxSeqSeen = Math.max(maxSeqSeen, seq);
-                }
-                chatView.addAgentMessage(message);
-            });
+            if (seq !== undefined) {
+                maxSeqSeen = Math.max(maxSeqSeen, seq);
+            }
+            chatView.addAgentMessage(message);
         },
         appendDisplay: (message, mode, seq?) => {
-            withReplayQueue(() => {
-                if (seq !== undefined) {
-                    maxSeqSeen = Math.max(maxSeqSeen, seq);
-                }
-                chatView.addAgentMessage(message, { appendMode: mode });
-            });
+            if (seq !== undefined) {
+                maxSeqSeen = Math.max(maxSeqSeen, seq);
+            }
+            chatView.addAgentMessage(message, { appendMode: mode });
         },
         appendDiagnosticData: (requestId, data) => {
-            // TODO: append data instead of replace
-            withReplayQueue(() => chatView.setActionData(requestId, data));
+            chatView.appendDiagnosticData(requestId, data);
         },
         setDynamicDisplay: (
             requestId,
@@ -203,18 +202,30 @@ function registerClient(
             displayId,
             nextRefreshMs,
         ) => {
-            withReplayQueue(() =>
-                chatView.setDynamicDisplay(
-                    requestId,
-                    source,
-                    actionIndex,
-                    displayId,
-                    nextRefreshMs,
-                ),
+            chatView.setDynamicDisplay(
+                requestId,
+                source,
+                actionIndex,
+                displayId,
+                nextRefreshMs,
             );
         },
-        askYesNo: async (requestId, message, _defaultValue) => {
-            return chatView.askYesNo(requestId, message, "");
+        question: async (requestId, message, choices) => {
+            // For binary Yes/No with a known requestId, delegate to the existing chatView UI.
+            if (
+                requestId !== undefined &&
+                choices.length === 2 &&
+                choices[0] === "Yes" &&
+                choices[1] === "No"
+            ) {
+                const yes = await chatView.askYesNo(requestId, message, "");
+                return yes ? 0 : 1;
+            }
+            // General multi-choice and broadcast (no requestId) are not yet implemented
+            // in the Shell renderer — the main process handles those via dialog.showMessageBox.
+            throw new Error(
+                "Main process should have handled multi-choice question",
+            );
         },
         requestChoice: (
             requestId,
@@ -224,118 +235,216 @@ function registerClient(
             choices,
             source,
         ) => {
-            withReplayQueue(() =>
-                chatView.showChoice(
-                    requestId,
-                    choiceId,
-                    type,
-                    message,
-                    choices,
-                    source,
-                ),
+            chatView.showChoice(
+                requestId,
+                choiceId,
+                type,
+                message,
+                choices,
+                source,
             );
         },
         proposeAction: async (requestId, actionTemplates, source) => {
             return chatView.proposeAction(requestId, actionTemplates, source);
         },
-        popupQuestion: () => {
-            throw new Error("Main process should have handled popupQuestion");
-        },
         notify: (requestId, event, data, source, seq?) => {
-            withReplayQueue(() => {
-                if (seq !== undefined) {
-                    maxSeqSeen = Math.max(maxSeqSeen, seq);
-                }
-                switch (event) {
-                    case "explained":
-                        chatView.notifyExplained(requestId, data);
-                        break;
-                    case "randomCommandSelected":
-                        chatView.randomCommandSelected(requestId, data.message);
-                        break;
-                    case "grammarRule":
-                        // Update roadrunner color based on grammar result.
-                        // Grammar details are diagnostic-only — accessible via
-                        // the clickable label, not displayed inline.
-                        chatView.updateGrammarResult(
-                            requestId,
-                            data.success,
-                            data.message,
-                        );
-                        break;
-                    case "showNotifications":
-                        switch (data) {
-                            case NotifyCommands.Clear:
-                                notifications.length = 0;
-                                break;
-                            case NotifyCommands.ShowAll:
-                                showNotifications(
-                                    requestId,
-                                    chatView,
-                                    notifications,
-                                    true,
-                                );
-                                break;
-                            case NotifyCommands.ShowSummary:
-                                summarizeNotifications(
-                                    requestId,
-                                    chatView,
-                                    notifications,
-                                );
-                                break;
-                            case NotifyCommands.ShowUnread:
-                                showNotifications(
-                                    requestId,
-                                    chatView,
-                                    notifications,
-                                );
-                                break;
-                            default:
-                                console.log("unknown notify command");
-                                break;
-                        }
-                        break;
-                    case AppAgentEvent.Error:
-                    case AppAgentEvent.Warning:
-                    case AppAgentEvent.Info:
-                        notifications.push({
-                            event,
-                            source,
-                            data,
-                            read: false,
-                            requestId,
-                        });
-                        break;
+            if (seq !== undefined) {
+                maxSeqSeen = Math.max(maxSeqSeen, seq);
+            }
+            switch (event) {
+                case "explained":
+                    chatView.notifyExplained(requestId, data);
+                    break;
+                case "randomCommandSelected":
+                    chatView.randomCommandSelected(requestId, data.message);
+                    break;
+                case "grammarRule":
+                    // Update roadrunner color based on grammar result.
+                    // Grammar details are diagnostic-only — accessible via
+                    // the clickable label, not displayed inline.
+                    chatView.updateGrammarResult(
+                        requestId,
+                        data.success,
+                        data.message,
+                    );
+                    break;
+                case "showNotifications":
+                    switch (data) {
+                        case NotifyCommands.Clear:
+                            notifications.length = 0;
+                            break;
+                        case NotifyCommands.ShowAll:
+                            showNotifications(
+                                requestId,
+                                chatView,
+                                notifications,
+                                true,
+                            );
+                            break;
+                        case NotifyCommands.ShowSummary:
+                            summarizeNotifications(
+                                requestId,
+                                chatView,
+                                notifications,
+                            );
+                            break;
+                        case NotifyCommands.ShowUnread:
+                            showNotifications(
+                                requestId,
+                                chatView,
+                                notifications,
+                            );
+                            break;
+                        default:
+                            console.log("unknown notify command");
+                            break;
+                    }
+                    break;
+                case AppAgentEvent.Error:
+                case AppAgentEvent.Warning:
+                case AppAgentEvent.Info:
+                    notifications.push({
+                        event,
+                        source,
+                        data,
+                        read: false,
+                        requestId,
+                    });
+                    break;
 
-                    // Display-focused events - for now show toast notification inline
-                    // TODO: Design for toast notifications in shell
-                    case AppAgentEvent.Inline:
-                    case AppAgentEvent.Toast:
-                        chatView.addNotificationMessage(
-                            data,
-                            source,
-                            requestId,
-                        );
-                        // Also add to notifications list for @notify show
-                        notifications.push({
-                            event,
-                            source,
-                            data,
-                            read: false,
-                            requestId,
-                        });
-                        break;
+                // Display-focused events - for now show toast notification inline
+                // TODO: Design for toast notifications in shell
+                case AppAgentEvent.Inline:
+                case AppAgentEvent.Toast:
+                    chatView.addNotificationMessage(data, source, requestId);
+                    // Also add to notifications list for @notify show
+                    notifications.push({
+                        event,
+                        source,
+                        data,
+                        read: false,
+                        requestId,
+                    });
+                    break;
 
-                    default:
-                    // ignore
-                }
-            });
+                default:
+                // ignore
+            }
         },
         openLocalView: async () => {
             throw new Error("Main process should have handled openLocalView");
         },
         closeLocalView: async () => {
             throw new Error("Main process should have handled closeLocalView");
+        },
+        requestInteraction: (interaction: PendingInteractionRequest) => {
+            if (!dispatcher) {
+                console.warn(
+                    "requestInteraction: dispatcher not yet initialized",
+                );
+                return;
+            }
+
+            const interactionId = interaction.interactionId;
+
+            // Cancellation mechanism: race the UI promise against a
+            // locally-controlled cancellation promise.
+            let cancelReject: (() => void) | undefined;
+            const cancelPromise = new Promise<never>((_, reject) => {
+                cancelReject = () => reject(new Error("interaction dismissed"));
+            });
+            // Prevent unhandled rejection if cancellation fires after the UI
+            // promise wins the race.
+            cancelPromise.catch(() => {});
+            pendingInteractions.set(interactionId, cancelReject!);
+
+            const handle = async () => {
+                try {
+                    let response: PendingInteractionResponse;
+
+                    if (interaction.type === "question") {
+                        const { message, choices } = interaction;
+                        const requestId =
+                            interaction.requestId ??
+                            (`pending-${interactionId}` as unknown as RequestId);
+                        const source = interaction.source;
+
+                        if (
+                            choices.length === 2 &&
+                            choices[0] === "Yes" &&
+                            choices[1] === "No"
+                        ) {
+                            const yes = await Promise.race([
+                                chatView.askYesNo(requestId, message, source),
+                                cancelPromise,
+                            ]);
+                            response = {
+                                interactionId,
+                                type: "question",
+                                value: yes ? 0 : 1,
+                            };
+                        } else {
+                            // TODO: implement general multi-choice UI;
+                            // falling back to default for now.
+                            console.warn(
+                                `requestInteraction: multi-choice questions not yet supported in Shell (${choices.length} choices)`,
+                            );
+                            return;
+                        }
+                    } else if (interaction.type === "proposeAction") {
+                        const requestId =
+                            interaction.requestId ??
+                            (`pending-${interactionId}` as unknown as RequestId);
+                        const result = await Promise.race([
+                            chatView.proposeAction(
+                                requestId,
+                                interaction.actionTemplates,
+                                interaction.source,
+                            ),
+                            cancelPromise,
+                        ]);
+                        response = {
+                            interactionId,
+                            type: "proposeAction",
+                            value: result,
+                        };
+                    } else {
+                        console.warn(`requestInteraction: unknown type`);
+                        return;
+                    }
+
+                    await dispatcher!.respondToInteraction(response);
+                } catch (e: unknown) {
+                    // Only swallow dismissal errors; log unexpected failures.
+                    if (
+                        !(e instanceof Error) ||
+                        e.message !== "interaction dismissed"
+                    ) {
+                        console.error(
+                            "requestInteraction: unexpected error",
+                            e,
+                        );
+                    }
+                } finally {
+                    pendingInteractions.delete(interactionId);
+                }
+            };
+
+            handle();
+        },
+        interactionResolved: (interactionId: string) => {
+            const cancel = pendingInteractions.get(interactionId);
+            if (cancel) {
+                cancel();
+                pendingInteractions.delete(interactionId);
+            }
+        },
+        interactionCancelled: (interactionId: string) => {
+            const cancel = pendingInteractions.get(interactionId);
+            if (cancel) {
+                cancel();
+                pendingInteractions.delete(interactionId);
+            }
         },
         takeAction: (_, action, data) => {
             // Android object gets injected on Android devices, otherwise unavailable
@@ -371,6 +480,296 @@ function registerClient(
                         getClientAPI().openFolder(data as string);
                         break;
                     }
+                    case "manage-conversation": {
+                        const payload = d as {
+                            subcommand: string;
+                            name?: string;
+                            newName?: string;
+                        };
+                        const api = getClientAPI();
+                        (async () => {
+                            switch (payload.subcommand) {
+                                case "new": {
+                                    if (!payload.name) {
+                                        // TODO: prompt the user for a name inline instead of warning,
+                                        // so that NL "create a new conversation" works end-to-end.
+                                        chatView.addNotificationMessage(
+                                            {
+                                                type: "html",
+                                                content:
+                                                    "A name is required to create a new conversation.",
+                                                kind: "warning",
+                                            },
+                                            "conversation",
+                                            undefined,
+                                        );
+                                        break;
+                                    }
+                                    const created =
+                                        await api.conversationCreate(
+                                            payload.name,
+                                        );
+                                    const switchResult =
+                                        await api.conversationSwitch(
+                                            created.conversationId,
+                                        );
+                                    const msg = switchResult.success
+                                        ? `✅ Created and switched to conversation "<b>${escapeHtml(created.name)}</b>"`
+                                        : `✅ Created conversation "<b>${escapeHtml(created.name)}</b>" but could not switch: ${escapeHtml(switchResult.error ?? "unknown error")}`;
+                                    chatView.addNotificationMessage(
+                                        {
+                                            type: "html",
+                                            content: msg,
+                                            kind: "info",
+                                        },
+                                        "conversation",
+                                        undefined,
+                                    );
+                                    break;
+                                }
+                                case "list": {
+                                    const sessions =
+                                        await api.conversationList();
+                                    const current =
+                                        await api.conversationGetCurrent();
+                                    let html: string;
+                                    if (sessions.length === 0) {
+                                        html = "No conversations found.";
+                                    } else {
+                                        const lines = sessions.map((s) => {
+                                            const isCurrent =
+                                                current &&
+                                                s.conversationId ===
+                                                    current.conversationId;
+                                            const marker = isCurrent
+                                                ? " ← <b>current</b>"
+                                                : "";
+                                            const date = new Date(
+                                                s.createdAt,
+                                            ).toLocaleDateString();
+                                            return `• <b>${escapeHtml(s.name)}</b> (${escapeHtml(s.conversationId)}) — ${s.clientCount} client(s), created ${date}${marker}`;
+                                        });
+                                        html = `<b>Conversations (${sessions.length})</b><br>${lines.join("<br>")}`;
+                                    }
+                                    chatView.addNotificationMessage(
+                                        {
+                                            type: "html",
+                                            content: html,
+                                            kind: "info",
+                                        },
+                                        "conversation",
+                                        undefined,
+                                    );
+                                    break;
+                                }
+                                case "info": {
+                                    const cur =
+                                        await api.conversationGetCurrent();
+                                    const html = cur
+                                        ? `Current conversation: <b>${escapeHtml(cur.name)}</b> (${escapeHtml(cur.conversationId)})`
+                                        : "No active conversation.";
+                                    chatView.addNotificationMessage(
+                                        {
+                                            type: "html",
+                                            content: html,
+                                            kind: "info",
+                                        },
+                                        "conversation",
+                                        undefined,
+                                    );
+                                    break;
+                                }
+                                case "switch": {
+                                    if (!payload.name) {
+                                        chatView.addNotificationMessage(
+                                            {
+                                                type: "html",
+                                                content:
+                                                    "A conversation name is required to switch.",
+                                                kind: "warning",
+                                            },
+                                            "conversation",
+                                            undefined,
+                                        );
+                                        break;
+                                    }
+                                    const sessions =
+                                        await api.conversationList();
+                                    const match = sessions.find(
+                                        (s) =>
+                                            s.name.toLowerCase() ===
+                                            payload.name!.toLowerCase(),
+                                    );
+                                    if (!match) {
+                                        chatView.addNotificationMessage(
+                                            {
+                                                type: "html",
+                                                content: `No conversation named "<b>${escapeHtml(payload.name)}</b>" found.`,
+                                                kind: "warning",
+                                            },
+                                            "conversation",
+                                            undefined,
+                                        );
+                                        break;
+                                    }
+                                    const result = await api.conversationSwitch(
+                                        match.conversationId,
+                                    );
+                                    if (!result.success) {
+                                        chatView.addNotificationMessage(
+                                            {
+                                                type: "html",
+                                                content: `❌ ${escapeHtml(result.error ?? "Failed to switch conversation")}`,
+                                                kind: "warning",
+                                            },
+                                            "conversation",
+                                            undefined,
+                                        );
+                                    }
+                                    break;
+                                }
+                                case "rename": {
+                                    if (!payload.newName) {
+                                        chatView.addNotificationMessage(
+                                            {
+                                                type: "html",
+                                                content:
+                                                    "A new name is required to rename the conversation.",
+                                                kind: "warning",
+                                            },
+                                            "conversation",
+                                            undefined,
+                                        );
+                                        break;
+                                    }
+                                    let conversationId: string;
+                                    if (payload.name) {
+                                        const sessions =
+                                            await api.conversationList();
+                                        const match = sessions.find(
+                                            (s) =>
+                                                s.name.toLowerCase() ===
+                                                payload.name!.toLowerCase(),
+                                        );
+                                        if (!match) {
+                                            chatView.addNotificationMessage(
+                                                {
+                                                    type: "html",
+                                                    content: `No conversation named "<b>${escapeHtml(payload.name)}</b>" found.`,
+                                                    kind: "warning",
+                                                },
+                                                "conversation",
+                                                undefined,
+                                            );
+                                            break;
+                                        }
+                                        conversationId = match.conversationId;
+                                    } else {
+                                        const cur =
+                                            await api.conversationGetCurrent();
+                                        if (!cur) {
+                                            chatView.addNotificationMessage(
+                                                {
+                                                    type: "html",
+                                                    content:
+                                                        "No active conversation to rename.",
+                                                    kind: "warning",
+                                                },
+                                                "conversation",
+                                                undefined,
+                                            );
+                                            break;
+                                        }
+                                        conversationId = cur.conversationId;
+                                    }
+                                    await api.conversationRename(
+                                        conversationId,
+                                        payload.newName,
+                                    );
+                                    chatView.addNotificationMessage(
+                                        {
+                                            type: "html",
+                                            content: `✅ Renamed conversation to "<b>${escapeHtml(payload.newName)}</b>"`,
+                                            kind: "info",
+                                        },
+                                        "conversation",
+                                        undefined,
+                                    );
+                                    break;
+                                }
+                                case "delete": {
+                                    if (!payload.name) {
+                                        chatView.addNotificationMessage(
+                                            {
+                                                type: "html",
+                                                content:
+                                                    "A conversation name is required to delete.",
+                                                kind: "warning",
+                                            },
+                                            "conversation",
+                                            undefined,
+                                        );
+                                        break;
+                                    }
+                                    const sessions =
+                                        await api.conversationList();
+                                    const match = sessions.find(
+                                        (s) =>
+                                            s.name.toLowerCase() ===
+                                            payload.name!.toLowerCase(),
+                                    );
+                                    if (!match) {
+                                        chatView.addNotificationMessage(
+                                            {
+                                                type: "html",
+                                                content: `❌ Conversation "<b>${escapeHtml(payload.name)}</b>" not found.`,
+                                                kind: "warning",
+                                            },
+                                            "conversation",
+                                            undefined,
+                                        );
+                                        break;
+                                    }
+                                    await api.conversationDelete(
+                                        match.conversationId,
+                                    );
+                                    chatView.addNotificationMessage(
+                                        {
+                                            type: "html",
+                                            content: `🗑️ Deleted conversation "<b>${escapeHtml(match.name)}</b>"`,
+                                            kind: "info",
+                                        },
+                                        "conversation",
+                                        undefined,
+                                    );
+                                    break;
+                                }
+                                default: {
+                                    chatView.addNotificationMessage(
+                                        {
+                                            type: "html",
+                                            content: `Unknown manage-conversation subcommand: "<b>${escapeHtml(payload.subcommand)}</b>"`,
+                                            kind: "warning",
+                                        },
+                                        "conversation",
+                                        undefined,
+                                    );
+                                    break;
+                                }
+                            }
+                        })().catch((e) =>
+                            chatView.addNotificationMessage(
+                                {
+                                    type: "html",
+                                    content: `❌ ${escapeHtml(e?.message ?? String(e))}`,
+                                    kind: "warning",
+                                },
+                                "conversation",
+                                undefined,
+                            ),
+                        );
+                        break;
+                    }
                 }
             } catch (e) {
                 console.log(e);
@@ -380,60 +779,13 @@ function registerClient(
 
     const client: Client = {
         clientIO,
-        async dispatcherInitialized(dispatcher: Dispatcher): Promise<void> {
-            chatView.initializeDispatcher(dispatcher);
+        async dispatcherInitialized(d: Dispatcher): Promise<void> {
+            dispatcher = d;
+            chatView.initializeDispatcher(d);
             await chatHistoryReady;
-            const afterSeq = maxSeqSeen >= 0 ? maxSeqSeen : undefined;
-            const entries = await dispatcher.getDisplayHistory(afterSeq);
-            for (const entry of entries) {
-                switch (entry.type) {
-                    case "user-request":
-                        chatView.addRemoteUserMessage(
-                            entry.requestId,
-                            entry.command,
-                        );
-                        break;
-                    case "set-display":
-                        chatView.addAgentMessage(entry.message);
-                        break;
-                    case "append-display":
-                        chatView.addAgentMessage(entry.message, {
-                            appendMode: entry.mode,
-                        });
-                        break;
-                    case "set-display-info":
-                        chatView.setDisplayInfo(
-                            entry.requestId,
-                            entry.source,
-                            entry.actionIndex,
-                            entry.action,
-                        );
-                        break;
-                    // Skip notify — notifications are ephemeral
-                }
-                maxSeqSeen = Math.max(maxSeqSeen, entry.seq);
-            }
 
-            // Mark every message currently in the scroll container as historical.
-            // This covers both the HTML chat history loaded at startup (already
-            // marked by initializeChatHistory) and any display-log entries that
-            // were just replayed above (from previous sessions). Marking them
-            // here prevents them from appearing in the command back-stack.
-            for (const child of Array.from(
-                chatView.getScrollContainer().children,
-            )) {
-                (child as HTMLElement).classList.add("history");
-            }
-
-            replayPending = false;
-            for (const fn of replayQueue) fn();
-            replayQueue.length = 0;
-
-            // Signal that the dispatcher is fully initialised, all historical
-            // messages have been replayed and marked, and the replay queue has
-            // been drained.  Tests wait for this attribute before sending the
-            // first request to avoid racing with the replay mechanism (which
-            // would queue IPC callbacks and delay metrics updates).
+            // Signal that the dispatcher is fully initialised.
+            // Tests wait for this attribute before sending the first request.
             chatView
                 .getScrollContainer()
                 .setAttribute("data-dispatcher-ready", "true");
@@ -524,6 +876,14 @@ function registerClient(
                 agents.set("shell", "\uD83D\uDC1A");
             }
             chatView.addNotificationMessage(message, "shell", id);
+        },
+        conversationChanged(_conversationId: string, _name: string): void {
+            // Conversation changed — no UI to update (dropdown removed)
+        },
+        markHistoryEntries(): void {
+            for (const child of chatView.getScrollContainer().children) {
+                child.classList.add("history");
+            }
         },
     };
 

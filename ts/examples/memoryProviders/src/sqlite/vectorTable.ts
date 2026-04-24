@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as sqlite from "better-sqlite3";
+import { randomUUID } from "node:crypto";
 import {
     Embedding,
     ScoredItem,
@@ -40,6 +41,9 @@ export function createVectorTable<TKeyId extends ValueType = string>(
     const sql_add = db.prepare(
         `INSERT OR IGNORE INTO ${tableName} (keyId, embedding) VALUES (?, ?)`,
     );
+    const sql_add_auto = db.prepare(
+        `INSERT INTO ${tableName} (embedding) VALUES (?)`,
+    );
     const sql_remove = db.prepare(`DELETE FROM ${tableName} WHERE keyId = ?`);
     const sql_all = db.prepare(`SELECT * from ${tableName}`);
 
@@ -67,8 +71,16 @@ export function createVectorTable<TKeyId extends ValueType = string>(
 
     function put(value: Embedding, id?: TKeyId | undefined): Promise<TKeyId> {
         if (id === undefined) {
-            // TODO: ID generation
-            throw Error("id required");
+            const buffer = Buffer.from(value.buffer);
+            if (keyType === "INTEGER") {
+                const result = sql_add_auto.run(buffer);
+                return Promise.resolve(
+                    Number(result.lastInsertRowid) as TKeyId,
+                );
+            }
+            const newId = randomUUID() as TKeyId;
+            sql_add.run(newId, buffer);
+            return Promise.resolve(newId);
         }
         const buffer = Buffer.from(value.buffer);
         sql_add.run(id, buffer);

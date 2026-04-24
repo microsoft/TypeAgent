@@ -7,6 +7,7 @@ import fs from "node:fs";
 import {
     grammarToJson,
     loadGrammarRulesNoThrow,
+    recommendedOptimizations,
     SchemaLoader,
 } from "action-grammar";
 import { parseSchemaSource } from "@typeagent/action-schema";
@@ -62,6 +63,11 @@ export default class Compile extends Command {
             required: true,
             char: "o",
         }),
+        debug: Flags.boolean({
+            description:
+                "Disable grammar optimizations (produces an unoptimized AST that preserves the 1:1 correspondence between top-level rules and the original source — useful for diagnostics).",
+            default: false,
+        }),
     };
 
     async run(): Promise<void> {
@@ -75,7 +81,13 @@ export default class Compile extends Command {
             undefined,
             errors,
             warnings,
-            { startValueRequired: true, schemaLoader },
+            flags.debug
+                ? { startValueRequired: true, schemaLoader }
+                : {
+                      startValueRequired: true,
+                      schemaLoader,
+                      optimizations: recommendedOptimizations,
+                  },
         );
 
         if (grammar === undefined) {

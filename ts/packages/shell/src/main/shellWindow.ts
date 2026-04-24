@@ -6,6 +6,7 @@ import {
     DevicePermissionHandlerHandlerDetails,
     globalShortcut,
     ipcMain,
+    shell,
     WebContents,
     WebContentsView,
 } from "electron";
@@ -340,7 +341,13 @@ export class ShellWindow {
         try {
             // Send settings asap
             this.sendUserSettingChanged();
-            globalShortcut.register("Alt+Right", () => {
+            let lastDemoAdvance = 0;
+            globalShortcut.register("Control+Right", () => {
+                const now = Date.now();
+                if (now - lastDemoAdvance < 500) {
+                    return;
+                }
+                lastDemoAdvance = now;
                 this.chatView.webContents.send("send-demo-event", "Alt+Right");
             });
 
@@ -436,7 +443,7 @@ export class ShellWindow {
         ipcMain.removeAllListeners("browser-go-forward");
         ipcMain.removeAllListeners("browser-reload");
 
-        globalShortcut.unregister("Alt+Right");
+        globalShortcut.unregister("Control+Right");
         globalShortcut.unregister("CommandOrControl+L");
         globalShortcut.unregister("Alt+E");
 
@@ -487,6 +494,21 @@ export class ShellWindow {
             id: id || `system-${Date.now()}`,
             timestamp: Date.now(),
         });
+    }
+
+    /**
+     * Notify the renderer that the active conversation has changed.
+     */
+    public sendConversationChanged(conversationId: string, name: string): void {
+        this.chatView.webContents.send(
+            "conversation-changed",
+            conversationId,
+            name,
+        );
+    }
+
+    public sendMarkHistory(): void {
+        this.chatView.webContents.send("mark-history");
     }
 
     public runDemo(interactive: boolean = false) {
@@ -1255,10 +1277,29 @@ function createMainWindow(inputOnly: boolean): BrowserWindow {
 
     mainWindow.removeMenu();
 
-    // make sure links are opened in the the shell
-    mainWindow.webContents.setWindowOpenHandler(() => {
-        // TODO: add logic for opening in external browser if a modifier key is pressed
-        //shell.openExternal(details.url);
+    // Track whether a modifier key is held so the window-open handler can
+    // decide whether to open in the system browser instead.
+    let modifierHeld = false;
+    mainWindow.webContents.on("before-input-event", (_event, input) => {
+        modifierHeld =
+            (isMac ? input.meta : input.control) || input.shift || input.alt;
+    });
+
+    // make sure links are opened in the the shell; open in system browser when
+    // the user holds a modifier key (Ctrl/Meta, Shift, or Alt) while clicking
+    mainWindow.webContents.setWindowOpenHandler((details) => {
+        if (modifierHeld) {
+            // Only allow http/https URLs to prevent malicious schemes (e.g., file:, javascript:).
+            try {
+                const { protocol } = new URL(details.url);
+                if (protocol === "http:" || protocol === "https:") {
+                    shell.openExternal(details.url);
+                }
+            } catch {
+                // Invalid URL — deny silently.
+            }
+            return { action: "deny" };
+        }
         return { action: "allow" };
     });
 

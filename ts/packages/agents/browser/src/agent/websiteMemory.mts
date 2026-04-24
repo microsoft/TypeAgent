@@ -157,6 +157,7 @@ export async function resolveURLWithHistory(
             removeDynamicAgent: async () => {},
             forceCleanupDynamicAgent: async () => {},
             getSharedLocalHostPort: async () => 0,
+            setLocalHostPort: (_port: number) => {},
             indexes: async () => [],
             reloadAgentSchema: async () => {},
         };

@@ -24,11 +24,14 @@ export type CompletionSettings = {
     verbosity?: "low" | "medium" | "high";
 };
 
+// A JSON Schema object passed opaquely to the OpenAI API.
+export type JsonSchemaType = Record<string, unknown>;
+
 export type StructuredOutputJsonSchema = {
     name: string;
     description?: string;
     strict?: true;
-    schema: any; // TODO: JsonSchemaType
+    schema: JsonSchemaType;
 };
 
 export type FunctionCallingJsonSchema = {
@@ -36,7 +39,7 @@ export type FunctionCallingJsonSchema = {
     function: {
         name: string;
         description?: string;
-        parameters?: any; // TODO: JsonSchemaType
+        parameters?: JsonSchemaType;
         strict?: true;
     };
 };
@@ -172,7 +175,7 @@ export type VideoGenerationJob = {
     height?: number;
     width?: number;
     size?: "720x1280" | "1280x720" | "1024x1792" | "1792x1024";
-    seconds: 4 | 8 | 12;
+    seconds?: 4 | 8 | 12;
     input_reference?: ImageInPaintItem[]; // TODO: add support for videos
     failure_reason?: string;
     endpoint?: URL;

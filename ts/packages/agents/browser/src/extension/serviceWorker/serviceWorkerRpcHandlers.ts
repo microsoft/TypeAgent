@@ -256,11 +256,12 @@ export function createAllHandlers(): AllServiceWorkerInvokeFunctions {
                 }
                 const startIndex = result.startIndex;
                 const prefix = params.input.substring(0, startIndex);
-                const separator =
-                    result.separatorMode === "space" ||
-                    result.separatorMode === "spacePunctuation"
-                        ? " "
-                        : "";
+                const needsSpace = result.completions.some(
+                    (g) =>
+                        g.separatorMode === "space" ||
+                        g.separatorMode === "spacePunctuation",
+                );
+                const separator = needsSpace ? " " : "";
                 return {
                     completions,
                     startIndex,

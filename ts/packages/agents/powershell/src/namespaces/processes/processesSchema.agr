@@ -1,0 +1,64 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// PowerShell Processes Namespace Grammar
+// Process monitoring and management
+
+import { PowerShellProcessesActions } from "./processesActionsSchema.ts";
+
+<Start> : PowerShellProcessesActions = <ListProcesses>
+          | <ProcessMemory>
+          | <ProcessCpu>
+          | <StopProcess>
+          | <StartProcess>
+          | <WaitProcess>;
+
+<ListProcesses> =
+    (list|show|get) (all)? (running)? processes (named|matching)? $(name:wildcard)?
+      -> { actionName: "listProcesses", parameters: { name } }
+  | ps $(name:wildcard)?
+      -> { actionName: "listProcesses", parameters: { name } }
+  | (what|which) processes are running
+      -> { actionName: "listProcesses", parameters: {} }
+  | (show|list) (top)? $(topN:number) processes
+      -> { actionName: "listProcesses", parameters: { topN } };
+
+<ProcessMemory> =
+    (show|what's|what is) (using)? (the)? (most)? memory
+      -> { actionName: "processMemory", parameters: {} }
+  | (top|show) $(topN:number)? memory (hogs|usage|consumers)
+      -> { actionName: "processMemory", parameters: { topN } }
+  | processes (sorted)? by memory (usage)?
+      -> { actionName: "processMemory", parameters: {} }
+  | memory usage (by process)?
+      -> { actionName: "processMemory", parameters: {} };
+
+<ProcessCpu> =
+    (show|what's|what is) (using)? (the)? (most)? cpu
+      -> { actionName: "processCpu", parameters: {} }
+  | (top|show) $(topN:number)? cpu (hogs|usage|consumers)
+      -> { actionName: "processCpu", parameters: { topN } }
+  | processes (sorted)? by cpu (usage)?
+      -> { actionName: "processCpu", parameters: {} }
+  | cpu usage (by process)?
+      -> { actionName: "processCpu", parameters: {} };
+
+<StopProcess> =
+    (kill|stop|end) (process|task)? $(name:wildcard)
+      -> { actionName: "stopProcess", parameters: { name } }
+  | (kill|stop) process (id|pid)? $(id:number)
+      -> { actionName: "stopProcess", parameters: { id } }
+  | taskkill $(name:wildcard)
+      -> { actionName: "stopProcess", parameters: { name } };
+
+<StartProcess> =
+    (start|run|launch|open) $(path:wildcard)
+      -> { actionName: "startProcess", parameters: { path } }
+  | (start|run|launch) $(path:wildcard) (with)? $(arguments:wildcard)
+      -> { actionName: "startProcess", parameters: { path, arguments } };
+
+<WaitProcess> =
+    wait for (process)? $(name:wildcard) (to)? (exit|finish|complete)?
+      -> { actionName: "waitProcess", parameters: { name } }
+  | wait for (process)? (id|pid)? $(id:number) (to)? (exit|finish|complete)?
+      -> { actionName: "waitProcess", parameters: { id } };

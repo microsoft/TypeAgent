@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "actionName": "gitBranches",
+  "description": "Lists git branches in the repository",
+  "displayName": "Git Branches",
+  "parameters": [
+    {
+      "name": "repoPath",
+      "type": "path",
+      "required": false,
+      "description": "Path to the git repository",
+      "default": "."
+    },
+    {
+      "name": "all",
+      "type": "boolean",
+      "required": false,
+      "description": "Include remote branches",
+      "default": "false"
+    }
+  ],
+  "script": {
+    "language": "powershell",
+    "body": "param([string]$RepoPath = '.', [bool]$All = $false)\nPush-Location $RepoPath\ntry {\n    $args = @('branch')\n    if ($All) { $args += '-a' }\n    $args += '--format=%(if)%(HEAD)%(then)*%(else) %(end)%(refname:short)|%(objectname:short)|%(committerdate:relative)'\n    & git @args | ForEach-Object {\n        $parts = $_ -split '\\|'\n        [PSCustomObject]@{\n            Current = if ($parts[0] -match '^\\*') { '*' } else { '' }\n            Branch = $parts[0].TrimStart('* ')\n            Commit = $parts[1]\n            LastCommit = $parts[2]\n        }\n    } | Format-Table -AutoSize\n} finally {\n    Pop-Location\n}",
+    "expectedOutputFormat": "table"
+  },
+  "grammarPatterns": [
+    {
+      "pattern": "git branch(es)? (in)? $(repoPath:wildcard)?",
+      "isAlias": false,
+      "examples": ["git branches", "git branch"]
+    },
+    {
+      "pattern": "(list|show) (all)? (git)? branches (in)? $(repoPath:wildcard)?",
+      "isAlias": false,
+      "examples": ["list branches", "show all branches"]
+    }
+  ],
+  "sandbox": {
+    "allowedCmdlets": [
+      "Push-Location",
+      "Pop-Location",
+      "ForEach-Object",
+      "Format-Table"
+    ],
+    "allowedPaths": ["$PWD", "$env:USERPROFILE"],
+    "allowedModules": [
+      "Microsoft.PowerShell.Management",
+      "Microsoft.PowerShell.Utility"
+    ],
+    "maxExecutionTime": 30,
+    "networkAccess": false
+  },
+  "source": {
+    "type": "manual",
+    "timestamp": "2026-04-23T00:00:00Z"
+  }
+}

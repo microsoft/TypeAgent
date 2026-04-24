@@ -78,6 +78,25 @@ export const webapi: ClientAPI = {
     continuousSpeechProcessing: async (_) => {
         throw new Error("Not implemented");
     },
+    conversationList: async () => {
+        // Not supported on mobile
+        return [];
+    },
+    conversationCreate: async (_name: string) => {
+        throw new Error("Conversation management not supported on mobile");
+    },
+    conversationSwitch: async (_conversationId: string) => {
+        throw new Error("Conversation management not supported on mobile");
+    },
+    conversationRename: async (_conversationId: string, _newName: string) => {
+        throw new Error("Conversation management not supported on mobile");
+    },
+    conversationDelete: async (_conversationId: string) => {
+        throw new Error("Conversation management not supported on mobile");
+    },
+    conversationGetCurrent: async () => {
+        return undefined;
+    },
 };
 
 const dispatcherChannel = createChannelAdapter((message: any) =>
@@ -99,6 +118,7 @@ export async function createWebSocket(autoReconnect: boolean = true) {
     const endpoint = `${protocol}://${url.hostname}${port}`;
 
     return new Promise<WebSocket | undefined>((resolve) => {
+        let reconnecting = false;
         console.log(`opening web socket to ${endpoint} `);
         const webSocket = new WebSocket(endpoint);
 
@@ -162,8 +182,14 @@ export async function createWebSocket(autoReconnect: boolean = true) {
             resolve(undefined);
 
             // reconnect?
-            if (autoReconnect) {
-                createWebSocket().then((ws) => (globalThis.ws = ws));
+            if (autoReconnect && !reconnecting) {
+                reconnecting = true;
+                createWebSocket().then((ws) => {
+                    if (ws) {
+                        globalThis.ws = ws;
+                    }
+                    reconnecting = false;
+                });
             } else {
                 clientIOChannel.notifyDisconnected();
                 dispatcherChannel.notifyDisconnected();

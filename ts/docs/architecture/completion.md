@@ -14,8 +14,9 @@
 TypeAgent's completion system provides real-time, context-aware completions
 as the user types `@`-commands, subcommands, flags, and parameter values.
 The system spans four backend layers — grammar matcher, cache, agent SDK,
-and dispatcher — plus a shell layer (with sub-components for session
-management, DOM integration, and the search menu) and a CLI adapter.
+and dispatcher — plus a host-agnostic completion session (state machine
+and trie), a shell layer (DOM integration and search menu UI), and a
+CLI adapter.
 These are connected by a structured metadata contract that eliminates
 client-side heuristics.
 
@@ -58,7 +59,7 @@ User keystroke
      │
      ▼
 ┌──────────────────────────────────────────────────────────────┐
-│  Shell PartialCompletionSession  (or CLI getCompletionsData) │
+│  CompletionController / PartialCompletionSession             │
 │  State machine: IDLE → PENDING → ACTIVE                      │
 │  Decides: reuse local trie  OR  re-fetch from backend        │
 └────────────────────────┬─────────────────────────────────────┘
@@ -90,9 +91,8 @@ The return path carries `CommandCompletionResult`:
 
 ```typescript
 {
-  startIndex: number;           // where the resolved prefix ends
-  completions: CompletionGroup[];
-  separatorMode?: SeparatorMode;  // "space" | "spacePunctuation" | "optional" | "none"
+  startIndex: number;           // where the anchor ends (resolved prefix length)
+  completions: CompletionGroup[];  // each group carries its own separatorMode
   closedSet: boolean;           // true → list is exhaustive
   directionSensitive: boolean;  // true → completion(input[0..P], backward) ≠ completion(input[0..P], forward)
   afterWildcard: AfterWildcard;        // "none" | "some" | "all" — wildcard boundary ambiguity
@@ -103,8 +103,8 @@ These fields are cross-cutting concepts that flow through every layer.
 Brief definitions here; see [Key types](#key-types) for full semantics.
 
 - **`startIndex` / `matchedPrefixLength`** — The character position where
-  the backend's matched prefix ends. Everything before this position is
-  "consumed" input; completions apply after it.
+  the backend's matched prefix (the anchor) ends. Everything before this
+  position is "consumed" input; completions apply after it.
 - **`separatorMode`** — Whether a separator character (space, punctuation)
   is required between the consumed prefix and the completion text. Ranges
   from `"space"` (strictest) to `"none"` (no separator needed).
@@ -280,24 +280,21 @@ Agents implement this optional method to provide domain-specific completions
 type CompletionGroups = {
   groups: CompletionGroup[];
   matchedPrefixLength?: number; // grammar override for startIndex
-  separatorMode?: SeparatorMode;
   closedSet?: boolean;
 };
 ```
 
 Each `CompletionGroup` carries:
 
-| Field         | Purpose                                                   |
-| ------------- | --------------------------------------------------------- |
-| `name`        | Group label                                               |
-| `completions` | String values                                             |
-| `needQuotes`  | Quote values containing spaces                            |
-| `emojiChar`   | Optional icon                                             |
-| `sorted`      | Whether already sorted                                    |
-| `kind`        | `"literal"` (grammar tokens) or `"entity"` (agent values) |
-
-**Helper:** `mergeSeparatorMode(a, b)` resolves conflicts by picking the
-strongest requirement.
+| Field           | Purpose                                                    |
+| --------------- | ---------------------------------------------------------- |
+| `name`          | Group label                                                |
+| `completions`   | String values                                              |
+| `needQuotes`    | Quote values containing spaces                             |
+| `emojiChar`     | Optional icon                                              |
+| `sorted`        | Whether already sorted                                     |
+| `kind`          | `"literal"` (grammar tokens) or `"entity"` (agent values)  |
+| `separatorMode` | What separator is required before this group's completions |
 
 ---
 
@@ -355,26 +352,21 @@ whether the user is still editing or has committed the last token.
 
 ---
 
-### 5. Shell
+### 5. Completion Session
 
-The shell layer comprises three sub-components: a completion session
-(state machine), a DOM adapter (input extraction and menu positioning),
-and a search menu (trie-backed filtering). Together they form the
-client-side half of the completion system.
-
-#### 5a. Completion Session
-
-**Package:** `packages/shell`
+**Package:** `packages/dispatcher`
 **Class:** `PartialCompletionSession`
+**Consumer interface:** `CompletionController` (created via `createCompletionController()`)
 
 A three-state machine (`IDLE`, `PENDING`, `ACTIVE`) that manages the
-lifecycle of a completion interaction.
+lifecycle of a completion interaction. This class has no DOM dependencies
+and is shared by both the shell and CLI hosts.
 
 **State transitions:**
 
 ```
         ┌───────────────────┐
-        │       IDLE        │ ← resetToIdle()
+        │       IDLE        │ ← accept()
         └────────┬──────────┘
                  │ update() with input
                  ▼
@@ -410,11 +402,11 @@ contiguous within each category.
 
 **Key concepts:**
 
-- **Anchor** (`this.anchor`): the prefix string at `startIndex` returned by
-  the backend. Everything after the anchor is the `completionPrefix` used to
-  filter the local trie.
+- **Anchor** (`this.anchor`): the prefix string at `startIndex` (the
+  resolved prefix) returned by the backend. Everything after the anchor
+  is the completion prefix used to filter the local trie.
 - **Separator stripping**: when `separatorMode` requires a separator
-  (`"space"` or `"spacePunctuation"`), or is `"optional"`, leading
+  (`"space"` or `"spacePunctuation"`), or is `"optionalSpace"` / `"optionalSpacePunctuation"`, leading
   separator characters in the raw prefix are stripped before trie lookup.
   This means extra whitespace (e.g. double space) does not leak into the
   trie as filter text — the trie always sees clean completion prefixes.
@@ -425,11 +417,13 @@ contiguous within each category.
 - **Session preservation**: `hide()` cancels in-flight fetches but preserves
   anchor and menu state for quick re-activation on re-focus.
 
-#### 5b. DOM Adapter
+---
+
+### 6. Shell — DOM Adapter
 
 **Class:** `PartialCompletion`
 
-Bridges the DOM text editor and the session state machine:
+Bridges the DOM text editor and the completion session:
 
 - Extracts current input (stripping ghost text from inline suggestions)
 - Validates cursor is at end of input before offering completions
@@ -437,20 +431,28 @@ Bridges the DOM text editor and the session state machine:
 - On user selection: computes replacement range from completion prefix,
   performs DOM text replacement, repositions cursor, triggers fresh completion
 
-#### 5c. Search Menu
+---
 
-**Classes:** `SearchMenuBase` (abstract), `SearchMenu` (concrete)
+### 7. Shell — Search Menu
 
-Trie-backed prefix filtering:
+**Class:** `SearchMenu`
+**Trie index:** `SearchMenuIndex` interface / `TSTSearchMenuIndex` implementation
 
-- `setChoices(items)` — populates a ternary search tree, deduplicates by
-  NFD-normalized, case-folded text
-- `updatePrefix(prefix, position)` — queries trie; returns `true` on unique
-  exact match; calls `onShow()`/`onHide()` template methods
-- `hasExactMatch(text)` — exact trie membership test
+The search menu is split into two layers:
 
-`SearchMenuBase` is extracted to enable unit testing with `TestSearchMenu`
-(real trie logic, jest-mocked lifecycle methods).
+- **`SearchMenuIndex`** (in `packages/dispatcher`) — a TST (ternary search
+  tree) that stores completion items and supports prefix filtering.
+  `setItems(items)` populates the trie (deduplicating by NFD-normalized,
+  case-folded text); `filterItems(prefix)` queries it;
+  `hasExactMatch(text)` tests exact membership.
+
+- **`SearchMenu`** (in `packages/shell`) — a purely presentational class
+  that manages the popup/inline UI. It receives pre-filtered items from
+  `CompletionController.getCompletionState()` via an `onUpdate` callback
+  and delegates to `SearchMenuUI` implementations (`InlineSearchMenuUI`,
+  `LocalSearchMenuUI`, `RemoteSearchMenuUI`) for rendering. The trie
+  filtering happens inside `PartialCompletionSession`; `SearchMenu` only
+  handles display and user interaction (arrow keys, selection, toggle).
 
 ---
 
@@ -461,12 +463,14 @@ Trie-backed prefix filtering:
 Controls what character is required between the matched prefix and completion
 text.
 
-| Value                | Meaning                             | Use case                                                                                                                                                                                                                                                                   |
-| -------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"space"`            | Whitespace required                 | Commands, flags, agent names                                                                                                                                                                                                                                               |
-| `"spacePunctuation"` | Whitespace or Unicode punctuation   | Latin-script grammar completions                                                                                                                                                                                                                                           |
-| `"optional"`         | Separator accepted but not required | CJK / mixed-script grammars; also digit–Latin boundaries (digits are Unicode script "Common", not "Latin", so a transition like `"0"→"i"` is a script change that does not require a separator)                                                                            |
-| `"none"`             | No separator                        | Grammar rules annotated with `[spacing=none]`. At the top level, no leading or trailing whitespace is consumed. For nested rules, the parent rule's spacing controls the boundaries around the child; the child's `"none"` only affects its own internal token boundaries. |
+| Value                        | Meaning                                                                              | Use case                                                                                                                                                                                                                                                                   |
+| ---------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `"space"`                    | Whitespace required                                                                  | Commands, flags, agent names                                                                                                                                                                                                                                               |
+| `"spacePunctuation"`         | Whitespace or Unicode punctuation                                                    | Latin-script grammar completions                                                                                                                                                                                                                                           |
+| `"optionalSpacePunctuation"` | Separator accepted but not required; when present, whitespace or Unicode punctuation | Grammar rules annotated with `[spacing=optional]`; also the resolved form of `"autoSpacePunctuation"` when no separator is needed between the adjacent characters                                                                                                          |
+| `"optionalSpace"`            | Separator accepted but not required; when present, only whitespace                   | Command/flag-level completions where trailing whitespace was already consumed into `startIndex`; subcommand and agent-name completions                                                                                                                                     |
+| `"none"`                     | No separator                                                                         | Grammar rules annotated with `[spacing=none]`. At the top level, no leading or trailing whitespace is consumed. For nested rules, the parent rule's spacing controls the boundaries around the child; the child's `"none"` only affects its own internal token boundaries. |
+| `"autoSpacePunctuation"`     | Per-item; resolved by the consumer                                                   | Grammar auto-spacing mode (default). The consumer inspects the character pair (last input char, first completion char) and resolves each item to `"spacePunctuation"` or `"optionalSpacePunctuation"`. The shell resolves this in `toPartitions()`.                        |
 
 See `actionGrammar.md` Spacing modes for how the grammar matcher
 determines `separatorMode` from spacing annotations. The matcher
@@ -841,10 +845,13 @@ Closed only if ALL sources are closed.
 _Impact:_ Premature "accept" when one source is open — user misses
 completions from that source.
 
-**#13 — `separatorMode`: strongest requirement wins.**
-`"space"` > `"spacePunctuation"` > `"optional"` > `"none"`.
-_Impact:_ Fused display if a weak mode wins over a strong one, or
-unnecessary separation if the reverse.
+**#13 — `separatorMode`: per-group, no cross-group merging.**
+Each `CompletionGroup` carries its own `separatorMode`. The session's
+SepLevel model (see `session.ts`) partitions groups
+by mode and shows/hides them based on the user's trailing separator
+state. No merging or priority ordering is needed.
+_Impact:_ Fused display if a group's mode is wrong, or unnecessary
+separation if a wrong mode is applied.
 
 **#14 — `directionSensitive`: OR-merge.**
 Sensitive if ANY source is sensitive.
@@ -865,19 +872,12 @@ definite completions to slide — `"some"` triggers re-fetch instead.
   handles this correctly. The two-pass invariant check skips this case
   (when `forwardAtP.matchedPrefixLength < P`).
 
-### Direction asymmetry and separator-mode conflicts
+### Direction asymmetry
 
-Two related mechanisms protect the invariants when rules with different
+One mechanism protects the invariants when rules with different
 spacing modes compete for the same `maxPrefixLength`:
 
-1. **Separator-mode conflict filtering** (`filterSepConflicts` in
-   `grammarCompletion.ts`, post-loop in `grammarStore.ts`): when
-   `"none"` and requiring-separator candidates coexist, filters by
-   trailing separator state, advances P, and forces `closedSet=false`.
-   Protects invariant #9 (`separatorMode="none"` for `[spacing=none]`
-   rules) and #13 (strongest separator requirement wins at merge).
-
-2. **Deferred shadow candidates** (`DeferredShadowCandidate` in
+1. **Deferred shadow candidates** (`DeferredShadowCandidate` in
    `grammarCompletion.ts`): when Category 3b backward backs up past the
    forward position, a shadow candidate is collected and flushed after
    Phase 2. Protects invariant #3 (truncated-forward idempotency),
@@ -894,22 +894,19 @@ needs shadow candidates".
 
 ## CLI integration
 
-The CLI (`packages/cli/src/commands/interactive.ts`) follows the same
-contract but with simpler plumbing:
+The CLI (`packages/cli/src/enhancedConsole.ts`) uses the same
+`CompletionController` interface as the shell, created via
+`createCompletionController()`:
 
-1. Sends full input and a `direction` (always `"forward"` for tab-completion,
-   since readline has no equivalent of backspace-triggered recompletion)
-   to `dispatcher.getCommandCompletion(line, direction)` (no
-   token-boundary heuristics).
-2. Uses `result.startIndex` as the readline filter position.
-3. Prepends a space separator when `separatorMode` is `"space"` or
-   `"spacePunctuation"` to prevent fused display (e.g., `"playmusic"`).
+1. Calls `controller.update(input, direction)` on each keystroke, including
+   `"backward"` when the user backspaces. The `onUpdate` callback triggers
+   re-render of the completion menu in the terminal UI.
+2. Queries `controller.getCompletionState()` for the current items, prefix,
+   and anchor index.
+3. Uses `anchorIndex` as the readline filter position.
 
-Because `direction` is always `"forward"`, the CLI cannot trigger
-backward-specific completions (e.g., reconsidering a flag name). In
-practice this is a minor limitation: readline tab-completion is
-inherently forward-looking, and users backspace-and-retype rather than
-expecting the completion menu to adapt to deletions.
+Unlike the shell, the CLI renders completions as a terminal-based menu
+with arrow-key navigation rather than a DOM popup.
 
 ---
 

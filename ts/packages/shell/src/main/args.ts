@@ -14,6 +14,9 @@ type ShellCommandLineArgs = {
     mockGreetings?: boolean;
     inputOnly?: boolean;
     connect?: number;
+    hidden?: boolean;
+    idleTimeout?: number;
+    resume?: boolean;
 };
 
 export function parseShellCommandLine() {
@@ -98,6 +101,47 @@ export function parseShellCommandLine() {
                 result.inputOnly = true;
                 continue;
             }
+
+            if (arg === "--hidden") {
+                result.hidden = true;
+                continue;
+            }
+
+            if (arg === "--no-hidden") {
+                result.hidden = false;
+                continue;
+            }
+
+            if (arg === "--idle-timeout") {
+                i++;
+                if (
+                    i < process.argv.length &&
+                    !process.argv[i].startsWith("--")
+                ) {
+                    const timeout = parseInt(process.argv[i]);
+                    if (isNaN(timeout) || timeout < 0) {
+                        debugShell(
+                            `Invalid value '${process.argv[i]}' for --idle-timeout argument`,
+                        );
+                    } else {
+                        result.idleTimeout = timeout;
+                    }
+                } else {
+                    debugShell("Missing value for --idle-timeout argument");
+                }
+                continue;
+            }
+
+            if (arg === "--resume") {
+                result.resume = true;
+                continue;
+            }
+
+            if (arg === "--no-resume") {
+                result.resume = false;
+                continue;
+            }
+
             if (arg === "--connect") {
                 i++;
                 if (

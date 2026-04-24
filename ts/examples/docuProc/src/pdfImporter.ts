@@ -312,7 +312,9 @@ export async function writeToIndex(
     index: knowLib.TextIndex<string, ChunkId>,
 ) {
     for (const phrase of phrases ?? []) {
-        await exponentialBackoff(io, index.put, phrase, [chunkId]);
+        await exponentialBackoff(io, index.addUpdate.bind(index), phrase, [
+            chunkId,
+        ]);
     }
 }
 
@@ -339,9 +341,4 @@ export async function exponentialBackoff<T extends any[], R>(
             timeout *= 2;
         }
     }
-}
-
-// Apply URL escaping to key. NOTE: Currently unused. TODO: Therefore remove.
-export function sanitizeKey(key: string): string {
-    return encodeURIComponent(key).replace(/%20/g, "+"); // Encode spaces as plus, others as %xx.
 }

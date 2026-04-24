@@ -8,7 +8,7 @@ import type {
     ClientIO,
     IAgentMessage,
     RequestId,
-} from "agent-dispatcher";
+} from "@typeagent/dispatcher-types";
 import { fileURLToPath } from "node:url";
 
 const testAppAgentProvider = createNpmAppAgentProvider(
@@ -27,23 +27,25 @@ function createTestClientIO(data: IAgentMessage[]): ClientIO {
     return {
         clear: () => {},
         exit: () => process.exit(0),
+        shutdown: () => process.exit(0),
         setUserRequest: () => {},
         setDisplayInfo: () => {},
         appendDiagnosticData: () => {},
         setDynamicDisplay: () => {},
-        askYesNo: async (
-            requestId: RequestId,
-            message: string,
-            defaultValue: boolean = false,
-        ) => defaultValue,
+        question: async (
+            _requestId: RequestId | undefined,
+            _message: string,
+            _choices: string[],
+            defaultId?: number,
+        ) => defaultId ?? 0,
         proposeAction: async () => undefined,
-        popupQuestion: async () => {
-            throw new Error("popupQuestion not implemented");
-        },
         notify: () => {},
         openLocalView: async () => {},
         closeLocalView: async () => {},
         requestChoice: () => {},
+        requestInteraction: () => {},
+        interactionResolved: () => {},
+        interactionCancelled: () => {},
         takeAction: (requestId: RequestId, action: string) => {
             throw new Error(`Action ${action} not supported`);
         },

@@ -19,8 +19,8 @@ import {
     AgentServerInvokeFunctions,
     AgentServerChannelName,
     DispatcherConnectOptions,
-    SessionInfo,
-    JoinSessionResult,
+    ConversationInfo,
+    JoinConversationResult,
     getDispatcherChannelName,
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
@@ -28,28 +28,84 @@ import {
 const debug = registerDebug("typeagent:agent-server-client");
 const debugErr = registerDebug("typeagent:agent-server-client:error");
 
-export type SessionDispatcher = {
+function getServerPidPath(port: number): string {
+    return path.join(os.homedir(), ".typeagent", `server-${port}.pid`);
+}
+
+export function writeServerPid(port: number, pid: number): void {
+    const pidPath = getServerPidPath(port);
+    const dir = path.dirname(pidPath);
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(pidPath, String(pid));
+}
+
+export function removeServerPid(port: number): void {
+    try {
+        fs.unlinkSync(getServerPidPath(port));
+    } catch {
+        // Already gone
+    }
+}
+
+function readServerPid(port: number): number | undefined {
+    try {
+        const content = fs.readFileSync(getServerPidPath(port), "utf-8").trim();
+        const pid = parseInt(content, 10);
+        return isNaN(pid) ? undefined : pid;
+    } catch {
+        return undefined;
+    }
+}
+
+function isProcessAlive(pid: number): boolean {
+    try {
+        process.kill(pid, 0); // signal 0 = existence check
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function forceKillServer(port: number): boolean {
+    const pid = readServerPid(port);
+    if (pid === undefined || !isProcessAlive(pid)) {
+        removeServerPid(port);
+        return false;
+    }
+    try {
+        process.kill(pid, "SIGKILL");
+    } catch {
+        // Already dead
+    }
+    removeServerPid(port);
+    return true;
+}
+
+export type ConversationDispatcher = {
     dispatcher: Dispatcher;
-    sessionId: string;
+    conversationId: string;
     name: string;
 };
 
 export type AgentServerConnection = {
-    joinSession(
+    joinConversation(
         clientIO: ClientIO,
         options?: DispatcherConnectOptions,
-    ): Promise<SessionDispatcher>;
-    leaveSession(sessionId: string): Promise<void>;
-    createSession(name: string): Promise<SessionInfo>;
-    listSessions(name?: string): Promise<SessionInfo[]>;
-    renameSession(sessionId: string, newName: string): Promise<void>;
-    deleteSession(sessionId: string): Promise<void>;
+    ): Promise<ConversationDispatcher>;
+    leaveConversation(conversationId: string): Promise<void>;
+    createConversation(name: string): Promise<ConversationInfo>;
+    listConversations(name?: string): Promise<ConversationInfo[]>;
+    renameConversation(conversationId: string, newName: string): Promise<void>;
+    deleteConversation(conversationId: string): Promise<void>;
+    shutdown(): Promise<void>;
     close(): Promise<void>;
 };
 
 /**
  * Connect to an agent server and return a connection object that supports
- * multiple sessions over a single WebSocket.
+ * multiple conversations over a single WebSocket.
  */
 export async function connectAgentServer(
     url: string | URL,
@@ -70,8 +126,8 @@ export async function connectAgentServer(
             channel.createChannel(AgentServerChannelName),
         );
 
-        // Track joined sessions for cleanup on close
-        const joinedSessions = new Map<
+        // Track joined conversations for cleanup on close
+        const joinedConversations = new Map<
             string,
             { dispatcher: Dispatcher; connectionId: string }
         >();
@@ -81,90 +137,109 @@ export async function connectAgentServer(
         let closed = false;
 
         const connection: AgentServerConnection = {
-            async joinSession(
+            async joinConversation(
                 clientIO: ClientIO,
                 options?: DispatcherConnectOptions,
-            ): Promise<SessionDispatcher> {
-                const requestedSessionId = options?.sessionId;
+            ): Promise<ConversationDispatcher> {
+                const requestedConversationId = options?.conversationId;
                 if (
-                    requestedSessionId !== undefined &&
-                    joinedSessions.has(requestedSessionId)
+                    requestedConversationId !== undefined &&
+                    joinedConversations.has(requestedConversationId)
                 ) {
                     throw new Error(
-                        `Already joined session '${requestedSessionId}'. Call leaveSession() before joining again.`,
+                        `Already joined conversation '${requestedConversationId}'. Call leaveConversation() before joining again.`,
                     );
                 }
 
-                const result: JoinSessionResult = await rpc.invoke(
-                    "joinSession",
+                const result: JoinConversationResult = await rpc.invoke(
+                    "joinConversation",
                     options,
                 );
 
-                const sessionId = result.sessionId;
+                const conversationId = result.conversationId;
 
-                // Create session-namespaced channels
+                // Create conversation-namespaced channels
                 createClientIORpcServer(
                     clientIO,
-                    channel.createChannel(getClientIOChannelName(sessionId)),
+                    channel.createChannel(
+                        getClientIOChannelName(conversationId),
+                    ),
                 );
 
                 const dispatcher = createDispatcherRpcClient(
-                    channel.createChannel(getDispatcherChannelName(sessionId)),
+                    channel.createChannel(
+                        getDispatcherChannelName(conversationId),
+                    ),
                     result.connectionId,
                 );
 
-                // Override close to leave the session rather than close the WebSocket
+                // Override close to leave the conversation rather than close the WebSocket
                 dispatcher.close = async () => {
-                    await connection.leaveSession(sessionId);
+                    await connection.leaveConversation(conversationId);
                 };
 
-                joinedSessions.set(sessionId, {
+                joinedConversations.set(conversationId, {
                     dispatcher,
                     connectionId: result.connectionId,
                 });
 
                 return {
                     dispatcher,
-                    sessionId,
+                    conversationId,
                     name: result.name,
                 };
             },
 
-            async leaveSession(sessionId: string): Promise<void> {
-                const entry = joinedSessions.get(sessionId);
+            async leaveConversation(conversationId: string): Promise<void> {
+                const entry = joinedConversations.get(conversationId);
                 if (entry === undefined) {
                     return;
                 }
-                joinedSessions.delete(sessionId);
-                channel.deleteChannel(getDispatcherChannelName(sessionId));
-                channel.deleteChannel(getClientIOChannelName(sessionId));
-                await rpc.invoke("leaveSession", sessionId);
+                joinedConversations.delete(conversationId);
+                channel.deleteChannel(getDispatcherChannelName(conversationId));
+                channel.deleteChannel(getClientIOChannelName(conversationId));
+                await rpc.invoke("leaveConversation", conversationId);
             },
 
-            async createSession(name: string): Promise<SessionInfo> {
-                return rpc.invoke("createSession", name);
+            async createConversation(name: string): Promise<ConversationInfo> {
+                return rpc.invoke("createConversation", name);
             },
 
-            async listSessions(name?: string): Promise<SessionInfo[]> {
-                return rpc.invoke("listSessions", name);
+            async listConversations(
+                name?: string,
+            ): Promise<ConversationInfo[]> {
+                return rpc.invoke("listConversations", name);
             },
 
-            async renameSession(
-                sessionId: string,
+            async renameConversation(
+                conversationId: string,
                 newName: string,
             ): Promise<void> {
-                return rpc.invoke("renameSession", sessionId, newName);
+                return rpc.invoke(
+                    "renameConversation",
+                    conversationId,
+                    newName,
+                );
             },
 
-            async deleteSession(sessionId: string): Promise<void> {
-                // Clean up local channels if we're in this session
-                const entry = joinedSessions.get(sessionId);
+            async deleteConversation(conversationId: string): Promise<void> {
+                // Clean up local channels if we're in this conversation
+                const entry = joinedConversations.get(conversationId);
                 if (entry !== undefined) {
-                    joinedSessions.delete(sessionId);
-                    channel.deleteChannel(getDispatcherChannelName(sessionId));
-                    channel.deleteChannel(getClientIOChannelName(sessionId));
+                    joinedConversations.delete(conversationId);
+                    channel.deleteChannel(
+                        getDispatcherChannelName(conversationId),
+                    );
+                    channel.deleteChannel(
+                        getClientIOChannelName(conversationId),
+                    );
                 }
-                return rpc.invoke("deleteSession", sessionId);
+                return rpc.invoke("deleteConversation", conversationId);
+            },
+
+            async shutdown(): Promise<void> {
+                debug("Requesting server shutdown via existing connection");
+                await rpc.invoke("shutdown");
             },
 
             async close(): Promise<void> {
@@ -190,7 +265,7 @@ export async function connectAgentServer(
         ws.onclose = (event: WebSocket.CloseEvent) => {
             debug("WebSocket connection closed", event.code, event.reason);
             channel.notifyDisconnected();
-            joinedSessions.clear();
+            joinedConversations.clear();
             if (!opened) {
                 // Closed before onopen fired — reject the pending promise.
                 if (!resolved) {
@@ -234,7 +309,7 @@ function getAgentServerEntryPoint(): string {
     return serverPath;
 }
 
-function isServerRunning(url: string): Promise<boolean> {
+export function isServerRunning(url: string): Promise<boolean> {
     return new Promise((resolve) => {
         const ws = new WebSocket(url);
         const timer = setTimeout(() => {
@@ -253,7 +328,12 @@ function isServerRunning(url: string): Promise<boolean> {
     });
 }
 
-function spawnAgentServer(serverPath: string, port: number): void {
+function spawnAgentServer(
+    serverPath: string,
+    port: number,
+    hidden: boolean = false,
+    idleTimeout: number = 0,
+): void {
     // Use an exclusive lock file to prevent two concurrent client processes from
     // both concluding the server is down and each spawning their own copy.
     // fs.openSync with 'wx' is atomic: exactly one caller creates the file.
@@ -271,19 +351,62 @@ function spawnAgentServer(serverPath: string, port: number): void {
         );
         return;
     }
+
+    const extraArgs =
+        idleTimeout > 0 ? ["--idle-timeout", String(idleTimeout)] : [];
+
     try {
         debug(`Starting agent server from ${serverPath}`);
         const isWindows = process.platform === "win32";
-        const child = spawn("node", [serverPath, "--port", String(port)], {
-            // On Unix, detached creates a new session so the child survives parent exit.
-            // On Windows, detached creates a visible console window, so we skip it —
-            // stdio: 'ignore' + unref() is sufficient for the child to outlive the parent.
-            detached: !isWindows,
-            stdio: "ignore",
-            windowsHide: true,
-        });
-        child.unref();
-        debug(`Agent server process spawned (pid: ${child.pid})`);
+        if (isWindows) {
+            if (hidden) {
+                // On Windows, detached: true creates a new console window
+                // for the child and any processes it spawns. To avoid this,
+                // spawn via cmd /c start /B which runs the process truly in
+                // the background with no visible windows.
+                const args = [serverPath, "--port", String(port), ...extraArgs];
+                const child = spawn(
+                    "cmd.exe",
+                    ["/c", "start", "/B", "node", ...args],
+                    {
+                        stdio: "ignore",
+                        windowsHide: true,
+                    },
+                );
+                child.unref();
+                debug(
+                    `Agent server process spawned hidden (pid: ${child.pid})`,
+                );
+            } else {
+                const pwsh7 = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
+                const psExe = fs.existsSync(pwsh7) ? pwsh7 : "powershell.exe";
+                const psCommand = `node "${serverPath}" --port ${port}${idleTimeout > 0 ? ` --idle-timeout ${idleTimeout}` : ""}`;
+                const psArgs = ["-NoExit", "-Command", psCommand];
+                const child = spawn(
+                    "cmd.exe",
+                    ["/c", "start", "", psExe, ...psArgs],
+                    {
+                        detached: true,
+                        stdio: "ignore",
+                    },
+                );
+                child.unref();
+                debug(
+                    `Agent server process spawned via ${psExe} in new window (pid: ${child.pid})`,
+                );
+            }
+        } else {
+            const child = spawn(
+                "node",
+                [serverPath, "--port", String(port), ...extraArgs],
+                {
+                    detached: true,
+                    stdio: "ignore",
+                },
+            );
+            child.unref();
+            debug(`Agent server process spawned (pid: ${child.pid})`);
+        }
     } finally {
         fs.closeSync(fd);
         try {
@@ -311,12 +434,26 @@ async function waitForServer(
     );
 }
 
-export async function ensureAgentServer(port: number = 8999): Promise<void> {
+export async function ensureAgentServer(
+    port: number = 8999,
+    hidden: boolean = false,
+    idleTimeout: number = 0,
+): Promise<void> {
     const url = `ws://localhost:${port}`;
-    if (!(await isServerRunning(url))) {
+    if (await isServerRunning(url)) {
+        console.log(
+            `Connecting to existing TypeAgent server on port ${port}...`,
+        );
+    } else {
+        if (hidden) {
+            console.log("Starting TypeAgent server in the background...");
+        } else {
+            console.log("Starting TypeAgent server in a new window...");
+        }
         const serverPath = getAgentServerEntryPoint();
-        spawnAgentServer(serverPath, port);
+        spawnAgentServer(serverPath, port, hidden, idleTimeout);
         await waitForServer(url);
+        console.log("TypeAgent server started.");
     }
 }
 
@@ -325,77 +462,112 @@ export async function ensureAndConnectDispatcher(
     port: number = 8999,
     options?: DispatcherConnectOptions,
     onDisconnect?: () => void,
+    hidden: boolean = false,
 ): Promise<Dispatcher> {
-    await ensureAgentServer(port);
+    await ensureAgentServer(port, hidden);
     const url = `ws://localhost:${port}`;
     return connectDispatcher(clientIO, url, options, onDisconnect);
 }
 
-export async function ensureAndConnectSession(
+export async function ensureAndConnectConversation(
     clientIO: ClientIO,
     port: number = 8999,
     options?: DispatcherConnectOptions,
     onDisconnect?: () => void,
-): Promise<SessionDispatcher> {
-    await ensureAgentServer(port);
+    hidden: boolean = false,
+    idleTimeout: number = 0,
+): Promise<ConversationDispatcher> {
+    await ensureAgentServer(port, hidden, idleTimeout);
     const url = `ws://localhost:${port}`;
     const connection = await connectAgentServer(url, onDisconnect);
-    const session = await connection.joinSession(clientIO, options);
-    session.dispatcher.close = async () => {
+    const conversation = await connection.joinConversation(clientIO, options);
+    conversation.dispatcher.close = async () => {
         await connection.close();
     };
-    return session;
+    return conversation;
 }
 
-export async function stopAgentServer(port: number = 8999): Promise<void> {
+export async function stopAgentServer(
+    port: number = 8999,
+    force: boolean = false,
+): Promise<void> {
     const url = `ws://localhost:${port}`;
-    if (!(await isServerRunning(url))) {
-        console.log("Agent server is not running.");
-        return;
+
+    // Try graceful shutdown first
+    const gracefulShutdown = (): Promise<void> => {
+        return new Promise((resolve, reject) => {
+            const ws = new WebSocket(url);
+            const channel = createChannelProviderAdapter(
+                "agent-server:stop",
+                (message: any) => {
+                    ws.send(JSON.stringify(message));
+                },
+            );
+            const rpc = createRpc<AgentServerInvokeFunctions>(
+                "agent-server:stop",
+                channel.createChannel(AgentServerChannelName),
+            );
+
+            ws.onopen = () => {
+                rpc.invoke("shutdown")
+                    .then(() => {
+                        debug("Shutdown request sent");
+                        resolve();
+                    })
+                    .catch((err: any) => {
+                        debugErr("Failed to send shutdown:", err);
+                        reject(err);
+                    });
+            };
+            ws.onmessage = (event: WebSocket.MessageEvent) => {
+                channel.notifyMessage(JSON.parse(event.data.toString()));
+            };
+            ws.onclose = () => {
+                resolve();
+            };
+            ws.onerror = (error: WebSocket.ErrorEvent) => {
+                debugErr("WebSocket error during shutdown:", error);
+                reject(
+                    new Error(`Failed to connect to agent server at ${url}`),
+                );
+            };
+        });
+    };
+
+    if (!force) {
+        if (!(await isServerRunning(url))) {
+            console.log("Agent server is not running.");
+            return;
+        }
+        return gracefulShutdown();
     }
 
-    return new Promise((resolve, reject) => {
-        const ws = new WebSocket(url);
-        const channel = createChannelProviderAdapter(
-            "agent-server:stop",
-            (message: any) => {
-                ws.send(JSON.stringify(message));
-            },
+    // Force mode: try graceful with a timeout, then force-kill
+    try {
+        const timeout = new Promise<never>((_, reject) =>
+            setTimeout(
+                () => reject(new Error("Graceful shutdown timed out")),
+                5000,
+            ),
         );
-        const rpc = createRpc<AgentServerInvokeFunctions>(
-            "agent-server:stop",
-            channel.createChannel(AgentServerChannelName),
-        );
-
-        ws.onopen = () => {
-            rpc.invoke("shutdown")
-                .then(() => {
-                    debug("Shutdown request sent");
-                    resolve();
-                })
-                .catch((err: any) => {
-                    debugErr("Failed to send shutdown:", err);
-                    reject(err);
-                });
-        };
-        ws.onmessage = (event: WebSocket.MessageEvent) => {
-            channel.notifyMessage(JSON.parse(event.data.toString()));
-        };
-        ws.onclose = () => {
-            resolve();
-        };
-        ws.onerror = (error: WebSocket.ErrorEvent) => {
-            debugErr("WebSocket error during shutdown:", error);
-            reject(new Error(`Failed to connect to agent server at ${url}`));
-        };
-    });
+        await Promise.race([gracefulShutdown(), timeout]);
+        return;
+    } catch {
+        // Graceful failed — force kill
+        debug("Graceful shutdown failed, attempting force kill");
+        if (forceKillServer(port)) {
+            console.log("Agent server force-stopped via PID file.");
+        } else {
+            console.log("Agent server is not running (no live process found).");
+        }
+    }
 }
 
 /**
  * Convenience wrapper: connect to an agent server and immediately join a
- * session. Returns a single Dispatcher (backward compatible with old API).
+ * conversation. Returns a single Dispatcher (backward compatible with old API).
  *
- * @deprecated Use `connectAgentServer()` for full multi-session support.
+ * @deprecated Use `connectAgentServer()` for full multi-conversation support.
  */
 export async function connectDispatcher(
     clientIO: ClientIO,
@@ -404,7 +576,7 @@ export async function connectDispatcher(
     onDisconnect?: () => void,
 ): Promise<Dispatcher> {
     const connection = await connectAgentServer(url, onDisconnect);
-    const { dispatcher } = await connection.joinSession(clientIO, options);
+    const { dispatcher } = await connection.joinConversation(clientIO, options);
     // Override close to also close the WebSocket (old behavior)
     dispatcher.close = async () => {
         await connection.close();

@@ -1,99 +1,48 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
+using autoShell.Handlers.Generated;
 using autoShell.Services;
-using autoShell.Services.Interop;
 using Microsoft.Win32;
-using Newtonsoft.Json.Linq;
 
 namespace autoShell.Handlers.Settings;
 
 /// <summary>
-/// Handles taskbar settings: auto-hide, alignment, task view, widgets, badges, multi-monitor, clock.
+/// Handles taskbar settings: auto-hide, clock seconds, multi-monitor, badges, task view,
+/// alignment, and widgets visibility.
 /// </summary>
-internal partial class TaskbarSettingsHandler : ICommandHandler
+internal class TaskbarSettingsHandler : SettingsHandlerBase
 {
-    #region P/Invoke
-    private const string ExplorerAdvanced = @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
     private const string StuckRects3 = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StuckRects3";
+    private const string ExplorerAdvanced = @"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced";
 
-    [LibraryImport(NativeDlls.User32, EntryPoint = "SendNotifyMessageW")]
-    private static partial IntPtr SendNotifyMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
-    #endregion P/Invoke
-
-    private readonly IRegistryService _registry;
-
-    public TaskbarSettingsHandler(IRegistryService registry)
+    /// <summary>
+    /// Registers registered actions for clock seconds, multi-monitor taskbar, badges, task view,
+    /// alignment, and widgets visibility. Auto-hide requires binary blob manipulation and is handled
+    /// as a specialized action.
+    /// </summary>
+    public TaskbarSettingsHandler(IRegistryService registry, IProcessService process)
+        : base(registry, process)
     {
-        _registry = registry;
+
+        AddRegistryToggleAction("DisplaySecondsInSystrayClock", new RegistryToggleConfig(ExplorerAdvanced, "ShowSecondsInSystemClock", "enable", 1, 0, NotifyShell: true));
+        AddRegistryToggleAction("DisplayTaskbarOnAllMonitors", new RegistryToggleConfig(ExplorerAdvanced, "MMTaskbarEnabled", "enable", 1, 0, NotifyShell: true));
+        AddRegistryToggleAction("ShowBadgesOnTaskbar", new RegistryToggleConfig(ExplorerAdvanced, "TaskbarBadges", "enableBadging", 1, 0, NotifyShell: true));
+        AddRegistryToggleAction("TaskViewVisibility", new RegistryToggleConfig(ExplorerAdvanced, "ShowTaskViewButton", "visibility", 1, 0, NotifyShell: true));
+        AddRegistryMapAction("TaskbarAlignment", new RegistryMapConfig(ExplorerAdvanced, "TaskbarAl", "alignment",
+            new Dictionary<string, object> { ["left"] = 0, ["center"] = 1 }, DefaultValue: 1, NotifyShell: true));
+        AddRegistryMapAction("ToggleWidgetsButtonVisibility", new RegistryMapConfig(ExplorerAdvanced, "TaskbarDa", "visibility",
+            new Dictionary<string, object> { ["show"] = 1 }, DefaultValue: 0, NotifyShell: true));
+        AddAction<AutoHideTaskbarParams>("AutoHideTaskbar", HandleAutoHideTaskbar);
     }
 
-    /// <inheritdoc/>
-    public IEnumerable<string> SupportedCommands { get; } =
-    [
-        "AutoHideTaskbar",
-        "DisplaySecondsInSystrayClock",
-        "DisplayTaskbarOnAllMonitors",
-        "ShowBadgesOnTaskbar",
-        "TaskbarAlignment",
-        "TaskViewVisibility",
-        "ToggleWidgetsButtonVisibility",
-    ];
-
-    /// <inheritdoc/>
-    public void Handle(string key, string value, JToken rawValue)
+    private ActionResult HandleAutoHideTaskbar(AutoHideTaskbarParams p)
     {
-        var param = JObject.Parse(value);
-
-        switch (key)
-        {
-            case "AutoHideTaskbar":
-                HandleAutoHideTaskbar(param);
-                break;
-            case "DisplaySecondsInSystrayClock":
-                SetToggle(param, "enable", "ShowSecondsInSystemClock");
-                break;
-            case "DisplayTaskbarOnAllMonitors":
-                SetToggle(param, "enable", "MMTaskbarEnabled");
-                break;
-            case "ShowBadgesOnTaskbar":
-                SetToggle(param, "enableBadging", "TaskbarBadges");
-                break;
-            case "TaskbarAlignment":
-                HandleTaskbarAlignment(param);
-                break;
-            case "TaskViewVisibility":
-                SetToggle(param, "visibility", "ShowTaskViewButton");
-                break;
-            case "ToggleWidgetsButtonVisibility":
-                SetToggle(param, "visibility", "TaskbarDa", trueValue: "show");
-                break;
-        }
-
-        NotifySettingsChange();
-    }
-
-    private static void NotifySettingsChange()
-    {
-        try
-        {
-            SendNotifyMessage((IntPtr)0xffff, 0x001A, IntPtr.Zero, IntPtr.Zero);
-        }
-        catch (EntryPointNotFoundException)
-        {
-            // P/Invoke may not be available in all environments
-        }
-    }
-
-    private void HandleAutoHideTaskbar(JObject param)
-    {
-        bool hide = param.Value<bool>("hideWhenNotUsing");
+        bool hide = p.HideWhenNotUsing;
 
         // Auto-hide uses a binary blob in a different registry path
-        if (_registry.GetValue(StuckRects3, "Settings", null) is byte[] settings && settings.Length >= 9)
+        if (Registry.GetValue(StuckRects3, "Settings", null) is byte[] settings && settings.Length >= 9)
         {
             // Bit 0 of byte 8 controls auto-hide
             if (hide)
@@ -105,36 +54,12 @@ internal partial class TaskbarSettingsHandler : ICommandHandler
                 settings[8] &= 0xFE;
             }
 
-            _registry.SetValue(StuckRects3, "Settings", settings, RegistryValueKind.Binary);
-        }
-    }
+            Registry.SetValue(StuckRects3, "Settings", settings, RegistryValueKind.Binary);
+            Registry.SetTaskbarAutoHideState(hide);
 
-    private void HandleTaskbarAlignment(JObject param)
-    {
-        string alignment = param.Value<string>("alignment") ?? "center";
-        // 0 = left, 1 = center
-        bool useCenter = alignment.Equals("center", StringComparison.OrdinalIgnoreCase);
-        _registry.SetValue(ExplorerAdvanced, "TaskbarAl", useCenter ? 1 : 0, RegistryValueKind.DWord);
-    }
-
-    /// <summary>
-    /// Sets a DWord toggle in Explorer\Advanced.
-    /// For bool JSON values, true=1 false=0.
-    /// For string JSON values, compares against <paramref name="trueValue"/>.
-    /// </summary>
-    private void SetToggle(JObject param, string jsonProperty, string registryValue, string trueValue = null)
-    {
-        int regValue;
-        if (trueValue != null)
-        {
-            string val = param.Value<string>(jsonProperty) ?? "";
-            regValue = val.Equals(trueValue, StringComparison.OrdinalIgnoreCase) ? 1 : 0;
-        }
-        else
-        {
-            regValue = (param.Value<bool?>(jsonProperty) ?? true) ? 1 : 0;
+            return ActionResult.Ok($"Taskbar auto-hide {(hide ? "enabled" : "disabled")}");
         }
 
-        _registry.SetValue(ExplorerAdvanced, registryValue, regValue, RegistryValueKind.DWord);
+        return ActionResult.Fail("StuckRects3 registry blob not found or invalid");
     }
 }

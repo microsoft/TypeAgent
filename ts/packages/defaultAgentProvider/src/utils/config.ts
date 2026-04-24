@@ -31,6 +31,7 @@ export type InstanceConfig = {
 export type ProviderConfig = AppAgentConfig & {
     explainers: { [key: string]: ExplainerConfig };
     tests: string[];
+    promptAppend?: string; // additional instructions injected into the reasoning system prompt
 };
 
 let providerConfig: ProviderConfig | undefined;

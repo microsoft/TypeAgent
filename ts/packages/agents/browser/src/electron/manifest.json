@@ -46,40 +46,6 @@
       "world": "MAIN"
     },
     {
-      "matches": [
-        "https://*.amazon.com/*",
-        "https://*.amazon.co.uk/*",
-        "https://*.amazon.de/*",
-        "https://*.amazon.fr/*",
-        "https://*.amazon.es/*",
-        "https://*.amazon.it/*",
-        "https://*.amazon.nl/*",
-        "https://*.amazon.in/*",
-        "https://*.amazon.ca/*",
-        "https://*.amazon.com.mx/*",
-        "https://*.amazon.com.br/*",
-        "https://*.amazon.com.au/*",
-        "https://*.target.com/*",
-        "https://*.walmart.com/*",
-        "https://*.bestbuy.com/*",
-        "https://*.homedepot.com/*",
-        "https://*.lowes.com/*",
-        "https://*.costco.com/*",
-        "https://*.ebay.com/*",
-        "https://*.opentable.com/*",
-        "https://*.resy.com/*"
-      ],
-      "js": ["sites/commerce.js"],
-      "run_at": "document_start",
-      "world": "MAIN"
-    },
-    {
-      "matches": ["https://*.instacart.com/*"],
-      "js": ["sites/instacart.js"],
-      "run_at": "document_start",
-      "world": "MAIN"
-    },
-    {
       "matches": ["https://paleobiodb.org/*"],
       "js": ["sites/paleobiodb.js"],
       "run_at": "document_start",

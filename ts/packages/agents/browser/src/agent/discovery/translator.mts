@@ -628,4 +628,88 @@ export class SchemaDiscoveryAgent<T extends object> {
         ]);
         return response;
     }
+
+    async inferPageActions(pageUrl: string, fragments?: HtmlFragments[]) {
+        const inferredActionsSchema = `
+export type InferredActionParameter = {
+    name: string;
+    type: "string" | "number" | "boolean";
+    required: boolean;
+    description: string;
+};
+
+export type InferredAction = {
+    name: string;
+    description: string;
+    parameters: InferredActionParameter[];
+    expectedOutcome: string;
+};
+
+export type InferredActionsList = {
+    actions: InferredAction[];
+};
+`;
+
+        const bootstrapTranslator = this.getBootstrapTranslator(
+            "InferredActionsList",
+            inferredActionsSchema,
+        );
+
+        const htmlSection = getHtmlPromptSection(fragments);
+        const prefixSection = getPrefixPromptSection();
+        const suffixSection = getSuffixPromptSection();
+
+        const promptSections = [
+            ...prefixSection,
+            ...htmlSection,
+            {
+                type: "text",
+                text: `
+        Analyze this web page and identify HIGH-LEVEL USER WORKFLOWS that could be automated.
+
+        Page URL: ${pageUrl}
+
+        IMPORTANT GUIDELINES:
+        1. Focus on END-USER GOALS, not individual UI interactions. A workflow is a complete task a user wants to accomplish.
+        2. When you see a FORM with multiple inputs (dropdowns, text fields, radio buttons) and a submit button,
+           treat the ENTIRE FORM as ONE action with multiple parameters - NOT separate actions for each field.
+        3. DO NOT create actions for trivial interactions like:
+           - Clicking navigation links or tabs
+           - Closing alerts/banners
+           - Opening help panels
+           - Setting individual form fields (combine them into the form submission action)
+
+        EXAMPLES of what we want:
+        - "bookShuttle" with parameters: fromLocation, toLocation, passengers, accessibilityRequest
+        - "searchFlights" with parameters: origin, destination, departDate, returnDate, passengers
+        - "submitContactForm" with parameters: name, email, message
+
+        EXAMPLES of what we DON'T want:
+        - "setFromDropdown", "setToDropdown", "selectPassengerCount" (these should be parameters of a single action)
+        - "clickHomeTab", "closeAlert", "openHelp" (trivial navigation)
+
+        For each workflow action, identify:
+        - A descriptive name for the complete user goal (e.g., "bookShuttle", "searchProducts", "submitOrder")
+        - All parameters the user needs to provide to complete the workflow
+        - The expected outcome when the workflow completes successfully
+
+        Return a SINGLE "${bootstrapTranslator.validator.getTypeName()}" response using the typescript schema below.
+        Include only the most meaningful workflow actions (typically 1-5). Use camelCase for action names.
+
+        '''
+        ${bootstrapTranslator.validator.getSchemaText()}
+        '''
+        `,
+            },
+            ...suffixSection,
+        ];
+
+        const response = await bootstrapTranslator.translate("", [
+            {
+                role: "user",
+                content: promptSections as MultimodalPromptContent[],
+            },
+        ]);
+        return response;
+    }
 }

@@ -1,0 +1,49 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// PowerShell Services Namespace Grammar
+// Windows service management
+
+import { PowerShellServicesActions } from "./servicesActionsSchema.ts";
+
+<Start> : PowerShellServicesActions = <ListServices>
+          | <ServiceStatus>
+          | <StartService>
+          | <StopService>
+          | <RestartService>;
+
+<ListServices> =
+    (list|show|get) (all)? (windows)? services
+      -> { actionName: "listServices", parameters: {} }
+  | (list|show) (running|stopped) services
+      -> { actionName: "listServices", parameters: { status: "running" } }
+  | (list|show) services (named|matching)? $(name:wildcard)
+      -> { actionName: "listServices", parameters: { name } }
+  | (what)? services are running
+      -> { actionName: "listServices", parameters: { status: "running" } };
+
+<ServiceStatus> =
+    (is|check if) (service)? $(name:wildcard) (running|started|stopped)?
+      -> { actionName: "serviceStatus", parameters: { name } }
+  | (status of|check) (service)? $(name:wildcard) (service)?
+      -> { actionName: "serviceStatus", parameters: { name } }
+  | (get|show) (service)? $(name:wildcard) status
+      -> { actionName: "serviceStatus", parameters: { name } };
+
+<StartService> =
+    start (service)? $(name:wildcard) (service)?
+      -> { actionName: "startService", parameters: { name } }
+  | (enable|turn on) (service)? $(name:wildcard) (service)?
+      -> { actionName: "startService", parameters: { name } };
+
+<StopService> =
+    stop (service)? $(name:wildcard) (service)?
+      -> { actionName: "stopService", parameters: { name } }
+  | (disable|turn off) (service)? $(name:wildcard) (service)?
+      -> { actionName: "stopService", parameters: { name } };
+
+<RestartService> =
+    restart (service)? $(name:wildcard) (service)?
+      -> { actionName: "restartService", parameters: { name } }
+  | (bounce|cycle) (service)? $(name:wildcard) (service)?
+      -> { actionName: "restartService", parameters: { name } };

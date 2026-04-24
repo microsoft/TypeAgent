@@ -450,6 +450,11 @@ export function createAgentRpcServer(
                     agentName,
                 });
             },
+            setLocalHostPort(port: number) {
+                void rpc
+                    .invoke("setLocalHostPort", { contextId, port })
+                    .catch();
+            },
             addDynamicAgent: async (
                 name: string,
                 manifest: AppAgentManifest,
@@ -628,6 +633,7 @@ export function createAgentRpcServer(
             // streamingContext is only used by the agent, so it is not mirrored back to the dispatcher.
             streamingContext: undefined,
             activityContext: param.activityContext,
+            isFromReasoningLoop: param.isFromReasoningLoop ?? false,
             get sessionContext() {
                 return sessionContext;
             },
@@ -667,3 +673,5 @@ export function createAgentRpcServer(
 export type AgentInterfaceFunctionName =
     | keyof AgentInvokeFunctions
     | keyof AgentCallFunctions;
+
+export type AgentControlMessage = "exit";

@@ -155,15 +155,42 @@ export function createAgentInvokeHandlers(
                 url: `http://localhost:${context.agentContext.localHostPort}`,
             }),
 
-        // Tab index
-        addTabIdToIndex: (params: any) =>
-            knowledgeHandler("addTabIdToIndex", params),
-        deleteTabIdFromIndex: (params: any) =>
-            knowledgeHandler("deleteTabIdFromIndex", params),
-        getTabIdFromIndex: (params: any) =>
-            knowledgeHandler("getTabIdFromIndex", params),
-        resetTabIdToIndex: (params: any) =>
-            knowledgeHandler("resetTabIdToIndex", params),
+        // Tab index - use tabTitleIndex directly from context
+        addTabIdToIndex: async (params: any) => {
+            const index = context.agentContext.tabTitleIndex;
+            if (!index) {
+                return { success: false, error: "Tab index not initialized" };
+            }
+            await index.addOrUpdate(params.title, params.id);
+            return { success: true };
+        },
+        deleteTabIdFromIndex: async (params: any) => {
+            const index = context.agentContext.tabTitleIndex;
+            if (!index) {
+                return { success: false, error: "Tab index not initialized" };
+            }
+            await index.remove(params.id);
+            return { success: true };
+        },
+        getTabIdFromIndex: async (params: any) => {
+            const index = context.agentContext.tabTitleIndex;
+            if (!index) {
+                return { success: false, error: "Tab index not initialized" };
+            }
+            const results = await index.search(
+                params.query,
+                params.maxMatches || 10,
+            );
+            return { success: true, results };
+        },
+        resetTabIdToIndex: async (_params: any) => {
+            const index = context.agentContext.tabTitleIndex;
+            if (!index) {
+                return { success: false, error: "Tab index not initialized" };
+            }
+            await index.reset();
+            return { success: true };
+        },
     };
 
     return handlers;

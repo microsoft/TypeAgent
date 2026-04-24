@@ -946,7 +946,7 @@ describe("Grammar Compiler", () => {
     describe("Source-less Imports (Entities)", () => {
         it("Unused source-less import warns", () => {
             const grammarText = `
-            import { UnusedEntity };
+            import { Ordinal };
 
             <Start> = play music;
         `;
@@ -956,15 +956,15 @@ describe("Grammar Compiler", () => {
             expect(errors.length).toBe(0);
             expect(warnings.length).toBe(1);
             expect(warnings[0]).toContain(
-                "warning: Imported type 'UnusedEntity' is declared but never used.",
+                "warning: Imported rule '<Ordinal>' is declared but never used.",
             );
         });
 
         it("Used source-less import does not warn", () => {
             const grammarText = `
-            import { UsedEntity };
+            import { Ordinal };
 
-            <Start> = $(x:UsedEntity);
+            <Start> = $(x:<Ordinal>);
         `;
             const errors: string[] = [];
             const warnings: string[] = [];
@@ -975,9 +975,9 @@ describe("Grammar Compiler", () => {
 
         it("Only unused source-less imports warn when mixed with used ones", () => {
             const grammarText = `
-            import { UsedEntity, UnusedEntity };
+            import { Ordinal, Cardinal };
 
-            <Start> = $(x:UsedEntity);
+            <Start> = $(x:<Ordinal>);
         `;
             const errors: string[] = [];
             const warnings: string[] = [];
@@ -985,26 +985,13 @@ describe("Grammar Compiler", () => {
             expect(errors.length).toBe(0);
             expect(warnings.length).toBe(1);
             expect(warnings[0]).toContain(
-                "warning: Imported type 'UnusedEntity' is declared but never used.",
+                "warning: Imported rule '<Cardinal>' is declared but never used.",
             );
-        });
-
-        it("Source-less import used in value type does not warn", () => {
-            const grammarText = `
-            import { MyEntity };
-
-            <Start> : MyEntity = play music -> { actionName: "play" };
-        `;
-            const errors: string[] = [];
-            const warnings: string[] = [];
-            loadGrammarRulesNoThrow("test", grammarText, errors, warnings);
-            expect(errors.length).toBe(0);
-            expect(warnings.length).toBe(0);
         });
 
         it("Multiple unused source-less imports each warn", () => {
             const grammarText = `
-            import { EntityA, EntityB };
+            import { Ordinal, Cardinal };
 
             <Start> = play music;
         `;
@@ -1013,8 +1000,8 @@ describe("Grammar Compiler", () => {
             loadGrammarRulesNoThrow("test", grammarText, errors, warnings);
             expect(errors.length).toBe(0);
             expect(warnings.length).toBe(2);
-            expect(warnings[0]).toContain("EntityA");
-            expect(warnings[1]).toContain("EntityB");
+            expect(warnings[0]).toContain("<Ordinal>");
+            expect(warnings[1]).toContain("<Cardinal>");
         });
     });
 });
