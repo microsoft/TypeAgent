@@ -16,7 +16,10 @@ import { fileURLToPath } from "url";
 import os from "os";
 import registerDebug from "debug";
 import chalk from "chalk";
-import { createActionResultFromError } from "@typeagent/agent-sdk/helpers/action";
+import {
+    createActionResult,
+    createActionResultFromError,
+} from "@typeagent/agent-sdk/helpers/action";
 
 const debug = registerDebug("typeagent:code");
 
@@ -275,11 +278,22 @@ async function executeCodeAction(
         action.actionName === "renameConversation" ||
         action.actionName === "switchConversation"
     ) {
+        const params = (action as any).parameters ?? {};
         context.actionIO.takeAction("vscode-shell-action" as any, {
             actionName: action.actionName,
-            parameters: (action as any).parameters,
+            parameters: params,
         });
-        return undefined;
+        const summary =
+            action.actionName === "newConversation"
+                ? params.name
+                    ? `Created new conversation "${params.name}".`
+                    : "Creating a new conversation."
+                : action.actionName === "renameConversation"
+                  ? `Renamed current conversation to "${params.newName}".`
+                  : params.name
+                    ? `Switched to conversation "${params.name}".`
+                    : "Switching conversation.";
+        return createActionResult(summary);
     }
 
     const agentContext = context.sessionContext.agentContext;
