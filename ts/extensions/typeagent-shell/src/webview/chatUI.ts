@@ -556,6 +556,22 @@ export class ChatUI {
     }
 
     /**
+     * Disable input and show a "loading history" placeholder until the
+     * extension host finishes replaying past messages on (re)connect.
+     */
+    public setHistoryLoading(loading: boolean): void {
+        if (loading) {
+            this._inputEl.disabled = true;
+            this._sendBtn.disabled = true;
+            this._inputEl.placeholder = "Loading history…";
+        } else if (!this._isSwitching) {
+            this._inputEl.disabled = false;
+            this._sendBtn.disabled = false;
+            this._inputEl.placeholder = "";
+        }
+    }
+
+    /**
      * Called when the user switches to a different conversation.
      * Just clears the UI — history will be replayed via beginHistory/endHistory.
      */

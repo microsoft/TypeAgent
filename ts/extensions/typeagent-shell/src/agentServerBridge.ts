@@ -52,6 +52,7 @@ export type BridgeToWebviewMessage =
     | { type: "switching"; switching: boolean; targetName?: string }
     | { type: "userInfo"; name: string }
     | { type: "setActive"; active: boolean }
+    | { type: "historyLoading"; loading: boolean }
     | {
           type: "historyReplay";
           entries: Array<{
@@ -636,6 +637,20 @@ export class AgentServerBridge {
      * markers so the webview can style replayed entries differently.
      */
     private async replayHistory(session: SessionDispatcher): Promise<void> {
+        this.broadcastToWebviews({ type: "historyLoading", loading: true });
+        try {
+            await this.replayHistoryInner(session);
+        } finally {
+            this.broadcastToWebviews({
+                type: "historyLoading",
+                loading: false,
+            });
+        }
+    }
+
+    private async replayHistoryInner(
+        session: SessionDispatcher,
+    ): Promise<void> {
         let entries: Array<any>;
         try {
             entries = await session.dispatcher.getDisplayHistory();

@@ -100,6 +100,9 @@ window.addEventListener("message", (event) => {
         case "setActive":
             document.body.classList.toggle("chat-inactive", !msg.active);
             break;
+        case "historyLoading":
+            chatUI.setHistoryLoading(msg.loading);
+            break;
     }
 });
 
