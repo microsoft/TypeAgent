@@ -236,7 +236,11 @@ export class AgentServerBridge {
 
             let joinOpts: any = {
                 clientType: "extension",
-                filter: true,
+                // filter: false so multiple tabs sharing the same session all
+                // receive setDisplay/appendDisplay broadcasts. Per-connection
+                // routing (askYesNo, clear, exit) goes through callback() and
+                // is unaffected by this flag.
+                filter: false,
             };
             if (this.restoreSessionId) {
                 // Try to rejoin a session restored from a saved panel.
@@ -569,7 +573,7 @@ export class AgentServerBridge {
             try {
                 newSession = await this.connection.joinSession(clientIO, {
                     clientType: "extension",
-                    filter: true,
+                    filter: false,
                     sessionId,
                 });
             } catch (e: any) {
