@@ -160,6 +160,19 @@ export class ChatUI {
     }
 
     /**
+     * Returns true if a user message with this requestId is already in the DOM.
+     * Used to detect the local-echo case so a server setUserRequest broadcast
+     * isn't duplicated on the originating tab. A second tab joined to the same
+     * conversation will return false here and render the user message.
+     */
+    public hasUserMessage(requestId: string): boolean {
+        if (!requestId) return false;
+        return !!this._messagesEl.querySelector(
+            `.message.user[data-request-id="${CSS.escape(requestId)}"]`,
+        );
+    }
+
+    /**
      * setDisplay: replace the content of the active agent bubble.
      */
     public setAgentDisplay(

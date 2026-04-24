@@ -59,10 +59,16 @@ window.addEventListener("message", (event) => {
                 clientIdOf(msg.message.requestId),
             );
             break;
-        case "setUserRequest":
-            // Live: user message shown immediately on send — skip echo.
-            // History now comes through historyReplay batch, not here.
+        case "setUserRequest": {
+            // Echo from server. If we already rendered this locally (this tab
+            // is the originator), skip. Otherwise, another tab on the same
+            // conversation sent it — render it so both tabs stay in sync.
+            const rid = clientIdOf(msg.requestId);
+            if (rid && !chatUI.hasUserMessage(rid)) {
+                chatUI.addUserMessage(msg.command, undefined, "done", rid);
+            }
             break;
+        }
         case "setDisplayInfo":
             chatUI.setDisplayInfo(
                 msg.source,
