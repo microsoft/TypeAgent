@@ -5,12 +5,15 @@ import * as vscode from "vscode";
 import { ChatViewProvider } from "./chatViewProvider";
 import { AgentServerBridge } from "./agentServerBridge";
 
-let bridge: AgentServerBridge | undefined;
+let primaryBridge: AgentServerBridge | undefined;
+// Track per-panel bridges so we can dispose them on extension deactivate
+const panelBridges = new Set<AgentServerBridge>();
+let panelCounter = 0;
 
 export function activate(context: vscode.ExtensionContext): void {
-    bridge = new AgentServerBridge();
+    primaryBridge = new AgentServerBridge({ ownsStatusBar: true });
 
-    const provider = new ChatViewProvider(context.extensionUri, bridge);
+    const provider = new ChatViewProvider(context.extensionUri, primaryBridge);
 
     // Sidebar webview provider
     context.subscriptions.push(
@@ -21,22 +24,21 @@ export function activate(context: vscode.ExtensionContext): void {
         ),
     );
 
-    // Command: open chat as an editor tab
+    // Command: open a NEW chat in an editor tab beside the current view.
+    // Each invocation creates a fresh ephemeral session + bridge so panels
+    // are independent of each other and of the sidebar.
     context.subscriptions.push(
         vscode.commands.registerCommand("typeagent-shell.openChat", () => {
-            const panel = vscode.window.createWebviewPanel(
-                "typeagent-shell.chatPanel",
-                "TypeAgent Chat",
-                vscode.ViewColumn.Beside,
-                getWebviewOptions(context.extensionUri),
-            );
-            panel.iconPath = vscode.Uri.joinPath(
-                context.extensionUri,
-                "media",
-                "typeagent-icon.svg",
-            );
-            provider.resolveWebviewPanel(panel.webview);
+            openNewChatPanel(context, provider);
         }),
+    );
+
+    // Alias for clarity
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            "typeagent-shell.newChatPanel",
+            () => openNewChatPanel(context, provider),
+        ),
     );
 
     // Command: focus the sidebar chat
@@ -48,40 +50,74 @@ export function activate(context: vscode.ExtensionContext): void {
         }),
     );
 
-    // Conversation management commands
+    // Conversation management commands — operate on the primary (sidebar)
+    // bridge. Per-panel chats are intentionally ephemeral.
     context.subscriptions.push(
         vscode.commands.registerCommand(
             "typeagent-shell.switchSession",
-            () => bridge?.switchSession(),
+            () => primaryBridge?.switchSession(),
         ),
         vscode.commands.registerCommand(
             "typeagent-shell.newSession",
-            () => bridge?.newSession(),
+            () => primaryBridge?.newSession(),
         ),
         vscode.commands.registerCommand(
             "typeagent-shell.renameSession",
-            () => bridge?.renameCurrentSession(),
+            () => primaryBridge?.renameCurrentSession(),
         ),
         vscode.commands.registerCommand(
             "typeagent-shell.deleteSession",
-            () => bridge?.deleteSession(),
+            () => primaryBridge?.deleteSession(),
         ),
     );
 }
 
-export function deactivate(): void {
-    bridge?.dispose();
+function openNewChatPanel(
+    context: vscode.ExtensionContext,
+    provider: ChatViewProvider,
+): void {
+    panelCounter += 1;
+    const title = `TypeAgent Chat ${panelCounter}`;
+    const panel = vscode.window.createWebviewPanel(
+        "typeagent-shell.chatPanel",
+        title,
+        vscode.ViewColumn.Beside,
+        {
+            enableScripts: true,
+            retainContextWhenHidden: true,
+            localResourceRoots: [
+                vscode.Uri.joinPath(context.extensionUri, "dist"),
+                vscode.Uri.joinPath(context.extensionUri, "media"),
+            ],
+        },
+    );
+    panel.iconPath = vscode.Uri.joinPath(
+        context.extensionUri,
+        "media",
+        "typeagent-icon.svg",
+    );
+
+    // Each panel gets its own bridge, its own connection, and its own
+    // ephemeral session that's deleted when the panel closes.
+    const bridge = new AgentServerBridge({
+        ownsStatusBar: false,
+        autoCreateSessionPrefix: "cli-ephemeral-vscode-",
+    });
+    panelBridges.add(bridge);
+
+    const bridgeDisposable = provider.wireWebview(panel.webview, bridge);
+
+    panel.onDidDispose(() => {
+        bridgeDisposable.dispose();
+        bridge.dispose();
+        panelBridges.delete(bridge);
+    });
 }
 
-function getWebviewOptions(
-    extensionUri: vscode.Uri,
-): vscode.WebviewOptions & vscode.WebviewPanelOptions {
-    return {
-        enableScripts: true,
-        retainContextWhenHidden: true,
-        localResourceRoots: [
-            vscode.Uri.joinPath(extensionUri, "dist"),
-            vscode.Uri.joinPath(extensionUri, "media"),
-        ],
-    };
+export function deactivate(): void {
+    primaryBridge?.dispose();
+    for (const b of panelBridges) {
+        b.dispose();
+    }
+    panelBridges.clear();
 }

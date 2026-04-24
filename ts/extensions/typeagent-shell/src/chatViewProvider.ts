@@ -5,7 +5,8 @@ import * as vscode from "vscode";
 import { AgentServerBridge } from "./agentServerBridge";
 
 /**
- * Provides the chat webview for both the sidebar panel and editor tabs.
+ * Provides the chat webview for the sidebar (uses primary bridge) and
+ * helper for editor panels (each gets its own bridge).
  */
 export class ChatViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = "typeagent-shell.chatView";
@@ -14,7 +15,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
-        private readonly _bridge: AgentServerBridge,
+        private readonly _primaryBridge: AgentServerBridge,
     ) {}
 
     public resolveWebviewView(
@@ -23,13 +24,21 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         _token: vscode.CancellationToken,
     ): void {
         this._sidebarView = webviewView;
-        this.resolveWebviewPanel(webviewView.webview);
+        this.wireWebview(webviewView.webview, this._primaryBridge);
+
+        webviewView.onDidDispose(() => {
+            this._sidebarView = undefined;
+        });
     }
 
     /**
-     * Configure a webview (sidebar or editor panel) with the chat UI.
+     * Configure a webview (panel) with the chat UI and bind it to a bridge.
+     * Used both by the sidebar (primary bridge) and per-panel bridges.
      */
-    public resolveWebviewPanel(webview: vscode.Webview): void {
+    public wireWebview(
+        webview: vscode.Webview,
+        bridge: AgentServerBridge,
+    ): vscode.Disposable {
         webview.options = {
             enableScripts: true,
             localResourceRoots: [
@@ -40,18 +49,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         webview.html = this._getHtmlForWebview(webview);
 
-        // Register webview with the bridge — this connects it to the RPC stream
-        const bridgeDisposable = this._bridge.registerWebview(webview);
-
+        const bridgeDisposable = bridge.registerWebview(webview);
         // Auto-connect when webview opens
-        this._bridge.connect();
-
-        // Clean up on dispose
-        if (this._sidebarView) {
-            this._sidebarView.onDidDispose(() => {
-                bridgeDisposable.dispose();
-            });
-        }
+        bridge.connect();
+        return bridgeDisposable;
     }
 
     private _getHtmlForWebview(webview: vscode.Webview): string {

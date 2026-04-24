@@ -99,14 +99,32 @@ export class AgentServerBridge {
     // create muted duplicates of live messages).
     private lastReplayedSessionId: string | undefined;
 
-    constructor() {
-        this.statusBarItem = vscode.window.createStatusBarItem(
-            vscode.StatusBarAlignment.Left,
-            100,
-        );
-        this.statusBarItem.command = "typeagent-shell.focusChat";
-        this.updateStatusBar(false);
-        this.statusBarItem.show();
+    // Configuration
+    private readonly ownsStatusBar: boolean;
+    private readonly autoCreateSessionPrefix: string | undefined;
+    // Track ephemeral session we created so we can delete on dispose
+    private ephemeralSessionId: string | undefined;
+
+    constructor(opts?: {
+        ownsStatusBar?: boolean;
+        autoCreateSessionPrefix?: string;
+    }) {
+        this.ownsStatusBar = opts?.ownsStatusBar ?? true;
+        this.autoCreateSessionPrefix = opts?.autoCreateSessionPrefix;
+        if (this.ownsStatusBar) {
+            this.statusBarItem = vscode.window.createStatusBarItem(
+                vscode.StatusBarAlignment.Left,
+                100,
+            );
+            this.statusBarItem.command = "typeagent-shell.focusChat";
+            this.updateStatusBar(false);
+            this.statusBarItem.show();
+        } else {
+            // Dummy stand-in so existing code paths don't crash
+            this.statusBarItem = {
+                dispose: () => {},
+            } as unknown as vscode.StatusBarItem;
+        }
     }
 
     /**
@@ -175,10 +193,38 @@ export class AgentServerBridge {
             // Join the default session with our ClientIO implementation
             // filter: true ensures we only see responses to our own requests
             const clientIO = this.createClientIO();
-            this.session = await this.connection.joinSession(clientIO, {
+
+            // If configured for an ephemeral panel session, create one first
+            // and join it; otherwise join the default session.
+            let joinOpts: any = {
                 clientType: "extension",
                 filter: true,
-            });
+            };
+            if (
+                this.autoCreateSessionPrefix &&
+                this.ephemeralSessionId === undefined
+            ) {
+                const ts = new Date()
+                    .toISOString()
+                    .replace(/[:.]/g, "-")
+                    .replace("T", "_")
+                    .substring(0, 19);
+                const name = `${this.autoCreateSessionPrefix}${ts}`;
+                try {
+                    const info = await this.connection.createSession(name);
+                    this.ephemeralSessionId = info.sessionId;
+                    joinOpts.sessionId = info.sessionId;
+                } catch (e) {
+                    // Fall back to default join if creation fails
+                }
+            } else if (this.ephemeralSessionId) {
+                joinOpts.sessionId = this.ephemeralSessionId;
+            }
+
+            this.session = await this.connection.joinSession(
+                clientIO,
+                joinOpts,
+            );
 
             this.isConnected = true;
             this.updateStatusBar(true);
@@ -224,7 +270,20 @@ export class AgentServerBridge {
     }
 
     dispose(): void {
-        this.disconnect();
+        // Best-effort delete the ephemeral session we created for this panel
+        const toDelete = this.ephemeralSessionId;
+        const conn = this.connection;
+        if (toDelete && conn) {
+            // Fire-and-forget — don't block dispose
+            conn
+                .deleteSession(toDelete)
+                .catch(() => {})
+                .finally(() => {
+                    this.disconnect();
+                });
+        } else {
+            this.disconnect();
+        }
         this.statusBarItem.dispose();
     }
 
@@ -745,6 +804,7 @@ export class AgentServerBridge {
     }
 
     private updateStatusBar(connected: boolean): void {
+        if (!this.ownsStatusBar) return;
         if (connected) {
             this.statusBarItem.text = "$(plug) TypeAgent: Connected";
             this.statusBarItem.backgroundColor = undefined;

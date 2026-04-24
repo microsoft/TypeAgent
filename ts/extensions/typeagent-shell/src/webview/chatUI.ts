@@ -179,7 +179,11 @@ export class ChatUI {
         }
         const contentEl = bubble.querySelector(".agent-content");
         if (contentEl) {
-            contentEl.innerHTML = this._renderDisplayContent(content);
+            const html = this._renderDisplayContent(content);
+            contentEl.innerHTML = html;
+            if (html && html.trim().length > 0) {
+                bubble.classList.remove("empty");
+            }
         }
         this._scrollToBottom();
     }
@@ -230,6 +234,9 @@ export class ChatUI {
         const contentEl = bubble.querySelector(".agent-content");
         if (contentEl) {
             contentEl.innerHTML += rendered;
+            if (rendered && rendered.trim().length > 0) {
+                bubble.classList.remove("empty");
+            }
         }
         this._scrollToBottom();
     }
@@ -675,7 +682,7 @@ export class ChatUI {
         requestId?: string,
     ): HTMLElement {
         const row = document.createElement("div");
-        row.className = "message agent";
+        row.className = "message agent empty";
         if (requestId) row.dataset.requestId = requestId;
 
         row.appendChild(this._createAvatar("agent", source));

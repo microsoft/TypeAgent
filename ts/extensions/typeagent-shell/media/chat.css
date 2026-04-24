@@ -82,6 +82,12 @@ body {
     flex-direction: row;
 }
 
+/* Hide agent bubble until it has real content (avoids flash of empty
+   bubble while status / setDisplayInfo events fire before content). */
+.message.agent.empty {
+    display: none;
+}
+
 .message-body {
     display: flex;
     flex-direction: column;

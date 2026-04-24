@@ -47,6 +47,11 @@
                 "category": "TypeAgent"
             },
             {
+                "command": "typeagent-shell.newChatPanel",
+                "title": "New Chat (Side Panel)",
+                "category": "TypeAgent"
+            },
+            {
                 "command": "typeagent-shell.focusChat",
                 "title": "Focus Chat",
                 "category": "TypeAgent"
