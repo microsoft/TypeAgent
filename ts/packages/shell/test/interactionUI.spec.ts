@@ -50,7 +50,6 @@ async function pushInteraction(
                 type: "question",
                 message,
                 choices,
-                requestId: { requestId: `test-req-${id}` },
                 source: "test",
                 timestamp: Date.now(),
             });
