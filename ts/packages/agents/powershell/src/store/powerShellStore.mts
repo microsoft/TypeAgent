@@ -207,7 +207,9 @@ export class PowerShellStore {
         debug(`Flow script updated: ${actionName}`);
     }
 
-    async getFlow(actionName: string): Promise<PowerShellFlowDefinition | null> {
+    async getFlow(
+        actionName: string,
+    ): Promise<PowerShellFlowDefinition | null> {
         this.ensureInitialized();
 
         const entry = this.index.flows[actionName];
