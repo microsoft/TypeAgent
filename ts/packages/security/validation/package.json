@@ -19,9 +19,9 @@
   ],
   "scripts": {
     "build": "npm run tsc",
-    "tsc": "tsc -b",
     "clean": "rimraf dist",
-    "dev": "tsc && node dist/validationTests.js"
+    "dev": "tsc && node dist/validationTests.js",
+    "tsc": "tsc -b"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.92"
