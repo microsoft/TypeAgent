@@ -144,7 +144,10 @@ export function optimizeGrammar(
             // site rather than as confusing match failures or
             // runtime throws deep in `enterTailRulesPart`.  Honors
             // `onInvariantViolation`: throw on the strict path,
-            // demote to warning + debug log on the permissive path.
+            // demote to warning + debug log on the permissive path
+            // and discard the optimized output (return the input
+            // grammar unchanged) so callers get a known-good AST
+            // rather than a contract-violating one.
             try {
                 validateTailRulesParts(rules);
             } catch (e) {
@@ -152,8 +155,9 @@ export function optimizeGrammar(
                 if (inlineConfig.onInvariantViolation === "throw") {
                     throw new Error(msg);
                 }
-                debug(msg);
+                debug(`${msg} - discarding optimized output`);
                 warnings?.push(msg);
+                return grammar;
             }
         }
     }
