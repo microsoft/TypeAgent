@@ -40,7 +40,7 @@ export type GrammarOptimizationOptions = {
 
     /**
      * Behavior when the inliner reaches an internal invariant violation
-     * (a bound `RulesPart` whose child has no binding-friendly part —
+     * (a bound `RulesPart` whose child has no binding-friendly part -
      * see `tryInlineRulesPart`).  This indicates either a compiler bug
      * upstream or a future change to `hasValue` semantics.
      *
@@ -59,7 +59,7 @@ export type GrammarOptimizationOptions = {
      * the wrapper rule's value).  Tail wrappers are observably
      * identical to the unfactored shape, produce a smaller AST (no
      * synthesized wrapper-binding variable, no `factoredAlt.value`
-     * indirection), and save one matcher frame push per fork — so
+     * indirection), and save one matcher frame push per fork - so
      * tail is preferred whenever it can be emitted.
      *
      * The non-tail wrapper is used only as a fallback at forks where
@@ -71,7 +71,7 @@ export type GrammarOptimizationOptions = {
      * and emits each member as a separate full rule.
      *
      * Without this flag set, the factorer never emits tail RulesParts
-     * — preserving today's matcher semantics for every consumer.
+     * - preserving today's matcher semantics for every consumer.
      *
      * Currently only the NFA-interpreter matcher (`grammarMatcher.ts`)
      * understands tail RulesParts.  The NFA compiler / DFA path does
@@ -82,7 +82,7 @@ export type GrammarOptimizationOptions = {
 
 /**
  * Recommended preset enabling all optimizations.  Use this when callers
- * want every safe pass on without naming each flag individually \u2014 future
+ * want every safe pass on without naming each flag individually - future
  * passes added here will be picked up automatically.
  *
  * Caveat: enabling `factorCommonPrefixes` destroys the 1:1
@@ -97,7 +97,7 @@ export const recommendedOptimizations: GrammarOptimizationOptions = {
 
 /**
  * Run enabled optimization passes against the compiled grammar AST.
- * The returned grammar is semantically equivalent to the input — only the
+ * The returned grammar is semantically equivalent to the input - only the
  * shape of the parts/rules tree changes.
  *
  * The optimizer is intentionally conservative: when in doubt about an
@@ -114,13 +114,20 @@ export function optimizeGrammar(
     const inlineConfig: InlineConfig = {
         onInvariantViolation: options.onInvariantViolation ?? "debug",
     };
+    if (options.tailFactoring && !options.factorCommonPrefixes) {
+        // tailFactoring is a sub-mode of the prefix-factoring pass;
+        // setting it without enabling the parent pass is almost
+        // certainly a configuration mistake.  Log so it surfaces in
+        // debug traces rather than silently being a no-op.
+        debug(
+            "tailFactoring is set but factorCommonPrefixes is not - tailFactoring has no effect",
+        );
+    }
     if (options.inlineSingleAlternatives) {
         rules = inlineSingleAlternativeRules(rules, inlineConfig);
     }
     if (options.factorCommonPrefixes) {
-        rules = factorCommonPrefixes(rules, {
-            tailFactoring: !!options.tailFactoring,
-        });
+        rules = factorCommonPrefixes(rules, !!options.tailFactoring);
         if (options.inlineSingleAlternatives) {
             // Factoring never emits a single-alternative wrapper itself
             // (factorRulesPart only wraps when members.length >= 2), but
@@ -280,13 +287,13 @@ type TryInlineResult = {
     valueSubstitution?: InlineValueSubstitution;
     /**
      * When set, the parent rule had no value expression of its own and
-     * this inlining synthesizes one — copying what the matcher would
+     * this inlining synthesizes one - copying what the matcher would
      * have computed via its default-value rule (i.e. the captured child
      * rule's value).  At most one assignment is possible per parent
      * rule: the matcher's default-value rule requires exactly one
      * variable on the parent, so two inlinings each producing a
      * valueAssignment would mean the parent originally had two
-     * variables and `hasValue=false` — a grammar the compiler
+     * variables and `hasValue=false` - a grammar the compiler
      * rejects (or warns about).
      */
     valueAssignment?: CompiledValueNode;
@@ -333,7 +340,7 @@ function inlineParts(
         // Refuse to inline a RulesPart whose body is shared by more than
         // one reference: inlining duplicates the child's parts at the
         // call site, but the original array is still referenced from the
-        // other call sites — net effect is N copies in the serialized
+        // other call sites - net effect is N copies in the serialized
         // grammar instead of 1 dedup'd entry.  Reference counts come
         // from the *input* AST; the rewritten array shares identity with
         // it via the memo when no nested change occurred, and otherwise
@@ -355,7 +362,7 @@ function inlineParts(
                 // valueAssignment is only produced when the parent had
                 // no value of its own and the matcher's default-value
                 // rule would have used child.value as the parent's
-                // result — see TryInlineResult.valueAssignment for why
+                // result - see TryInlineResult.valueAssignment for why
                 // this can fire at most once per parent rule.
                 valueAssignment = replacement.valueAssignment;
             }
@@ -394,18 +401,20 @@ function tryInlineRulesPart(
     }
     // Past this point, `part.rules.length === 1`.  Tail RulesParts have
     // a structural contract requiring `rules.length >= 2` (see
-    // `RulesPart.tail` doc) — reaching here with `tail` set is a real
-    // invariant violation rather than a routine "skip" case (a
-    // multi-member tail RulesPart from the factorer's second-pass AST
-    // would have been refused by the length check above).  Honor the
-    // configured policy: throw on the strict path, log + bail on the
-    // permissive path.
-    if (part.tail) {
+    // `RulesPart.tailCall` doc), so the factorer never produces a
+    // single-member tail RulesPart - today this branch is dead and
+    // serves only as a future-proofing assertion.  It would become
+    // reachable if a future change relaxed the >=2 invariant
+    // (e.g. allowed a single-member tail wrapper as a structural
+    // marker).  Honor the configured policy: throw on the strict
+    // path, log + bail on the permissive path.
+    /* istanbul ignore if -- @preserve: dead-by-construction defense */
+    if (part.tailCall) {
         const msg = `Internal: single-member tail RulesPart violates the rules.length>=2 contract (variable='${part.variable ?? "<none>"}')`;
         if (config.onInvariantViolation === "throw") {
             throw new Error(msg);
         }
-        debug(`${msg} — refusing to inline (onInvariantViolation=debug)`);
+        debug(`${msg} - refusing to inline (onInvariantViolation=debug)`);
         return undefined;
     }
     const child = part.rules[0];
@@ -417,7 +426,7 @@ function tryInlineRulesPart(
     // *between* its own parts.  When inlined, those boundaries are
     // governed by the parent's spacing mode.  Require exact equality:
     // `undefined` (auto) is a distinct mode at the matcher level, not
-    // a synonym for "inherit from parent" — inlining a child with
+    // a synonym for "inherit from parent" - inlining a child with
     // `undefined` into a parent with `"required"` would change boundary
     // behavior at e.g. digit↔Latin transitions where auto resolves to
     // `optionalSpacePunctuation` but required is always
@@ -434,7 +443,7 @@ function tryInlineRulesPart(
     //
     //   (Hoist)        parent has no value of its own and exactly one
     //                  part (this RulesPart).  Synthesize a value
-    //                  assignment from child.value onto the parent —
+    //                  assignment from child.value onto the parent -
     //                  this is what the matcher's single-part
     //                  default-value rule would have computed at
     //                  runtime.
@@ -447,7 +456,7 @@ function tryInlineRulesPart(
     //   (Drop)         child.value is unobservable: inline child.parts
     //                  and forget the value.
     //
-    // The Substitute and Drop cases share the same parts handling —
+    // The Substitute and Drop cases share the same parts handling -
     // child's top-level bindings are α-renamed (so they can't collide
     // with parent's other parts) and the renamed child.value is
     // either folded into parent.value (Substitute) or discarded
@@ -459,7 +468,7 @@ function tryInlineRulesPart(
         // they can't collide with any other top-level bindings the
         // parent already has, and apply the same remap to child.value.
         // Skipped when parent has only this RulesPart as its single
-        // part — there are no siblings to collide with.
+        // part - there are no siblings to collide with.
         const { parts: renamedParts, value: renamedValue } =
             parentRule.parts.length === 1
                 ? { parts: child.parts, value: child.value }
@@ -467,7 +476,7 @@ function tryInlineRulesPart(
 
         // (Hoist) Parent has no value of its own and the matcher
         // would have computed the parent's value via its
-        // default-value rule using `child.value` — either because
+        // default-value rule using `child.value` - either because
         // parent has a single part (this RulesPart) or because
         // parent's only variable is `part.variable` (which captured
         // child.value at runtime).  Synthesize that assignment
@@ -483,7 +492,7 @@ function tryInlineRulesPart(
         }
 
         // (Substitute) parent captures via `part.variable` AND has
-        // its own value expression — fold the renamed child.value
+        // its own value expression - fold the renamed child.value
         // into it.  When parent.value doesn't reference
         // `part.variable` the substitution is a no-op walk and we
         // get the same result as the drop case.
@@ -510,7 +519,7 @@ function tryInlineRulesPart(
     // a child with no explicit value:
     //
     //   - Single-part child: the lone part contributes the value (any
-    //     type — string / phraseSet via implicit text, wildcard /
+    //     type - string / phraseSet via implicit text, wildcard /
     //     number / rules via their captured value).  All five types
     //     qualify.
     //
@@ -521,7 +530,7 @@ function tryInlineRulesPart(
     //     string / phraseSet qualify only when bound (`cp.variable !==
     //     undefined`).  An unbound rules / string / phraseSet
     //     contributes nothing to the value at runtime, so it isn't a
-    //     binding target — and counting it would produce false
+    //     binding target - and counting it would produce false
     //     ambiguity rejections (e.g. child = `<X> $(n:string)` with
     //     `<X>` unbound: only the wildcard is the real contributor).
     //
@@ -567,7 +576,7 @@ function tryInlineRulesPart(
             if (config.onInvariantViolation === "throw") {
                 throw new Error(msg);
             }
-            debug(`${msg} — refusing to inline (onInvariantViolation=debug)`);
+            debug(`${msg} - refusing to inline (onInvariantViolation=debug)`);
             return undefined;
         }
         const bindingCp = child.parts[bindingIdx];
@@ -597,25 +606,21 @@ function tryInlineRulesPart(
  * treats inner `RulesPart` alternatives (each is queued as its own
  * `MatchState` and produces its own result), so factoring is semantically
  * safe.  This intentionally destroys the 1:1 correspondence between
- * top-level rule indices and the original source — that mapping must be
+ * top-level rule indices and the original source - that mapping must be
  * recovered via separate metadata if needed downstream.
  *
  * Uses an identity memo over `GrammarRule[]` arrays so shared named
  * rules (multiple `RulesPart`s pointing at the same array) still share
- * after the pass — see `inlineSingleAlternativeRules` for rationale.
+ * after the pass - see `inlineSingleAlternativeRules` for rationale.
  */
 /** Per-invocation configuration for `factorCommonPrefixes`. */
-export type FactorConfig = {
-    tailFactoring: boolean;
-};
-
 export function factorCommonPrefixes(
     rules: GrammarRule[],
-    config: FactorConfig = { tailFactoring: false },
+    tailFactoring: boolean = false,
 ): GrammarRule[] {
     const counter = { factored: 0 };
     const memo: RulesArrayMemo = new Map();
-    let result = factorRulesArray(rules, counter, memo, config);
+    let result = factorRulesArray(rules, counter, memo, tailFactoring);
 
     // Top-level factoring: the matcher treats top-level alternatives the
     // same way it treats inner `RulesPart` alternatives (each is queued
@@ -623,7 +628,7 @@ export function factorCommonPrefixes(
     // trie-based factoring applies.  Newly synthesized suffix
     // `RulesPart`s produced here are not themselves re-walked, matching
     // the existing behavior for nested factoring.
-    result = factorRules(result, counter, config);
+    result = factorRules(result, counter, tailFactoring);
 
     if (counter.factored > 0) {
         debug(`factored ${counter.factored} common prefix groups`);
@@ -635,7 +640,7 @@ function factorRulesArray(
     rules: GrammarRule[],
     counter: { factored: number },
     memo: RulesArrayMemo,
-    config: FactorConfig,
+    tailFactoring: boolean,
 ): GrammarRule[] {
     const cached = memo.get(rules);
     if (cached !== undefined) return cached;
@@ -644,7 +649,7 @@ function factorRulesArray(
     // (see inlineRulesArray for rationale).
     let next: GrammarRule[] | undefined;
     for (let i = 0; i < rules.length; i++) {
-        const r = factorRule(rules[i], counter, memo, config);
+        const r = factorRule(rules[i], counter, memo, tailFactoring);
         if (next !== undefined) {
             next.push(r);
         } else if (r !== rules[i]) {
@@ -661,9 +666,14 @@ function factorRule(
     rule: GrammarRule,
     counter: { factored: number },
     memo: RulesArrayMemo,
-    config: FactorConfig,
+    tailFactoring: boolean,
 ): GrammarRule {
-    const { parts, changed } = factorParts(rule.parts, counter, memo, config);
+    const { parts, changed } = factorParts(
+        rule.parts,
+        counter,
+        memo,
+        tailFactoring,
+    );
     if (!changed) return rule;
     return { ...rule, parts };
 }
@@ -672,7 +682,7 @@ function factorParts(
     parts: GrammarPart[],
     counter: { factored: number },
     memo: RulesArrayMemo,
-    config: FactorConfig,
+    tailFactoring: boolean,
 ): { parts: GrammarPart[]; changed: boolean } {
     // Single-pass: only allocate `out` once an element actually changes
     // (mirrors `factorRulesArray` / `inlineRulesArray`).
@@ -685,11 +695,16 @@ function factorParts(
         }
         // Recurse into nested rules first, preserving shared-array
         // identity via memo.
-        const recursedRules = factorRulesArray(p.rules, counter, memo, config);
+        const recursedRules = factorRulesArray(
+            p.rules,
+            counter,
+            memo,
+            tailFactoring,
+        );
         const recursed: RulesPart =
             recursedRules !== p.rules ? { ...p, rules: recursedRules } : p;
 
-        const working = factorRulesPart(recursed, counter, config);
+        const working = factorRulesPart(recursed, counter, tailFactoring);
         if (out !== undefined) {
             out.push(working);
         } else if (working !== p) {
@@ -712,14 +727,14 @@ function factorParts(
 function factorRulesPart(
     part: RulesPart,
     counter: { factored: number },
-    config: FactorConfig,
+    tailFactoring: boolean,
 ): RulesPart {
     if (part.repeat || part.optional) {
         // Repeat/optional change the matcher's loop-back semantics; leave
         // such groups untouched to stay safe.
         return part;
     }
-    const factored = factorRules(part.rules, counter, config);
+    const factored = factorRules(part.rules, counter, tailFactoring);
     if (factored === part.rules) return part;
     return { ...part, rules: factored };
 }
@@ -737,7 +752,7 @@ function factorRulesPart(
  *     "play" edge but branch at "song"/"album");
  *   - VarStringPart, VarNumberPart, RulesPart, PhraseSetPart each yield
  *     one edge.  RulesPart edges key by `rules` array identity so that
- *     two `<RuleName>` references share the same edge — preserving the
+ *     two `<RuleName>` references share the same edge - preserving the
  *     dedup invariant `grammarSerializer.ts` relies on.
  *
  * Variables on wildcard/number/rules edges are carried by the first
@@ -749,7 +764,7 @@ function factorRulesPart(
  * are path-compressed back into a flat parts array (with adjacent
  * StringParts re-merged), and multi-member nodes become wrapper
  * `RulesPart`s.  Per-fork eligibility checks are applied at each wrapper
- * site; failure causes a *local* bailout — the would-be members are
+ * site; failure causes a *local* bailout - the would-be members are
  * emitted as separate full rules with the canonical prefix prepended,
  * losing factoring at that fork only (factoring above and below the
  * fork still applies).
@@ -759,7 +774,7 @@ function factorRulesPart(
 function factorRules(
     rules: GrammarRule[],
     counter: { factored: number },
-    config: FactorConfig,
+    tailFactoring: boolean,
 ): GrammarRule[] {
     if (rules.length < 2) return rules;
 
@@ -767,7 +782,7 @@ function factorRules(
         nextCanonicalId: 0,
         rulesArrayIds: new WeakMap(),
         nextRulesArrayId: 0,
-        config,
+        tailFactoring,
     };
     const root: TrieRoot = { children: new Map(), terminals: [] };
     for (let i = 0; i < rules.length; i++) {
@@ -818,7 +833,7 @@ function factorRules(
 // `local` field), `insertRuleIntoTrie` matches steps against existing
 // edges and either reuses an edge (recording `local → canonical` in
 // the per-rule remap) or allocates a new edge with a fresh canonical.
-// Every inserter — *including the lead* — records its remap; the lead
+// Every inserter - *including the lead* - records its remap; the lead
 // is no longer an exception because its local also differs from the
 // canonical.
 
@@ -839,7 +854,7 @@ type TrieStep =
           repeat: boolean;
           name: string | undefined;
           local: string | undefined;
-          tail: boolean;
+          tailCall: boolean;
       }
     | {
           kind: "phraseSet";
@@ -869,7 +884,7 @@ type TrieEdge =
           name: string | undefined;
           /** undefined iff every inserter at this edge was unbound. */
           canonical: string | undefined;
-          tail: boolean;
+          tailCall: boolean;
       }
     | {
           kind: "phraseSet";
@@ -895,7 +910,7 @@ type Terminal = {
  * for `<RuleName>` references).
  *
  * Scope is one `RulesPart` because canonicals never escape the wrapper
- * rule we're about to emit — a fresh BuildState per invocation is
+ * rule we're about to emit - a fresh BuildState per invocation is
  * enough to guarantee within-RulesPart uniqueness.  Distinct from
  * `RenameState` (which scopes per-parent-rule and produces
  * `__opt_inline_<n>` names for the inliner pass).
@@ -904,7 +919,7 @@ type BuildState = {
     nextCanonicalId: number;
     rulesArrayIds: WeakMap<GrammarRule[], number>;
     nextRulesArrayId: number;
-    config: FactorConfig;
+    tailFactoring: boolean;
 };
 
 function freshCanonical(state: BuildState): string {
@@ -932,12 +947,12 @@ function rulesArrayId(state: BuildState, rules: GrammarRule[]): number {
 
 /**
  * Compute a primitive merge key for a trie step.  Two steps with
- * the same key share a child node at insertion time — the same
+ * the same key share a child node at insertion time - the same
  * pairing `edgeKeyMatches` performs by walking sibling edges, but
  * O(1) via a `Map<string, TrieNode>` lookup.  For variable-bearing
  * kinds the variable *name* is omitted (names are remapped); for
  * `rules` edges the binding presence (bound vs. unbound) is encoded
- * so they don't merge — mirrors the parity check in `edgeKeyMatches`.
+ * so they don't merge - mirrors the parity check in `edgeKeyMatches`.
  */
 function stepMergeKey(step: TrieStep, state: BuildState): string {
     // Use JSON.stringify for any field that could contain unrestricted text
@@ -946,7 +961,7 @@ function stepMergeKey(step: TrieStep, state: BuildState): string {
     //
     // Note: tokens are encoded as a JSON array, so atomic-bound vs.
     // exploded-unbound StringPart encodings stay on separate edges by
-    // construction — `JSON.stringify(["foo"])` ≠ `JSON.stringify(["fo","o"])`,
+    // construction - `JSON.stringify(["foo"])` ≠ `JSON.stringify(["fo","o"])`,
     // and the `local` parity bit further guarantees bound and unbound
     // single-token forms also never collide.
     switch (step.kind) {
@@ -957,8 +972,11 @@ function stepMergeKey(step: TrieStep, state: BuildState): string {
         case "number":
             return `n:${step.optional ? 1 : 0}`;
         case "rules": {
+            // Two otherwise-identical edges with different `tailCall`
+            // must NOT merge: their matcher entry semantics differ
+            // (tail call skips parent-frame push, see RulesPart.tailCall).
             const id = rulesArrayId(state, step.rules);
-            return `r:${id}:${step.optional ? 1 : 0}:${step.repeat ? 1 : 0}:${step.local !== undefined ? 1 : 0}:${step.tail ? 1 : 0}`;
+            return `r:${id}:${step.optional ? 1 : 0}:${step.repeat ? 1 : 0}:${step.local !== undefined ? 1 : 0}:${step.tailCall ? 1 : 0}`;
         }
         case "phraseSet":
             return `p:${JSON.stringify(step.matcherName)}:${step.local !== undefined ? 1 : 0}`;
@@ -967,7 +985,7 @@ function stepMergeKey(step: TrieStep, state: BuildState): string {
 
 /**
  * Root of the trie.  Distinct from `TrieNode` so that `edge` can be
- * required on every non-root node — eliminating non-null assertions in
+ * required on every non-root node - eliminating non-null assertions in
  * the insertion and emission code.  Terminals on the root represent
  * empty-parts input rules (rare but legal).
  *
@@ -1045,7 +1063,7 @@ function insertRuleIntoTrie(
  * Unbound StringParts explode into one step per token so that adjacent
  * alternatives can factor on a shared prefix substring.  Bound
  * StringParts emit a single atomic step containing the full token
- * sequence — splitting would break the binding parity (the matcher
+ * sequence - splitting would break the binding parity (the matcher
  * captures the whole joined text into the slot, so the binding can't
  * be moved to the last token alone without changing semantics) and
  * would also leak the binding-presence bit into intermediate edges,
@@ -1053,9 +1071,9 @@ function insertRuleIntoTrie(
  *
  * TODO: bound StringParts that share a token prefix (e.g.
  * `[good, morning]` and `[good, evening]`, both bound) currently
- * cannot factor.  The same trick `compileStringPart` uses — emit
+ * cannot factor.  The same trick `compileStringPart` uses - emit
  * sub-token transitions for the shared prefix and write the slot
- * only on the final transition — would let the trie share the
+ * only on the final transition - would let the trie share the
  * `good` edge if we tracked "binding emitted on last sub-step
  * only" parity.  Not yet worth the complexity.
  */
@@ -1102,7 +1120,7 @@ function* partsToEdgeSteps(parts: GrammarPart[]): Generator<TrieStep> {
                     repeat: !!p.repeat,
                     name: p.name,
                     local: p.variable,
-                    tail: !!p.tail,
+                    tailCall: !!p.tailCall,
                 };
                 break;
             case "phraseSet":
@@ -1161,7 +1179,7 @@ function stepToEdge(step: TrieStep, buildState: BuildState): TrieEdge {
                     step.local !== undefined
                         ? freshCanonical(buildState)
                         : undefined,
-                tail: step.tail,
+                tailCall: step.tailCall,
             };
     }
 }
@@ -1223,7 +1241,7 @@ function edgeToPart(edge: TrieEdge): GrammarPart {
             if (edge.optional) out.optional = true;
             if (edge.repeat) out.repeat = true;
             if (edge.name !== undefined) out.name = edge.name;
-            if (edge.tail) out.tail = true;
+            if (edge.tailCall) out.tailCall = true;
             return out;
         }
         case "phraseSet": {
@@ -1241,7 +1259,7 @@ function edgeToPart(edge: TrieEdge): GrammarPart {
  * Append `part` to `prefix` in place, folding when both ends are
  * StringParts (i.e. merging `last.value` and `part.value` into one
  * `StringPart`).  Mutating in place keeps path-compression linear in
- * chain depth — returning a fresh array on every step would be
+ * chain depth - returning a fresh array on every step would be
  * O(depth²).
  */
 function appendPartInPlace(prefix: GrammarPart[], part: GrammarPart): void {
@@ -1311,7 +1329,7 @@ function emitFromNode(
     buildState: BuildState,
 ): GrammarRule[] {
     // Path-compress: walk down single-child / no-terminal chain, but
-    // stop *before* entering a node that would itself be a fork — that
+    // stop *before* entering a node that would itself be a fork - that
     // way the fork's edge becomes the first part of each emitted member
     // (avoiding empty-parts members at the fork, which would defeat
     // factoring via the wholeConsumed-with-value check below).
@@ -1353,9 +1371,9 @@ function emitFromNode(
     // Multi-member fork: try to wrap; bail out if any check fails.
     const eligibility = checkFactoringEligible(
         members,
-        buildState.config.tailFactoring,
+        buildState.tailFactoring,
     );
-    if (eligibility.reason !== undefined) {
+    if (!eligibility.ok) {
         debug(
             `factor bailout (${eligibility.reason}) at fork with ${members.length} members; emitting unfactored`,
         );
@@ -1365,20 +1383,27 @@ function emitFromNode(
         }));
     }
     state.didFactor = true;
-    return [buildWrapperRule(prefix, members, buildState, eligibility.tail)];
+    return [
+        eligibility.tail
+            ? buildTailWrapper(prefix, members)
+            : buildNonTailWrapper(prefix, members, buildState),
+    ];
 }
 
 /**
- * Per-fork eligibility result.  When `reason` is defined the caller
- * must bail out (emit each member as a separate full rule).  When
- * `reason` is undefined, `tail` indicates whether the wrapper's suffix
- * `RulesPart` should be emitted as a tail call (skipping parent-frame
- * push so member value-exprs can resolve prefix-bound canonicals).
+ * Per-fork eligibility result.  When `ok` is `false` the caller must
+ * bail out (emit each member as a separate full rule).  When `ok` is
+ * `true`, `tail` indicates whether the wrapper's suffix `RulesPart`
+ * should be emitted as a tail call (skipping parent-frame push so
+ * member value-exprs can resolve prefix-bound canonicals).
+ *
+ * Modeled as a discriminated union so callers cannot read `tail`
+ * without first checking `ok` - the wrapper builders only run on the
+ * `ok: true` branch by construction.
  */
-type FactorEligibility = {
-    reason: string | undefined;
-    tail: boolean;
-};
+type FactorEligibility =
+    | { ok: false; reason: string }
+    | { ok: true; tail: boolean };
 
 /**
  * Per-fork eligibility checks (lifted from the previous implementation).
@@ -1394,13 +1419,13 @@ function checkFactoringEligible(
     // resolver throws ("missing value for default") because the
     // empty-parts rule has nothing to default from.
     if (members.some((m) => m.parts.length === 0)) {
-        return { reason: "whole-consumed", tail: false };
+        return { ok: false, reason: "whole-consumed" };
     }
     const valuePresence = members.map((m) => m.value !== undefined);
     const allHaveValue = valuePresence.every((v) => v);
     const noneHaveValue = valuePresence.every((v) => !v);
     if (!allHaveValue && !noneHaveValue) {
-        return { reason: "mixed-value-presence", tail: false };
+        return { ok: false, reason: "mixed-value-presence" };
     }
     if (noneHaveValue) {
         // The matcher synthesizes an implicit text-concatenation
@@ -1408,26 +1433,26 @@ function checkFactoringEligible(
         // is a StringPart (`matchStringPartWithoutWildcard` fast
         // path).  After factoring, the wrapper rule becomes
         // `[prefix..., suffixRulesPart]` with parts.length >= 2 and
-        // no value expression — the implicit default no longer
+        // no value expression - the implicit default no longer
         // fires and `createValue` throws "missing value for default"
         // at finalize time.  Without a wrapper variable to
         // synthesize a value into, factoring at this fork breaks
         // matcher behavior whenever the parent rule relied on the
         // implicit default.  Bail out unconditionally.
-        return { reason: "no-value-implicit-default", tail: false };
+        return { ok: false, reason: "no-value-implicit-default" };
     }
 
     // Cross-scope-ref classification.  Nested rule scope is normally
     // fresh at the matcher level (entering a `RulesPart` resets
     // `valueIds`).  When members are lifted into a wrapper rule's
     // (non-tail) `suffixRulesPart`, each member's value can only see
-    // variables bound in its own `parts` — bindings in the wrapper's
+    // variables bound in its own `parts` - bindings in the wrapper's
     // prefix are not visible.
     //
     // Tail-RulesPart entry skips the parent-frame push and inherits
     // the parent's `valueIds` chain, so member value-exprs *can*
     // resolve prefix-bound canonicals.  `needsTail` records whether
-    // any member's value-expr references a prefix-bound canonical —
+    // any member's value-expr references a prefix-bound canonical -
     // i.e. whether the non-tail wrapper would change observable
     // behavior at this fork.
     let needsTail = false;
@@ -1447,7 +1472,7 @@ function checkFactoringEligible(
     // non-tail.  The wrapper rule has a single `spacingMode` that
     // governs boundary semantics for the prefix parts (and the
     // prefix/suffix seam); before factoring, each member's own
-    // `spacingMode` governed boundaries across its full parts —
+    // `spacingMode` governed boundaries across its full parts -
     // including the prefix portion.  When members disagree on
     // `spacingMode` there is no single value the wrapper can carry
     // that preserves every member's original prefix semantics, so we
@@ -1455,7 +1480,7 @@ function checkFactoringEligible(
     const firstSpacing = members[0].spacingMode;
     const uniformSpacing = members.every((m) => m.spacingMode === firstSpacing);
     if (!uniformSpacing) {
-        return { reason: "mixed-spacing", tail: false };
+        return { ok: false, reason: "mixed-spacing" };
     }
 
     // Policy: prefer tail when enabled.  Tail wrapper is observably
@@ -1466,7 +1491,7 @@ function checkFactoringEligible(
     // and saves one matcher frame push per fork.  Fall back to the
     // non-tail wrapper only when tail is disabled.
     if (tailFactoringEnabled) {
-        return { reason: undefined, tail: true };
+        return { ok: true, tail: true };
     }
 
     // Tail disabled.  The non-tail wrapper is only safe when no
@@ -1474,47 +1499,57 @@ function checkFactoringEligible(
     // resolve to a different scope after lifting).  When needsTail is
     // true we have to bail out.
     if (needsTail) {
-        return { reason: "cross-scope-ref", tail: false };
+        return { ok: false, reason: "cross-scope-ref" };
     }
-    return { reason: undefined, tail: false };
+    return { ok: true, tail: false };
 }
 
-function buildWrapperRule(
+/**
+ * Build a tail-call wrapper rule: the suffix `RulesPart` runs in the
+ * wrapper rule's own scope (no parent-frame push), so the member's
+ * value flows up directly as the wrapper rule's value - no
+ * synthesized wrapper-binding variable, no `factoredAlt.value`.
+ *
+ * Caller (`emitFromNode`) only reaches this with `members.length >= 2`
+ * (the length===1 short-circuit returns earlier), upholding the
+ * `RulesPart.tailCall` >= 2-rules invariant by construction.
+ */
+function buildTailWrapper(
+    prefix: GrammarPart[],
+    members: GrammarRule[],
+): GrammarRule {
+    const suffixRulesPart: RulesPart = {
+        type: "rules",
+        rules: members,
+        tailCall: true,
+    };
+    const factoredAlt: GrammarRule = {
+        parts: [...prefix, suffixRulesPart],
+    };
+    // Uniform spacing across members is guaranteed by
+    // `checkFactoringEligible` (mixed-spacing forks bail out before
+    // reaching here), so any member's spacingMode represents the whole
+    // group's.
+    const firstSpacing = members[0].spacingMode;
+    if (firstSpacing !== undefined) {
+        factoredAlt.spacingMode = firstSpacing;
+    }
+    return factoredAlt;
+}
+
+/**
+ * Build a non-tail wrapper rule: each member's value is captured into
+ * a synthesized opaque wrapper-binding variable, and the wrapper rule
+ * forwards that binding as its own value.  Used when `tailFactoring`
+ * is disabled and the fork doesn't need cross-scope reference
+ * resolution (otherwise the factorer would have bailed out with
+ * `cross-scope-ref`).
+ */
+function buildNonTailWrapper(
     prefix: GrammarPart[],
     members: GrammarRule[],
     buildState: BuildState,
-    tail: boolean,
 ): GrammarRule {
-    if (tail) {
-        // Tail wrapper: the suffix `RulesPart` runs in the wrapper
-        // rule's own scope (no parent-frame push), so the member's
-        // value flows up directly as the wrapper rule's value — no
-        // synthesized wrapper-binding variable, no `factoredAlt.value`.
-        //
-        // `emitFromNode` only reaches this branch with members.length
-        // >= 2 (the length===1 short-circuit returns earlier), so the
-        // RulesPart.tail >= 2-rules invariant is upheld here by
-        // construction.  Defensive assertion catches future callers
-        // that bypass the short-circuit.
-        if (members.length < 2) {
-            throw new Error(
-                `Internal: tail wrapper requires >= 2 members (got ${members.length})`,
-            );
-        }
-        const suffixRulesPart: RulesPart = {
-            type: "rules",
-            rules: members,
-            tail: true,
-        };
-        const factoredAlt: GrammarRule = {
-            parts: [...prefix, suffixRulesPart],
-        };
-        const firstSpacing = members[0].spacingMode;
-        if (firstSpacing !== undefined) {
-            factoredAlt.spacingMode = firstSpacing;
-        }
-        return factoredAlt;
-    }
     const suffixRulesPart: RulesPart = { type: "rules", rules: members };
     const factoredAlt: GrammarRule = {
         parts: [...prefix, suffixRulesPart],
@@ -1522,7 +1557,7 @@ function buildWrapperRule(
     if (members.some((m) => m.value !== undefined)) {
         // Opaque counter-based name shares `BuildState.nextCanonicalId`
         // with `freshCanonical`, so it can never collide with any
-        // canonical edge binding in this `factorRules` invocation — no
+        // canonical edge binding in this `factorRules` invocation - no
         // reserved-set scan needed.
         const gen = freshWrapperBinding(buildState);
         suffixRulesPart.variable = gen;
@@ -1530,8 +1565,8 @@ function buildWrapperRule(
     }
     // Uniform spacing across members is guaranteed by
     // `checkFactoringEligible` (mixed-spacing forks bail out before
-    // reaching the wrapper builder), so any member's spacingMode
-    // represents the whole group's.
+    // reaching here), so any member's spacingMode represents the whole
+    // group's.
     const firstSpacing = members[0].spacingMode;
     if (firstSpacing !== undefined) {
         factoredAlt.spacingMode = firstSpacing;
@@ -1739,4 +1774,76 @@ function substituteValueVariables(
         case "templateLiteral":
             return { ...node, expressions: node.expressions.map(sub) };
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Structural validation: RulesPart.tailCall contract
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Walk every rule in `rules` and verify that any `RulesPart` carrying
+ * `tailCall: true` satisfies the contract documented on
+ * `RulesPart.tailCall`:
+ *
+ *   - last entry in its parent rule's `parts`
+ *   - parent rule has no `value` of its own
+ *   - `repeat` / `optional` / `variable` all unset
+ *   - `rules.length >= 2`
+ *   - every member's `spacingMode` matches the parent rule's
+ *
+ * Throws on the first violation with a message identifying the
+ * offending rule.  Cheap to run; intended to be called after loading
+ * a serialized grammar from JSON (where the bytes are not produced by
+ * a trusted in-process compiler) and from tests.
+ *
+ * Members are recursed into so that nested tail RulesParts are also
+ * validated.
+ */
+export function validateTailRulesParts(rules: GrammarRule[]): void {
+    const visited = new WeakSet<GrammarRule[]>();
+    const visitRules = (rs: GrammarRule[]): void => {
+        if (visited.has(rs)) return;
+        visited.add(rs);
+        for (const r of rs) {
+            visitRule(r);
+        }
+    };
+    const visitRule = (rule: GrammarRule): void => {
+        const parts = rule.parts;
+        for (let i = 0; i < parts.length; i++) {
+            const p = parts[i];
+            if (p.type !== "rules") continue;
+            if (p.tailCall) {
+                if (i !== parts.length - 1) {
+                    throw new Error(
+                        `Invalid tail RulesPart: must be the last part of its parent rule (name='${p.name ?? "<unnamed>"}')`,
+                    );
+                }
+                if (rule.value !== undefined) {
+                    throw new Error(
+                        `Invalid tail RulesPart: parent rule must have no value of its own (name='${p.name ?? "<unnamed>"}')`,
+                    );
+                }
+                if (p.repeat || p.optional || p.variable !== undefined) {
+                    throw new Error(
+                        `Invalid tail RulesPart: repeat/optional/variable are forbidden (name='${p.name ?? "<unnamed>"}')`,
+                    );
+                }
+                if (p.rules.length < 2) {
+                    throw new Error(
+                        `Invalid tail RulesPart: requires rules.length >= 2 (got ${p.rules.length}, name='${p.name ?? "<unnamed>"}')`,
+                    );
+                }
+                for (const m of p.rules) {
+                    if (m.spacingMode !== rule.spacingMode) {
+                        throw new Error(
+                            `Invalid tail RulesPart: every member's spacingMode must match the parent rule's (name='${p.name ?? "<unnamed>"}')`,
+                        );
+                    }
+                }
+            }
+            visitRules(p.rules);
+        }
+    };
+    visitRules(rules);
 }

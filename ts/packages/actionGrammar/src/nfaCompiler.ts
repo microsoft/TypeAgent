@@ -1194,9 +1194,10 @@ function compileRulesPart(
     checkedVariables?: Set<string>,
     overrideVariableName?: string,
 ): number {
-    if (part.tail) {
+    if (part.tailCall) {
         throw new Error(
-            "compileRulesPart: tail RulesParts are not supported by the NFA compiler. " +
+            `compileRulesPart: tail RulesParts are not supported by the NFA compiler ` +
+                `(part.name='${part.name ?? "<unnamed>"}'). ` +
                 "Disable `tailFactoring` in the grammar optimizer for NFA/DFA paths.",
         );
     }
@@ -1272,9 +1273,10 @@ function compileRulesPartWithSlots(
     toState: number,
     context: RuleCompilationContext,
 ): number {
-    if (part.tail) {
+    if (part.tailCall) {
         throw new Error(
-            "compileRulesPartWithSlots: tail RulesParts are not supported by the NFA compiler. " +
+            `compileRulesPartWithSlots: tail RulesParts are not supported by the NFA compiler ` +
+                `(part.name='${part.name ?? "<unnamed>"}'). ` +
                 "Disable `tailFactoring` in the grammar optimizer for NFA/DFA paths.",
         );
     }

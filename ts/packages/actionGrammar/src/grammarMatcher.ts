@@ -121,8 +121,8 @@ export function isBoundarySatisfied(
             // the outer boundary.  For top-level "none" rules, leading
             // whitespace is rejected (via leadingSpacingMode) and trailing
             // content is rejected (via finalizeState).  For nested rules,
-            // the nearest ancestor with a flex-space boundary — or the
-            // top-level rule if none — controls leading/trailing spacing
+            // the nearest ancestor with a flex-space boundary - or the
+            // top-level rule if none - controls leading/trailing spacing
             // around the nested match (see leadingSpacingMode).  The
             // boundary check itself always passes.
             return true;
@@ -169,7 +169,7 @@ type ParentMatchState = {
     variable: string | undefined;
     valueIds: ValueIdNode | undefined | null; // null means we don't need any value
     parent: ParentMatchState | undefined;
-    repeatPartIndex?: number | undefined; // defined for ()* / )+ — holds the part index to loop back to
+    repeatPartIndex?: number | undefined; // defined for ()* / )+ - holds the part index to loop back to
     spacingMode: CompiledSpacingMode; // parent rule's spacingMode, restored in MatchState on return from nested rule
 };
 
@@ -186,7 +186,7 @@ export type PendingWildcard = {
 //
 // All three default to `"exhaustive"` so callers receive every
 // valid parse.  The non-default values are first-success
-// commitments — the matcher picks one branch and abandons the
+// commitments - the matcher picks one branch and abandons the
 // other(s) without enumerating them.
 
 /**
@@ -204,7 +204,7 @@ export type PendingWildcard = {
  *   - `"shortest"`: each traversal path commits to the shortest
  *     viable wildcard capture; longer-wildcard alternatives for
  *     that path are not enumerated.  Other axes (alternation,
- *     optional, repeat) are still explored normally — only the
+ *     optional, repeat) are still explored normally - only the
  *     wildcard-length axis is collapsed.
  */
 export type WildcardPolicy = "exhaustive" | "shortest";
@@ -249,7 +249,7 @@ export type GrammarMatchOptions = {
 // `suppressBacktracksAfterSuccess` to apply per-axis policy
 // (`wildcardPolicy` / `optionalPolicy` / `repeatPolicy`) when
 // pruning unexplored siblings after a successful parse.  The tag
-// does NOT affect drain order — that is purely LIFO push order.
+// does NOT affect drain order - that is purely LIFO push order.
 //
 // `"wildcard"` frames are pushed by `captureWildcard` to enable
 // extending a wildcard capture to a strictly longer length.
@@ -304,12 +304,12 @@ type SingleBacktrack = {
 
 // Per-alternative state at one alternation fork point is fully
 // derivable from the rule itself (`parts`/`value`/`spacingMode`)
-// plus a debug `name` — nothing else differs across siblings.
+// plus a debug `name` - nothing else differs across siblings.
 // The cursor frame stores a direct reference to the existing
 // `GrammarRule[]` (no copy) and a single `namePrefix` string;
 // `tryNextBacktrack` builds `namePrefix + "[" + cursor + "]"` and
 // reads `rules[cursor].parts/value/spacingMode` lazily on restore.
-// Eliminates per-alternative allocation entirely — N-way alternation
+// Eliminates per-alternative allocation entirely - N-way alternation
 // pushes 1 frame + 1 base snapshot regardless of N.
 type AlternationBacktrack = {
     readonly origin: "alternation";
@@ -340,9 +340,9 @@ type Backtrack = SingleBacktrack | AlternationBacktrack;
 // compile error.
 //
 // Audit points when adding a new MatchState field:
-//   1. `captureSnapshot` (this file) — must list the new field;
+//   1. `captureSnapshot` (this file) - must list the new field;
 //      this mapped type makes omitting it a compile error.
-//   2. `wildcardFrameSnapshot.spec.ts` — extend coverage if the
+//   2. `wildcardFrameSnapshot.spec.ts` - extend coverage if the
 //      field can be assigned AFTER a wildcard frame is pushed.
 type SnapshotState = { [K in keyof PendingMatchState]-?: PendingMatchState[K] };
 
@@ -392,7 +392,7 @@ export type PendingMatchState = {
     //
     // `afterWildcard` indicates the part was matched via wildcard
     // scanning (matchStringPartWithWildcard / matchVarNumberPartWithWildcard)
-    // — i.e., a wildcard preceded this part and the part's position
+    // - i.e., a wildcard preceded this part and the part's position
     // was determined by scanning forward through the wildcard region.
     // When backward backs up to such a part, the position is ambiguous
     // (see afterWildcard on GrammarCompletionResult in grammarCompletion.ts).
@@ -429,13 +429,13 @@ export type MatchState = PendingMatchState & {
     // Single-owner invariant: only the live state currently being
     // driven by `matchGrammar`/`matchGrammarCompletion` may own
     // frames.  States queued on a `PendingMatchState[]` work-list
-    // statically cannot — enforced by the `PendingMatchState` type
+    // statically cannot - enforced by the `PendingMatchState` type
     // (which omits this field).
     backtracks?: Backtrack | undefined;
 
     // Per-axis policies.  Set once at `initialMatchState` time and
     // never changed.  Deliberately NOT in `PendingMatchState` /
-    // `SnapshotState` — `Object.assign` of a snapshot won't overwrite
+    // `SnapshotState` - `Object.assign` of a snapshot won't overwrite
     // them, so they persist across `tryNextBacktrack` restores.
     wildcardPolicy: WildcardPolicy;
     optionalPolicy: OptionalPolicy;
@@ -447,7 +447,7 @@ export type MatchState = PendingMatchState & {
 // optional skip/take, alternation, repeat continue) and by the
 // public `cloneMatchState`.  Returns the strict `SnapshotState`
 // (every field required as an own property) so a missing field is
-// a compile error — the fork/clone helpers widen back to
+// a compile error - the fork/clone helpers widen back to
 // `PendingMatchState`.
 function captureSnapshot(state: MatchState): SnapshotState {
     return {
@@ -479,24 +479,24 @@ function captureSnapshot(state: MatchState): SnapshotState {
 // a MatchState is expected (e.g. read-only inspection, or as a
 // starting point for an independent matcher run).
 //
-// Use this for READ-ONLY views — e.g. the pre-finalize clone in
+// Use this for READ-ONLY views - e.g. the pre-finalize clone in
 // `grammarCompletion` that must survive subsequent matcher
 // mutation of the live state.  For fork sites (optional-skip,
 // nested-rule alternatives, repeat continuation, wildcard
-// extension) use `forkMatchState` instead — that returns a
+// extension) use `forkMatchState` instead - that returns a
 // `SnapshotState` with no policies, suitable for restoration via
 // `Object.assign` without disturbing the live state's policies.
 export function cloneMatchState(state: MatchState): MatchState {
     // Single-allocation clone: drop only `backtracks` (live-state
-    // mutation surface) and keep everything else — including the
-    // three policy fields — by spreading once.
+    // mutation surface) and keep everything else - including the
+    // three policy fields - by spreading once.
     const { backtracks: _backtracks, ...rest } = state;
     return rest;
 }
 
 // Fork a `state` into a sibling that is about to be pushed onto the
 // `backtracks` chain.  The return type omits `backtracks`
-// — only the live state retains ownership of the existing chain.
+// - only the live state retains ownership of the existing chain.
 // This makes the single-owner invariant a compile-time guarantee:
 // two siblings cannot independently pop the same chain.
 //
@@ -515,12 +515,12 @@ export function forkMatchState(state: MatchState): SnapshotState {
 //
 // Used for:
 //   - structural forks at degree-2 fan-outs (origin "optional" /
-//     "repeat") — `alternative` is built via `forkMatchState` and
+//     "repeat") - `alternative` is built via `forkMatchState` and
 //     mutated to reflect the alternative branch's choice.
-//   - wildcard refinement (origin "wildcard") — pushed by
+//   - wildcard refinement (origin "wildcard") - pushed by
 //     `captureWildcard` to enable extending the wildcard.
 //
-// Alternation uses `pushAlternation` instead — see that helper.
+// Alternation uses `pushAlternation` instead - see that helper.
 //
 // Single-owner invariant: SnapshotState omits the `backtracks`
 // field, so the snapshot cannot smuggle a parallel chain in.  When
@@ -541,7 +541,7 @@ export function pushBacktrack(
 
 // Push a compressed alternation cursor frame.  Replaces the
 // historical pattern of pushing N-1 individual snapshots at one
-// alternation fork — the live state takes rule 0, and a single
+// alternation fork - the live state takes rule 0, and a single
 // cursor frame carries the shared `base` snapshot plus a direct
 // reference to the existing `GrammarRule[]` (no per-alternative
 // copy).  The debug name for `rules[i]` is built lazily as
@@ -550,7 +550,7 @@ export function pushBacktrack(
 //
 // Cursor starts at 1 (rule 0 is the live alternative) and advances
 // forward through `rules.length-1`, restoring the lowest-index
-// alternative first — matching the prior reverse-push order of one
+// alternative first - matching the prior reverse-push order of one
 // frame per rule.  Caller must ensure `rules.length > 1`.
 //
 // `base` MUST be captured AFTER the live state has been set up for
@@ -621,14 +621,14 @@ export function tryNextBacktrack(state: MatchState): boolean {
         state.spacingMode = rule.spacingMode;
         frame.cursor = i + 1;
         if (frame.cursor >= frame.rules.length) {
-            // All alternatives restored — unlink the cursor.
+            // All alternatives restored - unlink the cursor.
             state.backtracks = frame.prev;
         }
         debugMatch(state, `Restoring local backtrack (alternation)`);
         return true;
     }
     // The snapshot omits `backtracks`, so Object.assign won't
-    // overwrite it — explicitly advance the head pointer to `prev`.
+    // overwrite it - explicitly advance the head pointer to `prev`.
     Object.assign(state, frame.snapshot);
     state.backtracks = frame.prev;
     debugMatch(
@@ -641,7 +641,7 @@ export function tryNextBacktrack(state: MatchState): boolean {
 }
 
 // After a successful match, drop ALL backtrack frames in the chain
-// whose origin axis is configured to commit on first success —
+// whose origin axis is configured to commit on first success -
 // the caller has said it doesn't want extra parses along that
 // axis once one has been found.
 //
@@ -649,7 +649,7 @@ export function tryNextBacktrack(state: MatchState): boolean {
 //   - origin "wildcard"  + wildcardPolicy === "shortest"
 //   - origin "optional"  + optionalPolicy !== "exhaustive"
 //   - origin "repeat"    + repeatPolicy   !== "exhaustive"
-//   - origin "alternation"                 — always retained
+//   - origin "alternation"                 - always retained
 //
 // Frames with non-suppressed origins are SKIPPED OVER (their own
 // `prev` is preserved through), so suppression walks the entire
@@ -686,7 +686,7 @@ export function suppressBacktracksAfterSuccess(state: MatchState) {
         state.backtracks = state.backtracks.prev;
     }
     // Walk the rest, splicing out any suppressed frame deeper in
-    // the chain.  Mutates `prev` pointers in place — the chain is
+    // the chain.  Mutates `prev` pointers in place - the chain is
     // single-owner, so no other state shares this view.
     let kept = state.backtracks;
     while (kept !== undefined) {
@@ -867,7 +867,7 @@ export function createValue(
                         stat,
                     );
                     if (inner === undefined) {
-                        // Partial match — the spread argument's variable
+                        // Partial match - the spread argument's variable
                         // hasn't been captured yet.  Skip silently.
                     } else if (typeof inner === "object") {
                         Object.assign(obj, inner);
@@ -954,7 +954,7 @@ export function createValue(
         default: {
             // Expression node (binaryExpression, unaryExpression, etc.).
             // All expression node types are handled by evaluateValueExpr,
-            // which throws on unknown types — no silent fallthrough risk.
+            // which throws on unknown types - no silent fallthrough risk.
             // The evalBase callback routes base nodes (literal, variable,
             // object, array) back through createValue so variable resolution
             // and wildcard extraction work correctly.
@@ -976,7 +976,7 @@ export function createValue(
 // Extract and trim a wildcard capture from `request[start..end)`.  In the
 // default spacing modes the result is stripped of leading/trailing separators
 // (whitespace and punctuation).  Returns `undefined` when the capture is empty
-// or consists *entirely* of separator characters — e.g. a lone " " — so that
+// or consists *entirely* of separator characters - e.g. a lone " " - so that
 // the matcher rejects wildcard slots that contain no meaningful content.
 // In "none" mode no trimming is performed; only a truly zero-length capture
 // is rejected.
@@ -1113,7 +1113,7 @@ export function finalizeState(state: MatchState, request: string) {
         }
     }
     if (state.index < request.length) {
-        // In "none" mode the match must be exact — no trailing content
+        // In "none" mode the match must be exact - no trailing content
         // is tolerated.  This applies to the top-level rule's spacing
         // mode (by the time finalizeState runs, nested rules have been
         // unwound and the spacing mode has been restored to the
@@ -1288,7 +1288,7 @@ function matchStringPartWithWildcard(
             // If the StringPart has an explicit capture variable, write the
             // joined matched tokens into that named slot.  Otherwise fall
             // through to the implicit-default rule for single-part rules
-            // without a value expression — same logic as the non-wildcard
+            // without a value expression - same logic as the non-wildcard
             // path in matchStringPartWithoutWildcard.  Without this, a
             // pending wildcard from a parent rule that leaks into a
             // single-part child rule would bypass the default value
@@ -1347,7 +1347,7 @@ function matchStringPartWithoutWildcard(
         state.valueIds !== null &&
         (part.variable !== undefined || usesImplicitDefault(state))
     ) {
-        // Explicit capture variable on the StringPart — write the joined
+        // Explicit capture variable on the StringPart - write the joined
         // matched tokens into that named slot.  Otherwise fall through to
         // the implicit-default rule for single-part rules without a value
         // expression.
@@ -1368,7 +1368,7 @@ function matchStringPartWithoutWildcard(
 // ([\s\p{P}]*?) for a part at the current position.
 //
 // For subsequent parts within a rule (partIndex > 0), the rule's own
-// spacingMode applies — there is a flex-space boundary between the
+// spacingMode applies - there is a flex-space boundary between the
 // previous part and this one.
 //
 // For the first part of a nested rule (partIndex === 0, parent exists),
@@ -1376,7 +1376,7 @@ function matchStringPartWithoutWildcard(
 // a flex-space boundary before the rule reference (parent.partIndex > 1
 // means the rule ref was not the first part).  That ancestor's spacing
 // mode controls the separator.  If no ancestor has a preceding
-// flex-space, we've reached the top-level rule — its spacing mode
+// flex-space, we've reached the top-level rule - its spacing mode
 // determines the leading/trailing behavior (all modes except "none"
 // allow leading whitespace at the top level).
 export function leadingSpacingMode(state: MatchState): CompiledSpacingMode {
@@ -1387,7 +1387,7 @@ export function leadingSpacingMode(state: MatchState): CompiledSpacingMode {
     while (parent !== undefined) {
         if (parent.partIndex > 1) {
             // The rule reference had a preceding part in this ancestor
-            // — use this ancestor's spacing mode for the flex-space.
+            // - use this ancestor's spacing mode for the flex-space.
             return parent.spacingMode;
         }
         if (parent.parent === undefined) {
@@ -1419,7 +1419,7 @@ function buildStringPartRegExpStr(
     const regexpSegments: string[] = [escaped[0]];
     for (let i = 1; i < escaped.length; i++) {
         // In "none" mode flex-space positions must match exactly zero
-        // characters — tokens are directly adjacent.  Any literal spaces
+        // characters - tokens are directly adjacent.  Any literal spaces
         // (e.g. from "\ ") are already part of the segment text and will
         // be matched by the regex itself.
         const sep =
@@ -1643,6 +1643,69 @@ function matchVarStringPart(state: MatchState, part: VarStringPart) {
     return true;
 }
 
+// Enter a tail `RulesPart` (true tail call).  No parent frame is
+// pushed - `state.parent` keeps pointing at whatever ancestor frame
+// was already current.  When the selected member finishes, finalize
+// pops straight to that ancestor with the member's value/valueIds in
+// place.
+//
+// Structural contract (enforced by `validateGrammar` and asserted
+// here): `tailCall` requires `rules.length >= 2`, the part is the
+// last in its parent's `parts`, the parent has no value of its own,
+// and `repeat`/`optional`/`variable` are all forbidden.  So there is
+// nothing left in the parent for a parent frame to resume to, no
+// value to synthesize at parent finalize, and no captured wrapper
+// variable to bind.  The contract also requires every member's
+// `spacingMode` to equal the parent's - `forkMatchState` (used to
+// snapshot the alternation base) doesn't capture `spacingMode` per
+// member, so disagreement here would silently corrupt state.
+//
+// Scope: do NOT reset `state.valueIds` - the child's bindings cons
+// onto the parent's persistent linked list, so member value-exprs
+// resolve prefix-bound canonicals naturally through `createValue`.
+// Backtracking across sibling alts comes for free because
+// `pushAlternation` captures the alternation base via
+// `forkMatchState`, which snapshots `valueIds` (see
+// `captureSnapshot`) before any member binds - abandoned branches
+// are automatically discarded on restore.
+function enterTailRulesPart(state: MatchState, part: RulesPart): void {
+    const rules = part.rules;
+    // Defensive: validateGrammar should have caught any contract
+    // violation upstream, but a misbehaving caller / future change
+    // could still hand us a malformed tail part.  The assertions are
+    // cheap and catch problems at the offending site rather than
+    // letting state corruption surface as a confusing match failure.
+    if (rules.length < 2) {
+        throw new Error(
+            `Internal: tail RulesPart requires rules.length >= 2 (got ${rules.length})`,
+        );
+    }
+    if (part.repeat || part.optional || part.variable !== undefined) {
+        throw new Error(
+            "Internal: tail RulesPart cannot have repeat/optional/variable",
+        );
+    }
+    if (rules[0].spacingMode !== state.spacingMode) {
+        throw new Error(
+            "Internal: tail RulesPart member spacingMode must match parent's",
+        );
+    }
+
+    state.name = getNestedStateName(state, part, 0);
+    state.parts = rules[0].parts;
+    state.value = rules[0].value;
+    state.partIndex = 0;
+    state.suppressOptionalFork = undefined;
+    // state.spacingMode unchanged - contract guarantees member matches.
+
+    // `forkMatchState` snapshots `valueIds` (and every other field) at
+    // this fork point; restoring on backtrack rewinds anything an
+    // abandoned member added to the chain.
+    const base = forkMatchState(state);
+    const namePrefix = part.name ? `<${part.name}>` : getStateName(state);
+    pushAlternation(state, base, rules, namePrefix);
+}
+
 export function matchState(state: MatchState, request: string) {
     while (true) {
         const { parts, partIndex } = state;
@@ -1657,7 +1720,7 @@ export function matchState(state: MatchState, request: string) {
             // parent still has parts remaining.  If the parent is also
             // exhausted, skip the check here: the loop will call
             // finalizeNestedRule again and the check will fire once we
-            // reach an ancestor that actually has a following part — using
+            // reach an ancestor that actually has a following part - using
             // that ancestor's mode instead of an intermediate pass-through
             // rule's mode.
             if (
@@ -1701,7 +1764,7 @@ export function matchState(state: MatchState, request: string) {
                 // state continues with the optional part).  The take
                 // snapshot is marked `suppressOptionalFork: true` so
                 // that on restore the optional-fork block at the top
-                // of this loop is suppressed — otherwise the same
+                // of this loop is suppressed - otherwise the same
                 // optional part would re-fork and we would push
                 // another take frame in an infinite loop.  The flag
                 // is consumed by the local capture above on the next
@@ -1740,46 +1803,8 @@ export function matchState(state: MatchState, request: string) {
                 const rules = part.rules;
                 debugMatch(state, `expanding ${rules.length} rules`);
 
-                if (part.tail) {
-                    // Tail RulesPart: true tail call.  No parent frame
-                    // is pushed — `state.parent` keeps pointing at
-                    // whatever ancestor frame was already current.
-                    // When the selected member finishes, finalize pops
-                    // straight to that ancestor with the member's
-                    // value/valueIds in place.
-                    //
-                    // Structural contract (validated upstream): this
-                    // is the last part of the parent rule, the parent
-                    // has no value of its own, and `repeat`/`optional`/
-                    // `variable` are all forbidden — so there is
-                    // nothing left in the parent for a parent frame to
-                    // resume to, no value to synthesize at parent
-                    // finalize, and no captured wrapper variable to
-                    // bind.
-                    //
-                    // Scope: do NOT reset `state.valueIds` — the
-                    // child's bindings cons onto the parent's
-                    // persistent linked list, so member value-exprs
-                    // resolve prefix-bound canonicals naturally
-                    // through `createValue`.  Backtracking across
-                    // sibling alts comes for free because the
-                    // alternation cursor frame snapshots `valueIds`
-                    // before any member binds, automatically
-                    // discarding anything an abandoned branch added.
-                    state.name = getNestedStateName(state, part, 0);
-                    state.parts = rules[0].parts;
-                    state.value = rules[0].value;
-                    state.partIndex = 0;
-                    state.suppressOptionalFork = undefined;
-                    state.spacingMode = rules[0].spacingMode;
-
-                    if (rules.length > 1) {
-                        const base = forkMatchState(state);
-                        const namePrefix = part.name
-                            ? `<${part.name}>`
-                            : getStateName(state);
-                        pushAlternation(state, base, rules, namePrefix);
-                    }
+                if (part.tailCall) {
+                    enterTailRulesPart(state, part);
                     // continue the loop (without incrementing partIndex)
                     continue;
                 }
@@ -1817,7 +1842,7 @@ export function matchState(state: MatchState, request: string) {
 
                 // Push a single compressed alternation cursor frame
                 // covering rules 1..N-1.  The shared `base` is the
-                // live state right after rule 0 setup — every
+                // live state right after rule 0 setup - every
                 // alternative starts from the same fork-point
                 // context with only the four per-rule fields
                 // overlaid (read directly from `rules[i]` on
@@ -1845,7 +1870,7 @@ export function matchState(state: MatchState, request: string) {
 // Build the initial live MatchState for `matchGrammar` /
 // `matchGrammarCompletion`.  The returned state is initialized for
 // rule 0 (the live DFS path); rules 1..N-1 are pre-pushed onto
-// its `backtracks` chain as `"alternation"`-origin frames —
+// its `backtracks` chain as `"alternation"`-origin frames -
 // the same mechanism a nested-rule alternation uses.  Pushed in
 // reverse order so rule 1 is on top of the stack and gets
 // restored first by `tryNextBacktrack`, matching source
@@ -1883,7 +1908,7 @@ export function initialMatchState(
     };
     // Top-level alternation: push a single compressed cursor frame
     // covering rules 1..N-1.  The cursor advances forward (rule 1
-    // first, then rule 2, ...) — same source order as the prior
+    // first, then rule 2, ...) - same source order as the prior
     // reverse-push of one frame per rule.  `base` is rule-0's
     // initial state; per-rule `parts/value/spacingMode` are read
     // from `rules[i]` directly on restore, and the debug name is

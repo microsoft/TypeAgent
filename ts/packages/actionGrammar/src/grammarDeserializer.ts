@@ -11,6 +11,7 @@ import {
     PhraseSetPart,
     RulesPart,
 } from "./grammarTypes.js";
+import { validateTailRulesParts } from "./grammarOptimizer.js";
 
 export function grammarFromJson(json: GrammarJson): Grammar {
     const start = json[0];
@@ -48,7 +49,7 @@ export function grammarFromJson(json: GrammarJson): Grammar {
                     optional: p.optional,
                 };
                 if (p.repeat) part.repeat = true;
-                if (p.tail) part.tail = true;
+                if (p.tailCall) part.tailCall = true;
                 return part;
             }
             case "phraseSet": {
@@ -65,4 +66,21 @@ export function grammarFromJson(json: GrammarJson): Grammar {
     return {
         rules: start.map((r) => grammarRuleFromJson(r, json)),
     };
+}
+
+/**
+ * Deserialize a `GrammarJson` and validate the structural contract on
+ * any tail `RulesPart` it carries.  Untrusted JSON inputs (cached
+ * grammars, hand-crafted test fixtures) should prefer this entry
+ * point so contract violations surface as a clear `Error` at load
+ * time rather than as confusing match failures or NFA-compile
+ * crashes downstream.
+ *
+ * Validation is a single recursive walk; cost is dominated by tree
+ * size, not the presence of tail parts.
+ */
+export function grammarFromJsonValidated(json: GrammarJson): Grammar {
+    const grammar = grammarFromJson(json);
+    validateTailRulesParts(grammar.rules);
+    return grammar;
 }

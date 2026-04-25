@@ -48,7 +48,7 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
                     optional: p.optional,
                 };
                 if (p.repeat) part.repeat = true;
-                if (p.tail) part.tail = true;
+                if (p.tailCall) part.tailCall = true;
                 return part;
             }
             case "phraseSet": {

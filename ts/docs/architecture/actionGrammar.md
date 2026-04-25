@@ -541,11 +541,63 @@ below the failing fork still applies. Failure reasons:
   a canonical name bound by the prefix. Nested rule scope is fresh
   in the matcher (entering a `RulesPart` resets `valueIds`), so the
   suffix cannot see prefix bindings — bail out so each member emits
-  at the wrapper's level instead.
+  at the wrapper's level instead. (Recoverable by enabling
+  `tailFactoring`; see below.)
+- **Mixed spacing.** Members disagree on `spacingMode`. The wrapper
+  rule has a single `spacingMode` that governs the prefix and the
+  prefix/suffix seam, and there is no value the wrapper can carry
+  that preserves every member's original prefix boundary semantics.
+  Factoring is refused at this fork.
 
 The earlier "binding shadow" guard is no longer needed: opaque
 canonicals allocated globally per `factorRules` call cannot
 collide with each other.
+
+#### Pass 2b - Tail-call factoring (opt-in, NFA-incompatible)
+
+Some forks cannot be factored as a non-tail wrapper because each
+member's value expression references a prefix-bound canonical - for
+example the `playerSchema` shape
+
+```
+play <Inner> by   <Artist>     -> { kind: "by",   trackName, artist }
+play <Inner> from album <Album> -> { kind: "from", trackName, albumName }
+```
+
+where `trackName` is bound in the shared `play <Inner>` prefix and
+read by both members' value expressions. With Pass 2's non-tail
+wrapper this fork bails out (`cross-scope-ref`).
+
+Setting `optimizations.tailFactoring: true` (which requires
+`factorCommonPrefixes: true`) lets the factorer emit the suffix
+`RulesPart` as a **tail call** - a structurally-marked `RulesPart`
+the matcher enters without pushing a parent frame. The selected
+member's value flows up directly as the wrapper rule's value, and
+member value-exprs see the prefix's bindings through the inherited
+`valueIds` chain. No `__opt_factor_<n>` wrapper variable is
+synthesized.
+
+Tail wrappers carry a strict structural contract (validated by
+`validateTailRulesParts`):
+
+- This part is the **last** entry in its parent rule's `parts`.
+- The parent rule has `value === undefined`.
+- `repeat` / `optional` / `variable` are all forbidden.
+- `rules.length >= 2` (a single-member tail wrapper is equivalent
+  to inlining and the factorer never emits one).
+- Every member's `spacingMode` matches the parent rule's.
+
+Tail wrappers are observably identical to the unfactored shape and
+also save one matcher frame push per fork. When `tailFactoring` is
+on, the factorer prefers tail wherever the contract is structurally
+satisfiable, falling back to the non-tail wrapper only when tail is
+unavailable (today: forks that hit `mixed-spacing`).
+
+**NFA compatibility.** Tail RulesParts are understood only by the
+NFA-interpreter matcher (`grammarMatcher.ts`). The NFA compiler /
+DFA path (`nfaCompiler.ts`) explicitly throws on encountering one,
+so consumers that route through the NFA/DFA path must leave
+`tailFactoring` off.
 
 **No fixed-point loop.** Factoring is applied once per group of
 alternatives — the trie's grouping converges in a single pass and
