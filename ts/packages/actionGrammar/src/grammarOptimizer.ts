@@ -82,14 +82,21 @@ export type GrammarOptimizationOptions = {
  * want every safe pass on without naming each flag individually - future
  * passes added here will be picked up automatically.
  *
- * Caveat: enabling `factorCommonPrefixes` destroys the 1:1
- * correspondence between top-level rule indices and the original
- * source.  Callers that need that mapping for diagnostics must capture
- * it before optimization runs.
+ * Caveats:
+ *   - Enabling `factorCommonPrefixes` destroys the 1:1 correspondence
+ *     between top-level rule indices and the original source.  Callers
+ *     that need that mapping for diagnostics must capture it before
+ *     optimization runs.
+ *   - Enabling `tailFactoring` produces `RulesPart.tailCall` nodes that
+ *     only the AST-walking matcher (`grammarMatcher.ts`) understands.
+ *     Callers that route the compiled grammar through the NFA compiler
+ *     / DFA path must not use this preset (or must override
+ *     `tailFactoring: false`).
  */
 export const recommendedOptimizations: GrammarOptimizationOptions = {
     inlineSingleAlternatives: true,
     factorCommonPrefixes: true,
+    tailFactoring: true,
 };
 
 /**
