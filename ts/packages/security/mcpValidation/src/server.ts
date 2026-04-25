@@ -36,6 +36,11 @@ import {
     type AgentPlan,
     type OrgPolicy,
     type Tool,
+    type ValidationError,
+    type ValidationWarning,
+    type PolicyViolation,
+    type TraceEntry,
+    type BindingDeclaration,
 } from "validation";
 import {
     type PlanState,
@@ -194,11 +199,11 @@ export function createValidationServer(options?: { policy?: OrgPolicy }): {
             const result = validatePlan(parsed);
             if (!result.valid) {
                 const errorLines = result.errors.map(
-                    (e) =>
+                    (e: ValidationError) =>
                         `[${e.phase}]${e.stepIndex !== undefined ? ` step ${e.stepIndex}:` : ""} ${e.message}`,
                 );
                 const warningLines = result.warnings.map(
-                    (w) => `[${w.phase}] ${w.message}`,
+                    (w: ValidationWarning) => `[${w.phase}] ${w.message}`,
                 );
                 return errorResult(
                     [
@@ -230,7 +235,7 @@ export function createValidationServer(options?: { policy?: OrgPolicy }): {
                 if (!policyResult.valid) {
                     const policyErrors = policyResult.errors
                         .map(
-                            (e) =>
+                            (e: PolicyViolation) =>
                                 `[${e.rule}]${e.stepIndex !== undefined ? ` step ${e.stepIndex}:` : ""} ${e.message}`,
                         )
                         .join("\n");
@@ -248,7 +253,7 @@ export function createValidationServer(options?: { policy?: OrgPolicy }): {
 
             const warnings =
                 result.warnings.length > 0
-                    ? `\nWarnings:\n${result.warnings.map((w) => `  [${w.phase}] ${w.message}`).join("\n")}`
+                    ? `\nWarnings:\n${result.warnings.map((w: ValidationWarning) => `  [${w.phase}] ${w.message}`).join("\n")}`
                     : "";
 
             return textResult(
@@ -256,7 +261,7 @@ export function createValidationServer(options?: { policy?: OrgPolicy }): {
                     "Plan validated and activated.",
                     `  Steps: ${state.flatSteps.length}`,
                     `  Tools: ${[...new Set(state.flatSteps.map((s) => s.tool))].join(", ")}`,
-                    `  Bindings: ${(parsed.bindings ?? []).map((b) => b.name).join(", ") || "(none)"}`,
+                    `  Bindings: ${(parsed.bindings ?? []).map((b: BindingDeclaration) => b.name).join(", ") || "(none)"}`,
                     "",
                     "Proceed by calling validated_* tools in plan order.",
                     ...(state.policy?.container?.enabled
@@ -354,7 +359,7 @@ export function createValidationServer(options?: { policy?: OrgPolicy }): {
                             ? new Date(state.trace.completedAt).toISOString()
                             : null,
                         entryCount: state.trace.entries.length,
-                        entries: state.trace.entries.map((e) => ({
+                        entries: state.trace.entries.map((e: TraceEntry) => ({
                             index: e.index,
                             stepIndex: e.stepIndex,
                             tool: e.tool,
@@ -623,7 +628,8 @@ export function createValidationServer(options?: { policy?: OrgPolicy }): {
 
             if (!evalResult.allPassed) {
                 const failCount = evalResult.results.filter(
-                    (r) => r.result.status === "fail",
+                    (r: { result: { status: string } }) =>
+                        r.result.status === "fail",
                 ).length;
                 lines.push(`  ${failCount} postcondition(s) FAILED.`);
             } else {

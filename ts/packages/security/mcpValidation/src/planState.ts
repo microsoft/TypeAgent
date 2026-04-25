@@ -122,10 +122,12 @@ export function finalizeTrace(state: PlanState): void {
     state.trace.metrics = {
         totalSteps: state.trace.entries.length,
         durationMs: state.trace.completedAt - state.trace.startedAt,
-        successCount: state.trace.entries.filter((e) => e.status === "success")
-            .length,
-        failedCount: state.trace.entries.filter((e) => e.status === "failed")
-            .length,
+        successCount: state.trace.entries.filter(
+            (e: TraceEntry) => e.status === "success",
+        ).length,
+        failedCount: state.trace.entries.filter(
+            (e: TraceEntry) => e.status === "failed",
+        ).length,
     };
 }
 

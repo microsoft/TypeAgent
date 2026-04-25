@@ -40,6 +40,7 @@ import {
     type PathPolicy,
     type NetworkPolicy,
     type ContainerPolicy,
+    type DerivedVolume,
     type Predicate,
     type EvalContext,
 } from "validation";
@@ -2146,7 +2147,9 @@ async function testContainerSandbox(): Promise<boolean> {
         const volumes = deriveContainerVolumes(policy, "/home/user/project");
         // workdir (/home/user/project) mounted rw + /opt/output mounted rw
         // /home/user/project read pattern skipped (already mounted as workdir)
-        const writeVol = volumes.find((v) => v.hostPath.includes("output"));
+        const writeVol = volumes.find((v: DerivedVolume) =>
+            v.hostPath.includes("output"),
+        );
         assert(writeVol !== undefined, "expected output write mount");
         assert(
             writeVol!.readonly === false,
@@ -2159,7 +2162,9 @@ async function testContainerSandbox(): Promise<boolean> {
             allowedReadPatterns: ["/data/shared/**"],
         };
         const volumes = deriveContainerVolumes(policy, "/home/user/project");
-        const readVol = volumes.find((v) => v.hostPath.includes("data"));
+        const readVol = volumes.find((v: DerivedVolume) =>
+            v.hostPath.includes("data"),
+        );
         assert(readVol !== undefined, "expected data read mount");
         assert(readVol!.readonly === true, "read mount should be read-only");
     });
@@ -2183,7 +2188,9 @@ async function testContainerSandbox(): Promise<boolean> {
             allowedReadPatterns: ["/home/user/project/src/**"], // same as write
         };
         const volumes = deriveContainerVolumes(policy, "/home/user/project");
-        const srcVolumes = volumes.filter((v) => v.hostPath.includes("src"));
+        const srcVolumes = volumes.filter((v: DerivedVolume) =>
+            v.hostPath.includes("src"),
+        );
         assert(
             srcVolumes.length <= 1,
             `expected at most 1 src volume, got ${srcVolumes.length}`,
