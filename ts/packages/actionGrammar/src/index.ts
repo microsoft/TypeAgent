@@ -26,17 +26,21 @@ export type {
 // Writer / formatter
 export { writeGrammarRules } from "./grammarRuleWriter.js";
 
-export { matchGrammar, GrammarMatchResult } from "./grammarMatcher.js";
-export { needsSeparatorInAutoMode } from "./grammarMatcher.js";
+export { matchGrammar, needsSeparatorInAutoMode } from "./grammarMatcher.js";
+export type {
+    GrammarMatchResult,
+    GrammarMatchOptions,
+} from "./grammarMatcher.js";
 
 export {
     matchGrammarCompletion,
-    GrammarCompletionResult,
     spacingModeToSeparatorMode,
 } from "./grammarCompletion.js";
+export type { GrammarCompletionResult } from "./grammarCompletion.js";
 export type {
     AfterWildcard,
     GrammarCompletionGroup,
+    GrammarCompletionOptions,
     GrammarCompletionProperty,
 } from "./grammarCompletion.js";
 

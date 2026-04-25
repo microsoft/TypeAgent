@@ -662,6 +662,84 @@ text `"mx"`. This applies equally to forward and backward directions.
    keyword word plus a partial match of the second, and offers `"by"`.
    The function honors `spacingMode` for inter-word separator matching.
 
+**Per-axis exploration policies (`GrammarMatchOptions` / `GrammarCompletionOptions`):**
+
+The matcher and completion both accept three independent
+policy options that control how each fork point in the grammar
+is explored:
+
+- `wildcardPolicy: "exhaustive" | "shortest"` — wildcard capture
+  length. `"exhaustive"` (default) emits a result for every viable
+  capture length; `"shortest"` commits to the shortest viable
+  capture along each path.
+- `optionalPolicy: "exhaustive" | "preferTake" | "preferSkip"` —
+  optional groups `(...)?`. Non-`exhaustive` values pick a side
+  first and skip enumerating the other when it succeeds (regex
+  `?` vs. `??`).
+- `repeatPolicy: "exhaustive" | "greedy" | "nonGreedy"` —
+  repetition `(...)*` / `(...)+` (regex `+` vs. `+?`).
+
+All three default to `"exhaustive"` so callers receive every valid
+parse. Non-exhaustive values are first-success commitments along
+that axis only; the other axes are still explored normally.
+
+**Why `wildcardPolicy: "shortest"` matters for completion.** By
+default, completion enumerates every wildcard-length alternative
+the matcher accumulates, surfacing candidates for every viable
+wildcard boundary. With ambiguous grammars this can produce
+spurious completions: for `play <name> by <artist>` and input
+`"play hello by world"`, the longest-wildcard alternative captures
+`name="hello by world"` and emits `"by"` as a fresh completion at
+the end of input — even though `"by"` is already the literal
+terminator matched at a shorter wildcard length.
+
+Under `wildcardPolicy: "shortest"`, completion stops enumerating
+wildcard alternatives for a state as soon as one alternative
+reaches end-of-meaningful-input. Two sub-cases qualify:
+
+1. **Clean finalize** — `matchState`/`finalizeState` consumed every
+   non-separator character (the exact-match success path, the
+   partial-clean path with only trailing separators, or a pending
+   end-of-rule wildcard that captured the tail).
+2. **Dirty partial with separator-only pending wildcard** — the
+   pending wildcard's start is at-or-past the last non-separator
+   character (e.g. `"play This Train by "` — `name="This Train"`,
+   literal `"by"` matched, `<artist>` pending at the trailing space).
+   `getWildcardStr` rejects the empty capture so `finalizeState`
+   returns false, but the rule has already reached end-of-input and
+   emitted a useful property completion. Extending the previous
+   wildcard further would only re-emit the just-matched literal as
+   a spurious completion.
+
+This is the policy the cache layer uses for grammar-driven
+completion (`grammarStore.ts`) — only the leftmost-shortest
+interpretation of each rule is needed to drive prefix and
+`afterWildcard` detection. The completion side honors the option
+with the broader end-of-input criterion above because completion
+emits useful candidates from partial attempts (not only from full
+successes as the matcher does).
+
+**Implementation: explicit-stack DFS with a unified backtrack chain.**
+
+Both `matchGrammar` and `matchGrammarCompletion` drive a single
+mutable `MatchState` that walks parts left-to-right; whenever a
+fork point is encountered (optional skip-vs-take, alternation,
+repeat continue-vs-stop, or wildcard length refinement) all-but-
+one branch are pushed onto `state.backtracks` — a LIFO
+linked list of `Backtrack` snapshots, each tagged with a
+`BacktrackOrigin` (`"wildcard" | "optional" | "alternation" |
+"repeat"`). `tryNextBacktrack` pops the most-recently-pushed
+frame (rightmost / deepest in DFS order) and restores it via
+`Object.assign`, replacing the live state in place. This is the
+explicit-stack DFS of the parse forest: left-to-right match,
+right-to-left (LIFO) backtrack.
+
+After every successful parse, `suppressBacktracksAfterSuccess`
+walks the entire chain and drops frames whose origin axis is
+non-exhaustive — for example, with `wildcardPolicy: "shortest"`
+it removes every `"wildcard"`-origin frame, including those owned
+by sibling alternation states deeper in the chain.
+
 **Why direction matters — reconsidering the last matched part:**
 
 The `direction` parameter (`"forward"` or `"backward"`) is provided by

@@ -393,11 +393,39 @@ export class GrammarStoreImpl implements GrammarStore {
                 }
             } else {
                 // simple grammar-based completions
+                //
+                // `wildcardPolicy: "shortest"` opts out of
+                // enumerating every wildcard-length alternative.
+                // Once any alternative has consumed all non-separator
+                // input (clean finalize, or a pending wildcard at a
+                // separator-only tail), longer-wildcard alternatives
+                // would surface the same completion candidates with
+                // strictly less informative prefix boundaries — and
+                // can re-emit literal terminators already matched at
+                // shorter wildcard lengths as spurious completions.
+                //
+                // User-visible behavior delta vs the prior exhaustive
+                // default: for ambiguous inputs that admit both a
+                // short-wildcard parse (with a downstream literal
+                // matched) and a long-wildcard parse (literal absorbed
+                // into the wildcard), the completion now anchors at
+                // the shorter parse and surfaces property-completion
+                // candidates for the unmatched downstream wildcard,
+                // instead of repeating the already-matched literal
+                // as a completion.  E.g. for grammar
+                // `play $(name) by $(artist)` and input
+                // "play hello by world", the completion now anchors
+                // at P=13 (after "by") and offers an `artist`
+                // property completion, rather than P=19 with "by"
+                // re-emitted as a literal completion.  See
+                // grammarCompletionShortestWildcard.spec.ts for the
+                // full behavioral matrix.
                 const partial = matchGrammarCompletion(
                     entry.grammar,
                     input,
                     matchedPrefixLength,
                     direction,
+                    { wildcardPolicy: "shortest" },
                 );
                 const partialPrefixLength = partial.matchedPrefixLength ?? 0;
                 if (partialPrefixLength !== matchedPrefixLength) {

@@ -9,6 +9,7 @@ import escapeMatch from "regexp.escape";
 import {
     Grammar,
     GrammarPart,
+    GrammarRule,
     RulesPart,
     StringPart,
     StringPartRegExpEntry,
@@ -179,7 +180,184 @@ export type PendingWildcard = {
     readonly valueId: number | undefined;
 };
 
-export type MatchState = {
+// Per-axis exploration policies.  Each policy controls how the
+// matcher resolves an ambiguity along a single axis: what to do
+// when more than one parse is viable at a given fork point.
+//
+// All three default to `"exhaustive"` so callers receive every
+// valid parse.  The non-default values are first-success
+// commitments — the matcher picks one branch and abandons the
+// other(s) without enumerating them.
+
+/**
+ * Wildcard capture-length policy.
+ *
+ * Wildcards (`<name>`, `$(name)`) are inherently ambiguous: a
+ * wildcard followed by a literal can absorb any prefix of the
+ * remaining input that still leaves the literal matchable.  This
+ * policy decides whether to enumerate every viable length or
+ * commit to the shortest.
+ *
+ *   - `"exhaustive"` (default): emit a separate result for every
+ *     viable wildcard capture length.  Callers rank the results
+ *     (e.g. by `wildcardCharCount` or `matchedValueCount`).
+ *   - `"shortest"`: each traversal path commits to the shortest
+ *     viable wildcard capture; longer-wildcard alternatives for
+ *     that path are not enumerated.  Other axes (alternation,
+ *     optional, repeat) are still explored normally — only the
+ *     wildcard-length axis is collapsed.
+ */
+export type WildcardPolicy = "exhaustive" | "shortest";
+
+/**
+ * Optional-group take-vs-skip policy for `(...)?`.
+ *
+ *   - `"exhaustive"` (default): try both taking and skipping the
+ *     optional group; return all parses.
+ *   - `"preferTake"`: try take first; if it succeeds, do not
+ *     enumerate the skip alternative.  Equivalent to regex `?`.
+ *   - `"preferSkip"`: try skip first; if it succeeds, do not
+ *     enumerate the take alternative.  Equivalent to regex `??`.
+ */
+export type OptionalPolicy = "exhaustive" | "preferTake" | "preferSkip";
+
+/**
+ * Repetition-count policy for `(...)*` / `(...)+`.
+ *
+ *   - `"exhaustive"` (default): return all valid repetition counts.
+ *   - `"greedy"`: take the longest match first; if a parse
+ *     succeeds at that count, do not enumerate shorter counts.
+ *     Equivalent to regex `+`.
+ *   - `"nonGreedy"`: take the shortest valid match first; if a
+ *     parse succeeds at that count, do not enumerate longer
+ *     counts.  Equivalent to regex `+?`.
+ */
+export type RepeatPolicy = "exhaustive" | "greedy" | "nonGreedy";
+
+export type GrammarMatchOptions = {
+    /** See {@link WildcardPolicy}.  Defaults to `"exhaustive"`. */
+    wildcardPolicy?: WildcardPolicy;
+
+    /** See {@link OptionalPolicy}.  Defaults to `"exhaustive"`. */
+    optionalPolicy?: OptionalPolicy;
+
+    /** See {@link RepeatPolicy}.  Defaults to `"exhaustive"`. */
+    repeatPolicy?: RepeatPolicy;
+};
+
+// Origin tag carried on each Backtrack frame.  Used by
+// `suppressBacktracksAfterSuccess` to apply per-axis policy
+// (`wildcardPolicy` / `optionalPolicy` / `repeatPolicy`) when
+// pruning unexplored siblings after a successful parse.  The tag
+// does NOT affect drain order — that is purely LIFO push order.
+//
+// `"wildcard"` frames are pushed by `captureWildcard` to enable
+// extending a wildcard capture to a strictly longer length.
+// `"optional"`, `"alternation"`, and `"repeat"` frames are pushed
+// at structural fork points (skip-vs-take, alternation rules,
+// repeat continue-vs-stop).
+//
+// All four origins live on the SAME LIFO chain so a single drain
+// loop services every kind of backtrack uniformly.  Within a
+// single rule, a wildcard captured at part i lands BELOW any
+// frames pushed by parts > i, so DFS naturally exhausts (or
+// abandons) downstream alternatives before reconsidering the
+// upstream wildcard length.
+export type BacktrackOrigin =
+    | "wildcard"
+    | "optional"
+    | "alternation"
+    | "repeat";
+
+// Persistent linked-list of unexplored DFS branches (most recent
+// push at head).  Each frame snapshots a sibling parse path or a
+// wildcard refinement point.  Restoring a frame replaces the live
+// state via `Object.assign` (see `tryNextBacktrack`).
+//
+// This IS the explicit DFS stack: `matchState` walks parts
+// left-to-right mutating the live state in place; whenever a fork
+// is encountered, all-but-one branch are pushed here and
+// `tryNextBacktrack` pops them in right-to-left (LIFO) order
+// to backtrack.  Per-fork sibling ORDER (which branch goes live
+// vs. onto the stack) is policy-controlled (see
+// `optionalPolicy` / `repeatPolicy`).
+//
+// Single-owner invariant: only the live state may own frames;
+// `PendingMatchState` omits this field.
+//
+// Discriminated union by `origin`:
+//   - `"alternation"` frames are COMPRESSED: a single cursor frame
+//     represents all N-1 sibling alternatives at one fork point.
+//     Restoring the cursor overlays a per-rule override
+//     (`name/parts/value/spacingMode`) onto a shared `base`
+//     snapshot and advances `cursor`; the frame stays at the head
+//     of the chain until all alternatives have been restored, then
+//     unlinks.
+//   - The other three origins (`wildcard`/`optional`/`repeat`)
+//     each carry a full `SnapshotState` and unlink on restore.
+// See `pushBacktrack` / `pushAlternation` / `tryNextBacktrack`.
+type SingleBacktrack = {
+    readonly snapshot: SnapshotState;
+    readonly origin: "wildcard" | "optional" | "repeat";
+    readonly prev: Backtrack | undefined;
+};
+
+// Per-alternative state at one alternation fork point is fully
+// derivable from the rule itself (`parts`/`value`/`spacingMode`)
+// plus a debug `name` — nothing else differs across siblings.
+// The cursor frame stores a direct reference to the existing
+// `GrammarRule[]` (no copy) and a single `namePrefix` string;
+// `tryNextBacktrack` builds `namePrefix + "[" + cursor + "]"` and
+// reads `rules[cursor].parts/value/spacingMode` lazily on restore.
+// Eliminates per-alternative allocation entirely — N-way alternation
+// pushes 1 frame + 1 base snapshot regardless of N.
+type AlternationBacktrack = {
+    readonly origin: "alternation";
+    readonly base: SnapshotState;
+    readonly rules: ReadonlyArray<GrammarRule>;
+    readonly namePrefix: string; // debug name = `${namePrefix}[${cursor}]`
+    // Mutable cursor advanced by `tryNextBacktrack` on each restore;
+    // single-owner contract on the chain guarantees no other state
+    // observes intermediate values.  Starts at 1 (rule 0 is the
+    // live alternative); the frame unlinks once `cursor` reaches
+    // `rules.length`.
+    cursor: number;
+    readonly prev: Backtrack | undefined;
+};
+
+type Backtrack = SingleBacktrack | AlternationBacktrack;
+
+// Strict variant of `PendingMatchState` used as the snapshot payload
+// inside `Backtrack`.  The `-?` mapped modifier forces every
+// optional field to be a required own property so that
+// `Object.assign` in `tryNextBacktrack` reliably resets fields
+// that may have been assigned AFTER the snapshot was taken (e.g.
+// `values` after the captured wildcard is committed, or `parent`
+// after entering a nested rule).
+//
+// `captureSnapshot` returns this type, so adding a new field to
+// `PendingMatchState` without listing it in `captureSnapshot` is a
+// compile error.
+//
+// Audit points when adding a new MatchState field:
+//   1. `captureSnapshot` (this file) — must list the new field;
+//      this mapped type makes omitting it a compile error.
+//   2. `wildcardFrameSnapshot.spec.ts` — extend coverage if the
+//      field can be assigned AFTER a wildcard frame is pushed.
+type SnapshotState = { [K in keyof PendingMatchState]-?: PendingMatchState[K] };
+
+// Snapshot shape used as the payload of `Backtrack` frames
+// and as the return type of `forkMatchState` / `captureSnapshot`.
+// This is the base shape of a match state; the live `MatchState`
+// extends it with the mutating `backtracks` chain plus the
+// per-axis policy fields.
+//
+// Single-owner backtrack-chain invariant is enforced at the type
+// level: `PendingMatchState` has no `backtracks` field, so
+// snapshots cannot smuggle a parallel chain into a restored state.
+// Use `forkMatchState` (returns `SnapshotState`) at every push
+// site.
+export type PendingMatchState = {
     // Current context
     name: string; // For debugging
     parts: GrammarPart[];
@@ -194,7 +372,14 @@ export type MatchState = {
 
     nestedLevel: number; // for debugging
 
-    inRepeat?: boolean | undefined; // true when re-entering a repeat group after a successful match
+    // Single-use suppression flag for the optional-fork block in
+    // `matchState`.  Set on snapshots whose restore must skip the
+    // optional take/skip fork for the part at `partIndex` because
+    // the take/skip decision has already been made by the snapshot
+    // creator (repeat-continue re-entry, or a `preferSkip` take
+    // frame).  `matchState` clears it immediately after the fork
+    // block, so the flag never influences a subsequent part.
+    suppressOptionalFork?: boolean | undefined;
 
     spacingMode: CompiledSpacingMode; // active spacing mode for this rule
 
@@ -228,6 +413,291 @@ export type MatchState = {
           }
         | undefined;
 };
+
+export type MatchState = PendingMatchState & {
+    // Head of the linked-list stack of resumable backtrack frames
+    // (most recent first).  See `Backtrack` above.  Single
+    // chain covers both wildcard refinement (origin "wildcard")
+    // and structural alternatives (origin "optional" |
+    // "alternation" | "repeat").
+    //
+    // Mutation contract: external callers that clone a MatchState
+    // and expect it to remain stable across later matcher operations
+    // MUST drop this field on the clone.  Use `cloneMatchState`
+    // rather than spreading directly to enforce this at one site.
+    //
+    // Single-owner invariant: only the live state currently being
+    // driven by `matchGrammar`/`matchGrammarCompletion` may own
+    // frames.  States queued on a `PendingMatchState[]` work-list
+    // statically cannot — enforced by the `PendingMatchState` type
+    // (which omits this field).
+    backtracks?: Backtrack | undefined;
+
+    // Per-axis policies.  Set once at `initialMatchState` time and
+    // never changed.  Deliberately NOT in `PendingMatchState` /
+    // `SnapshotState` — `Object.assign` of a snapshot won't overwrite
+    // them, so they persist across `tryNextBacktrack` restores.
+    wildcardPolicy: WildcardPolicy;
+    optionalPolicy: OptionalPolicy;
+    repeatPolicy: RepeatPolicy;
+};
+
+// Explicit per-field copy of `state`.  Single source of truth
+// shared by every backtrack-frame push site (`captureWildcard`,
+// optional skip/take, alternation, repeat continue) and by the
+// public `cloneMatchState`.  Returns the strict `SnapshotState`
+// (every field required as an own property) so a missing field is
+// a compile error — the fork/clone helpers widen back to
+// `PendingMatchState`.
+function captureSnapshot(state: MatchState): SnapshotState {
+    return {
+        name: state.name,
+        parts: state.parts,
+        value: state.value,
+        partIndex: state.partIndex,
+        valueIds: state.valueIds,
+        nextValueId: state.nextValueId,
+        values: state.values,
+        parent: state.parent,
+        nestedLevel: state.nestedLevel,
+        suppressOptionalFork: state.suppressOptionalFork,
+        spacingMode: state.spacingMode,
+        index: state.index,
+        pendingWildcard: state.pendingWildcard,
+        lastMatchedPartInfo: state.lastMatchedPartInfo,
+    };
+}
+
+// Clone `state` into an independent MatchState that is safe to
+// retain across later matcher operations on the live state.  The
+// returned clone has no `backtracks` (live-state-only and
+// would be mutated by `tryNextBacktrack`); per-axis policies
+// are carried over (they are runtime constants).
+//
+// The result is typed as `MatchState`: `backtracks` is
+// optional on that type, so the clone is directly usable wherever
+// a MatchState is expected (e.g. read-only inspection, or as a
+// starting point for an independent matcher run).
+//
+// Use this for READ-ONLY views — e.g. the pre-finalize clone in
+// `grammarCompletion` that must survive subsequent matcher
+// mutation of the live state.  For fork sites (optional-skip,
+// nested-rule alternatives, repeat continuation, wildcard
+// extension) use `forkMatchState` instead — that returns a
+// `SnapshotState` with no policies, suitable for restoration via
+// `Object.assign` without disturbing the live state's policies.
+export function cloneMatchState(state: MatchState): MatchState {
+    // Single-allocation clone: drop only `backtracks` (live-state
+    // mutation surface) and keep everything else — including the
+    // three policy fields — by spreading once.
+    const { backtracks: _backtracks, ...rest } = state;
+    return rest;
+}
+
+// Fork a `state` into a sibling that is about to be pushed onto the
+// `backtracks` chain.  The return type omits `backtracks`
+// — only the live state retains ownership of the existing chain.
+// This makes the single-owner invariant a compile-time guarantee:
+// two siblings cannot independently pop the same chain.
+//
+// Behaviorally identical to `captureSnapshot` (and currently just
+// delegates to it).  Kept as a separate name so fork sites
+// (optional skip/take, alternation, repeat continue, wildcard
+// extension) read as "fork a sibling" rather than "snapshot for
+// internal use".  `captureSnapshot` stays private as the shared
+// per-field copy primitive used by `captureWildcard`,
+// `cloneMatchState`, and this function.
+export function forkMatchState(state: MatchState): SnapshotState {
+    return captureSnapshot(state);
+}
+
+// Push a single-snapshot backtrack frame onto the live state's chain.
+//
+// Used for:
+//   - structural forks at degree-2 fan-outs (origin "optional" /
+//     "repeat") — `alternative` is built via `forkMatchState` and
+//     mutated to reflect the alternative branch's choice.
+//   - wildcard refinement (origin "wildcard") — pushed by
+//     `captureWildcard` to enable extending the wildcard.
+//
+// Alternation uses `pushAlternation` instead — see that helper.
+//
+// Single-owner invariant: SnapshotState omits the `backtracks`
+// field, so the snapshot cannot smuggle a parallel chain in.  When
+// `tryNextBacktrack` restores via `Object.assign`, the live
+// state's `backtracks` is preserved (and explicitly advanced
+// to `frame.prev`).
+export function pushBacktrack(
+    state: MatchState,
+    alternative: SnapshotState,
+    origin: SingleBacktrack["origin"],
+) {
+    state.backtracks = {
+        snapshot: alternative,
+        origin,
+        prev: state.backtracks,
+    };
+}
+
+// Push a compressed alternation cursor frame.  Replaces the
+// historical pattern of pushing N-1 individual snapshots at one
+// alternation fork — the live state takes rule 0, and a single
+// cursor frame carries the shared `base` snapshot plus a direct
+// reference to the existing `GrammarRule[]` (no per-alternative
+// copy).  The debug name for `rules[i]` is built lazily as
+// `${namePrefix}[${i}]` inside `tryNextBacktrack`;
+// `parts`/`value`/`spacingMode` are read directly from `rules[i]`.
+//
+// Cursor starts at 1 (rule 0 is the live alternative) and advances
+// forward through `rules.length-1`, restoring the lowest-index
+// alternative first — matching the prior reverse-push order of one
+// frame per rule.  Caller must ensure `rules.length > 1`.
+//
+// `base` MUST be captured AFTER the live state has been set up for
+// rule 0 (the live alternative): every field other than the four
+// per-rule fields is identical across all alternatives at one fork
+// point, so reusing `base` for each restore is sound.  The shared
+// linked-list heads (`values`, `valueIds`, `parent`) are immutable,
+// so multiple restores from the same `base` cannot leak mutations
+// between alternatives.
+function pushAlternation(
+    state: MatchState,
+    base: SnapshotState,
+    rules: ReadonlyArray<GrammarRule>,
+    namePrefix: string,
+) {
+    state.backtracks = {
+        origin: "alternation",
+        base,
+        rules,
+        namePrefix,
+        cursor: 1,
+        prev: state.backtracks,
+    };
+}
+
+// Pop the most-recently-pushed (rightmost / deepest in DFS order)
+// unexplored sibling and restore it onto `state`, mutating in
+// place via `Object.assign`.  Returns true if a frame was
+// restored, false if the chain is empty.
+//
+// This is the backtrack step of the explicit-stack DFS: the live
+// state walks parts left-to-right; when its current path fails
+// (or yields a result that the caller wants more alternatives
+// after), this function rewinds to the most recent unexplored
+// branch and lets matching resume from there.
+//
+// Restoration semantics by origin:
+//   - `wildcard`: the snapshot has `pendingWildcard` set;
+//     re-running matchState extends the wildcard to a longer
+//     capture.
+//   - `optional` / `alternation` / `repeat`: the snapshot is a
+//     sibling parse path at a structural fork.
+//
+// Callers drive enumeration with the pattern:
+//
+//   do {
+//       const matched = matchState(state, request);
+//       // ...process attempt...
+//   } while (tryNextBacktrack(state));
+export function tryNextBacktrack(state: MatchState): boolean {
+    const frame = state.backtracks;
+    if (frame === undefined) {
+        return false;
+    }
+    if (frame.origin === "alternation") {
+        // Cursor frame: restore the shared base, then overlay the
+        // next per-rule fields read directly from `rules[cursor]`.
+        // The frame stays at the head of the chain until all
+        // alternatives have been consumed; new frames pushed during
+        // the restored alternative's matching sit on top of (and
+        // resolve before) this cursor.
+        const i = frame.cursor;
+        const rule = frame.rules[i];
+        Object.assign(state, frame.base);
+        state.name = `${frame.namePrefix}[${i}]`;
+        state.parts = rule.parts;
+        state.value = rule.value;
+        state.spacingMode = rule.spacingMode;
+        frame.cursor = i + 1;
+        if (frame.cursor >= frame.rules.length) {
+            // All alternatives restored — unlink the cursor.
+            state.backtracks = frame.prev;
+        }
+        debugMatch(state, `Restoring local backtrack (alternation)`);
+        return true;
+    }
+    // The snapshot omits `backtracks`, so Object.assign won't
+    // overwrite it — explicitly advance the head pointer to `prev`.
+    Object.assign(state, frame.snapshot);
+    state.backtracks = frame.prev;
+    debugMatch(
+        state,
+        frame.origin === "wildcard"
+            ? `Extending wildcard from frame`
+            : `Restoring local backtrack (${frame.origin})`,
+    );
+    return true;
+}
+
+// After a successful match, drop ALL backtrack frames in the chain
+// whose origin axis is configured to commit on first success —
+// the caller has said it doesn't want extra parses along that
+// axis once one has been found.
+//
+// Per-axis policy mapping:
+//   - origin "wildcard"  + wildcardPolicy === "shortest"
+//   - origin "optional"  + optionalPolicy !== "exhaustive"
+//   - origin "repeat"    + repeatPolicy   !== "exhaustive"
+//   - origin "alternation"                 — always retained
+//
+// Frames with non-suppressed origins are SKIPPED OVER (their own
+// `prev` is preserved through), so suppression walks the entire
+// chain rather than just the trailing prefix.  This is critical
+// for wildcard-axis suppression: a successful match in the live
+// state must invalidate wildcard refinements pushed by SIBLING
+// states (which sit deeper in the chain, below alternation
+// frames), not just the current state's own wildcards.
+export function suppressBacktracksAfterSuccess(state: MatchState) {
+    const wildcardSuppress = state.wildcardPolicy === "shortest";
+    const optionalSuppress = state.optionalPolicy !== "exhaustive";
+    const repeatSuppress = state.repeatPolicy !== "exhaustive";
+    if (!wildcardSuppress && !optionalSuppress && !repeatSuppress) {
+        return;
+    }
+    const isSuppressed = (origin: BacktrackOrigin): boolean => {
+        switch (origin) {
+            case "wildcard":
+                return wildcardSuppress;
+            case "optional":
+                return optionalSuppress;
+            case "repeat":
+                return repeatSuppress;
+            case "alternation":
+                return false;
+        }
+    };
+
+    // Skip suppressed frames at the head.
+    while (
+        state.backtracks !== undefined &&
+        isSuppressed(state.backtracks.origin)
+    ) {
+        state.backtracks = state.backtracks.prev;
+    }
+    // Walk the rest, splicing out any suppressed frame deeper in
+    // the chain.  Mutates `prev` pointers in place — the chain is
+    // single-owner, so no other state shares this view.
+    let kept = state.backtracks;
+    while (kept !== undefined) {
+        let next = kept.prev;
+        while (next !== undefined && isSuppressed(next.origin)) {
+            next = next.prev;
+        }
+        (kept as { prev: Backtrack | undefined }).prev = next;
+        kept = next;
+    }
+}
 
 type GrammarMatchStat = {
     matchedValueCount: number;
@@ -533,7 +1003,6 @@ function captureWildcard(
     request: string,
     wildcardEnd: number,
     newIndex: number,
-    pending: MatchState[] = [],
 ) {
     const { start: wildcardStart, valueId } = state.pendingWildcard!;
     const wildcardStr = getWildcardStr(
@@ -547,8 +1016,14 @@ function captureWildcard(
     }
     state.index = newIndex;
 
-    // Queue up longer wildcard match
-    pending.push({ ...state });
+    // Push a "wildcard"-origin backtrack so we can later resume
+    // scanning for a strictly longer wildcard capture (used by
+    // `tryNextBacktrack` on downstream failure, and on success
+    // in default mode).  The frame is taken BEFORE we clear
+    // pendingWildcard / commit the captured value so that restoring
+    // it puts the state back into the wildcard-scanning dispatch
+    // path with pendingWildcard still set.
+    pushBacktrack(state, captureSnapshot(state), "wildcard");
 
     // Update current state
     state.pendingWildcard = undefined;
@@ -559,7 +1034,7 @@ function captureWildcard(
 }
 
 function addValueId(
-    state: MatchState,
+    state: PendingMatchState,
     name: string | undefined,
     wildcardTypeName?: string,
 ) {
@@ -574,7 +1049,7 @@ function addValueId(
 }
 
 function addValueWithId(
-    state: MatchState,
+    state: PendingMatchState,
     valueId: number,
     matchedValue: MatchedValue,
     wildcard: boolean,
@@ -588,7 +1063,7 @@ function addValueWithId(
 }
 
 function addValue(
-    state: MatchState,
+    state: PendingMatchState,
     name: string | undefined,
     matchedValue: MatchedValue,
 ) {
@@ -672,7 +1147,7 @@ function finalizeMatch(
     state: MatchState,
     request: string,
     results: GrammarMatchResult[],
-) {
+): boolean {
     if (state.valueIds === null) {
         throw new Error(
             "Internal Error: state for finalizeMatch should not have valueIds be null",
@@ -680,7 +1155,7 @@ function finalizeMatch(
     }
 
     if (!finalizeState(state, request)) {
-        return;
+        return false;
     }
     debugMatch(
         state,
@@ -705,11 +1180,11 @@ function finalizeMatch(
         matchResult, // stats
     );
     results.push(matchResult);
+    return true;
 }
 
 export function finalizeNestedRule(
     state: MatchState,
-    pending?: MatchState[],
     partial: boolean = false,
 ) {
     const parent = state.parent;
@@ -759,14 +1234,26 @@ export function finalizeNestedRule(
         state.spacingMode = parent.spacingMode;
 
         // For repeat parts ()*  or )+: after each successful match, queue a state
-        // that tries to match the same group again.  inRepeat suppresses the
-        // optional-skip push so we don't generate duplicate "done" states.
-        if (parent.repeatPartIndex !== undefined && pending !== undefined) {
-            pending.push({
-                ...state,
+        // that tries to match the same group again.  suppressOptionalFork
+        // suppresses the optional-skip push so we don't generate duplicate
+        // "done" states.
+        if (parent.repeatPartIndex !== undefined) {
+            // Build the CONTINUE alternative (re-enter the group).
+            const continueState: SnapshotState = {
+                ...forkMatchState(state),
                 partIndex: parent.repeatPartIndex,
-                inRepeat: true,
-            });
+                suppressOptionalFork: true,
+            };
+            if (state.repeatPolicy === "greedy") {
+                // Live = continue (drill deeper); backtrack = stop
+                // (snapshot of state past the repeat).
+                const stopSnapshot = forkMatchState(state);
+                Object.assign(state, continueState);
+                pushBacktrack(state, stopSnapshot, "repeat");
+            } else {
+                // Default / nonGreedy: live = stop; backtrack = continue.
+                pushBacktrack(state, continueState, "repeat");
+            }
         }
 
         return true;
@@ -780,7 +1267,6 @@ function matchStringPartWithWildcard(
     request: string,
     part: StringPart,
     state: MatchState,
-    pending: MatchState[],
 ) {
     regExp.lastIndex = state.index;
     while (true) {
@@ -798,12 +1284,16 @@ function matchStringPartWithWildcard(
             continue;
         }
 
-        if (captureWildcard(state, request, wildcardEnd, newIndex, pending)) {
+        if (captureWildcard(state, request, wildcardEnd, newIndex)) {
             // If the StringPart has an explicit capture variable, write the
             // joined matched tokens into that named slot.  Otherwise fall
             // through to the implicit-default rule for single-part rules
             // without a value expression — same logic as the non-wildcard
-            // path in matchStringPartWithoutWildcard.
+            // path in matchStringPartWithoutWildcard.  Without this, a
+            // pending wildcard from a parent rule that leaks into a
+            // single-part child rule would bypass the default value
+            // assignment and cause "No value assign to variable" at
+            // finalizeNestedRule time.
             if (
                 state.valueIds !== null &&
                 (part.variable !== undefined || usesImplicitDefault(state))
@@ -955,20 +1445,37 @@ function buildStringPartRegExpStr(
 }
 
 /**
- * Get or create cached RegExp objects for a StringPart.  The cache key
- * is derived from (spacingMode, leadingIsNone) — for the same StringPart
- * and spacing configuration, the compiled regex is reused across calls.
+ * Get or create cached RegExp objects for a StringPart.  The cache
+ * has exactly 4 (`CompiledSpacingMode`) \u00d7 2 (`leadingIsNone`) = 8
+ * possible (spacingMode, leadingIsNone) keys, so it is stored as a
+ * fixed 8-slot sparse array indexed directly by
+ * `(modeIndex << 1) | leadingIsNone`.  This avoids the per-call
+ * template-string + `Map.get(string)` allocation incurred by the
+ * previous string-keyed Map on every match attempt.
  */
+// Maps each CompiledSpacingMode value to a 0..3 slot index used to
+// build the regex-cache key.  Order is fixed so cache keys remain
+// stable across matcher invocations.
+const spacingModeIndex: Record<"required" | "optional" | "none", number> = {
+    required: 0,
+    optional: 1,
+    none: 2,
+    // "auto" (undefined) handled separately as index 3.
+};
+
 function getStringPartRegExp(
     part: StringPart,
     spacingMode: CompiledSpacingMode,
     leadingIsNone: boolean,
 ): StringPartRegExpEntry {
-    const key = `${spacingMode ?? "auto"}:${leadingIsNone}`;
+    const modeIdx =
+        spacingMode === undefined ? 3 : spacingModeIndex[spacingMode];
+    const key = (modeIdx << 1) | (leadingIsNone ? 1 : 0);
     if (part.regexpCache === undefined) {
-        part.regexpCache = new Map();
+        // Sparse 8-slot array; unset slots remain `undefined`.
+        part.regexpCache = new Array(8);
     }
-    let entry = part.regexpCache.get(key);
+    let entry = part.regexpCache[key];
     if (entry === undefined) {
         const regExpStr = buildStringPartRegExpStr(
             part,
@@ -979,17 +1486,12 @@ function getStringPartRegExp(
             global: new RegExp(regExpStr, "iug"),
             sticky: new RegExp(regExpStr, "iuy"),
         };
-        part.regexpCache.set(key, entry);
+        part.regexpCache[key] = entry;
     }
     return entry;
 }
 
-function matchStringPart(
-    request: string,
-    state: MatchState,
-    part: StringPart,
-    pending: MatchState[],
-) {
+function matchStringPart(request: string, state: MatchState, part: StringPart) {
     debugMatch(
         state,
         `Checking string expr "${part.value.join(" ")}" with${state.pendingWildcard ? "" : "out"} wildcard`,
@@ -997,13 +1499,7 @@ function matchStringPart(
     const leadingIsNone = leadingSpacingMode(state) === "none";
     const entry = getStringPartRegExp(part, state.spacingMode, leadingIsNone);
     return state.pendingWildcard !== undefined
-        ? matchStringPartWithWildcard(
-              entry.global,
-              request,
-              part,
-              state,
-              pending,
-          )
+        ? matchStringPartWithWildcard(entry.global, request, part, state)
         : matchStringPartWithoutWildcard(entry.sticky, request, part, state);
 }
 
@@ -1016,7 +1512,6 @@ function matchVarNumberPartWithWildcard(
     request: string,
     state: MatchState,
     part: VarNumberPart,
-    pending: MatchState[],
 ) {
     const curr = state.index;
     const re =
@@ -1045,7 +1540,7 @@ function matchVarNumberPartWithWildcard(
             continue;
         }
 
-        if (captureWildcard(state, request, wildcardEnd, newIndex, pending)) {
+        if (captureWildcard(state, request, wildcardEnd, newIndex)) {
             debugMatch(
                 state,
                 `Matched number at ${wildcardEnd} to ${newIndex}`,
@@ -1124,14 +1619,13 @@ function matchVarNumberPart(
     request: string,
     state: MatchState,
     part: VarNumberPart,
-    pending: MatchState[],
 ) {
     debugMatch(
         state,
         `Checking number expr at with${state.pendingWildcard ? "" : "out"} wildcard`,
     );
     return state.pendingWildcard !== undefined
-        ? matchVarNumberPartWithWildcard(request, state, part, pending)
+        ? matchVarNumberPartWithWildcard(request, state, part)
         : matchVarNumberPartWithoutWildcard(request, state, part);
 }
 
@@ -1149,15 +1643,11 @@ function matchVarStringPart(state: MatchState, part: VarStringPart) {
     return true;
 }
 
-export function matchState(
-    state: MatchState,
-    request: string,
-    pending: MatchState[],
-) {
+export function matchState(state: MatchState, request: string) {
     while (true) {
         const { parts, partIndex } = state;
         if (partIndex >= parts.length) {
-            if (!finalizeNestedRule(state, pending)) {
+            if (!finalizeNestedRule(state)) {
                 // Finish matching this state.
                 return true;
             }
@@ -1187,25 +1677,56 @@ export function matchState(
             `matching type=${JSON.stringify(part.type)} pendingWildcard=${JSON.stringify(state.pendingWildcard)}`,
         );
 
-        if (part.optional && !state.inRepeat) {
-            // queue up skipping optional (suppressed when re-entering a repeat
-            // group to avoid duplicating already-queued "done" states)
-            const newState = { ...state, partIndex: state.partIndex + 1 };
+        // Consume the single-use suppression flag exactly once per
+        // part iteration: read it into a local and clear immediately.
+        // The flag's sole purpose is to gate the optional-fork block
+        // below; clearing here (before any early-continue path) makes
+        // it impossible for the flag to leak onto a subsequent part
+        // even if future code adds new branches inside the loop body.
+        const suppressOptionalFork = state.suppressOptionalFork;
+        state.suppressOptionalFork = undefined;
+
+        if (part.optional && !suppressOptionalFork) {
+            // Build the SKIP alternative (advance past the optional
+            // part, with `undefined` recorded for any variable).
+            const skipState: SnapshotState = {
+                ...forkMatchState(state),
+                partIndex: state.partIndex + 1,
+            };
             if (part.variable) {
-                addValue(newState, part.variable, undefined);
+                addValue(skipState, part.variable, undefined);
             }
-            pending.push(newState);
+            if (state.optionalPolicy === "preferSkip") {
+                // Live = skip; backtrack = take (snapshot of current
+                // state continues with the optional part).  The take
+                // snapshot is marked `suppressOptionalFork: true` so
+                // that on restore the optional-fork block at the top
+                // of this loop is suppressed — otherwise the same
+                // optional part would re-fork and we would push
+                // another take frame in an infinite loop.  The flag
+                // is consumed by the local capture above on the next
+                // iteration, so it cannot leak onto subsequent parts.
+                const takeSnapshot: SnapshotState = {
+                    ...forkMatchState(state),
+                    suppressOptionalFork: true,
+                };
+                Object.assign(state, skipState);
+                pushBacktrack(state, takeSnapshot, "optional");
+                continue;
+            }
+            // Default / preferTake: live = take; backtrack = skip.
+            pushBacktrack(state, skipState, "optional");
         }
 
         switch (part.type) {
             case "string":
-                if (!matchStringPart(request, state, part, pending)) {
+                if (!matchStringPart(request, state, part)) {
                     return false;
                 }
                 break;
 
             case "number":
-                if (!matchVarNumberPart(request, state, part, pending)) {
+                if (!matchVarNumberPart(request, state, part)) {
                     return false;
                 }
                 break;
@@ -1247,18 +1768,27 @@ export function matchState(
                 state.valueIds = requireValue ? undefined : null;
                 state.parent = parent;
                 state.nestedLevel++;
-                state.inRepeat = undefined; // entering nested rules, clear repeat flag
+                state.suppressOptionalFork = undefined; // entering nested rules, clear suppression flag
                 state.spacingMode = rules[0].spacingMode;
 
-                // queue up the other rules (backwards to search in the original order)
-                for (let i = rules.length - 1; i > 0; i--) {
-                    pending.push({
-                        ...state,
-                        name: getNestedStateName(state, part, i),
-                        parts: rules[i].parts,
-                        value: rules[i].value,
-                        spacingMode: rules[i].spacingMode,
-                    });
+                // Push a single compressed alternation cursor frame
+                // covering rules 1..N-1.  The shared `base` is the
+                // live state right after rule 0 setup — every
+                // alternative starts from the same fork-point
+                // context with only the four per-rule fields
+                // overlaid (read directly from `rules[i]` on
+                // restore).  The name prefix is computed once;
+                // `tryNextBacktrack` builds the per-rule debug name
+                // lazily as `${namePrefix}[${i}]`.
+                // `forkMatchState` enforces the single-owner
+                // invariant on the chain (the snapshot omits
+                // `backtracks`).
+                if (rules.length > 1) {
+                    const base = forkMatchState(state);
+                    const namePrefix = part.name
+                        ? `<${part.name}>`
+                        : getStateName(state);
+                    pushAlternation(state, base, rules, namePrefix);
                 }
                 // continue the loop (without incrementing partIndex)
                 continue;
@@ -1268,22 +1798,64 @@ export function matchState(
     }
 }
 
-export function initialMatchState(grammar: Grammar): MatchState[] {
-    return grammar.rules
-        .map((r, i) => ({
-            name: `<Start>[${i}]`,
-            parts: r.parts,
-            value: r.value,
-            partIndex: 0,
-            index: 0,
-            nextValueId: 0,
-            nestedLevel: 0,
-            spacingMode: r.spacingMode,
-        }))
-        .reverse();
+// Build the initial live MatchState for `matchGrammar` /
+// `matchGrammarCompletion`.  The returned state is initialized for
+// rule 0 (the live DFS path); rules 1..N-1 are pre-pushed onto
+// its `backtracks` chain as `"alternation"`-origin frames —
+// the same mechanism a nested-rule alternation uses.  Pushed in
+// reverse order so rule 1 is on top of the stack and gets
+// restored first by `tryNextBacktrack`, matching source
+// order.  Returns `undefined` for an empty grammar (no rules).
+export function initialMatchState(
+    grammar: Grammar,
+    options?: GrammarMatchOptions,
+): MatchState | undefined {
+    const rules = grammar.rules;
+    if (rules.length === 0) {
+        return undefined;
+    }
+    const wildcardPolicy = options?.wildcardPolicy ?? "exhaustive";
+    const optionalPolicy = options?.optionalPolicy ?? "exhaustive";
+    const repeatPolicy = options?.repeatPolicy ?? "exhaustive";
+
+    const state: MatchState = {
+        name: `<Start>[0]`,
+        parts: rules[0].parts,
+        value: rules[0].value,
+        partIndex: 0,
+        valueIds: undefined,
+        nextValueId: 0,
+        values: undefined,
+        parent: undefined,
+        nestedLevel: 0,
+        suppressOptionalFork: undefined,
+        spacingMode: rules[0].spacingMode,
+        index: 0,
+        pendingWildcard: undefined,
+        lastMatchedPartInfo: undefined,
+        wildcardPolicy,
+        optionalPolicy,
+        repeatPolicy,
+    };
+    // Top-level alternation: push a single compressed cursor frame
+    // covering rules 1..N-1.  The cursor advances forward (rule 1
+    // first, then rule 2, ...) — same source order as the prior
+    // reverse-push of one frame per rule.  `base` is rule-0's
+    // initial state; per-rule `parts/value/spacingMode` are read
+    // from `rules[i]` directly on restore, and the debug name is
+    // built lazily as `<Start>[i]`.
+    if (rules.length > 1) {
+        pushAlternation(state, forkMatchState(state), rules, "<Start>");
+    }
+    return state;
 }
 
 function debugMatch(state: MatchState, msg: string) {
+    if (state.nestedLevel < 0) {
+        throw new Error(
+            `Internal error: nestedLevel went negative (${state.nestedLevel}) at "${msg}"`,
+        );
+    }
     debugMatchRaw(
         `${" ".repeat(state.nestedLevel)}${getStateName(state)}: @${state.index}: ${msg}`,
     );
@@ -1296,16 +1868,29 @@ function getNestedStateName(state: MatchState, part: RulesPart, index: number) {
     return `${part.name ? `<${part.name}>` : getStateName(state)}[${index}]`;
 }
 
-export function matchGrammar(grammar: Grammar, request: string) {
-    const pending = initialMatchState(grammar);
+export function matchGrammar(
+    grammar: Grammar,
+    request: string,
+    options?: GrammarMatchOptions,
+) {
+    const state = initialMatchState(grammar, options);
     const results: GrammarMatchResult[] = [];
-    while (pending.length > 0) {
-        const state = pending.pop()!;
-        debugMatch(state, `resume state`);
-        if (matchState(state, request, pending)) {
-            finalizeMatch(state, request, results);
-        }
+    if (state === undefined) {
+        return results;
     }
+    // Explicit-stack DFS over the parse forest: `matchState` walks
+    // the live state's parts left-to-right; on success collect the
+    // result and prune any per-policy first-success frames; then
+    // pop the most-recently-pushed unexplored sibling and resume.
+    do {
+        debugMatch(state, `resume state`);
+        if (
+            matchState(state, request) &&
+            finalizeMatch(state, request, results)
+        ) {
+            suppressBacktracksAfterSuccess(state);
+        }
+    } while (tryNextBacktrack(state));
 
     return results;
 }

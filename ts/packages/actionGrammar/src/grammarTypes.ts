@@ -192,12 +192,17 @@ export type StringPart = {
     variable?: string | undefined;
 
     /**
-     * Cache of compiled RegExp objects, keyed by
-     * `"${spacingMode ?? 'auto'}:${leadingIsNone}"`.
-     * Populated lazily by the matcher to avoid recompiling the same
-     * regex pattern on every match attempt.
+     * Cache of compiled RegExp objects.  There are exactly 4
+     * {@link CompiledSpacingMode} values \u00d7 2 leading-spacing
+     * variants = 8 possible (spacingMode, leadingIsNone) keys for
+     * a given StringPart, so the cache is a fixed 8-slot sparse
+     * tuple indexed directly by `(modeIndex << 1) | leadingIsNone`
+     * (see `getStringPartRegExp`).  Allocating an 8-slot array
+     * lazily avoids the per-call template-string + Map.get
+     * allocation that the previous string-keyed Map incurred on
+     * every match attempt.
      */
-    regexpCache?: Map<string, StringPartRegExpEntry>;
+    regexpCache?: Array<StringPartRegExpEntry | undefined>;
 };
 
 export type VarStringPart = {
