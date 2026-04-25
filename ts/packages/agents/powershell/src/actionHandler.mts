@@ -1008,8 +1008,11 @@ export function instantiate(): AppAgent {
 
         async getDynamicSchema(
             _context: SessionContext,
-            _schemaName: string,
+            schemaName: string,
         ): Promise<SchemaContent | undefined> {
+            // Only provide dynamic schema for the main powershell schema,
+            // not for sub-schemas which use static compiled schemas
+            if (schemaName !== "powershell") return undefined;
             if (!agentContext.store) return undefined;
             return {
                 format: "ts",
@@ -1019,8 +1022,10 @@ export function instantiate(): AppAgent {
 
         async getDynamicGrammar(
             _context: SessionContext,
-            _schemaName: string,
+            schemaName: string,
         ): Promise<GrammarContent | undefined> {
+            // Only provide dynamic grammar for the main powershell schema
+            if (schemaName !== "powershell") return undefined;
             if (!agentContext.store) return undefined;
             const text = agentContext.store.getDynamicGrammarText();
             if (!text) return undefined;

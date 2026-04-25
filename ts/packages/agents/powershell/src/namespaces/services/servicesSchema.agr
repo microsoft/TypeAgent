@@ -4,7 +4,7 @@
 // PowerShell Services Namespace Grammar
 // Windows service management
 
-import { PowerShellServicesActions } from "./servicesActionsSchema.ts";
+import { PowerShellServicesActions } from "./servicesActionsSchema.mts";
 
 <Start> : PowerShellServicesActions = <ListServices>
           | <ServiceStatus>

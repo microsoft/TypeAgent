@@ -4,7 +4,7 @@
 // PowerShell System Namespace Grammar
 // System information and diagnostics
 
-import { PowerShellSystemActions } from "./systemActionsSchema.ts";
+import { PowerShellSystemActions } from "./systemActionsSchema.mts";
 
 <Start> : PowerShellSystemActions = <SystemInfo>
           | <DiskUsage>

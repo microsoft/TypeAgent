@@ -4,7 +4,7 @@
 // PowerShell Archives Namespace Grammar
 // Compression and extraction operations
 
-import { PowerShellArchivesActions } from "./archivesActionsSchema.ts";
+import { PowerShellArchivesActions } from "./archivesActionsSchema.mts";
 
 <Start> : PowerShellArchivesActions = <Compress>
           | <Expand>;

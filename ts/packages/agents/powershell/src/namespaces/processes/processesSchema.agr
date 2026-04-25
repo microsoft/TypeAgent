@@ -4,7 +4,7 @@
 // PowerShell Processes Namespace Grammar
 // Process monitoring and management
 
-import { PowerShellProcessesActions } from "./processesActionsSchema.ts";
+import { PowerShellProcessesActions } from "./processesActionsSchema.mts";
 
 <Start> : PowerShellProcessesActions = <ListProcesses>
           | <ProcessMemory>

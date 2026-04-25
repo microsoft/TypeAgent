@@ -4,7 +4,7 @@
 // PowerShell Data Namespace Grammar
 // Data transformation and file parsing
 
-import { PowerShellDataActions } from "./dataActionsSchema.ts";
+import { PowerShellDataActions } from "./dataActionsSchema.mts";
 
 <Start> : PowerShellDataActions = <ReadJson>
           | <WriteJson>

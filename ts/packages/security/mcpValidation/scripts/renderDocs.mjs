@@ -31,11 +31,15 @@ function parseArgs() {
         else if (a === "--title") opts.title = args[++i];
     }
     if (!opts.input) {
-        console.error("Usage: renderDocs.mjs --input <file.md> [--out <dir>] [--format html|pdf|both] [--title <title>]");
+        console.error(
+            "Usage: renderDocs.mjs --input <file.md> [--out <dir>] [--format html|pdf|both] [--title <title>]",
+        );
         process.exit(2);
     }
     if (!["html", "pdf", "both"].includes(opts.format)) {
-        console.error(`Unknown --format "${opts.format}". Use html, pdf, or both.`);
+        console.error(
+            `Unknown --format "${opts.format}". Use html, pdf, or both.`,
+        );
         process.exit(2);
     }
     return opts;
@@ -46,7 +50,12 @@ function which(name) {
     const cmd = isWin ? "where" : "which";
     const r = spawnSync(cmd, [name], { encoding: "utf-8" });
     if (r.status !== 0) return null;
-    return r.stdout.split(/\r?\n/).find((l) => l.trim().length > 0)?.trim() ?? null;
+    return (
+        r.stdout
+            .split(/\r?\n/)
+            .find((l) => l.trim().length > 0)
+            ?.trim() ?? null
+    );
 }
 
 function findPandoc() {
@@ -89,7 +98,9 @@ function findBrowser() {
 function run(cmd, args, opts = {}) {
     const r = spawnSync(cmd, args, { stdio: "inherit", ...opts });
     if (r.status !== 0) {
-        throw new Error(`${cmd} ${args.join(" ")} exited with code ${r.status}`);
+        throw new Error(
+            `${cmd} ${args.join(" ")} exited with code ${r.status}`,
+        );
     }
 }
 
@@ -107,12 +118,16 @@ function main() {
 
     const pandoc = findPandoc();
     if (!pandoc) {
-        console.error("pandoc not found on PATH. Install: winget install JohnMacFarlane.Pandoc");
+        console.error(
+            "pandoc not found on PATH. Install: winget install JohnMacFarlane.Pandoc",
+        );
         process.exit(1);
     }
     const mermaidFilter = findMermaidFilter();
     if (!mermaidFilter) {
-        console.error("mermaid-filter not found on PATH. Install: npm i -g @mermaid-js/mermaid-cli mermaid-filter");
+        console.error(
+            "mermaid-filter not found on PATH. Install: npm i -g @mermaid-js/mermaid-cli mermaid-filter",
+        );
         process.exit(1);
     }
 
@@ -128,11 +143,14 @@ function main() {
         console.log(`pandoc: ${inputAbs} → ${htmlOut}`);
         run(pandoc, [
             inputAbs,
-            "-o", htmlOut,
+            "-o",
+            htmlOut,
             "--standalone",
             "--embed-resources",
-            "--filter", mermaidFilter,
-            "--metadata", `title=${title}`,
+            "--filter",
+            mermaidFilter,
+            "--metadata",
+            `title=${title}`,
         ]);
     }
 

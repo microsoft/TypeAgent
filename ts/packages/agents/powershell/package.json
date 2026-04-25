@@ -29,13 +29,13 @@
     "agc:system": "agc -i ./src/namespaces/system/systemSchema.agr -o ./dist/systemSchema.ag.json",
     "asc": "asc -i ./src/schema/scriptActions.mts -o ./dist/powershellSchema.pas.json -t PowerShellActions",
     "asc:all": "concurrently npm:asc npm:asc:files npm:asc:processes npm:asc:system npm:asc:services npm:asc:network npm:asc:data npm:asc:archives",
-    "asc:archives": "asc -i ./src/namespaces/archives/archivesActionsSchema.ts -o ./dist/archivesSchema.pas.json -t PowerShellArchivesActions",
-    "asc:data": "asc -i ./src/namespaces/data/dataActionsSchema.ts -o ./dist/dataSchema.pas.json -t PowerShellDataActions",
-    "asc:files": "asc -i ./src/namespaces/files/filesActionsSchema.ts -o ./dist/filesSchema.pas.json -t PowerShellFilesActions",
-    "asc:network": "asc -i ./src/namespaces/network/networkActionsSchema.ts -o ./dist/networkSchema.pas.json -t PowerShellNetworkActions",
-    "asc:processes": "asc -i ./src/namespaces/processes/processesActionsSchema.ts -o ./dist/processesSchema.pas.json -t PowerShellProcessesActions",
-    "asc:services": "asc -i ./src/namespaces/services/servicesActionsSchema.ts -o ./dist/servicesSchema.pas.json -t PowerShellServicesActions",
-    "asc:system": "asc -i ./src/namespaces/system/systemActionsSchema.ts -o ./dist/systemSchema.pas.json -t PowerShellSystemActions",
+    "asc:archives": "asc -i ./src/namespaces/archives/archivesActionsSchema.mts -o ./dist/archivesSchema.pas.json -t PowerShellArchivesActions",
+    "asc:data": "asc -i ./src/namespaces/data/dataActionsSchema.mts -o ./dist/dataSchema.pas.json -t PowerShellDataActions",
+    "asc:files": "asc -i ./src/namespaces/files/filesActionsSchema.mts -o ./dist/filesSchema.pas.json -t PowerShellFilesActions",
+    "asc:network": "asc -i ./src/namespaces/network/networkActionsSchema.mts -o ./dist/networkSchema.pas.json -t PowerShellNetworkActions",
+    "asc:processes": "asc -i ./src/namespaces/processes/processesActionsSchema.mts -o ./dist/processesSchema.pas.json -t PowerShellProcessesActions",
+    "asc:services": "asc -i ./src/namespaces/services/servicesActionsSchema.mts -o ./dist/servicesSchema.pas.json -t PowerShellServicesActions",
+    "asc:system": "asc -i ./src/namespaces/system/systemActionsSchema.mts -o ./dist/systemSchema.pas.json -t PowerShellSystemActions",
     "benchmark": "npx tsx benchmark/run-benchmark.mts",
     "benchmark:dry": "npx tsx benchmark/run-benchmark.mts --dry-run",
     "build": "concurrently npm:tsc npm:asc:all npm:agc:all",
@@ -184,7 +184,7 @@
         ],
         "files": {
           "inputGlobs": [
-            "src/namespaces/files/filesActionsSchema.ts"
+            "src/namespaces/files/filesActionsSchema.mts"
           ],
           "outputGlobs": [
             "dist/filesSchema.pas.json"
@@ -197,7 +197,7 @@
         ],
         "files": {
           "inputGlobs": [
-            "src/namespaces/processes/processesActionsSchema.ts"
+            "src/namespaces/processes/processesActionsSchema.mts"
           ],
           "outputGlobs": [
             "dist/processesSchema.pas.json"
@@ -210,7 +210,7 @@
         ],
         "files": {
           "inputGlobs": [
-            "src/namespaces/system/systemActionsSchema.ts"
+            "src/namespaces/system/systemActionsSchema.mts"
           ],
           "outputGlobs": [
             "dist/systemSchema.pas.json"
@@ -223,7 +223,7 @@
         ],
         "files": {
           "inputGlobs": [
-            "src/namespaces/services/servicesActionsSchema.ts"
+            "src/namespaces/services/servicesActionsSchema.mts"
           ],
           "outputGlobs": [
             "dist/servicesSchema.pas.json"
@@ -236,7 +236,7 @@
         ],
         "files": {
           "inputGlobs": [
-            "src/namespaces/network/networkActionsSchema.ts"
+            "src/namespaces/network/networkActionsSchema.mts"
           ],
           "outputGlobs": [
             "dist/networkSchema.pas.json"
@@ -249,7 +249,7 @@
         ],
         "files": {
           "inputGlobs": [
-            "src/namespaces/data/dataActionsSchema.ts"
+            "src/namespaces/data/dataActionsSchema.mts"
           ],
           "outputGlobs": [
             "dist/dataSchema.pas.json"
@@ -262,7 +262,7 @@
         ],
         "files": {
           "inputGlobs": [
-            "src/namespaces/archives/archivesActionsSchema.ts"
+            "src/namespaces/archives/archivesActionsSchema.mts"
           ],
           "outputGlobs": [
             "dist/archivesSchema.pas.json"

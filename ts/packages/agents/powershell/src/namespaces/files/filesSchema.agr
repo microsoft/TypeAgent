@@ -4,7 +4,7 @@
 // PowerShell Files Namespace Grammar
 // File system operations: list, read, write, copy, move, delete, search
 
-import { PowerShellFilesActions } from "./filesActionsSchema.ts";
+import { PowerShellFilesActions } from "./filesActionsSchema.mts";
 
 <Start> : PowerShellFilesActions = <ListFiles>
           | <ReadFile>

@@ -4,7 +4,7 @@
 // PowerShell Network Namespace Grammar
 // Network diagnostics and configuration
 
-import { PowerShellNetworkActions } from "./networkActionsSchema.ts";
+import { PowerShellNetworkActions } from "./networkActionsSchema.mts";
 
 <Start> : PowerShellNetworkActions = <TestConnection>
           | <PortListeners>
