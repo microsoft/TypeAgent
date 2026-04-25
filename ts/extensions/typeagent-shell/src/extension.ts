@@ -279,7 +279,8 @@ function attachChatPanel(
     panel.iconPath = vscode.Uri.joinPath(
         context.extensionUri,
         "media",
-        "typeagent-icon.svg",
+        "icons",
+        "typeagent.svg",
     );
 
     const bridge = new AgentServerBridge({

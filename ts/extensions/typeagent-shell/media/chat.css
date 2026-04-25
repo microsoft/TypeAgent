@@ -509,3 +509,44 @@ body.vscode-light .message span.ansi-gray-fg { color: var(--vscode-descriptionFo
     padding: 3px 6px;
     font-size: 0.9em;
 }
+
+/* ── Completion menu (theme-matched override of @typeagent/completion-ui) ── */
+.autocomplete-container {
+    background-color: var(--vscode-editorSuggestWidget-background, var(--vscode-editorWidget-background));
+    color: var(--vscode-editorSuggestWidget-foreground, var(--vscode-editorWidget-foreground));
+    border: 1px solid var(--vscode-editorSuggestWidget-border, var(--vscode-editorWidget-border, var(--vscode-panel-border)));
+    border-radius: 4px;
+    backdrop-filter: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+}
+.autocomplete-container .completions li {
+    padding: 4px 10px;
+    color: var(--vscode-editorSuggestWidget-foreground);
+}
+.autocomplete-container .completions li:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+.autocomplete-container .completions li .search-prefix {
+    color: var(--vscode-editorSuggestWidget-highlightForeground, var(--vscode-list-highlightForeground));
+    font-weight: bold;
+}
+.autocomplete-container .completions .completion-selected,
+.autocomplete-container .completions .completion-selected:hover {
+    background: var(--vscode-editorSuggestWidget-selectedBackground, var(--vscode-list-activeSelectionBackground));
+    color: var(--vscode-editorSuggestWidget-selectedForeground, var(--vscode-list-activeSelectionForeground));
+}
+.autocomplete-container .completions .completion-selected .search-prefix {
+    color: var(--vscode-editorSuggestWidget-focusHighlightForeground, var(--vscode-list-focusHighlightForeground, inherit));
+}
+.autocomplete-scrollbar {
+    background-color: var(--vscode-scrollbarSlider-background, rgba(121, 121, 121, 0.2));
+}
+.autocomplete-scrollbar-indicator {
+    background-color: var(--vscode-scrollbarSlider-hoverBackground, rgba(100, 100, 100, 0.4));
+}
+.completion-toggle {
+    color: var(--vscode-descriptionForeground, var(--vscode-foreground));
+}
+

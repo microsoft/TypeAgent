@@ -7,6 +7,7 @@
     "publisher": "typeagent",
     "license": "MIT",
     "author": "Microsoft",
+    "icon": "media/icons/icon-80.png",
     "homepage": "https://github.com/microsoft/TypeAgent#readme",
     "repository": {
         "type": "git",
@@ -29,7 +30,7 @@
                 {
                     "id": "typeagent-shell",
                     "title": "TypeAgent",
-                    "icon": "media/typeagent-icon.svg"
+                    "icon": "media/icons/typeagent.svg"
                 }
             ]
         },

@@ -37,6 +37,7 @@ export class TextareaPartialCompletion {
     private readonly toggle: CompletionToggle | undefined;
     private readonly mirror: HTMLDivElement;
     private readonly ghostSpan: HTMLSpanElement;
+    private readonly caretMarker: HTMLSpanElement;
     private menu: LocalSearchMenuUI | undefined;
     private state: PcCompletionState | undefined;
     private inline: boolean;
@@ -49,6 +50,9 @@ export class TextareaPartialCompletion {
         private readonly post: PostMessage,
         opts?: { inline?: boolean },
     ) {
+        // Match shell default: inline ghost text.  Toggle button on the
+        // input switches to the dropdown menu (parity with shell's
+        // ui.inlineCompletions setting).
         this.inline = opts?.inline ?? true;
 
         // Mirror div for inline ghost-text rendering.  Sits behind the
@@ -59,22 +63,33 @@ export class TextareaPartialCompletion {
         this.mirror.className = "tac-mirror";
         this.ghostSpan = document.createElement("span");
         this.ghostSpan.className = "tac-ghost";
+        // Zero-width marker placed in the mirror at the caret position so
+        // we can compute the on-screen caret coordinates for menu placement.
+        this.caretMarker = document.createElement("span");
+        this.caretMarker.className = "tac-caret-marker";
         const parent = textarea.parentElement;
         if (parent) {
             const style = getComputedStyle(parent);
             if (style.position === "static") {
                 parent.style.position = "relative";
             }
+            // Mirror is absolutely positioned, so it doesn't affect the
+            // flex layout of #input-area (textarea / send button).
             parent.insertBefore(this.mirror, textarea);
-            // CompletionToggle sits next to the textarea (hidden by default).
+            // CompletionToggle is also absolutely positioned (top-right of
+            // textarea) so it doesn't push the send button.
             this.toggle = new CompletionToggle(
                 this.inline ? "expand" : "collapse",
                 () => this.switchMode(!this.inline),
             );
             this.toggle.hide();
-            parent.appendChild(this.toggle.getElement());
+            const tEl = this.toggle.getElement();
+            tEl.style.position = "absolute";
+            tEl.style.zIndex = "2";
+            parent.appendChild(tEl);
         }
         this.syncMirrorStyles();
+        this.positionToggle();
 
         textarea.addEventListener("input", this.onInput);
         textarea.addEventListener("keydown", this.onKeydown);
@@ -299,29 +314,66 @@ export class TextareaPartialCompletion {
         m.zIndex = "0";
     }
 
+    private positionToggle() {
+        if (!this.toggle) return;
+        const tEl = this.toggle.getElement();
+        // Anchor to top-right corner of the textarea.
+        tEl.style.top = `${this.textarea.offsetTop + 2}px`;
+        const right =
+            (this.textarea.parentElement?.clientWidth ?? 0) -
+            (this.textarea.offsetLeft + this.textarea.offsetWidth);
+        tEl.style.right = `${right + 4}px`;
+    }
+
+    /**
+     * Fills the mirror with the user's text, places a zero-width caret marker
+     * at the textarea selectionStart, and (when in inline mode + caret at end)
+     * appends the ghost suffix.  The marker is used by computeMenuPosition.
+     */
+    private updateMirror(): void {
+        this.syncMirrorStyles();
+        this.positionToggle();
+        const value = this.textarea.value;
+        const caret = this.textarea.selectionStart ?? value.length;
+        const before = value.slice(0, caret);
+        const after = value.slice(caret);
+
+        this.mirror.textContent = "";
+        if (before.length > 0) {
+            this.mirror.appendChild(document.createTextNode(before));
+        }
+        this.mirror.appendChild(this.caretMarker);
+
+        // Inline ghost suffix sits right after the caret, before "after" text.
+        const showGhost =
+            this.inline &&
+            this.state &&
+            this.state.items.length > 0 &&
+            this.isCaretAtEnd();
+        if (showGhost && this.state) {
+            const item = this.state.items[0];
+            const suffix = item.matchText.substring(this.state.prefix.length);
+            this.ghostSpan.textContent = suffix;
+            this.mirror.appendChild(this.ghostSpan);
+        } else {
+            this.ghostSpan.textContent = "";
+        }
+        if (after.length > 0) {
+            this.mirror.appendChild(document.createTextNode(after));
+        }
+        // Append a trailing space so a newline at end of value still produces
+        // a measurable line for the caret marker.
+        this.mirror.appendChild(document.createTextNode("\u200b"));
+    }
+
     private renderInline() {
-        if (!this.inline || !this.state || this.state.items.length === 0) {
+        if (!this.state || this.state.items.length === 0) {
             this.ghostSpan.textContent = "";
             this.toggle?.hide();
+            this.updateMirror();
             return;
         }
-        if (!this.isCaretAtEnd()) {
-            this.ghostSpan.textContent = "";
-            return;
-        }
-        const item = this.state.items[0];
-        const suffix = item.matchText.substring(this.state.prefix.length);
-        if (suffix.length === 0) {
-            this.ghostSpan.textContent = "";
-            return;
-        }
-        // Re-sync layout (font may have changed via theme).
-        this.syncMirrorStyles();
-        this.mirror.textContent = "";
-        const userText = document.createTextNode(this.textarea.value);
-        this.mirror.appendChild(userText);
-        this.ghostSpan.textContent = suffix;
-        this.mirror.appendChild(this.ghostSpan);
+        this.updateMirror();
         this.toggle?.show();
     }
 
@@ -352,10 +404,40 @@ export class TextareaPartialCompletion {
     }
 
     private computeMenuPosition(): SearchMenuPosition {
-        const r = this.container.getBoundingClientRect();
+        // Use the caret marker in the mirror to anchor the menu.  The mirror
+        // mimics the textarea exactly (font, padding, wrap), so the marker's
+        // bounding rect approximates the on-screen caret position — minus any
+        // textarea scroll offset.
+        const markerRect = this.caretMarker.getBoundingClientRect();
+        const taRect = this.textarea.getBoundingClientRect();
+        const left = Math.max(
+            taRect.left + 2,
+            markerRect.left - this.textarea.scrollLeft -
+                this.getPrefixWidthHint(),
+        );
+        // Anchor menu's bottom to the line containing the caret.  If the
+        // caret is on the first line, bottom = top of that line.
+        const lineTop = markerRect.top - this.textarea.scrollTop;
         return {
-            left: r.left + 8,
-            bottom: window.innerHeight - r.top,
+            left,
+            bottom: window.innerHeight - lineTop,
         };
+    }
+
+    private getPrefixWidthHint(): number {
+        // The menu wants to be flush with the start of the prefix the user
+        // is editing.  We approximate by measuring the prefix width with the
+        // mirror's font.  Returns 0 when no state.
+        if (!this.state || !this.state.prefix) return 0;
+        const probe = document.createElement("span");
+        probe.style.visibility = "hidden";
+        probe.style.position = "absolute";
+        probe.style.whiteSpace = "pre";
+        probe.style.font = getComputedStyle(this.textarea).font;
+        probe.textContent = this.state.prefix;
+        document.body.appendChild(probe);
+        const w = probe.getBoundingClientRect().width;
+        probe.remove();
+        return w;
     }
 }

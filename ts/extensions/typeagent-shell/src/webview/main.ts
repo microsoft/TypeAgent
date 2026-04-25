@@ -8,10 +8,11 @@
 import { ChatUI } from "./chatUI";
 import completionStyles from "@typeagent/completion-ui/styles.css";
 
-// Inject the shared completion UI styles.
+// Inject the shared completion UI styles.  Insert at the top of <head> so
+// the extension's chat.css (linked later) can override these defaults.
 const styleEl = document.createElement("style");
 styleEl.textContent = completionStyles as unknown as string;
-document.head.appendChild(styleEl);
+document.head.insertBefore(styleEl, document.head.firstChild);
 
 declare function acquireVsCodeApi(): {
     postMessage(message: unknown): void;

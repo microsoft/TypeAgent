@@ -114,6 +114,16 @@
 }
 
 .tac-ghost {
-    color: currentColor;
-    opacity: 0.45;
+    /* Parent (.tac-mirror) is transparent, so the ghost needs an explicit
+       color; honor the editor foreground when available. */
+    color: var(--vscode-editorGhostText-foreground, rgba(127, 127, 127, 0.7));
+    opacity: 0.85;
+}
+
+.tac-caret-marker {
+    /* Zero-width inline-block marker — only used to measure caret position. */
+    display: inline-block;
+    width: 0;
+    height: 1em;
+    vertical-align: text-bottom;
 }
