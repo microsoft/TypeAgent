@@ -33,6 +33,9 @@ const webviewConfig = {
     target: "es2022",
     sourcemap: true,
     minify: !watch,
+    loader: {
+        ".css": "text",
+    },
 };
 
 async function build() {

@@ -6,6 +6,12 @@
 // The extension host manages the actual RPC connection to the agent server.
 
 import { ChatUI } from "./chatUI";
+import completionStyles from "@typeagent/completion-ui/styles.css";
+
+// Inject the shared completion UI styles.
+const styleEl = document.createElement("style");
+styleEl.textContent = completionStyles as unknown as string;
+document.head.appendChild(styleEl);
 
 declare function acquireVsCodeApi(): {
     postMessage(message: unknown): void;
@@ -15,6 +21,9 @@ declare function acquireVsCodeApi(): {
 
 const vscode = acquireVsCodeApi();
 const chatUI = new ChatUI();
+
+// Mount command-completion (inline ghost text + dropdown menu) on the chat input.
+const partial = chatUI.attachCompletion((msg) => vscode.postMessage(msg));
 
 // Listen for messages from the extension host (bridged from agent server)
 // Helper: pull clientRequestId out of a RequestId object/string.
@@ -113,6 +122,9 @@ window.addEventListener("message", (event) => {
             break;
         case "historyLoading":
             chatUI.setHistoryLoading(msg.loading);
+            break;
+        case "pcState":
+            partial?.applyState(msg.state);
             break;
     }
 });

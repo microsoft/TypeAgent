@@ -99,3 +99,21 @@
 .completion-toggle:hover {
     opacity: 1 !important;
 }
+
+/* Textarea mirror used for inline ghost-text completion (extension webview). */
+.tac-mirror {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow: hidden;
+    color: transparent;
+    z-index: 0;
+}
+
+.tac-ghost {
+    color: currentColor;
+    opacity: 0.45;
+}

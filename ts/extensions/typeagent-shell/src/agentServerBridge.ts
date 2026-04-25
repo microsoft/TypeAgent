@@ -49,6 +49,7 @@ export type BridgeToWebviewMessage =
     | { type: "commandResult"; requestId: string; result: any }
     | { type: "commandComplete"; requestId: string; result: any }
     | { type: "peerMetrics"; requestId: string; result: any }
+    | { type: "pcState"; state?: CompletionState }
     | { type: "error"; message: string }
     | { type: "switching"; switching: boolean; targetName?: string }
     | { type: "userInfo"; name: string }
@@ -75,6 +76,13 @@ export type BridgeToWebviewMessage =
           }>;
       };
 
+import {
+    createCompletionController,
+    type CompletionController,
+    type CompletionState,
+} from "agent-dispatcher/helpers/completion";
+import type { CompletionDirection } from "@typeagent/agent-sdk";
+
 /**
  * Messages from webview → extension host
  */
@@ -83,7 +91,12 @@ export type BridgeFromWebviewMessage =
     | { type: "connect" }
     | { type: "disconnect" }
     | { type: "getStatus" }
-    | { type: "focus"; focused: boolean };
+    | { type: "focus"; focused: boolean }
+    | { type: "pcUpdate"; input: string; direction: CompletionDirection }
+    | { type: "pcAccept" }
+    | { type: "pcDismiss"; input: string; direction: CompletionDirection }
+    | { type: "pcHide" }
+    | { type: "pcDispose" };
 
 /**
  * Manages the RPC connection to the agent server from the extension host
@@ -146,6 +159,12 @@ export class AgentServerBridge {
     private onWebviewFocusChanged?: (focused: boolean) => void;
     /** If set, connect() will join this existing session instead of creating one. */
     private restoreSessionId: string | undefined;
+
+    // Per-session command-completion controller (lazy).  Each webview that
+    // requests completions is tracked here; replies are sent only to the
+    // requesting webview to keep peer tabs from competing.
+    private completionController: CompletionController | undefined;
+    private completionWebview: vscode.Webview | undefined;
 
     constructor(opts?: {
         ownsStatusBar?: boolean;
@@ -229,6 +248,9 @@ export class AgentServerBridge {
         return {
             dispose: () => {
                 this.webviews.delete(webview);
+                if (this.completionWebview === webview) {
+                    this.disposeCompletionController();
+                }
                 disposable.dispose();
             },
         };
@@ -360,6 +382,9 @@ export class AgentServerBridge {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = undefined;
         }
+        // Tear down the per-session completion controller so a future
+        // connect() rebuilds it against the new dispatcher.
+        this.disposeCompletionController();
         if (this.connection) {
             await this.connection.close();
             this.connection = undefined;
@@ -801,7 +826,72 @@ export class AgentServerBridge {
             case "focus":
                 this.onWebviewFocusChanged?.(msg.focused);
                 break;
+            case "pcUpdate":
+                this.pcUpdate(_webview, msg.input, msg.direction);
+                break;
+            case "pcAccept":
+                this.completionController?.accept();
+                break;
+            case "pcDismiss":
+                this.completionController?.dismiss(msg.input, msg.direction);
+                break;
+            case "pcHide":
+                this.completionController?.hide();
+                break;
+            case "pcDispose":
+                this.disposeCompletionController();
+                break;
         }
+    }
+
+    private ensureCompletionController(
+        webview: vscode.Webview,
+    ): CompletionController | undefined {
+        if (!this.session) return undefined;
+        if (
+            this.completionController &&
+            this.completionWebview === webview
+        ) {
+            return this.completionController;
+        }
+        // If an existing controller is bound to a different webview, tear it
+        // down — the per-keystroke onUpdate must target the typing webview.
+        this.disposeCompletionController();
+        this.completionWebview = webview;
+        const session = this.session;
+        this.completionController = createCompletionController(
+            {
+                getCommandCompletion: async (input, direction) => {
+                    return await session.dispatcher.getCommandCompletion(
+                        input,
+                        direction,
+                    );
+                },
+            },
+            {
+                onUpdate: () => {
+                    const state =
+                        this.completionController?.getCompletionState();
+                    webview.postMessage({ type: "pcState", state });
+                },
+            },
+        );
+        return this.completionController;
+    }
+
+    private pcUpdate(
+        webview: vscode.Webview,
+        input: string,
+        direction: CompletionDirection,
+    ): void {
+        const controller = this.ensureCompletionController(webview);
+        controller?.update(input, direction);
+    }
+
+    private disposeCompletionController(): void {
+        this.completionController?.dispose();
+        this.completionController = undefined;
+        this.completionWebview = undefined;
     }
 
     /**

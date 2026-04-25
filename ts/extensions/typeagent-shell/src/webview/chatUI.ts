@@ -4,6 +4,7 @@
 import { AnsiUp } from "ansi_up";
 import MarkdownIt from "markdown-it";
 import DOMPurify from "dompurify";
+import { TextareaPartialCompletion } from "./partialCompletion";
 
 const ansiText = new AnsiUp();
 ansiText.use_classes = true;
@@ -73,6 +74,9 @@ export class ChatUI {
     // Counter for generating unique request IDs
     private _nextRequestId = 1;
 
+    // Optional inline + dropdown completion handler installed by main.ts.
+    private _partial?: TextareaPartialCompletion;
+
     constructor() {
         this._messagesEl = document.getElementById("messages")!;
         this._inputEl = document.getElementById(
@@ -85,6 +89,8 @@ export class ChatUI {
 
         this._sendBtn.addEventListener("click", () => this._handleSend());
         this._inputEl.addEventListener("keydown", (e) => {
+            // Let completion handle Tab/Esc/arrow keys/Enter when active.
+            if (this._partial?.handleKeyDownPreSend(e)) return;
             if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 this._handleSend();
@@ -97,6 +103,24 @@ export class ChatUI {
             this._inputEl.style.height =
                 Math.min(this._inputEl.scrollHeight, 120) + "px";
         });
+    }
+
+    /**
+     * Mount inline + dropdown completion on the chat input.  Caller passes
+     * a postMessage function that delivers messages to the extension host.
+     */
+    public attachCompletion(
+        post: (msg: any) => void,
+    ): TextareaPartialCompletion {
+        if (this._partial) return this._partial;
+        const inputArea =
+            this._inputEl.parentElement ?? document.body;
+        this._partial = new TextareaPartialCompletion(
+            inputArea,
+            this._inputEl,
+            post,
+        );
+        return this._partial;
     }
 
     public onSend(callback: (text: string, requestId: string) => void): void {
@@ -768,6 +792,7 @@ export class ChatUI {
         this.addUserMessage(text, undefined, "pending", requestId);
         this._inputEl.value = "";
         this._inputEl.style.height = "auto";
+        this._partial?.reset();
         this._sendCallback?.(text, requestId);
     }
 
