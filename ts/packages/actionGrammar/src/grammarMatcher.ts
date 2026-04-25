@@ -1696,7 +1696,13 @@ function enterTailRulesPart(state: MatchState, part: RulesPart): void {
     state.value = rules[0].value;
     state.partIndex = 0;
     state.suppressOptionalFork = undefined;
-    // state.spacingMode unchanged - contract guarantees member matches.
+    // Mirror the non-tail RulesPart entry path and the backtrack
+    // restore in `tryNextBacktrack` (which overlays
+    // `rule.spacingMode` per restored alternative).  The assertion
+    // above guarantees this is a no-op when the contract holds; on
+    // a contract violation it keeps rule 0's behavior consistent
+    // with rule i's after backtrack.
+    state.spacingMode = rules[0].spacingMode;
 
     // `forkMatchState` snapshots `valueIds` (and every other field) at
     // this fork point; restoring on backtrack rewinds anything an
