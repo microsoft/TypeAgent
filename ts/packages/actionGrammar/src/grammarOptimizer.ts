@@ -809,7 +809,7 @@ function factorRules(
     const state: EmitState = { didFactor: false };
     const items: { idx: number; rules: GrammarRule[] }[] = [];
 
-    for (const partition of partitions.values()) {
+    for (const [partitionSpacing, partition] of partitions) {
         if (partition.length === 1) {
             // Solo partition - nothing to factor against; pass the
             // rule through at its original index.
@@ -823,7 +823,7 @@ function factorRules(
         for (const c of root.children.values()) {
             items.push({
                 idx: c.firstIdx,
-                rules: emitFromNode(c, state, buildState),
+                rules: emitFromNode(c, state, buildState, partitionSpacing),
             });
         }
     }
@@ -926,7 +926,6 @@ type TrieEdge =
 type Terminal = {
     idx: number;
     value: CompiledValueNode | undefined;
-    spacingMode: CompiledSpacingMode | undefined;
     /** local→canonical variable rename accumulated along the path. */
     remap: Map<string, string>;
 };
@@ -1082,7 +1081,6 @@ function insertRuleIntoTrie(
     terminals.push({
         idx,
         value: rule.value,
-        spacingMode: rule.spacingMode,
         remap,
     });
 }
@@ -1334,14 +1332,17 @@ function concatParts(a: GrammarPart[], b: GrammarPart[]): GrammarPart[] {
     return [...a, ...b];
 }
 
-function terminalToRule(t: Terminal): GrammarRule {
+function terminalToRule(
+    t: Terminal,
+    partitionSpacing: CompiledSpacingMode | undefined,
+): GrammarRule {
     let value = t.value;
     if (value !== undefined && t.remap.size > 0) {
         value = remapValueVariables(value, t.remap);
     }
     const out: GrammarRule = { parts: [] };
     if (value !== undefined) out.value = value;
-    if (t.spacingMode !== undefined) out.spacingMode = t.spacingMode;
+    if (partitionSpacing !== undefined) out.spacingMode = partitionSpacing;
     return out;
 }
 
@@ -1357,6 +1358,7 @@ function emitFromNode(
     node: TrieNode,
     state: EmitState,
     buildState: BuildState,
+    partitionSpacing: CompiledSpacingMode | undefined,
 ): GrammarRule[] {
     // Path-compress: walk down single-child / no-terminal chain, but
     // stop *before* entering a node that would itself be a fork - that
@@ -1378,12 +1380,15 @@ function emitFromNode(
     // plus each child's emitted subtree (in original insertion order).
     const items: { idx: number; rules: GrammarRule[] }[] = [];
     for (const t of current.terminals) {
-        items.push({ idx: t.idx, rules: [terminalToRule(t)] });
+        items.push({
+            idx: t.idx,
+            rules: [terminalToRule(t, partitionSpacing)],
+        });
     }
     for (const c of current.children.values()) {
         items.push({
             idx: c.firstIdx,
-            rules: emitFromNode(c, state, buildState),
+            rules: emitFromNode(c, state, buildState, partitionSpacing),
         });
     }
     items.sort((a, b) => a.idx - b.idx);
@@ -1498,21 +1503,6 @@ function checkFactoringEligible(
         if (needsTail) break;
     }
 
-    // Spacing-mode uniformity is required for *any* wrapper, tail or
-    // non-tail.  The wrapper rule has a single `spacingMode` that
-    // governs boundary semantics for the prefix parts (and the
-    // prefix/suffix seam).  `factorRules` partitions input rules by
-    // `spacingMode` and runs a separate trie per partition, so
-    // every member at every fork in one trie is guaranteed to share
-    // the same spacingMode by construction.  The check here is
-    // defensive against a future caller that bypasses partitioning.
-    /* istanbul ignore if -- @preserve: dead-by-construction defense */
-    if (!members.every((m) => m.spacingMode === members[0].spacingMode)) {
-        throw new Error(
-            "Internal: factorRules should partition members by spacingMode before reaching checkFactoringEligible",
-        );
-    }
-
     // Policy: prefer tail when enabled.  Tail wrapper is observably
     // identical to the unfactored shape for both needsTail and
     // !needsTail forks (the inherited `valueIds` chain is unread when
@@ -1556,10 +1546,9 @@ function buildTailWrapper(
     const factoredAlt: GrammarRule = {
         parts: [...prefix, suffixRulesPart],
     };
-    // Uniform spacing across members is guaranteed by
-    // `checkFactoringEligible` (mixed-spacing forks bail out before
-    // reaching here), so any member's spacingMode represents the whole
-    // group's.
+    // Members all share the partition's spacingMode (set by
+    // `terminalToRule` from the partition `factorRules` is processing),
+    // so any member's value represents the whole group's.
     const firstSpacing = members[0].spacingMode;
     if (firstSpacing !== undefined) {
         factoredAlt.spacingMode = firstSpacing;
@@ -1593,10 +1582,9 @@ function buildNonTailWrapper(
         suffixRulesPart.variable = gen;
         factoredAlt.value = { type: "variable", name: gen };
     }
-    // Uniform spacing across members is guaranteed by
-    // `checkFactoringEligible` (mixed-spacing forks bail out before
-    // reaching here), so any member's spacingMode represents the whole
-    // group's.
+    // Members all share the partition's spacingMode (set by
+    // `terminalToRule` from the partition `factorRules` is processing),
+    // so any member's value represents the whole group's.
     const firstSpacing = members[0].spacingMode;
     if (firstSpacing !== undefined) {
         factoredAlt.spacingMode = firstSpacing;
