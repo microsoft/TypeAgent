@@ -9,6 +9,7 @@ import {
     type MatchState,
     type PendingWildcard,
     type SeparatorMode,
+    type GrammarMatchOptions,
     separatorRegExpStr,
     requiresSeparator,
     isBoundarySatisfied,
@@ -17,9 +18,12 @@ import {
     createValue,
     finalizeState,
     finalizeNestedRule,
-    matchState,
     initialMatchState,
     leadingSpacingMode,
+    matchState,
+    cloneMatchState,
+    suppressBacktracksAfterSuccess,
+    tryNextBacktrack,
 } from "./grammarMatcher.js";
 
 const debugCompletion = registerDebug("typeagent:grammar:completion");
@@ -376,7 +380,7 @@ function getGrammarCompletionProperty(
 ): GrammarCompletionProperty | undefined {
     const temp = { ...state };
 
-    while (finalizeNestedRule(temp, undefined, true)) {}
+    while (finalizeNestedRule(temp, true)) {}
     if (temp.valueIds === null) {
         // valueId would have been undefined
         throw new Error(
@@ -1154,6 +1158,7 @@ function collectCandidates(
     input: string,
     minPrefixLength: number | undefined,
     direction: "forward" | "backward" | undefined,
+    matchOptions: GrammarMatchOptions | undefined,
 ): CompletionContext {
     const ctx: CompletionContext = {
         input,
@@ -1165,22 +1170,32 @@ function collectCandidates(
         deferredShadowCandidates: [],
     };
 
-    // Seed the work-list with one MatchState per top-level grammar rule.
-    // matchState may push additional states (for nested rules, optional
-    // parts, wildcard extensions, repeat groups) during processing.
-    const pending = initialMatchState(grammar);
+    // Seed the live MatchState for rule 0; rules 1..N-1 are
+    // pre-pushed onto its `backtracks` chain by
+    // `initialMatchState`.  Each fork site (optional skip,
+    // nested-rule alternation, repeat continuation) pushes its
+    // alternative onto the live state's `backtracks` rather
+    // than a global work-list.
+    const state = initialMatchState(grammar, matchOptions);
+    if (state === undefined) {
+        return ctx;
+    }
 
-    while (pending.length > 0) {
-        const state = pending.pop()!;
+    const wildcardShortest = state.wildcardPolicy === "shortest";
 
-        // Attempt to greedily match as many grammar parts as possible
-        // against the prefix.  `matched` is true only when ALL parts in
-        // the rule (including nested rules) were satisfied.  matchState
-        // may also push new derivative states onto `pending` (e.g. for
-        // alternative nested rules, optional-skip paths, wildcard
-        // extensions, repeat iterations).
-        const matched = matchState(state, input, pending);
-
+    // Single-axis drain: process one match attempt, collect
+    // candidates per category, then advance to the next backtrack
+    // frame.  Wildcard refinements (origin "wildcard") and
+    // structural alternatives (origin "optional"/"alternation"/
+    // "repeat") share the same LIFO chain — see
+    // `pushBacktrack` / `tryNextBacktrack`.
+    //
+    // We process every attempt (success and failure), unlike the
+    // matcher which only emits results on success — a failed
+    // attempt is a partial match that produces completion
+    // candidates for the next expected part.
+    do {
+        const matched = matchState(state, input);
         // Save the pending wildcard before finalizeState clears it.
         // Needed for backward completion of wildcards at the end of a rule.
         const savedPendingWildcard: PendingWildcard | undefined =
@@ -1189,14 +1204,13 @@ function collectCandidates(
         // Snapshot the state BEFORE finalizeState mutates it.  When
         // backward backs up past a wildcard captured by finalizeState,
         // we need the pre-capture state so the property completion
-        // does not include the backed-up wildcard's value.
-        // Shallow copy is sufficient: finalizeState only reassigns
-        // primitive fields (pendingWildcard, index) and appends to the
-        // .values linked list.  The linked-list nodes themselves are
-        // immutable once created, so the snapshot and the mutated state
-        // share .values/.parent chains safely.
+        // does not include the backed-up wildcard's value.  Use
+        // `cloneMatchState` to drop `backtracks` — the live
+        // chain will be mutated by the next iteration.
         const preFinalizeState: MatchState | undefined =
-            savedPendingWildcard !== undefined ? { ...state } : undefined;
+            savedPendingWildcard !== undefined
+                ? cloneMatchState(state)
+                : undefined;
 
         // finalizeState does two things:
         //   1. If a wildcard is pending at the end, attempt to capture
@@ -1213,18 +1227,43 @@ function collectCandidates(
                     preFinalizeState,
                     savedPendingWildcard,
                 );
-                continue;
+            } else {
+                processCleanPartial(
+                    ctx,
+                    state,
+                    preFinalizeState,
+                    savedPendingWildcard,
+                );
             }
-            processCleanPartial(
-                ctx,
-                state,
-                preFinalizeState,
-                savedPendingWildcard,
-            );
+            // After a successful path through this state, drop
+            // backtrack frames whose origin axis is configured to
+            // commit on first success.  Under wildcardPolicy:
+            // "shortest", this ALSO drops "wildcard"-origin frames
+            // belonging to sibling states deeper in the chain —
+            // preventing the sibling-rescue spurious completion
+            // class of bug.
+            // See `suppressBacktracksAfterSuccess`.
+            suppressBacktracksAfterSuccess(state);
         } else {
             processDirtyPartial(ctx, state, matched);
+            // Even for a dirty partial, if the pending wildcard
+            // starts at-or-past the last non-separator character
+            // (capture region is separator-only), the state has
+            // reached end-of-meaningful-input and any longer-
+            // wildcard alternative would re-emit the just-matched
+            // literal terminator as a spurious completion.
+            // Suppress per-policy frames as if it were a clean
+            // success.
+            if (
+                wildcardShortest &&
+                savedPendingWildcard !== undefined &&
+                nextNonSeparatorIndex(input, savedPendingWildcard.start) ===
+                    input.length
+            ) {
+                suppressBacktracksAfterSuccess(state);
+            }
         }
-    }
+    } while (tryNextBacktrack(state));
 
     return ctx;
 }
@@ -1717,18 +1756,34 @@ function materializeCandidates(
     };
 }
 
+// Alias for `GrammarMatchOptions` from `grammarMatcher`.  Re-exported
+// here so completion callers don't need to reach across modules for
+// what is structurally the same option set, but kept as a distinct
+// type alias so the two surfaces can diverge without churning
+// callers.  Use this when a partial match against the full input is
+// sufficient and the caller does not need ambiguous wildcard
+// placements enumerated.
+export type GrammarCompletionOptions = GrammarMatchOptions;
+
 export function matchGrammarCompletion(
     grammar: Grammar,
     input: string,
     minPrefixLength?: number,
     direction?: "forward" | "backward",
+    options?: GrammarCompletionOptions,
 ): GrammarCompletionResult {
     debugCompletion(
         `Start completion for input ${direction ?? "forward"}: "${input}"`,
     );
 
     // Phase 1 (collect)
-    const ctx = collectCandidates(grammar, input, minPrefixLength, direction);
+    const ctx = collectCandidates(
+        grammar,
+        input,
+        minPrefixLength,
+        direction,
+        options,
+    );
     // Phase 2 (finalize): wildcard anchors, shadows, EOI
     finalizeCandidates(ctx);
     // Phase 3 (materialize): convert candidates to final completions/properties
