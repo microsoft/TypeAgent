@@ -1420,8 +1420,13 @@ function emitFromNode(
     state.didFactor = true;
     return [
         eligibility.tail
-            ? buildTailWrapper(prefix, members)
-            : buildNonTailWrapper(prefix, members, buildState),
+            ? buildTailWrapper(prefix, members, partitionSpacing)
+            : buildNonTailWrapper(
+                  prefix,
+                  members,
+                  buildState,
+                  partitionSpacing,
+              ),
     ];
 }
 
@@ -1537,6 +1542,7 @@ function checkFactoringEligible(
 function buildTailWrapper(
     prefix: GrammarPart[],
     members: GrammarRule[],
+    partitionSpacing: CompiledSpacingMode | undefined,
 ): GrammarRule {
     const suffixRulesPart: RulesPart = {
         type: "rules",
@@ -1546,12 +1552,8 @@ function buildTailWrapper(
     const factoredAlt: GrammarRule = {
         parts: [...prefix, suffixRulesPart],
     };
-    // Members all share the partition's spacingMode (set by
-    // `terminalToRule` from the partition `factorRules` is processing),
-    // so any member's value represents the whole group's.
-    const firstSpacing = members[0].spacingMode;
-    if (firstSpacing !== undefined) {
-        factoredAlt.spacingMode = firstSpacing;
+    if (partitionSpacing !== undefined) {
+        factoredAlt.spacingMode = partitionSpacing;
     }
     return factoredAlt;
 }
@@ -1568,6 +1570,7 @@ function buildNonTailWrapper(
     prefix: GrammarPart[],
     members: GrammarRule[],
     buildState: BuildState,
+    partitionSpacing: CompiledSpacingMode | undefined,
 ): GrammarRule {
     const suffixRulesPart: RulesPart = { type: "rules", rules: members };
     const factoredAlt: GrammarRule = {
@@ -1582,12 +1585,8 @@ function buildNonTailWrapper(
         suffixRulesPart.variable = gen;
         factoredAlt.value = { type: "variable", name: gen };
     }
-    // Members all share the partition's spacingMode (set by
-    // `terminalToRule` from the partition `factorRules` is processing),
-    // so any member's value represents the whole group's.
-    const firstSpacing = members[0].spacingMode;
-    if (firstSpacing !== undefined) {
-        factoredAlt.spacingMode = firstSpacing;
+    if (partitionSpacing !== undefined) {
+        factoredAlt.spacingMode = partitionSpacing;
     }
     return factoredAlt;
 }

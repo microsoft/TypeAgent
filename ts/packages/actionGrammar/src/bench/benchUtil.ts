@@ -26,11 +26,27 @@ export const CONFIGS: { name: string; opts: LoadGrammarRulesOptions }[] = [
         opts: { optimizations: { factorCommonPrefixes: true } },
     },
     {
-        name: "both",
+        // Adds tailFactoring on top of factor.  Lets the factorer
+        // emit tail RulesParts at forks where members reference
+        // prefix-bound canonicals (today's `cross-scope-ref`
+        // bailouts), and prefers tail wrappers everywhere else
+        // (smaller AST, one fewer matcher frame push per fork).
+        name: "factor+tail",
+        opts: {
+            optimizations: {
+                factorCommonPrefixes: true,
+                tailFactoring: true,
+            },
+        },
+    },
+    {
+        // All passes enabled: inline + factor + tailFactoring.
+        name: "all",
         opts: {
             optimizations: {
                 inlineSingleAlternatives: true,
                 factorCommonPrefixes: true,
+                tailFactoring: true,
             },
         },
     },
@@ -80,9 +96,9 @@ export function runBenchmark(
 ): void {
     console.log(`\n=== ${label} ===`);
     console.log(
-        `| config    | RulesParts | match ms (${ITERATIONS}x) | speedup |`,
+        `| config      | RulesParts | match ms (${ITERATIONS}x) | speedup |`,
     );
-    console.log(`|-----------|-----------:|---------------:|--------:|`);
+    console.log(`|-------------|-----------:|---------------:|--------:|`);
     let baselineMs = 0;
     for (const cfg of CONFIGS) {
         const errors: string[] = [];
@@ -113,7 +129,7 @@ export function runBenchmark(
         if (cfg.name === "baseline") baselineMs = ms;
         const speedup = baselineMs > 0 ? baselineMs / ms : 1;
         console.log(
-            `| ${cfg.name.padEnd(9)} | ${String(partCount).padStart(10)} | ${ms.toFixed(1).padStart(14)} | ${colorSpeedup(speedup)} |`,
+            `| ${cfg.name.padEnd(11)} | ${String(partCount).padStart(10)} | ${ms.toFixed(1).padStart(14)} | ${colorSpeedup(speedup)} |`,
         );
     }
 }

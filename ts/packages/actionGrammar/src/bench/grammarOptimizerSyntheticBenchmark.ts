@@ -75,6 +75,32 @@ function buildCombined(width: number): string {
     );
 }
 
+/**
+ * Cross-scope-ref fork: N alternatives that share a prefix capturing
+ * `$(item:string)` and each alternative's value expression references
+ * that prefix-bound capture.  Without `tailFactoring`, the factorer
+ * bails out at this fork (`cross-scope-ref`) and emits each member
+ * as a separate full rule - losing prefix factoring entirely.  With
+ * `tailFactoring`, the factorer emits a tail RulesPart and the prefix
+ * is shared.  This is the motivating case the player grammar hits in
+ * the wild.
+ *
+ *   <Choice> = act on $(item:string) by $(name0:string) -> { kind: "by0", item, name0 }
+ *            | act on $(item:string) by $(name1:string) -> { kind: "by1", item, name1 }
+ *            | …
+ */
+function buildCrossScopeRefFork(width: number): string {
+    const alts: string[] = [];
+    for (let i = 0; i < width; i++) {
+        const slot = `name${i}`;
+        const tag = `by${i}`;
+        alts.push(
+            `act on $(item:string) by ${i} $(${slot}:string) -> { kind: "${tag}", item, ${slot} }`,
+        );
+    }
+    return `<Start> = <Choice>;\n<Choice> = ${alts.join("\n         | ")};`;
+}
+
 function main(): void {
     runBenchmark(
         `pass-through chain (depth=8)`,
@@ -117,6 +143,34 @@ function main(): void {
             "perform the action with item valuea0",
             "perform the action with item valuek0",
             "perform the action with item nothere",
+            "noise",
+        ],
+    );
+
+    runBenchmark(
+        `cross-scope-ref fork (width=10)`,
+        "synthetic.grammar",
+        buildCrossScopeRefFork(10),
+        [
+            "act on widget by 0 alice",
+            "act on widget by 5 bob",
+            "act on widget by 9 carol",
+            "act on widget by 3 dave",
+            "act on widget by 11 eve",
+            "no match here",
+        ],
+    );
+
+    runBenchmark(
+        `cross-scope-ref fork (width=30)`,
+        "synthetic.grammar",
+        buildCrossScopeRefFork(30),
+        [
+            "act on widget by 0 alice",
+            "act on widget by 15 bob",
+            "act on widget by 29 carol",
+            "act on widget by 7 dave",
+            "act on widget by 99 eve",
             "noise",
         ],
     );
