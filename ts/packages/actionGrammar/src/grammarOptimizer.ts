@@ -103,6 +103,7 @@ export const recommendedOptimizations: GrammarOptimizationOptions = {
 export function optimizeGrammar(
     grammar: Grammar,
     options: GrammarOptimizationOptions | undefined,
+    warnings?: string[],
 ): Grammar {
     if (!options) {
         return grammar;
@@ -114,11 +115,13 @@ export function optimizeGrammar(
     if (options.tailFactoring && !options.factorCommonPrefixes) {
         // tailFactoring is a sub-mode of the prefix-factoring pass;
         // setting it without enabling the parent pass is almost
-        // certainly a configuration mistake.  Log so it surfaces in
-        // debug traces rather than silently being a no-op.
-        debug(
-            "tailFactoring is set but factorCommonPrefixes is not - tailFactoring has no effect",
-        );
+        // certainly a configuration mistake.  Surface via the caller's
+        // warnings array (and log via debug) so it doesn't silently
+        // become a no-op.
+        const msg =
+            "tailFactoring is set but factorCommonPrefixes is not - tailFactoring has no effect";
+        debug(msg);
+        warnings?.push(msg);
     }
     if (options.inlineSingleAlternatives) {
         rules = inlineSingleAlternativeRules(rules, inlineConfig);
@@ -133,6 +136,25 @@ export function optimizeGrammar(
             // Pass 1 in their pre-factored shape.  Re-run the inliner so
             // those collapse.
             rules = inlineSingleAlternativeRules(rules, inlineConfig);
+        }
+        if (options.tailFactoring) {
+            // Self-validate: any tail RulesPart the factorer emitted
+            // must satisfy the structural contract.  Catches
+            // regressions in the wrapper builders at the offending
+            // site rather than as confusing match failures or
+            // runtime throws deep in `enterTailRulesPart`.  Honors
+            // `onInvariantViolation`: throw on the strict path,
+            // demote to warning + debug log on the permissive path.
+            try {
+                validateTailRulesParts(rules);
+            } catch (e) {
+                const msg = `Optimizer self-check failed: ${(e as Error).message}`;
+                if (inlineConfig.onInvariantViolation === "throw") {
+                    throw new Error(msg);
+                }
+                debug(msg);
+                warnings?.push(msg);
+            }
         }
     }
     if (rules === grammar.rules) {
@@ -1535,9 +1557,12 @@ function checkFactoringEligible(
  * value flows up directly as the wrapper rule's value - no
  * synthesized wrapper-binding variable, no `factoredAlt.value`.
  *
- * Caller (`emitFromNode`) only reaches this with `members.length >= 2`
- * (the length===1 short-circuit returns earlier), upholding the
- * `RulesPart.tailCall` >= 2-rules invariant by construction.
+ * Invariant - `members.length >= 2`.  `emitFromNode` short-circuits
+ * the single-member case before reaching the wrapper builders
+ * (`if (members.length === 1) return [...]`), so this builder is
+ * only ever called at multi-member forks.  This upholds the
+ * `RulesPart.tailCall` `rules.length >= 2` contract by construction;
+ * `validateTailRulesParts` re-checks it post-emit.
  */
 function buildTailWrapper(
     prefix: GrammarPart[],
@@ -1561,10 +1586,18 @@ function buildTailWrapper(
 /**
  * Build a non-tail wrapper rule: each member's value is captured into
  * a synthesized opaque wrapper-binding variable, and the wrapper rule
- * forwards that binding as its own value.  Used when `tailFactoring`
- * is disabled and the fork doesn't need cross-scope reference
- * resolution (otherwise the factorer would have bailed out with
- * `cross-scope-ref`).
+ * forwards that binding as its own value.
+ *
+ * **Reachability:** today this builder is only reached when
+ * `tailFactoring` is OFF.  When `tailFactoring` is on, the
+ * eligibility check unconditionally returns `tail: true` for every
+ * passing fork (the tail wrapper is observably identical to the
+ * non-tail wrapper for both `needsTail` and `!needsTail` shapes,
+ * produces a smaller AST, and saves a frame push), so this branch
+ * is dead on the tail-factoring path.  Kept as the legacy emit
+ * path: callers that route through the NFA/DFA matcher must leave
+ * `tailFactoring` off, and they still benefit from prefix factoring
+ * via this builder for the `!needsTail` case.
  */
 function buildNonTailWrapper(
     prefix: GrammarPart[],

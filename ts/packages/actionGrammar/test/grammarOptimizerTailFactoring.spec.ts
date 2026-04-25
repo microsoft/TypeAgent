@@ -1,10 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
-    grammarFromJson,
-    grammarFromJsonValidated,
-} from "../src/grammarDeserializer.js";
+import { grammarFromJson } from "../src/grammarDeserializer.js";
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
 import { validateTailRulesParts } from "../src/grammarOptimizer.js";
@@ -140,7 +137,7 @@ describe("Grammar Optimizer - tail RulesPart factoring (opt-in)", () => {
             },
         });
         const json = grammarToJson(optimized);
-        const reloaded = grammarFromJsonValidated(json);
+        const reloaded = grammarFromJson(json);
 
         const reloadedTailParts = findAllRulesParts(reloaded.rules).filter(
             (rp) => rp.tailCall,
@@ -190,11 +187,14 @@ describe("Grammar Optimizer - tail RulesPart factoring (opt-in)", () => {
         }
     });
 
-    // Nested tail factoring: a tail RulesPart member that itself
-    // contains a fork eligible for tail factoring.  Validates the
-    // factorer recurses through tail wrappers and the matcher handles
-    // nested tail-call entries correctly.
-    it("supports nested tail RulesParts", () => {
+    // Strengthened from a `tailParts.length >= 1` smoke check to
+    // assert the exact factored shape: three input alternatives
+    // sharing a `a $(p:string)` prefix collapse into a SINGLE tail
+    // wrapper whose prefix is the shared parts and whose suffix
+    // RulesPart has one member per original alt.  A regression that
+    // failed to factor (or that emitted multiple wrappers per fork)
+    // would change either count.
+    it("collapses three prefix-sharing alts into a single tail wrapper", () => {
         const text = `<Start> = a $(p:string) b $(q:string) -> { v: "ab", p, q }
        | a $(p:string) c $(q:string) -> { v: "ac", p, q }
        | a $(p:string) d $(q:string) -> { v: "ad", p, q };`;
@@ -205,11 +205,21 @@ describe("Grammar Optimizer - tail RulesPart factoring (opt-in)", () => {
                 tailFactoring: true,
             },
         });
+        // Top-level: one wrapper rule (was three before factoring).
+        expect(optimized.rules.length).toBe(1);
         const tailParts = findAllRulesParts(optimized.rules).filter(
             (rp) => rp.tailCall,
         );
-        expect(tailParts.length).toBeGreaterThanOrEqual(1);
-        // Validator should accept the optimized AST.
+        // Exactly one tail wrapper at this fork.
+        expect(tailParts.length).toBe(1);
+        // The single tail wrapper holds all three original alternatives.
+        expect(tailParts[0].rules.length).toBe(3);
+        // The wrapper rule itself ends in the tail RulesPart (last
+        // part), per `RulesPart.tailCall` contract.
+        const wrapper = optimized.rules[0];
+        expect(wrapper.parts[wrapper.parts.length - 1]).toBe(tailParts[0]);
+        expect(wrapper.parts.length).toBeGreaterThan(1); // prefix exists
+        // Validator should accept the factored AST.
         expect(() => validateTailRulesParts(optimized.rules)).not.toThrow();
 
         for (const input of [
@@ -346,12 +356,10 @@ describe("validateTailRulesParts", () => {
                 }
             }
         }
-        // Permissive load still works (cached path), but validated
-        // load throws.
-        expect(() => grammarFromJson(json)).not.toThrow();
-        expect(() => grammarFromJsonValidated(json)).toThrow(
-            /rules\.length >= 2/,
-        );
+        // Permissive (validate: false) load still works (cached path),
+        // but the default load throws.
+        expect(() => grammarFromJson(json, { validate: false })).not.toThrow();
+        expect(() => grammarFromJson(json)).toThrow(/rules\.length >= 2/);
     });
 });
 

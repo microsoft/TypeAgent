@@ -1670,27 +1670,13 @@ function matchVarStringPart(state: MatchState, part: VarStringPart) {
 // are automatically discarded on restore.
 function enterTailRulesPart(state: MatchState, part: RulesPart): void {
     const rules = part.rules;
-    // Defensive: validateGrammar should have caught any contract
-    // violation upstream, but a misbehaving caller / future change
-    // could still hand us a malformed tail part.  The assertions are
-    // cheap and catch problems at the offending site rather than
-    // letting state corruption surface as a confusing match failure.
-    if (rules.length < 2) {
-        throw new Error(
-            `Internal: tail RulesPart requires rules.length >= 2 (got ${rules.length})`,
-        );
-    }
-    if (part.repeat || part.optional || part.variable !== undefined) {
-        throw new Error(
-            "Internal: tail RulesPart cannot have repeat/optional/variable",
-        );
-    }
-    if (rules[0].spacingMode !== state.spacingMode) {
-        throw new Error(
-            "Internal: tail RulesPart member spacingMode must match parent's",
-        );
-    }
-
+    // Structural contract is enforced by `validateTailRulesParts`,
+    // which runs at JSON load time (default in `grammarFromJson`) and
+    // at the end of `optimizeGrammar` when `tailFactoring` is on.
+    // No runtime asserts here on the hot path - the cases this code
+    // would otherwise check (rules.length >= 2, no
+    // repeat/optional/variable, member spacingMode matches parent's)
+    // are caught at construction time at the offending site.
     state.name = getNestedStateName(state, part, 0);
     state.parts = rules[0].parts;
     state.value = rules[0].value;
@@ -1698,10 +1684,13 @@ function enterTailRulesPart(state: MatchState, part: RulesPart): void {
     state.suppressOptionalFork = undefined;
     // Mirror the non-tail RulesPart entry path and the backtrack
     // restore in `tryNextBacktrack` (which overlays
-    // `rule.spacingMode` per restored alternative).  The assertion
-    // above guarantees this is a no-op when the contract holds; on
-    // a contract violation it keeps rule 0's behavior consistent
-    // with rule i's after backtrack.
+    // `rule.spacingMode` per restored alternative).  By contract,
+    // member spacingMode equals the parent rule's spacingMode and
+    // `state.spacingMode` is already the parent rule's mode at this
+    // point (the tail RulesPart is the last part of the parent),
+    // so this assignment is a no-op when the contract holds.  Kept
+    // explicit to mirror the non-tail entry path and the backtrack
+    // restore.
     state.spacingMode = rules[0].spacingMode;
 
     // `forkMatchState` snapshots `valueIds` (and every other field) at

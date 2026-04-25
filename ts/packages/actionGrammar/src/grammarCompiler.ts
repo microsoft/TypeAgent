@@ -519,7 +519,7 @@ export function compileGrammar(
     // Skip optimizations when there were errors — the AST may be partial
     // and optimization invariants may not hold.
     if (errors.length === 0 && optimizations !== undefined) {
-        return optimizeGrammar(grammar, optimizations);
+        return optimizeGrammar(grammar, optimizations, warnings);
     }
     return grammar;
 }
