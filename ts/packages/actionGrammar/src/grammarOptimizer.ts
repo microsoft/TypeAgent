@@ -62,13 +62,10 @@ export type GrammarOptimizationOptions = {
      * indirection), and save one matcher frame push per fork - so
      * tail is preferred whenever it can be emitted.
      *
-     * The non-tail wrapper is used only as a fallback at forks where
-     * tail is structurally unavailable (currently: members with
-     * heterogeneous `spacingMode`).  Forks whose member value
-     * expressions reference prefix-bound canonicals can *only* be
-     * factored as tail; if tail is unavailable at such a fork the
-     * factorer bails out (`cross-scope-ref` / `tail-mixed-spacing`)
-     * and emits each member as a separate full rule.
+     * Forks whose member value expressions reference prefix-bound
+     * canonicals can *only* be factored as tail; with this flag off
+     * the factorer bails out at such forks (`cross-scope-ref`) and
+     * emits each member as a separate full rule.
      *
      * Without this flag set, the factorer never emits tail RulesParts
      * - preserving today's matcher semantics for every consumer.
@@ -778,24 +775,57 @@ function factorRules(
 ): GrammarRule[] {
     if (rules.length < 2) return rules;
 
+    // Partition by `spacingMode`.  A wrapper rule has a single
+    // `spacingMode` that governs prefix-boundary semantics, so two
+    // members with different spacingModes can never share a wrapper.
+    // Rather than bail out at every mixed-spacing fork (which would
+    // miss legitimate factoring opportunities within each spacing
+    // group), build a separate trie per spacingMode and concatenate
+    // the per-partition output back in original-index order.
+    //
+    // Map iteration is insertion order; partitions are visited in
+    // first-occurrence order, but the final flatten sorts by `idx`
+    // so source ordering is preserved across partitions.
+    const partitions = new Map<
+        CompiledSpacingMode,
+        { idx: number; rule: GrammarRule }[]
+    >();
+    for (let i = 0; i < rules.length; i++) {
+        const r = rules[i];
+        let p = partitions.get(r.spacingMode);
+        if (p === undefined) {
+            p = [];
+            partitions.set(r.spacingMode, p);
+        }
+        p.push({ idx: i, rule: r });
+    }
+
     const buildState: BuildState = {
         nextCanonicalId: 0,
         rulesArrayIds: new WeakMap(),
         nextRulesArrayId: 0,
         tailFactoring,
     };
-    const root: TrieRoot = { children: new Map(), terminals: [] };
-    for (let i = 0; i < rules.length; i++) {
-        insertRuleIntoTrie(root, rules[i], i, buildState);
-    }
-
     const state: EmitState = { didFactor: false };
     const items: { idx: number; rules: GrammarRule[] }[] = [];
-    for (const c of root.children.values()) {
-        items.push({
-            idx: c.firstIdx,
-            rules: emitFromNode(c, state, buildState),
-        });
+
+    for (const partition of partitions.values()) {
+        if (partition.length === 1) {
+            // Solo partition - nothing to factor against; pass the
+            // rule through at its original index.
+            items.push({ idx: partition[0].idx, rules: [partition[0].rule] });
+            continue;
+        }
+        const root: TrieRoot = { children: new Map(), terminals: [] };
+        for (const { idx, rule } of partition) {
+            insertRuleIntoTrie(root, rule, idx, buildState);
+        }
+        for (const c of root.children.values()) {
+            items.push({
+                idx: c.firstIdx,
+                rules: emitFromNode(c, state, buildState),
+            });
+        }
     }
     items.sort((a, b) => a.idx - b.idx);
     const newRules: GrammarRule[] = items.flatMap((it) => it.rules);
@@ -1471,16 +1501,16 @@ function checkFactoringEligible(
     // Spacing-mode uniformity is required for *any* wrapper, tail or
     // non-tail.  The wrapper rule has a single `spacingMode` that
     // governs boundary semantics for the prefix parts (and the
-    // prefix/suffix seam); before factoring, each member's own
-    // `spacingMode` governed boundaries across its full parts -
-    // including the prefix portion.  When members disagree on
-    // `spacingMode` there is no single value the wrapper can carry
-    // that preserves every member's original prefix semantics, so we
-    // refuse to factor at this fork.
-    const firstSpacing = members[0].spacingMode;
-    const uniformSpacing = members.every((m) => m.spacingMode === firstSpacing);
-    if (!uniformSpacing) {
-        return { ok: false, reason: "mixed-spacing" };
+    // prefix/suffix seam).  `factorRules` partitions input rules by
+    // `spacingMode` and runs a separate trie per partition, so
+    // every member at every fork in one trie is guaranteed to share
+    // the same spacingMode by construction.  The check here is
+    // defensive against a future caller that bypasses partitioning.
+    /* istanbul ignore if -- @preserve: dead-by-construction defense */
+    if (!members.every((m) => m.spacingMode === members[0].spacingMode)) {
+        throw new Error(
+            "Internal: factorRules should partition members by spacingMode before reaching checkFactoringEligible",
+        );
     }
 
     // Policy: prefer tail when enabled.  Tail wrapper is observably

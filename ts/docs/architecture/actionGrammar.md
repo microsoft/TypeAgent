@@ -540,14 +540,21 @@ below the failing fork still applies. Failure reasons:
 - **Cross-scope reference.** A suffix's value expression references
   a canonical name bound by the prefix. Nested rule scope is fresh
   in the matcher (entering a `RulesPart` resets `valueIds`), so the
-  suffix cannot see prefix bindings — bail out so each member emits
+  suffix cannot see prefix bindings - bail out so each member emits
   at the wrapper's level instead. (Recoverable by enabling
   `tailFactoring`; see below.)
-- **Mixed spacing.** Members disagree on `spacingMode`. The wrapper
-  rule has a single `spacingMode` that governs the prefix and the
-  prefix/suffix seam, and there is no value the wrapper can carry
-  that preserves every member's original prefix boundary semantics.
-  Factoring is refused at this fork.
+
+**Spacing-mode partitioning.** A wrapper rule has a single
+`spacingMode` that governs prefix-boundary semantics, so members
+with different spacing modes can never share a wrapper. Rather than
+bailing out at every mixed-spacing fork (which would miss legitimate
+factoring opportunities within each spacing group), `factorRules`
+partitions input rules by `spacingMode` and runs a separate trie per
+partition. Each partition emits its own factored output; the
+partitions are concatenated back in original-index order. As a
+result every member at every fork inside one trie is guaranteed to
+share the same `spacingMode` by construction, and `mixed-spacing`
+is never observed at the eligibility check.
 
 The earlier "binding shadow" guard is no longer needed: opaque
 canonicals allocated globally per `factorRules` call cannot
@@ -589,9 +596,10 @@ Tail wrappers carry a strict structural contract (validated by
 
 Tail wrappers are observably identical to the unfactored shape and
 also save one matcher frame push per fork. When `tailFactoring` is
-on, the factorer prefers tail wherever the contract is structurally
-satisfiable, falling back to the non-tail wrapper only when tail is
-unavailable (today: forks that hit `mixed-spacing`).
+on, the factorer prefers tail wherever the eligibility check
+succeeds; today every successful eligibility decision satisfies the
+tail contract, so the non-tail wrapper builder is only reached when
+`tailFactoring` is off.
 
 **NFA compatibility.** Tail RulesParts are understood only by the
 NFA-interpreter matcher (`grammarMatcher.ts`). The NFA compiler /
