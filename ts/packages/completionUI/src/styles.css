@@ -1,0 +1,101 @@
+/* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+
+/* Shared dropdown completion menu styles. */
+.autocomplete-container {
+    box-sizing: border-box;
+    font-family: inherit;
+    border-radius: 12px;
+    position: absolute;
+    bottom: 100%;
+    z-index: 100;
+    overflow: hidden;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow:
+        0 4px 16px rgba(0, 0, 0, 0.12),
+        0 1px 4px rgba(0, 0, 0, 0.06);
+    background-color: #fffffff0;
+    width: max-content;
+    backdrop-filter: blur(8px);
+}
+
+.autocomplete-container .completions {
+    padding: 0;
+    margin: 0;
+}
+
+.autocomplete-container .completions li {
+    list-style-type: none;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.autocomplete-container .completions li:hover {
+    background-color: rgba(167, 139, 250, 0.08);
+}
+
+.autocomplete-container .completions li .search-prefix {
+    font-weight: bold;
+}
+
+.autocomplete-container .completions .completion-selected,
+.autocomplete-container .completions .completion-selected:hover {
+    background: linear-gradient(135deg, #a78bfa, #7c3aed);
+    color: white;
+}
+
+.autocomplete-container .completions li .search-symbol {
+    margin-right: 5px;
+}
+
+.autocomplete-scrollbar {
+    background-color: rgba(0, 0, 0, 0.04);
+    width: 6px;
+    top: 4px;
+    bottom: 4px;
+    right: 2px;
+    position: absolute;
+    border-radius: 3px;
+}
+
+.autocomplete-scrollbar-indicator {
+    background-color: rgba(124, 58, 237, 0.3);
+    width: 100%;
+    position: absolute;
+    border-radius: 3px;
+}
+
+.completion-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 8px;
+    line-height: 1;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    color: #a78bfa;
+    padding: 3px 8px;
+    user-select: none;
+}
+
+.completion-toggle::before,
+.completion-toggle::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background-color: currentColor;
+    opacity: 0.4;
+}
+
+.completion-toggle::before {
+    margin-right: 6px;
+}
+
+.completion-toggle::after {
+    margin-left: 6px;
+}
+
+.completion-toggle:hover {
+    opacity: 1 !important;
+}

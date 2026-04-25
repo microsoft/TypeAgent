@@ -1,16 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import {
+// Re-export from the shared @typeagent/completion-ui package.  Kept as a
+// stub to preserve existing relative-import paths inside the shell renderer.
+export type {
     SearchMenuItem,
     SearchMenuPosition,
     SearchMenuUIUpdateData,
-} from "../../../preload/electronTypes";
-export type { SearchMenuItem, SearchMenuPosition, SearchMenuUIUpdateData };
-
-export interface SearchMenuUI {
-    update(data: SearchMenuUIUpdateData): void;
-    adjustSelection(deltaY: number): void;
-    selectCompletion(): void;
-    close(): void;
-}
+    SearchMenuUI,
+} from "@typeagent/completion-ui";

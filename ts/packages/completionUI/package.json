@@ -1,0 +1,38 @@
+{
+  "name": "@typeagent/completion-ui",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Shared DOM UI components for TypeAgent command-completion (dropdown menu and toggle).",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/completionUI"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js",
+    "./styles.css": "./dist/styles.css"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "npm run tsc && npm run copy:css",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "copy:css": "node -e \"require('fs').mkdirSync('dist',{recursive:true});require('fs').copyFileSync('src/styles.css','dist/styles.css')\"",
+    "prettier": "prettier --check . --ignore-path ../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "agent-dispatcher": "workspace:*"
+  },
+  "devDependencies": {
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  }
+}

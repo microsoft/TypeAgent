@@ -63,6 +63,7 @@
     "@typeagent/agent-sdk": "workspace:*",
     "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/common-utils": "workspace:*",
+    "@typeagent/completion-ui": "workspace:*",
     "@typeagent/dispatcher-rpc": "workspace:*",
     "agent-dispatcher": "workspace:*",
     "aiclient": "workspace:*",
