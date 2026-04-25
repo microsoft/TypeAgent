@@ -228,6 +228,35 @@ export type RulesPart = {
     variable?: string | undefined;
     optional?: boolean | undefined;
     repeat?: boolean | undefined; // Kleene star: zero or more occurrences
+
+    /**
+     * Optimizer-only flag marking this `RulesPart` as a true *tail call*.
+     * When set, the matcher does not push a parent frame on entry — the
+     * selected member's value flows up directly as the containing
+     * (parent) rule's value, and the child's bindings cons onto the
+     * parent's `valueIds` chain (so member value-exprs see prefix
+     * bindings).
+     *
+     * Required structural constraints, validated by the compiler:
+     *   - This part is the LAST entry in its containing rule's `parts`.
+     *   - The containing rule has `value === undefined`.
+     *   - `repeat`, `optional`, and `variable` are all forbidden here.
+     *   - `rules.length >= 2`.  A single-rule tail `RulesPart` is
+     *     pointless: the lone member's value would just flow up to
+     *     the parent, which is equivalent to inlining the member's
+     *     parts directly into the parent (since tail already shares
+     *     scope with the parent).  The factorer only emits tail
+     *     wrappers at multi-member forks.
+     *   - Each member rule individually produces a value (explicit
+     *     `value` or implicit-default-eligible).
+     *   - `spacingMode` of every member equals the containing rule's
+     *     spacingMode (boundary semantics must match — see the
+     *     equivalent check in the inliner).
+     *
+     * Not exposed in `.agr` source syntax; introduced only by the
+     * factorer's prefix-factoring pass.
+     */
+    tail?: boolean | undefined;
 };
 
 export type PhraseSetPart = {
@@ -335,6 +364,8 @@ export type RulePartJson = {
     variable?: string | undefined;
     optional?: boolean | undefined;
     repeat?: boolean | undefined;
+    /** See `RulesPart.tail`. */
+    tail?: boolean | undefined;
 };
 
 export type PhraseSetPartJson = {

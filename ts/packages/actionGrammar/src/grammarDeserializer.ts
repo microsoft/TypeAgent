@@ -48,6 +48,7 @@ export function grammarFromJson(json: GrammarJson): Grammar {
                     optional: p.optional,
                 };
                 if (p.repeat) part.repeat = true;
+                if (p.tail) part.tail = true;
                 return part;
             }
             case "phraseSet": {

@@ -1194,6 +1194,12 @@ function compileRulesPart(
     checkedVariables?: Set<string>,
     overrideVariableName?: string,
 ): number {
+    if (part.tail) {
+        throw new Error(
+            "compileRulesPart: tail RulesParts are not supported by the NFA compiler. " +
+                "Disable `tailFactoring` in the grammar optimizer for NFA/DFA paths.",
+        );
+    }
     if (part.rules.length === 0) {
         // Empty rules - epsilon transition
         builder.addEpsilonTransition(fromState, toState);
@@ -1266,6 +1272,12 @@ function compileRulesPartWithSlots(
     toState: number,
     context: RuleCompilationContext,
 ): number {
+    if (part.tail) {
+        throw new Error(
+            "compileRulesPartWithSlots: tail RulesParts are not supported by the NFA compiler. " +
+                "Disable `tailFactoring` in the grammar optimizer for NFA/DFA paths.",
+        );
+    }
     if (part.rules.length === 0) {
         // Empty rules - epsilon transition
         builder.addEpsilonTransition(fromState, toState);

@@ -1740,6 +1740,50 @@ export function matchState(state: MatchState, request: string) {
                 const rules = part.rules;
                 debugMatch(state, `expanding ${rules.length} rules`);
 
+                if (part.tail) {
+                    // Tail RulesPart: true tail call.  No parent frame
+                    // is pushed — `state.parent` keeps pointing at
+                    // whatever ancestor frame was already current.
+                    // When the selected member finishes, finalize pops
+                    // straight to that ancestor with the member's
+                    // value/valueIds in place.
+                    //
+                    // Structural contract (validated upstream): this
+                    // is the last part of the parent rule, the parent
+                    // has no value of its own, and `repeat`/`optional`/
+                    // `variable` are all forbidden — so there is
+                    // nothing left in the parent for a parent frame to
+                    // resume to, no value to synthesize at parent
+                    // finalize, and no captured wrapper variable to
+                    // bind.
+                    //
+                    // Scope: do NOT reset `state.valueIds` — the
+                    // child's bindings cons onto the parent's
+                    // persistent linked list, so member value-exprs
+                    // resolve prefix-bound canonicals naturally
+                    // through `createValue`.  Backtracking across
+                    // sibling alts comes for free because the
+                    // alternation cursor frame snapshots `valueIds`
+                    // before any member binds, automatically
+                    // discarding anything an abandoned branch added.
+                    state.name = getNestedStateName(state, part, 0);
+                    state.parts = rules[0].parts;
+                    state.value = rules[0].value;
+                    state.partIndex = 0;
+                    state.suppressOptionalFork = undefined;
+                    state.spacingMode = rules[0].spacingMode;
+
+                    if (rules.length > 1) {
+                        const base = forkMatchState(state);
+                        const namePrefix = part.name
+                            ? `<${part.name}>`
+                            : getStateName(state);
+                        pushAlternation(state, base, rules, namePrefix);
+                    }
+                    // continue the loop (without incrementing partIndex)
+                    continue;
+                }
+
                 // Save the current state to be restored after finishing the nested rule.
                 const parent: ParentMatchState = {
                     name: state.name,

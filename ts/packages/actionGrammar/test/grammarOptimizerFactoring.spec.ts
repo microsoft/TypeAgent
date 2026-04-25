@@ -798,16 +798,35 @@ describe("Grammar Optimizer - Wrapper rule spacingMode propagation", () => {
         }
     });
 
-    it("does not set wrapper spacingMode when members disagree", () => {
-        // Members with differing spacingMode → wrapper stays default
-        // (auto / undefined).
+    it("refuses to factor when members disagree on spacingMode", () => {
+        // Members with differing spacingMode have no single boundary
+        // semantics the wrapper rule could carry that preserves every
+        // member's original prefix matching, so the factorer bails out
+        // at this fork and emits the alternatives unfactored.
         const text = `<Start> [spacing=required] = play hello -> 1;
 <Start> [spacing=optional] = play world -> 2;`;
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { factorCommonPrefixes: true },
         });
-        expect(optimized.rules.length).toBe(1);
-        expect(optimized.rules[0].spacingMode).toBeUndefined();
+        // No factoring → both top-level rules survive with their
+        // original spacingMode intact.
+        expect(optimized.rules.length).toBe(2);
+        expect(optimized.rules[0].spacingMode).toBe("required");
+        expect(optimized.rules[1].spacingMode).toBe("optional");
+
+        // Behavior is identical to the unoptimized grammar across
+        // representative inputs (with and without inter-token spacing).
+        const baseline = loadGrammarRules("t.grammar", text);
+        for (const input of [
+            "play hello",
+            "play world",
+            "playhello",
+            "playworld",
+        ]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
     });
 });
 
