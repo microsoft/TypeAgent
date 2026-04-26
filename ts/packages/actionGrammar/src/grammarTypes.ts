@@ -283,13 +283,25 @@ export type PhraseSetPart = {
  * Optimizer-only first-token dispatch table.  Replaces a `RulesPart`
  * whose alternatives can be partitioned by the lowercased first token
  * each one consumes.  At match time the matcher peeks one token from
- * the input, looks it up in `tokenMap`, and tries the listed suffix
- * rules (with the consumed token already credited - the suffix does
- * not re-match it).  Members whose first token is not statically known
- * (wildcard / number / phraseSet first part, recursive or nested
- * RulesPart-first members, bound first-StringPart, empty parts) live
- * in `fallback` and are tried as ordinary alternatives after the
- * tokenMap hits.
+ * the input, looks it up in `tokenMap`, and tries only the listed
+ * suffix rules.
+ *
+ * **Filter-only semantics.**  The peeked token is *not* consumed: each
+ * suffix rule retains its full original `parts` (including its leading
+ * `StringPart`), and the matcher re-matches that token via the suffix
+ * rule's normal `StringPart` regex.  The dispatch's only role is to
+ * cull members whose first token cannot match the peeked input -
+ * turning what would otherwise be a linear scan over N alternatives
+ * into an O(1) hash lookup that yields a small bucket.  This
+ * preserves the matcher's implicit-default behavior for
+ * StringPart-only rules (which depends on the leading tokens being
+ * present in `parts`) without any per-suffix rewriting in the
+ * optimizer.
+ *
+ * Members whose first token is not statically known (wildcard /
+ * number / phraseSet first part, recursive or nested RulesPart-first
+ * members, bound first-StringPart, empty parts) live in `fallback`
+ * and are tried as ordinary alternatives after the tokenMap hits.
  *
  * Eligibility (computed by `dispatchifyAlternations`):
  *   - Containing partition's `spacingMode === "required"` always OK.
@@ -301,11 +313,6 @@ export type PhraseSetPart = {
  *     partitions the optimizer leaves the original `RulesPart`
  *     unchanged.
  *
- * Suffix rules: when the leading `StringPart` carried multiple tokens
- * (e.g. `["play", "song"]`), the suffix keeps a tail-truncated
- * `StringPart` (`["song"]`).  When it carried a single token, the
- * `StringPart` is removed entirely from `parts`.
- *
  * Not exposed in `.agr` source.  The NFA/DFA compile path expands
  * `DispatchPart` back into an equivalent `RulesPart` before
  * compilation (the NFA already does global first-token dispatch via
@@ -313,7 +320,13 @@ export type PhraseSetPart = {
  */
 export type DispatchPart = {
     type: "dispatch";
-    /** Lowercased first token → suffix rules. */
+    /**
+     * Lowercased first token -> rules whose first `StringPart` begins
+     * with that token.  The rules are the *original* alternation
+     * members, unmodified - the matcher re-matches the leading token
+     * via each rule's normal `StringPart` regex (see filter-only
+     * semantics in the type-level docstring above).
+     */
     tokenMap: Map<string, GrammarRule[]>;
     /**
      * Members whose first token is not statically known.  Tried as

@@ -46,7 +46,11 @@ const wildcardTrimRegExp = new RegExp(
 // Mongolian). In "auto" mode, a separator is required between two adjacent
 // characters only when BOTH belong to one of these scripts. Unknown/unlisted
 // scripts (e.g. CJK) default to no separator needed.
-const wordBoundaryScriptRe =
+//
+// Exported so the dispatch optimizer (`grammarOptimizer.ts`) can build a
+// matching anchored "every char" variant from the same source - the
+// matcher's table is the single source of truth.
+export const wordBoundaryScriptRe =
     /\p{Script=Latin}|\p{Script=Cyrillic}|\p{Script=Greek}|\p{Script=Armenian}|\p{Script=Georgian}|\p{Script=Hangul}|\p{Script=Arabic}|\p{Script=Hebrew}|\p{Script=Devanagari}|\p{Script=Bengali}|\p{Script=Tamil}|\p{Script=Telugu}|\p{Script=Kannada}|\p{Script=Malayalam}|\p{Script=Gujarati}|\p{Script=Gurmukhi}|\p{Script=Oriya}|\p{Script=Sinhala}|\p{Script=Ethiopic}|\p{Script=Mongolian}/u;
 
 // Decimal digits are not part of any word-space script, but two adjacent
@@ -343,15 +347,14 @@ type AlternationBacktrack = {
 // purely as a filter that culls members whose first token cannot
 // match the peeked input token.  Each alternative resumes at the
 // original input index (the suffix rules retain their leading
-// StringPart and the matcher re-matches the token); `tokenEnd` and
-// `originalIndex` are kept on the frame for symmetry / debugging.
+// StringPart and the matcher re-matches the token), so no
+// per-frame index bookkeeping is needed - `base` already captures
+// the input position at fork time.
 type DispatchBacktrack = {
     readonly origin: "dispatch";
     readonly base: SnapshotState;
     readonly hits: ReadonlyArray<GrammarRule>;
     readonly fallback: ReadonlyArray<GrammarRule>;
-    readonly tokenEnd: number;
-    readonly originalIndex: number;
     readonly namePrefix: string; // debug name = `${namePrefix}[${cursor}]`
     cursor: number;
     readonly prev: Backtrack | undefined;
@@ -623,15 +626,12 @@ function pushAlternation(
 
 // Push a compressed dispatch cursor frame.  Cursor starts at 1
 // (rule 0 is the live alternative, set up by the caller as either
-// the first hit at `index = tokenEnd` or - when `hits` is empty -
-// the first fallback at `index = originalIndex`).
+// the first hit or - when `hits` is empty - the first fallback rule).
 function pushDispatch(
     state: MatchState,
     base: SnapshotState,
     hits: ReadonlyArray<GrammarRule>,
     fallback: ReadonlyArray<GrammarRule>,
-    tokenEnd: number,
-    originalIndex: number,
     namePrefix: string,
 ) {
     state.backtracks = {
@@ -639,8 +639,6 @@ function pushDispatch(
         base,
         hits,
         fallback,
-        tokenEnd,
-        originalIndex,
         namePrefix,
         cursor: 1,
         prev: state.backtracks,
@@ -2131,15 +2129,7 @@ function enterDispatchPart(
 
     if (total > 1) {
         const base = forkMatchState(state);
-        pushDispatch(
-            state,
-            base,
-            hits,
-            fallback,
-            peek?.tokenEnd ?? originalIndex,
-            originalIndex,
-            namePrefix,
-        );
+        pushDispatch(state, base, hits, fallback, namePrefix);
     }
     return true;
 }

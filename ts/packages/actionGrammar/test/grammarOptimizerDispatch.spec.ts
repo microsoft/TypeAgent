@@ -153,7 +153,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         expect(findDispatchPart(optimized.rules)).toBeUndefined();
     });
 
-    it("leaves alternations with no common prefix dispatch unchanged when uneligible", () => {
+    it("emits dispatch even for two single-bucket alternatives", () => {
         // Two alternatives, both with first token = literal: dispatch
         // would produce 2 buckets of 1 each, no fallback.  That still
         // filters (saves one regex try on a non-matching first token),

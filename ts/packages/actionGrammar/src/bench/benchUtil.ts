@@ -40,7 +40,7 @@ export const CONFIGS: { name: string; opts: LoadGrammarRulesOptions }[] = [
         },
     },
     {
-        // dispatchifyAlternations alone — measures the impact of
+        // dispatchifyAlternations alone - measures the impact of
         // first-token dispatch in isolation.  At alternation forks
         // whose members start with distinct, statically-known tokens,
         // emits a `DispatchPart` so the matcher does an O(1) hash
@@ -105,6 +105,33 @@ export function timeMs(fn: () => void, iterations: number): number {
     const start = performance.now();
     for (let i = 0; i < iterations; i++) fn();
     return performance.now() - start;
+}
+
+const ANSI_RE = /\x1b\[[0-9;]*m/g;
+
+/** Visible (ANSI-stripped) length of a string. */
+export function visibleLen(s: string): number {
+    return s.replace(ANSI_RE, "").length;
+}
+
+/**
+ * Print a column-aligned table.  Each column is padded (right-aligned)
+ * to the visible width of its widest cell, ignoring ANSI color escapes
+ * so colored cells still align correctly.
+ */
+export function printAligned(header: string[], rows: string[][]): void {
+    const widths = header.map((h, i) =>
+        Math.max(visibleLen(h), ...rows.map((r) => visibleLen(r[i] ?? ""))),
+    );
+    const sep = widths.map((w) => "-".repeat(w)).join(" | ");
+    const padStart = (s: string, w: number): string =>
+        " ".repeat(Math.max(0, w - visibleLen(s))) + s;
+    const fmt = (row: string[]) =>
+        row.map((c, i) => padStart(c ?? "", widths[i])).join(" | ");
+    console.log(fmt(header));
+    console.log(sep);
+    for (const row of rows) console.log(fmt(row));
+    console.log();
 }
 
 export function countRulesParts(

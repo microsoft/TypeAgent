@@ -16,6 +16,7 @@ import {
     RulesPart,
     StringPart,
 } from "./grammarTypes.js";
+import { wordBoundaryScriptRe } from "./grammarMatcher.js";
 
 const debug = registerDebug("typeagent:grammar:opt");
 
@@ -80,10 +81,12 @@ export type GrammarOptimizationOptions = {
     /**
      * Replace eligible `RulesPart` alternation forks with a
      * `DispatchPart` that maps the next input token to a list of
-     * suffix rules.  At match time the matcher peeks one token,
-     * looks it up in the table, and tries only the listed suffixes
-     * (with the consumed token already credited) instead of
-     * attempting every alternative.
+     * matching alternative rules.  At match time the matcher peeks
+     * one token, looks it up in the table, and tries only the
+     * listed alternatives instead of every member.  Dispatch is a
+     * filter only - the peeked token is not consumed and each
+     * dispatched rule re-matches it via its normal leading
+     * `StringPart` (preserving implicit-default behavior).
      *
      * Eligibility (per spacing-mode partition):
      *   - `required`  - always eligible.
@@ -1612,32 +1615,32 @@ function checkFactoringEligible(
     // `valueIds`).  When members are lifted into a wrapper rule's
     // (non-tail) `suffixRulesPart`, each member's value can only see
     // variables bound in its own `parts` - bindings in the wrapper's
-    // prefix are not visible.
-    //
-    // Tail-RulesPart entry skips the parent-frame push and inherits
-    // the parent's `valueIds` chain, so member value-exprs *can*
-    // resolve prefix-bound canonicals.  `needsTail` records whether
-    // any member's value-expr references a prefix-bound canonical -
-    // i.e. whether the non-tail wrapper would change observable
-    // behavior at this fork.  When true we have to bail out, since
-    // tail emission is disabled at this site.
-    let needsTail = false;
+    // prefix are not visible.  Tail-RulesPart entry skips the parent-
+    // frame push and inherits the parent's `valueIds` chain, so member
+    // value-exprs *can* resolve prefix-bound canonicals; with tail
+    // disabled we have to bail out at any such fork.
+    if (referencesPrefixBoundCanonical(members)) {
+        return { ok: false, reason: "cross-scope-ref" };
+    }
+    return { ok: true, tail: false };
+}
+
+/**
+ * True iff any member's value expression references a variable that
+ * isn't bound by that member's own `parts` - i.e. it relies on a
+ * binding from the surrounding scope (typically a prefix-bound
+ * canonical when called from `checkFactoringEligible`).  Non-tail
+ * factoring at such a fork would silently change scope resolution.
+ */
+function referencesPrefixBoundCanonical(members: GrammarRule[]): boolean {
     for (const m of members) {
         if (m.value === undefined) continue;
         const memberBindings = collectVariableNames(m.parts);
         for (const v of collectVariableReferences(m.value)) {
-            if (!memberBindings.has(v)) {
-                needsTail = true;
-                break;
-            }
+            if (!memberBindings.has(v)) return true;
         }
-        if (needsTail) break;
     }
-
-    if (needsTail) {
-        return { ok: false, reason: "cross-scope-ref" };
-    }
-    return { ok: true, tail: false };
+    return false;
 }
 
 /**
@@ -1920,23 +1923,25 @@ function substituteValueVariables(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Subset of `wordBoundaryScriptRe` from `grammarMatcher.ts`.  Used to
- * decide eligibility of an `auto`-mode (undefined spacingMode)
- * partition: a tokenMap key is "safe" iff every char belongs to one
- * of these scripts AND the matcher's `peekNextToken` will return the
- * same boundary the StringPart would consume.  Mixed-script and
- * digit-only tokens still match correctly because peek returns the
+ * Anchored "every char is word-boundary-script" variant of the matcher's
+ * `wordBoundaryScriptRe` - built from the same source so the two stay in
+ * lockstep.  Used to decide eligibility of an `auto`-mode (undefined
+ * spacingMode) partition: a tokenMap key is "safe" iff every char belongs
+ * to one of the listed scripts AND the matcher's `peekNextToken` will
+ * return the same boundary the StringPart would consume.  Mixed-script
+ * and digit-only tokens still match correctly because peek returns the
  * full non-separator run; if the run does not equal the key it falls
  * through to fallback.  This gate exists to avoid the rare edge case
  * where a peek-by-separator returns the entire run but the matcher's
  * StringPart regex would have stopped at an internal boundary.
  *
  * In practice for ASCII command grammars every key is Latin-only and
- * dispatch is always taken.  Keeping this in sync with the matcher's
- * definition is critical - the matcher's table is authoritative.
+ * dispatch is always taken.
  */
-const dispatchKeyScriptRe =
-    /^(?:\p{Script=Latin}|\p{Script=Cyrillic}|\p{Script=Greek}|\p{Script=Armenian}|\p{Script=Georgian}|\p{Script=Hangul}|\p{Script=Arabic}|\p{Script=Hebrew}|\p{Script=Devanagari}|\p{Script=Bengali}|\p{Script=Tamil}|\p{Script=Telugu}|\p{Script=Kannada}|\p{Script=Malayalam}|\p{Script=Gujarati}|\p{Script=Gurmukhi}|\p{Script=Oriya}|\p{Script=Sinhala}|\p{Script=Ethiopic}|\p{Script=Mongolian})+$/u;
+const dispatchKeyScriptRe = new RegExp(
+    `^(?:${wordBoundaryScriptRe.source})+$`,
+    "u",
+);
 
 function isDispatchEligibleSpacingMode(
     mode: CompiledSpacingMode,
@@ -2095,11 +2100,9 @@ export function dispatchifyAlternations(rules: GrammarRule[]): GrammarRule[] {
         if (dispatched !== undefined) {
             counter.dispatched++;
             const wrapper: GrammarRule = { parts: [dispatched] };
-            if (counter.dispatched > 0) {
-                debug(
-                    `dispatched ${counter.dispatched} alternations into token tables`,
-                );
-            }
+            debug(
+                `dispatched ${counter.dispatched} alternations into token tables`,
+            );
             return [wrapper];
         }
     }

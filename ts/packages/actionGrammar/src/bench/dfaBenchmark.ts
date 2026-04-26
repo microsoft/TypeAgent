@@ -45,7 +45,7 @@ import {
     type FirstTokenIndex,
 } from "../index.js";
 import { registerBuiltInEntities } from "../builtInEntities.js";
-import { colorSpeedup } from "./benchUtil.js";
+import { colorSpeedup, printAligned } from "./benchUtil.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -296,23 +296,6 @@ function printCrossGrammarSummary(rows: SpaceResult[]): void {
     printAligned(header, data);
 }
 
-function printAligned(header: string[], rows: string[][]): void {
-    const ANSI_RE = /\x1b\[[0-9;]*m/g;
-    const visibleLen = (s: string): number => s.replace(ANSI_RE, "").length;
-    const widths = header.map((h, i) =>
-        Math.max(visibleLen(h), ...rows.map((r) => visibleLen(r[i] ?? ""))),
-    );
-    const sep = widths.map((w) => "-".repeat(w)).join(" | ");
-    const padStart = (s: string, w: number): string =>
-        " ".repeat(Math.max(0, w - visibleLen(s))) + s;
-    const fmt = (row: string[]) =>
-        row.map((c, i) => padStart(c ?? "", widths[i])).join(" | ");
-    console.log(fmt(header));
-    console.log(sep);
-    for (const row of rows) console.log(fmt(row));
-    console.log();
-}
-
 // ─── Benchmark runner ────────────────────────────────────────────────────────
 
 const spaceResults: SpaceResult[] = [];
@@ -493,7 +476,9 @@ function runBenchmark(
 // Paths are resolved relative to this file's compiled location
 // (`dist/bench/`).  They point at sibling agent packages via
 // `../../../agents/<name>/...` and assume the standard `packages/`
-// layout in the workspace.
+// layout in the workspace.  Missing grammar files are skipped
+// silently (see `runBenchmark`'s `fileExists` check) so partial
+// checkouts still produce a partial table.
 
 interface GrammarSpec {
     name: string;
