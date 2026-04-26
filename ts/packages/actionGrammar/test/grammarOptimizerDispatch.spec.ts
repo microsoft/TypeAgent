@@ -235,13 +235,17 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         }
     });
 
-    // ── Auto-mode + script-eligibility coverage ────────────────────────
+    // ── Auto-mode + script-prefix bucketing ────────────────────────────
     //
-    // Auto-mode dispatch is gated by `dispatchKeyScriptRe`: every
-    // tokenMap key must be composed entirely of word-boundary-script
-    // chars (Latin/Cyrillic/Greek/...).  CJK / digit-only / mixed-script
-    // keys are ineligible.  These tests exercise each branch and
-    // confirm match equivalence with the unoptimized baseline.
+    // In auto mode each rule is bucketed under the leading
+    // word-boundary-script run of its first literal token (Latin /
+    // Cyrillic / Greek / ...).  Rules whose first literal starts with
+    // a non-word-boundary char (CJK, digit, punctuation) have an
+    // empty prefix and go to `fallback`.  This mirrors what the
+    // matcher's `peekNextToken` returns for any input that could
+    // match the rule, so dispatch remains a pure filter.  These
+    // tests exercise each branch and confirm match equivalence with
+    // the unoptimized baseline.
 
     it("dispatches auto-mode all-Cyrillic keys", () => {
         // Cyrillic is in the word-boundary-script list, so auto-mode
@@ -288,16 +292,23 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         }
     });
 
-    it("does NOT dispatch auto-mode mixed-script keys", () => {
-        // A key like "play你" is not a single-script run, so the
-        // anchored eligibility regex rejects it (any non-word-boundary
-        // char in any key disqualifies the whole partition).
+    it("buckets auto-mode mixed-script first literal under its WB-script prefix", () => {
+        // First literal "play你" has WB-script prefix "play"; that's
+        // also what `peekNextToken` returns for inputs whose first
+        // run starts with "play" followed by CJK.  So the rule
+        // dispatches under bucket "play".
         const text = `<Start> = play你 song -> "ps"
                      | stop -> "stop";`;
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        expect(findDispatchPart(optimized.rules)).toBeUndefined();
+        const dispatch = findDispatchPart(optimized.rules);
+        expect(dispatch).toBeDefined();
+        expect(Array.from(dispatch!.tokenMap.keys()).sort()).toEqual([
+            "play",
+            "stop",
+        ]);
+        expect(dispatch!.fallback ?? []).toHaveLength(0);
 
         const baseline = loadGrammarRules("t.grammar", text);
         for (const input of ["play你 song", "stop", "noise"]) {
@@ -307,18 +318,21 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         }
     });
 
-    it("does NOT dispatch auto-mode digit-only first tokens", () => {
-        // Digits are not part of any word-boundary script.  Bare
-        // numeric leading tokens disqualify the partition.
+    it("sends auto-mode digit-leading rules to fallback", () => {
+        // Digits are not word-boundary-script, so digit-leading
+        // literals get an empty prefix and end up in fallback.
+        // "weeks" buckets normally; result is dispatch with one
+        // tokenMap key + two fallback rules.
         const text = `<Start> = 1 hour -> "h"
                      | 2 days -> "d"
                      | weeks -> "w";`;
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        // The partition contains "1" and "2" keys (digits) which are
-        // not word-boundary-script, so auto-mode dispatch is rejected.
-        expect(findDispatchPart(optimized.rules)).toBeUndefined();
+        const dispatch = findDispatchPart(optimized.rules);
+        expect(dispatch).toBeDefined();
+        expect(Array.from(dispatch!.tokenMap.keys()).sort()).toEqual(["weeks"]);
+        expect(dispatch!.fallback ?? []).toHaveLength(2);
 
         const baseline = loadGrammarRules("t.grammar", text);
         for (const input of ["1 hour", "2 days", "weeks", "3 days"]) {
@@ -387,13 +401,12 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
 
     // ── Cross-script grammar (different keys, different scripts) ───────
     //
-    // The eligibility gate requires *every* key in the partition to
-    // belong to a word-boundary script.  When all keys do (even across
-    // different scripts e.g. Latin + Cyrillic + Greek), dispatch is
-    // emitted.  When any single key falls outside the list (CJK,
-    // digit-only, mixed-script), the whole partition stays as
-    // `RulesPart`.  Match results must be identical to baseline either
-    // way; these tests sanity-check both branches.
+    // Each rule's bucket key is derived independently (leading
+    // WB-script prefix in auto, full first literal in required).
+    // Rules with multiple word-boundary scripts can coexist in the
+    // same dispatch; rules with non-WB-leading first literals end up
+    // in fallback alongside word-boundary-keyed rules.  Match
+    // results match the unoptimized baseline in every case.
 
     it("dispatches when all keys belong to word-boundary scripts (Latin + Cyrillic + Greek)", () => {
         const text = `<Start> = play song -> "play"
@@ -424,17 +437,25 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         }
     });
 
-    it("does NOT dispatch when one key is CJK among Latin keys", () => {
-        // A single non-word-boundary key (CJK 再生) disqualifies the
-        // whole partition - dispatch stays off and the matcher falls
-        // back to the unoptimized RulesPart.
+    it("sends a CJK-leading rule to fallback alongside Latin-keyed rules", () => {
+        // The CJK rule's first literal has an empty WB-prefix - it
+        // goes to fallback.  Latin rules continue to bucket under
+        // their WB-prefix.  The CJK input "再生" peeks as undefined
+        // (no WB prefix), so the dispatch arm tries the fallback and
+        // matches.
         const text = `<Start> = play song -> "play"
                      | stop -> "stop"
                      | 再生 -> "j_play";`;
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        expect(findDispatchPart(optimized.rules)).toBeUndefined();
+        const dispatch = findDispatchPart(optimized.rules);
+        expect(dispatch).toBeDefined();
+        expect(Array.from(dispatch!.tokenMap.keys()).sort()).toEqual([
+            "play",
+            "stop",
+        ]);
+        expect(dispatch!.fallback ?? []).toHaveLength(1);
 
         const baseline = loadGrammarRules("t.grammar", text);
         for (const input of ["play song", "stop", "再生", "noise"]) {
@@ -446,12 +467,12 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
 
     it("mixed-script input against an eligible (Latin+Cyrillic) dispatch grammar", () => {
         // Grammar dispatches; input mixes scripts (e.g. "play你").
-        // `peekNextToken` returns the full non-separator run "play你",
-        // which is not a tokenMap key, so dispatch falls through to
-        // fallback (none here) → no match - identical to the
-        // unoptimized RulesPart's behavior, where the leading
-        // StringPart regex on "play" would also fail to match the run
-        // boundary at "play你".
+        // `peekNextToken` returns the WB-script prefix "play", which
+        // hits the "play" bucket; the suffix's StringPart regex then
+        // re-matches from the original index against "play你 song"
+        // and either succeeds (when the rule's literals line up with
+        // the script transitions in the input) or fails the same
+        // way the unoptimized matcher would.
         const text = `<Start> = play song -> "play"
                      | стоп -> "stop";`;
         const optimized = loadGrammarRules("t.grammar", text, {
@@ -461,10 +482,10 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
 
         const baseline = loadGrammarRules("t.grammar", text);
         for (const input of [
-            "play你 song", // mixed Latin+CJK first token: no dispatch hit
-            "стоп你", // mixed Cyrillic+CJK first token: no dispatch hit
-            "play song", // pure Latin: hits dispatch bucket
-            "стоп", // pure Cyrillic: hits dispatch bucket
+            "play你 song", // "play" hits dispatch; suffix fails on " song" mismatch
+            "стоп你", // "стоп" hits dispatch; suffix matches up to "стоп", trailing "你" rejected
+            "play song", // pure Latin: hits dispatch bucket, succeeds
+            "стоп", // pure Cyrillic: hits dispatch bucket, succeeds
         ]) {
             expect(match(optimized, input)).toStrictEqual(
                 match(baseline, input),
@@ -491,6 +512,145 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
 
         const baseline = loadGrammarRules("t.grammar", text);
         for (const input of ["play", "stop", "你好", "hello", "再生"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    it("matches script-transition input through dispatched WB-prefix bucket", () => {
+        // Regression test: in auto mode an input may legitimately
+        // omit a separator at a script transition (Latin→CJK), e.g.
+        // "play你好" matches the rule `play 你好`.  Pre-fix the
+        // dispatch optimizer's peek returned the entire non-separator
+        // run "play你好" and missed the "play" bucket, so the
+        // optimized matcher returned no match while the baseline
+        // matched.  With WB-script-prefix bucketing peek returns
+        // "play" and the suffix re-matches successfully.
+        const text = `<Start> = play 你好 -> "p"
+                     | stop -> "s";`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        expect(findDispatchPart(optimized.rules)).toBeDefined();
+        for (const input of [
+            "play你好", // Latin→CJK transition, no separator
+            "play 你好", // explicit separator
+            "stop",
+            "play你", // suffix mismatch (only "你", missing "好")
+        ]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    it("matches script-transition input via wildcard suffix in dispatched bucket", () => {
+        // Same script-transition dynamic as above but with the
+        // post-token suffix being a wildcard.  Input "play你好"
+        // hits the "play" bucket and the wildcard captures "你好".
+        const text = `<Start> = play $(t:string) -> { play: t }
+                     | stop -> "s"
+                     | next -> "n";`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        expect(findDispatchPart(optimized.rules)).toBeDefined();
+        for (const input of ["play你好", "play hello", "stop", "next"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    // ── Cross-mode dispatch (outer rule mode ≠ dispatched part mode) ─
+    //
+    // The dispatch arm calls `peekNextToken` with TWO independent
+    // spacing modes: `leadingMode` from the surrounding state (the
+    // outer rule's mode) and `tokenMode` from the dispatched part
+    // itself (the partition's mode = the inner alternative rules'
+    // mode).  When the two disagree, peek must honor each mode for
+    // its own concern: leading-separator handling vs script-
+    // transition truncation.  These regression tests exercise the
+    // mismatch via grammars that compose a non-auto outer rule with
+    // an auto-mode inner alternation containing dispatch-eligible
+    // script-transition rules.
+
+    it("none outer + auto inner: script-transition input dispatches", () => {
+        // Outer rule is `[spacing=none]` so no leading whitespace is
+        // allowed at the outer boundary.  The inner alternation is
+        // auto-mode and contains a script-transition rule
+        // `play 你好`.  Input "play你好" must reach the dispatched
+        // "play" bucket: peek's tokenMode (auto) must truncate at
+        // the Latin→CJK transition.  Pre-fix (single-mode peek
+        // using outer's "none" for both purposes) the run was
+        // returned whole and missed the bucket.
+        const text = `<Inner> = play 你好 -> "p" | stop -> "s" | next -> "n";
+                     <Start> [spacing=none] = <Inner>;`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        expect(findDispatchPart(optimized.rules)).toBeDefined();
+        for (const input of [
+            "play你好", // hits dispatch via WB-script-prefix "play"
+            "play 你好", // explicit separator (auto inner accepts it)
+            "stop",
+            "next",
+            " play你好", // outer none rejects leading sep
+            "play你好 ", // outer none rejects trailing sep
+        ]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    it("none outer + auto inner: leading separator rejected before dispatch", () => {
+        // Confirms peek's leadingMode = outer's "none" rejects a
+        // leading separator at the dispatch boundary, even though
+        // the inner alternation's auto mode would normally tolerate
+        // one.  All four inputs with a leading space must fail to
+        // match the optimized grammar exactly as the baseline does.
+        const text = `<Inner> = play -> "p" | stop -> "s" | next -> "n";
+                     <Start> [spacing=none] = <Inner>;`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        expect(findDispatchPart(optimized.rules)).toBeDefined();
+        for (const input of [" play", "  stop", "\tnext", "play", "stop"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    it("auto outer + none inner: dispatched literal must match without separator", () => {
+        // Inner alternation is `[spacing=none]`, so peek's tokenMode
+        // is "none" - no script-transition truncation.  Outer is
+        // auto, so peek's leadingMode skips leading whitespace.
+        // Input "  play你好" must skip outer whitespace, then peek
+        // returns the full non-separator run "play你好", which the
+        // none-mode inner rule `play你好` matches exactly.
+        const text = `<Inner> [spacing=none] = play你好 -> "p" | stop -> "s";
+                     <Start> = <Inner>;`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        // Note: dispatch may or may not be emitted for a none-mode
+        // partition (the optimizer rejects optional/none dispatch
+        // partitions today).  Either way, optimized vs baseline
+        // results must agree.
+        for (const input of [
+            "play你好",
+            "  play你好  ",
+            "stop",
+            "play 你好", // none inner forbids the inner separator
+        ]) {
             expect(match(optimized, input)).toStrictEqual(
                 match(baseline, input),
             );

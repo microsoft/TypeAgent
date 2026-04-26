@@ -1189,32 +1189,73 @@ export function nextNonSeparatorIndex(request: string, index: number) {
 const nonSeparatorRunRegExp = new RegExp(`[^${separatorRegExpStr}]+`, "yu");
 const singleSeparatorRegExp = new RegExp(`[${separatorRegExpStr}]`, "u");
 
+// Anchored "leading run of word-boundary-script chars" - re-used by
+// `peekNextToken` (auto-mode dispatch lookup) and the dispatch
+// optimizer (bucket-key derivation).  In auto mode the StringPart's
+// implicit token boundary lies at the first script transition;
+// `peekNextToken` truncates at that boundary so peek and the
+// matcher's StringPart regex agree on what the leading "word" is.
+export const leadingWordBoundaryScriptRe = new RegExp(
+    `^(?:${wordBoundaryScriptRe.source})+`,
+    "u",
+);
+
+/**
+ * Maximal leading run of word-boundary-script characters in `s`.
+ * Returns `""` when the first character is not a word-boundary-script
+ * char (CJK, digits, punctuation, etc.).  Used by the dispatch
+ * optimizer to derive bucket keys; matches the run that
+ * `peekNextToken` will return for an input starting at the same
+ * position in auto mode.
+ */
+export function leadingWordBoundaryScriptPrefix(s: string): string {
+    const m = leadingWordBoundaryScriptRe.exec(s);
+    return m === null ? "" : m[0];
+}
+
 /**
  * Peek the next "token" (lowercased run of non-separator chars) from
- * `request` starting at `index`, optionally skipping leading
- * separators per `leadingMode`.  Returns `undefined` when no token
+ * `request` starting at `index`.  Returns `undefined` when no token
  * is available (EOI, separator-only tail, or a leading separator
- * exists in `none` mode).
+ * exists in `none` leading mode).
  *
  * Used by the `case "dispatch":` arm in `matchState` to look up the
- * first input token in a `DispatchPart.tokenMap`.  Token semantics
- * intentionally mirror `matchStringPart`'s separator handling:
- *   - In `none` mode (input must start exactly at a token boundary)
- *     a leading separator yields `undefined`.
- *   - In `required` / `optional` / `auto` modes, leading separators
- *     are skipped via `nextNonSeparatorIndex` before the token run.
+ * first input token in a `DispatchPart.tokenMap`.  Two spacing modes
+ * govern independent concerns; both must agree with what the
+ * suffix's StringPart regex would consume:
  *
- * Token boundary in `auto` mode: peek extends to the next
- * separator, naturally aligning with `matchStringPart`'s regex.
- * Mixed-script input like `"play你好"` returns the entire run
- * `"play你好"` (lowercased).  Such a token will not match a `"play"`
- * key in `tokenMap`, so the dispatch falls through to fallback - no
- * additional runtime boundary check is required.
+ *   - `leadingMode`: governs leading-separator handling at `index`.
+ *     This is the spacing mode of whatever precedes the dispatch in
+ *     the surrounding rule (typically `leadingSpacingMode(state)`).
+ *     In `none` mode a leading separator yields `undefined`; in any
+ *     other mode leading separators are skipped before the token
+ *     run.
+ *
+ *   - `tokenMode`: governs the token boundary itself.  This is the
+ *     spacing mode of the dispatched member rules (the dispatch's
+ *     own `part.spacingMode`).  In `auto` mode (`undefined`) the
+ *     run is truncated at the first non-word-boundary-script
+ *     character (`leadingWordBoundaryScriptPrefix`), matching the
+ *     implicit token boundary `matchStringPart` enforces in auto
+ *     mode (`needsSeparatorInAutoMode`): "play你好" peeks as "play".
+ *     When the leading character is itself non-word-boundary-script
+ *     (CJK, digit, ...) the prefix is empty and `peekNextToken`
+ *     returns `undefined` so the dispatch arm falls through to its
+ *     `fallback` list.  In `required` / `optional` / `none`
+ *     `tokenMode` the entire non-separator run is returned
+ *     unchanged.
+ *
+ * Splitting the two modes matters when the outer and dispatch modes
+ * disagree, e.g. a `required`-mode dispatch nested in an `auto`
+ * outer rule (no auto-mode truncation of the peeked token), or an
+ * `auto`-mode dispatch following a `none`-mode preceding part
+ * (no leading separator allowed).
  */
 export function peekNextToken(
     request: string,
     index: number,
     leadingMode: CompiledSpacingMode,
+    tokenMode: CompiledSpacingMode,
 ): { token: string; tokenEnd: number } | undefined {
     let start = index;
     if (leadingMode === "none") {
@@ -1238,7 +1279,21 @@ export function peekNextToken(
     if (m === null) {
         return undefined;
     }
-    return { token: m[0].toLowerCase(), tokenEnd: start + m[0].length };
+    let token = m[0].toLowerCase();
+    if (tokenMode === undefined) {
+        // auto: cut at the first script transition so the peeked
+        // token matches what the StringPart regex would consume.
+        const pref = leadingWordBoundaryScriptPrefix(token);
+        if (pref.length === 0) {
+            return undefined;
+        }
+        token = pref;
+    }
+    // tokenEnd is documentation of where the full non-separator run
+    // ended in `request`; no caller currently reads it (the dispatch
+    // arm leaves `state.index` at the original index and re-matches
+    // via the suffix's StringPart regex).
+    return { token, tokenEnd: start + m[0].length };
 }
 
 // Finalize the state to capture the last wildcard if any
@@ -2068,10 +2123,20 @@ function enterDispatchPart(
     request: string,
 ): boolean {
     const originalIndex = state.index;
+    // Two spacing modes govern peek independently:
+    //   - leading-separator handling at `originalIndex` follows the
+    //     surrounding context (`leadingSpacingMode(state)`), so that
+    //     a `none`-mode preceding part rejects an unexpected
+    //     leading separator.
+    //   - token-boundary handling (auto-mode script-transition
+    //     truncation) follows the dispatched member rules' own
+    //     `part.spacingMode`, since the suffix's StringPart regex
+    //     uses that mode and peek must agree with it.
     const peek = peekNextToken(
         request,
         originalIndex,
         leadingSpacingMode(state),
+        part.spacingMode,
     );
     const hits =
         peek !== undefined ? (part.tokenMap.get(peek.token) ?? []) : [];

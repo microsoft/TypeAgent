@@ -16,7 +16,7 @@ import {
     RulesPart,
     StringPart,
 } from "./grammarTypes.js";
-import { wordBoundaryScriptRe } from "./grammarMatcher.js";
+import { leadingWordBoundaryScriptPrefix } from "./grammarMatcher.js";
 
 const debug = registerDebug("typeagent:grammar:opt");
 
@@ -1923,55 +1923,31 @@ function substituteValueVariables(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Anchored "every char is word-boundary-script" variant of the matcher's
- * `wordBoundaryScriptRe` - built from the same source so the two stay in
- * lockstep.  Used to decide eligibility of an `auto`-mode (undefined
- * spacingMode) partition: a tokenMap key is "safe" iff every char belongs
- * to one of the listed scripts AND the matcher's `peekNextToken` will
- * return the same boundary the StringPart would consume.  Mixed-script
- * and digit-only tokens still match correctly because peek returns the
- * full non-separator run; if the run does not equal the key it falls
- * through to fallback.  This gate exists to avoid the rare edge case
- * where a peek-by-separator returns the entire run but the matcher's
- * StringPart regex would have stopped at an internal boundary.
+ * Classify a single rule's first part for dispatch eligibility,
+ * deriving the bucket key for an `auto`/`required`-mode partition:
+ *   - { kind: "token", token } - rule goes into `tokenMap[token]`.
+ *   - { kind: "fallback" } - rule is not dispatch-eligible; goes
+ *     to the dispatch part's `fallback` list.
  *
- * In practice for ASCII command grammars every key is Latin-only and
- * dispatch is always taken.
- */
-const dispatchKeyScriptRe = new RegExp(
-    `^(?:${wordBoundaryScriptRe.source})+$`,
-    "u",
-);
-
-function isDispatchEligibleSpacingMode(
-    mode: CompiledSpacingMode,
-    keys: Iterable<string>,
-): boolean {
-    if (mode === "required") {
-        return true;
-    }
-    if (mode === undefined) {
-        // auto: every key must be word-boundary-script-only.
-        for (const k of keys) {
-            if (!dispatchKeyScriptRe.test(k)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    // optional / none: never eligible.
-    return false;
-}
-
-/**
- * Classify a single rule's first part for dispatch eligibility:
- *   - { kind: "token", token, suffix } - rule is dispatch-eligible;
- *     `suffix` is the rule with its leading token removed.
- *   - { kind: "fallback" } - rule is not dispatch-eligible; goes to
- *     the dispatch part's `fallback` list.
+ * Bucket-key derivation depends on the partition's spacing mode:
+ *   - `required`: a separator is mandated after every token, so peek
+ *     returns the full first non-separator run.  Bucket key = the
+ *     full lowercased first literal token.
+ *   - `auto` (`undefined`): the matcher's StringPart regex implicitly
+ *     splits at the first script transition (Latin↔CJK, Latin↔digit
+ *     etc.); peek mirrors that via `leadingWordBoundaryScriptPrefix`.
+ *     Bucket key = the lowercased leading word-boundary-script prefix
+ *     of the first literal token.  When the prefix is empty (the
+ *     literal starts with CJK / digit / punctuation), peek for any
+ *     hypothetical input that could match this rule will likewise
+ *     return `undefined`, so the rule belongs in `fallback`.
+ *
+ * `optional` / `none` modes never reach this function (the partition
+ * is rejected upstream in `tryDispatchifyRulesPart`).
  */
 function classifyDispatchMember(
     rule: GrammarRule,
+    mode: CompiledSpacingMode,
 ): { kind: "token"; token: string } | { kind: "fallback" } {
     const first = rule.parts[0];
     if (first === undefined) {
@@ -1988,8 +1964,16 @@ function classifyDispatchMember(
     if (first.value.length === 0) {
         return { kind: "fallback" };
     }
-    const token = first.value[0].toLowerCase();
-    return { kind: "token", token };
+    const literal = first.value[0].toLowerCase();
+    if (mode === "required") {
+        return { kind: "token", token: literal };
+    }
+    // auto: bucket on the leading word-boundary-script run.
+    const pref = leadingWordBoundaryScriptPrefix(literal);
+    if (pref.length === 0) {
+        return { kind: "fallback" };
+    }
+    return { kind: "token", token: pref };
 }
 
 /**
@@ -2001,14 +1985,13 @@ function classifyDispatchMember(
  *     semantics; out of scope for initial cut).
  *   - `tailCall` set (the tail-call protocol is incompatible with
  *     the dispatch frame).
- *   - tokenMap would be empty.
+ *   - The partition's spacing mode is `optional` or `none`: peek's
+ *     token boundary doesn't agree with what the StringPart regex
+ *     would consume in those modes, so dispatch can't be a pure
+ *     filter.  Mixed-mode partitions are also rejected.
+ *   - tokenMap would be empty (every rule went to fallback).
  *   - tokenMap wouldn't filter (one bucket containing every member,
  *     no fallback): the matcher's work is unchanged.
- *   - The partition's spacing mode is ineligible for dispatch (see
- *     `isDispatchEligibleSpacingMode`).  Members may have different
- *     spacingModes - we partition by the dominant mode of the
- *     dispatch hits and emit dispatch only when the partition is
- *     uniformly eligible.
  */
 function tryDispatchifyRulesPart(part: RulesPart): DispatchPart | undefined {
     if (part.repeat || part.optional || part.tailCall) {
@@ -2027,11 +2010,14 @@ function tryDispatchifyRulesPart(part: RulesPart): DispatchPart | undefined {
             return undefined;
         }
     }
+    if (partitionMode === "optional" || partitionMode === "none") {
+        return undefined;
+    }
 
     const tokenMap = new Map<string, GrammarRule[]>();
     const fallback: GrammarRule[] = [];
     for (const rule of part.rules) {
-        const cls = classifyDispatchMember(rule);
+        const cls = classifyDispatchMember(rule, partitionMode);
         if (cls.kind === "token") {
             const existing = tokenMap.get(cls.token);
             if (existing !== undefined) {
@@ -2052,10 +2038,6 @@ function tryDispatchifyRulesPart(part: RulesPart): DispatchPart | undefined {
     // factoring (one regex try per member instead of N hash misses).
     // Skip to avoid pessimization.
     if (tokenMap.size === 1 && fallback.length === 0) {
-        return undefined;
-    }
-
-    if (!isDispatchEligibleSpacingMode(partitionMode, tokenMap.keys())) {
         return undefined;
     }
 
