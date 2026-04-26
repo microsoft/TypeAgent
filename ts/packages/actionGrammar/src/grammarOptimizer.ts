@@ -1936,10 +1936,13 @@ function substituteValueVariables(
  *     splits at the first script transition (Latin↔CJK, Latin↔digit
  *     etc.); peek mirrors that via `leadingWordBoundaryScriptPrefix`.
  *     Bucket key = the lowercased leading word-boundary-script prefix
- *     of the first literal token.  When the prefix is empty (the
- *     literal starts with CJK / digit / punctuation), peek for any
- *     hypothetical input that could match this rule will likewise
- *     return `undefined`, so the rule belongs in `fallback`.
+ *     of the first literal token, OR (when the WB-prefix is empty -
+ *     the literal starts with CJK, digit, punctuation, ...) the
+ *     literal's leading code point.  This first-code-point fallback
+ *     keeps CJK / Hiragana / Katakana / digit-leading rules dispatch-
+ *     eligible (one bucket per leading character).  `peekNextToken`
+ *     applies the same rule on the input side so the buckets line
+ *     up.  A literal that is empty stays in `fallback`.
  *
  * `optional` / `none` modes never reach this function (the partition
  * is rejected upstream in `tryDispatchifyRulesPart`).
@@ -1964,15 +1967,23 @@ function classifyDispatchMember(
         return { kind: "fallback" };
     }
     const literal = first.value[0].toLowerCase();
+    if (literal.length === 0) {
+        return { kind: "fallback" };
+    }
     if (mode === "required") {
         return { kind: "token", token: literal };
     }
-    // auto: bucket on the leading word-boundary-script run.
+    // auto: bucket on the leading word-boundary-script run.  When
+    // the literal starts with a non-WB-script char (CJK, digit,
+    // punctuation), fall back to bucketing on the leading code
+    // point - matches `peekNextToken`'s first-code-point fallback
+    // for inputs whose nonSeparatorRun starts with such a char.
     const pref = leadingWordBoundaryScriptPrefix(literal);
-    if (pref.length === 0) {
-        return { kind: "fallback" };
+    if (pref.length > 0) {
+        return { kind: "token", token: pref };
     }
-    return { kind: "token", token: pref };
+    const cp = literal.codePointAt(0)!;
+    return { kind: "token", token: String.fromCodePoint(cp) };
 }
 
 /**

@@ -272,17 +272,26 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         }
     });
 
-    it("does NOT dispatch auto-mode all-CJK keys", () => {
-        // CJK (Han) is NOT in the word-boundary-script list, so the
-        // auto-mode eligibility check rejects this partition.  Match
-        // results must still be correct via the unoptimized RulesPart.
+    it("dispatches auto-mode all-CJK keys via leading code point", () => {
+        // CJK (Han) is not in the word-boundary-script list, so the
+        // WB-prefix of each first literal is empty.  The optimizer
+        // falls back to bucketing on the leading code point, so each
+        // rule gets its own bucket and dispatch is emitted.  Match
+        // results must still match the unoptimized RulesPart.
         const text = `<Start> = 再生 -> "play"
                      | 停止 -> "stop"
                      | 次 -> "next";`;
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        expect(findDispatchPart(optimized.rules)).toBeUndefined();
+        const dispatch = findDispatchPart(optimized.rules);
+        expect(dispatch).toBeDefined();
+        expect(Array.from(dispatch!.tokenMap.keys()).sort()).toEqual([
+            "停",
+            "再",
+            "次",
+        ]);
+        expect(dispatch!.fallback ?? []).toHaveLength(0);
 
         const baseline = loadGrammarRules("t.grammar", text);
         for (const input of ["再生", "停止", "次", "他"]) {
@@ -318,11 +327,11 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         }
     });
 
-    it("sends auto-mode digit-leading rules to fallback", () => {
+    it("dispatches auto-mode digit-leading rules via leading digit", () => {
         // Digits are not word-boundary-script, so digit-leading
-        // literals get an empty prefix and end up in fallback.
-        // "weeks" buckets normally; result is dispatch with one
-        // tokenMap key + two fallback rules.
+        // literals get an empty WB-prefix; the optimizer falls back
+        // to the leading code point.  All three rules dispatch:
+        // "1", "2", and "weeks" are all bucket keys.
         const text = `<Start> = 1 hour -> "h"
                      | 2 days -> "d"
                      | weeks -> "w";`;
@@ -331,8 +340,12 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         });
         const dispatch = findDispatchPart(optimized.rules);
         expect(dispatch).toBeDefined();
-        expect(Array.from(dispatch!.tokenMap.keys()).sort()).toEqual(["weeks"]);
-        expect(dispatch!.fallback ?? []).toHaveLength(2);
+        expect(Array.from(dispatch!.tokenMap.keys()).sort()).toEqual([
+            "1",
+            "2",
+            "weeks",
+        ]);
+        expect(dispatch!.fallback ?? []).toHaveLength(0);
 
         const baseline = loadGrammarRules("t.grammar", text);
         for (const input of ["1 hour", "2 days", "weeks", "3 days"]) {
@@ -437,12 +450,13 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         }
     });
 
-    it("sends a CJK-leading rule to fallback alongside Latin-keyed rules", () => {
-        // The CJK rule's first literal has an empty WB-prefix - it
-        // goes to fallback.  Latin rules continue to bucket under
-        // their WB-prefix.  The CJK input "再生" peeks as undefined
-        // (no WB prefix), so the dispatch arm tries the fallback and
-        // matches.
+    it("dispatches CJK-leading rules under their leading code point alongside Latin-keyed rules", () => {
+        // Mixed-script alternation: the CJK rule's first literal has
+        // an empty WB-prefix and falls back to the leading code
+        // point ("再"), while Latin rules continue to bucket under
+        // their WB-prefix.  All three rules dispatch; no fallback.
+        // The CJK input "再生" peeks as "再" (first code point) and
+        // routes to its bucket.
         const text = `<Start> = play song -> "play"
                      | stop -> "stop"
                      | 再生 -> "j_play";`;
@@ -454,8 +468,9 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         expect(Array.from(dispatch!.tokenMap.keys()).sort()).toEqual([
             "play",
             "stop",
+            "再",
         ]);
-        expect(dispatch!.fallback ?? []).toHaveLength(1);
+        expect(dispatch!.fallback ?? []).toHaveLength(0);
 
         const baseline = loadGrammarRules("t.grammar", text);
         for (const input of ["play song", "stop", "再生", "noise"]) {
@@ -495,10 +510,11 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
 
     it("CJK-leading input falls through to wildcard fallback when grammar dispatches Latin keys", () => {
         // Grammar has Latin dispatch keys plus a wildcard alternative
-        // (which goes to fallback).  CJK input "你好" peeks as the
-        // full run, misses every Latin bucket, and is tried against
-        // the wildcard fallback - which captures it.  Confirms
-        // dispatched + fallback ordering is preserved across scripts.
+        // (which goes to fallback).  CJK input "你好" peeks as "你"
+        // (first code point under Option G), misses both Latin
+        // buckets, and is tried against the wildcard fallback -
+        // which captures it.  Confirms dispatched + fallback
+        // ordering is preserved across scripts.
         const text = `<Start> = play -> "play"
                      | stop -> "stop"
                      | $(t:string) -> { other: t };`;
@@ -767,6 +783,130 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
             "head some text other end",
             "head a foo X",
             "head only end",
+        ]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    // ── Option G: first-code-point bucketing for non-WB-script keys ──
+    //
+    // Auto-mode rules whose first literal starts with a non-word-
+    // boundary-script character (CJK Han / Hiragana / Katakana,
+    // digits, punctuation, supplementary code points) bucket on the
+    // leading code point.  `peekNextToken` mirrors that on the input
+    // side so the buckets line up.
+
+    it("dispatches Hiragana/Katakana auto-mode rules under leading code point", () => {
+        // Japanese rule set: Hiragana and Katakana are also not in
+        // the WB-script list, so each rule buckets on its leading
+        // code point.  The first character is enough selectivity for
+        // typical voice-command sets.
+        const text = `<Start> = さいせい -> "play"
+                     | ていし -> "stop"
+                     | カット -> "cut";`;
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        const dispatch = findDispatchPart(optimized.rules);
+        expect(dispatch).toBeDefined();
+        expect(Array.from(dispatch!.tokenMap.keys()).sort()).toEqual([
+            "さ",
+            "て",
+            "カ",
+        ]);
+        expect(dispatch!.fallback ?? []).toHaveLength(0);
+
+        const baseline = loadGrammarRules("t.grammar", text);
+        for (const input of ["さいせい", "ていし", "カット", "ノイズ"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    it("collides multiple CJK rules sharing a leading character into one bucket", () => {
+        // 你好 and 你们 both bucket on "你"; 我 buckets on "我".
+        // The "你" bucket has two rules; suffix re-match disambiguates.
+        const text = `<Start> = 你好 -> "hi"
+                     | 你们 -> "you"
+                     | 我 -> "me";`;
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        const dispatch = findDispatchPart(optimized.rules);
+        expect(dispatch).toBeDefined();
+        expect(Array.from(dispatch!.tokenMap.keys()).sort()).toEqual([
+            "你",
+            "我",
+        ]);
+        expect(dispatch!.tokenMap.get("你")).toHaveLength(2);
+        expect(dispatch!.tokenMap.get("我")).toHaveLength(1);
+
+        const baseline = loadGrammarRules("t.grammar", text);
+        for (const input of ["你好", "你们", "我", "你", "他"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    it("dispatches supplementary-plane (surrogate pair) leading character", () => {
+        // U+1F3B5 (musical note) is a single code point encoded as a
+        // surrogate pair in UTF-16.  classifyDispatchMember /
+        // peekNextToken use codePointAt(0) + fromCodePoint, which
+        // round-trip the supplementary char as a 2-UTF-16-unit
+        // bucket key.  Matching must work end-to-end.
+        const text = `<Start> = 🎵 song -> "music"
+                     | play -> "p";`;
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        const dispatch = findDispatchPart(optimized.rules);
+        expect(dispatch).toBeDefined();
+        const keys = Array.from(dispatch!.tokenMap.keys());
+        expect(keys).toContain("🎵");
+        expect(keys).toContain("play");
+
+        const baseline = loadGrammarRules("t.grammar", text);
+        for (const input of ["🎵 song", "play", "🎵", "noise"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    it("buckets mixed CJK + Latin alternation correctly", () => {
+        // Realistic mixed-language rule set: Latin commands +
+        // Japanese hiragana + Han.  Each bucket keys on the
+        // appropriate prefix (WB-prefix for Latin, first char for
+        // CJK).  Inputs route to the right bucket.
+        const text = `<Start> = play -> "p"
+                     | stop -> "s"
+                     | 再生 -> "jp"
+                     | さいせい -> "jh";`;
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        const dispatch = findDispatchPart(optimized.rules);
+        expect(dispatch).toBeDefined();
+        expect(Array.from(dispatch!.tokenMap.keys()).sort()).toEqual([
+            "play",
+            "stop",
+            "さ",
+            "再",
+        ]);
+
+        const baseline = loadGrammarRules("t.grammar", text);
+        for (const input of [
+            "play",
+            "stop",
+            "再生",
+            "さいせい",
+            "noise",
+            "再",
+            "さい",
         ]) {
             expect(match(optimized, input)).toStrictEqual(
                 match(baseline, input),

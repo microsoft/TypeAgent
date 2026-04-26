@@ -1177,11 +1177,13 @@ export function leadingWordBoundaryScriptPrefix(s: string): string {
  *     implicit token boundary `matchStringPart` enforces in auto
  *     mode (`needsSeparatorInAutoMode`): "play你好" peeks as "play".
  *     When the leading character is itself non-word-boundary-script
- *     (CJK, digit, ...) the prefix is empty and `peekNextToken`
- *     returns `undefined` so the dispatch arm falls through to its
- *     `fallback` list.  In `required` / `optional` / `none`
- *     `tokenMode` the entire non-separator run is returned
- *     unchanged.
+ *     (CJK, digit, punctuation) the WB-prefix is empty; the run's
+ *     first code point is returned instead so dispatch can still
+ *     bucket on it.  This mirrors `classifyDispatchMember`'s
+ *     first-code-point fallback in the optimizer.  Surrogate pairs
+ *     yield a 2-UTF-16-unit string that is a valid Map key.  In
+ *     `required` / `optional` / `none` `tokenMode` the entire
+ *     non-separator run is returned unchanged.
  *
  * Splitting the two modes matters when the outer and dispatch modes
  * disagree, e.g. a `required`-mode dispatch nested in an `auto`
@@ -1222,10 +1224,21 @@ export function peekNextToken(
         // auto: cut at the first script transition so the peeked
         // token matches what the StringPart regex would consume.
         const pref = leadingWordBoundaryScriptPrefix(token);
-        if (pref.length === 0) {
-            return undefined;
+        if (pref.length > 0) {
+            token = pref;
+        } else {
+            // Non-word-boundary-script leading char (CJK, digit,
+            // punctuation): the WB-prefix is empty.  Bucket on the
+            // leading code point instead, mirroring
+            // `classifyDispatchMember`'s first-code-point fallback
+            // in the optimizer.  `m[0]` is non-empty (the regex
+            // matched at least one char), so `codePointAt(0)` is
+            // always defined.  Surrogate pairs return the
+            // supplementary code point and `fromCodePoint` rebuilds
+            // a 2-UTF-16-unit string that matches the bucket key.
+            const cp = token.codePointAt(0)!;
+            token = String.fromCodePoint(cp);
         }
-        token = pref;
     }
     // tokenEnd is documentation of where the full non-separator run
     // ended in `request`; no caller currently reads it (the dispatch

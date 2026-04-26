@@ -128,14 +128,47 @@ describe("peekNextToken", () => {
         });
     });
 
-    it("auto: returns undefined for CJK-leading run", () => {
-        expect(peekNextToken("你好", 0, undefined, undefined)).toBeUndefined();
+    it("auto: returns first code point for CJK-leading run", () => {
+        // Option G: when the WB-script prefix is empty (CJK is not
+        // a word-boundary script), peek falls back to the leading
+        // code point so dispatch can still bucket on it.
+        expect(peekNextToken("你好", 0, undefined, undefined)).toEqual({
+            token: "你",
+            tokenEnd: 2,
+        });
     });
 
-    it("auto: returns undefined for digit-leading run", () => {
-        expect(
-            peekNextToken("123abc", 0, undefined, undefined),
-        ).toBeUndefined();
+    it("auto: returns first digit for digit-leading run", () => {
+        // Option G: digits are not WB-script either; the leading
+        // digit becomes the bucket key.
+        expect(peekNextToken("123abc", 0, undefined, undefined)).toEqual({
+            token: "1",
+            tokenEnd: 6,
+        });
+    });
+
+    it("auto: returns single Hiragana code point for Hiragana-leading run", () => {
+        expect(peekNextToken("さいせい", 0, undefined, undefined)).toEqual({
+            token: "さ",
+            tokenEnd: 4,
+        });
+    });
+
+    it("auto: returns single Katakana code point for Katakana-leading run", () => {
+        expect(peekNextToken("カット", 0, undefined, undefined)).toEqual({
+            token: "カ",
+            tokenEnd: 3,
+        });
+    });
+
+    it("auto: returns supplementary code point as 2-UTF-16-unit string", () => {
+        // U+1F3B5 (musical note) is encoded as a surrogate pair.
+        // codePointAt(0) + fromCodePoint round-trips it as a
+        // 2-UTF-16-unit token; tokenEnd reflects the full run.
+        expect(peekNextToken("🎵 song", 0, undefined, undefined)).toEqual({
+            token: "🎵",
+            tokenEnd: 2,
+        });
     });
 
     it("auto: returns full Latin run when there is no transition", () => {
