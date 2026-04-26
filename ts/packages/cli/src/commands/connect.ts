@@ -19,7 +19,6 @@ import type { ConversationCommandContext } from "../conversationCommands.js";
 import {
     connectAgentServer,
     ensureAgentServer,
-    ensureAndConnectConversation,
     AgentServerConnection,
 } from "@typeagent/agent-server-client";
 import { getStatusSummary } from "@typeagent/dispatcher-types/helpers/status";
@@ -272,43 +271,47 @@ export default class Connect extends Command {
                 //   3. default: find-or-create the "CLI" conversation
                 const result =
                     persistedConversationId !== undefined
-                        ? await ensureAndConnectConversation(
-                              clientIO,
-                              flags.port,
-                              { conversationId: persistedConversationId },
-                              onDisconnect,
-                              flags.hidden,
-                              flags.idleTimeout,
-                          )
-                              .then((s) => ({
-                                  conversation: s,
-                                  connection: undefined as
-                                      | AgentServerConnection
-                                      | undefined,
-                              }))
-                              .catch(async (err: any) => {
-                                  if (
-                                      isDefaultConversation &&
-                                      typeof err?.message === "string" &&
-                                      err.message.startsWith(
-                                          "Conversation not found:",
-                                      )
-                                  ) {
-                                      console.log(
-                                          `The last used conversation no longer exists on the server.`,
-                                      );
-                                      const join = await promptYesNo(
-                                          `Join the default '${CLI_CONVERSATION_NAME}' conversation?`,
-                                      );
-                                      if (!join) {
-                                          clearLastConversationId();
-                                          return null;
-                                      }
+                        ? await (async () => {
+                              await ensureAgentServer(
+                                  flags.port,
+                                  flags.hidden,
+                                  flags.idleTimeout,
+                              );
+                              const conn = await connectAgentServer(
+                                  url,
+                                  onDisconnect,
+                              );
+                              const conv = await conn.joinConversation(
+                                  clientIO,
+                                  { conversationId: persistedConversationId },
+                              );
+                              conv.dispatcher.close = async () => {
+                                  await conn.close();
+                              };
+                              return { conversation: conv, connection: conn };
+                          })().catch(async (err: any) => {
+                              if (
+                                  isDefaultConversation &&
+                                  typeof err?.message === "string" &&
+                                  err.message.startsWith(
+                                      "Conversation not found:",
+                                  )
+                              ) {
+                                  console.log(
+                                      `The last used conversation no longer exists on the server.`,
+                                  );
+                                  const join = await promptYesNo(
+                                      `Join the default '${CLI_CONVERSATION_NAME}' conversation?`,
+                                  );
+                                  if (!join) {
                                       clearLastConversationId();
-                                      return connectToCliConversation();
+                                      return null;
                                   }
-                                  throw err;
-                              })
+                                  clearLastConversationId();
+                                  return connectToCliConversation();
+                              }
+                              throw err;
+                          })
                         : await connectToCliConversation();
 
                 if (result === null) {
@@ -336,10 +339,8 @@ export default class Connect extends Command {
             await replayDisplayHistory(activeDispatcher, clientIO, activeName);
 
             // Set up ConversationCommandContext for @conversation commands.
-            // Only available when the AgentServerConnection is accessible
-            // (connectToCliConversation / connectToEphemeralConversation paths).
-            // The ensureAndConnectConversation path (--session / --resume flags)
-            // does not expose the connection, so convCtx stays undefined there.
+            // Available on all connection paths since each path now exposes the
+            // AgentServerConnection.
             let convCtx: ConversationCommandContext | undefined;
             if (connection !== undefined) {
                 convCtx = {
