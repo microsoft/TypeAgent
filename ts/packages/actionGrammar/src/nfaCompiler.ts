@@ -279,8 +279,18 @@ function normalizePart(
     part: GrammarPart,
     cache: Map<GrammarRule[], GrammarRule[]>,
 ): GrammarPart {
+    if (part.type === "dispatch") {
+        // Expand the optimizer-only DispatchPart back into the
+        // equivalent RulesPart for NFA compilation: re-prepend the
+        // consumed token to each tokenMap entry's suffix rules,
+        // then append the fallback rules.  The NFA compiler does
+        // its own first-token dispatch via `buildFirstTokenIndex`,
+        // so DispatchPart adds nothing here - expansion preserves
+        // semantics with no compile-path knowledge of the new kind.
+        return normalizePart(expandDispatchPart(part), cache);
+    }
     if (part.type !== "rules") {
-        return part; // Only RulesParts need normalization
+        return part; // Only RulesParts (and dispatch above) need normalization
     }
 
     // Normalize all nested rules within this RulesPart (using cache)
@@ -288,6 +298,33 @@ function normalizePart(
         ...part,
         rules: normalizeRulesArray(part.rules, cache),
     };
+}
+
+/**
+ * Expand a `DispatchPart` into the equivalent `RulesPart`.  The
+ * dispatch part stores the original alternation rules unchanged in
+ * its `tokenMap` buckets (and `fallback`); expansion just unions
+ * them into a flat alternation in `[...hits..., ...fallback]` order.
+ */
+function expandDispatchPart(
+    part: import("./grammarTypes.js").DispatchPart,
+): RulesPart {
+    const expanded: GrammarRule[] = [];
+    for (const suffixRules of part.tokenMap.values()) {
+        for (const r of suffixRules) {
+            expanded.push(r);
+        }
+    }
+    if (part.fallback) {
+        expanded.push(...part.fallback);
+    }
+    const rulesPart: RulesPart = {
+        type: "rules",
+        rules: expanded,
+        name: part.name,
+        variable: part.variable,
+    };
+    return rulesPart;
 }
 
 /**
@@ -1503,12 +1540,20 @@ export function compileRuleToNFA(rule: GrammarRule, name?: string): NFA {
     const startState = builder.createState(false);
     const acceptState = builder.createState(true);
 
-    // Create a minimal grammar for this single rule
-    const grammar: Grammar = {
-        rules: [rule],
-    };
+    // Normalize through the grammar pipeline to expand any
+    // optimizer-introduced DispatchPart back to RulesPart and apply
+    // the standard passthrough/single-literal rewrites.
+    const normalized = normalizeGrammar({ rules: [rule] });
+    const grammar: Grammar = normalized;
+    const normalizedRule = normalized.rules[0];
 
-    compileRuleFromState(builder, grammar, rule, startState, acceptState);
+    compileRuleFromState(
+        builder,
+        grammar,
+        normalizedRule,
+        startState,
+        acceptState,
+    );
 
     return builder.build(startState, name);
 }

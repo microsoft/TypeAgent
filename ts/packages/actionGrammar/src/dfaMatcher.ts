@@ -15,9 +15,7 @@ import { normalizeToken } from "./nfaMatcher.js";
 import { applySplitToTokens } from "./tokenSplit.js";
 import { matchNFA } from "./nfaInterpreter.js";
 import type { NFAMatchResult } from "./nfaInterpreter.js";
-import type { Grammar, CompiledValueNode } from "./grammarTypes.js";
-
-// ─── DFA First-Token Index ──────────────────────────────────────────────────
+import type { Grammar, CompiledValueNode } from "./grammarTypes.js"; // ─── DFA First-Token Index ──────────────────────────────────────────────────
 // O(1) pre-filter: reject tokens whose first word can't start any DFA path.
 // Built lazily from the DFA start state and cached per DFA object.
 
@@ -2024,6 +2022,36 @@ function matchesRuleStructure(
                 const astPart = astParts[astIdx];
                 if (astPart.kind !== "phraseSet") return false;
                 astIdx++;
+                break;
+            }
+            case "dispatch": {
+                // Optimizer-introduced first-token dispatch.  For
+                // structural-match purposes treat exactly like a
+                // RulesPart whose alternatives are
+                // `[...tokenMap-buckets-flattened, ...fallback]`.
+                // Dispatch is a filter only - rules retain their
+                // original parts including the leading token.
+                let matched = false;
+                outer: for (const suffixRules of part.tokenMap.values()) {
+                    for (const suffix of suffixRules) {
+                        if (
+                            matchesRuleStructure(suffix, astParts.slice(astIdx))
+                        ) {
+                            matched = true;
+                            break outer;
+                        }
+                    }
+                }
+                if (!matched && part.fallback) {
+                    for (const fb of part.fallback) {
+                        if (matchesRuleStructure(fb, astParts.slice(astIdx))) {
+                            matched = true;
+                            break;
+                        }
+                    }
+                }
+                if (!matched) return false;
+                astIdx = astParts.length;
                 break;
             }
         }

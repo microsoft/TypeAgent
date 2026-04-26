@@ -582,6 +582,21 @@ function derivePartType(
             // never invoke derivePartType for them.  Kept for exhaustiveness.
             baseType = SchemaCreator.string();
             break;
+        case "dispatch":
+            // Optimizer-introduced.  When `variable` is set the dispatch
+            // captures whatever its alternatives' value expressions
+            // produce; for type-derivation purposes we treat it like a
+            // RulesPart over its expanded alternatives (suffix rules
+            // with consumed token re-prepended, plus fallback).
+            baseType = deriveRuleValueType(
+                [
+                    ...Array.from(part.tokenMap.values()).flat(),
+                    ...(part.fallback ?? []),
+                ],
+                cache,
+                part.name,
+            );
+            break;
     }
     // Optional captures produce T | undefined at runtime
     if (part.optional) {

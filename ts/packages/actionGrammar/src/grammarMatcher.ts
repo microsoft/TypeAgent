@@ -15,6 +15,7 @@ import {
     StringPartRegExpEntry,
     VarNumberPart,
     VarStringPart,
+    DispatchPart,
 } from "./grammarTypes.js";
 
 // Separator mode for completion results.  Structurally identical to
@@ -278,7 +279,8 @@ export type BacktrackOrigin =
     | "wildcard"
     | "optional"
     | "alternation"
-    | "repeat";
+    | "repeat"
+    | "dispatch";
 
 // Persistent linked-list of unexplored DFS branches (most recent
 // push at head).  Each frame snapshots a sibling parse path or a
@@ -336,7 +338,26 @@ type AlternationBacktrack = {
     readonly prev: Backtrack | undefined;
 };
 
-type Backtrack = SingleBacktrack | AlternationBacktrack;
+// Compressed cursor frame for a `DispatchPart` fork.  Conceptually
+// an alternation over `[...hits, ...fallback]` - the dispatch acts
+// purely as a filter that culls members whose first token cannot
+// match the peeked input token.  Each alternative resumes at the
+// original input index (the suffix rules retain their leading
+// StringPart and the matcher re-matches the token); `tokenEnd` and
+// `originalIndex` are kept on the frame for symmetry / debugging.
+type DispatchBacktrack = {
+    readonly origin: "dispatch";
+    readonly base: SnapshotState;
+    readonly hits: ReadonlyArray<GrammarRule>;
+    readonly fallback: ReadonlyArray<GrammarRule>;
+    readonly tokenEnd: number;
+    readonly originalIndex: number;
+    readonly namePrefix: string; // debug name = `${namePrefix}[${cursor}]`
+    cursor: number;
+    readonly prev: Backtrack | undefined;
+};
+
+type Backtrack = SingleBacktrack | AlternationBacktrack | DispatchBacktrack;
 
 // Strict variant of `PendingMatchState` used as the snapshot payload
 // inside `Backtrack`.  The `-?` mapped modifier forces every
@@ -600,6 +621,32 @@ function pushAlternation(
     };
 }
 
+// Push a compressed dispatch cursor frame.  Cursor starts at 1
+// (rule 0 is the live alternative, set up by the caller as either
+// the first hit at `index = tokenEnd` or - when `hits` is empty -
+// the first fallback at `index = originalIndex`).
+function pushDispatch(
+    state: MatchState,
+    base: SnapshotState,
+    hits: ReadonlyArray<GrammarRule>,
+    fallback: ReadonlyArray<GrammarRule>,
+    tokenEnd: number,
+    originalIndex: number,
+    namePrefix: string,
+) {
+    state.backtracks = {
+        origin: "dispatch",
+        base,
+        hits,
+        fallback,
+        tokenEnd,
+        originalIndex,
+        namePrefix,
+        cursor: 1,
+        prev: state.backtracks,
+    };
+}
+
 // Pop the most-recently-pushed (rightmost / deepest in DFS order)
 // unexplored sibling and restore it onto `state`, mutating in
 // place via `Object.assign`.  Returns true if a frame was
@@ -651,6 +698,27 @@ export function tryNextBacktrack(state: MatchState): boolean {
         debugMatch(state, `Restoring local backtrack (alternation)`);
         return true;
     }
+    if (frame.origin === "dispatch") {
+        // Dispatch cursor frame: identical restore semantics to
+        // alternation - the dispatch acts purely as a filter, so
+        // hits and fallback both resume at the original input
+        // index (no consumed token).
+        const i = frame.cursor;
+        const hitCount = frame.hits.length;
+        const isHit = i < hitCount;
+        const rule = isHit ? frame.hits[i] : frame.fallback[i - hitCount];
+        Object.assign(state, frame.base);
+        state.name = `${frame.namePrefix}[${i}]`;
+        state.parts = rule.parts;
+        state.value = rule.value;
+        state.spacingMode = rule.spacingMode;
+        frame.cursor = i + 1;
+        if (frame.cursor >= hitCount + frame.fallback.length) {
+            state.backtracks = frame.prev;
+        }
+        debugMatch(state, `Restoring local backtrack (dispatch)`);
+        return true;
+    }
     // The snapshot omits `backtracks`, so Object.assign won't
     // overwrite it - explicitly advance the head pointer to `prev`.
     Object.assign(state, frame.snapshot);
@@ -698,6 +766,7 @@ export function suppressBacktracksAfterSuccess(state: MatchState) {
             case "repeat":
                 return repeatSuppress;
             case "alternation":
+            case "dispatch":
                 return false;
         }
     };
@@ -1114,6 +1183,64 @@ export function nextNonSeparatorIndex(request: string, index: number) {
     separatorRegExp.lastIndex = index;
     const match = separatorRegExp.exec(request);
     return match === null ? index : index + match[0].length;
+}
+
+// Sticky-anchored regex for scanning a contiguous run of non-separator
+// characters starting at `lastIndex`.  Used by `peekNextToken` to
+// extract the next "word" from input without allocating substrings.
+const nonSeparatorRunRegExp = new RegExp(`[^${separatorRegExpStr}]+`, "yu");
+const singleSeparatorRegExp = new RegExp(`[${separatorRegExpStr}]`, "u");
+
+/**
+ * Peek the next "token" (lowercased run of non-separator chars) from
+ * `request` starting at `index`, optionally skipping leading
+ * separators per `leadingMode`.  Returns `undefined` when no token
+ * is available (EOI, separator-only tail, or a leading separator
+ * exists in `none` mode).
+ *
+ * Used by the `case "dispatch":` arm in `matchState` to look up the
+ * first input token in a `DispatchPart.tokenMap`.  Token semantics
+ * intentionally mirror `matchStringPart`'s separator handling:
+ *   - In `none` mode (input must start exactly at a token boundary)
+ *     a leading separator yields `undefined`.
+ *   - In `required` / `optional` / `auto` modes, leading separators
+ *     are skipped via `nextNonSeparatorIndex` before the token run.
+ *
+ * Token boundary in `auto` mode: peek extends to the next
+ * separator, naturally aligning with `matchStringPart`'s regex.
+ * Mixed-script input like `"play你好"` returns the entire run
+ * `"play你好"` (lowercased).  Such a token will not match a `"play"`
+ * key in `tokenMap`, so the dispatch falls through to fallback - no
+ * additional runtime boundary check is required.
+ */
+export function peekNextToken(
+    request: string,
+    index: number,
+    leadingMode: CompiledSpacingMode,
+): { token: string; tokenEnd: number } | undefined {
+    let start = index;
+    if (leadingMode === "none") {
+        // No leading separator allowed: input must start exactly at
+        // the token.  If a separator is present, no dispatch hit is
+        // possible (matches what `matchStringPart` would do).
+        if (
+            start < request.length &&
+            singleSeparatorRegExp.test(request.charAt(start))
+        ) {
+            return undefined;
+        }
+    } else {
+        start = nextNonSeparatorIndex(request, start);
+    }
+    if (start >= request.length) {
+        return undefined;
+    }
+    nonSeparatorRunRegExp.lastIndex = start;
+    const m = nonSeparatorRunRegExp.exec(request);
+    if (m === null) {
+        return undefined;
+    }
+    return { token: m[0].toLowerCase(), tokenEnd: start + m[0].length };
 }
 
 // Finalize the state to capture the last wildcard if any
@@ -1918,9 +2045,103 @@ export function matchState(state: MatchState, request: string) {
                 // continue the loop (without incrementing partIndex)
                 continue;
             }
+            case "dispatch": {
+                if (!enterDispatchPart(state, part, request)) {
+                    return false;
+                }
+                // continue the loop (without incrementing partIndex)
+                continue;
+            }
         }
         state.partIndex++;
     }
+}
+
+/**
+ * Set up `state` to enter a `DispatchPart`.  Mirrors the non-tail
+ * `RulesPart` entry but additionally peeks the next input token,
+ * partitions members into hits + fallback, and seeds rule 0 at the
+ * appropriate input index.  Returns `false` when neither a token
+ * hit nor any fallback alternative exists.
+ */
+function enterDispatchPart(
+    state: MatchState,
+    part: DispatchPart,
+    request: string,
+): boolean {
+    const originalIndex = state.index;
+    const peek = peekNextToken(
+        request,
+        originalIndex,
+        leadingSpacingMode(state),
+    );
+    const hits =
+        peek !== undefined ? (part.tokenMap.get(peek.token) ?? []) : [];
+    const fallback = part.fallback ?? [];
+    const hitCount = hits.length;
+    const total = hitCount + fallback.length;
+    if (total === 0) {
+        debugMatch(state, `dispatch: no hits or fallback`);
+        return false;
+    }
+
+    // First live alternative: a hit if available, otherwise the
+    // first fallback rule.
+    const firstIsHit = hitCount > 0;
+    const firstRule = firstIsHit ? hits[0] : fallback[0];
+
+    // Save the current state to be restored after finishing the nested rule.
+    const parent: ParentMatchState = {
+        name: state.name,
+        variable: part.variable,
+        parts: state.parts,
+        value: state.value,
+        partIndex: state.partIndex + 1,
+        valueIds: state.valueIds,
+        parent: state.parent,
+        repeatPartIndex: undefined,
+        repeatStartIndex: undefined,
+        spacingMode: state.spacingMode,
+    };
+
+    const requireValue =
+        state.valueIds !== null &&
+        (part.variable !== undefined || usesImplicitDefault(state));
+
+    const namePrefix = part.name
+        ? `<${part.name}>`
+        : `${getStateName(state)}<dispatch>`;
+
+    state.name = `${namePrefix}[0]`;
+    state.parts = firstRule.parts;
+    state.value = firstRule.value;
+    state.partIndex = 0;
+    state.valueIds = requireValue ? undefined : null;
+    state.parent = parent;
+    state.nestedLevel++;
+    state.suppressOptionalFork = undefined;
+    state.spacingMode = firstRule.spacingMode;
+    // Note: state.index is left at originalIndex - dispatch acts as
+    // a filter only.  The suffix rules retain their full leading
+    // StringPart so the matcher's existing implicit-default logic
+    // (which derives the rule's value from the StringPart's tokens)
+    // continues to work.  The peeked token's only role is to
+    // partition members into hits + fallback; the matcher will
+    // re-match the token via the suffix's StringPart regex.
+
+    if (total > 1) {
+        const base = forkMatchState(state);
+        pushDispatch(
+            state,
+            base,
+            hits,
+            fallback,
+            peek?.tokenEnd ?? originalIndex,
+            originalIndex,
+            namePrefix,
+        );
+    }
+    return true;
 }
 
 // Build the initial live MatchState for `matchGrammar` /

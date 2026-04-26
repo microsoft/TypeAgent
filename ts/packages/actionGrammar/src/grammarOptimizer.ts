@@ -6,6 +6,7 @@ import {
     CompiledObjectElement,
     CompiledSpacingMode,
     CompiledValueNode,
+    DispatchPart,
     getCapturedVariableName,
     Grammar,
     GrammarPart,
@@ -75,6 +76,41 @@ export type GrammarOptimizationOptions = {
      * not, and will throw if it encounters one.
      */
     tailFactoring?: boolean;
+
+    /**
+     * Replace eligible `RulesPart` alternation forks with a
+     * `DispatchPart` that maps the next input token to a list of
+     * suffix rules.  At match time the matcher peeks one token,
+     * looks it up in the table, and tries only the listed suffixes
+     * (with the consumed token already credited) instead of
+     * attempting every alternative.
+     *
+     * Eligibility (per spacing-mode partition):
+     *   - `required`  - always eligible.
+     *   - `undefined` (auto) - eligible iff every dispatch key is
+     *     composed entirely of word-boundary-script characters
+     *     (Latin / Cyrillic / Greek / etc.) so the matcher's
+     *     peek-by-separator aligns with the partition's boundary
+     *     semantics.
+     *   - `optional` / `none` - never eligible (peek-by-separator
+     *     would falsely segment unseparated input).
+     *
+     * Members whose first part is not a statically-known token
+     * (wildcard / number / phraseSet / nested RulesPart, bound
+     * first-StringPart, recursive or empty members, RulesParts
+     * carrying `repeat`/`optional`) are placed in the dispatch
+     * `fallback` list and tried as ordinary alternatives after the
+     * tokenMap hits.
+     *
+     * The pass is observably equivalent to the unoptimized form -
+     * the matcher tries the same set of alternatives in the same
+     * order on a hit, plus all fallback rules.  Only the NFA/DFA
+     * compile path expands `DispatchPart` back to `RulesPart` (the
+     * NFA already does global first-token dispatch via
+     * `buildFirstTokenIndex`, so the dispatch part adds nothing
+     * there).
+     */
+    dispatchifyAlternations?: boolean;
 };
 
 /**
@@ -97,6 +133,7 @@ export const recommendedOptimizations: GrammarOptimizationOptions = {
     inlineSingleAlternatives: true,
     factorCommonPrefixes: true,
     tailFactoring: true,
+    dispatchifyAlternations: true,
 };
 
 /**
@@ -167,6 +204,9 @@ export function optimizeGrammar(
                 return grammar;
             }
         }
+    }
+    if (options.dispatchifyAlternations) {
+        rules = dispatchifyAlternations(rules);
     }
     if (rules === grammar.rules) {
         return grammar;
@@ -1873,6 +1913,267 @@ function substituteValueVariables(
         case "templateLiteral":
             return { ...node, expressions: node.expressions.map(sub) };
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Optimization: dispatchify alternations
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Subset of `wordBoundaryScriptRe` from `grammarMatcher.ts`.  Used to
+ * decide eligibility of an `auto`-mode (undefined spacingMode)
+ * partition: a tokenMap key is "safe" iff every char belongs to one
+ * of these scripts AND the matcher's `peekNextToken` will return the
+ * same boundary the StringPart would consume.  Mixed-script and
+ * digit-only tokens still match correctly because peek returns the
+ * full non-separator run; if the run does not equal the key it falls
+ * through to fallback.  This gate exists to avoid the rare edge case
+ * where a peek-by-separator returns the entire run but the matcher's
+ * StringPart regex would have stopped at an internal boundary.
+ *
+ * In practice for ASCII command grammars every key is Latin-only and
+ * dispatch is always taken.  Keeping this in sync with the matcher's
+ * definition is critical - the matcher's table is authoritative.
+ */
+const dispatchKeyScriptRe =
+    /^(?:\p{Script=Latin}|\p{Script=Cyrillic}|\p{Script=Greek}|\p{Script=Armenian}|\p{Script=Georgian}|\p{Script=Hangul}|\p{Script=Arabic}|\p{Script=Hebrew}|\p{Script=Devanagari}|\p{Script=Bengali}|\p{Script=Tamil}|\p{Script=Telugu}|\p{Script=Kannada}|\p{Script=Malayalam}|\p{Script=Gujarati}|\p{Script=Gurmukhi}|\p{Script=Oriya}|\p{Script=Sinhala}|\p{Script=Ethiopic}|\p{Script=Mongolian})+$/u;
+
+function isDispatchEligibleSpacingMode(
+    mode: CompiledSpacingMode,
+    keys: Iterable<string>,
+): boolean {
+    if (mode === "required") {
+        return true;
+    }
+    if (mode === undefined) {
+        // auto: every key must be word-boundary-script-only.
+        for (const k of keys) {
+            if (!dispatchKeyScriptRe.test(k)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    // optional / none: never eligible.
+    return false;
+}
+
+/**
+ * Classify a single rule's first part for dispatch eligibility:
+ *   - { kind: "token", token, suffix } - rule is dispatch-eligible;
+ *     `suffix` is the rule with its leading token removed.
+ *   - { kind: "fallback" } - rule is not dispatch-eligible; goes to
+ *     the dispatch part's `fallback` list.
+ */
+function classifyDispatchMember(
+    rule: GrammarRule,
+): { kind: "token"; token: string } | { kind: "fallback" } {
+    const first = rule.parts[0];
+    if (first === undefined) {
+        return { kind: "fallback" };
+    }
+    if (first.type !== "string") {
+        return { kind: "fallback" };
+    }
+    if (first.variable !== undefined) {
+        // Bound first-StringPart goes to fallback in initial cut to
+        // avoid having to inject the binding into the suffix.
+        return { kind: "fallback" };
+    }
+    if (first.value.length === 0) {
+        return { kind: "fallback" };
+    }
+    const token = first.value[0].toLowerCase();
+    return { kind: "token", token };
+}
+
+/**
+ * Try to convert a `RulesPart` into a `DispatchPart`.  Returns
+ * `undefined` if not eligible (caller keeps the original `RulesPart`).
+ *
+ * Skip conditions:
+ *   - `repeat` or `optional` set on the RulesPart (changes loop
+ *     semantics; out of scope for initial cut).
+ *   - `tailCall` set (the tail-call protocol is incompatible with
+ *     the dispatch frame).
+ *   - tokenMap would be empty.
+ *   - tokenMap wouldn't filter (one bucket containing every member,
+ *     no fallback): the matcher's work is unchanged.
+ *   - The partition's spacing mode is ineligible for dispatch (see
+ *     `isDispatchEligibleSpacingMode`).  Members may have different
+ *     spacingModes - we partition by the dominant mode of the
+ *     dispatch hits and emit dispatch only when the partition is
+ *     uniformly eligible.
+ */
+function tryDispatchifyRulesPart(part: RulesPart): DispatchPart | undefined {
+    if (part.repeat || part.optional || part.tailCall) {
+        return undefined;
+    }
+    if (part.rules.length < 2) {
+        // Single-rule "alternation" - nothing to dispatch.
+        return undefined;
+    }
+    // Determine the partition spacing mode.  We only dispatch when
+    // every member rule shares a single spacingMode; mixed-mode
+    // partitions stay as RulesPart in the initial cut.
+    const partitionMode = part.rules[0].spacingMode;
+    for (let i = 1; i < part.rules.length; i++) {
+        if (part.rules[i].spacingMode !== partitionMode) {
+            return undefined;
+        }
+    }
+
+    const tokenMap = new Map<string, GrammarRule[]>();
+    const fallback: GrammarRule[] = [];
+    for (const rule of part.rules) {
+        const cls = classifyDispatchMember(rule);
+        if (cls.kind === "token") {
+            const existing = tokenMap.get(cls.token);
+            if (existing !== undefined) {
+                existing.push(rule);
+            } else {
+                tokenMap.set(cls.token, [rule]);
+            }
+        } else {
+            fallback.push(rule);
+        }
+    }
+
+    if (tokenMap.size === 0) {
+        return undefined;
+    }
+    // No filtering: a single-bucket dispatch with no fallback is
+    // equivalent to the original RulesPart minus the leading-token
+    // factoring (one regex try per member instead of N hash misses).
+    // Skip to avoid pessimization.
+    if (tokenMap.size === 1 && fallback.length === 0) {
+        return undefined;
+    }
+
+    if (!isDispatchEligibleSpacingMode(partitionMode, tokenMap.keys())) {
+        return undefined;
+    }
+
+    const dispatch: DispatchPart = {
+        type: "dispatch",
+        tokenMap,
+        spacingMode: partitionMode,
+    };
+    if (part.name !== undefined) dispatch.name = part.name;
+    if (part.variable !== undefined) dispatch.variable = part.variable;
+    if (fallback.length > 0) dispatch.fallback = fallback;
+    return dispatch;
+}
+
+/**
+ * Walk every rule array in `rules` post-order, attempting to
+ * convert each `RulesPart` whose alternatives can be partitioned by
+ * first input token into a `DispatchPart`.  Top-level
+ * `Grammar.rules` is also dispatched when eligible (as a synthesized
+ * outer RulesPart - effectively the same logic).
+ *
+ * Identity-sharing of `GrammarRule[]` arrays (the dedup invariant
+ * the serializer relies on) is preserved via memoization.
+ */
+export function dispatchifyAlternations(rules: GrammarRule[]): GrammarRule[] {
+    const counter = { dispatched: 0 };
+    const memo = new Map<GrammarRule[], GrammarRule[]>();
+
+    const result = visitRulesArray(rules, counter, memo);
+
+    // Top-level dispatch: synthesize a transient RulesPart over the
+    // top-level alternatives and try to dispatch it.  If successful,
+    // the result is a single-rule grammar whose only part is a
+    // DispatchPart - preserves the matcher's "rule i drives one
+    // alternative" semantics through the dispatch frame.
+    if (result.length >= 2) {
+        const synthetic: RulesPart = {
+            type: "rules",
+            rules: result,
+        };
+        const dispatched = tryDispatchifyRulesPart(synthetic);
+        if (dispatched !== undefined) {
+            counter.dispatched++;
+            const wrapper: GrammarRule = { parts: [dispatched] };
+            if (counter.dispatched > 0) {
+                debug(
+                    `dispatched ${counter.dispatched} alternations into token tables`,
+                );
+            }
+            return [wrapper];
+        }
+    }
+
+    if (counter.dispatched > 0) {
+        debug(
+            `dispatched ${counter.dispatched} alternations into token tables`,
+        );
+    }
+    return result;
+}
+
+function visitRulesArray(
+    rules: GrammarRule[],
+    counter: { dispatched: number },
+    memo: Map<GrammarRule[], GrammarRule[]>,
+): GrammarRule[] {
+    const cached = memo.get(rules);
+    if (cached !== undefined) return cached;
+    memo.set(rules, rules);
+    let next: GrammarRule[] | undefined;
+    for (let i = 0; i < rules.length; i++) {
+        const r = visitRule(rules[i], counter, memo);
+        if (next !== undefined) {
+            next.push(r);
+        } else if (r !== rules[i]) {
+            next = rules.slice(0, i);
+            next.push(r);
+        }
+    }
+    const result = next ?? rules;
+    memo.set(rules, result);
+    return result;
+}
+
+function visitRule(
+    rule: GrammarRule,
+    counter: { dispatched: number },
+    memo: Map<GrammarRule[], GrammarRule[]>,
+): GrammarRule {
+    let outParts: GrammarPart[] | undefined;
+    for (let i = 0; i < rule.parts.length; i++) {
+        const p = rule.parts[i];
+        const visited = visitPart(p, counter, memo);
+        if (outParts !== undefined) {
+            outParts.push(visited);
+        } else if (visited !== p) {
+            outParts = rule.parts.slice(0, i);
+            outParts.push(visited);
+        }
+    }
+    if (outParts === undefined) return rule;
+    return { ...rule, parts: outParts };
+}
+
+function visitPart(
+    part: GrammarPart,
+    counter: { dispatched: number },
+    memo: Map<GrammarRule[], GrammarRule[]>,
+): GrammarPart {
+    if (part.type !== "rules") {
+        return part;
+    }
+    // Recurse first (post-order) so nested dispatch attempts run
+    // before the outer one decides classification.
+    const innerRules = visitRulesArray(part.rules, counter, memo);
+    const innerPart: RulesPart =
+        innerRules !== part.rules ? { ...part, rules: innerRules } : part;
+    const dispatched = tryDispatchifyRulesPart(innerPart);
+    if (dispatched !== undefined) {
+        counter.dispatched++;
+        return dispatched;
+    }
+    return innerPart;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
