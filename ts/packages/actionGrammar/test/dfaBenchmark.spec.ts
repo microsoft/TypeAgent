@@ -27,6 +27,8 @@ import { loadGrammarRulesNoThrow } from "../src/grammarLoader.js";
 import { compileGrammarToNFA } from "../src/nfaCompiler.js";
 import { matchNFA } from "../src/nfaInterpreter.js";
 import { normalizeToken } from "../src/nfaMatcher.js";
+import { matchGrammar } from "../src/grammarMatcher.js";
+import { recommendedOptimizations } from "../src/grammarOptimizer.js";
 import {
     compileNFAToDFA,
     matchDFAWithSplitting,
@@ -123,16 +125,21 @@ interface TimingResult {
     grammar: string;
     request: string;
     matched: boolean;
+    matchNoOptMs: number; // matchGrammar over grammar with NO optimizations
+    matchAllTopMs: number; // matchGrammar over grammar with ALL recommended optimizations (incl. dispatch)
     nfaMatchMs: number; // NFA full match (threading + value eval)
     nfaIndexMs: number; // NFA with first-token index dispatch
     dfaTraverseMs: number; // pure DFA traversal (accept/reject only)
     dfaHybridMs: number; // DFA pre-filter + NFA only when accepted
     dfaASTMs: number; // DFA AST match + evaluate (structural parse)
+    matchNoOptMsPerCall: number; // μs/call
+    matchAllTopMsPerCall: number; // μs/call
     nfaMatchMsPerCall: number; // μs/call
     nfaIndexMsPerCall: number; // μs/call
     dfaTraverseMsPerCall: number; // μs/call
     dfaHybridMsPerCall: number; // μs/call
     dfaASTMsPerCall: number; // μs/call
+    allTopSpeedup: number; // matchNoOptMs / matchAllTopMs
     indexSpeedup: number; // nfaMatchMs / nfaIndexMs
     hybridSpeedup: number; // nfaMatchMs / dfaHybridMs
     astSpeedup: number; // nfaMatchMs / dfaASTMs
@@ -205,11 +212,14 @@ function printTimingTable(rows: TimingResult[]): void {
         "Grammar",
         "Request",
         "Match?",
+        "AST no-opt μs/call",
+        "AST all-top μs/call",
         "NFA μs/call",
         "NFA+idx μs/call",
         "DFA trav μs/call",
         "DFA hybrid μs/call",
         "DFA AST μs/call",
+        "All-top speedup",
         "Idx speedup",
         "Hybrid speedup",
         "AST speedup",
@@ -218,11 +228,14 @@ function printTimingTable(rows: TimingResult[]): void {
         r.grammar,
         r.request.length > 30 ? r.request.slice(0, 27) + "..." : r.request,
         r.matched ? "✓" : "✗",
+        r.matchNoOptMsPerCall.toFixed(2),
+        r.matchAllTopMsPerCall.toFixed(2),
         r.nfaMatchMsPerCall.toFixed(2),
         r.nfaIndexMsPerCall.toFixed(2),
         r.dfaTraverseMsPerCall.toFixed(2),
         r.dfaHybridMsPerCall.toFixed(2),
         r.dfaASTMsPerCall.toFixed(2),
+        r.allTopSpeedup.toFixed(1) + "x",
         r.indexSpeedup.toFixed(1) + "x",
         r.hybridSpeedup.toFixed(1) + "x",
         r.astSpeedup.toFixed(1) + "x",
@@ -232,6 +245,8 @@ function printTimingTable(rows: TimingResult[]): void {
     const matched = rows.filter((r) => r.matched);
     const unmatched = rows.filter((r) => !r.matched);
     if (matched.length) {
+        const avgAllTop =
+            matched.reduce((s, r) => s + r.allTopSpeedup, 0) / matched.length;
         const avgIdx =
             matched.reduce((s, r) => s + r.indexSpeedup, 0) / matched.length;
         const avgHybrid =
@@ -239,10 +254,13 @@ function printTimingTable(rows: TimingResult[]): void {
         const avgAST =
             matched.reduce((s, r) => s + r.astSpeedup, 0) / matched.length;
         console.log(
-            `  Avg speedup (matched):   idx=${avgIdx.toFixed(1)}x  hybrid=${avgHybrid.toFixed(1)}x  ast=${avgAST.toFixed(1)}x`,
+            `  Avg speedup (matched):   all-top=${avgAllTop.toFixed(1)}x  idx=${avgIdx.toFixed(1)}x  hybrid=${avgHybrid.toFixed(1)}x  ast=${avgAST.toFixed(1)}x`,
         );
     }
     if (unmatched.length) {
+        const avgAllTop =
+            unmatched.reduce((s, r) => s + r.allTopSpeedup, 0) /
+            unmatched.length;
         const avgIdx =
             unmatched.reduce((s, r) => s + r.indexSpeedup, 0) /
             unmatched.length;
@@ -252,7 +270,7 @@ function printTimingTable(rows: TimingResult[]): void {
         const avgAST =
             unmatched.reduce((s, r) => s + r.astSpeedup, 0) / unmatched.length;
         console.log(
-            `  Avg speedup (unmatched): idx=${avgIdx.toFixed(1)}x  hybrid=${avgHybrid.toFixed(1)}x  ast=${avgAST.toFixed(1)}x`,
+            `  Avg speedup (unmatched): all-top=${avgAllTop.toFixed(1)}x  idx=${avgIdx.toFixed(1)}x  hybrid=${avgHybrid.toFixed(1)}x  ast=${avgAST.toFixed(1)}x`,
         );
     }
 }
@@ -299,6 +317,34 @@ describe("DFA vs NFA Benchmark", () => {
         if (!grammar || errors.length > 0) {
             console.log(`Skipping ${grammarName}: ${errors.join(", ")}`);
             return;
+        }
+
+        // ── AST-walker grammar variants ───────────────────────────────────
+        // Two extra grammar instances for the AST-walking matcher
+        // (`matchGrammar`): no optimizations vs all recommended
+        // optimizations (inline + factor + tailFactoring + dispatch).
+        // The default `grammar` above is what feeds the NFA/DFA path.
+        const noOptErrors: string[] = [];
+        const grammarNoOpt = loadGrammarRulesNoThrow(
+            path.basename(grammarPath),
+            content,
+            noOptErrors,
+            undefined,
+            { optimizations: {} },
+        );
+        const allTopErrors: string[] = [];
+        const grammarAllTop = loadGrammarRulesNoThrow(
+            path.basename(grammarPath),
+            content,
+            allTopErrors,
+            undefined,
+            { optimizations: recommendedOptimizations },
+        );
+        if (!grammarNoOpt || !grammarAllTop) {
+            console.log(
+                `Skipping ${grammarName} AST variants: ` +
+                    [...noOptErrors, ...allTopErrors].join(", "),
+            );
         }
 
         // ── Compilation ───────────────────────────────────────────────────
@@ -359,6 +405,22 @@ describe("DFA vs NFA Benchmark", () => {
                 const r = matchDFAToASTWithSplitting(dfa!, tokens);
                 if (r.ast) evaluateMatchAST(r.ast, grammar);
             }
+            if (grammarNoOpt) matchGrammar(grammarNoOpt, request);
+            if (grammarAllTop) matchGrammar(grammarAllTop, request);
+
+            // AST-walker matchGrammar at no-optimization baseline
+            const matchNoOptMs = grammarNoOpt
+                ? timeMsN(() => matchGrammar(grammarNoOpt, request), ITERATIONS)
+                : 0;
+
+            // AST-walker matchGrammar with all recommended optimizations
+            // (inline + factor + tailFactoring + dispatch)
+            const matchAllTopMs = grammarAllTop
+                ? timeMsN(
+                      () => matchGrammar(grammarAllTop, request),
+                      ITERATIONS,
+                  )
+                : 0;
 
             // NFA full match (threading + slot ops + value eval) — baseline
             const nfaMatchMs = timeMsN(
@@ -398,16 +460,22 @@ describe("DFA vs NFA Benchmark", () => {
                 grammar: grammarName,
                 request,
                 matched,
+                matchNoOptMs,
+                matchAllTopMs,
                 nfaMatchMs,
                 nfaIndexMs,
                 dfaTraverseMs,
                 dfaHybridMs,
                 dfaASTMs,
+                matchNoOptMsPerCall: (matchNoOptMs / ITERATIONS) * 1000,
+                matchAllTopMsPerCall: (matchAllTopMs / ITERATIONS) * 1000,
                 nfaMatchMsPerCall: (nfaMatchMs / ITERATIONS) * 1000,
                 nfaIndexMsPerCall: (nfaIndexMs / ITERATIONS) * 1000,
                 dfaTraverseMsPerCall: (dfaTraverseMs / ITERATIONS) * 1000,
                 dfaHybridMsPerCall: (dfaHybridMs / ITERATIONS) * 1000,
                 dfaASTMsPerCall: (dfaASTMs / ITERATIONS) * 1000,
+                allTopSpeedup:
+                    matchAllTopMs > 0 ? matchNoOptMs / matchAllTopMs : 0,
                 indexSpeedup: nfaIndexMs > 0 ? nfaMatchMs / nfaIndexMs : 0,
                 hybridSpeedup: dfaHybridMs > 0 ? nfaMatchMs / dfaHybridMs : 0,
                 astSpeedup: dfaASTMs > 0 ? nfaMatchMs / dfaASTMs : 0,
