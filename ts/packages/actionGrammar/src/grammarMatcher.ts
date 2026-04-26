@@ -1897,8 +1897,18 @@ function enterTailAlternation(
     // `forkMatchState` snapshots `valueIds` (and every other field) at
     // this fork point; restoring on backtrack rewinds anything an
     // abandoned member added to the chain.
-    const base = forkMatchState(state);
-    pushAlternation(state, base, rules, namePrefix);
+    //
+    // Mirror `enterRulesAlternation`'s `> 1` guard: when there is
+    // only one alternative there is nothing to fork to on backtrack
+    // (the alternation cursor would point at `rules[1]` which is
+    // undefined).  This case can arise for a tail-call DispatchPart
+    // whose hits + fallback effective list happens to contain a
+    // single rule (e.g. peek matches a single-rule bucket and the
+    // dispatch has no fallback).
+    if (rules.length > 1) {
+        const base = forkMatchState(state);
+        pushAlternation(state, base, rules, namePrefix);
+    }
 }
 
 export function matchState(state: MatchState, request: string) {
