@@ -1543,17 +1543,19 @@ export function compileRuleToNFA(rule: GrammarRule, name?: string): NFA {
     const startState = builder.createState(false);
     const acceptState = builder.createState(true);
 
-    // Normalize through the grammar pipeline to expand any
-    // optimizer-introduced DispatchPart back to RulesPart and apply
-    // the standard passthrough/single-literal rewrites.
-    const normalized = normalizeGrammar({ rules: [rule] });
-    const grammar: Grammar = normalized;
-    const normalizedRule = normalized.rules[0];
+    // Normalize unconditionally so single-rule compilation matches
+    // `compileGrammarToNFA`'s behavior: passthrough rules acquire
+    // their `_result` capture and single-literal rules acquire their
+    // implicit `-> "literal"` value, and `DispatchPart`s (which the
+    // NFA compiler doesn't understand directly) are expanded back
+    // into the equivalent `RulesPart`.
+    const ruleToCompile = normalizeGrammar({ rules: [rule] }).rules[0];
+    const grammar: Grammar = { rules: [ruleToCompile] };
 
     compileRuleFromState(
         builder,
         grammar,
-        normalizedRule,
+        ruleToCompile,
         startState,
         acceptState,
     );
