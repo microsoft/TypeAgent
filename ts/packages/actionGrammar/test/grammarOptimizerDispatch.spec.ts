@@ -234,4 +234,154 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
             );
         }
     });
+
+    // ── Auto-mode + script-eligibility coverage ────────────────────────
+    //
+    // Auto-mode dispatch is gated by `dispatchKeyScriptRe`: every
+    // tokenMap key must be composed entirely of word-boundary-script
+    // chars (Latin/Cyrillic/Greek/...).  CJK / digit-only / mixed-script
+    // keys are ineligible.  These tests exercise each branch and
+    // confirm match equivalence with the unoptimized baseline.
+
+    it("dispatches auto-mode all-Cyrillic keys", () => {
+        // Cyrillic is in the word-boundary-script list, so auto-mode
+        // dispatch is eligible.
+        const text = `<Start> = играть песню -> "play"
+                     | стоп -> "stop"
+                     | дальше -> "next";`;
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        const dispatch = findDispatchPart(optimized.rules);
+        expect(dispatch).toBeDefined();
+        expect(Array.from(dispatch!.tokenMap.keys()).sort()).toEqual([
+            "дальше",
+            "играть",
+            "стоп",
+        ]);
+
+        const baseline = loadGrammarRules("t.grammar", text);
+        for (const input of ["играть песню", "стоп", "дальше", "noise"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    it("does NOT dispatch auto-mode all-CJK keys", () => {
+        // CJK (Han) is NOT in the word-boundary-script list, so the
+        // auto-mode eligibility check rejects this partition.  Match
+        // results must still be correct via the unoptimized RulesPart.
+        const text = `<Start> = 再生 -> "play"
+                     | 停止 -> "stop"
+                     | 次 -> "next";`;
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        expect(findDispatchPart(optimized.rules)).toBeUndefined();
+
+        const baseline = loadGrammarRules("t.grammar", text);
+        for (const input of ["再生", "停止", "次", "他"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    it("does NOT dispatch auto-mode mixed-script keys", () => {
+        // A key like "play你" is not a single-script run, so the
+        // anchored eligibility regex rejects it (any non-word-boundary
+        // char in any key disqualifies the whole partition).
+        const text = `<Start> = play你 song -> "ps"
+                     | stop -> "stop";`;
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        expect(findDispatchPart(optimized.rules)).toBeUndefined();
+
+        const baseline = loadGrammarRules("t.grammar", text);
+        for (const input of ["play你 song", "stop", "noise"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    it("does NOT dispatch auto-mode digit-only first tokens", () => {
+        // Digits are not part of any word-boundary script.  Bare
+        // numeric leading tokens disqualify the partition.
+        const text = `<Start> = 1 hour -> "h"
+                     | 2 days -> "d"
+                     | weeks -> "w";`;
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        // The partition contains "1" and "2" keys (digits) which are
+        // not word-boundary-script, so auto-mode dispatch is rejected.
+        expect(findDispatchPart(optimized.rules)).toBeUndefined();
+
+        const baseline = loadGrammarRules("t.grammar", text);
+        for (const input of ["1 hour", "2 days", "weeks", "3 days"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    it("dispatches required-mode keys regardless of script", () => {
+        // `required` spacing mode skips the auto-mode script check
+        // entirely - the matcher always demands a separator after the
+        // first token, so peek-by-separator agrees with the StringPart
+        // boundary even for CJK / digit / mixed keys.
+        const text = `<Start> [spacing=required] = 再生 song -> "play"
+                     | 停止 now -> "stop"
+                     | 1 thing -> "one";`;
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        const dispatch = findDispatchPart(optimized.rules);
+        expect(dispatch).toBeDefined();
+        expect(Array.from(dispatch!.tokenMap.keys()).sort()).toEqual([
+            "1",
+            "停止",
+            "再生",
+        ]);
+
+        const baseline = loadGrammarRules("t.grammar", text);
+        for (const input of ["再生 song", "停止 now", "1 thing", "noise"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    it("dispatch tokenMap keys are lowercased", () => {
+        // The optimizer lowercases keys (`first.value[0].toLowerCase()`)
+        // and the matcher's `peekNextToken` lowercases peeked tokens.
+        // Mixed-case input must still hit the correct bucket.
+        const text = `<Start> = Play song -> "play"
+                     | STOP -> "stop";`;
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        const dispatch = findDispatchPart(optimized.rules);
+        expect(dispatch).toBeDefined();
+        expect(Array.from(dispatch!.tokenMap.keys()).sort()).toEqual([
+            "play",
+            "stop",
+        ]);
+
+        const baseline = loadGrammarRules("t.grammar", text);
+        for (const input of [
+            "play song",
+            "Play song",
+            "PLAY SONG",
+            "stop",
+            "Stop",
+        ]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
 });
