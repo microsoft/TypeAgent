@@ -40,6 +40,17 @@ export const CONFIGS: { name: string; opts: LoadGrammarRulesOptions }[] = [
         },
     },
     {
+        // dispatchifyAlternations alone — measures the impact of
+        // first-token dispatch in isolation.  At alternation forks
+        // whose members start with distinct, statically-known tokens,
+        // emits a `DispatchPart` so the matcher does an O(1) hash
+        // lookup instead of trying each member's leading regex in turn.
+        name: "dispatch",
+        opts: {
+            optimizations: { dispatchifyAlternations: true },
+        },
+    },
+    {
         // All passes enabled: inline + factor + tailFactoring.
         name: "all",
         opts: {
@@ -47,6 +58,18 @@ export const CONFIGS: { name: string; opts: LoadGrammarRulesOptions }[] = [
                 inlineSingleAlternatives: true,
                 factorCommonPrefixes: true,
                 tailFactoring: true,
+            },
+        },
+    },
+    {
+        // All passes plus dispatch.
+        name: "all+dispatch",
+        opts: {
+            optimizations: {
+                inlineSingleAlternatives: true,
+                factorCommonPrefixes: true,
+                tailFactoring: true,
+                dispatchifyAlternations: true,
             },
         },
     },

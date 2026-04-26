@@ -101,6 +101,53 @@ function buildCrossScopeRefFork(width: number): string {
     return `<Start> = <Choice>;\n<Choice> = ${alts.join("\n         | ")};`;
 }
 
+/**
+ * Wide keyword dispatch: N alternatives with *distinct* leading
+ * keywords and short tails.  Each alternative's first token is unique
+ * so common-prefix factoring cannot help, but `dispatchifyAlternations`
+ * can index the entire fork by first token and reduce a linear regex
+ * scan over N members to a single hash lookup.  This is the canonical
+ * "command keyword" pattern (each agent action starts with a different
+ * verb).
+ *
+ *   <Choice> = verb0 the thing -> 0
+ *            | verb1 the thing -> 1
+ *            | …
+ */
+function buildWideKeywordDispatch(width: number): string {
+    const alts: string[] = [];
+    for (let i = 0; i < width; i++) {
+        alts.push(`verb${i} the thing -> ${i}`);
+    }
+    return `<Start> = <Choice>;\n<Choice> = ${alts.join("\n         | ")};`;
+}
+
+/**
+ * Mixed keyword dispatch with shared-prefix buckets: groups of M
+ * alternatives sharing each first token.  Within a bucket, members
+ * differ in trailing tokens.  This exercises dispatch combined with
+ * common-prefix factoring: dispatch should narrow the fork to the
+ * bucket, and the factorer should still factor each bucket's prefix.
+ *
+ *   <Choice> = play song0 -> "s0"
+ *            | play song1 -> "s1"
+ *            | …
+ *            | stop song0 -> "x0"
+ *            | …
+ */
+function buildBucketedKeywordDispatch(
+    buckets: number,
+    bucketSize: number,
+): string {
+    const alts: string[] = [];
+    for (let b = 0; b < buckets; b++) {
+        for (let i = 0; i < bucketSize; i++) {
+            alts.push(`verb${b} item${i} now -> ${b * bucketSize + i}`);
+        }
+    }
+    return `<Start> = <Choice>;\n<Choice> = ${alts.join("\n         | ")};`;
+}
+
 function main(): void {
     runBenchmark(
         `pass-through chain (depth=8)`,
@@ -171,6 +218,76 @@ function main(): void {
             "act on widget by 29 carol",
             "act on widget by 7 dave",
             "act on widget by 99 eve",
+            "noise",
+        ],
+    );
+
+    // ─── Dispatch-targeted benchmarks ──────────────────────────────────
+    // Wide alternation with distinct leading keywords - the canonical
+    // case `dispatchifyAlternations` is designed to accelerate.
+    runBenchmark(
+        `wide keyword dispatch (width=20)`,
+        "synthetic.grammar",
+        buildWideKeywordDispatch(20),
+        [
+            "verb0 the thing",
+            "verb10 the thing",
+            "verb19 the thing",
+            "verb99 the thing", // miss: not a known verb
+            "noise input that does not match",
+        ],
+    );
+
+    runBenchmark(
+        `wide keyword dispatch (width=50)`,
+        "synthetic.grammar",
+        buildWideKeywordDispatch(50),
+        [
+            "verb0 the thing",
+            "verb25 the thing",
+            "verb49 the thing",
+            "verb99 the thing",
+            "noise",
+        ],
+    );
+
+    runBenchmark(
+        `wide keyword dispatch (width=100)`,
+        "synthetic.grammar",
+        buildWideKeywordDispatch(100),
+        [
+            "verb0 the thing",
+            "verb50 the thing",
+            "verb99 the thing",
+            "verb500 the thing",
+            "noise",
+        ],
+    );
+
+    // Bucketed dispatch: several distinct first tokens, multiple
+    // alternatives per bucket - exercises dispatch + factoring together.
+    runBenchmark(
+        `bucketed keyword dispatch (buckets=5, size=10)`,
+        "synthetic.grammar",
+        buildBucketedKeywordDispatch(5, 10),
+        [
+            "verb0 item0 now",
+            "verb2 item5 now",
+            "verb4 item9 now",
+            "verb9 item0 now", // miss
+            "noise",
+        ],
+    );
+
+    runBenchmark(
+        `bucketed keyword dispatch (buckets=20, size=5)`,
+        "synthetic.grammar",
+        buildBucketedKeywordDispatch(20, 5),
+        [
+            "verb0 item0 now",
+            "verb10 item2 now",
+            "verb19 item4 now",
+            "verb99 item0 now", // miss
             "noise",
         ],
     );

@@ -15,7 +15,9 @@ import { normalizeToken } from "./nfaMatcher.js";
 import { applySplitToTokens } from "./tokenSplit.js";
 import { matchNFA } from "./nfaInterpreter.js";
 import type { NFAMatchResult } from "./nfaInterpreter.js";
-import type { Grammar, CompiledValueNode } from "./grammarTypes.js"; // ─── DFA First-Token Index ──────────────────────────────────────────────────
+import type { Grammar, CompiledValueNode } from "./grammarTypes.js";
+
+// ─── DFA First-Token Index ──────────────────────────────────────────────────
 // O(1) pre-filter: reject tokens whose first word can't start any DFA path.
 // Built lazily from the DFA start state and cached per DFA object.
 
