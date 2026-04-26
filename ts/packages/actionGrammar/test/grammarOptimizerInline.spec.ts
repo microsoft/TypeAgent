@@ -697,4 +697,63 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         expect(stringPart).toBeDefined();
         expect((stringPart as { variable?: string }).variable).toBeUndefined();
     });
+
+    // Regression: fuzz-found bug 052.
+    // Inlining a child with variable-bearing parts into a multi-part
+    // value-less parent leaked the child's variables into the parent's
+    // implicit-default scope.  The baseline throws "missing value for
+    // default" because the <R1> ref has no variable binding and the
+    // parent has 2 parts; after inlining, the child's $(n0:number)
+    // became a direct parent part and changed value-tracking semantics.
+    it("refuses to inline child with variables into multi-part value-less parent (fuzz #052)", () => {
+        const text = `<Start> = <R0>;
+<R0> = [spacing=required]c <R1>;
+<R1> [spacing=required] = $(n0:number) c;`;
+        const opts = { startValueRequired: false };
+        const baseline = loadGrammarRules("t.grammar", text, opts);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            ...opts,
+            optimizations: { inlineSingleAlternatives: true },
+        });
+        // Both must agree. The baseline throws "missing value for
+        // default" on this input because R0 has 2 parts, no value, and
+        // the unbound <R1> ref doesn't track values. The fix ensures
+        // the inliner doesn't change that by leaking child variables.
+        const safeMatch = (
+            grammar: ReturnType<typeof loadGrammarRules>,
+            input: string,
+        ) => {
+            try {
+                return { ok: true, result: match(grammar, input) };
+            } catch (e) {
+                return { ok: false, error: (e as Error).message };
+            }
+        };
+        const baseResult = safeMatch(baseline, "c 11 c");
+        const optResult = safeMatch(optimized, "c 11 c");
+        expect(optResult).toStrictEqual(baseResult);
+    });
+
+    // Regression: fuzz-found bug 029.
+    // Inlining dropped child's value expression and leaked its 3
+    // variable-bearing parts into a multi-part value-less parent,
+    // causing "multiple values for default" in the optimized grammar.
+    it("refuses to inline child with value into multi-part value-less parent when variables leak (fuzz #029)", () => {
+        const text = `<Start> = <R0>;
+<R0> [spacing=optional] = <R1> $(n17:number);
+<R1> = [spacing=optional]$(n14:number) $(n15:number) $(v16:string) <R2> -> { actionName: "act", parameters: { n14, n15, v16 } };
+<R2> [spacing=auto] = d <R3> <R3> <R3> | $(n11:number) $(n12:number) c $(n13:number) -> \`hello \${n13}\` | e e;
+<R3> = $(n0:number) $(n1:number) b $(n2:number) -> n1 === "a" | [spacing=optional]$(v3:string) a $(n4:number) b -> n4 === "a" | a $(v5:string) $(v6:string) $(v7:string) -> v7 | [spacing=none]b $(n8:number) $(n9:number) $(v10:string);`;
+        const opts = {
+            startValueRequired: false,
+            enableValueExpressions: true,
+        };
+        const baseline = loadGrammarRules("t.grammar", text, opts);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            ...opts,
+            optimizations: { inlineSingleAlternatives: true },
+        });
+        const input = "25 26 d d 11 12 b 13 11 12 b 13 11 12 b 13 28";
+        expect(match(optimized, input)).toStrictEqual(match(baseline, input));
+    });
 });

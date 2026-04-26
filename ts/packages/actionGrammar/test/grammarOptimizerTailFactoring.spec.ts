@@ -381,3 +381,70 @@ describe("Grammar Optimizer - tailFactoring + NFA compatibility", () => {
         );
     });
 });
+
+describe("Grammar Optimizer - tail-call spacing regression", () => {
+    // Regression: fuzz-found bug 178.
+    // A grammar with [spacing=none] on the top-level rule has
+    // alternatives starting with $(n:number).  After prefix-factoring
+    // with tailFactoring, the factored rule's first number part is
+    // shared and the suffix alternatives are in a tail-call RulesPart.
+    // The matcher's leadingSpacingMode must respect the wrapper rule's
+    // spacing=none for the suffix's first part; otherwise the number
+    // regex consumes a leading space and produces a spurious match.
+    it("preserves spacing=none across tail-call boundary (fuzz #178)", () => {
+        const text = `<Start> = <R0>;
+<R0> [spacing=none] = $(n10:number) $(n11:number) d -> n11 | $(v12:string) $(v13:string) $(v14:string) $(n15:number) | [spacing=auto]$(v16:string) $(v17:string) <R3> $(n18:number) -> v17 | $(n19:number) $(n20:number) -> [n19, n20];
+<R1> = $(v9:string) -> \`hello \${v9}\` | <R2> | <R3> | <R2>;
+<R2> = [spacing=none]e $(v8:string) | [spacing=none]<R3>;
+<R3> = d $(v0:string) $(n1:number) $(n2:number) -> n2 | d $(v3:string) $(v4:string) -> { actionName: "act", parameters: { v3, v4 } } | a | [spacing=none]$(n5:number) $(v6:string) $(n7:number);`;
+        const opts = {
+            startValueRequired: false,
+            enableValueExpressions: true,
+        };
+        const baseline = loadGrammarRules("t.grammar", text, opts);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            ...opts,
+            optimizations: {
+                inlineSingleAlternatives: true,
+                factorCommonPrefixes: true,
+                tailFactoring: true,
+            },
+        });
+        // "21 22" must NOT match: spacing=none forbids the space
+        // between the two numbers.
+        expect(match(optimized, "21 22")).toStrictEqual(
+            match(baseline, "21 22"),
+        );
+        expect(match(optimized, "21 22")).toStrictEqual([]);
+    });
+
+    // Minimal reproducer: two number-leading alternatives with
+    // spacing=none that share a common prefix and get tail-factored.
+    it("spacing=none blocks separator in minimal tail-factored grammar", () => {
+        const text = `<Start> = <R>;
+<R> [spacing=none] = $(a:number) $(b:number) -> [a, b]
+                   | $(a:number) d -> a;`;
+        const opts = {
+            startValueRequired: false,
+            enableValueExpressions: true,
+        };
+        const baseline = loadGrammarRules("t.grammar", text, opts);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            ...opts,
+            optimizations: {
+                inlineSingleAlternatives: true,
+                factorCommonPrefixes: true,
+                tailFactoring: true,
+            },
+        });
+        // With spacing=none, "1 2" should not match (space disallowed).
+        expect(match(optimized, "1 2")).toStrictEqual(match(baseline, "1 2"));
+        expect(match(optimized, "1 2")).toStrictEqual([]);
+        // "12" should match the first alt (two single-digit numbers
+        // directly adjacent).
+        expect(match(optimized, "12")).toStrictEqual(match(baseline, "12"));
+        // "1d" should match the second alt.
+        expect(match(optimized, "1d")).toStrictEqual(match(baseline, "1d"));
+        expect(match(optimized, "1d")).toStrictEqual([1]);
+    });
+});

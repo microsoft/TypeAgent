@@ -465,6 +465,33 @@ function tryInlineRulesPart(
         return undefined;
     }
 
+    // Variable-leakage guard: when the parent doesn't capture this
+    // RulesPart via a `part.variable` binding, has no explicit value
+    // expression of its own, and has other parts beyond this one, the
+    // matcher enters the child with `valueIds=null` (not tracking).
+    // After inlining, child's variable-bearing parts become direct
+    // parts of the parent and contribute to the parent's value
+    // tracking, changing semantics ("missing/multiple values for
+    // default" errors appear or disappear).  Refuse to inline in this
+    // case.  When the parent HAS an explicit value, `createValue` uses
+    // that expression (not the implicit-default path), so the extra
+    // bindings are harmless.
+    if (
+        part.variable === undefined &&
+        parentRule.value === undefined &&
+        parentRule.parts.length > 1
+    ) {
+        const hasVarBearingParts = child.parts.some(
+            (cp) =>
+                cp.type === "wildcard" ||
+                cp.type === "number" ||
+                cp.variable !== undefined,
+        );
+        if (hasVarBearingParts) {
+            return undefined;
+        }
+    }
+
     // The child rule may carry its own value expression.  After
     // inlining, child.parts move into the parent and the explicit
     // child.value can no longer fire on its own.  child.value is

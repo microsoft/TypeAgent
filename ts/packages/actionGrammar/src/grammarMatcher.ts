@@ -391,6 +391,14 @@ export type PendingMatchState = {
     // block, so the flag never influences a subsequent part.
     suppressOptionalFork?: boolean | undefined;
 
+    // True when the current rule was entered via a tail-call
+    // RulesPart.  Used by `leadingSpacingMode` to avoid walking
+    // parent frames (which don't exist for tail calls) and return
+    // `state.spacingMode` directly, since the wrapper's prefix parts
+    // precede this suffix and the member's spacingMode equals the
+    // wrapper's by contract.
+    tailCallEntry?: boolean | undefined;
+
     spacingMode: CompiledSpacingMode; // active spacing mode for this rule
 
     index: number;
@@ -471,6 +479,7 @@ function captureSnapshot(state: MatchState): SnapshotState {
         parent: state.parent,
         nestedLevel: state.nestedLevel,
         suppressOptionalFork: state.suppressOptionalFork,
+        tailCallEntry: state.tailCallEntry,
         spacingMode: state.spacingMode,
         index: state.index,
         pendingWildcard: state.pendingWildcard,
@@ -1430,6 +1439,12 @@ export function leadingSpacingMode(state: MatchState): CompiledSpacingMode {
     if (state.partIndex !== 0 || state.parent === undefined) {
         return state.spacingMode;
     }
+    // Tail-call entry: the wrapper rule had prefix parts preceding
+    // this suffix rule, so the leading boundary is governed by the
+    // wrapper's spacing mode (which equals the member's by contract).
+    if (state.tailCallEntry) {
+        return state.spacingMode;
+    }
     let parent: ParentMatchState | undefined = state.parent;
     while (parent !== undefined) {
         if (parent.partIndex > 1) {
@@ -1729,6 +1744,7 @@ function enterTailRulesPart(state: MatchState, part: RulesPart): void {
     state.value = rules[0].value;
     state.partIndex = 0;
     state.suppressOptionalFork = undefined;
+    state.tailCallEntry = true;
     // Mirror the non-tail RulesPart entry path and the backtrack
     // restore in `tryNextBacktrack` (which overlays
     // `rule.spacingMode` per restored alternative).  By contract,
@@ -1886,6 +1902,7 @@ export function matchState(state: MatchState, request: string) {
                 state.parent = parent;
                 state.nestedLevel++;
                 state.suppressOptionalFork = undefined; // entering nested rules, clear suppression flag
+                state.tailCallEntry = undefined; // clear tail-call flag on non-tail entry
                 state.spacingMode = rules[0].spacingMode;
 
                 // Push a single compressed alternation cursor frame
