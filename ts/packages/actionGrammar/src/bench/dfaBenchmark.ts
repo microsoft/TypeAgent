@@ -126,20 +126,20 @@ interface TimingResult {
     request: string;
     matched: boolean;
     matchNoOptMs: number;
-    matchAllTopMs: number;
+    matchOptMs: number;
     nfaMatchMs: number;
     nfaIndexMs: number;
     dfaTraverseMs: number;
     dfaHybridMs: number;
     dfaASTMs: number;
     matchNoOptMsPerCall: number;
-    matchAllTopMsPerCall: number;
+    matchOptMsPerCall: number;
     nfaMatchMsPerCall: number;
     nfaIndexMsPerCall: number;
     dfaTraverseMsPerCall: number;
     dfaHybridMsPerCall: number;
     dfaASTMsPerCall: number;
-    allTopSpeedup: number;
+    optSpeedup: number;
     indexSpeedup: number;
     hybridSpeedup: number;
     astSpeedup: number;
@@ -218,7 +218,7 @@ function printTimingTable(rows: TimingResult[]): void {
         "Request",
         "Match?",
         "AST no-opt μs/call",
-        "AST all-top μs/call",
+        "AST opt μs/call",
         "NFA μs/call",
         "NFA+idx μs/call",
         "DFA trav μs/call",
@@ -230,7 +230,7 @@ function printTimingTable(rows: TimingResult[]): void {
         r.request.length > 30 ? r.request.slice(0, 27) + "..." : r.request,
         r.matched ? "✓" : "✗",
         r.matchNoOptMsPerCall.toFixed(2),
-        fmt(r.matchAllTopMsPerCall, r.allTopSpeedup),
+        fmt(r.matchOptMsPerCall, r.optSpeedup),
         r.nfaMatchMsPerCall.toFixed(2),
         fmt(r.nfaIndexMsPerCall, r.indexSpeedup),
         r.dfaTraverseMsPerCall.toFixed(2),
@@ -243,8 +243,8 @@ function printTimingTable(rows: TimingResult[]): void {
     const unmatched = rows.filter((r) => !r.matched);
     const fmtAvg = (s: number) => colorSpeedup(s);
     if (matched.length) {
-        const avgAllTop =
-            matched.reduce((s, r) => s + r.allTopSpeedup, 0) / matched.length;
+        const avgOpt =
+            matched.reduce((s, r) => s + r.optSpeedup, 0) / matched.length;
         const avgIdx =
             matched.reduce((s, r) => s + r.indexSpeedup, 0) / matched.length;
         const avgHybrid =
@@ -252,13 +252,12 @@ function printTimingTable(rows: TimingResult[]): void {
         const avgAST =
             matched.reduce((s, r) => s + r.astSpeedup, 0) / matched.length;
         console.log(
-            `  Avg speedup (matched):   all-top=${fmtAvg(avgAllTop)}  idx=${fmtAvg(avgIdx)}  hybrid=${fmtAvg(avgHybrid)}  ast=${fmtAvg(avgAST)}`,
+            `  Avg speedup (matched):   opt=${fmtAvg(avgOpt)}  idx=${fmtAvg(avgIdx)}  hybrid=${fmtAvg(avgHybrid)}  ast=${fmtAvg(avgAST)}`,
         );
     }
     if (unmatched.length) {
-        const avgAllTop =
-            unmatched.reduce((s, r) => s + r.allTopSpeedup, 0) /
-            unmatched.length;
+        const avgOpt =
+            unmatched.reduce((s, r) => s + r.optSpeedup, 0) / unmatched.length;
         const avgIdx =
             unmatched.reduce((s, r) => s + r.indexSpeedup, 0) /
             unmatched.length;
@@ -268,7 +267,7 @@ function printTimingTable(rows: TimingResult[]): void {
         const avgAST =
             unmatched.reduce((s, r) => s + r.astSpeedup, 0) / unmatched.length;
         console.log(
-            `  Avg speedup (unmatched): all-top=${fmtAvg(avgAllTop)}  idx=${fmtAvg(avgIdx)}  hybrid=${fmtAvg(avgHybrid)}  ast=${fmtAvg(avgAST)}`,
+            `  Avg speedup (unmatched): opt=${fmtAvg(avgOpt)}  idx=${fmtAvg(avgIdx)}  hybrid=${fmtAvg(avgHybrid)}  ast=${fmtAvg(avgAST)}`,
         );
     }
 }
@@ -354,18 +353,18 @@ function runBenchmark(
         undefined,
         { optimizations: {} },
     );
-    const allTopErrors: string[] = [];
-    const grammarAllTop = loadGrammarRulesNoThrow(
+    const optErrors: string[] = [];
+    const grammarOpt = loadGrammarRulesNoThrow(
         path.basename(grammarPath),
         content,
-        allTopErrors,
+        optErrors,
         undefined,
         { optimizations: recommendedOptimizations },
     );
-    if (!grammarNoOpt || !grammarAllTop) {
+    if (!grammarNoOpt || !grammarOpt) {
         console.log(
             `Skipping ${grammarName} AST variants: ` +
-                [...noOptErrors, ...allTopErrors].join(", "),
+                [...noOptErrors, ...optErrors].join(", "),
         );
     }
 
@@ -426,14 +425,14 @@ function runBenchmark(
             if (r.ast) evaluateMatchAST(r.ast, grammar);
         }
         if (grammarNoOpt) matchGrammar(grammarNoOpt, request);
-        if (grammarAllTop) matchGrammar(grammarAllTop, request);
+        if (grammarOpt) matchGrammar(grammarOpt, request);
 
         const matchNoOptMs = grammarNoOpt
             ? timeMsN(() => matchGrammar(grammarNoOpt, request), ITERATIONS)
             : 0;
 
-        const matchAllTopMs = grammarAllTop
-            ? timeMsN(() => matchGrammar(grammarAllTop, request), ITERATIONS)
+        const matchOptMs = grammarOpt
+            ? timeMsN(() => matchGrammar(grammarOpt, request), ITERATIONS)
             : 0;
 
         const nfaMatchMs = timeMsN(
@@ -468,20 +467,20 @@ function runBenchmark(
             request,
             matched,
             matchNoOptMs,
-            matchAllTopMs,
+            matchOptMs,
             nfaMatchMs,
             nfaIndexMs,
             dfaTraverseMs,
             dfaHybridMs,
             dfaASTMs,
             matchNoOptMsPerCall: (matchNoOptMs / ITERATIONS) * 1000,
-            matchAllTopMsPerCall: (matchAllTopMs / ITERATIONS) * 1000,
+            matchOptMsPerCall: (matchOptMs / ITERATIONS) * 1000,
             nfaMatchMsPerCall: (nfaMatchMs / ITERATIONS) * 1000,
             nfaIndexMsPerCall: (nfaIndexMs / ITERATIONS) * 1000,
             dfaTraverseMsPerCall: (dfaTraverseMs / ITERATIONS) * 1000,
             dfaHybridMsPerCall: (dfaHybridMs / ITERATIONS) * 1000,
             dfaASTMsPerCall: (dfaASTMs / ITERATIONS) * 1000,
-            allTopSpeedup: matchAllTopMs > 0 ? matchNoOptMs / matchAllTopMs : 0,
+            optSpeedup: matchOptMs > 0 ? matchNoOptMs / matchOptMs : 0,
             indexSpeedup: nfaIndexMs > 0 ? nfaMatchMs / nfaIndexMs : 0,
             hybridSpeedup: dfaHybridMs > 0 ? nfaMatchMs / dfaHybridMs : 0,
             astSpeedup: dfaASTMs > 0 ? nfaMatchMs / dfaASTMs : 0,
