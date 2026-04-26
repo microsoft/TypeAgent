@@ -2125,6 +2125,19 @@ function enterDispatchPart(
     // through the same fallback (via `enterTailAlternation`) since
     // tail factoring is the main reason dispatch ends up after a
     // wildcard.
+    //
+    // Future optimization (deferred, no measured need yet): build a
+    // combined alternation regex over `tokenMap.keys()` at dispatch-
+    // build time, `exec()` it once from the wildcard's start to find
+    // which bucket keys actually appear in the remaining input, and
+    // try only those buckets (plus all fallback rules, which have
+    // no fixed leading literal).  This collapses N per-rule forward
+    // scans in `matchStringPartWithWildcard` into one combined
+    // scan + a smaller alternation.  See "Variant A" in the
+    // CJK-dispatch design discussion - keep semantics identical
+    // (wildcard policy, capture frames, ordering); pre-scan is a
+    // pure pruning pass.  Worth doing if profiling on a real
+    // grammar shows wildcard-prefix dispatch is a hot path.
     if (state.pendingWildcard !== undefined) {
         const all: GrammarRule[] = [];
         for (const bucket of part.tokenMap.values()) {
