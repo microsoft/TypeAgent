@@ -1979,19 +1979,18 @@ function classifyDispatchMember(
  * Try to convert a `RulesPart` into a `DispatchPart`.  Returns
  * `undefined` if not eligible (caller keeps the original `RulesPart`).
  *
- * `repeat` / `optional` are propagated to the resulting `DispatchPart`:
- * the matcher's optional-fork block fires before the dispatch arm
- * and `repeat` re-enters via the standard `repeatPartIndex` /
- * `repeatStartIndex` mechanism (which re-runs the dispatch peek per
- * iteration).  `tailCall`, however, is incompatible with the dispatch
- * frame - the tail protocol skips the parent-frame push that
- * dispatch needs to set up its alternation cursor, so tail RulesParts
- * stay as-is.
+ * `repeat` / `optional` / `tailCall` are all propagated to the
+ * resulting `DispatchPart`.  The matcher's optional-fork block fires
+ * before the dispatch arm; `repeat` re-enters via the standard
+ * `repeatPartIndex` / `repeatStartIndex` mechanism (which re-runs the
+ * dispatch peek per iteration); `tailCall` routes the dispatch arm
+ * through the tail-entry helper instead of the normal alternation
+ * entry (no parent frame, inherits `valueIds`).  See
+ * `DispatchPart.tailCall` for the structural contract that the
+ * effective member list must satisfy; `validateTailRulesParts`
+ * enforces it.
  *
  * Skip conditions:
- *   - `tailCall` set (the tail-call protocol is incompatible with
- *     the dispatch entry, which delegates to the same parent-frame
- *     push as the non-tail RulesPart entry).
  *   - The partition's spacing mode is `optional` or `none`: peek's
  *     token boundary doesn't agree with what the StringPart regex
  *     would consume in those modes, so dispatch can't be a pure
@@ -2001,9 +2000,6 @@ function classifyDispatchMember(
  *     no fallback): the matcher's work is unchanged.
  */
 function tryDispatchifyRulesPart(part: RulesPart): DispatchPart | undefined {
-    if (part.tailCall) {
-        return undefined;
-    }
     if (part.rules.length < 2) {
         // Single-rule "alternation" - nothing to dispatch.
         return undefined;
@@ -2057,6 +2053,7 @@ function tryDispatchifyRulesPart(part: RulesPart): DispatchPart | undefined {
     if (part.variable !== undefined) dispatch.variable = part.variable;
     if (part.optional) dispatch.optional = true;
     if (part.repeat) dispatch.repeat = true;
+    if (part.tailCall) dispatch.tailCall = true;
     if (fallback.length > 0) dispatch.fallback = fallback;
     return dispatch;
 }
@@ -2175,14 +2172,15 @@ function visitPart(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Walk every rule in `rules` and verify that any `RulesPart` carrying
- * `tailCall: true` satisfies the contract documented on
- * `RulesPart.tailCall`:
+ * Walk every rule in `rules` and verify that any `RulesPart` or
+ * `DispatchPart` carrying `tailCall: true` satisfies the contract
+ * documented on `RulesPart.tailCall` / `DispatchPart.tailCall`:
  *
  *   - last entry in its parent rule's `parts`
  *   - parent rule has no `value` of its own
  *   - `repeat` / `optional` / `variable` all unset
- *   - `rules.length >= 2`
+ *   - `rules.length >= 2` (for dispatch: effective member count =
+ *     sum of tokenMap bucket sizes + fallback length)
  *   - every member's `spacingMode` matches the parent rule's
  *
  * Throws on the first violation with a message identifying the
@@ -2190,7 +2188,7 @@ function visitPart(
  * a serialized grammar from JSON (where the bytes are not produced by
  * a trusted in-process compiler) and from tests.
  *
- * Members are recursed into so that nested tail RulesParts are also
+ * Members are recursed into so that nested tail parts are also
  * validated.
  */
 export function validateTailRulesParts(rules: GrammarRule[]): void {
@@ -2206,38 +2204,105 @@ export function validateTailRulesParts(rules: GrammarRule[]): void {
         const parts = rule.parts;
         for (let i = 0; i < parts.length; i++) {
             const p = parts[i];
-            if (p.type !== "rules") continue;
-            if (p.tailCall) {
-                if (i !== parts.length - 1) {
-                    throw new Error(
-                        `Invalid tail RulesPart: must be the last part of its parent rule (name='${p.name ?? "<unnamed>"}')`,
+            if (p.type === "rules") {
+                if (p.tailCall) {
+                    checkTailContract(rule, p, i, parts.length, "RulesPart", {
+                        members: p.rules,
+                        effectiveCount: p.rules.length,
+                    });
+                }
+                visitRules(p.rules);
+            } else if (p.type === "dispatch") {
+                if (p.tailCall) {
+                    checkTailContract(
+                        rule,
+                        p,
+                        i,
+                        parts.length,
+                        "DispatchPart",
+                        dispatchEffectiveMembers(p),
                     );
                 }
-                if (rule.value !== undefined) {
-                    throw new Error(
-                        `Invalid tail RulesPart: parent rule must have no value of its own (name='${p.name ?? "<unnamed>"}')`,
-                    );
+                for (const bucket of p.tokenMap.values()) {
+                    visitRules(bucket);
                 }
-                if (p.repeat || p.optional || p.variable !== undefined) {
-                    throw new Error(
-                        `Invalid tail RulesPart: repeat/optional/variable are forbidden (name='${p.name ?? "<unnamed>"}')`,
-                    );
-                }
-                if (p.rules.length < 2) {
-                    throw new Error(
-                        `Invalid tail RulesPart: requires rules.length >= 2 (got ${p.rules.length}, name='${p.name ?? "<unnamed>"}')`,
-                    );
-                }
-                for (const m of p.rules) {
-                    if (m.spacingMode !== rule.spacingMode) {
-                        throw new Error(
-                            `Invalid tail RulesPart: every member's spacingMode must match the parent rule's (name='${p.name ?? "<unnamed>"}')`,
-                        );
-                    }
+                if (p.fallback !== undefined) {
+                    visitRules(p.fallback);
                 }
             }
-            visitRules(p.rules);
         }
     };
     visitRules(rules);
+}
+
+/**
+ * Flatten a `DispatchPart`'s effective member list (sum of tokenMap
+ * buckets ++ fallback) for tail-contract validation.  The flat array
+ * is small (typically <100) and only built when a tail dispatch is
+ * actually being validated, so the materialization cost is negligible.
+ */
+function dispatchEffectiveMembers(p: DispatchPart): {
+    members: GrammarRule[];
+    effectiveCount: number;
+} {
+    const members: GrammarRule[] = [];
+    for (const bucket of p.tokenMap.values()) {
+        for (const m of bucket) members.push(m);
+    }
+    if (p.fallback !== undefined) {
+        for (const m of p.fallback) members.push(m);
+    }
+    return { members, effectiveCount: members.length };
+}
+
+/**
+ * Shared contract checker for tail `RulesPart` / `DispatchPart`.
+ * `kind` parameterizes only the error label - the five clauses
+ * (last-part, no parent value, no repeat/optional/variable, effective
+ * member count >= 2, member spacingMode equality) are identical.
+ */
+function checkTailContract(
+    rule: GrammarRule,
+    p: {
+        name?: string | undefined;
+        repeat?: boolean | undefined;
+        optional?: boolean | undefined;
+        variable?: string | undefined;
+    },
+    index: number,
+    partsLength: number,
+    kind: "RulesPart" | "DispatchPart",
+    effective: { members: Iterable<GrammarRule>; effectiveCount: number },
+): void {
+    const where = `(name='${p.name ?? "<unnamed>"}')`;
+    const label = `Invalid tail ${kind}`;
+    if (index !== partsLength - 1) {
+        throw new Error(
+            `${label}: must be the last part of its parent rule ${where}`,
+        );
+    }
+    if (rule.value !== undefined) {
+        throw new Error(
+            `${label}: parent rule must have no value of its own ${where}`,
+        );
+    }
+    if (p.repeat || p.optional || p.variable !== undefined) {
+        throw new Error(
+            `${label}: repeat/optional/variable are forbidden ${where}`,
+        );
+    }
+    if (effective.effectiveCount < 2) {
+        const sizeClause =
+            kind === "DispatchPart"
+                ? `effective member count >= 2 (got ${effective.effectiveCount})`
+                : `rules.length >= 2 (got ${effective.effectiveCount})`;
+        throw new Error(`${label}: requires ${sizeClause} ${where}`);
+    }
+    for (const m of effective.members) {
+        if (m.spacingMode !== rule.spacingMode) {
+            throw new Error(
+                `${label}: every member's spacingMode must match the parent rule's ${where}`,
+            );
+        }
+    }
 }

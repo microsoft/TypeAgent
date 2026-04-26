@@ -656,4 +656,121 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
             );
         }
     });
+
+    // ── Pending-wildcard fallback in enterDispatchPart ────────────────
+    //
+    // Regression tests for a latent bug: when a `DispatchPart` follows
+    // a wildcard-bearing prefix in the same rule, `state.index` at
+    // dispatch entry points at the *wildcard's start* (the end is
+    // resolved later when the next concrete part matches).  Peeking
+    // from there returns the wildcard's leading token, not the next
+    // concrete token, so dispatch can't filter correctly.
+    // `enterDispatchPart` detects `state.pendingWildcard !== undefined`
+    // and falls back to a non-dispatch alternation entry over the full
+    // member list - each member's leading `StringPart` then resolves
+    // the wildcard the same way it does in the unoptimized
+    // `RulesPart` path.
+    //
+    // The bug surfaced first via tail dispatch (`grammarOptimizerDispatchTail.spec.ts`)
+    // because tail factoring is what most often places a dispatch
+    // after a wildcard, but it affects non-tail dispatch identically -
+    // the fix lives above the `tailCall` branch in `enterDispatchPart`.
+    // These tests exercise the non-tail path explicitly.
+
+    it("matches a non-tail dispatch following a wildcard", () => {
+        // Non-tail layout: <Start> wraps the alternation as the
+        // second part of a parent rule with three parts (head ++
+        // dispatch ++ tail), so the alternation cannot be a tail
+        // call.  A leading wildcard between the head and the
+        // dispatch sets pendingWildcard; the dispatch must still
+        // partition correctly via the fallback path.
+        const text = `<Start> = head $(t:string) (foo X | bar Y) end -> { t: t };`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        const dispatch = findDispatchPart(optimized.rules);
+        expect(dispatch).toBeDefined();
+        // Without tailCall: the alternation isn't the rule's last
+        // part, so the optimizer cannot mark it as a tail call.
+        expect(dispatch!.tailCall).toBeUndefined();
+        expect(Array.from(dispatch!.tokenMap.keys()).sort()).toEqual([
+            "bar",
+            "foo",
+        ]);
+
+        for (const input of [
+            "head some text foo X end",
+            "head other words bar Y end",
+            "head a foo X end",
+            "head a bar Y end",
+            "head foo X end", // no wildcard content - rejected (wildcard is non-empty)
+            "head x foo Y end", // wrong dispatch arm
+        ]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    it("matches a non-tail dispatch following a typed wildcard", () => {
+        // Same shape as above but with a typed wildcard (`<Inner>`
+        // rule reference).  Confirms the fallback branch handles
+        // both `$(t:string)` and named-rule wildcards uniformly.
+        const text = `
+            <Start> = play <Inner> (by $(a:string) -> { kind: "by", a }
+                                  | from album $(b:string) -> { kind: "album", b }) -> 1;
+            <Inner> = $(name:string);`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        const dispatch = findDispatchPart(optimized.rules);
+        expect(dispatch).toBeDefined();
+        expect(Array.from(dispatch!.tokenMap.keys()).sort()).toEqual([
+            "by",
+            "from",
+        ]);
+
+        for (const input of [
+            "play song by artist",
+            "play song from album record",
+            "play a long title by some artist",
+            "play tune from album greatest hits",
+            "play nothing", // no dispatch arm matches
+        ]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    it("preserves match parity when a wildcard precedes a fallback-only dispatch hit", () => {
+        // Mixed dispatch: one literal-first member ("foo X") and one
+        // wildcard-first member that lands in fallback.  After the
+        // outer wildcard sets pendingWildcard, the dispatch entry
+        // should consider BOTH the tokenMap entry and the fallback,
+        // matching what the unoptimized RulesPart would do.
+        const text = `<Start> = head $(t:string) (foo X -> "hit"
+                                                 | $(w:string) end -> { fallback: w }) -> { t: t };`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        const dispatch = findDispatchPart(optimized.rules);
+        expect(dispatch).toBeDefined();
+        // The wildcard-first arm goes to fallback.
+        expect(dispatch!.fallback?.length ?? 0).toBeGreaterThanOrEqual(1);
+
+        for (const input of [
+            "head some text foo X",
+            "head some text other end",
+            "head a foo X",
+            "head only end",
+        ]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
 });

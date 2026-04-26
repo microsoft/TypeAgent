@@ -1836,7 +1836,6 @@ function matchVarStringPart(state: MatchState, part: VarStringPart) {
 // `captureSnapshot`) before any member binds - abandoned branches
 // are automatically discarded on restore.
 function enterTailRulesPart(state: MatchState, part: RulesPart): void {
-    const rules = part.rules;
     // Structural contract is enforced by `validateTailRulesParts`,
     // which runs at JSON load time (default in `grammarFromJson`) and
     // at the end of `optimizeGrammar` when `tailFactoring` is on.
@@ -1844,6 +1843,27 @@ function enterTailRulesPart(state: MatchState, part: RulesPart): void {
     // would otherwise check (rules.length >= 2, no
     // repeat/optional/variable, member spacingMode matches parent's)
     // are caught at construction time at the offending site.
+    const namePrefix = part.name ? `<${part.name}>` : getStateName(state);
+    enterTailAlternation(state, part, part.rules, namePrefix);
+}
+
+/**
+ * Common tail entry path for `RulesPart` and `DispatchPart` carrying
+ * `tailCall`.  Mirrors `enterRulesAlternation` but skips the parent
+ * frame push and does not reset `valueIds`: child member bindings
+ * cons onto the parent's persistent linked list, so member value-
+ * exprs resolve prefix-bound canonicals naturally through
+ * `createValue`.  Backtracking across sibling alts comes for free
+ * because `pushAlternation` captures the alternation base via
+ * `forkMatchState`, which snapshots `valueIds` (see `captureSnapshot`)
+ * before any member binds.
+ */
+function enterTailAlternation(
+    state: MatchState,
+    part: RulesPart | DispatchPart,
+    rules: ReadonlyArray<GrammarRule>,
+    namePrefix: string,
+): void {
     state.leadingSpacingMode = leadingSpacingMode(state);
     state.name = getNestedStateName(state, part, 0);
     state.parts = rules[0].parts;
@@ -1865,7 +1885,6 @@ function enterTailRulesPart(state: MatchState, part: RulesPart): void {
     // this fork point; restoring on backtrack rewinds anything an
     // abandoned member added to the chain.
     const base = forkMatchState(state);
-    const namePrefix = part.name ? `<${part.name}>` : getStateName(state);
     pushAlternation(state, base, rules, namePrefix);
 }
 
@@ -2081,6 +2100,40 @@ function enterDispatchPart(
     part: DispatchPart,
     request: string,
 ): boolean {
+    // Pending-wildcard fallback.  `state.index` points at the
+    // wildcard's start (its end isn't known until the next concrete
+    // part matches and resolves it via `commitPendingWildcard`).
+    // Peeking from there would return the wildcard's first token,
+    // not the next concrete token, so dispatch can't filter
+    // correctly.  Fall back to a non-dispatch alternation entry over
+    // the full effective member list - each member's leading
+    // `StringPart` will then resolve the wildcard the way it does
+    // in the unoptimized RulesPart path.  Note: tail dispatch flows
+    // through the same fallback (via `enterTailAlternation`) since
+    // tail factoring is the main reason dispatch ends up after a
+    // wildcard.
+    if (state.pendingWildcard !== undefined) {
+        const all: GrammarRule[] = [];
+        for (const bucket of part.tokenMap.values()) {
+            for (const r of bucket) all.push(r);
+        }
+        if (part.fallback !== undefined) {
+            for (const r of part.fallback) all.push(r);
+        }
+        if (all.length === 0) {
+            debugMatch(state, `dispatch: pending-wildcard fallback empty`);
+            return false;
+        }
+        const namePrefix = part.name
+            ? `<${part.name}>`
+            : `${getStateName(state)}<dispatch>`;
+        if (part.tailCall) {
+            enterTailAlternation(state, part, all, namePrefix);
+        } else {
+            enterRulesAlternation(state, part, all, namePrefix);
+        }
+        return true;
+    }
     // Two spacing modes govern peek independently:
     //   - leading-separator handling at `state.index` follows the
     //     surrounding context (`leadingSpacingMode(state)`), so that
@@ -2115,7 +2168,11 @@ function enterDispatchPart(
     const namePrefix = part.name
         ? `<${part.name}>`
         : `${getStateName(state)}<dispatch>`;
-    enterRulesAlternation(state, part, effective, namePrefix);
+    if (part.tailCall) {
+        enterTailAlternation(state, part, effective, namePrefix);
+    } else {
+        enterRulesAlternation(state, part, effective, namePrefix);
+    }
     return true;
 }
 
@@ -2186,7 +2243,11 @@ function getStateName(state: MatchState): string {
     return `${state.name}{${state.partIndex}}`;
 }
 
-function getNestedStateName(state: MatchState, part: RulesPart, index: number) {
+function getNestedStateName(
+    state: MatchState,
+    part: RulesPart | DispatchPart,
+    index: number,
+) {
     return `${part.name ? `<${part.name}>` : getStateName(state)}[${index}]`;
 }
 

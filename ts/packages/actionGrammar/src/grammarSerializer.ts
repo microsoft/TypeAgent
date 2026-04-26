@@ -90,6 +90,7 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
                 }
                 if (p.optional) part.optional = true;
                 if (p.repeat) part.repeat = true;
+                if (p.tailCall) part.tailCall = true;
                 return part;
             }
         }

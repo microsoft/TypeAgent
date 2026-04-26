@@ -354,6 +354,20 @@ export type DispatchPart = {
      */
     optional?: boolean | undefined;
     repeat?: boolean | undefined;
+    /**
+     * Mirrors `RulesPart.tailCall` and inherits the same structural
+     * contract (last part of the parent rule; parent has no value;
+     * `repeat` / `optional` / `variable` all unset; effective rule
+     * count >= 2; every effective member's `spacingMode` matches the
+     * parent's).  At match time the matcher routes `enterDispatchPart`
+     * through the tail-entry helper instead of the normal alternation
+     * entry: no parent frame is pushed, `valueIds` is inherited from
+     * the parent so member value-exprs can resolve prefix-bound
+     * canonicals.  `validateTailRulesParts` enforces the contract
+     * against the effective member list (`[...tokenMap.values().flat(),
+     * ...fallback]`).
+     */
+    tailCall?: boolean | undefined;
 };
 
 export type GrammarPart =
@@ -479,6 +493,8 @@ export type DispatchPartJson = {
     fallbackIndex?: number | undefined;
     optional?: boolean | undefined;
     repeat?: boolean | undefined;
+    /** See `DispatchPart.tailCall`. */
+    tailCall?: boolean | undefined;
 };
 
 export type GrammarPartJson =

@@ -326,6 +326,7 @@ function expandDispatchPart(
     };
     if (part.optional) rulesPart.optional = true;
     if (part.repeat) rulesPart.repeat = true;
+    if (part.tailCall) rulesPart.tailCall = true;
     return rulesPart;
 }
 
