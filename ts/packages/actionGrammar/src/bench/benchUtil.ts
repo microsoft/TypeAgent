@@ -77,10 +77,28 @@ export const CONFIGS: { name: string; opts: LoadGrammarRulesOptions }[] = [
 
 // Speedup is colored once it moves more than 10% from baseline.
 export function colorSpeedup(speedup: number): string {
-    const text = `${speedup.toFixed(2)}x`.padStart(6);
+    const text = `${speedup.toFixed(2)}x`;
     if (speedup > 1.1) return chalk.green(text);
     if (speedup < 0.9) return chalk.red(text);
     return text;
+}
+
+/**
+ * Format a timing followed by its speedup in parentheses, padded to the
+ * given visible width.  ANSI color codes from `colorSpeedup` are added
+ * after padding so visible-width alignment is preserved.
+ *
+ * Example output: `   12.3 (1.45x)` (with the speedup colored).
+ */
+export function formatTimeWithSpeedup(
+    ms: number,
+    speedup: number,
+    width: number = 0,
+): string {
+    const speedStr = `${speedup.toFixed(2)}x`;
+    const plain = `${ms.toFixed(1)} (${speedStr})`;
+    const padded = width > 0 ? plain.padStart(width) : plain;
+    return padded.replace(speedStr, colorSpeedup(speedup));
 }
 
 export function timeMs(fn: () => void, iterations: number): number {
@@ -119,9 +137,9 @@ export function runBenchmark(
 ): void {
     console.log(`\n=== ${label} ===`);
     console.log(
-        `| config      | RulesParts | match ms (${ITERATIONS}x) | speedup |`,
+        `| config       | RulesParts | match ms (${ITERATIONS}x, speedup) |`,
     );
-    console.log(`|-------------|-----------:|---------------:|--------:|`);
+    console.log(`|--------------|-----------:|---------------------------:|`);
     let baselineMs = 0;
     for (const cfg of CONFIGS) {
         const errors: string[] = [];
@@ -152,7 +170,7 @@ export function runBenchmark(
         if (cfg.name === "baseline") baselineMs = ms;
         const speedup = baselineMs > 0 ? baselineMs / ms : 1;
         console.log(
-            `| ${cfg.name.padEnd(11)} | ${String(partCount).padStart(10)} | ${ms.toFixed(1).padStart(14)} | ${colorSpeedup(speedup)} |`,
+            `| ${cfg.name.padEnd(12)} | ${String(partCount).padStart(10)} | ${formatTimeWithSpeedup(ms, speedup, 26)} |`,
         );
     }
 }

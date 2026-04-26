@@ -45,6 +45,7 @@ import {
     type FirstTokenIndex,
 } from "../index.js";
 import { registerBuiltInEntities } from "../builtInEntities.js";
+import { colorSpeedup } from "./benchUtil.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -204,6 +205,11 @@ function printCompileTable(rows: CompileResult[]): void {
 function printTimingTable(rows: TimingResult[]): void {
     if (!rows.length) return;
 
+    // Format "12.34 (1.5x)" with the speedup colored.  Padding is applied
+    // by the table's printAligned which strips ANSI when measuring width.
+    const fmt = (us: number, speedup: number): string =>
+        `${us.toFixed(2)} (${colorSpeedup(speedup)})`;
+
     console.log(
         `\n╔══ MATCH TIMING (${ITERATIONS} iterations) ═══════════════════╗`,
     );
@@ -218,31 +224,24 @@ function printTimingTable(rows: TimingResult[]): void {
         "DFA trav μs/call",
         "DFA hybrid μs/call",
         "DFA AST μs/call",
-        "All-top speedup",
-        "Idx speedup",
-        "Hybrid speedup",
-        "AST speedup",
     ];
     const data = rows.map((r) => [
         r.grammar,
         r.request.length > 30 ? r.request.slice(0, 27) + "..." : r.request,
         r.matched ? "✓" : "✗",
         r.matchNoOptMsPerCall.toFixed(2),
-        r.matchAllTopMsPerCall.toFixed(2),
+        fmt(r.matchAllTopMsPerCall, r.allTopSpeedup),
         r.nfaMatchMsPerCall.toFixed(2),
-        r.nfaIndexMsPerCall.toFixed(2),
+        fmt(r.nfaIndexMsPerCall, r.indexSpeedup),
         r.dfaTraverseMsPerCall.toFixed(2),
-        r.dfaHybridMsPerCall.toFixed(2),
-        r.dfaASTMsPerCall.toFixed(2),
-        r.allTopSpeedup.toFixed(1) + "x",
-        r.indexSpeedup.toFixed(1) + "x",
-        r.hybridSpeedup.toFixed(1) + "x",
-        r.astSpeedup.toFixed(1) + "x",
+        fmt(r.dfaHybridMsPerCall, r.hybridSpeedup),
+        fmt(r.dfaASTMsPerCall, r.astSpeedup),
     ]);
     printAligned(header, data);
 
     const matched = rows.filter((r) => r.matched);
     const unmatched = rows.filter((r) => !r.matched);
+    const fmtAvg = (s: number) => colorSpeedup(s);
     if (matched.length) {
         const avgAllTop =
             matched.reduce((s, r) => s + r.allTopSpeedup, 0) / matched.length;
@@ -253,7 +252,7 @@ function printTimingTable(rows: TimingResult[]): void {
         const avgAST =
             matched.reduce((s, r) => s + r.astSpeedup, 0) / matched.length;
         console.log(
-            `  Avg speedup (matched):   all-top=${avgAllTop.toFixed(1)}x  idx=${avgIdx.toFixed(1)}x  hybrid=${avgHybrid.toFixed(1)}x  ast=${avgAST.toFixed(1)}x`,
+            `  Avg speedup (matched):   all-top=${fmtAvg(avgAllTop)}  idx=${fmtAvg(avgIdx)}  hybrid=${fmtAvg(avgHybrid)}  ast=${fmtAvg(avgAST)}`,
         );
     }
     if (unmatched.length) {
@@ -269,7 +268,7 @@ function printTimingTable(rows: TimingResult[]): void {
         const avgAST =
             unmatched.reduce((s, r) => s + r.astSpeedup, 0) / unmatched.length;
         console.log(
-            `  Avg speedup (unmatched): all-top=${avgAllTop.toFixed(1)}x  idx=${avgIdx.toFixed(1)}x  hybrid=${avgHybrid.toFixed(1)}x  ast=${avgAST.toFixed(1)}x`,
+            `  Avg speedup (unmatched): all-top=${fmtAvg(avgAllTop)}  idx=${fmtAvg(avgIdx)}  hybrid=${fmtAvg(avgHybrid)}  ast=${fmtAvg(avgAST)}`,
         );
     }
 }
@@ -299,12 +298,16 @@ function printCrossGrammarSummary(rows: SpaceResult[]): void {
 }
 
 function printAligned(header: string[], rows: string[][]): void {
+    const ANSI_RE = /\x1b\[[0-9;]*m/g;
+    const visibleLen = (s: string): number => s.replace(ANSI_RE, "").length;
     const widths = header.map((h, i) =>
-        Math.max(h.length, ...rows.map((r) => (r[i] ?? "").length)),
+        Math.max(visibleLen(h), ...rows.map((r) => visibleLen(r[i] ?? ""))),
     );
     const sep = widths.map((w) => "-".repeat(w)).join(" | ");
+    const padStart = (s: string, w: number): string =>
+        " ".repeat(Math.max(0, w - visibleLen(s))) + s;
     const fmt = (row: string[]) =>
-        row.map((c, i) => (c ?? "").padStart(widths[i])).join(" | ");
+        row.map((c, i) => padStart(c ?? "", widths[i])).join(" | ");
     console.log(fmt(header));
     console.log(sep);
     for (const row of rows) console.log(fmt(row));
