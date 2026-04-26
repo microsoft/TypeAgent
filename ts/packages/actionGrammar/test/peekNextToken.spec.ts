@@ -36,24 +36,17 @@ describe("peekNextToken", () => {
     });
 
     it("none: accepts when the input starts on a non-separator", () => {
-        expect(peekNextToken("play", 0, "none", "none")).toEqual({
-            token: "play",
-            tokenEnd: 4,
-        });
+        expect(peekNextToken("play", 0, "none", "none")).toBe("play");
     });
 
     it("required: skips leading separators", () => {
-        expect(peekNextToken("   play", 0, "required", "required")).toEqual({
-            token: "play",
-            tokenEnd: 7,
-        });
+        expect(peekNextToken("   play", 0, "required", "required")).toBe(
+            "play",
+        );
     });
 
     it("auto: skips leading separators", () => {
-        expect(peekNextToken("   play", 0, undefined, undefined)).toEqual({
-            token: "play",
-            tokenEnd: 7,
-        });
+        expect(peekNextToken("   play", 0, undefined, undefined)).toBe("play");
     });
 
     it("returns undefined at end of input", () => {
@@ -66,35 +59,27 @@ describe("peekNextToken", () => {
     // verbatim, including mixed-script content.
 
     it("required tokenMode: returns the full mixed-script run", () => {
-        expect(
-            peekNextToken("play你好 song", 0, "required", "required"),
-        ).toEqual({
-            token: "play你好",
-            tokenEnd: 6,
-        });
+        expect(peekNextToken("play你好 song", 0, "required", "required")).toBe(
+            "play你好",
+        );
     });
 
     it("required tokenMode: returns full digit-leading run", () => {
-        expect(peekNextToken("1abc def", 0, "required", "required")).toEqual({
-            token: "1abc",
-            tokenEnd: 4,
-        });
+        expect(peekNextToken("1abc def", 0, "required", "required")).toBe(
+            "1abc",
+        );
     });
 
     it("required tokenMode: lowercases ASCII letters", () => {
-        expect(peekNextToken("PLAY song", 0, "required", "required")).toEqual({
-            token: "play",
-            tokenEnd: 4,
-        });
+        expect(peekNextToken("PLAY song", 0, "required", "required")).toBe(
+            "play",
+        );
     });
 
     it("none tokenMode: returns full run when leadingMode allows", () => {
         // leadingMode "none" plus a non-separator first char: the
         // entire non-separator run is returned (no auto truncation).
-        expect(peekNextToken("play你好", 0, "none", "none")).toEqual({
-            token: "play你好",
-            tokenEnd: 6,
-        });
+        expect(peekNextToken("play你好", 0, "none", "none")).toBe("play你好");
     });
 
     // ── tokenMode = auto: script-transition truncation ───────────────
@@ -105,84 +90,56 @@ describe("peekNextToken", () => {
     // dispatch arm falls through to its fallback list).
 
     it("auto: truncates Latin → CJK at the script boundary", () => {
-        expect(peekNextToken("play你好", 0, undefined, undefined)).toEqual({
-            token: "play",
-            tokenEnd: 6,
-        });
+        expect(peekNextToken("play你好", 0, undefined, undefined)).toBe("play");
     });
 
     it("auto: truncates Cyrillic → CJK at the script boundary", () => {
-        expect(peekNextToken("стоп你好", 0, undefined, undefined)).toEqual({
-            token: "стоп",
-            tokenEnd: 6,
-        });
+        expect(peekNextToken("стоп你好", 0, undefined, undefined)).toBe("стоп");
     });
 
     it("auto: truncates Latin → digit at the script boundary", () => {
         // Digits are not in the word-boundary-script set, so an
         // ASCII letter run followed by digits truncates at the
         // first digit.
-        expect(peekNextToken("abc123", 0, undefined, undefined)).toEqual({
-            token: "abc",
-            tokenEnd: 6,
-        });
+        expect(peekNextToken("abc123", 0, undefined, undefined)).toBe("abc");
     });
 
     it("auto: returns first code point for CJK-leading run", () => {
         // Option G: when the WB-script prefix is empty (CJK is not
         // a word-boundary script), peek falls back to the leading
         // code point so dispatch can still bucket on it.
-        expect(peekNextToken("你好", 0, undefined, undefined)).toEqual({
-            token: "你",
-            tokenEnd: 2,
-        });
+        expect(peekNextToken("你好", 0, undefined, undefined)).toBe("你");
     });
 
     it("auto: returns first digit for digit-leading run", () => {
         // Option G: digits are not WB-script either; the leading
         // digit becomes the bucket key.
-        expect(peekNextToken("123abc", 0, undefined, undefined)).toEqual({
-            token: "1",
-            tokenEnd: 6,
-        });
+        expect(peekNextToken("123abc", 0, undefined, undefined)).toBe("1");
     });
 
     it("auto: returns single Hiragana code point for Hiragana-leading run", () => {
-        expect(peekNextToken("さいせい", 0, undefined, undefined)).toEqual({
-            token: "さ",
-            tokenEnd: 4,
-        });
+        expect(peekNextToken("さいせい", 0, undefined, undefined)).toBe("さ");
     });
 
     it("auto: returns single Katakana code point for Katakana-leading run", () => {
-        expect(peekNextToken("カット", 0, undefined, undefined)).toEqual({
-            token: "カ",
-            tokenEnd: 3,
-        });
+        expect(peekNextToken("カット", 0, undefined, undefined)).toBe("カ");
     });
 
     it("auto: returns supplementary code point as 2-UTF-16-unit string", () => {
         // U+1F3B5 (musical note) is encoded as a surrogate pair.
         // codePointAt(0) + fromCodePoint round-trips it as a
-        // 2-UTF-16-unit token; tokenEnd reflects the full run.
-        expect(peekNextToken("🎵 song", 0, undefined, undefined)).toEqual({
-            token: "🎵",
-            tokenEnd: 2,
-        });
+        // 2-UTF-16-unit token.
+        expect(peekNextToken("🎵 song", 0, undefined, undefined)).toBe("🎵");
     });
 
     it("auto: returns full Latin run when there is no transition", () => {
-        expect(peekNextToken("play song", 0, undefined, undefined)).toEqual({
-            token: "play",
-            tokenEnd: 4,
-        });
+        expect(peekNextToken("play song", 0, undefined, undefined)).toBe(
+            "play",
+        );
     });
 
     it("auto: lowercases the script-truncated prefix", () => {
-        expect(peekNextToken("Play你好", 0, undefined, undefined)).toEqual({
-            token: "play",
-            tokenEnd: 6,
-        });
+        expect(peekNextToken("Play你好", 0, undefined, undefined)).toBe("play");
     });
 
     // ── leadingMode vs tokenMode: independent concerns ───────────────
@@ -204,33 +161,27 @@ describe("peekNextToken", () => {
     it("leading=none + token=auto: succeeds when no leading separator", () => {
         // No leading separator → token extracted, then auto
         // truncation cuts at the script boundary.
-        expect(peekNextToken("play你好", 0, "none", undefined)).toEqual({
-            token: "play",
-            tokenEnd: 6,
-        });
+        expect(peekNextToken("play你好", 0, "none", undefined)).toBe("play");
     });
 
     it("leading=auto + token=required: skip leading sep, no truncation", () => {
         // Auto leading mode skips the separator; required token
         // mode returns the full run (no script-transition cut).
-        expect(peekNextToken(" play你好", 0, undefined, "required")).toEqual({
-            token: "play你好",
-            tokenEnd: 7,
-        });
+        expect(peekNextToken(" play你好", 0, undefined, "required")).toBe(
+            "play你好",
+        );
     });
 
     it("leading=required + token=auto: skip leading sep, auto truncation", () => {
-        expect(peekNextToken(" play你好", 0, "required", undefined)).toEqual({
-            token: "play",
-            tokenEnd: 7,
-        });
+        expect(peekNextToken(" play你好", 0, "required", undefined)).toBe(
+            "play",
+        );
     });
 
     it("leading=required + token=required: skip sep, full run", () => {
-        expect(peekNextToken(" play你好", 0, "required", "required")).toEqual({
-            token: "play你好",
-            tokenEnd: 7,
-        });
+        expect(peekNextToken(" play你好", 0, "required", "required")).toBe(
+            "play你好",
+        );
     });
 
     // ── Index handling ───────────────────────────────────────────────
@@ -238,10 +189,9 @@ describe("peekNextToken", () => {
     it("respects a non-zero start index", () => {
         // Start past the leading "foo " - should peek the next
         // token from there.
-        expect(peekNextToken("foo bar baz", 4, undefined, undefined)).toEqual({
-            token: "bar",
-            tokenEnd: 7,
-        });
+        expect(peekNextToken("foo bar baz", 4, undefined, undefined)).toBe(
+            "bar",
+        );
     });
 
     it("returns undefined when index is at end of input", () => {

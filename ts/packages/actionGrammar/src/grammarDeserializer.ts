@@ -13,6 +13,9 @@ import {
     DispatchPart,
 } from "./grammarTypes.js";
 import { validateTailRulesParts } from "./grammarOptimizer.js";
+import registerDebug from "debug";
+
+const debug = registerDebug("typeagent:grammar:deserializer");
 
 function grammarFromJsonInternal(json: GrammarJson): Grammar {
     const start = json[0];
@@ -96,6 +99,36 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
                 if (p.optional) part.optional = true;
                 if (p.repeat) part.repeat = true;
                 if (p.tailCall) part.tailCall = true;
+                // Non-canonical shape advisories.  Both shapes are
+                // semantically valid - the matcher handles them
+                // correctly - but neither one is something the
+                // optimizer would ever emit, so they almost certainly
+                // indicate a hand-written or buggy producer:
+                //
+                //   - Empty `tokenMap`: the dispatch only ever yields
+                //     fallback hits (or always fails when fallback is
+                //     empty too), so it adds a peek + hash miss for
+                //     no benefit over a plain `RulesPart` over
+                //     `fallback`.
+                //   - Single bucket with no fallback: the dispatch
+                //     always picks the same bucket, adding a peek +
+                //     hash lookup for no filtering benefit over the
+                //     original `RulesPart`.
+                //
+                // Log via `debug` so the producer can spot the issue
+                // without breaking otherwise-correct grammars.
+                if (tokenMap.size === 0) {
+                    debug(
+                        `non-canonical DispatchPart: empty tokenMap (name='${p.name ?? "<unnamed>"}')`,
+                    );
+                } else if (
+                    tokenMap.size === 1 &&
+                    (part.fallback === undefined || part.fallback.length === 0)
+                ) {
+                    debug(
+                        `non-canonical DispatchPart: single-bucket with no fallback (name='${p.name ?? "<unnamed>"}')`,
+                    );
+                }
                 return part;
             }
         }

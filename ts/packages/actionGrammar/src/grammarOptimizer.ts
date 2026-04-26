@@ -16,7 +16,7 @@ import {
     RulesPart,
     StringPart,
 } from "./grammarTypes.js";
-import { leadingWordBoundaryScriptPrefix } from "./grammarMatcher.js";
+import { leadingWordBoundaryScriptPrefix } from "./spacingScripts.js";
 
 const debug = registerDebug("typeagent:grammar:opt");
 
@@ -1958,11 +1958,12 @@ function classifyDispatchMember(
     if (first.type !== "string") {
         return { kind: "fallback" };
     }
-    if (first.variable !== undefined) {
-        // Bound first-StringPart goes to fallback in initial cut to
-        // avoid having to inject the binding into the suffix.
-        return { kind: "fallback" };
-    }
+    // Bound first-StringPart is fine: dispatch is filter-only and
+    // each rule retains its full leading `StringPart` (including its
+    // binding), so the matcher binds the captured tokens via the
+    // rule's own `StringPart` regex on the dispatch hit - no
+    // suffix-binding injection required.  Bucket key is still derived
+    // from the literal's first token below.
     if (first.value.length === 0) {
         return { kind: "fallback" };
     }
@@ -2013,18 +2014,31 @@ function classifyDispatchMember(
 function tryDispatchifyRulesPart(part: RulesPart): DispatchPart | undefined {
     if (part.rules.length < 2) {
         // Single-rule "alternation" - nothing to dispatch.
+        debug(`dispatch skip (single-rule) name='${part.name ?? "<unnamed>"}'`);
         return undefined;
     }
     // Determine the partition spacing mode.  We only dispatch when
     // every member rule shares a single spacingMode; mixed-mode
     // partitions stay as RulesPart in the initial cut.
+    //
+    // TODO: split mixed-mode partitions into per-mode dispatches
+    // wrapped in an outer alternation.  Today this rejects any
+    // RulesPart whose members differ in spacingMode (e.g. one
+    // `required` member alongside `auto` members), even when each
+    // sub-partition could dispatch on its own.
     const partitionMode = part.rules[0].spacingMode;
     for (let i = 1; i < part.rules.length; i++) {
         if (part.rules[i].spacingMode !== partitionMode) {
+            debug(
+                `dispatch skip (mixed-spacing) name='${part.name ?? "<unnamed>"}'`,
+            );
             return undefined;
         }
     }
     if (partitionMode === "optional" || partitionMode === "none") {
+        debug(
+            `dispatch skip (spacing=${partitionMode}) name='${part.name ?? "<unnamed>"}'`,
+        );
         return undefined;
     }
 
@@ -2045,6 +2059,9 @@ function tryDispatchifyRulesPart(part: RulesPart): DispatchPart | undefined {
     }
 
     if (tokenMap.size === 0) {
+        debug(
+            `dispatch skip (all-fallback) name='${part.name ?? "<unnamed>"}'`,
+        );
         return undefined;
     }
     // No filtering: a single-bucket dispatch with no fallback is
@@ -2052,6 +2069,9 @@ function tryDispatchifyRulesPart(part: RulesPart): DispatchPart | undefined {
     // factoring (one regex try per member instead of N hash misses).
     // Skip to avoid pessimization.
     if (tokenMap.size === 1 && fallback.length === 0) {
+        debug(
+            `dispatch skip (single-bucket-no-fallback) name='${part.name ?? "<unnamed>"}'`,
+        );
         return undefined;
     }
 
@@ -2090,6 +2110,7 @@ export function dispatchifyAlternations(rules: GrammarRule[]): GrammarRule[] {
     // the result is a single-rule grammar whose only part is a
     // DispatchPart - preserves the matcher's "rule i drives one
     // alternative" semantics through the dispatch frame.
+    let finalResult = result;
     if (result.length >= 2) {
         const synthetic: RulesPart = {
             type: "rules",
@@ -2098,11 +2119,7 @@ export function dispatchifyAlternations(rules: GrammarRule[]): GrammarRule[] {
         const dispatched = tryDispatchifyRulesPart(synthetic);
         if (dispatched !== undefined) {
             counter.dispatched++;
-            const wrapper: GrammarRule = { parts: [dispatched] };
-            debug(
-                `dispatched ${counter.dispatched} alternations into token tables`,
-            );
-            return [wrapper];
+            finalResult = [{ parts: [dispatched] }];
         }
     }
 
@@ -2111,7 +2128,7 @@ export function dispatchifyAlternations(rules: GrammarRule[]): GrammarRule[] {
             `dispatched ${counter.dispatched} alternations into token tables`,
         );
     }
-    return result;
+    return finalResult;
 }
 
 function visitRulesArray(
@@ -2247,15 +2264,19 @@ export function validateTailRulesParts(rules: GrammarRule[]): void {
 }
 
 /**
- * Flatten a `DispatchPart`'s effective member list (sum of tokenMap
- * buckets ++ fallback) for tail-contract validation.  The flat array
- * is small (typically <100) and only built when a tail dispatch is
- * actually being validated, so the materialization cost is negligible.
+ * Lazy per-`DispatchPart` cache of the flattened effective member
+ * list (`[...allBuckets.flat(), ...fallback]`).  Used by the tail
+ * contract validator (`dispatchEffectiveMembers`) and by the value-
+ * type derivation in `grammarValueTypeValidator.ts` so neither has
+ * to re-flatten on every call.  Keyed by `DispatchPart` identity via
+ * a module-local `WeakMap` so the cache is invalidated automatically
+ * when a part becomes unreachable.
  */
-function dispatchEffectiveMembers(p: DispatchPart): {
-    members: GrammarRule[];
-    effectiveCount: number;
-} {
+const dispatchEffectiveCache = new WeakMap<DispatchPart, GrammarRule[]>();
+
+export function getDispatchEffectiveMembers(p: DispatchPart): GrammarRule[] {
+    let cached = dispatchEffectiveCache.get(p);
+    if (cached !== undefined) return cached;
     const members: GrammarRule[] = [];
     for (const bucket of p.tokenMap.values()) {
         for (const m of bucket) members.push(m);
@@ -2263,6 +2284,20 @@ function dispatchEffectiveMembers(p: DispatchPart): {
     if (p.fallback !== undefined) {
         for (const m of p.fallback) members.push(m);
     }
+    dispatchEffectiveCache.set(p, members);
+    return members;
+}
+
+/**
+ * Flatten a `DispatchPart`'s effective member list (sum of tokenMap
+ * buckets ++ fallback) for tail-contract validation.  Delegates to
+ * the cached helper above.
+ */
+function dispatchEffectiveMembers(p: DispatchPart): {
+    members: GrammarRule[];
+    effectiveCount: number;
+} {
+    const members = getDispatchEffectiveMembers(p);
     return { members, effectiveCount: members.length };
 }
 

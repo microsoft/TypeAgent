@@ -17,6 +17,10 @@ import {
     VarStringPart,
     DispatchPart,
 } from "./grammarTypes.js";
+import {
+    leadingWordBoundaryScriptPrefix,
+    wordBoundaryScriptRe,
+} from "./spacingScripts.js";
 
 // Separator mode for completion results.  Structurally identical to
 // SeparatorMode from @typeagent/agent-sdk (command.ts); independently
@@ -47,11 +51,9 @@ const wildcardTrimRegExp = new RegExp(
 // characters only when BOTH belong to one of these scripts. Unknown/unlisted
 // scripts (e.g. CJK) default to no separator needed.
 //
-// Exported so the dispatch optimizer (`grammarOptimizer.ts`) can build a
-// matching anchored "every char" variant from the same source - the
-// matcher's table is the single source of truth.
-export const wordBoundaryScriptRe =
-    /\p{Script=Latin}|\p{Script=Cyrillic}|\p{Script=Greek}|\p{Script=Armenian}|\p{Script=Georgian}|\p{Script=Hangul}|\p{Script=Arabic}|\p{Script=Hebrew}|\p{Script=Devanagari}|\p{Script=Bengali}|\p{Script=Tamil}|\p{Script=Telugu}|\p{Script=Kannada}|\p{Script=Malayalam}|\p{Script=Gujarati}|\p{Script=Gurmukhi}|\p{Script=Oriya}|\p{Script=Sinhala}|\p{Script=Ethiopic}|\p{Script=Mongolian}/u;
+// The regex itself lives in `spacingScripts.ts` so the dispatch optimizer
+// can build matching bucket-key variants from the same source - that
+// module is the single source of truth.
 
 // Decimal digits are not part of any word-space script, but two adjacent
 // digit characters must still be separated: "123456" is a different token from
@@ -1127,30 +1129,6 @@ export function nextNonSeparatorIndex(request: string, index: number) {
 const nonSeparatorRunRegExp = new RegExp(`[^${separatorRegExpStr}]+`, "yu");
 const singleSeparatorRegExp = new RegExp(`[${separatorRegExpStr}]`, "u");
 
-// Anchored "leading run of word-boundary-script chars" - re-used by
-// `peekNextToken` (auto-mode dispatch lookup) and the dispatch
-// optimizer (bucket-key derivation).  In auto mode the StringPart's
-// implicit token boundary lies at the first script transition;
-// `peekNextToken` truncates at that boundary so peek and the
-// matcher's StringPart regex agree on what the leading "word" is.
-export const leadingWordBoundaryScriptRe = new RegExp(
-    `^(?:${wordBoundaryScriptRe.source})+`,
-    "u",
-);
-
-/**
- * Maximal leading run of word-boundary-script characters in `s`.
- * Returns `""` when the first character is not a word-boundary-script
- * char (CJK, digits, punctuation, etc.).  Used by the dispatch
- * optimizer to derive bucket keys; matches the run that
- * `peekNextToken` will return for an input starting at the same
- * position in auto mode.
- */
-export function leadingWordBoundaryScriptPrefix(s: string): string {
-    const m = leadingWordBoundaryScriptRe.exec(s);
-    return m === null ? "" : m[0];
-}
-
 /**
  * Peek the next "token" (lowercased run of non-separator chars) from
  * `request` starting at `index`.  Returns `undefined` when no token
@@ -1190,13 +1168,18 @@ export function leadingWordBoundaryScriptPrefix(s: string): string {
  * outer rule (no auto-mode truncation of the peeked token), or an
  * `auto`-mode dispatch following a `none`-mode preceding part
  * (no leading separator allowed).
+ *
+ * The dispatch arm leaves `state.index` at the original index and
+ * re-matches via the suffix's StringPart regex, so callers do not
+ * need the end-of-run index - returning just the lowercased token
+ * keeps this hot-path helper allocation-free.
  */
 export function peekNextToken(
     request: string,
     index: number,
     leadingMode: CompiledSpacingMode,
     tokenMode: CompiledSpacingMode,
-): { token: string; tokenEnd: number } | undefined {
+): string | undefined {
     let start = index;
     if (leadingMode === "none") {
         // No leading separator allowed: input must start exactly at
@@ -1219,32 +1202,29 @@ export function peekNextToken(
     if (m === null) {
         return undefined;
     }
-    let token = m[0].toLowerCase();
-    if (tokenMode === undefined) {
-        // auto: cut at the first script transition so the peeked
-        // token matches what the StringPart regex would consume.
-        const pref = leadingWordBoundaryScriptPrefix(token);
-        if (pref.length > 0) {
-            token = pref;
-        } else {
-            // Non-word-boundary-script leading char (CJK, digit,
-            // punctuation): the WB-prefix is empty.  Bucket on the
-            // leading code point instead, mirroring
-            // `classifyDispatchMember`'s first-code-point fallback
-            // in the optimizer.  `m[0]` is non-empty (the regex
-            // matched at least one char), so `codePointAt(0)` is
-            // always defined.  Surrogate pairs return the
-            // supplementary code point and `fromCodePoint` rebuilds
-            // a 2-UTF-16-unit string that matches the bucket key.
-            const cp = token.codePointAt(0)!;
-            token = String.fromCodePoint(cp);
-        }
+    const token = m[0].toLowerCase();
+    if (tokenMode !== undefined) {
+        // required / optional / none: return the whole non-separator
+        // run unchanged.
+        return token;
     }
-    // tokenEnd is documentation of where the full non-separator run
-    // ended in `request`; no caller currently reads it (the dispatch
-    // arm leaves `state.index` at the original index and re-matches
-    // via the suffix's StringPart regex).
-    return { token, tokenEnd: start + m[0].length };
+    // auto: cut at the first script transition so the peeked
+    // token matches what the StringPart regex would consume.
+    const pref = leadingWordBoundaryScriptPrefix(token);
+    if (pref.length > 0) {
+        return pref;
+    }
+    // Non-word-boundary-script leading char (CJK, digit,
+    // punctuation): the WB-prefix is empty.  Bucket on the
+    // leading code point instead, mirroring
+    // `classifyDispatchMember`'s first-code-point fallback
+    // in the optimizer.  `m[0]` is non-empty (the regex
+    // matched at least one char), so `codePointAt(0)` is
+    // always defined.  Surrogate pairs return the
+    // supplementary code point and `fromCodePoint` rebuilds
+    // a 2-UTF-16-unit string that matches the bucket key.
+    const cp = token.codePointAt(0)!;
+    return String.fromCodePoint(cp);
 }
 
 // Finalize the state to capture the last wildcard if any
@@ -2118,6 +2098,72 @@ function enterRulesAlternation(
  * members, and the matcher will re-match the token via each
  * suffix's `StringPart` regex.
  */
+/**
+ * Per-`DispatchPart` lazy caches for the two arrays `enterDispatchPart`
+ * needs at match time:
+ *
+ *   - `all`: the full effective member list `[...allBuckets, ...fallback]`
+ *     used by the pending-wildcard path (and as the only effective list
+ *     if `tokenMap` is empty - currently impossible by construction).
+ *   - `merged`: a `Map<bucketArray, [...bucket, ...fallback]>` keyed by
+ *     each tokenMap bucket, used on a peek hit when `fallback` is
+ *     non-empty.  Identity-keyed so two buckets sharing the same array
+ *     reuse the same merged result.
+ *
+ * Both caches are populated on first use and live for the lifetime of
+ * the `DispatchPart` (which is reachable for the lifetime of the
+ * grammar).  Avoids the per-match `[...hits, ...fallback]` allocation
+ * that would otherwise happen on every dispatch entry whenever any
+ * non-dispatchable rule exists at the fork.
+ */
+type DispatchCaches = {
+    all?: GrammarRule[];
+    merged?: Map<GrammarRule[], GrammarRule[]>;
+};
+const dispatchCaches = new WeakMap<DispatchPart, DispatchCaches>();
+
+function getDispatchCaches(part: DispatchPart): DispatchCaches {
+    let c = dispatchCaches.get(part);
+    if (c === undefined) {
+        c = {};
+        dispatchCaches.set(part, c);
+    }
+    return c;
+}
+
+function getDispatchAllMembers(part: DispatchPart): GrammarRule[] {
+    const c = getDispatchCaches(part);
+    if (c.all !== undefined) return c.all;
+    const all: GrammarRule[] = [];
+    for (const bucket of part.tokenMap.values()) {
+        for (const r of bucket) all.push(r);
+    }
+    if (part.fallback !== undefined) {
+        for (const r of part.fallback) all.push(r);
+    }
+    c.all = all;
+    return all;
+}
+
+function getDispatchMergedBucket(
+    part: DispatchPart,
+    bucket: GrammarRule[],
+    fallback: GrammarRule[],
+): GrammarRule[] {
+    const c = getDispatchCaches(part);
+    let m = c.merged;
+    if (m === undefined) {
+        m = new Map();
+        c.merged = m;
+    }
+    let merged = m.get(bucket);
+    if (merged === undefined) {
+        merged = bucket.concat(fallback);
+        m.set(bucket, merged);
+    }
+    return merged;
+}
+
 function enterDispatchPart(
     state: MatchState,
     part: DispatchPart,
@@ -2149,13 +2195,7 @@ function enterDispatchPart(
     // pure pruning pass.  Worth doing if profiling on a real
     // grammar shows wildcard-prefix dispatch is a hot path.
     if (state.pendingWildcard !== undefined) {
-        const all: GrammarRule[] = [];
-        for (const bucket of part.tokenMap.values()) {
-            for (const r of bucket) all.push(r);
-        }
-        if (part.fallback !== undefined) {
-            for (const r of part.fallback) all.push(r);
-        }
+        const all = getDispatchAllMembers(part);
         if (all.length === 0) {
             debugMatch(state, `dispatch: pending-wildcard fallback empty`);
             return false;
@@ -2179,27 +2219,31 @@ function enterDispatchPart(
     //     truncation) follows the dispatched member rules' own
     //     `part.spacingMode`, since the suffix's StringPart regex
     //     uses that mode and peek must agree with it.
-    const peek = peekNextToken(
+    const token = peekNextToken(
         request,
         state.index,
         leadingSpacingMode(state),
         part.spacingMode,
     );
-    const hits =
-        peek !== undefined ? (part.tokenMap.get(peek.token) ?? []) : [];
-    const fallback = part.fallback ?? [];
-    if (hits.length === 0 && fallback.length === 0) {
+    const hits = token !== undefined ? part.tokenMap.get(token) : undefined;
+    const fallback = part.fallback;
+    if (
+        hits === undefined &&
+        (fallback === undefined || fallback.length === 0)
+    ) {
         debugMatch(state, `dispatch: no hits or fallback`);
         return false;
     }
     // Hits-before-fallback ordering preserves match order from the
-    // pre-unification dispatch path.
+    // pre-unification dispatch path.  When both exist we use a
+    // per-DispatchPart cache so the merged array is allocated once
+    // and reused across every match that hits the same bucket.
     const effective: GrammarRule[] =
-        fallback.length === 0
-            ? (hits as GrammarRule[])
-            : hits.length === 0
-              ? fallback
-              : [...hits, ...fallback];
+        hits === undefined
+            ? fallback!
+            : fallback === undefined || fallback.length === 0
+              ? hits
+              : getDispatchMergedBucket(part, hits, fallback);
 
     const namePrefix = part.name
         ? `<${part.name}>`

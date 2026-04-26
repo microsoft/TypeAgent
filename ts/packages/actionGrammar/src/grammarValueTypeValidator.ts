@@ -15,6 +15,7 @@ import type {
     SchemaObjectField,
 } from "@typeagent/action-schema";
 import { SchemaCreator } from "@typeagent/action-schema";
+import { getDispatchEffectiveMembers } from "./grammarOptimizer.js";
 
 // Sentinel for "any" — can't determine type
 const ANY_TYPE: SchemaType = SchemaCreator.any();
@@ -514,6 +515,22 @@ export function classifyRuleValue(rule: GrammarRule): RuleValueKind {
                 name: part.name,
             };
         }
+        if (part.type === "dispatch") {
+            // Optimizer-introduced.  Treat as passthrough over the
+            // expanded effective member list so downstream logic
+            // (`deriveAlternativeType`, `collectLeafValues`) continues
+            // to walk the same alternatives it would have walked
+            // before `dispatchifyAlternations` ran.  Today the
+            // validator runs before the optimizer, so this branch is
+            // a future-proofing measure - if validation is ever
+            // re-run after optimization (e.g. for serialized
+            // grammars), values are still classified correctly.
+            return {
+                kind: "passthrough",
+                rules: getDispatchEffectiveMembers(part),
+                name: part.name,
+            };
+        }
         if (part.type === "string" || part.type === "phraseSet") {
             return { kind: "default", part };
         }
@@ -575,11 +592,21 @@ function derivePartType(
             baseType = deriveRuleValueType(part.rules, cache, part.name);
             break;
         case "string":
+            // Bound StringParts arise from the factorer/inliner
+            // (synthesized `__opt_v_<n>` canonicals on shared first
+            // tokens) and may also be authored directly.  The
+            // captured value is the matched text, which is exactly
+            // the part's token sequence joined - return a string-
+            // union literal so enum conformance can be checked.
+            baseType =
+                part.value.length > 0
+                    ? SchemaCreator.string(part.value.join(" "))
+                    : SchemaCreator.string();
+            break;
         case "phraseSet":
-            // DEAD CODE: StringPart.variable and PhraseSetPart.variable are
-            // typed as `undefined` — these parts never carry a variable name,
-            // so callers (buildVariableTypeMap, deriveAlternativeType) will
-            // never invoke derivePartType for them.  Kept for exhaustiveness.
+            // Bound PhraseSetParts capture matched text from the
+            // matcher's phrase-set lookup; the exact tokens aren't
+            // statically known, so widen to plain string.
             baseType = SchemaCreator.string();
             break;
         case "dispatch":
@@ -587,12 +614,10 @@ function derivePartType(
             // captures whatever its alternatives' value expressions
             // produce; for type-derivation purposes we treat it like a
             // RulesPart over its expanded alternatives (suffix rules
-            // with consumed token re-prepended, plus fallback).
+            // plus fallback).  Effective member list is cached on the
+            // DispatchPart so this stays O(1) on subsequent calls.
             baseType = deriveRuleValueType(
-                [
-                    ...Array.from(part.tokenMap.values()).flat(),
-                    ...(part.fallback ?? []),
-                ],
+                getDispatchEffectiveMembers(part),
                 cache,
                 part.name,
             );

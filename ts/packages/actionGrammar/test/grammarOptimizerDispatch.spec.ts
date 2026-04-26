@@ -914,3 +914,114 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         }
     });
 });
+
+/**
+ * The optimizer never emits these `DispatchPart` shapes (they offer
+ * no filtering benefit over an equivalent `RulesPart`), but the
+ * matcher must still handle them correctly because they can arrive
+ * via hand-written or third-party serialized grammars.
+ * `grammarDeserializer.ts` logs a `debug` advisory but loads them.
+ *
+ * Each test hand-constructs a `DispatchPart` of the non-canonical
+ * shape, drops it into a minimal grammar, runs `matchGrammar`
+ * directly against it, and asserts the result equals an equivalent
+ * `RulesPart`-only baseline.
+ */
+describe("Grammar Optimizer - non-canonical DispatchPart shapes", () => {
+    function buildRule(token: string, value: string): GrammarRule {
+        return {
+            parts: [{ type: "string", value: [token] }],
+            value: { type: "literal", value },
+        };
+    }
+
+    it("matcher handles empty tokenMap with non-empty fallback", () => {
+        // Equivalent to a plain RulesPart over `fallback` - dispatch
+        // peek always misses, so every match goes through fallback.
+        const ruleA = buildRule("alpha", "a");
+        const ruleB = buildRule("beta", "b");
+        const dispatch: DispatchPart = {
+            type: "dispatch",
+            tokenMap: new Map(),
+            fallback: [ruleA, ruleB],
+        };
+        const grammar = { rules: [{ parts: [dispatch] }] };
+        const baseline = { rules: [ruleA, ruleB] };
+
+        for (const input of ["alpha", "beta", "gamma", ""]) {
+            const got = matchGrammar(grammar, input)
+                .map((m) => JSON.stringify(m.match))
+                .sort();
+            const exp = matchGrammar(baseline, input)
+                .map((m) => JSON.stringify(m.match))
+                .sort();
+            expect(got).toStrictEqual(exp);
+        }
+    });
+
+    it("matcher handles single-bucket dispatch with no fallback", () => {
+        // Equivalent to a plain RulesPart over the single bucket -
+        // peek hit yields the bucket, miss yields no alternatives.
+        const ruleA = buildRule("alpha", "a1");
+        const ruleA2: GrammarRule = {
+            parts: [{ type: "string", value: ["alpha", "two"] }],
+            value: { type: "literal", value: "a2" },
+        };
+        const dispatch: DispatchPart = {
+            type: "dispatch",
+            tokenMap: new Map([["alpha", [ruleA, ruleA2]]]),
+        };
+        const grammar = { rules: [{ parts: [dispatch] }] };
+        const baseline = { rules: [ruleA, ruleA2] };
+
+        for (const input of ["alpha", "alpha two", "beta", ""]) {
+            const got = matchGrammar(grammar, input)
+                .map((m) => JSON.stringify(m.match))
+                .sort();
+            const exp = matchGrammar(baseline, input)
+                .map((m) => JSON.stringify(m.match))
+                .sort();
+            expect(got).toStrictEqual(exp);
+        }
+    });
+
+    it("matcher handles empty tokenMap with empty fallback (always fails)", () => {
+        // Degenerate but well-formed: peek always misses, no fallback,
+        // so the dispatch arm returns false for every input.  The
+        // equivalent RulesPart with zero alternatives also matches
+        // nothing.
+        const dispatch: DispatchPart = {
+            type: "dispatch",
+            tokenMap: new Map(),
+        };
+        const grammar = { rules: [{ parts: [dispatch] }] };
+
+        for (const input of ["alpha", "beta", ""]) {
+            expect(matchGrammar(grammar, input)).toEqual([]);
+        }
+    });
+
+    it("non-canonical shapes round-trip through serializer", () => {
+        // Round-trip a hand-built non-canonical dispatch through
+        // grammarToJson / grammarFromJson and confirm matches still
+        // line up.  Verifies the deserializer's `debug` advisory
+        // does not block the load.
+        const ruleA = buildRule("alpha", "a");
+        const dispatch: DispatchPart = {
+            type: "dispatch",
+            tokenMap: new Map([["alpha", [ruleA]]]),
+        };
+        const grammar = { rules: [{ parts: [dispatch] }] };
+        const roundTripped = grammarFromJson(grammarToJson(grammar));
+
+        for (const input of ["alpha", "beta", ""]) {
+            const got = matchGrammar(roundTripped, input)
+                .map((m) => JSON.stringify(m.match))
+                .sort();
+            const exp = matchGrammar(grammar, input)
+                .map((m) => JSON.stringify(m.match))
+                .sort();
+            expect(got).toStrictEqual(exp);
+        }
+    });
+});

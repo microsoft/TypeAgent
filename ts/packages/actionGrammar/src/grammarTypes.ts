@@ -326,6 +326,14 @@ export type DispatchPart = {
      * members, unmodified - the matcher re-matches the leading token
      * via each rule's normal `StringPart` regex (see filter-only
      * semantics in the type-level docstring above).
+     *
+     * Canonical shapes produced by `tryDispatchifyRulesPart`: at
+     * least 2 buckets, OR 1 bucket with a non-empty `fallback`.
+     * Other shapes (empty `tokenMap`, single-bucket with no
+     * fallback) are semantically valid - the matcher handles them
+     * correctly - but offer no filtering benefit over an equivalent
+     * `RulesPart`.  `grammarDeserializer.ts` logs a `debug` advisory
+     * when it sees one.
      */
     tokenMap: Map<string, GrammarRule[]>;
     /**
