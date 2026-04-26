@@ -1539,11 +1539,32 @@ function checkFactoringEligible(
         // `[prefix..., suffixRulesPart]` with parts.length >= 2 and
         // no value expression - the implicit default no longer
         // fires and `createValue` throws "missing value for default"
-        // at finalize time.  Without a wrapper variable to
-        // synthesize a value into, factoring at this fork breaks
-        // matcher behavior whenever the parent rule relied on the
-        // implicit default.  Bail out unconditionally.
+        // at finalize time.
+        //
+        // Synthesizing an explicit value here is possible (e.g.
+        // template-literal joining the prefix tokens with the
+        // suffix wrapper-binding) but not worth doing: the implicit
+        // default fires only for unbound-StringPart-only rules,
+        // where the matcher's `matchStringPartWithoutWildcard` fast
+        // path is itself very cheap.  The wrapper would add a frame
+        // push, a wrapper-binding entry on the `valueIds` chain, and
+        // a template-literal evaluation per match - costs that
+        // typically exceed the prefix-match savings.  Bail out
+        // unconditionally; the implicit-default rules stay
+        // unfactored and keep their fast path.
         return { ok: false, reason: "no-value-implicit-default" };
+    }
+
+    // Policy: prefer tail when enabled.  Tail wrapper is observably
+    // identical to the unfactored shape for both needsTail and
+    // !needsTail forks (the inherited `valueIds` chain is unread when
+    // !needsTail), produces a smaller AST (no synthesized
+    // `__opt_factor_<n>` binding, no `factoredAlt.value` indirection),
+    // and saves one matcher frame push per fork.  Decided up-front so
+    // we can skip the cross-scope-ref scan below entirely - that scan
+    // only governs the non-tail bailout.
+    if (tailFactoringEnabled) {
+        return { ok: true, tail: true };
     }
 
     // Cross-scope-ref classification.  Nested rule scope is normally
@@ -1558,7 +1579,8 @@ function checkFactoringEligible(
     // resolve prefix-bound canonicals.  `needsTail` records whether
     // any member's value-expr references a prefix-bound canonical -
     // i.e. whether the non-tail wrapper would change observable
-    // behavior at this fork.
+    // behavior at this fork.  When true we have to bail out, since
+    // tail emission is disabled at this site.
     let needsTail = false;
     for (const m of members) {
         if (m.value === undefined) continue;
@@ -1572,21 +1594,6 @@ function checkFactoringEligible(
         if (needsTail) break;
     }
 
-    // Policy: prefer tail when enabled.  Tail wrapper is observably
-    // identical to the unfactored shape for both needsTail and
-    // !needsTail forks (the inherited `valueIds` chain is unread when
-    // !needsTail), produces a smaller AST (no synthesized
-    // `__opt_factor_<n>` binding, no `factoredAlt.value` indirection),
-    // and saves one matcher frame push per fork.  Fall back to the
-    // non-tail wrapper only when tail is disabled.
-    if (tailFactoringEnabled) {
-        return { ok: true, tail: true };
-    }
-
-    // Tail disabled.  The non-tail wrapper is only safe when no
-    // member references a prefix-bound canonical (would silently
-    // resolve to a different scope after lifting).  When needsTail is
-    // true we have to bail out.
     if (needsTail) {
         return { ok: false, reason: "cross-scope-ref" };
     }
