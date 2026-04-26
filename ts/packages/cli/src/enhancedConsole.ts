@@ -33,6 +33,7 @@ import type { CompletionController } from "agent-dispatcher/helpers/completion";
 import chalk from "chalk";
 import fs from "fs";
 import path from "path";
+import os from "os";
 import { EnhancedSpinner, ANSI, getDisplayWidth } from "interactive-app";
 import { createInterface } from "readline/promises";
 import readline from "readline";
@@ -1886,10 +1887,15 @@ export async function processCommandsEnhanced<T>(
     dispatcherForCancel?: Dispatcher,
 ) {
     const fs = await import("node:fs");
+    const historyFile = path.join(
+        os.homedir(),
+        ".typeagent",
+        "command_history.json",
+    );
     let history: string[] = [];
-    if (fs.existsSync("command_history.json")) {
+    if (fs.existsSync(historyFile)) {
         const hh = JSON.parse(
-            fs.readFileSync("command_history.json", { encoding: "utf-8" }),
+            fs.readFileSync(historyFile, { encoding: "utf-8" }),
         );
         history = hh.commands;
     }
@@ -2033,10 +2039,7 @@ export async function processCommandsEnhanced<T>(
         console.log("");
 
         // save command history
-        fs.writeFileSync(
-            "command_history.json",
-            JSON.stringify({ commands: history }),
-        );
+        fs.writeFileSync(historyFile, JSON.stringify({ commands: history }));
     }
 }
 

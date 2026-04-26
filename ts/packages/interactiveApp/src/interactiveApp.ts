@@ -6,6 +6,7 @@ import { InteractiveIo, getInteractiveIO } from "./InteractiveIo.js";
 import { exit } from "process";
 import readline from "readline";
 import path from "path";
+import os from "os";
 
 /**
  * Handler of command line inputs
@@ -111,6 +112,11 @@ export async function runConsole(
  * An Interactive App. You can inherit from this, but typically you just call RunConsole
  */
 class InteractiveApp {
+    static readonly historyFile = path.join(
+        os.homedir(),
+        ".typeagent",
+        "command_history.json",
+    );
     public settings: InteractiveAppSettings;
     private _stdio: InteractiveIo;
     private lineReader: readline.promises.Interface;
@@ -122,9 +128,11 @@ class InteractiveApp {
         this.lineReader = this._stdio.readline;
         this.lineReader.setPrompt(this.settings.prompt!);
 
-        if (fs.existsSync("command_history.json")) {
+        if (fs.existsSync(InteractiveApp.historyFile)) {
             const history = JSON.parse(
-                fs.readFileSync("command_history.json", { encoding: "utf-8" }),
+                fs.readFileSync(InteractiveApp.historyFile, {
+                    encoding: "utf-8",
+                }),
             );
 
             (this.lineReader as any).history = history.commands;
@@ -201,7 +209,7 @@ class InteractiveApp {
                 .on("close", () => {
                     this.lineReader.close();
                     fs.writeFileSync(
-                        "command_history.json",
+                        InteractiveApp.historyFile,
                         JSON.stringify({
                             commands: (this.lineReader as any).history,
                         }),

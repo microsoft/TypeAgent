@@ -19,6 +19,8 @@ import chalk from "chalk";
 import stringWidth from "string-width";
 import { createInterface } from "readline/promises";
 import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
 import readline from "readline";
 import open from "open";
 import { convert } from "html-to-text";
@@ -544,9 +546,14 @@ export async function processCommands<T>(
     inputs?: string[],
 ) {
     let history: string[] = [];
-    if (fs.existsSync("command_history.json")) {
+    const historyFile = path.join(
+        os.homedir(),
+        ".typeagent",
+        "command_history.json",
+    );
+    if (fs.existsSync(historyFile)) {
         const hh = JSON.parse(
-            fs.readFileSync("command_history.json", { encoding: "utf-8" }),
+            fs.readFileSync(historyFile, { encoding: "utf-8" }),
         );
         history = hh.commands;
     }
@@ -589,7 +596,7 @@ export async function processCommands<T>(
 
         // save command history
         fs.writeFileSync(
-            "command_history.json",
+            historyFile,
             JSON.stringify({ commands: (rl as any).history }),
         );
     }
