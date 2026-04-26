@@ -20,17 +20,20 @@
   },
   "bin": {
     "generate-grammar": "./dist/generation/generate-grammar-cli.js",
-    "test-grammar": "./dist/generation/test-grammar-cli.js"
+    "test-grammar": "./dist/generation/test-grammar-cli.js",
+    "fuzz-grammar": "./dist/fuzz/fuzzRunner.js"
   },
   "files": [
     "dist",
     "!dist/test",
-    "!dist/bench"
+    "!dist/bench",
+    "!dist/fuzz"
   ],
   "scripts": {
     "bench": "npm run bench:synthetic && npm run bench:real",
     "bench:real": "node ./dist/bench/grammarOptimizerBenchmark.js",
     "bench:synthetic": "node ./dist/bench/grammarOptimizerSyntheticBenchmark.js",
+    "fuzz": "node ./dist/fuzz/fuzzRunner.js",
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
