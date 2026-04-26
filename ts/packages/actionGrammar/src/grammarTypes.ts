@@ -279,12 +279,73 @@ export type PhraseSetPart = {
     optional?: undefined;
 };
 
+/**
+ * Optimizer-only first-token dispatch table.  Replaces a `RulesPart`
+ * whose alternatives can be partitioned by the lowercased first token
+ * each one consumes.  At match time the matcher peeks one token from
+ * the input, looks it up in `tokenMap`, and tries the listed suffix
+ * rules (with the consumed token already credited - the suffix does
+ * not re-match it).  Members whose first token is not statically known
+ * (wildcard / number / phraseSet first part, recursive or nested
+ * RulesPart-first members, bound first-StringPart, empty parts) live
+ * in `fallback` and are tried as ordinary alternatives after the
+ * tokenMap hits.
+ *
+ * Eligibility (computed by `dispatchifyAlternations`):
+ *   - Containing partition's `spacingMode === "required"` always OK.
+ *   - `spacingMode === undefined` (auto) OK iff every key consists
+ *     entirely of word-boundary-script chars; the matcher applies a
+ *     runtime auto-mode boundary check after the hit.
+ *   - `optional` / `none` modes are NOT eligible (peek-by-separator
+ *     would mismatch keys against unseparated input).  In those
+ *     partitions the optimizer leaves the original `RulesPart`
+ *     unchanged.
+ *
+ * Suffix rules: when the leading `StringPart` carried multiple tokens
+ * (e.g. `["play", "song"]`), the suffix keeps a tail-truncated
+ * `StringPart` (`["song"]`).  When it carried a single token, the
+ * `StringPart` is removed entirely from `parts`.
+ *
+ * Not exposed in `.agr` source.  The NFA/DFA compile path expands
+ * `DispatchPart` back into an equivalent `RulesPart` before
+ * compilation (the NFA already does global first-token dispatch via
+ * `buildFirstTokenIndex`, so dispatch parts add nothing there).
+ */
+export type DispatchPart = {
+    type: "dispatch";
+    /** Lowercased first token → suffix rules. */
+    tokenMap: Map<string, GrammarRule[]>;
+    /**
+     * Members whose first token is not statically known.  Tried as
+     * ordinary alternatives after `tokenMap` hits at match time.
+     * Absent / empty when every member dispatches.
+     */
+    fallback?: GrammarRule[] | undefined;
+    name?: string | undefined; // For debugging
+    variable?: string | undefined;
+    /**
+     * Spacing mode of the original `RulesPart` partition this dispatch
+     * was built from.  Drives `state.spacingMode` on entry (mirrors
+     * `RulesPart` member-spacing handling).
+     */
+    spacingMode?: CompiledSpacingMode | undefined;
+    /**
+     * `repeat` / `optional` are forbidden on `DispatchPart` (the
+     * dispatch optimizer skips RulesParts with those flags).  Listed
+     * here as `undefined`-only so a future change that allows them
+     * surfaces as a compile error rather than silent matcher behavior.
+     */
+    optional?: undefined;
+    repeat?: undefined;
+};
+
 export type GrammarPart =
     | StringPart
     | VarStringPart
     | VarNumberPart
     | RulesPart
-    | PhraseSetPart;
+    | PhraseSetPart
+    | DispatchPart;
 
 /**
  * GrammarPart kinds that can carry an optional capture `variable`.
@@ -300,7 +361,8 @@ export type CaptureBearingPart =
     | VarNumberPart
     | RulesPart
     | StringPart
-    | PhraseSetPart;
+    | PhraseSetPart
+    | DispatchPart;
 
 /** Type guard: does this part kind support a capture `variable`? */
 export function isCaptureBearingPart(
@@ -312,6 +374,7 @@ export function isCaptureBearingPart(
         case "rules":
         case "string":
         case "phraseSet":
+        case "dispatch":
             return true;
         default:
             return false;
@@ -379,12 +442,33 @@ export type PhraseSetPartJson = {
     variable?: string | undefined;
 };
 
+/**
+ * Serialized form of `DispatchPart`.  `tokenMap` becomes an array of
+ * `[token, ruleArrayIndex]` tuples (Maps don't survive JSON round-trip
+ * directly).  Each entry's `index` is a `GrammarRulesJson` index in
+ * the same shared `GrammarJson` table that `RulePartJson.index`
+ * references, so suffix arrays dedup with named-rule arrays via the
+ * existing identity-sharing mechanism.  `fallback` (when present) is
+ * also a single shared rules-array index.
+ */
+export type DispatchPartJson = {
+    type: "dispatch";
+    name?: string | undefined;
+    variable?: string | undefined;
+    spacingMode?: CompiledSpacingMode | undefined;
+    /** [lowercased-token, rulesArrayIndex][] */
+    tokenMap: Array<[string, number]>;
+    /** rulesArrayIndex pointing to fallback rules; absent when no fallback. */
+    fallbackIndex?: number | undefined;
+};
+
 export type GrammarPartJson =
     | StringPartJson
     | VarStringPartJson
     | VarNumberPartJson
     | RulePartJson
-    | PhraseSetPartJson;
+    | PhraseSetPartJson
+    | DispatchPartJson;
 
 export type GrammarRuleJson = {
     parts: GrammarPartJson[];

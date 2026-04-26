@@ -10,6 +10,7 @@ import {
     GrammarRuleJson,
     PhraseSetPart,
     RulesPart,
+    DispatchPart,
 } from "./grammarTypes.js";
 import { validateTailRulesParts } from "./grammarOptimizer.js";
 
@@ -58,6 +59,40 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
                     matcherName: p.matcherName,
                 };
                 if (p.variable !== undefined) part.variable = p.variable;
+                return part;
+            }
+            case "dispatch": {
+                const tokenMap = new Map<string, GrammarRule[]>();
+                for (const [token, idx] of p.tokenMap) {
+                    let rules = indexToRules.get(idx);
+                    if (rules === undefined) {
+                        rules = [];
+                        indexToRules.set(idx, rules);
+                        for (const r of json[idx]) {
+                            rules.push(grammarRuleFromJson(r, json));
+                        }
+                    }
+                    tokenMap.set(token, rules);
+                }
+                const part: DispatchPart = {
+                    type: "dispatch",
+                    tokenMap,
+                };
+                if (p.name !== undefined) part.name = p.name;
+                if (p.variable !== undefined) part.variable = p.variable;
+                if (p.spacingMode !== undefined)
+                    part.spacingMode = p.spacingMode;
+                if (p.fallbackIndex !== undefined) {
+                    let rules = indexToRules.get(p.fallbackIndex);
+                    if (rules === undefined) {
+                        rules = [];
+                        indexToRules.set(p.fallbackIndex, rules);
+                        for (const r of json[p.fallbackIndex]) {
+                            rules.push(grammarRuleFromJson(r, json));
+                        }
+                    }
+                    part.fallback = rules;
+                }
                 return part;
             }
         }

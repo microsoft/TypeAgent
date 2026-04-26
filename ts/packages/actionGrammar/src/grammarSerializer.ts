@@ -12,6 +12,7 @@ import {
     PhraseSetPartJson,
     RulePartJson,
     StringPartJson,
+    DispatchPartJson,
 } from "./grammarTypes.js";
 
 export function grammarToJson(grammar: Grammar): GrammarJson {
@@ -57,6 +58,36 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
                     matcherName: p.matcherName,
                 };
                 if (p.variable !== undefined) part.variable = p.variable;
+                return part;
+            }
+            case "dispatch": {
+                const tokenMap: Array<[string, number]> = [];
+                for (const [token, suffixRules] of p.tokenMap) {
+                    let index = rulesToIndex.get(suffixRules);
+                    if (index === undefined) {
+                        index = nextIndex++;
+                        rulesToIndex.set(suffixRules, index);
+                        json[index] = suffixRules.map(grammarRuleToJson);
+                    }
+                    tokenMap.push([token, index]);
+                }
+                const part: DispatchPartJson = {
+                    type: "dispatch",
+                    tokenMap,
+                };
+                if (p.name !== undefined) part.name = p.name;
+                if (p.variable !== undefined) part.variable = p.variable;
+                if (p.spacingMode !== undefined)
+                    part.spacingMode = p.spacingMode;
+                if (p.fallback !== undefined && p.fallback.length > 0) {
+                    let index = rulesToIndex.get(p.fallback);
+                    if (index === undefined) {
+                        index = nextIndex++;
+                        rulesToIndex.set(p.fallback, index);
+                        json[index] = p.fallback.map(grammarRuleToJson);
+                    }
+                    part.fallbackIndex = index;
+                }
                 return part;
             }
         }
