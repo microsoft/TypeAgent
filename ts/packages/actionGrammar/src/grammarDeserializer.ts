@@ -93,6 +93,8 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
                     }
                     part.fallback = rules;
                 }
+                if (p.optional) part.optional = true;
+                if (p.repeat) part.repeat = true;
                 return part;
             }
         }

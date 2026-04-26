@@ -324,6 +324,8 @@ function expandDispatchPart(
         name: part.name,
         variable: part.variable,
     };
+    if (part.optional) rulesPart.optional = true;
+    if (part.repeat) rulesPart.repeat = true;
     return rulesPart;
 }
 

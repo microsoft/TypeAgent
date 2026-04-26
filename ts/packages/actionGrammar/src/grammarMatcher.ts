@@ -283,8 +283,7 @@ export type BacktrackOrigin =
     | "wildcard"
     | "optional"
     | "alternation"
-    | "repeat"
-    | "dispatch";
+    | "repeat";
 
 // Persistent linked-list of unexplored DFS branches (most recent
 // push at head).  Each frame snapshots a sibling parse path or a
@@ -342,25 +341,7 @@ type AlternationBacktrack = {
     readonly prev: Backtrack | undefined;
 };
 
-// Compressed cursor frame for a `DispatchPart` fork.  Conceptually
-// an alternation over `[...hits, ...fallback]` - the dispatch acts
-// purely as a filter that culls members whose first token cannot
-// match the peeked input token.  Each alternative resumes at the
-// original input index (the suffix rules retain their leading
-// StringPart and the matcher re-matches the token), so no
-// per-frame index bookkeeping is needed - `base` already captures
-// the input position at fork time.
-type DispatchBacktrack = {
-    readonly origin: "dispatch";
-    readonly base: SnapshotState;
-    readonly hits: ReadonlyArray<GrammarRule>;
-    readonly fallback: ReadonlyArray<GrammarRule>;
-    readonly namePrefix: string; // debug name = `${namePrefix}[${cursor}]`
-    cursor: number;
-    readonly prev: Backtrack | undefined;
-};
-
-type Backtrack = SingleBacktrack | AlternationBacktrack | DispatchBacktrack;
+type Backtrack = SingleBacktrack | AlternationBacktrack;
 
 // Strict variant of `PendingMatchState` used as the snapshot payload
 // inside `Backtrack`.  The `-?` mapped modifier forces every
@@ -624,27 +605,6 @@ function pushAlternation(
     };
 }
 
-// Push a compressed dispatch cursor frame.  Cursor starts at 1
-// (rule 0 is the live alternative, set up by the caller as either
-// the first hit or - when `hits` is empty - the first fallback rule).
-function pushDispatch(
-    state: MatchState,
-    base: SnapshotState,
-    hits: ReadonlyArray<GrammarRule>,
-    fallback: ReadonlyArray<GrammarRule>,
-    namePrefix: string,
-) {
-    state.backtracks = {
-        origin: "dispatch",
-        base,
-        hits,
-        fallback,
-        namePrefix,
-        cursor: 1,
-        prev: state.backtracks,
-    };
-}
-
 // Pop the most-recently-pushed (rightmost / deepest in DFS order)
 // unexplored sibling and restore it onto `state`, mutating in
 // place via `Object.assign`.  Returns true if a frame was
@@ -696,27 +656,6 @@ export function tryNextBacktrack(state: MatchState): boolean {
         debugMatch(state, `Restoring local backtrack (alternation)`);
         return true;
     }
-    if (frame.origin === "dispatch") {
-        // Dispatch cursor frame: identical restore semantics to
-        // alternation - the dispatch acts purely as a filter, so
-        // hits and fallback both resume at the original input
-        // index (no consumed token).
-        const i = frame.cursor;
-        const hitCount = frame.hits.length;
-        const isHit = i < hitCount;
-        const rule = isHit ? frame.hits[i] : frame.fallback[i - hitCount];
-        Object.assign(state, frame.base);
-        state.name = `${frame.namePrefix}[${i}]`;
-        state.parts = rule.parts;
-        state.value = rule.value;
-        state.spacingMode = rule.spacingMode;
-        frame.cursor = i + 1;
-        if (frame.cursor >= hitCount + frame.fallback.length) {
-            state.backtracks = frame.prev;
-        }
-        debugMatch(state, `Restoring local backtrack (dispatch)`);
-        return true;
-    }
     // The snapshot omits `backtracks`, so Object.assign won't
     // overwrite it - explicitly advance the head pointer to `prev`.
     Object.assign(state, frame.snapshot);
@@ -764,7 +703,6 @@ export function suppressBacktracksAfterSuccess(state: MatchState) {
             case "repeat":
                 return repeatSuppress;
             case "alternation":
-            case "dispatch":
                 return false;
         }
     };
@@ -2025,76 +1963,16 @@ export function matchState(state: MatchState, request: string) {
                 }
                 break;
             case "rules": {
-                const rules = part.rules;
-                debugMatch(state, `expanding ${rules.length} rules`);
-
                 if (part.tailCall) {
                     enterTailRulesPart(state, part);
                     // continue the loop (without incrementing partIndex)
                     continue;
                 }
-
-                // Compute before saving parent frame (reads current-rule context).
-                const childLeadingSpacingMode = leadingSpacingMode(state);
-
-                // Save the current state to be restored after finishing the nested rule.
-                const parent: ParentMatchState = {
-                    name: state.name,
-                    variable: part.variable,
-                    parts: state.parts,
-                    value: state.value,
-                    partIndex: state.partIndex + 1,
-                    valueIds: state.valueIds,
-                    parent: state.parent,
-                    repeatPartIndex: part.repeat ? state.partIndex : undefined,
-                    // Capture the input position AT THIS ITERATION'S start so
-                    // `finalizeNestedRule` can detect a zero-progress
-                    // iteration of a nullable-body repeat (`((foo)?)*` etc.)
-                    // and refuse to push another CONTINUE frame.  See the
-                    // field doc on `ParentMatchState`.
-                    repeatStartIndex: part.repeat ? state.index : undefined,
-                    spacingMode: state.spacingMode,
-                    leadingSpacingMode: state.leadingSpacingMode,
-                };
-
-                // The nested rule needs to track values if the current rule is tracking value AND
-                // - the current part has variable
-                // - the current rule has not explicit value and only has one part (default)
-                const requireValue =
-                    state.valueIds !== null &&
-                    (part.variable !== undefined || usesImplicitDefault(state));
-
-                // Update the current state to consider the first nested rule.
-                state.name = getNestedStateName(state, part, 0);
-                state.parts = rules[0].parts;
-                state.value = rules[0].value;
-                state.partIndex = 0;
-                state.valueIds = requireValue ? undefined : null;
-                state.parent = parent;
-                state.nestedLevel++;
-                state.suppressOptionalFork = undefined; // entering nested rules, clear suppression flag
-                state.leadingSpacingMode = childLeadingSpacingMode;
-                state.spacingMode = rules[0].spacingMode;
-
-                // Push a single compressed alternation cursor frame
-                // covering rules 1..N-1.  The shared `base` is the
-                // live state right after rule 0 setup - every
-                // alternative starts from the same fork-point
-                // context with only the four per-rule fields
-                // overlaid (read directly from `rules[i]` on
-                // restore).  The name prefix is computed once;
-                // `tryNextBacktrack` builds the per-rule debug name
-                // lazily as `${namePrefix}[${i}]`.
-                // `forkMatchState` enforces the single-owner
-                // invariant on the chain (the snapshot omits
-                // `backtracks`).
-                if (rules.length > 1) {
-                    const base = forkMatchState(state);
-                    const namePrefix = part.name
-                        ? `<${part.name}>`
-                        : getStateName(state);
-                    pushAlternation(state, base, rules, namePrefix);
-                }
+                debugMatch(state, `expanding ${part.rules.length} rules`);
+                const namePrefix = part.name
+                    ? `<${part.name}>`
+                    : getStateName(state);
+                enterRulesAlternation(state, part, part.rules, namePrefix);
                 // continue the loop (without incrementing partIndex)
                 continue;
             }
@@ -2111,48 +1989,26 @@ export function matchState(state: MatchState, request: string) {
 }
 
 /**
- * Set up `state` to enter a `DispatchPart`.  Mirrors the non-tail
- * `RulesPart` entry but additionally peeks the next input token,
- * partitions members into hits + fallback, and seeds rule 0 at the
- * appropriate input index.  Returns `false` when neither a token
- * hit nor any fallback alternative exists.
+ * Common entry path for `RulesPart` and `DispatchPart` non-tail
+ * alternations.  Sets up the parent frame, seeds the live state
+ * with rule 0, and pushes a single compressed alternation cursor
+ * frame covering rules 1..N-1.  `repeat` is honored via
+ * `repeatPartIndex` / `repeatStartIndex`; `optional` is handled
+ * uniformly by the optional-fork block in `matchState` *before*
+ * this helper is reached, so it needs no direct treatment here.
+ *
+ * `tailCall` is intentionally NOT handled here - tail entry skips
+ * the parent-frame push and lives in `enterTailRulesPart`.
  */
-function enterDispatchPart(
+function enterRulesAlternation(
     state: MatchState,
-    part: DispatchPart,
-    request: string,
-): boolean {
-    const originalIndex = state.index;
-    // Two spacing modes govern peek independently:
-    //   - leading-separator handling at `originalIndex` follows the
-    //     surrounding context (`leadingSpacingMode(state)`), so that
-    //     a `none`-mode preceding part rejects an unexpected
-    //     leading separator.
-    //   - token-boundary handling (auto-mode script-transition
-    //     truncation) follows the dispatched member rules' own
-    //     `part.spacingMode`, since the suffix's StringPart regex
-    //     uses that mode and peek must agree with it.
-    const peek = peekNextToken(
-        request,
-        originalIndex,
-        leadingSpacingMode(state),
-        part.spacingMode,
-    );
-    const hits =
-        peek !== undefined ? (part.tokenMap.get(peek.token) ?? []) : [];
-    const fallback = part.fallback ?? [];
-    const hitCount = hits.length;
-    const total = hitCount + fallback.length;
-    if (total === 0) {
-        debugMatch(state, `dispatch: no hits or fallback`);
-        return false;
-    }
-
-    // First live alternative: a hit if available, otherwise the
-    // first fallback rule.
-    const firstIsHit = hitCount > 0;
-    const firstRule = firstIsHit ? hits[0] : fallback[0];
-
+    part: RulesPart | DispatchPart,
+    rules: ReadonlyArray<GrammarRule>,
+    namePrefix: string,
+): void {
+    const repeat = !!part.repeat;
+    // Compute before saving parent frame (reads current-rule context).
+    const childLeadingSpacingMode = leadingSpacingMode(state);
     // Save the current state to be restored after finishing the nested rule.
     const parent: ParentMatchState = {
         name: state.name,
@@ -2162,40 +2018,104 @@ function enterDispatchPart(
         partIndex: state.partIndex + 1,
         valueIds: state.valueIds,
         parent: state.parent,
-        repeatPartIndex: undefined,
-        repeatStartIndex: undefined,
+        repeatPartIndex: repeat ? state.partIndex : undefined,
+        // Capture the input position AT THIS ITERATION'S start so
+        // `finalizeNestedRule` can detect a zero-progress
+        // iteration of a nullable-body repeat (`((foo)?)*` etc.)
+        // and refuse to push another CONTINUE frame.  See the
+        // field doc on `ParentMatchState`.
+        repeatStartIndex: repeat ? state.index : undefined,
         spacingMode: state.spacingMode,
+        leadingSpacingMode: state.leadingSpacingMode,
     };
 
+    // The nested rule needs to track values if the current rule is tracking value AND
+    // - the current part has variable
+    // - the current rule has not explicit value and only has one part (default)
     const requireValue =
         state.valueIds !== null &&
         (part.variable !== undefined || usesImplicitDefault(state));
 
-    const namePrefix = part.name
-        ? `<${part.name}>`
-        : `${getStateName(state)}<dispatch>`;
-
+    // Update the current state to consider the first nested rule.
     state.name = `${namePrefix}[0]`;
-    state.parts = firstRule.parts;
-    state.value = firstRule.value;
+    state.parts = rules[0].parts;
+    state.value = rules[0].value;
     state.partIndex = 0;
     state.valueIds = requireValue ? undefined : null;
     state.parent = parent;
     state.nestedLevel++;
-    state.suppressOptionalFork = undefined;
-    state.spacingMode = firstRule.spacingMode;
-    // Note: state.index is left at originalIndex - dispatch acts as
-    // a filter only.  The suffix rules retain their full leading
-    // StringPart so the matcher's existing implicit-default logic
-    // (which derives the rule's value from the StringPart's tokens)
-    // continues to work.  The peeked token's only role is to
-    // partition members into hits + fallback; the matcher will
-    // re-match the token via the suffix's StringPart regex.
+    state.suppressOptionalFork = undefined; // entering nested rules, clear suppression flag
+    state.leadingSpacingMode = childLeadingSpacingMode;
+    state.spacingMode = rules[0].spacingMode;
 
-    if (total > 1) {
+    // Push a single compressed alternation cursor frame
+    // covering rules 1..N-1.  See `pushAlternation` for the
+    // single-frame N-way encoding.  `forkMatchState` enforces the
+    // single-owner invariant on the chain (the snapshot omits
+    // `backtracks`).
+    if (rules.length > 1) {
         const base = forkMatchState(state);
-        pushDispatch(state, base, hits, fallback, namePrefix);
+        pushAlternation(state, base, rules, namePrefix);
     }
+}
+
+/**
+ * Set up `state` to enter a `DispatchPart`.  Peeks the next input
+ * token, partitions members into hits + fallback to form the
+ * effective alternation list, then delegates to
+ * `enterRulesAlternation` so dispatch shares all entry plumbing
+ * (parent frame, repeat handling, alternation cursor) with the
+ * non-tail `RulesPart` path.  Returns `false` when neither a
+ * token hit nor any fallback alternative exists.
+ *
+ * `state.index` is left at `originalIndex` - dispatch acts as a
+ * filter only.  The suffix rules retain their full leading
+ * `StringPart` so the matcher's existing implicit-default logic
+ * (which derives the rule's value from the StringPart's tokens)
+ * continues to work; the peeked token's only role is to partition
+ * members, and the matcher will re-match the token via each
+ * suffix's `StringPart` regex.
+ */
+function enterDispatchPart(
+    state: MatchState,
+    part: DispatchPart,
+    request: string,
+): boolean {
+    // Two spacing modes govern peek independently:
+    //   - leading-separator handling at `state.index` follows the
+    //     surrounding context (`leadingSpacingMode(state)`), so that
+    //     a `none`-mode preceding part rejects an unexpected
+    //     leading separator.
+    //   - token-boundary handling (auto-mode script-transition
+    //     truncation) follows the dispatched member rules' own
+    //     `part.spacingMode`, since the suffix's StringPart regex
+    //     uses that mode and peek must agree with it.
+    const peek = peekNextToken(
+        request,
+        state.index,
+        leadingSpacingMode(state),
+        part.spacingMode,
+    );
+    const hits =
+        peek !== undefined ? (part.tokenMap.get(peek.token) ?? []) : [];
+    const fallback = part.fallback ?? [];
+    if (hits.length === 0 && fallback.length === 0) {
+        debugMatch(state, `dispatch: no hits or fallback`);
+        return false;
+    }
+    // Hits-before-fallback ordering preserves match order from the
+    // pre-unification dispatch path.
+    const effective: GrammarRule[] =
+        fallback.length === 0
+            ? (hits as GrammarRule[])
+            : hits.length === 0
+              ? fallback
+              : [...hits, ...fallback];
+
+    const namePrefix = part.name
+        ? `<${part.name}>`
+        : `${getStateName(state)}<dispatch>`;
+    enterRulesAlternation(state, part, effective, namePrefix);
     return true;
 }
 

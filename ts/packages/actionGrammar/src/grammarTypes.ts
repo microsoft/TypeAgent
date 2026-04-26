@@ -343,13 +343,17 @@ export type DispatchPart = {
      */
     spacingMode?: CompiledSpacingMode | undefined;
     /**
-     * `repeat` / `optional` are forbidden on `DispatchPart` (the
-     * dispatch optimizer skips RulesParts with those flags).  Listed
-     * here as `undefined`-only so a future change that allows them
-     * surfaces as a compile error rather than silent matcher behavior.
+     * `repeat` / `optional` mirror the same flags on `RulesPart` and
+     * are honored by the AST-walking matcher: optional handling fires
+     * through the generic optional-fork block before the `case
+     * "dispatch":` arm; repeat handling is set up via the parent
+     * frame's `repeatPartIndex` / `repeatStartIndex` exactly as for
+     * `RulesPart`.  The optimizer copies them across when converting
+     * a `RulesPart` into a `DispatchPart` (see
+     * `tryDispatchifyRulesPart`).
      */
-    optional?: undefined;
-    repeat?: undefined;
+    optional?: boolean | undefined;
+    repeat?: boolean | undefined;
 };
 
 export type GrammarPart =
@@ -473,6 +477,8 @@ export type DispatchPartJson = {
     tokenMap: Array<[string, number]>;
     /** rulesArrayIndex pointing to fallback rules; absent when no fallback. */
     fallbackIndex?: number | undefined;
+    optional?: boolean | undefined;
+    repeat?: boolean | undefined;
 };
 
 export type GrammarPartJson =

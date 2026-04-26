@@ -88,6 +88,8 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
                     }
                     part.fallbackIndex = index;
                 }
+                if (p.optional) part.optional = true;
+                if (p.repeat) part.repeat = true;
                 return part;
             }
         }

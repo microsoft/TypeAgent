@@ -100,10 +100,9 @@ export type GrammarOptimizationOptions = {
      *
      * Members whose first part is not a statically-known token
      * (wildcard / number / phraseSet / nested RulesPart, bound
-     * first-StringPart, recursive or empty members, RulesParts
-     * carrying `repeat`/`optional`) are placed in the dispatch
-     * `fallback` list and tried as ordinary alternatives after the
-     * tokenMap hits.
+     * first-StringPart, recursive or empty members) are placed in
+     * the dispatch `fallback` list and tried as ordinary
+     * alternatives after the tokenMap hits.
      *
      * The pass is observably equivalent to the unoptimized form -
      * the matcher tries the same set of alternatives in the same
@@ -1980,11 +1979,19 @@ function classifyDispatchMember(
  * Try to convert a `RulesPart` into a `DispatchPart`.  Returns
  * `undefined` if not eligible (caller keeps the original `RulesPart`).
  *
+ * `repeat` / `optional` are propagated to the resulting `DispatchPart`:
+ * the matcher's optional-fork block fires before the dispatch arm
+ * and `repeat` re-enters via the standard `repeatPartIndex` /
+ * `repeatStartIndex` mechanism (which re-runs the dispatch peek per
+ * iteration).  `tailCall`, however, is incompatible with the dispatch
+ * frame - the tail protocol skips the parent-frame push that
+ * dispatch needs to set up its alternation cursor, so tail RulesParts
+ * stay as-is.
+ *
  * Skip conditions:
- *   - `repeat` or `optional` set on the RulesPart (changes loop
- *     semantics; out of scope for initial cut).
  *   - `tailCall` set (the tail-call protocol is incompatible with
- *     the dispatch frame).
+ *     the dispatch entry, which delegates to the same parent-frame
+ *     push as the non-tail RulesPart entry).
  *   - The partition's spacing mode is `optional` or `none`: peek's
  *     token boundary doesn't agree with what the StringPart regex
  *     would consume in those modes, so dispatch can't be a pure
@@ -1994,7 +2001,7 @@ function classifyDispatchMember(
  *     no fallback): the matcher's work is unchanged.
  */
 function tryDispatchifyRulesPart(part: RulesPart): DispatchPart | undefined {
-    if (part.repeat || part.optional || part.tailCall) {
+    if (part.tailCall) {
         return undefined;
     }
     if (part.rules.length < 2) {
@@ -2048,6 +2055,8 @@ function tryDispatchifyRulesPart(part: RulesPart): DispatchPart | undefined {
     };
     if (part.name !== undefined) dispatch.name = part.name;
     if (part.variable !== undefined) dispatch.variable = part.variable;
+    if (part.optional) dispatch.optional = true;
+    if (part.repeat) dispatch.repeat = true;
     if (fallback.length > 0) dispatch.fallback = fallback;
     return dispatch;
 }
