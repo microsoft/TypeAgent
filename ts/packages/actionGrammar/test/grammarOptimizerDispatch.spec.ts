@@ -384,4 +384,116 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
             );
         }
     });
+
+    // ── Cross-script grammar (different keys, different scripts) ───────
+    //
+    // The eligibility gate requires *every* key in the partition to
+    // belong to a word-boundary script.  When all keys do (even across
+    // different scripts e.g. Latin + Cyrillic + Greek), dispatch is
+    // emitted.  When any single key falls outside the list (CJK,
+    // digit-only, mixed-script), the whole partition stays as
+    // `RulesPart`.  Match results must be identical to baseline either
+    // way; these tests sanity-check both branches.
+
+    it("dispatches when all keys belong to word-boundary scripts (Latin + Cyrillic + Greek)", () => {
+        const text = `<Start> = play song -> "play"
+                     | стоп -> "stop"
+                     | παύση -> "pause";`;
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        const dispatch = findDispatchPart(optimized.rules);
+        expect(dispatch).toBeDefined();
+        expect(Array.from(dispatch!.tokenMap.keys()).sort()).toEqual([
+            "play",
+            "παύση",
+            "стоп",
+        ]);
+
+        const baseline = loadGrammarRules("t.grammar", text);
+        for (const input of [
+            "play song",
+            "стоп",
+            "παύση",
+            "noise",
+            "play стоп", // Latin first-token bucket; tail mismatch → no match
+        ]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    it("does NOT dispatch when one key is CJK among Latin keys", () => {
+        // A single non-word-boundary key (CJK 再生) disqualifies the
+        // whole partition - dispatch stays off and the matcher falls
+        // back to the unoptimized RulesPart.
+        const text = `<Start> = play song -> "play"
+                     | stop -> "stop"
+                     | 再生 -> "j_play";`;
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        expect(findDispatchPart(optimized.rules)).toBeUndefined();
+
+        const baseline = loadGrammarRules("t.grammar", text);
+        for (const input of ["play song", "stop", "再生", "noise"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    it("mixed-script input against an eligible (Latin+Cyrillic) dispatch grammar", () => {
+        // Grammar dispatches; input mixes scripts (e.g. "play你").
+        // `peekNextToken` returns the full non-separator run "play你",
+        // which is not a tokenMap key, so dispatch falls through to
+        // fallback (none here) → no match - identical to the
+        // unoptimized RulesPart's behavior, where the leading
+        // StringPart regex on "play" would also fail to match the run
+        // boundary at "play你".
+        const text = `<Start> = play song -> "play"
+                     | стоп -> "stop";`;
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        expect(findDispatchPart(optimized.rules)).toBeDefined();
+
+        const baseline = loadGrammarRules("t.grammar", text);
+        for (const input of [
+            "play你 song", // mixed Latin+CJK first token: no dispatch hit
+            "стоп你", // mixed Cyrillic+CJK first token: no dispatch hit
+            "play song", // pure Latin: hits dispatch bucket
+            "стоп", // pure Cyrillic: hits dispatch bucket
+        ]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
+
+    it("CJK-leading input falls through to wildcard fallback when grammar dispatches Latin keys", () => {
+        // Grammar has Latin dispatch keys plus a wildcard alternative
+        // (which goes to fallback).  CJK input "你好" peeks as the
+        // full run, misses every Latin bucket, and is tried against
+        // the wildcard fallback - which captures it.  Confirms
+        // dispatched + fallback ordering is preserved across scripts.
+        const text = `<Start> = play -> "play"
+                     | stop -> "stop"
+                     | $(t:string) -> { other: t };`;
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        const dispatch = findDispatchPart(optimized.rules);
+        expect(dispatch).toBeDefined();
+        // "play" / "stop" in tokenMap, wildcard rule in fallback.
+        expect(dispatch!.fallback?.length ?? 0).toBe(1);
+
+        const baseline = loadGrammarRules("t.grammar", text);
+        for (const input of ["play", "stop", "你好", "hello", "再生"]) {
+            expect(match(optimized, input)).toStrictEqual(
+                match(baseline, input),
+            );
+        }
+    });
 });
