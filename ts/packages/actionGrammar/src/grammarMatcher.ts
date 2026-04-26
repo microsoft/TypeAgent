@@ -170,6 +170,16 @@ type ParentMatchState = {
     valueIds: ValueIdNode | undefined | null; // null means we don't need any value
     parent: ParentMatchState | undefined;
     repeatPartIndex?: number | undefined; // defined for ()* / )+ - holds the part index to loop back to
+    // Input position captured AT ENTRY to the current repeat iteration's
+    // body.  Used by `finalizeNestedRule` to detect a zero-progress
+    // iteration of a `(...)*` / `(...)+` group whose body matched the
+    // empty string (e.g. `((foo)?)*`).  When `state.index ===
+    // repeatStartIndex` after the body completes, no input was consumed
+    // and re-entering would loop forever, so the CONTINUE frame is NOT
+    // pushed - the matcher commits to STOP for this branch.  Mirrors
+    // PCRE/V8 RegExp semantics for nullable-body repeats.  Only set
+    // when `repeatPartIndex !== undefined`.
+    repeatStartIndex?: number | undefined;
     spacingMode: CompiledSpacingMode; // parent rule's spacingMode, restored in MatchState on return from nested rule
 };
 
@@ -1238,21 +1248,58 @@ export function finalizeNestedRule(
         // suppresses the optional-skip push so we don't generate duplicate
         // "done" states.
         if (parent.repeatPartIndex !== undefined) {
-            // Build the CONTINUE alternative (re-enter the group).
-            const continueState: SnapshotState = {
-                ...forkMatchState(state),
-                partIndex: parent.repeatPartIndex,
-                suppressOptionalFork: true,
-            };
-            if (state.repeatPolicy === "greedy") {
-                // Live = continue (drill deeper); backtrack = stop
-                // (snapshot of state past the repeat).
-                const stopSnapshot = forkMatchState(state);
-                Object.assign(state, continueState);
-                pushBacktrack(state, stopSnapshot, "repeat");
+            // Must-advance guard: if this iteration consumed zero input
+            // (the body matched the empty string), do NOT push a
+            // CONTINUE frame - re-entering the group would loop
+            // forever absorbing zero input each time.  Mirrors PCRE/V8
+            // RegExp behavior for nullable-body repeats like `(a*)*`
+            // or `((foo)?)*`: at most one zero-length iteration, then
+            // commit to STOP.  `repeatStartIndex` is captured at the
+            // ITERATION's entry (not the original `*`/`+` entry), so
+            // each iteration is judged on its own progress.
+            //
+            // Design note: this matcher is a backtracking DFS over a
+            // LIFO snapshot stack (see `Backtrack` / `pushBacktrack`),
+            // not a true parse-forest builder - it has no GSS and no
+            // SPPF.  But because callers can request the default
+            // `"exhaustive"` policies, it will enumerate every viable
+            // parse rather than committing to the first, so a single
+            // input can yield multiple results.  For a nullable-body
+            // repeat the matcher therefore emits the single
+            // zero-length iteration as a distinct parse - a grammar
+            // like `((foo)?)*` on `""` produces TWO parses (zero
+            // outer iterations, and one ε-iteration of the body).
+            // The duplicate is harmless: downstream value-based
+            // deduplication in the dispatcher collapses any pair
+            // whose action values are equal.  The must-advance guard
+            // below is the standard PCRE / V8 RegExp semantics for
+            // nullable-body repeats - at most one zero-length
+            // iteration per repeat instance, then commit to STOP -
+            // and avoids the infinite-derivation pathology that
+            // GLR / Earley parsers instead solve via GSS
+            // deduplication or nullable-completer caching.
+            if (state.index !== parent.repeatStartIndex) {
+                // Build the CONTINUE alternative (re-enter the group).
+                const continueState: SnapshotState = {
+                    ...forkMatchState(state),
+                    partIndex: parent.repeatPartIndex,
+                    suppressOptionalFork: true,
+                };
+                if (state.repeatPolicy === "greedy") {
+                    // Live = continue (drill deeper); backtrack = stop
+                    // (snapshot of state past the repeat).
+                    const stopSnapshot = forkMatchState(state);
+                    Object.assign(state, continueState);
+                    pushBacktrack(state, stopSnapshot, "repeat");
+                } else {
+                    // Default / nonGreedy: live = stop; backtrack = continue.
+                    pushBacktrack(state, continueState, "repeat");
+                }
             } else {
-                // Default / nonGreedy: live = stop; backtrack = continue.
-                pushBacktrack(state, continueState, "repeat");
+                debugMatch(
+                    state,
+                    `Repeat body matched empty (zero-progress) - committing to STOP`,
+                );
             }
         }
 
@@ -1814,6 +1861,12 @@ export function matchState(state: MatchState, request: string) {
                     valueIds: state.valueIds,
                     parent: state.parent,
                     repeatPartIndex: part.repeat ? state.partIndex : undefined,
+                    // Capture the input position AT THIS ITERATION'S start so
+                    // `finalizeNestedRule` can detect a zero-progress
+                    // iteration of a nullable-body repeat (`((foo)?)*` etc.)
+                    // and refuse to push another CONTINUE frame.  See the
+                    // field doc on `ParentMatchState`.
+                    repeatStartIndex: part.repeat ? state.index : undefined,
                     spacingMode: state.spacingMode,
                 };
 
