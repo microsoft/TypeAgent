@@ -18,10 +18,14 @@
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
-import { DispatchPart, GrammarRule } from "../src/grammarTypes.js";
+import { GrammarRule } from "../src/grammarTypes.js";
 import { grammarToJson } from "../src/grammarSerializer.js";
 import { grammarFromJson } from "../src/grammarDeserializer.js";
-import { getDispatchAllTokenMap } from "./dispatchTestHelpers.js";
+import {
+    DispatchedRulesPart,
+    getDispatchAllTokenMap,
+    isDispatched,
+} from "./dispatchTestHelpers.js";
 
 function match(grammar: ReturnType<typeof loadGrammarRules>, request: string) {
     return matchGrammar(grammar, request)
@@ -29,14 +33,18 @@ function match(grammar: ReturnType<typeof loadGrammarRules>, request: string) {
         .sort();
 }
 
-function findDispatchPart(rules: GrammarRule[]): DispatchPart | undefined {
+function findDispatchPart(
+    rules: GrammarRule[],
+): DispatchedRulesPart | undefined {
     const seen = new Set<GrammarRule[]>();
-    const visit = (rs: GrammarRule[]): DispatchPart | undefined => {
+    const visit = (rs: GrammarRule[]): DispatchedRulesPart | undefined => {
         if (seen.has(rs)) return undefined;
         seen.add(rs);
         for (const r of rs) {
             for (const p of r.parts) {
-                if (p.type === "dispatch") return p;
+                if (p.type === "rules" && isDispatched(p)) {
+                    return p;
+                }
                 if (p.type === "rules") {
                     const inner = visit(p.rules);
                     if (inner) return inner;

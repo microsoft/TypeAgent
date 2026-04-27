@@ -43,7 +43,7 @@ export const CONFIGS: { name: string; opts: LoadGrammarRulesOptions }[] = [
         // dispatchifyAlternations alone - measures the impact of
         // first-token dispatch in isolation.  At alternation forks
         // whose members start with distinct, statically-known tokens,
-        // emits a `DispatchPart` so the matcher does an O(1) hash
+        // emits a dispatched `RulesPart` so the matcher does an O(1) hash
         // lookup instead of trying each member's leading regex in turn.
         name: "dispatch",
         opts: {

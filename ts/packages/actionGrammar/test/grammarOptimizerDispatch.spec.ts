@@ -19,12 +19,14 @@
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
-import { DispatchPart, GrammarRule } from "../src/grammarTypes.js";
+import { GrammarRule, RulesPart } from "../src/grammarTypes.js";
 import { grammarToJson } from "../src/grammarSerializer.js";
 import { grammarFromJson } from "../src/grammarDeserializer.js";
 import {
+    DispatchedRulesPart,
     getDispatchAllTokenMap,
     getDispatchTokenKeyCount,
+    isDispatched,
 } from "./dispatchTestHelpers.js";
 
 function match(grammar: ReturnType<typeof loadGrammarRules>, request: string) {
@@ -33,14 +35,18 @@ function match(grammar: ReturnType<typeof loadGrammarRules>, request: string) {
         .sort();
 }
 
-function findDispatchPart(rules: GrammarRule[]): DispatchPart | undefined {
+function findDispatchPart(
+    rules: GrammarRule[],
+): DispatchedRulesPart | undefined {
     const seen = new Set<GrammarRule[]>();
-    const visit = (rs: GrammarRule[]): DispatchPart | undefined => {
+    const visit = (rs: GrammarRule[]): DispatchedRulesPart | undefined => {
         if (seen.has(rs)) return undefined;
         seen.add(rs);
         for (const r of rs) {
             for (const p of r.parts) {
-                if (p.type === "dispatch") return p;
+                if (p.type === "rules" && isDispatched(p)) {
+                    return p;
+                }
                 if (p.type === "rules") {
                     const inner = visit(p.rules);
                     if (inner) return inner;
@@ -63,12 +69,13 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         });
         const dispatch = findDispatchPart(optimized.rules);
         expect(dispatch).toBeDefined();
-        expect(dispatch!.type).toBe("dispatch");
+        expect(dispatch!.type).toBe("rules");
+        expect(dispatch!.dispatch).toBeDefined();
         const keys = Array.from(
             getDispatchAllTokenMap(dispatch!).keys(),
         ).sort();
         expect(keys).toEqual(["next", "play", "previous", "stop"]);
-        expect(dispatch!.fallback ?? []).toHaveLength(0);
+        expect(dispatch!.rules ?? []).toHaveLength(0);
     });
 
     it("matches identically to the unoptimized grammar (pure dispatch)", () => {
@@ -141,7 +148,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         // results are preserved either way.
         expect(
             getDispatchTokenKeyCount(dispatch!) +
-                (dispatch!.fallback?.length ?? 0),
+                (dispatch!.rules?.length ?? 0),
         ).toBeGreaterThanOrEqual(2);
 
         const baseline = loadGrammarRules("t.grammar", text);
@@ -291,7 +298,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         expect(
             Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
         ).toEqual(["停", "再", "次"]);
-        expect(dispatch!.fallback ?? []).toHaveLength(0);
+        expect(dispatch!.rules ?? []).toHaveLength(0);
 
         const baseline = loadGrammarRules("t.grammar", text);
         for (const input of ["再生", "停止", "次", "他"]) {
@@ -316,7 +323,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         expect(
             Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
         ).toEqual(["play", "stop"]);
-        expect(dispatch!.fallback ?? []).toHaveLength(0);
+        expect(dispatch!.rules ?? []).toHaveLength(0);
 
         const baseline = loadGrammarRules("t.grammar", text);
         for (const input of ["play你 song", "stop", "noise"]) {
@@ -342,7 +349,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         expect(
             Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
         ).toEqual(["1", "2", "weeks"]);
-        expect(dispatch!.fallback ?? []).toHaveLength(0);
+        expect(dispatch!.rules ?? []).toHaveLength(0);
 
         const baseline = loadGrammarRules("t.grammar", text);
         for (const input of ["1 hour", "2 days", "weeks", "3 days"]) {
@@ -460,7 +467,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         expect(
             Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
         ).toEqual(["play", "stop", "再"]);
-        expect(dispatch!.fallback ?? []).toHaveLength(0);
+        expect(dispatch!.rules ?? []).toHaveLength(0);
 
         const baseline = loadGrammarRules("t.grammar", text);
         for (const input of ["play song", "stop", "再生", "noise"]) {
@@ -514,7 +521,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const dispatch = findDispatchPart(optimized.rules);
         expect(dispatch).toBeDefined();
         // "play" / "stop" in tokenMap, wildcard rule in fallback.
-        expect(dispatch!.fallback?.length ?? 0).toBe(1);
+        expect(dispatch!.rules?.length ?? 0).toBe(1);
 
         const baseline = loadGrammarRules("t.grammar", text);
         for (const input of ["play", "stop", "你好", "hello", "再生"]) {
@@ -764,7 +771,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const dispatch = findDispatchPart(optimized.rules);
         expect(dispatch).toBeDefined();
         // The wildcard-first arm goes to fallback.
-        expect(dispatch!.fallback?.length ?? 0).toBeGreaterThanOrEqual(1);
+        expect(dispatch!.rules?.length ?? 0).toBeGreaterThanOrEqual(1);
 
         for (const input of [
             "head some text foo X",
@@ -802,7 +809,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         expect(
             Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
         ).toEqual(["さ", "て", "カ"]);
-        expect(dispatch!.fallback ?? []).toHaveLength(0);
+        expect(dispatch!.rules ?? []).toHaveLength(0);
 
         const baseline = loadGrammarRules("t.grammar", text);
         for (const input of ["さいせい", "ていし", "カット", "ノイズ"]) {
@@ -926,7 +933,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         // the wildcard rule in fallback.
         const dispatch = findDispatchPart(optimized.rules);
         expect(dispatch).toBeDefined();
-        expect((dispatch!.fallback ?? []).length).toBe(1);
+        expect((dispatch!.rules ?? []).length).toBe(1);
         expect(
             Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
         ).toEqual(["play", "stop"]);
@@ -979,10 +986,10 @@ describe("Grammar Optimizer - non-canonical DispatchPart shapes", () => {
         // peek always misses, so every match goes through fallback.
         const ruleA = buildRule("alpha", "a");
         const ruleB = buildRule("beta", "b");
-        const dispatch: DispatchPart = {
-            type: "dispatch",
-            perMode: [],
-            fallback: [ruleA, ruleB],
+        const dispatch: RulesPart = {
+            type: "rules",
+            dispatch: [],
+            rules: [ruleA, ruleB],
         };
         const grammar = { rules: [{ parts: [dispatch] }] };
         const baseline = { rules: [ruleA, ruleB] };
@@ -1006,9 +1013,10 @@ describe("Grammar Optimizer - non-canonical DispatchPart shapes", () => {
             parts: [{ type: "string", value: ["alpha", "two"] }],
             value: { type: "literal", value: "a2" },
         };
-        const dispatch: DispatchPart = {
-            type: "dispatch",
-            perMode: [
+        const dispatch: RulesPart = {
+            type: "rules",
+            rules: [],
+            dispatch: [
                 {
                     spacingMode: undefined,
                     tokenMap: new Map([["alpha", [ruleA, ruleA2]]]),
@@ -1034,9 +1042,10 @@ describe("Grammar Optimizer - non-canonical DispatchPart shapes", () => {
         // so the dispatch arm returns false for every input.  The
         // equivalent RulesPart with zero alternatives also matches
         // nothing.
-        const dispatch: DispatchPart = {
-            type: "dispatch",
-            perMode: [],
+        const dispatch: RulesPart = {
+            type: "rules",
+            rules: [],
+            dispatch: [],
         };
         const grammar = { rules: [{ parts: [dispatch] }] };
 
@@ -1051,9 +1060,10 @@ describe("Grammar Optimizer - non-canonical DispatchPart shapes", () => {
         // line up.  Verifies the deserializer's `debug` advisory
         // does not block the load.
         const ruleA = buildRule("alpha", "a");
-        const dispatch: DispatchPart = {
-            type: "dispatch",
-            perMode: [
+        const dispatch: RulesPart = {
+            type: "rules",
+            rules: [],
+            dispatch: [
                 {
                     spacingMode: undefined,
                     tokenMap: new Map([["alpha", [ruleA]]]),

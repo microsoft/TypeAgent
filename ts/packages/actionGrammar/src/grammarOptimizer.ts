@@ -6,7 +6,6 @@ import {
     CompiledObjectElement,
     CompiledSpacingMode,
     CompiledValueNode,
-    DispatchPart,
     getCapturedVariableName,
     Grammar,
     GrammarPart,
@@ -80,14 +79,14 @@ export type GrammarOptimizationOptions = {
     tailFactoring?: boolean;
 
     /**
-     * Replace eligible `RulesPart` alternation forks with a
-     * `DispatchPart` that maps the next input token to a list of
-     * matching alternative rules.  At match time the matcher peeks
-     * one token, looks it up in the table, and tries only the
-     * listed alternatives instead of every member.  Dispatch is a
-     * filter only - the peeked token is not consumed and each
-     * dispatched rule re-matches it via its normal leading
-     * `StringPart` (preserving implicit-default behavior).
+     * Attach a first-token dispatch index to eligible `RulesPart`
+     * alternation forks.  At match time the matcher peeks one
+     * token, looks it up across the per-mode bucket maps, and tries
+     * only the listed alternatives before falling back to the
+     * non-bucketed `rules` subset.  Dispatch is a filter only - the
+     * peeked token is not consumed and each dispatched rule
+     * re-matches it via its normal leading `StringPart` (preserving
+     * implicit-default behavior).
      *
      * Eligibility (per spacing-mode partition):
      *   - `required`  - always eligible.
@@ -101,17 +100,17 @@ export type GrammarOptimizationOptions = {
      *
      * Members whose first part is not a statically-known token
      * (wildcard / number / phraseSet / nested RulesPart, bound
-     * first-StringPart, recursive or empty members) are placed in
-     * the dispatch `fallback` list and tried as ordinary
-     * alternatives after the tokenMap hits.
+     * first-StringPart, recursive or empty members) land in the
+     * fallback `rules` subset and are tried as ordinary
+     * alternatives after the bucket hits.
      *
      * The pass is observably equivalent to the unoptimized form -
      * the matcher tries the same set of alternatives in the same
-     * order on a hit, plus all fallback rules.  Only the NFA/DFA
-     * compile path expands `DispatchPart` back to `RulesPart` (the
-     * NFA already does global first-token dispatch via
-     * `buildFirstTokenIndex`, so the dispatch part adds nothing
-     * there).
+     * order on a hit, plus all fallback rules.  The NFA/DFA
+     * compile path walks the union of buckets and `rules` to
+     * recover the full effective member list (the NFA already does
+     * global first-token dispatch via `buildFirstTokenIndex`, so
+     * the dispatch index is redundant there).
      */
     dispatchifyAlternations?: boolean;
 };
@@ -1990,43 +1989,46 @@ function classifyDispatchMember(
 }
 
 /**
- * Try to convert a `RulesPart` into a `DispatchPart`.  Returns
- * `undefined` if not eligible (caller keeps the original `RulesPart`).
+ * Try to attach a first-token dispatch index to a `RulesPart`.
+ * Returns the same part unchanged if not eligible.  When eligible,
+ * returns a new `RulesPart` whose `rules` is the *fallback subset*
+ * (members not assigned to any bucket) and whose `dispatch` is the
+ * per-mode bucket array (see `RulesPart.dispatch`).
  *
- * `repeat` / `optional` / `tailCall` are all propagated to the
- * resulting `DispatchPart`.  The matcher's optional-fork block fires
- * before the dispatch arm; `repeat` re-enters via the standard
- * `repeatPartIndex` / `repeatStartIndex` mechanism (which re-runs the
- * dispatch peek per iteration); `tailCall` routes the dispatch arm
- * through the tail-entry helper instead of the normal alternation
- * entry (no parent frame, inherits `valueIds`).  See
- * `DispatchPart.tailCall` for the structural contract that the
+ * `repeat` / `optional` / `tailCall` are all preserved on the
+ * returned part.  The matcher's optional-fork block fires before
+ * the rules entry arm; `repeat` re-enters via the standard
+ * `repeatPartIndex` / `repeatStartIndex` mechanism (which re-runs
+ * the dispatch peek per iteration); `tailCall` routes the rules
+ * entry arm through the tail-entry helper instead of the normal
+ * alternation entry (no parent frame, inherits `valueIds`).  See
+ * `RulesPart.tailCall` for the structural contract that the
  * effective member list must satisfy; `validateTailRulesParts`
  * enforces it.  (Note: the tail contract requires every member's
  * spacingMode to match the parent rule's, so a tail-eligible
- * partition is naturally uniform-mode here - no special handling is
- * needed for mixed-mode tail.)
+ * partition is naturally uniform-mode here - no special handling
+ * is needed for mixed-mode tail.)
  *
  * Mixed-mode partitions: members are partitioned by their own
  * `rule.spacingMode` and a separate `tokenMap` is built for each
  * dispatch-eligible mode (`required` and/or `undefined`/auto).  The
- * matcher peeks once per perMode entry and unions the hits.
+ * matcher peeks once per `dispatch` entry and unions the hits.
  * Members with `spacingMode === "optional"` or `"none"` are not
  * peek-dispatchable (peek-by-separator would mismatch keys against
- * unseparated input) and go straight to `fallback`.
+ * unseparated input) and land in the fallback `rules` subset.
  *
- * Skip conditions:
+ * Skip conditions (return original part unchanged):
  *   - Single-rule "alternation" - nothing to dispatch.
  *   - No member is dispatch-eligible (every member is
  *     `optional`/`none` mode, or every dispatch-eligible member's
  *     first part is wildcard / number / phraseSet / nested rule
  *     etc.): every rule lands in `fallback`, dispatch adds a
  *     useless peek + hash miss.
- *   - Total bucket count == 1 with no `fallback`: the dispatch
- *     always picks the same bucket, no filtering benefit over the
- *     original `RulesPart`.
+ *   - Total bucket count == 1 with no fallback: the dispatch
+ *     always picks the same bucket, no filtering benefit over
+ *     the non-dispatched form.
  */
-function tryDispatchifyRulesPart(part: RulesPart): DispatchPart | undefined {
+function tryDispatchifyRulesPart(part: RulesPart): RulesPart | undefined {
     if (part.rules.length < 2) {
         // Single-rule "alternation" - nothing to dispatch.
         debug(`dispatch skip (single-rule) name='${part.name ?? "<unnamed>"}'`);
@@ -2097,23 +2099,23 @@ function tryDispatchifyRulesPart(part: RulesPart): DispatchPart | undefined {
         return undefined;
     }
 
-    const dispatch: DispatchPart = {
-        type: "dispatch",
-        perMode,
+    const out: RulesPart = {
+        type: "rules",
+        rules: fallback,
+        dispatch: perMode,
     };
-    if (part.name !== undefined) dispatch.name = part.name;
-    if (part.variable !== undefined) dispatch.variable = part.variable;
-    if (part.optional) dispatch.optional = true;
-    if (part.repeat) dispatch.repeat = true;
-    if (part.tailCall) dispatch.tailCall = true;
-    if (fallback.length > 0) dispatch.fallback = fallback;
-    return dispatch;
+    if (part.name !== undefined) out.name = part.name;
+    if (part.variable !== undefined) out.variable = part.variable;
+    if (part.optional) out.optional = true;
+    if (part.repeat) out.repeat = true;
+    if (part.tailCall) out.tailCall = true;
+    return out;
 }
 
 /**
  * Walk every rule array in `rules` post-order, attempting to
- * convert each `RulesPart` whose alternatives can be partitioned by
- * first input token into a `DispatchPart`.  Top-level
+ * attach a first-token dispatch index to each `RulesPart` whose
+ * alternatives can be partitioned by first input token.  Top-level
  * `Grammar.rules` is also dispatched when eligible (as a synthesized
  * outer RulesPart - effectively the same logic).
  *
@@ -2145,25 +2147,25 @@ export function dispatchifyAlternations(rules: GrammarRule[]): GrammarRule[] {
 
     // Top-level dispatch: synthesize a transient RulesPart over the
     // top-level alternatives and try to dispatch it.  If successful,
-    // the result is a single-rule grammar whose only part is a
-    // DispatchPart - preserves the matcher's "rule i drives one
-    // alternative" semantics through the dispatch frame.
+    // wrap the dispatched RulesPart as the only part of a single
+    // outer rule - preserves the matcher's "rule i drives one
+    // alternative" semantics through the dispatch entry.
     //
-    // The synthesized wrapper rule inherits the dispatch's spacing
-    // mode when the partition is uniform-mode (single perMode entry)
-    // so `initialMatchState`'s `state.spacingMode = rules[0].spacingMode`
-    // seeds the parent-level mode that `leadingSpacingMode` will read
-    // for the dispatch peek.  Without this the wrapper's mode would
-    // be `undefined` (auto) regardless of partition mode - a no-op
-    // for `auto`/`required` partitions at top level today (top level
-    // allows leading whitespace in both), but the explicit
-    // propagation matches the per-alt entry's spacingMode and avoids
-    // surprises if the matcher's leading-separator rules ever
-    // change.  For mixed-mode top-level dispatch we leave the
-    // wrapper's mode unset (auto): there is no single source mode
-    // to inherit, and auto handling at the top level is correct
-    // for both `required`- and `auto`-mode members (each member
-    // rule still enforces its own mode in its own frame).
+    // The wrapper rule's `spacingMode` is intentionally left unset
+    // (auto).  Without the wrapper, each top-level alternative was
+    // queued as its own `MatchState` with `state.spacingMode =
+    // rule.spacingMode`; with the wrapper there is exactly one outer
+    // frame whose `spacingMode` would otherwise apply uniformly to
+    // every member - which is wrong for any top level that mixes
+    // modes (the `optional` / `none` rules routed to the fallback
+    // `rules` subset would suddenly run under the bucket members'
+    // mode).  The dispatch peek doesn't need the wrapper's mode
+    // either: it reads each `dispatch` entry's own `spacingMode`
+    // directly, and once a member rule is entered, that rule's own
+    // `spacingMode` seeds its frame.  Leaving the wrapper as auto
+    // keeps top-level leading-whitespace handling identical to the
+    // unwrapped shape (auto and required both allow leading
+    // whitespace at top level).
     let finalResult = result;
     if (result.length >= 2) {
         const synthetic: RulesPart = {
@@ -2174,12 +2176,6 @@ export function dispatchifyAlternations(rules: GrammarRule[]): GrammarRule[] {
         if (dispatched !== undefined) {
             counter.dispatched++;
             const wrapper: GrammarRule = { parts: [dispatched] };
-            if (
-                dispatched.perMode.length === 1 &&
-                dispatched.perMode[0].spacingMode !== undefined
-            ) {
-                wrapper.spacingMode = dispatched.perMode[0].spacingMode;
-            }
             finalResult = [wrapper];
         }
     }
@@ -2243,6 +2239,34 @@ function visitPart(
     if (part.type !== "rules") {
         return part;
     }
+    // Already-dispatched parts: recurse into bucket members and the
+    // fallback subset, then return.  We never re-dispatch (would
+    // partition only the fallback subset, which is wrong).
+    if (part.dispatch !== undefined) {
+        let dirty = false;
+        const newPerMode = part.dispatch.map((m) => {
+            const newTokenMap = new Map<string, GrammarRule[]>();
+            let bucketDirty = false;
+            for (const [tok, bucket] of m.tokenMap) {
+                const visited = visitRulesArray(bucket, counter, memo);
+                if (visited !== bucket) bucketDirty = true;
+                newTokenMap.set(tok, visited);
+            }
+            if (bucketDirty) {
+                dirty = true;
+                return { ...m, tokenMap: newTokenMap };
+            }
+            return m;
+        });
+        const innerRules = visitRulesArray(part.rules, counter, memo);
+        if (innerRules !== part.rules) dirty = true;
+        if (!dirty) return part;
+        return {
+            ...part,
+            rules: innerRules,
+            dispatch: newPerMode,
+        };
+    }
     // Recurse first (post-order) so nested dispatch attempts run
     // before the outer one decides classification.
     const innerRules = visitRulesArray(part.rules, counter, memo);
@@ -2261,22 +2285,23 @@ function visitPart(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Walk every rule in `rules` and verify that any `RulesPart` or
- * `DispatchPart` carrying `tailCall: true` satisfies the contract
- * documented on `RulesPart.tailCall` / `DispatchPart.tailCall`:
+ * Walk every rule in `rules` and verify that any `RulesPart`
+ * carrying `tailCall: true` satisfies the contract documented on
+ * `RulesPart.tailCall`:
  *
  *   - last entry in its parent rule's `parts`
  *   - parent rule has no `value` of its own
  *   - `repeat` / `optional` / `variable` all unset
- *   - effective member count >= 2 (for `RulesPart`, just
- *     `rules.length`; for `DispatchPart`, the *static* sum of
- *     bucket sizes across every `perMode` entry plus fallback
- *     length).  Note this is a structural check on the AST shape, not a runtime guarantee:
- *     at match time `enterDispatchPart` peeks one input token and
- *     selects a *single* bucket (plus fallback) to form the
- *     effective alternation list, so the runtime list size for a
- *     given dispatch entry can be 1.  `enterTailAlternation` has
- *     its own `rules.length > 1` guard for that case (matching
+ *   - effective member count >= 2.  For a non-dispatched part this
+ *     is just `rules.length`; for a dispatched part it is the
+ *     *static* sum of bucket sizes across every `dispatch` entry
+ *     plus the fallback `rules.length`.  Note this is a structural
+ *     check on the AST shape, not a runtime guarantee: at match
+ *     time the dispatch entry peeks one input token and selects a
+ *     *single* bucket (plus fallback) to form the effective
+ *     alternation list, so the runtime list size for a given
+ *     dispatch entry can be 1.  `enterTailAlternation` has its own
+ *     `rules.length > 1` guard for that case (matching
  *     `enterRulesAlternation`'s behavior); the check here only
  *     ensures the dispatch could ever pick more than one member.
  *   - every member's `spacingMode` matches the parent rule's
@@ -2302,57 +2327,32 @@ export function validateTailRulesParts(rules: GrammarRule[]): void {
         const parts = rule.parts;
         for (let i = 0; i < parts.length; i++) {
             const p = parts[i];
-            if (p.type === "rules") {
-                if (p.tailCall) {
-                    checkTailContract(rule, p, i, parts.length, "RulesPart", {
-                        members: p.rules,
-                        effectiveCount: p.rules.length,
-                    });
-                }
-                visitRules(p.rules);
-            } else if (p.type === "dispatch") {
-                if (p.tailCall) {
-                    checkTailContract(
-                        rule,
-                        p,
-                        i,
-                        parts.length,
-                        "DispatchPart",
-                        dispatchEffectiveMembers(p),
-                    );
-                }
-                for (const m of p.perMode) {
+            if (p.type !== "rules") continue;
+            if (p.tailCall) {
+                const members = getDispatchEffectiveMembers(p);
+                checkTailContract(rule, p, i, parts.length, {
+                    members,
+                    effectiveCount: members.length,
+                });
+            }
+            if (p.dispatch !== undefined) {
+                for (const m of p.dispatch) {
                     for (const bucket of m.tokenMap.values()) {
                         visitRules(bucket);
                     }
                 }
-                if (p.fallback !== undefined) {
-                    visitRules(p.fallback);
-                }
             }
+            visitRules(p.rules);
         }
     };
     visitRules(rules);
 }
 
 /**
- * Flatten a `DispatchPart`'s effective member list (sum of tokenMap
- * buckets ++ fallback) for tail-contract validation.  Delegates to
- * the shared cached helper in `dispatchHelpers.ts`.
- */
-function dispatchEffectiveMembers(p: DispatchPart): {
-    members: GrammarRule[];
-    effectiveCount: number;
-} {
-    const members = getDispatchEffectiveMembers(p);
-    return { members, effectiveCount: members.length };
-}
-
-/**
- * Shared contract checker for tail `RulesPart` / `DispatchPart`.
- * `kind` parameterizes only the error label - the five clauses
- * (last-part, no parent value, no repeat/optional/variable, effective
- * member count >= 2, member spacingMode equality) are identical.
+ * Shared contract checker for tail `RulesPart` (with or without a
+ * `dispatch` index).  The five clauses (last-part, no parent value,
+ * no repeat/optional/variable, effective member count >= 2, member
+ * spacingMode equality) are identical across both shapes.
  */
 function checkTailContract(
     rule: GrammarRule,
@@ -2364,11 +2364,10 @@ function checkTailContract(
     },
     index: number,
     partsLength: number,
-    kind: "RulesPart" | "DispatchPart",
     effective: { members: Iterable<GrammarRule>; effectiveCount: number },
 ): void {
     const where = `(name='${p.name ?? "<unnamed>"}')`;
-    const label = `Invalid tail ${kind}`;
+    const label = `Invalid tail RulesPart`;
     if (index !== partsLength - 1) {
         throw new Error(
             `${label}: must be the last part of its parent rule ${where}`,
@@ -2385,11 +2384,9 @@ function checkTailContract(
         );
     }
     if (effective.effectiveCount < 2) {
-        const sizeClause =
-            kind === "DispatchPart"
-                ? `effective member count >= 2 (got ${effective.effectiveCount})`
-                : `rules.length >= 2 (got ${effective.effectiveCount})`;
-        throw new Error(`${label}: requires ${sizeClause} ${where}`);
+        throw new Error(
+            `${label}: requires effective member count >= 2 (got ${effective.effectiveCount}) ${where}`,
+        );
     }
     for (const m of effective.members) {
         if (m.spacingMode !== rule.spacingMode) {

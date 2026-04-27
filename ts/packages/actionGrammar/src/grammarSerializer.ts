@@ -12,13 +12,22 @@ import {
     PhraseSetPartJson,
     RulePartJson,
     StringPartJson,
-    DispatchPartJson,
 } from "./grammarTypes.js";
 
 export function grammarToJson(grammar: Grammar): GrammarJson {
     const json: GrammarRulesJson[] = [];
     const rulesToIndex: Map<GrammarRule[], number> = new Map();
     let nextIndex = 1;
+
+    function indexFor(rules: GrammarRule[]): number {
+        let index = rulesToIndex.get(rules);
+        if (index === undefined) {
+            index = nextIndex++;
+            rulesToIndex.set(rules, index);
+            json[index] = rules.map(grammarRuleToJson);
+        }
+        return index;
+    }
 
     function grammarPartToJson(p: GrammarPart): GrammarPartJson {
         switch (p.type) {
@@ -34,22 +43,38 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
             case "number":
                 return p;
             case "rules": {
-                let index = rulesToIndex.get(p.rules);
-                if (index === undefined) {
-                    index = nextIndex++;
-                    rulesToIndex.set(p.rules, index);
-                    json[index] = p.rules.map(grammarRuleToJson);
-                }
-
+                // For both plain and dispatched parts, `index` points
+                // at `p.rules` (the full alternation, or - in a
+                // dispatched part - the fallback subset; may be
+                // empty, which still gets a unique slot via
+                // identity-sharing).
                 const part: RulePartJson = {
                     name: p.name,
                     type: "rules",
-                    index,
+                    index: indexFor(p.rules),
                     variable: p.variable,
                     optional: p.optional,
                 };
                 if (p.repeat) part.repeat = true;
                 if (p.tailCall) part.tailCall = true;
+                if (p.dispatch !== undefined) {
+                    const dispatchJson: NonNullable<RulePartJson["dispatch"]> =
+                        [];
+                    for (const m of p.dispatch) {
+                        const tokenMap: Array<[string, number]> = [];
+                        for (const [token, suffixRules] of m.tokenMap) {
+                            tokenMap.push([token, indexFor(suffixRules)]);
+                        }
+                        const entry: NonNullable<
+                            RulePartJson["dispatch"]
+                        >[number] = { tokenMap };
+                        if (m.spacingMode !== undefined) {
+                            entry.spacingMode = m.spacingMode;
+                        }
+                        dispatchJson.push(entry);
+                    }
+                    part.dispatch = dispatchJson;
+                }
                 return part;
             }
             case "phraseSet": {
@@ -58,47 +83,6 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
                     matcherName: p.matcherName,
                 };
                 if (p.variable !== undefined) part.variable = p.variable;
-                return part;
-            }
-            case "dispatch": {
-                const perMode: DispatchPartJson["perMode"] = [];
-                for (const m of p.perMode) {
-                    const tokenMap: Array<[string, number]> = [];
-                    for (const [token, suffixRules] of m.tokenMap) {
-                        let index = rulesToIndex.get(suffixRules);
-                        if (index === undefined) {
-                            index = nextIndex++;
-                            rulesToIndex.set(suffixRules, index);
-                            json[index] = suffixRules.map(grammarRuleToJson);
-                        }
-                        tokenMap.push([token, index]);
-                    }
-                    const entry: DispatchPartJson["perMode"][number] = {
-                        tokenMap,
-                    };
-                    if (m.spacingMode !== undefined) {
-                        entry.spacingMode = m.spacingMode;
-                    }
-                    perMode.push(entry);
-                }
-                const part: DispatchPartJson = {
-                    type: "dispatch",
-                    perMode,
-                };
-                if (p.name !== undefined) part.name = p.name;
-                if (p.variable !== undefined) part.variable = p.variable;
-                if (p.fallback !== undefined && p.fallback.length > 0) {
-                    let index = rulesToIndex.get(p.fallback);
-                    if (index === undefined) {
-                        index = nextIndex++;
-                        rulesToIndex.set(p.fallback, index);
-                        json[index] = p.fallback.map(grammarRuleToJson);
-                    }
-                    part.fallbackIndex = index;
-                }
-                if (p.optional) part.optional = true;
-                if (p.repeat) part.repeat = true;
-                if (p.tailCall) part.tailCall = true;
                 return part;
             }
         }

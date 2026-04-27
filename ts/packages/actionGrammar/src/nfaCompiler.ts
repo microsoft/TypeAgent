@@ -279,18 +279,20 @@ function normalizePart(
     part: GrammarPart,
     cache: Map<GrammarRule[], GrammarRule[]>,
 ): GrammarPart {
-    if (part.type === "dispatch") {
-        // Expand the optimizer-only DispatchPart back into the
-        // equivalent RulesPart for NFA compilation: re-prepend the
-        // consumed token to each tokenMap entry's suffix rules,
-        // then append the fallback rules.  The NFA compiler does
-        // its own first-token dispatch via `buildFirstTokenIndex`,
-        // so DispatchPart adds nothing here - expansion preserves
-        // semantics with no compile-path knowledge of the new kind.
-        return normalizePart(expandDispatchPart(part), cache);
-    }
     if (part.type !== "rules") {
-        return part; // Only RulesParts (and dispatch above) need normalization
+        return part; // Only RulesParts need normalization
+    }
+    if (part.dispatch !== undefined) {
+        // Strip the optimizer-only `dispatch` index and re-fold all
+        // bucket members into a flat `RulesPart` for NFA
+        // compilation.  Dispatch is a filter only - rules retain
+        // their original parts including the leading token - so the
+        // expansion is just a union in
+        // `[...buckets.flat()..., ...rules]` order.  The NFA
+        // compiler does its own first-token dispatch via
+        // `buildFirstTokenIndex`, so the `dispatch` index adds
+        // nothing here.
+        return normalizePart(stripDispatch(part), cache);
     }
 
     // Normalize all nested rules within this RulesPart (using cache)
@@ -301,26 +303,24 @@ function normalizePart(
 }
 
 /**
- * Expand a `DispatchPart` into the equivalent `RulesPart`.  The
- * dispatch part stores the original alternation rules unchanged in
- * its `perMode` buckets (and `fallback`); expansion just unions
- * them into a flat alternation in
- * `[...perModeBuckets.flat()..., ...fallback]` order.
+ * Strip the optimizer-only `dispatch` index from a `RulesPart` and
+ * re-fold all bucket members into a flat `rules` alternation in
+ * `[...buckets.flat()..., ...rules]` order.  The dispatched part
+ * stores the original alternation rules unchanged in its
+ * `dispatch[*].tokenMap` buckets and in `rules` (the fallback
+ * subset); this is just a union back into the canonical order.
  */
-function expandDispatchPart(
-    part: import("./grammarTypes.js").DispatchPart,
-): RulesPart {
+function stripDispatch(part: RulesPart): RulesPart {
+    if (part.dispatch === undefined) return part;
     const expanded: GrammarRule[] = [];
-    for (const m of part.perMode) {
+    for (const m of part.dispatch) {
         for (const suffixRules of m.tokenMap.values()) {
             for (const r of suffixRules) {
                 expanded.push(r);
             }
         }
     }
-    if (part.fallback) {
-        expanded.push(...part.fallback);
-    }
+    for (const r of part.rules) expanded.push(r);
     const rulesPart: RulesPart = {
         type: "rules",
         rules: expanded,
@@ -1549,9 +1549,9 @@ export function compileRuleToNFA(rule: GrammarRule, name?: string): NFA {
     // Normalize unconditionally so single-rule compilation matches
     // `compileGrammarToNFA`'s behavior: passthrough rules acquire
     // their `_result` capture and single-literal rules acquire their
-    // implicit `-> "literal"` value, and `DispatchPart`s (which the
-    // NFA compiler doesn't understand directly) are expanded back
-    // into the equivalent `RulesPart`.
+    // implicit `-> "literal"` value, and dispatched `RulesPart`s
+    // (which the NFA compiler doesn't understand directly) are
+    // expanded back into a flat plain `RulesPart`.
     const ruleToCompile = normalizeGrammar({ rules: [rule] }).rules[0];
     const grammar: Grammar = { rules: [ruleToCompile] };
 

@@ -26,12 +26,13 @@ import { matchGrammar } from "../src/grammarMatcher.js";
 import { validateTailRulesParts } from "../src/grammarOptimizer.js";
 import { grammarToJson } from "../src/grammarSerializer.js";
 import {
-    DispatchPart,
     Grammar,
     GrammarPart,
     GrammarRule,
+    RulesPart,
 } from "../src/grammarTypes.js";
 import { getDispatchEffectiveMembers } from "../src/dispatchHelpers.js";
+import { DispatchedRulesPart, isDispatched } from "./dispatchTestHelpers.js";
 
 function match(grammar: ReturnType<typeof loadGrammarRules>, request: string) {
     return matchGrammar(grammar, request)
@@ -39,14 +40,14 @@ function match(grammar: ReturnType<typeof loadGrammarRules>, request: string) {
         .sort();
 }
 
-function findAllDispatchParts(rules: GrammarRule[]): DispatchPart[] {
-    const out: DispatchPart[] = [];
+function findAllDispatchParts(rules: GrammarRule[]): DispatchedRulesPart[] {
+    const out: DispatchedRulesPart[] = [];
     const visited = new WeakSet<GrammarRule[]>();
     const visitParts = (parts: GrammarPart[]) => {
         for (const p of parts) {
-            if (p.type === "dispatch") {
+            if (p.type === "rules" && isDispatched(p)) {
                 out.push(p);
-                for (const m of p.perMode) {
+                for (const m of p.dispatch) {
                     for (const bucket of m.tokenMap.values()) {
                         if (!visited.has(bucket)) {
                             visited.add(bucket);
@@ -54,9 +55,9 @@ function findAllDispatchParts(rules: GrammarRule[]): DispatchPart[] {
                         }
                     }
                 }
-                if (p.fallback !== undefined && !visited.has(p.fallback)) {
-                    visited.add(p.fallback);
-                    for (const r of p.fallback) visitParts(r.parts);
+                if (!visited.has(p.rules)) {
+                    visited.add(p.rules);
+                    for (const r of p.rules) visitParts(r.parts);
                 }
             } else if (p.type === "rules") {
                 if (!visited.has(p.rules)) {
@@ -108,7 +109,7 @@ describe("Grammar Optimizer - DispatchPart with tailCall", () => {
             // dispatch with both keys present.
             const keys = new Set<string>();
             for (const dp of tailDispatches) {
-                for (const m of dp.perMode) {
+                for (const m of dp.dispatch) {
                     for (const k of m.tokenMap.keys()) keys.add(k);
                 }
             }
@@ -205,9 +206,10 @@ describe("Grammar Optimizer - DispatchPart with tailCall", () => {
                 parts: [{ type: "string", value: ["beta"] }],
                 value: { type: "literal", value: "b" },
             };
-            const dispatch: DispatchPart = {
-                type: "dispatch",
-                perMode: [
+            const dispatch: RulesPart = {
+                type: "rules",
+                rules: [],
+                dispatch: [
                     {
                         spacingMode: undefined,
                         tokenMap: new Map([
@@ -246,7 +248,7 @@ describe("Grammar Optimizer - DispatchPart with tailCall", () => {
 
         it("rejects when repeat is set", () => {
             const g = buildBaseline();
-            (g.rules[0].parts[0] as DispatchPart).repeat = true;
+            (g.rules[0].parts[0] as DispatchedRulesPart).repeat = true;
             expect(() => validateTailRulesParts(g.rules)).toThrow(
                 /repeat\/optional\/variable are forbidden/,
             );
@@ -254,7 +256,7 @@ describe("Grammar Optimizer - DispatchPart with tailCall", () => {
 
         it("rejects when optional is set", () => {
             const g = buildBaseline();
-            (g.rules[0].parts[0] as DispatchPart).optional = true;
+            (g.rules[0].parts[0] as DispatchedRulesPart).optional = true;
             expect(() => validateTailRulesParts(g.rules)).toThrow(
                 /repeat\/optional\/variable are forbidden/,
             );
@@ -262,7 +264,7 @@ describe("Grammar Optimizer - DispatchPart with tailCall", () => {
 
         it("rejects when variable is set", () => {
             const g = buildBaseline();
-            (g.rules[0].parts[0] as DispatchPart).variable = "x";
+            (g.rules[0].parts[0] as DispatchedRulesPart).variable = "x";
             expect(() => validateTailRulesParts(g.rules)).toThrow(
                 /repeat\/optional\/variable are forbidden/,
             );
@@ -270,11 +272,11 @@ describe("Grammar Optimizer - DispatchPart with tailCall", () => {
 
         it("rejects when effective member count < 2", () => {
             const g = buildBaseline();
-            const dp = g.rules[0].parts[0] as DispatchPart;
+            const dp = g.rules[0].parts[0] as DispatchedRulesPart;
             // Drop one of the two buckets, leaving a single member.
-            const tm = dp.perMode[0].tokenMap;
-            dp.perMode[0] = {
-                spacingMode: dp.perMode[0].spacingMode,
+            const tm = dp.dispatch[0].tokenMap;
+            dp.dispatch[0] = {
+                spacingMode: dp.dispatch[0].spacingMode,
                 tokenMap: new Map([["alpha", tm.get("alpha")!]]),
             };
             expect(() => validateTailRulesParts(g.rules)).toThrow(
@@ -284,8 +286,8 @@ describe("Grammar Optimizer - DispatchPart with tailCall", () => {
 
         it("rejects when a member's spacingMode disagrees with the parent's", () => {
             const g = buildBaseline();
-            const dp = g.rules[0].parts[0] as DispatchPart;
-            dp.perMode[0].tokenMap.get("alpha")![0].spacingMode = "required";
+            const dp = g.rules[0].parts[0] as DispatchedRulesPart;
+            dp.dispatch[0].tokenMap.get("alpha")![0].spacingMode = "required";
             expect(() => validateTailRulesParts(g.rules)).toThrow(
                 /spacingMode must match/,
             );
@@ -339,8 +341,8 @@ describe("Grammar Optimizer - DispatchPart with tailCall", () => {
             );
             expect(tailDispatches.length).toBeGreaterThanOrEqual(1);
             const tail = tailDispatches[0];
-            expect(tail.fallback ?? []).toHaveLength(0);
-            for (const m of tail.perMode) {
+            expect(tail.rules ?? []).toHaveLength(0);
+            for (const m of tail.dispatch) {
                 for (const bucket of m.tokenMap.values()) {
                     expect(bucket).toHaveLength(1);
                 }

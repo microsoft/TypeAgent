@@ -22,15 +22,18 @@
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
-import { DispatchPart, GrammarPart, GrammarRule } from "../src/grammarTypes.js";
+import { GrammarPart, GrammarRule } from "../src/grammarTypes.js";
+import { DispatchedRulesPart, isDispatched } from "./dispatchTestHelpers.js";
 
-function findFirstDispatch(rules: GrammarRule[]): DispatchPart | undefined {
+function findFirstDispatch(
+    rules: GrammarRule[],
+): DispatchedRulesPart | undefined {
     const visited = new WeakSet<GrammarRule[]>();
-    let found: DispatchPart | undefined;
+    let found: DispatchedRulesPart | undefined;
     const visitParts = (parts: GrammarPart[]) => {
         for (const p of parts) {
             if (found !== undefined) return;
-            if (p.type === "dispatch") {
+            if (p.type === "rules" && isDispatched(p)) {
                 found = p;
                 return;
             }
@@ -54,7 +57,7 @@ function compareWithBaseline(
     inputs: string[],
 ): {
     optimized: ReturnType<typeof loadGrammarRules>;
-    dispatch: DispatchPart | undefined;
+    dispatch: DispatchedRulesPart | undefined;
 } {
     const baseline = loadGrammarRules("t.grammar", schema, {
         optimizations: { dispatchifyAlternations: false },
@@ -95,16 +98,16 @@ describe("Grammar Optimizer - mixed-mode DispatchPart", () => {
         ]);
 
         expect(dispatch).toBeDefined();
-        expect(dispatch!.perMode).toHaveLength(2);
+        expect(dispatch!.dispatch).toHaveLength(2);
         // The auto entry comes first since the source order opens
         // with the two auto-mode rules; the required entry follows.
-        expect(dispatch!.perMode[0].spacingMode).toBeUndefined();
+        expect(dispatch!.dispatch[0].spacingMode).toBeUndefined();
         expect(
-            Array.from(dispatch!.perMode[0].tokenMap.keys()).sort(),
+            Array.from(dispatch!.dispatch[0].tokenMap.keys()).sort(),
         ).toStrictEqual(["alpha", "beta"]);
-        expect(dispatch!.perMode[1].spacingMode).toBe("required");
+        expect(dispatch!.dispatch[1].spacingMode).toBe("required");
         expect(
-            Array.from(dispatch!.perMode[1].tokenMap.keys()).sort(),
+            Array.from(dispatch!.dispatch[1].tokenMap.keys()).sort(),
         ).toStrictEqual(["delta", "gamma"]);
     });
 
@@ -131,12 +134,12 @@ describe("Grammar Optimizer - mixed-mode DispatchPart", () => {
         ]);
 
         expect(dispatch).toBeDefined();
-        expect(dispatch!.perMode).toHaveLength(1);
-        expect(dispatch!.perMode[0].spacingMode).toBeUndefined();
+        expect(dispatch!.dispatch).toHaveLength(1);
+        expect(dispatch!.dispatch[0].spacingMode).toBeUndefined();
         expect(
-            Array.from(dispatch!.perMode[0].tokenMap.keys()).sort(),
+            Array.from(dispatch!.dispatch[0].tokenMap.keys()).sort(),
         ).toStrictEqual(["alpha", "beta", "gamma"]);
-        expect(dispatch!.fallback).toHaveLength(1);
+        expect(dispatch!.rules).toHaveLength(1);
     });
 
     it("preserves member-source order of first appearance in perMode", () => {
@@ -156,9 +159,9 @@ describe("Grammar Optimizer - mixed-mode DispatchPart", () => {
         ]);
 
         expect(dispatch).toBeDefined();
-        expect(dispatch!.perMode).toHaveLength(2);
-        expect(dispatch!.perMode[0].spacingMode).toBe("required");
-        expect(dispatch!.perMode[1].spacingMode).toBeUndefined();
+        expect(dispatch!.dispatch).toHaveLength(2);
+        expect(dispatch!.dispatch[0].spacingMode).toBe("required");
+        expect(dispatch!.dispatch[1].spacingMode).toBeUndefined();
     });
 
     it("matches identically when the same first token appears under both modes", () => {
@@ -176,8 +179,8 @@ describe("Grammar Optimizer - mixed-mode DispatchPart", () => {
         ]);
 
         expect(dispatch).toBeDefined();
-        expect(dispatch!.perMode).toHaveLength(2);
-        for (const m of dispatch!.perMode) {
+        expect(dispatch!.dispatch).toHaveLength(2);
+        for (const m of dispatch!.dispatch) {
             expect(m.tokenMap.has("play")).toBe(true);
         }
     });

@@ -289,7 +289,7 @@ describe("validateTailRulesParts", () => {
             tail.rules = [tail.rules[0]];
         });
         expect(() => validateTailRulesParts(bad.rules)).toThrow(
-            /rules\.length >= 2/,
+            /effective member count >= 2/,
         );
     });
 
@@ -359,7 +359,7 @@ describe("validateTailRulesParts", () => {
         // Permissive (validate: false) load still works (cached path),
         // but the default load throws.
         expect(() => grammarFromJson(json, { validate: false })).not.toThrow();
-        expect(() => grammarFromJson(json)).toThrow(/rules\.length >= 2/);
+        expect(() => grammarFromJson(json)).toThrow(/effective member count >= 2/);
     });
 });
 

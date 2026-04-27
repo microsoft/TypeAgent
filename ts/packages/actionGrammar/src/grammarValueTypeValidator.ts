@@ -509,22 +509,14 @@ export function classifyRuleValue(rule: GrammarRule): RuleValueKind {
     if (variableParts.length === 0 && rule.parts.length === 1) {
         const part = rule.parts[0];
         if (part.type === "rules") {
-            return {
-                kind: "passthrough",
-                rules: part.rules,
-                name: part.name,
-            };
-        }
-        if (part.type === "dispatch") {
-            // Optimizer-introduced.  Treat as passthrough over the
-            // expanded effective member list so downstream logic
-            // (`deriveAlternativeType`, `collectLeafValues`) continues
-            // to walk the same alternatives it would have walked
-            // before `dispatchifyAlternations` ran.  Today the
-            // validator runs before the optimizer, so this branch is
-            // a future-proofing measure - if validation is ever
-            // re-run after optimization (e.g. for serialized
-            // grammars), values are still classified correctly.
+            // For dispatched parts, the effective member list spans
+            // both the bucket members and `part.rules` (the fallback
+            // subset).  `getDispatchEffectiveMembers` returns the
+            // union (or just `part.rules` when there is no dispatch).
+            // Using it unconditionally keeps downstream logic
+            // (`deriveAlternativeType`, `collectLeafValues`) walking
+            // the same alternatives it would have walked before
+            // `dispatchifyAlternations` ran.
             return {
                 kind: "passthrough",
                 rules: getDispatchEffectiveMembers(part),
@@ -589,7 +581,13 @@ function derivePartType(
             baseType = SchemaCreator.number();
             break;
         case "rules":
-            baseType = deriveRuleValueType(part.rules, cache, part.name);
+            // Walk the unified effective member list (covers plain
+            // and dispatched RulesParts).
+            baseType = deriveRuleValueType(
+                getDispatchEffectiveMembers(part),
+                cache,
+                part.name,
+            );
             break;
         case "string":
         case "phraseSet":
@@ -614,25 +612,11 @@ function derivePartType(
             // SchemaType (string-union for StringPart, plain string
             // for PhraseSetPart) is what callers expect; throwing or
             // returning ANY would silently weaken downstream type
-            // checks.  Same future-proofing rationale as the
-            // `dispatch` arm below.
+            // checks.
             baseType =
                 part.type === "string" && part.value.length > 0
                     ? SchemaCreator.string(part.value.join(" "))
                     : SchemaCreator.string();
-            break;
-        case "dispatch":
-            // Optimizer-introduced.  When `variable` is set the dispatch
-            // captures whatever its alternatives' value expressions
-            // produce; for type-derivation purposes we treat it like a
-            // RulesPart over its expanded alternatives (suffix rules
-            // plus fallback).  Effective member list is cached on the
-            // DispatchPart so this stays O(1) on subsequent calls.
-            baseType = deriveRuleValueType(
-                getDispatchEffectiveMembers(part),
-                cache,
-                part.name,
-            );
             break;
     }
     // Optional captures produce T | undefined at runtime

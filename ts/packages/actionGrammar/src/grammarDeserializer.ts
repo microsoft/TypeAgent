@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    DispatchModeBucket,
     Grammar,
     GrammarJson,
     GrammarPart,
@@ -10,7 +11,6 @@ import {
     GrammarRuleJson,
     PhraseSetPart,
     RulesPart,
-    DispatchPart,
 } from "./grammarTypes.js";
 import { validateTailRulesParts } from "./grammarOptimizer.js";
 import registerDebug from "debug";
@@ -20,6 +20,17 @@ const debug = registerDebug("typeagent:grammar:deserializer");
 function grammarFromJsonInternal(json: GrammarJson): Grammar {
     const start = json[0];
     const indexToRules: Map<number, GrammarRule[]> = new Map();
+    function rulesFor(idx: number, json: GrammarJson): GrammarRule[] {
+        let rules = indexToRules.get(idx);
+        if (rules === undefined) {
+            rules = [];
+            indexToRules.set(idx, rules);
+            for (const r of json[idx]) {
+                rules.push(grammarRuleFromJson(r, json));
+            }
+        }
+        return rules;
+    }
     function grammarRuleFromJson(r: GrammarRuleJson, json: GrammarJson) {
         return {
             parts: r.parts.map((p) => grammarPartFromJson(p, json)),
@@ -37,14 +48,7 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
             case "number":
                 return p;
             case "rules": {
-                let rules = indexToRules.get(p.index);
-                if (rules === undefined) {
-                    rules = [];
-                    indexToRules.set(p.index, rules);
-                    for (const r of json[p.index]) {
-                        rules.push(grammarRuleFromJson(r, json));
-                    }
-                }
+                const rules = rulesFor(p.index, json);
                 const part: RulesPart = {
                     type: "rules",
                     name: p.name,
@@ -54,6 +58,57 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
                 };
                 if (p.repeat) part.repeat = true;
                 if (p.tailCall) part.tailCall = true;
+                if (p.dispatch !== undefined) {
+                    const dispatch: DispatchModeBucket[] = [];
+                    let totalTokenKeys = 0;
+                    for (const m of p.dispatch) {
+                        const tokenMap = new Map<string, GrammarRule[]>();
+                        for (const [token, idx] of m.tokenMap) {
+                            tokenMap.set(token, rulesFor(idx, json));
+                        }
+                        totalTokenKeys += tokenMap.size;
+                        dispatch.push({
+                            spacingMode: m.spacingMode,
+                            tokenMap,
+                        });
+                    }
+                    part.dispatch = dispatch;
+                    // Non-canonical shape advisories.  Both shapes
+                    // are semantically valid - the matcher handles
+                    // them correctly - but neither one is something
+                    // the optimizer would ever emit, so they almost
+                    // certainly indicate a hand-written or buggy
+                    // producer:
+                    //
+                    //   - Total token-key count == 0 (every
+                    //     dispatch entry's tokenMap is empty, or
+                    //     the dispatch array itself is empty): the
+                    //     dispatch only ever yields fallback hits
+                    //     (or always fails when `rules` is empty
+                    //     too), so it adds a peek + hash miss for
+                    //     no benefit over the non-dispatched form.
+                    //   - Total token-key count == 1 with no
+                    //     fallback (`rules` empty): the dispatch
+                    //     always picks the same bucket, adding a
+                    //     peek + hash lookup for no filtering
+                    //     benefit over the non-dispatched form.
+                    //
+                    // Log via `debug` so the producer can spot the
+                    // issue without breaking otherwise-correct
+                    // grammars.
+                    if (totalTokenKeys === 0) {
+                        debug(
+                            `non-canonical dispatched RulesPart: empty dispatch (name='${p.name ?? "<unnamed>"}')`,
+                        );
+                    } else if (
+                        totalTokenKeys === 1 &&
+                        rules.length === 0
+                    ) {
+                        debug(
+                            `non-canonical dispatched RulesPart: single-bucket with no fallback (name='${p.name ?? "<unnamed>"}')`,
+                        );
+                    }
+                }
                 return part;
             }
             case "phraseSet": {
@@ -62,79 +117,6 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
                     matcherName: p.matcherName,
                 };
                 if (p.variable !== undefined) part.variable = p.variable;
-                return part;
-            }
-            case "dispatch": {
-                const perMode: DispatchPart["perMode"] = [];
-                let totalTokenKeys = 0;
-                for (const m of p.perMode) {
-                    const tokenMap = new Map<string, GrammarRule[]>();
-                    for (const [token, idx] of m.tokenMap) {
-                        let rules = indexToRules.get(idx);
-                        if (rules === undefined) {
-                            rules = [];
-                            indexToRules.set(idx, rules);
-                            for (const r of json[idx]) {
-                                rules.push(grammarRuleFromJson(r, json));
-                            }
-                        }
-                        tokenMap.set(token, rules);
-                    }
-                    totalTokenKeys += tokenMap.size;
-                    perMode.push({ spacingMode: m.spacingMode, tokenMap });
-                }
-                const part: DispatchPart = {
-                    type: "dispatch",
-                    perMode,
-                };
-                if (p.name !== undefined) part.name = p.name;
-                if (p.variable !== undefined) part.variable = p.variable;
-                if (p.fallbackIndex !== undefined) {
-                    let rules = indexToRules.get(p.fallbackIndex);
-                    if (rules === undefined) {
-                        rules = [];
-                        indexToRules.set(p.fallbackIndex, rules);
-                        for (const r of json[p.fallbackIndex]) {
-                            rules.push(grammarRuleFromJson(r, json));
-                        }
-                    }
-                    part.fallback = rules;
-                }
-                if (p.optional) part.optional = true;
-                if (p.repeat) part.repeat = true;
-                if (p.tailCall) part.tailCall = true;
-                // Non-canonical shape advisories.  Both shapes are
-                // semantically valid - the matcher handles them
-                // correctly - but neither one is something the
-                // optimizer would ever emit, so they almost certainly
-                // indicate a hand-written or buggy producer:
-                //
-                //   - Total token-key count == 0 (every perMode
-                //     entry's tokenMap is empty, or perMode itself
-                //     is empty): the dispatch only ever yields
-                //     fallback hits (or always fails when fallback
-                //     is empty too), so it adds a peek + hash miss
-                //     for no benefit over a plain `RulesPart` over
-                //     `fallback`.
-                //   - Total token-key count == 1 with no fallback:
-                //     the dispatch always picks the same bucket,
-                //     adding a peek + hash lookup for no filtering
-                //     benefit over the original `RulesPart`.
-                //
-                // Log via `debug` so the producer can spot the issue
-                // without breaking otherwise-correct grammars.
-                if (totalTokenKeys === 0) {
-                    debug(
-                        `non-canonical DispatchPart: empty perMode (name='${p.name ?? "<unnamed>"}')`,
-                    );
-                } else if (
-                    totalTokenKeys === 1 &&
-                    (part.fallback === undefined || part.fallback.length === 0)
-                ) {
-                    debug(
-                        `non-canonical DispatchPart: single-bucket with no fallback (name='${p.name ?? "<unnamed>"}')`,
-                    );
-                }
                 return part;
             }
         }
