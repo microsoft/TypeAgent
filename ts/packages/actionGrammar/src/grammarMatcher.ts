@@ -21,6 +21,7 @@ import {
     leadingWordBoundaryScriptPrefix,
     wordBoundaryScriptRe,
 } from "./spacingScripts.js";
+import { getDispatchEffectiveMembers } from "./dispatchHelpers.js";
 
 // Separator mode for completion results.  Structurally identical to
 // SeparatorMode from @typeagent/agent-sdk (command.ts); independently
@@ -1126,6 +1127,15 @@ export function nextNonSeparatorIndex(request: string, index: number) {
 // Sticky-anchored regex for scanning a contiguous run of non-separator
 // characters starting at `lastIndex`.  Used by `peekNextToken` to
 // extract the next "word" from input without allocating substrings.
+//
+// Module-level state caveat: `peekNextToken` mutates
+// `nonSeparatorRunRegExp.lastIndex` before each `exec()`.  This
+// matches the convention several other matcher regexes in this file
+// already use (the matcher runs single-threaded; no async work
+// happens between `lastIndex` write and `exec` call).  A future
+// reentrancy refactor (e.g. running matchers on worker threads) must
+// either fork these regexes per worker or copy `lastIndex`-bearing
+// regexes into local state at use sites.
 const nonSeparatorRunRegExp = new RegExp(`[^${separatorRegExpStr}]+`, "yu");
 const singleSeparatorRegExp = new RegExp(`[${separatorRegExpStr}]`, "u");
 
@@ -2097,27 +2107,17 @@ function enterRulesAlternation(
  * continues to work; the peeked token's only role is to partition
  * members, and the matcher will re-match the token via each
  * suffix's `StringPart` regex.
- */
-/**
- * Per-`DispatchPart` lazy caches for the two arrays `enterDispatchPart`
- * needs at match time:
  *
- *   - `all`: the full effective member list `[...allBuckets, ...fallback]`
- *     used by the pending-wildcard path (and as the only effective list
- *     if `tokenMap` is empty - currently impossible by construction).
- *   - `merged`: a `Map<bucketArray, [...bucket, ...fallback]>` keyed by
- *     each tokenMap bucket, used on a peek hit when `fallback` is
- *     non-empty.  Identity-keyed so two buckets sharing the same array
- *     reuse the same merged result.
- *
- * Both caches are populated on first use and live for the lifetime of
- * the `DispatchPart` (which is reachable for the lifetime of the
- * grammar).  Avoids the per-match `[...hits, ...fallback]` allocation
- * that would otherwise happen on every dispatch entry whenever any
- * non-dispatchable rule exists at the fork.
+ * **Per-`DispatchPart` cache.**  `merged` is a `Map<bucketArray,
+ * [...bucket, ...fallback]>` keyed by each tokenMap bucket, used on
+ * a peek hit when `fallback` is non-empty.  Identity-keyed so two
+ * buckets sharing the same array reuse the same merged result.
+ * The full effective list (`[...allBuckets, ...fallback]`) used by
+ * the pending-wildcard path is shared with the optimizer and
+ * validator via `getDispatchEffectiveMembers` from
+ * `dispatchHelpers.ts` (one allocation per `DispatchPart`).
  */
 type DispatchCaches = {
-    all?: GrammarRule[];
     merged?: Map<GrammarRule[], GrammarRule[]>;
 };
 const dispatchCaches = new WeakMap<DispatchPart, DispatchCaches>();
@@ -2129,20 +2129,6 @@ function getDispatchCaches(part: DispatchPart): DispatchCaches {
         dispatchCaches.set(part, c);
     }
     return c;
-}
-
-function getDispatchAllMembers(part: DispatchPart): GrammarRule[] {
-    const c = getDispatchCaches(part);
-    if (c.all !== undefined) return c.all;
-    const all: GrammarRule[] = [];
-    for (const bucket of part.tokenMap.values()) {
-        for (const r of bucket) all.push(r);
-    }
-    if (part.fallback !== undefined) {
-        for (const r of part.fallback) all.push(r);
-    }
-    c.all = all;
-    return all;
 }
 
 function getDispatchMergedBucket(
@@ -2195,7 +2181,7 @@ function enterDispatchPart(
     // pure pruning pass.  Worth doing if profiling on a real
     // grammar shows wildcard-prefix dispatch is a hot path.
     if (state.pendingWildcard !== undefined) {
-        const all = getDispatchAllMembers(part);
+        const all = getDispatchEffectiveMembers(part);
         if (all.length === 0) {
             debugMatch(state, `dispatch: pending-wildcard fallback empty`);
             return false;
@@ -2234,10 +2220,19 @@ function enterDispatchPart(
         debugMatch(state, `dispatch: no hits or fallback`);
         return false;
     }
-    // Hits-before-fallback ordering preserves match order from the
-    // pre-unification dispatch path.  When both exist we use a
-    // per-DispatchPart cache so the merged array is allocated once
-    // and reused across every match that hits the same bucket.
+    // Hits-before-fallback ordering: the bucket members are tried
+    // first (in source order within the bucket), then `fallback` (in
+    // source order).  This is *not* a faithful preservation of the
+    // pre-dispatch alternation's source order: a fallback member that
+    // originally appeared *before* a token-bucket member in source
+    // order is now tried after the bucket on a peek-hit.  See the
+    // `dispatchifyAlternations` doc for the full rationale (this is
+    // accepted as part of the dispatch optimization; a future
+    // `preserveSourceOrder` opt-in could bail out at such forks).
+    //
+    // When both `hits` and `fallback` exist we use a per-DispatchPart
+    // cache so the merged array is allocated once and reused across
+    // every match that hits the same bucket.
     const effective: GrammarRule[] =
         hits === undefined
             ? fallback!

@@ -17,6 +17,7 @@ import {
     StringPart,
 } from "./grammarTypes.js";
 import { leadingWordBoundaryScriptPrefix } from "./spacingScripts.js";
+import { getDispatchEffectiveMembers } from "./dispatchHelpers.js";
 
 const debug = registerDebug("typeagent:grammar:opt");
 
@@ -2098,6 +2099,23 @@ function tryDispatchifyRulesPart(part: RulesPart): DispatchPart | undefined {
  *
  * Identity-sharing of `GrammarRule[]` arrays (the dedup invariant
  * the serializer relies on) is preserved via memoization.
+ *
+ * **Match-order note (deliberate, observable change).**  The
+ * unoptimized `RulesPart` tries members in source order.  After
+ * dispatch, on a peek-hit only the bucket members (a *subset*) are
+ * tried first, then `fallback`.  When the original source order
+ * interleaved a fallback member (e.g. wildcard-first) *before* a
+ * token-first member, that fallback is now tried after the bucket
+ * - so on input both alternatives accept, the bucket member wins
+ * where the source-order fallback would have won previously.  This
+ * is accepted as part of the dispatch optimization (the source-order
+ * promise is a casualty of first-token bucketing).
+ *
+ * Future: a `preserveSourceOrder` opt-in could bail out of
+ * dispatchification at any fork where a fallback rule appears
+ * before any token-bucket rule in source order (or, more
+ * permissively, only when the fallback's first part could overlap
+ * with a tokenMap key).  Not yet wired up - no measured need.
  */
 export function dispatchifyAlternations(rules: GrammarRule[]): GrammarRule[] {
     const counter = { dispatched: 0 };
@@ -2110,6 +2128,17 @@ export function dispatchifyAlternations(rules: GrammarRule[]): GrammarRule[] {
     // the result is a single-rule grammar whose only part is a
     // DispatchPart - preserves the matcher's "rule i drives one
     // alternative" semantics through the dispatch frame.
+    //
+    // The synthesized wrapper rule inherits `partitionMode` as its
+    // `spacingMode` so `initialMatchState`'s `state.spacingMode =
+    // rules[0].spacingMode` seeds the parent-level mode that
+    // `leadingSpacingMode` will read for the dispatch peek.  Without
+    // this the wrapper's mode would be `undefined` (auto) regardless
+    // of partitionMode - a no-op for `auto`/`required` partitions at
+    // top level today (top level allows leading whitespace in both),
+    // but the explicit propagation matches `tryDispatchifyRulesPart`'s
+    // own `dispatch.spacingMode = partitionMode` and avoids surprises
+    // if the matcher's leading-separator rules ever change.
     let finalResult = result;
     if (result.length >= 2) {
         const synthetic: RulesPart = {
@@ -2119,7 +2148,11 @@ export function dispatchifyAlternations(rules: GrammarRule[]): GrammarRule[] {
         const dispatched = tryDispatchifyRulesPart(synthetic);
         if (dispatched !== undefined) {
             counter.dispatched++;
-            finalResult = [{ parts: [dispatched] }];
+            const wrapper: GrammarRule = { parts: [dispatched] };
+            if (dispatched.spacingMode !== undefined) {
+                wrapper.spacingMode = dispatched.spacingMode;
+            }
+            finalResult = [wrapper];
         }
     }
 
@@ -2207,8 +2240,17 @@ function visitPart(
  *   - last entry in its parent rule's `parts`
  *   - parent rule has no `value` of its own
  *   - `repeat` / `optional` / `variable` all unset
- *   - `rules.length >= 2` (for dispatch: effective member count =
- *     sum of tokenMap bucket sizes + fallback length)
+ *   - effective member count >= 2 (for `RulesPart`, just
+ *     `rules.length`; for `DispatchPart`, the *static* sum of
+ *     tokenMap bucket sizes + fallback length).  Note this is a
+ *     structural check on the AST shape, not a runtime guarantee:
+ *     at match time `enterDispatchPart` peeks one input token and
+ *     selects a *single* bucket (plus fallback) to form the
+ *     effective alternation list, so the runtime list size for a
+ *     given dispatch entry can be 1.  `enterTailAlternation` has
+ *     its own `rules.length > 1` guard for that case (matching
+ *     `enterRulesAlternation`'s behavior); the check here only
+ *     ensures the dispatch could ever pick more than one member.
  *   - every member's `spacingMode` matches the parent rule's
  *
  * Throws on the first violation with a message identifying the
@@ -2264,34 +2306,9 @@ export function validateTailRulesParts(rules: GrammarRule[]): void {
 }
 
 /**
- * Lazy per-`DispatchPart` cache of the flattened effective member
- * list (`[...allBuckets.flat(), ...fallback]`).  Used by the tail
- * contract validator (`dispatchEffectiveMembers`) and by the value-
- * type derivation in `grammarValueTypeValidator.ts` so neither has
- * to re-flatten on every call.  Keyed by `DispatchPart` identity via
- * a module-local `WeakMap` so the cache is invalidated automatically
- * when a part becomes unreachable.
- */
-const dispatchEffectiveCache = new WeakMap<DispatchPart, GrammarRule[]>();
-
-export function getDispatchEffectiveMembers(p: DispatchPart): GrammarRule[] {
-    let cached = dispatchEffectiveCache.get(p);
-    if (cached !== undefined) return cached;
-    const members: GrammarRule[] = [];
-    for (const bucket of p.tokenMap.values()) {
-        for (const m of bucket) members.push(m);
-    }
-    if (p.fallback !== undefined) {
-        for (const m of p.fallback) members.push(m);
-    }
-    dispatchEffectiveCache.set(p, members);
-    return members;
-}
-
-/**
  * Flatten a `DispatchPart`'s effective member list (sum of tokenMap
  * buckets ++ fallback) for tail-contract validation.  Delegates to
- * the cached helper above.
+ * the shared cached helper in `dispatchHelpers.ts`.
  */
 function dispatchEffectiveMembers(p: DispatchPart): {
     members: GrammarRule[];

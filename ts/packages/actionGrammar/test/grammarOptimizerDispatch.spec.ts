@@ -913,6 +913,64 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
             );
         }
     });
+
+    /**
+     * Match-order semantics: dispatch trades source-order
+     * preservation for first-token bucketing.  When a fallback
+     * (non-statically-tokened) member appears *before* a token-
+     * bucket member in source order, the unoptimized matcher tries
+     * the fallback first - so on inputs both alternatives accept,
+     * the fallback's value wins.  After dispatch, the bucket member
+     * is tried first on a peek hit and its value wins instead.
+     *
+     * This is documented as accepted in
+     * `dispatchifyAlternations`'s docstring.  This test pins the
+     * behavior so any future change (e.g. a `preserveSourceOrder`
+     * opt-in) is forced to update it explicitly.
+     */
+    it("documents accepted match-order shift: bucket member wins over earlier fallback", () => {
+        // Wildcard-first member appears before "play" member in
+        // source order.  Both accept "play me a song"; baseline
+        // returns the wildcard's value, optimized returns the
+        // "play" rule's value.
+        const text = `<Start> = $(text:string) -> { kind: "fallback", text }
+                                  | play $(rest:string) -> { kind: "play", rest }
+                                  | stop -> { kind: "stop" };`;
+        const baseline = loadGrammarRules("t.grammar", text);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        // Confirm a DispatchPart was emitted at the top level with
+        // the wildcard rule in fallback.
+        const dispatch = findDispatchPart(optimized.rules);
+        expect(dispatch).toBeDefined();
+        expect((dispatch!.fallback ?? []).length).toBe(1);
+        expect(Array.from(dispatch!.tokenMap.keys()).sort()).toEqual([
+            "play",
+            "stop",
+        ]);
+
+        // On "play me a song": baseline prefers the source-order
+        // first match (wildcard), optimized prefers the bucket hit.
+        const baselineFirst = matchGrammar(baseline, "play me a song")[0]
+            ?.match;
+        const optimizedFirst = matchGrammar(optimized, "play me a song")[0]
+            ?.match;
+        expect(baselineFirst).toEqual({
+            kind: "fallback",
+            text: "play me a song",
+        });
+        expect(optimizedFirst).toEqual({
+            kind: "play",
+            rest: "me a song",
+        });
+
+        // Both still produce the *same set* of matches (just in a
+        // different order), so exhaustive match-set equality holds.
+        expect(match(baseline, "play me a song")).toStrictEqual(
+            match(optimized, "play me a song"),
+        );
+    });
 });
 
 /**

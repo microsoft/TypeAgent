@@ -15,7 +15,7 @@ import type {
     SchemaObjectField,
 } from "@typeagent/action-schema";
 import { SchemaCreator } from "@typeagent/action-schema";
-import { getDispatchEffectiveMembers } from "./grammarOptimizer.js";
+import { getDispatchEffectiveMembers } from "./dispatchHelpers.js";
 
 // Sentinel for "any" — can't determine type
 const ANY_TYPE: SchemaType = SchemaCreator.any();
@@ -592,22 +592,34 @@ function derivePartType(
             baseType = deriveRuleValueType(part.rules, cache, part.name);
             break;
         case "string":
-            // Bound StringParts arise from the factorer/inliner
-            // (synthesized `__opt_v_<n>` canonicals on shared first
-            // tokens) and may also be authored directly.  The
-            // captured value is the matched text, which is exactly
-            // the part's token sequence joined - return a string-
-            // union literal so enum conformance can be checked.
+        case "phraseSet":
+            // Reachable in principle when an optimizer-emitted
+            // bound StringPart / PhraseSetPart (the factorer mints
+            // synthesized `__opt_v_<n>` canonicals on shared first
+            // tokens) flows through here.  Today this is dead code
+            // at the only call sites: `derivePartType` is invoked
+            // from `classifyRuleValue` (kind=variable) and
+            // `buildVariableTypeMap`, both used by `grammarCompiler`
+            // *before* the optimizer runs.  User-authored `.agr`
+            // syntax does not allow binding a StringPart or
+            // PhraseSetPart, so at compile time `part.variable` is
+            // always undefined for these kinds and the filter
+            // `part.variable !== undefined` (or `if (part.variable)`)
+            // skips them before the call.
+            //
+            // Defensive future-proofing: if validation is ever re-run
+            // after optimization (e.g. on a deserialized grammar that
+            // was optimized at build time), bound StringParts /
+            // PhraseSetParts would reach here.  Producing a real
+            // SchemaType (string-union for StringPart, plain string
+            // for PhraseSetPart) is what callers expect; throwing or
+            // returning ANY would silently weaken downstream type
+            // checks.  Same future-proofing rationale as the
+            // `dispatch` arm below.
             baseType =
-                part.value.length > 0
+                part.type === "string" && part.value.length > 0
                     ? SchemaCreator.string(part.value.join(" "))
                     : SchemaCreator.string();
-            break;
-        case "phraseSet":
-            // Bound PhraseSetParts capture matched text from the
-            // matcher's phrase-set lookup; the exact tokens aren't
-            // statically known, so widen to plain string.
-            baseType = SchemaCreator.string();
             break;
         case "dispatch":
             // Optimizer-introduced.  When `variable` is set the dispatch
