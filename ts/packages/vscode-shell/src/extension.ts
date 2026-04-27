@@ -26,7 +26,7 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.StatusBarAlignment.Left,
         100,
     );
-    statusBarItem.command = "typeagent-shell.focusChat";
+    statusBarItem.command = "vscode-shell.focusChat";
     context.subscriptions.push(statusBarItem);
 
     sidebarBridge = new AgentServerBridge({
@@ -81,13 +81,13 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // Command: open NEW chat in editor tab beside
     context.subscriptions.push(
-        vscode.commands.registerCommand("typeagent-shell.openChat", () => {
+        vscode.commands.registerCommand("vscode-shell.openChat", () => {
             openNewChatPanel(context, provider);
         }),
     );
     context.subscriptions.push(
         vscode.commands.registerCommand(
-            "typeagent-shell.newChatPanel",
+            "vscode-shell.newChatPanel",
             () => openNewChatPanel(context, provider),
         ),
     );
@@ -95,7 +95,7 @@ export function activate(context: vscode.ExtensionContext): void {
     // Serializer: restore previously-open chat panels on window reopen.
     context.subscriptions.push(
         vscode.window.registerWebviewPanelSerializer(
-            "typeagent-shell.chatPanel",
+            "vscode-shell.chatPanel",
             {
                 async deserializeWebviewPanel(
                     panel: vscode.WebviewPanel,
@@ -127,13 +127,13 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // Command: focus the sidebar chat
     context.subscriptions.push(
-        vscode.commands.registerCommand("typeagent-shell.focusChat", () => {
+        vscode.commands.registerCommand("vscode-shell.focusChat", () => {
             // If active chat is a panel, reveal it; otherwise focus sidebar
             if (activeChat?.panel) {
                 activeChat.panel.reveal();
             } else {
                 vscode.commands.executeCommand(
-                    "typeagent-shell.chatView.focus",
+                    "vscode-shell.chatView.focus",
                 );
             }
         }),
@@ -142,23 +142,23 @@ export function activate(context: vscode.ExtensionContext): void {
     // Conversation management commands — operate on the ACTIVE chat
     context.subscriptions.push(
         vscode.commands.registerCommand(
-            "typeagent-shell.switchSession",
+            "vscode-shell.switchSession",
             () => activeChat?.bridge.switchSession(),
         ),
         vscode.commands.registerCommand(
-            "typeagent-shell.newSession",
+            "vscode-shell.newSession",
             () => activeChat?.bridge.newSession(),
         ),
         vscode.commands.registerCommand(
-            "typeagent-shell.renameSession",
+            "vscode-shell.renameSession",
             () => activeChat?.bridge.renameCurrentSession(),
         ),
         vscode.commands.registerCommand(
-            "typeagent-shell.deleteSession",
+            "vscode-shell.deleteSession",
             () => activeChat?.bridge.deleteSession(),
         ),
         vscode.commands.registerCommand(
-            "typeagent-shell.clearChat",
+            "vscode-shell.clearChat",
             () => activeChat?.bridge.clearChatUI(),
         ),
     );
@@ -189,7 +189,7 @@ function refreshFocusContext(): void {
     const anyFocused = [...chats].some((c) => c.focused);
     vscode.commands.executeCommand(
         "setContext",
-        "typeagent-shell.chatFocused",
+        "vscode-shell.chatFocused",
         anyFocused,
     );
 }
@@ -248,7 +248,7 @@ function openNewChatPanel(
     }
 
     const panel = vscode.window.createWebviewPanel(
-        "typeagent-shell.chatPanel",
+        "vscode-shell.chatPanel",
         title,
         targetColumn,
         {

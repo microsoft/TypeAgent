@@ -181,7 +181,7 @@ export class AgentServerBridge {
                 vscode.StatusBarAlignment.Left,
                 100,
             );
-            this.statusBarItem.command = "typeagent-shell.focusChat";
+            this.statusBarItem.command = "vscode-shell.focusChat";
             this.updateStatusBar(false);
             this.statusBarItem.show();
         } else {

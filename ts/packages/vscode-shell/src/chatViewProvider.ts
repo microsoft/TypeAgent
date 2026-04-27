@@ -9,7 +9,7 @@ import { AgentServerBridge } from "./agentServerBridge";
  * helper for editor panels (each gets its own bridge).
  */
 export class ChatViewProvider implements vscode.WebviewViewProvider {
-    public static readonly viewType = "typeagent-shell.chatView";
+    public static readonly viewType = "vscode-shell.chatView";
 
     private _sidebarView?: vscode.WebviewView;
     private _onSidebarResolved?: (view: vscode.WebviewView) => void;
