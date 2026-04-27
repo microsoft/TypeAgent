@@ -22,54 +22,15 @@
 
 import { grammarFromJson } from "../src/grammarDeserializer.js";
 import { loadGrammarRules } from "../src/grammarLoader.js";
-import { matchGrammar } from "../src/grammarMatcher.js";
 import { validateTailRulesParts } from "../src/grammarOptimizer.js";
 import { grammarToJson } from "../src/grammarSerializer.js";
-import {
-    Grammar,
-    GrammarPart,
-    GrammarRule,
-    RulesPart,
-} from "../src/grammarTypes.js";
+import { Grammar, GrammarRule, RulesPart } from "../src/grammarTypes.js";
 import { getDispatchEffectiveMembers } from "../src/dispatchHelpers.js";
-import { DispatchedRulesPart, isDispatched } from "./dispatchTestHelpers.js";
-
-function match(grammar: ReturnType<typeof loadGrammarRules>, request: string) {
-    return matchGrammar(grammar, request)
-        .map((m) => JSON.stringify(m.match))
-        .sort();
-}
-
-function findAllDispatchParts(rules: GrammarRule[]): DispatchedRulesPart[] {
-    const out: DispatchedRulesPart[] = [];
-    const visited = new WeakSet<GrammarRule[]>();
-    const visitParts = (parts: GrammarPart[]) => {
-        for (const p of parts) {
-            if (p.type === "rules" && isDispatched(p)) {
-                out.push(p);
-                for (const m of p.dispatch) {
-                    for (const bucket of m.tokenMap.values()) {
-                        if (!visited.has(bucket)) {
-                            visited.add(bucket);
-                            for (const r of bucket) visitParts(r.parts);
-                        }
-                    }
-                }
-                if (!visited.has(p.rules)) {
-                    visited.add(p.rules);
-                    for (const r of p.rules) visitParts(r.parts);
-                }
-            } else if (p.type === "rules") {
-                if (!visited.has(p.rules)) {
-                    visited.add(p.rules);
-                    for (const r of p.rules) visitParts(r.parts);
-                }
-            }
-        }
-    };
-    for (const r of rules) visitParts(r.parts);
-    return out;
-}
+import {
+    DispatchedRulesPart,
+    findAllDispatchParts,
+    match,
+} from "./dispatchTestHelpers.js";
 
 // Motivating shape: shared `play <Inner> ...` prefix on two
 // alternatives whose suffixes start with distinct first tokens
@@ -94,7 +55,7 @@ describe("Grammar Optimizer - DispatchPart with tailCall", () => {
                     dispatchifyAlternations: true,
                 },
             });
-            const tailDispatches = findAllDispatchParts(optimized.rules).filter(
+            const tailDispatches = findAllDispatchParts(optimized).filter(
                 (dp) => dp.tailCall,
             );
             expect(tailDispatches.length).toBeGreaterThanOrEqual(1);
@@ -177,9 +138,9 @@ describe("Grammar Optimizer - DispatchPart with tailCall", () => {
                 },
             });
             const roundTripped = grammarFromJson(grammarToJson(optimized));
-            const tailDispatches = findAllDispatchParts(
-                roundTripped.rules,
-            ).filter((dp) => dp.tailCall);
+            const tailDispatches = findAllDispatchParts(roundTripped).filter(
+                (dp) => dp.tailCall,
+            );
             expect(tailDispatches.length).toBeGreaterThanOrEqual(1);
             for (const input of [
                 "play song by artist",
@@ -208,7 +169,7 @@ describe("Grammar Optimizer - DispatchPart with tailCall", () => {
             };
             const dispatch: RulesPart = {
                 type: "rules",
-                rules: [],
+                alternatives: [],
                 dispatch: [
                     {
                         spacingMode: undefined,
@@ -221,74 +182,77 @@ describe("Grammar Optimizer - DispatchPart with tailCall", () => {
                 tailCall: true,
             };
             const rule: GrammarRule = { parts: [dispatch] };
-            return { rules: [rule] };
+            return { alternatives: [rule] };
         }
 
         it("accepts a well-formed tail DispatchPart", () => {
             expect(() =>
-                validateTailRulesParts(buildBaseline().rules),
+                validateTailRulesParts(buildBaseline().alternatives),
             ).not.toThrow();
         });
 
         it("rejects when not the last part of the parent rule", () => {
             const g = buildBaseline();
-            g.rules[0].parts.push({ type: "string", value: ["trailer"] });
-            expect(() => validateTailRulesParts(g.rules)).toThrow(
+            g.alternatives[0].parts.push({
+                type: "string",
+                value: ["trailer"],
+            });
+            expect(() => validateTailRulesParts(g.alternatives)).toThrow(
                 /must be the last part/,
             );
         });
 
         it("rejects when the parent rule has its own value", () => {
             const g = buildBaseline();
-            g.rules[0].value = { type: "literal", value: "x" };
-            expect(() => validateTailRulesParts(g.rules)).toThrow(
+            g.alternatives[0].value = { type: "literal", value: "x" };
+            expect(() => validateTailRulesParts(g.alternatives)).toThrow(
                 /no value of its own/,
             );
         });
 
         it("rejects when repeat is set", () => {
             const g = buildBaseline();
-            (g.rules[0].parts[0] as DispatchedRulesPart).repeat = true;
-            expect(() => validateTailRulesParts(g.rules)).toThrow(
+            (g.alternatives[0].parts[0] as DispatchedRulesPart).repeat = true;
+            expect(() => validateTailRulesParts(g.alternatives)).toThrow(
                 /repeat\/optional\/variable are forbidden/,
             );
         });
 
         it("rejects when optional is set", () => {
             const g = buildBaseline();
-            (g.rules[0].parts[0] as DispatchedRulesPart).optional = true;
-            expect(() => validateTailRulesParts(g.rules)).toThrow(
+            (g.alternatives[0].parts[0] as DispatchedRulesPart).optional = true;
+            expect(() => validateTailRulesParts(g.alternatives)).toThrow(
                 /repeat\/optional\/variable are forbidden/,
             );
         });
 
         it("rejects when variable is set", () => {
             const g = buildBaseline();
-            (g.rules[0].parts[0] as DispatchedRulesPart).variable = "x";
-            expect(() => validateTailRulesParts(g.rules)).toThrow(
+            (g.alternatives[0].parts[0] as DispatchedRulesPart).variable = "x";
+            expect(() => validateTailRulesParts(g.alternatives)).toThrow(
                 /repeat\/optional\/variable are forbidden/,
             );
         });
 
         it("rejects when effective member count < 2", () => {
             const g = buildBaseline();
-            const dp = g.rules[0].parts[0] as DispatchedRulesPart;
+            const dp = g.alternatives[0].parts[0] as DispatchedRulesPart;
             // Drop one of the two buckets, leaving a single member.
             const tm = dp.dispatch[0].tokenMap;
             dp.dispatch[0] = {
                 spacingMode: dp.dispatch[0].spacingMode,
                 tokenMap: new Map([["alpha", tm.get("alpha")!]]),
             };
-            expect(() => validateTailRulesParts(g.rules)).toThrow(
+            expect(() => validateTailRulesParts(g.alternatives)).toThrow(
                 /effective member count >= 2/,
             );
         });
 
         it("rejects when a member's spacingMode disagrees with the parent's", () => {
             const g = buildBaseline();
-            const dp = g.rules[0].parts[0] as DispatchedRulesPart;
+            const dp = g.alternatives[0].parts[0] as DispatchedRulesPart;
             dp.dispatch[0].tokenMap.get("alpha")![0].spacingMode = "required";
-            expect(() => validateTailRulesParts(g.rules)).toThrow(
+            expect(() => validateTailRulesParts(g.alternatives)).toThrow(
                 /spacingMode must match/,
             );
         });
@@ -336,12 +300,12 @@ describe("Grammar Optimizer - DispatchPart with tailCall", () => {
             // Confirm the dispatch is tail-call and every bucket
             // has exactly one rule with no fallback - the shape
             // that triggered the original crash.
-            const tailDispatches = findAllDispatchParts(optimized.rules).filter(
+            const tailDispatches = findAllDispatchParts(optimized).filter(
                 (dp) => dp.tailCall,
             );
             expect(tailDispatches.length).toBeGreaterThanOrEqual(1);
             const tail = tailDispatches[0];
-            expect(tail.rules ?? []).toHaveLength(0);
+            expect(tail.alternatives ?? []).toHaveLength(0);
             for (const m of tail.dispatch) {
                 for (const bucket of m.tokenMap.values()) {
                     expect(bucket).toHaveLength(1);

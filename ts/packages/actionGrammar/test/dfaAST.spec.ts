@@ -33,7 +33,7 @@ describe("DFA AST Matching", () => {
     describe("Basic literal matching", () => {
         test("matches simple two-word command", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             { type: "string", value: ["play"] },
@@ -75,7 +75,7 @@ describe("DFA AST Matching", () => {
 
         test("rejects non-matching input", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             { type: "string", value: ["play"] },
@@ -94,7 +94,7 @@ describe("DFA AST Matching", () => {
 
         test("rejects partial input", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             { type: "string", value: ["play"] },
@@ -115,7 +115,7 @@ describe("DFA AST Matching", () => {
     describe("Wildcard matching", () => {
         test("captures single-token wildcard", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             { type: "string", value: ["play"] },
@@ -158,7 +158,7 @@ describe("DFA AST Matching", () => {
 
         test("captures multi-token wildcard (minimal munch absorbs remainder)", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             { type: "string", value: ["play"] },
@@ -195,7 +195,7 @@ describe("DFA AST Matching", () => {
     describe("Minimal munch with backtracking", () => {
         test("play X by Y — backtracking resolves ambiguity on 'by'", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             { type: "string", value: ["play"] },
@@ -261,7 +261,7 @@ describe("DFA AST Matching", () => {
 
         test("play Day by Day by the Carpenters — minimal munch takes first 'by'", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             { type: "string", value: ["play"] },
@@ -335,7 +335,7 @@ describe("DFA AST Matching", () => {
 
         test("backtracking on dead end — play X on Y at Z", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             { type: "string", value: ["play"] },
@@ -390,7 +390,7 @@ describe("DFA AST Matching", () => {
     describe("Value evaluation", () => {
         test("evaluates simple object value from AST", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             { type: "string", value: ["play"] },
@@ -429,7 +429,7 @@ describe("DFA AST Matching", () => {
 
         test("evaluates multi-token wildcard value", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             { type: "string", value: ["play"] },
@@ -480,7 +480,7 @@ describe("DFA AST Matching", () => {
 
         test("evaluates minimal-munch match correctly", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             { type: "string", value: ["play"] },
@@ -533,7 +533,7 @@ describe("DFA AST Matching", () => {
 
         test("evaluates literal-only value expression", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["pause"] }],
                         value: {
@@ -563,7 +563,7 @@ describe("DFA AST Matching", () => {
     describe("Multiple rules", () => {
         test("matches correct rule among alternatives", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             { type: "string", value: ["play"] },
@@ -624,7 +624,7 @@ describe("DFA AST Matching", () => {
     describe("Two-pass split-candidate matching", () => {
         test("possessive splits via two-pass", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             { type: "string", value: ["play"] },
@@ -678,7 +678,7 @@ describe("DFA AST Matching", () => {
     describe("Priority counting", () => {
         test("counts fixed string parts correctly", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             { type: "string", value: ["play"] },
@@ -700,7 +700,7 @@ describe("DFA AST Matching", () => {
 
         test("counts unchecked wildcards correctly", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             { type: "string", value: ["play"] },
@@ -732,7 +732,7 @@ describe("DFA AST Matching", () => {
     describe("Case insensitive matching", () => {
         test("normalizes token case", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             { type: "string", value: ["play"] },
@@ -756,7 +756,7 @@ describe("DFA AST Matching", () => {
     describe("Empty input", () => {
         test("handles empty token array", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["play"] }],
                     },

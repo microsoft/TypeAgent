@@ -1854,7 +1854,7 @@ function backtrack(
  * @returns The computed action value, or undefined if no value expression
  */
 export function evaluateMatchAST(ast: MatchAST, grammar: Grammar): any {
-    const rule = grammar.rules[ast.ruleIndex];
+    const rule = grammar.alternatives[ast.ruleIndex];
     if (!rule) return undefined;
 
     // Find the value expression — it may be nested in RulesPart structures.
@@ -1947,7 +1947,7 @@ function findValueExpression(
     for (const part of rule.parts) {
         if (part.type === "rules") {
             // Try structural matching against nested rule alternatives
-            for (const nestedRule of part.rules) {
+            for (const nestedRule of part.alternatives) {
                 if (
                     nestedRule.value &&
                     matchesRuleStructure(nestedRule, astParts)
@@ -2031,7 +2031,7 @@ function matchesRuleStructure(
                     }
                 }
                 if (!matched) {
-                    for (const nestedRule of part.rules) {
+                    for (const nestedRule of part.alternatives) {
                         if (
                             matchesRuleStructure(
                                 nestedRule,

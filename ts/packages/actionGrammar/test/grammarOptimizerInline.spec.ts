@@ -11,7 +11,7 @@ function countRulesParts(rules: GrammarRule[]): number {
         for (const p of parts) {
             if (p.type === "rules") {
                 n++;
-                for (const r of p.rules) visit(r.parts);
+                for (const r of p.alternatives) visit(r.parts);
             }
         }
     };
@@ -33,8 +33,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         });
 
         // Baseline has at least one wrapping RulesPart for <Inner>.
-        expect(countRulesParts(baseline.rules)).toBeGreaterThan(
-            countRulesParts(optimized.rules),
+        expect(countRulesParts(baseline.alternatives)).toBeGreaterThan(
+            countRulesParts(optimized.alternatives),
         );
         expect(match(optimized, "play world")).toStrictEqual([true]);
         expect(match(baseline, "play world")).toStrictEqual(
@@ -63,8 +63,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         // The child rule has a value expression and the parent is a
         // single-part wrapper with no value.  The optimizer hoists
         // child's value onto the parent and inlines child's parts.
-        expect(countRulesParts(optimized.rules)).toBeLessThan(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBeLessThan(
+            countRulesParts(baseline.alternatives),
         );
         expect(match(optimized, "hello")).toStrictEqual([{ greeting: true }]);
         expect(match(optimized, "hello")).toStrictEqual(
@@ -113,8 +113,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
 <Inner> = hello world -> true;`;
         const baseline = loadGrammarRules("t.grammar", text);
         const noOpt = loadGrammarRules("t.grammar", text, {});
-        expect(JSON.stringify(noOpt.rules)).toBe(
-            JSON.stringify(baseline.rules),
+        expect(JSON.stringify(noOpt.alternatives)).toBe(
+            JSON.stringify(baseline.alternatives),
         );
     });
 
@@ -133,8 +133,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        expect(countRulesParts(optimized.rules)).toBe(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBe(
+            countRulesParts(baseline.alternatives),
         );
         expect(match(optimized, "play hello world")).toStrictEqual(
             match(baseline, "play hello world"),
@@ -151,8 +151,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        expect(countRulesParts(optimized.rules)).toBeLessThan(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBeLessThan(
+            countRulesParts(baseline.alternatives),
         );
         expect(match(optimized, "play hello loud")).toStrictEqual(
             match(baseline, "play hello loud"),
@@ -174,8 +174,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        expect(countRulesParts(optimized.rules)).toBeLessThan(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBeLessThan(
+            countRulesParts(baseline.alternatives),
         );
         expect(match(optimized, "play hello loud now")).toStrictEqual(
             match(baseline, "play hello loud now"),
@@ -197,8 +197,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        expect(countRulesParts(optimized.rules)).toBeLessThan(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBeLessThan(
+            countRulesParts(baseline.alternatives),
         );
         expect(match(optimized, "hello loud")).toStrictEqual(
             match(baseline, "hello loud"),
@@ -215,8 +215,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        expect(countRulesParts(optimized.rules)).toBeLessThan(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBeLessThan(
+            countRulesParts(baseline.alternatives),
         );
         expect(match(optimized, "play hello world")).toStrictEqual(
             match(baseline, "play hello world"),
@@ -235,8 +235,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
             optimizations: { inlineSingleAlternatives: true },
         });
         // Inlining proceeded (one fewer RulesPart layer).
-        expect(countRulesParts(optimized.rules)).toBeLessThan(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBeLessThan(
+            countRulesParts(baseline.alternatives),
         );
         expect(match(optimized, "alice says bob loud")).toStrictEqual(
             match(baseline, "alice says bob loud"),
@@ -256,8 +256,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        expect(countRulesParts(optimized.rules)).toBeLessThan(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBeLessThan(
+            countRulesParts(baseline.alternatives),
         );
         expect(match(optimized, "play hello loud")).toStrictEqual(
             match(baseline, "play hello loud"),
@@ -283,8 +283,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
             optimizations: { inlineSingleAlternatives: true },
         });
         // Inlining still proceeds.
-        expect(countRulesParts(optimized.rules)).toBeLessThan(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBeLessThan(
+            countRulesParts(baseline.alternatives),
         );
         expect(match(optimized, "alice says bob loud")).toStrictEqual(
             match(baseline, "alice says bob loud"),
@@ -308,8 +308,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        expect(countRulesParts(optimized.rules)).toBeLessThan(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBeLessThan(
+            countRulesParts(baseline.alternatives),
         );
         expect(match(optimized, "alice here and bob there")).toStrictEqual(
             match(baseline, "alice here and bob there"),
@@ -337,8 +337,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        expect(countRulesParts(optimized.rules)).toBeLessThan(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBeLessThan(
+            countRulesParts(baseline.alternatives),
         );
         expect(match(optimized, "play hello")).toStrictEqual(
             match(baseline, "play hello"),
@@ -355,8 +355,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        expect(countRulesParts(optimized.rules)).toBeLessThan(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBeLessThan(
+            countRulesParts(baseline.alternatives),
         );
         expect(match(optimized, "set 42")).toStrictEqual(
             match(baseline, "set 42"),
@@ -376,8 +376,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        expect(countRulesParts(optimized.rules)).toBeLessThan(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBeLessThan(
+            countRulesParts(baseline.alternatives),
         );
         expect(match(optimized, "play hello")).toStrictEqual(
             match(baseline, "play hello"),
@@ -398,8 +398,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        expect(countRulesParts(optimized.rules)).toBeLessThan(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBeLessThan(
+            countRulesParts(baseline.alternatives),
         );
         expect(match(optimized, "play the hello")).toStrictEqual(
             match(baseline, "play the hello"),
@@ -430,8 +430,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
             optimizations: { inlineSingleAlternatives: true },
         });
         // Wrapper collapsed.
-        expect(countRulesParts(optimized.rules)).toBeLessThan(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBeLessThan(
+            countRulesParts(baseline.alternatives),
         );
         expect(match(optimized, "play hello")).toStrictEqual(
             match(baseline, "play hello"),
@@ -452,8 +452,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        expect(countRulesParts(optimized.rules)).toBeLessThan(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBeLessThan(
+            countRulesParts(baseline.alternatives),
         );
         expect(match(optimized, "hello world")).toStrictEqual(
             match(baseline, "hello world"),
@@ -472,8 +472,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        expect(countRulesParts(optimized.rules)).toBeLessThan(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBeLessThan(
+            countRulesParts(baseline.alternatives),
         );
         expect(match(optimized, "play hello now")).toStrictEqual(
             match(baseline, "play hello now"),
@@ -517,8 +517,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        expect(countRulesParts(optimized.rules)).toBeLessThan(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBeLessThan(
+            countRulesParts(baseline.alternatives),
         );
         expect(match(optimized, "play hello now")).toStrictEqual(
             match(baseline, "play hello now"),
@@ -555,8 +555,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        expect(countRulesParts(optimized.rules)).toBe(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBe(
+            countRulesParts(baseline.alternatives),
         );
         expect(match(optimized, "play ab")).toStrictEqual(
             match(baseline, "play ab"),
@@ -572,8 +572,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        expect(countRulesParts(optimized.rules)).toBe(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBe(
+            countRulesParts(baseline.alternatives),
         );
     });
 
@@ -589,8 +589,8 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        expect(countRulesParts(optimized.rules)).toBe(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBe(
+            countRulesParts(baseline.alternatives),
         );
         for (const input of ["play hello", "sing hello"]) {
             expect(match(optimized, input)).toStrictEqual(
@@ -640,10 +640,10 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { inlineSingleAlternatives: true },
         });
-        expect(countRulesParts(optimized.rules)).toBeLessThan(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBeLessThan(
+            countRulesParts(baseline.alternatives),
         );
-        const phraseSetPart = optimized.rules[0].parts.find(
+        const phraseSetPart = optimized.alternatives[0].parts.find(
             (p) => p.type === "phraseSet",
         );
         expect(phraseSetPart).toBeDefined();
@@ -668,19 +668,19 @@ describe("Grammar Optimizer - Inline single-alternative RulesPart", () => {
         });
         // <Wrap> wrapper collapsed; "please" + bound phraseSet sit
         // directly in the start rule.
-        expect(countRulesParts(optimized.rules)).toBeLessThan(
-            countRulesParts(baseline.rules),
+        expect(countRulesParts(optimized.alternatives)).toBeLessThan(
+            countRulesParts(baseline.alternatives),
         );
         const collect = (parts: GrammarPart[], out: GrammarPart[]) => {
             for (const p of parts) {
                 out.push(p);
                 if (p.type === "rules") {
-                    for (const r of p.rules) collect(r.parts, out);
+                    for (const r of p.alternatives) collect(r.parts, out);
                 }
             }
         };
         const all: GrammarPart[] = [];
-        for (const r of optimized.rules) collect(r.parts, all);
+        for (const r of optimized.alternatives) collect(r.parts, all);
         const phraseSetPart = all.find((p) => p.type === "phraseSet");
         expect(phraseSetPart).toBeDefined();
         // Parent's `o` retargeted onto the bound phraseSet — the same

@@ -22,42 +22,10 @@
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
-import { Grammar, GrammarPart, GrammarRule } from "../src/grammarTypes.js";
-import { DispatchedRulesPart, isDispatched } from "./dispatchTestHelpers.js";
-
-function findFirstDispatch(
-    grammar: Grammar,
-): DispatchedRulesPart | undefined {
-    if (grammar.dispatch !== undefined) {
-        return {
-            type: "rules",
-            rules: grammar.rules,
-            dispatch: grammar.dispatch,
-        } as DispatchedRulesPart;
-    }
-    const visited = new WeakSet<GrammarRule[]>();
-    let found: DispatchedRulesPart | undefined;
-    const visitParts = (parts: GrammarPart[]) => {
-        for (const p of parts) {
-            if (found !== undefined) return;
-            if (p.type === "rules" && isDispatched(p)) {
-                found = p;
-                return;
-            }
-            if (p.type === "rules") {
-                if (!visited.has(p.rules)) {
-                    visited.add(p.rules);
-                    for (const r of p.rules) visitParts(r.parts);
-                }
-            }
-        }
-    };
-    for (const r of grammar.rules) {
-        visitParts(r.parts);
-        if (found !== undefined) break;
-    }
-    return found;
-}
+import {
+    DispatchedRulesPart,
+    findDispatchPart,
+} from "./dispatchTestHelpers.js";
 
 function compareWithBaseline(
     schema: string,
@@ -81,7 +49,7 @@ function compareWithBaseline(
             .sort();
         expect(got).toStrictEqual(exp);
     }
-    return { optimized, dispatch: findFirstDispatch(optimized) };
+    return { optimized, dispatch: findDispatchPart(optimized) };
 }
 
 describe("Grammar Optimizer - mixed-mode DispatchPart", () => {
@@ -146,7 +114,7 @@ describe("Grammar Optimizer - mixed-mode DispatchPart", () => {
         expect(
             Array.from(dispatch!.dispatch[0].tokenMap.keys()).sort(),
         ).toStrictEqual(["alpha", "beta", "gamma"]);
-        expect(dispatch!.rules).toHaveLength(1);
+        expect(dispatch!.alternatives).toHaveLength(1);
     });
 
     it("preserves member-source order of first appearance in perMode", () => {

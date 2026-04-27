@@ -44,7 +44,7 @@ export class AgentGrammar {
         this.grammar = grammar;
         this.nfa = nfa;
         this.firstTokenIndex = buildFirstTokenIndex(nfa);
-        this.ruleCount = grammar.rules.length;
+        this.ruleCount = grammar.alternatives.length;
         // Store deep copy of base grammar for reset capability
         this.baseGrammar = JSON.parse(JSON.stringify(grammar));
         this.baseNFA = nfa; // NFA is immutable, safe to share reference
@@ -117,7 +117,10 @@ export class AgentGrammar {
         }
 
         // Merge into existing grammar
-        const mergedGrammar = mergeGrammarRules(this.grammar, newGrammar.rules);
+        const mergedGrammar = mergeGrammarRules(
+            this.grammar,
+            newGrammar.alternatives,
+        );
 
         // Merge entity declarations
         if (newGrammar.entities) {
@@ -151,7 +154,7 @@ export class AgentGrammar {
             this.grammar = mergedGrammar;
             this.nfa = newNFA;
             this.firstTokenIndex = buildFirstTokenIndex(newNFA);
-            this.ruleCount = mergedGrammar.rules.length;
+            this.ruleCount = mergedGrammar.alternatives.length;
 
             // Log the newly added grammar rules for debugging/testing
             const newRulesCount = this.ruleCount - previousRuleCount;
@@ -184,12 +187,12 @@ export class AgentGrammar {
         debug(
             `Resetting agent '%s' to base grammar (removing %d dynamic rules)`,
             this.agentId,
-            this.ruleCount - this.baseGrammar.rules.length,
+            this.ruleCount - this.baseGrammar.alternatives.length,
         );
         this.grammar = JSON.parse(JSON.stringify(this.baseGrammar));
         this.nfa = this.baseNFA;
         this.firstTokenIndex = this.baseFirstTokenIndex;
-        this.ruleCount = this.baseGrammar.rules.length;
+        this.ruleCount = this.baseGrammar.alternatives.length;
     }
 
     /**
@@ -246,7 +249,7 @@ export class AgentGrammar {
         }
 
         // Check wildcard types in rules
-        for (const rule of grammar.rules) {
+        for (const rule of grammar.alternatives) {
             this.checkPartsForEntities(
                 rule.parts,
                 unresolved,
@@ -294,7 +297,7 @@ export class AgentGrammar {
                     unresolved.add(part.typeName);
                 }
             } else if (part.type === "rules") {
-                for (const nestedRule of part.rules) {
+                for (const nestedRule of part.alternatives) {
                     this.checkPartsForEntities(
                         nestedRule.parts,
                         unresolved,
@@ -439,7 +442,7 @@ export class AgentGrammarRegistry {
                 agentId,
             );
             try {
-                agent = this.registerAgent(agentId, { rules: [] });
+                agent = this.registerAgent(agentId, { alternatives: [] });
             } catch (e) {
                 return {
                     success: false,

@@ -39,9 +39,9 @@ function countRulesParts(rules: GrammarRule[]): number {
         for (const p of parts) {
             if (p.type === "rules") {
                 n++;
-                if (seen.has(p.rules)) continue;
-                seen.add(p.rules);
-                for (const r of p.rules) visit(r.parts);
+                if (seen.has(p.alternatives)) continue;
+                seen.add(p.alternatives);
+                for (const r of p.alternatives) visit(r.parts);
             }
         }
     };
@@ -52,7 +52,7 @@ function countRulesParts(rules: GrammarRule[]): number {
 describe("Grammar Optimizer - Public API entry points", () => {
     it("optimizeGrammar returns the input grammar unchanged when options is undefined", () => {
         const grammar: Grammar = {
-            rules: [{ parts: [{ type: "string", value: ["hello"] }] }],
+            alternatives: [{ parts: [{ type: "string", value: ["hello"] }] }],
         };
         const result = optimizeGrammar(grammar, undefined);
         // Same object identity — early return, no copy.
@@ -61,7 +61,7 @@ describe("Grammar Optimizer - Public API entry points", () => {
 
     it("optimizeGrammar returns the input grammar unchanged when no flags are set", () => {
         const grammar: Grammar = {
-            rules: [{ parts: [{ type: "string", value: ["hello"] }] }],
+            alternatives: [{ parts: [{ type: "string", value: ["hello"] }] }],
         };
         // Both flags off → both passes skipped → returns same identity.
         const result = optimizeGrammar(grammar, {});
@@ -92,7 +92,7 @@ describe("Grammar Optimizer - Public API entry points", () => {
                 parts: [
                     {
                         type: "rules",
-                        rules: childRules,
+                        alternatives: childRules,
                         variable: "captured",
                     },
                 ],
@@ -106,7 +106,7 @@ describe("Grammar Optimizer - Public API entry points", () => {
         const part = optimized[0].parts[0];
         expect(part.type).toBe("rules");
         if (part.type === "rules") {
-            expect(part.rules).toBe(childRules);
+            expect(part.alternatives).toBe(childRules);
         }
     });
 });
@@ -160,8 +160,8 @@ describe("Grammar Optimizer - Two-pass inline+factor pipeline", () => {
         // Combo result must be at least as small (in RulesPart count)
         // as factor-only — the inline pass at the end of the pipeline
         // is observably non-destructive.
-        expect(countRulesParts(both.rules)).toBeLessThanOrEqual(
-            countRulesParts(factorOnly.rules),
+        expect(countRulesParts(both.alternatives)).toBeLessThanOrEqual(
+            countRulesParts(factorOnly.alternatives),
         );
 
         // And matches still agree with baseline.

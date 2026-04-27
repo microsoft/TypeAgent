@@ -17,7 +17,7 @@ describe("Agent Grammar Registry", () => {
     describe("AgentGrammar", () => {
         it("should create an agent grammar and match requests", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             { type: "string", value: ["play"] },
@@ -51,7 +51,7 @@ describe("Agent Grammar Registry", () => {
 
         it("should add generated rules dynamically", () => {
             const baseGrammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["pause"] }],
                     },
@@ -85,7 +85,7 @@ describe("Agent Grammar Registry", () => {
 
         it("should validate entity references in generated rules", () => {
             const baseGrammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["test"] }],
                     },
@@ -114,7 +114,7 @@ describe("Agent Grammar Registry", () => {
 
         it("should merge entity declarations when adding rules", () => {
             const baseGrammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["test"] }],
                     },
@@ -147,7 +147,7 @@ describe("Agent Grammar Registry", () => {
 
         it("should provide statistics", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["test"] }],
                     },
@@ -165,7 +165,7 @@ describe("Agent Grammar Registry", () => {
 
         it("should recompile NFA when adding multiple rules", () => {
             const baseGrammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["pause"] }],
                     },
@@ -255,7 +255,7 @@ describe("Agent Grammar Registry", () => {
 
         it("should register agents", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["play"] }],
                     },
@@ -294,7 +294,7 @@ describe("Agent Grammar Registry", () => {
 
         it("should unregister agents", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["test"] }],
                     },
@@ -311,7 +311,7 @@ describe("Agent Grammar Registry", () => {
 
         it("should add generated rules to registered agent", () => {
             const baseGrammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["pause"] }],
                     },
@@ -327,7 +327,7 @@ describe("Agent Grammar Registry", () => {
             expect(result.success).toBe(true);
 
             const agent = registry.getAgent("player");
-            expect(agent!.getGrammar().rules.length).toBe(2);
+            expect(agent!.getGrammar().alternatives.length).toBe(2);
         });
 
         it("should auto-register non-existent agent and attempt to add rules", () => {
@@ -347,7 +347,7 @@ describe("Agent Grammar Registry", () => {
         it("should match across multiple agents", () => {
             // Register player agent
             const playerGrammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             { type: "string", value: ["play"] },
@@ -374,7 +374,7 @@ describe("Agent Grammar Registry", () => {
 
             // Register calendar agent
             const calendarGrammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             { type: "string", value: ["schedule"] },
@@ -421,14 +421,14 @@ describe("Agent Grammar Registry", () => {
         it("should match against specific agents", () => {
             // Register two agents
             registry.registerAgent("player", {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["play"] }],
                     },
                 ],
             });
             registry.registerAgent("calendar", {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["schedule"] }],
                     },
@@ -447,7 +447,7 @@ describe("Agent Grammar Registry", () => {
 
         it("should return no match when no agents match", () => {
             registry.registerAgent("player", {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["play"] }],
                     },
@@ -462,14 +462,14 @@ describe("Agent Grammar Registry", () => {
 
         it("should provide statistics for all agents", () => {
             registry.registerAgent("player", {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["play"] }],
                     },
                 ],
             });
             registry.registerAgent("calendar", {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["schedule"] }],
                     },
@@ -484,14 +484,14 @@ describe("Agent Grammar Registry", () => {
 
         it("should clear all agents", () => {
             registry.registerAgent("agent1", {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["test1"] }],
                     },
                 ],
             });
             registry.registerAgent("agent2", {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["test2"] }],
                     },

@@ -546,7 +546,7 @@ describe("Grammar Generator", () => {
             try {
                 const grammar = loadGrammarRules("player", grammarRule);
                 expect(grammar).toBeDefined();
-                expect(grammar?.rules.length).toBeGreaterThan(0);
+                expect(grammar?.alternatives.length).toBeGreaterThan(0);
             } catch (error: any) {
                 fail(
                     `Generated grammar rule failed to compile: ${error.message}\n\nGenerated rule:\n${grammarRule}`,

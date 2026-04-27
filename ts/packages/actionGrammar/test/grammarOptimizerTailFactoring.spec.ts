@@ -24,9 +24,9 @@ function findAllRulesParts(rules: GrammarRule[]): RulesPart[] {
         for (const p of parts) {
             if (p.type === "rules") {
                 out.push(p);
-                if (!visited.has(p.rules)) {
-                    visited.add(p.rules);
-                    for (const r of p.rules) visit(r.parts);
+                if (!visited.has(p.alternatives)) {
+                    visited.add(p.alternatives);
+                    for (const r of p.alternatives) visit(r.parts);
                 }
             }
         }
@@ -47,7 +47,7 @@ describe("Grammar Optimizer - tail RulesPart factoring (opt-in)", () => {
         const optimized = loadGrammarRules("t.grammar", PLAYER_SCHEMA, {
             optimizations: { factorCommonPrefixes: true },
         });
-        const tailParts = findAllRulesParts(optimized.rules).filter(
+        const tailParts = findAllRulesParts(optimized.alternatives).filter(
             (rp) => rp.tailCall,
         );
         expect(tailParts).toHaveLength(0);
@@ -68,7 +68,7 @@ describe("Grammar Optimizer - tail RulesPart factoring (opt-in)", () => {
             },
         });
 
-        const tailParts = findAllRulesParts(optimized.rules).filter(
+        const tailParts = findAllRulesParts(optimized.alternatives).filter(
             (rp) => rp.tailCall,
         );
         expect(tailParts.length).toBeGreaterThanOrEqual(1);
@@ -76,7 +76,7 @@ describe("Grammar Optimizer - tail RulesPart factoring (opt-in)", () => {
             expect(tp.variable).toBeUndefined();
             expect(tp.optional).toBeFalsy();
             expect(tp.repeat).toBeFalsy();
-            expect(tp.rules.length).toBeGreaterThanOrEqual(2);
+            expect(tp.alternatives.length).toBeGreaterThanOrEqual(2);
         }
 
         for (const input of [
@@ -113,7 +113,7 @@ describe("Grammar Optimizer - tail RulesPart factoring (opt-in)", () => {
                 tailFactoring: true,
             },
         });
-        const tailParts = findAllRulesParts(optimized.rules).filter(
+        const tailParts = findAllRulesParts(optimized.alternatives).filter(
             (rp) => rp.tailCall,
         );
         expect(tailParts.length).toBeGreaterThanOrEqual(1);
@@ -139,9 +139,9 @@ describe("Grammar Optimizer - tail RulesPart factoring (opt-in)", () => {
         const json = grammarToJson(optimized);
         const reloaded = grammarFromJson(json);
 
-        const reloadedTailParts = findAllRulesParts(reloaded.rules).filter(
-            (rp) => rp.tailCall,
-        );
+        const reloadedTailParts = findAllRulesParts(
+            reloaded.alternatives,
+        ).filter((rp) => rp.tailCall);
         expect(reloadedTailParts.length).toBeGreaterThanOrEqual(1);
 
         for (const input of [
@@ -206,21 +206,23 @@ describe("Grammar Optimizer - tail RulesPart factoring (opt-in)", () => {
             },
         });
         // Top-level: one wrapper rule (was three before factoring).
-        expect(optimized.rules.length).toBe(1);
-        const tailParts = findAllRulesParts(optimized.rules).filter(
+        expect(optimized.alternatives.length).toBe(1);
+        const tailParts = findAllRulesParts(optimized.alternatives).filter(
             (rp) => rp.tailCall,
         );
         // Exactly one tail wrapper at this fork.
         expect(tailParts.length).toBe(1);
         // The single tail wrapper holds all three original alternatives.
-        expect(tailParts[0].rules.length).toBe(3);
+        expect(tailParts[0].alternatives.length).toBe(3);
         // The wrapper rule itself ends in the tail RulesPart (last
         // part), per `RulesPart.tailCall` contract.
-        const wrapper = optimized.rules[0];
+        const wrapper = optimized.alternatives[0];
         expect(wrapper.parts[wrapper.parts.length - 1]).toBe(tailParts[0]);
         expect(wrapper.parts.length).toBeGreaterThan(1); // prefix exists
         // Validator should accept the factored AST.
-        expect(() => validateTailRulesParts(optimized.rules)).not.toThrow();
+        expect(() =>
+            validateTailRulesParts(optimized.alternatives),
+        ).not.toThrow();
 
         for (const input of [
             "a x b y",
@@ -260,7 +262,7 @@ describe("validateTailRulesParts", () => {
                     for (const p of r.parts) {
                         if (p.type !== "rules") continue;
                         if (p.tailCall) return { rule: r, part: p };
-                        const inner = recur(p.rules);
+                        const inner = recur(p.alternatives);
                         if (inner) return inner;
                     }
                 }
@@ -268,7 +270,7 @@ describe("validateTailRulesParts", () => {
             };
             return recur(rules);
         };
-        const found = findTail(baseline.rules);
+        const found = findTail(baseline.alternatives);
         if (!found) throw new Error("test setup: no tail RulesPart found");
         mutate(found.rule, found.part);
         return baseline;
@@ -281,14 +283,16 @@ describe("validateTailRulesParts", () => {
                 tailFactoring: true,
             },
         });
-        expect(() => validateTailRulesParts(optimized.rules)).not.toThrow();
+        expect(() =>
+            validateTailRulesParts(optimized.alternatives),
+        ).not.toThrow();
     });
 
     it("rejects single-member tail RulesPart", () => {
         const bad = buildBadGrammar((_rule, tail) => {
-            tail.rules = [tail.rules[0]];
+            tail.alternatives = [tail.alternatives[0]];
         });
-        expect(() => validateTailRulesParts(bad.rules)).toThrow(
+        expect(() => validateTailRulesParts(bad.alternatives)).toThrow(
             /effective member count >= 2/,
         );
     });
@@ -297,7 +301,7 @@ describe("validateTailRulesParts", () => {
         const bad = buildBadGrammar((_rule, tail) => {
             tail.variable = "x";
         });
-        expect(() => validateTailRulesParts(bad.rules)).toThrow(
+        expect(() => validateTailRulesParts(bad.alternatives)).toThrow(
             /repeat\/optional\/variable/,
         );
     });
@@ -308,7 +312,7 @@ describe("validateTailRulesParts", () => {
             // last.
             rule.parts.push({ type: "string", value: ["xyz"] });
         });
-        expect(() => validateTailRulesParts(bad.rules)).toThrow(
+        expect(() => validateTailRulesParts(bad.alternatives)).toThrow(
             /must be the last part/,
         );
     });
@@ -317,18 +321,18 @@ describe("validateTailRulesParts", () => {
         const bad = buildBadGrammar((rule, _tail) => {
             rule.value = { type: "literal", value: "fixed" };
         });
-        expect(() => validateTailRulesParts(bad.rules)).toThrow(
+        expect(() => validateTailRulesParts(bad.alternatives)).toThrow(
             /no value of its own/,
         );
     });
 
     it("rejects tail RulesPart with mismatched member spacingMode", () => {
         const bad = buildBadGrammar((_rule, tail) => {
-            tail.rules = tail.rules.map((m, i) =>
+            tail.alternatives = tail.alternatives.map((m, i) =>
                 i === 0 ? { ...m, spacingMode: "required" as const } : m,
             );
         });
-        expect(() => validateTailRulesParts(bad.rules)).toThrow(
+        expect(() => validateTailRulesParts(bad.alternatives)).toThrow(
             /spacingMode must match/,
         );
     });
@@ -473,7 +477,7 @@ describe("leadingSpacingMode propagation through tail-call entries", () => {
                 tailFactoring: true,
             },
         });
-        const tailParts = findAllRulesParts(optimized.rules).filter(
+        const tailParts = findAllRulesParts(optimized.alternatives).filter(
             (rp) => rp.tailCall,
         );
         expect(tailParts.length).toBeGreaterThanOrEqual(1);
@@ -516,7 +520,7 @@ describe("leadingSpacingMode propagation through tail-call entries", () => {
                 tailFactoring: true,
             },
         });
-        const tailParts = findAllRulesParts(optimized.rules).filter(
+        const tailParts = findAllRulesParts(optimized.alternatives).filter(
             (rp) => rp.tailCall,
         );
         expect(tailParts.length).toBeGreaterThanOrEqual(1);

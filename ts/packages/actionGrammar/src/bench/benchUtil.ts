@@ -143,11 +143,11 @@ export function countRulesParts(
         for (const p of parts) {
             if (p.type === "rules") {
                 count++;
-                for (const r of p.rules) visit(r.parts);
+                for (const r of p.alternatives) visit(r.parts);
             }
         }
     };
-    for (const r of grammar.rules) visit(r.parts);
+    for (const r of grammar.alternatives) visit(r.parts);
     return count;
 }
 

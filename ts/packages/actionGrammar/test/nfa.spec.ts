@@ -54,7 +54,7 @@ describe("NFA Infrastructure", () => {
     describe("Grammar to NFA Compilation", () => {
         it("should compile a simple string grammar", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             {
@@ -75,7 +75,7 @@ describe("NFA Infrastructure", () => {
 
         it("should compile a grammar with alternatives", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             {
@@ -107,7 +107,7 @@ describe("NFA Infrastructure", () => {
 
         it("should compile a grammar with sequence", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             {
@@ -136,7 +136,7 @@ describe("NFA Infrastructure", () => {
 
         it("should compile a grammar with wildcards", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             {
@@ -173,7 +173,7 @@ describe("NFA Infrastructure", () => {
 
         it("should compile a grammar with optional parts", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             {
@@ -216,12 +216,12 @@ describe("NFA Infrastructure", () => {
         it("should compile Kleene star )* — zero or more repetitions", () => {
             // Pattern: (um | uh)* help  — zero fillers is fine
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             {
                                 type: "rules",
-                                rules: [
+                                alternatives: [
                                     {
                                         parts: [
                                             { type: "string", value: ["um"] },
@@ -257,12 +257,12 @@ describe("NFA Infrastructure", () => {
         it("should compile Kleene plus )+ — one or more repetitions", () => {
             // Pattern: (word)+ end  — at least one "word" required
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             {
                                 type: "rules",
-                                rules: [
+                                alternatives: [
                                     {
                                         parts: [
                                             { type: "string", value: ["word"] },
@@ -353,7 +353,7 @@ describe("NFA Infrastructure", () => {
 
         it("should handle number type constraints", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             {
@@ -430,7 +430,7 @@ describe("NFA Infrastructure", () => {
     describe("NFA Debugging", () => {
         it("should print NFA structure", () => {
             const grammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             {

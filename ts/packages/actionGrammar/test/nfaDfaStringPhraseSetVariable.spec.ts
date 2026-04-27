@@ -59,7 +59,7 @@ function bestDfaActionValue(grammar: Grammar, request: string): unknown {
 describe("StringPart variable capture", () => {
     // <Start> = "hello" -> { greeting: <captured "hello"> }
     const grammar: Grammar = {
-        rules: [
+        alternatives: [
             {
                 parts: [
                     {
@@ -89,7 +89,7 @@ describe("StringPart variable capture", () => {
     // Multi-token StringPart should write the joined fixed string,
     // once, on the final transition of the chain.
     const multiTokenGrammar: Grammar = {
-        rules: [
+        alternatives: [
             {
                 parts: [
                     {
@@ -124,7 +124,7 @@ describe("StringPart variable capture", () => {
     // wildcard capture in the same parent rule.  The value expression
     // references both.
     const mixedGrammar: Grammar = {
-        rules: [
+        alternatives: [
             {
                 parts: [
                     {
@@ -182,7 +182,7 @@ describe("StringPart variable capture", () => {
 describe("PhraseSetPart variable capture", () => {
     // <Start> = <Polite> "go" -> { opener: <captured polite phrase>, action: "go" }
     const grammar: Grammar = {
-        rules: [
+        alternatives: [
             {
                 parts: [
                     {
@@ -229,7 +229,7 @@ describe("PhraseSetPart variable capture", () => {
 describe("Serialization round-trip preserves variable", () => {
     it("StringPart variable survives JSON round-trip", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         {
@@ -244,14 +244,14 @@ describe("Serialization round-trip preserves variable", () => {
         };
         const json = grammarToJson(grammar);
         const restored = grammarFromJson(json);
-        const part = restored.rules[0].parts[0];
+        const part = restored.alternatives[0].parts[0];
         expect(part.type).toBe("string");
         expect((part as { variable?: string }).variable).toBe("v");
     });
 
     it("PhraseSetPart variable survives JSON round-trip", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         {
@@ -267,7 +267,7 @@ describe("Serialization round-trip preserves variable", () => {
         };
         const json = grammarToJson(grammar);
         const restored = grammarFromJson(json);
-        const part = restored.rules[0].parts[0];
+        const part = restored.alternatives[0].parts[0];
         expect(part.type).toBe("phraseSet");
         expect((part as { variable?: string }).variable).toBe("v");
     });

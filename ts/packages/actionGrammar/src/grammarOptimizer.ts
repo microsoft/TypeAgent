@@ -155,7 +155,7 @@ export function optimizeGrammar(
     if (!options) {
         return grammar;
     }
-    let rules = grammar.rules;
+    let rules = grammar.alternatives;
     const inlineConfig: InlineConfig = {
         onInvariantViolation: options.onInvariantViolation ?? "debug",
     };
@@ -211,13 +211,13 @@ export function optimizeGrammar(
     let topLevelDispatch: DispatchModeBucket[] | undefined;
     if (options.dispatchifyAlternations) {
         const result = dispatchifyAlternations(rules);
-        rules = result.rules;
+        rules = result.alternatives;
         topLevelDispatch = result.dispatch;
     }
-    if (rules === grammar.rules && topLevelDispatch === undefined) {
+    if (rules === grammar.alternatives && topLevelDispatch === undefined) {
         return grammar;
     }
-    const out: Grammar = { ...grammar, rules };
+    const out: Grammar = { ...grammar, alternatives: rules };
     if (topLevelDispatch !== undefined) {
         out.dispatch = topLevelDispatch;
     }
@@ -280,7 +280,7 @@ function countRulesArrayRefs(rules: GrammarRule[]): Map<GrammarRule[], number> {
         visited.add(arr);
         for (const r of arr) {
             for (const p of r.parts) {
-                if (p.type === "rules") walk(p.rules);
+                if (p.type === "rules") walk(p.alternatives);
             }
         }
     }
@@ -408,14 +408,16 @@ function inlineParts(
         // Recurse into nested rules first (post-order), preserving
         // shared-array identity via memo.
         const inlinedRules = inlineRulesArray(
-            p.rules,
+            p.alternatives,
             counter,
             memo,
             refCounts,
             config,
         );
         const rewritten: RulesPart =
-            inlinedRules !== p.rules ? { ...p, rules: inlinedRules } : p;
+            inlinedRules !== p.alternatives
+                ? { ...p, alternatives: inlinedRules }
+                : p;
 
         // Refuse to inline a RulesPart whose body is shared by more than
         // one reference: inlining duplicates the child's parts at the
@@ -425,7 +427,7 @@ function inlineParts(
         // from the *input* AST; the rewritten array shares identity with
         // it via the memo when no nested change occurred, and otherwise
         // is unique to this site (so inlining is safe).
-        const shared = (refCounts.get(p.rules) ?? 1) > 1;
+        const shared = (refCounts.get(p.alternatives) ?? 1) > 1;
         const replacement = shared
             ? undefined
             : tryInlineRulesPart(rewritten, parentRule, renameState, config);
@@ -476,7 +478,7 @@ function tryInlineRulesPart(
     if (part.repeat || part.optional) {
         return undefined;
     }
-    if (part.rules.length !== 1) {
+    if (part.alternatives.length !== 1) {
         return undefined;
     }
     // Past this point, `part.rules.length === 1`.  Tail RulesParts have
@@ -497,7 +499,7 @@ function tryInlineRulesPart(
         debug(`${msg} - refusing to inline (onInvariantViolation=debug)`);
         return undefined;
     }
-    const child = part.rules[0];
+    const child = part.alternatives[0];
     if (child.parts.length === 0) {
         return undefined;
     }
@@ -807,13 +809,15 @@ function factorParts(
         // Recurse into nested rules first, preserving shared-array
         // identity via memo.
         const recursedRules = factorRulesArray(
-            p.rules,
+            p.alternatives,
             counter,
             memo,
             tailFactoring,
         );
         const recursed: RulesPart =
-            recursedRules !== p.rules ? { ...p, rules: recursedRules } : p;
+            recursedRules !== p.alternatives
+                ? { ...p, alternatives: recursedRules }
+                : p;
 
         const working = factorRulesPart(recursed, counter, tailFactoring);
         if (out !== undefined) {
@@ -845,9 +849,9 @@ function factorRulesPart(
         // such groups untouched to stay safe.
         return part;
     }
-    const factored = factorRules(part.rules, counter, tailFactoring);
-    if (factored === part.rules) return part;
-    return { ...part, rules: factored };
+    const factored = factorRules(part.alternatives, counter, tailFactoring);
+    if (factored === part.alternatives) return part;
+    return { ...part, alternatives: factored };
 }
 
 /**
@@ -1257,7 +1261,7 @@ function* partsToEdgeSteps(parts: GrammarPart[]): Generator<TrieStep> {
             case "rules":
                 yield {
                     kind: "rules",
-                    rules: p.rules,
+                    rules: p.alternatives,
                     optional: !!p.optional,
                     repeat: !!p.repeat,
                     name: p.name,
@@ -1376,7 +1380,7 @@ function edgeToPart(edge: TrieEdge): GrammarPart {
             return out;
         }
         case "rules": {
-            const out: RulesPart = { type: "rules", rules: edge.rules };
+            const out: RulesPart = { type: "rules", alternatives: edge.rules };
             if (edge.canonical !== undefined) {
                 out.variable = edge.canonical;
             }
@@ -1670,7 +1674,7 @@ function buildTailWrapper(
 ): GrammarRule {
     const suffixRulesPart: RulesPart = {
         type: "rules",
-        rules: members,
+        alternatives: members,
         tailCall: true,
     };
     const factoredAlt: GrammarRule = {
@@ -1704,7 +1708,7 @@ function buildNonTailWrapper(
     buildState: BuildState,
     partitionSpacing: CompiledSpacingMode | undefined,
 ): GrammarRule {
-    const suffixRulesPart: RulesPart = { type: "rules", rules: members };
+    const suffixRulesPart: RulesPart = { type: "rules", alternatives: members };
     const factoredAlt: GrammarRule = {
         parts: [...prefix, suffixRulesPart],
     };
@@ -1930,6 +1934,17 @@ function substituteValueVariables(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Shared frozen empty-rules sentinel used as the `rules` (fallback)
+ * subset on dispatched `RulesPart`s with no fallback members.  Using
+ * a single identity across every empty-fallback dispatched part
+ * lets `grammarSerializer.ts`'s identity-keyed `indexFor` dedup
+ * them into one JSON slot instead of one slot per part.
+ */
+const EMPTY_FALLBACK_RULES: GrammarRule[] = Object.freeze(
+    [] as GrammarRule[],
+) as GrammarRule[];
+
+/**
  * Classify a single rule's first part for dispatch eligibility,
  * deriving the bucket key for an `auto`/`required`-mode partition:
  *   - { kind: "token", token } - rule goes into `tokenMap[token]`.
@@ -2037,7 +2052,7 @@ function classifyDispatchMember(
  *     the non-dispatched form.
  */
 function tryDispatchifyRulesPart(part: RulesPart): RulesPart | undefined {
-    if (part.rules.length < 2) {
+    if (part.alternatives.length < 2) {
         // Single-rule "alternation" - nothing to dispatch.
         debug(`dispatch skip (single-rule) name='${part.name ?? "<unnamed>"}'`);
         return undefined;
@@ -2061,7 +2076,7 @@ function tryDispatchifyRulesPart(part: RulesPart): RulesPart | undefined {
         }
         return undefined;
     };
-    for (const rule of part.rules) {
+    for (const rule of part.alternatives) {
         const mode = rule.spacingMode;
         if (mode === "optional" || mode === "none") {
             // Not peek-eligible - peek's separator handling
@@ -2109,7 +2124,12 @@ function tryDispatchifyRulesPart(part: RulesPart): RulesPart | undefined {
 
     const out: RulesPart = {
         type: "rules",
-        rules: fallback,
+        // Canonicalize empty fallback to a shared frozen sentinel so
+        // the serializer can dedup empty-rules slots across every
+        // dispatched part: each fallback `[]` would otherwise be a
+        // fresh array identity and `indexFor([])` would mint a fresh
+        // JSON slot per dispatched part.
+        alternatives: fallback.length === 0 ? EMPTY_FALLBACK_RULES : fallback,
         dispatch: perMode,
     };
     if (part.name !== undefined) out.name = part.name;
@@ -2154,7 +2174,7 @@ function tryDispatchifyRulesPart(part: RulesPart): RulesPart | undefined {
  * with a tokenMap key).  Not yet wired up - no measured need.
  */
 export function dispatchifyAlternations(rules: GrammarRule[]): {
-    rules: GrammarRule[];
+    alternatives: GrammarRule[];
     dispatch?: DispatchModeBucket[];
 } {
     const counter = { dispatched: 0 };
@@ -2166,17 +2186,20 @@ export function dispatchifyAlternations(rules: GrammarRule[]): {
     // top-level alternatives and try to dispatch it.  On success,
     // hoist the dispatch index and the trimmed fallback subset
     // onto the grammar shape directly - no wrapper rule synthesized.
-    const out: { rules: GrammarRule[]; dispatch?: DispatchModeBucket[] } = {
-        rules: result,
+    const out: {
+        alternatives: GrammarRule[];
+        dispatch?: DispatchModeBucket[];
+    } = {
+        alternatives: result,
     };
     if (result.length >= 2) {
         const dispatched = tryDispatchifyRulesPart({
             type: "rules",
-            rules: result,
+            alternatives: result,
         });
         if (dispatched?.dispatch !== undefined) {
             counter.dispatched++;
-            out.rules = dispatched.rules;
+            out.alternatives = dispatched.alternatives;
             out.dispatch = dispatched.dispatch;
         }
     }
@@ -2258,20 +2281,22 @@ function visitPart(
             }
             return m;
         });
-        const innerRules = visitRulesArray(part.rules, counter, memo);
-        if (innerRules !== part.rules) dirty = true;
+        const innerRules = visitRulesArray(part.alternatives, counter, memo);
+        if (innerRules !== part.alternatives) dirty = true;
         if (!dirty) return part;
         return {
             ...part,
-            rules: innerRules,
+            alternatives: innerRules,
             dispatch: newPerMode,
         };
     }
     // Recurse first (post-order) so nested dispatch attempts run
     // before the outer one decides classification.
-    const innerRules = visitRulesArray(part.rules, counter, memo);
+    const innerRules = visitRulesArray(part.alternatives, counter, memo);
     const innerPart: RulesPart =
-        innerRules !== part.rules ? { ...part, rules: innerRules } : part;
+        innerRules !== part.alternatives
+            ? { ...part, alternatives: innerRules }
+            : part;
     const dispatched = tryDispatchifyRulesPart(innerPart);
     if (dispatched !== undefined) {
         counter.dispatched++;
@@ -2343,7 +2368,7 @@ export function validateTailRulesParts(
                     }
                 }
             }
-            visitRules(p.rules);
+            visitRules(p.alternatives);
         }
     };
     visitRules(rules);

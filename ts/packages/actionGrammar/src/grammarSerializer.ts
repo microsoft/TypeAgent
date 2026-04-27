@@ -51,7 +51,7 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
                 const part: RulePartJson = {
                     name: p.name,
                     type: "rules",
-                    index: indexFor(p.rules),
+                    index: indexFor(p.alternatives),
                     variable: p.variable,
                     optional: p.optional,
                 };
@@ -96,8 +96,8 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
         };
     }
 
-    rulesToIndex.set(grammar.rules, 0);
-    json[0] = grammar.rules.map(grammarRuleToJson);
+    rulesToIndex.set(grammar.alternatives, 0);
+    json[0] = grammar.alternatives.map(grammarRuleToJson);
     if (grammar.dispatch === undefined) {
         return { rules: json };
     }

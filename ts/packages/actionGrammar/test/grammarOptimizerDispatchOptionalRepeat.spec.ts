@@ -17,51 +17,13 @@
  */
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
-import { matchGrammar } from "../src/grammarMatcher.js";
-import { Grammar, GrammarRule } from "../src/grammarTypes.js";
 import { grammarToJson } from "../src/grammarSerializer.js";
 import { grammarFromJson } from "../src/grammarDeserializer.js";
 import {
-    DispatchedRulesPart,
+    findDispatchPart,
     getDispatchAllTokenMap,
-    isDispatched,
+    match,
 } from "./dispatchTestHelpers.js";
-
-function match(grammar: ReturnType<typeof loadGrammarRules>, request: string) {
-    return matchGrammar(grammar, request)
-        .map((m) => JSON.stringify(m.match))
-        .sort();
-}
-
-function findDispatchPart(
-    grammar: Grammar,
-): DispatchedRulesPart | undefined {
-    if (grammar.dispatch !== undefined) {
-        return {
-            type: "rules",
-            rules: grammar.rules,
-            dispatch: grammar.dispatch,
-        } as DispatchedRulesPart;
-    }
-    const seen = new Set<GrammarRule[]>();
-    const visit = (rs: GrammarRule[]): DispatchedRulesPart | undefined => {
-        if (seen.has(rs)) return undefined;
-        seen.add(rs);
-        for (const r of rs) {
-            for (const p of r.parts) {
-                if (p.type === "rules" && isDispatched(p)) {
-                    return p;
-                }
-                if (p.type === "rules") {
-                    const inner = visit(p.rules);
-                    if (inner) return inner;
-                }
-            }
-        }
-        return undefined;
-    };
-    return visit(grammar.rules);
-}
 
 describe("Grammar Optimizer - DispatchPart with optional/repeat", () => {
     describe("optional dispatch", () => {

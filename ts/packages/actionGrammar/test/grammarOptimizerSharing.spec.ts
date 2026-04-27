@@ -23,9 +23,9 @@ function findAllRulesParts(rules: GrammarRule[]): RulesPart[] {
         for (const p of parts) {
             if (p.type !== "rules") continue;
             out.push(p);
-            if (seen.has(p.rules)) continue;
-            seen.add(p.rules);
-            for (const r of p.rules) visit(r.parts);
+            if (seen.has(p.alternatives)) continue;
+            seen.add(p.alternatives);
+            for (const r of p.alternatives) visit(r.parts);
         }
     };
     for (const r of rules) visit(r.parts);
@@ -47,11 +47,11 @@ describe("Grammar Optimizer - Shared rule identity preservation", () => {
     function commonRulesArrays(
         grammar: ReturnType<typeof loadGrammarRules>,
     ): GrammarRule[][] {
-        const rps = findAllRulesParts(grammar.rules);
+        const rps = findAllRulesParts(grammar.alternatives);
         // Find every RulesPart whose body matches the <Common> shape.
         return rps
             .filter((p) =>
-                p.rules.every(
+                p.alternatives.every(
                     (r) =>
                         r.parts.length === 1 &&
                         r.parts[0].type === "string" &&
@@ -60,7 +60,7 @@ describe("Grammar Optimizer - Shared rule identity preservation", () => {
                         ),
                 ),
             )
-            .map((p) => p.rules);
+            .map((p) => p.alternatives);
     }
 
     it("baseline compiler produces a single shared <Common> array", () => {
@@ -150,15 +150,16 @@ describe("Grammar Optimizer - Shared single-alternative rule is not inlined", ()
     function innerRulesArrays(
         grammar: ReturnType<typeof loadGrammarRules>,
     ): GrammarRule[][] {
-        return findAllRulesParts(grammar.rules)
+        return findAllRulesParts(grammar.alternatives)
             .filter(
                 (p) =>
-                    p.rules.length === 1 &&
-                    p.rules[0].parts.length === 1 &&
-                    p.rules[0].parts[0].type === "string" &&
-                    (p.rules[0].parts[0] as any).value.join(" ") === "the song",
+                    p.alternatives.length === 1 &&
+                    p.alternatives[0].parts.length === 1 &&
+                    p.alternatives[0].parts[0].type === "string" &&
+                    (p.alternatives[0].parts[0] as any).value.join(" ") ===
+                        "the song",
             )
-            .map((p) => p.rules);
+            .map((p) => p.alternatives);
     }
 
     it("inliner preserves shared <Inner> array identity", () => {
@@ -198,8 +199,8 @@ describe("Grammar Optimizer - Shared single-alternative rule is not inlined", ()
             optimizations: { inlineSingleAlternatives: true },
         });
         // The single reference should be inlined → fewer RulesParts.
-        const baseCount = findAllRulesParts(baseline.rules).length;
-        const optCount = findAllRulesParts(optimized.rules).length;
+        const baseCount = findAllRulesParts(baseline.alternatives).length;
+        const optCount = findAllRulesParts(optimized.alternatives).length;
         expect(optCount).toBeLessThan(baseCount);
     });
 

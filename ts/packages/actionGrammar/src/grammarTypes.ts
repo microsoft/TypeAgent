@@ -249,7 +249,7 @@ export type DispatchModeBucket = {
 export type RulesPart = {
     type: "rules";
 
-    rules: GrammarRule[];
+    alternatives: GrammarRule[];
     /**
      * Optimizer-only first-token dispatch table.  When set, the
      * matcher peeks one input token at entry and looks it up across
@@ -418,7 +418,7 @@ export type GrammarRule = {
 };
 
 export type Grammar = {
-    rules: GrammarRule[];
+    alternatives: GrammarRule[];
     /**
      * Optimizer-only first-token dispatch index over the top-level
      * alternation.  Mirrors `RulesPart.dispatch` but lives at the

@@ -17,10 +17,45 @@ import registerDebug from "debug";
 
 const debug = registerDebug("typeagent:grammar:deserializer");
 
+/**
+ * Validate the structural invariants the matcher's dispatch path
+ * relies on (see `RulesPart.dispatch`):
+ *   - every entry's `spacingMode` is `"required"` or `undefined`
+ *     (the matcher's `peek-by-separator` doesn't agree with
+ *     `"none"` / `"optional"` mode keys);
+ *   - entries have distinct `spacingMode` values (the matcher
+ *     stops after collecting two hits and assumes one entry per
+ *     mode).
+ *
+ * Throws on the first violation.  `where` describes the location
+ * for the error message (e.g. `"top-level"` or
+ * `"RulesPart name='Foo'"`).
+ */
+function validateDispatchInvariants(
+    dispatch: ReadonlyArray<{ spacingMode?: unknown }>,
+    where: string,
+): void {
+    const seen = new Set<unknown>();
+    for (const m of dispatch) {
+        const mode = m.spacingMode;
+        if (mode !== undefined && mode !== "required") {
+            throw new Error(
+                `Invalid dispatch ${where}: spacingMode must be 'required' or undefined (got '${String(mode)}')`,
+            );
+        }
+        if (seen.has(mode)) {
+            throw new Error(
+                `Invalid dispatch ${where}: duplicate spacingMode entry ('${mode === undefined ? "auto" : String(mode)}')`,
+            );
+        }
+        seen.add(mode);
+    }
+}
+
 function grammarFromJsonInternal(json: GrammarJson): Grammar {
     const start = json.rules[0];
     const indexToRules: Map<number, GrammarRule[]> = new Map();
-    function rulesFor(idx: number, json: GrammarJson): GrammarRule[] {
+    function rulesFor(idx: number): GrammarRule[] {
         let rules = indexToRules.get(idx);
         if (rules === undefined) {
             rules = [];
@@ -30,6 +65,41 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
             }
         }
         return rules;
+    }
+    /**
+     * Decode a serialized dispatch array into in-memory
+     * `DispatchModeBucket[]`, validate its invariants, and emit
+     * `debug` advisories for non-canonical shapes (empty dispatch
+     * or single-bucket with no fallback).  Both shapes are
+     * semantically valid - the matcher handles them correctly -
+     * but neither one is something the optimizer would ever emit,
+     * so they almost certainly indicate a hand-written or buggy
+     * producer.  Shared by the part-level (`RulesPart.dispatch`)
+     * and top-level (`Grammar.dispatch`) decode paths.
+     */
+    function decodeDispatch(
+        jsonDispatch: NonNullable<GrammarJson["dispatch"]>,
+        fallbackLength: number,
+        whereTag: string,
+        nameTag: string,
+    ): DispatchModeBucket[] {
+        validateDispatchInvariants(jsonDispatch, whereTag);
+        const dispatch: DispatchModeBucket[] = [];
+        let totalTokenKeys = 0;
+        for (const m of jsonDispatch) {
+            const tokenMap = new Map<string, GrammarRule[]>();
+            for (const [token, idx] of m.tokenMap) {
+                tokenMap.set(token, rulesFor(idx));
+            }
+            totalTokenKeys += tokenMap.size;
+            dispatch.push({ spacingMode: m.spacingMode, tokenMap });
+        }
+        if (totalTokenKeys === 0) {
+            debug(`non-canonical ${nameTag}: empty dispatch`);
+        } else if (totalTokenKeys === 1 && fallbackLength === 0) {
+            debug(`non-canonical ${nameTag}: single-bucket with no fallback`);
+        }
+        return dispatch;
     }
     function grammarRuleFromJson(r: GrammarRuleJson, json: GrammarJson) {
         return {
@@ -48,66 +118,24 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
             case "number":
                 return p;
             case "rules": {
-                const rules = rulesFor(p.index, json);
+                const rules = rulesFor(p.index);
                 const part: RulesPart = {
                     type: "rules",
                     name: p.name,
-                    rules,
+                    alternatives: rules,
                     variable: p.variable,
                     optional: p.optional,
                 };
                 if (p.repeat) part.repeat = true;
                 if (p.tailCall) part.tailCall = true;
                 if (p.dispatch !== undefined) {
-                    const dispatch: DispatchModeBucket[] = [];
-                    let totalTokenKeys = 0;
-                    for (const m of p.dispatch) {
-                        const tokenMap = new Map<string, GrammarRule[]>();
-                        for (const [token, idx] of m.tokenMap) {
-                            tokenMap.set(token, rulesFor(idx, json));
-                        }
-                        totalTokenKeys += tokenMap.size;
-                        dispatch.push({
-                            spacingMode: m.spacingMode,
-                            tokenMap,
-                        });
-                    }
-                    part.dispatch = dispatch;
-                    // Non-canonical shape advisories.  Both shapes
-                    // are semantically valid - the matcher handles
-                    // them correctly - but neither one is something
-                    // the optimizer would ever emit, so they almost
-                    // certainly indicate a hand-written or buggy
-                    // producer:
-                    //
-                    //   - Total token-key count == 0 (every
-                    //     dispatch entry's tokenMap is empty, or
-                    //     the dispatch array itself is empty): the
-                    //     dispatch only ever yields fallback hits
-                    //     (or always fails when `rules` is empty
-                    //     too), so it adds a peek + hash miss for
-                    //     no benefit over the non-dispatched form.
-                    //   - Total token-key count == 1 with no
-                    //     fallback (`rules` empty): the dispatch
-                    //     always picks the same bucket, adding a
-                    //     peek + hash lookup for no filtering
-                    //     benefit over the non-dispatched form.
-                    //
-                    // Log via `debug` so the producer can spot the
-                    // issue without breaking otherwise-correct
-                    // grammars.
-                    if (totalTokenKeys === 0) {
-                        debug(
-                            `non-canonical dispatched RulesPart: empty dispatch (name='${p.name ?? "<unnamed>"}')`,
-                        );
-                    } else if (
-                        totalTokenKeys === 1 &&
-                        rules.length === 0
-                    ) {
-                        debug(
-                            `non-canonical dispatched RulesPart: single-bucket with no fallback (name='${p.name ?? "<unnamed>"}')`,
-                        );
-                    }
+                    const tag = `dispatched RulesPart (name='${p.name ?? "<unnamed>"}')`;
+                    part.dispatch = decodeDispatch(
+                        p.dispatch,
+                        rules.length,
+                        `RulesPart name='${p.name ?? "<unnamed>"}'`,
+                        tag,
+                    );
                 }
                 return part;
             }
@@ -123,29 +151,15 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
     }
 
     const grammar: Grammar = {
-        rules: start.map((r) => grammarRuleFromJson(r, json)),
+        alternatives: start.map((r) => grammarRuleFromJson(r, json)),
     };
     if (json.dispatch !== undefined) {
-        const dispatch: DispatchModeBucket[] = [];
-        let totalTokenKeys = 0;
-        for (const m of json.dispatch) {
-            const tokenMap = new Map<string, GrammarRule[]>();
-            for (const [token, idx] of m.tokenMap) {
-                tokenMap.set(token, rulesFor(idx, json));
-            }
-            totalTokenKeys += tokenMap.size;
-            dispatch.push({ spacingMode: m.spacingMode, tokenMap });
-        }
-        grammar.dispatch = dispatch;
-        // Same non-canonical-shape advisories as the part-level
-        // dispatched RulesPart deserializer above.
-        if (totalTokenKeys === 0) {
-            debug(`non-canonical top-level dispatch: empty dispatch`);
-        } else if (totalTokenKeys === 1 && grammar.rules.length === 0) {
-            debug(
-                `non-canonical top-level dispatch: single-bucket with no fallback`,
-            );
-        }
+        grammar.dispatch = decodeDispatch(
+            json.dispatch,
+            grammar.alternatives.length,
+            "top-level",
+            "top-level dispatch",
+        );
     }
     return grammar;
 }
@@ -167,7 +181,7 @@ export function grammarFromJson(
 ): Grammar {
     const grammar = grammarFromJsonInternal(json);
     if (options?.validate !== false) {
-        validateTailRulesParts(grammar.rules, grammar.dispatch);
+        validateTailRulesParts(grammar.alternatives, grammar.dispatch);
     }
     return grammar;
 }

@@ -12,7 +12,7 @@ function findFirstRulesPart(rules: GrammarRule[]): RulesPart | undefined {
         }
         for (const p of parts) {
             if (p.type === "rules") {
-                for (const r of p.rules) {
+                for (const r of p.alternatives) {
                     const inner = visit(r.parts);
                     if (inner) return inner;
                 }
@@ -53,11 +53,13 @@ describe("Grammar Optimizer - Common prefix factoring", () => {
         }
 
         // The optimized AST has fewer top-level alternatives in <Choice>.
-        const optChoice = findFirstRulesPart(optimized.rules);
-        const baseChoice = findFirstRulesPart(baseline.rules);
+        const optChoice = findFirstRulesPart(optimized.alternatives);
+        const baseChoice = findFirstRulesPart(baseline.alternatives);
         expect(optChoice).toBeDefined();
         expect(baseChoice).toBeDefined();
-        expect(optChoice!.rules.length).toBeLessThan(baseChoice!.rules.length);
+        expect(optChoice!.alternatives.length).toBeLessThan(
+            baseChoice!.alternatives.length,
+        );
     });
 
     it("preserves match results when alternatives use different variable names", () => {
@@ -82,8 +84,8 @@ describe("Grammar Optimizer - Common prefix factoring", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { factorCommonPrefixes: true },
         });
-        expect(JSON.stringify(optimized.rules)).toBe(
-            JSON.stringify(baseline.rules),
+        expect(JSON.stringify(optimized.alternatives)).toBe(
+            JSON.stringify(baseline.alternatives),
         );
     });
 
@@ -95,9 +97,11 @@ describe("Grammar Optimizer - Common prefix factoring", () => {
             optimizations: { factorCommonPrefixes: true },
         });
         // No shared first part, factoring has nothing to do.
-        const optChoice = findFirstRulesPart(optimized.rules);
-        const baseChoice = findFirstRulesPart(baseline.rules);
-        expect(optChoice!.rules.length).toBe(baseChoice!.rules.length);
+        const optChoice = findFirstRulesPart(optimized.alternatives);
+        const baseChoice = findFirstRulesPart(baseline.alternatives);
+        expect(optChoice!.alternatives.length).toBe(
+            baseChoice!.alternatives.length,
+        );
         for (const input of ["foo", "bar", "baz"]) {
             expect(match(optimized, input)).toStrictEqual(
                 match(baseline, input),
@@ -143,18 +147,20 @@ describe("Grammar Optimizer - Common prefix factoring", () => {
         // Structural: the optimized AST should have nested factoring —
         // top-level RulesPart with one alternative whose suffix RulesPart
         // itself contains a further factored rule for `song`.
-        const optChoice = findFirstRulesPart(optimized.rules);
+        const optChoice = findFirstRulesPart(optimized.alternatives);
         expect(optChoice).toBeDefined();
         // <C> reduces to a single shared-prefix wrapper.
-        expect(optChoice!.rules.length).toBe(1);
-        const factored = optChoice!.rules[0];
+        expect(optChoice!.alternatives.length).toBe(1);
+        const factored = optChoice!.alternatives[0];
         // Find the inner RulesPart (the suffix group).
         const innerWrapper = factored.parts.find((p) => p.type === "rules");
         expect(innerWrapper).toBeDefined();
         // The inner suffix group should have collapsed `song x | song y` so
         // its rule count is 2 (one combined `song …` alt + the `album …`
         // alt) rather than 3.
-        expect((innerWrapper as { rules: unknown[] }).rules.length).toBe(2);
+        expect(
+            (innerWrapper as { alternatives: unknown[] }).alternatives.length,
+        ).toBe(2);
     });
 
     it("factors common prefixes across top-level rules", () => {
@@ -170,7 +176,9 @@ describe("Grammar Optimizer - Common prefix factoring", () => {
         });
         // Factoring collapses the 3 top-level alternatives into 1
         // (a shared-prefix rule with a 3-alternative suffix RulesPart).
-        expect(optimized.rules.length).toBeLessThan(baseline.rules.length);
+        expect(optimized.alternatives.length).toBeLessThan(
+            baseline.alternatives.length,
+        );
         for (const input of [
             "play the song",
             "play the track",
@@ -430,7 +438,7 @@ function findAllRulesParts(rules: GrammarRule[]): RulesPart[] {
         for (const p of parts) {
             if (p.type === "rules") {
                 out.push(p);
-                for (const r of p.rules) visit(r.parts);
+                for (const r of p.alternatives) visit(r.parts);
             }
         }
     };
@@ -479,20 +487,20 @@ describe("Grammar Optimizer - Trie risks", () => {
             optimizations: { factorCommonPrefixes: true },
         });
         const innerRulesArrays = new Set<unknown>();
-        for (const rp of findAllRulesParts(optimized.rules)) {
+        for (const rp of findAllRulesParts(optimized.alternatives)) {
             // Heuristic: any RulesPart with two child rules whose first
             // parts are both phraseSet/string and whose values are 1 / 2
             // is the <Inner> body.
             if (
-                rp.rules.length === 2 &&
-                rp.rules[0].value !== undefined &&
-                rp.rules[1].value !== undefined &&
-                JSON.stringify(rp.rules[0].value) ===
+                rp.alternatives.length === 2 &&
+                rp.alternatives[0].value !== undefined &&
+                rp.alternatives[1].value !== undefined &&
+                JSON.stringify(rp.alternatives[0].value) ===
                     '{"type":"literal","value":1}' &&
-                JSON.stringify(rp.rules[1].value) ===
+                JSON.stringify(rp.alternatives[1].value) ===
                     '{"type":"literal","value":2}'
             ) {
-                innerRulesArrays.add(rp.rules);
+                innerRulesArrays.add(rp.alternatives);
             }
         }
         // Both references to <Inner> produce edges that point at the
@@ -743,10 +751,12 @@ describe("Grammar Optimizer - Trie edge variants (number, phraseSet, optional)",
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { factorCommonPrefixes: true },
         });
-        const optChoice = findFirstRulesPart(optimized.rules);
-        const baseChoice = findFirstRulesPart(baseline.rules);
+        const optChoice = findFirstRulesPart(optimized.alternatives);
+        const baseChoice = findFirstRulesPart(baseline.alternatives);
         // Factoring collapses 2 alternatives into 1 wrapper.
-        expect(optChoice!.rules.length).toBeLessThan(baseChoice!.rules.length);
+        expect(optChoice!.alternatives.length).toBeLessThan(
+            baseChoice!.alternatives.length,
+        );
         for (const input of ["volume 5 up", "volume 7 down"]) {
             expect(match(optimized, input)).toStrictEqual(
                 match(baseline, input),
@@ -786,8 +796,8 @@ describe("Grammar Optimizer - Wrapper rule spacingMode propagation", () => {
             optimizations: { factorCommonPrefixes: true },
         });
         // Top-level reduces to a single shared-prefix wrapper.
-        expect(optimized.rules.length).toBe(1);
-        expect(optimized.rules[0].spacingMode).toBe("required");
+        expect(optimized.alternatives.length).toBe(1);
+        expect(optimized.alternatives[0].spacingMode).toBe("required");
 
         // And matching still respects the required-spacing semantics.
         const baseline = loadGrammarRules("t.grammar", text);
@@ -809,9 +819,9 @@ describe("Grammar Optimizer - Wrapper rule spacingMode propagation", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { factorCommonPrefixes: true },
         });
-        expect(optimized.rules.length).toBe(2);
-        expect(optimized.rules[0].spacingMode).toBe("required");
-        expect(optimized.rules[1].spacingMode).toBe("optional");
+        expect(optimized.alternatives.length).toBe(2);
+        expect(optimized.alternatives[0].spacingMode).toBe("required");
+        expect(optimized.alternatives[1].spacingMode).toBe("optional");
 
         // Behavior is identical to the unoptimized grammar across
         // representative inputs (with and without inter-token spacing).
@@ -842,11 +852,13 @@ describe("Grammar Optimizer - Wrapper rule spacingMode propagation", () => {
             optimizations: { factorCommonPrefixes: true },
         });
         // One wrapper per spacing group: 2 top-level rules total.
-        expect(optimized.rules.length).toBe(2);
-        const spacingModes = optimized.rules.map((r) => r.spacingMode).sort();
+        expect(optimized.alternatives.length).toBe(2);
+        const spacingModes = optimized.alternatives
+            .map((r) => r.spacingMode)
+            .sort();
         expect(spacingModes).toStrictEqual(["optional", "required"]);
         // Each wrapper has the shared `play` prefix factored out.
-        for (const r of optimized.rules) {
+        for (const r of optimized.alternatives) {
             expect(r.parts.length).toBeGreaterThanOrEqual(2);
             expect(r.parts[0].type).toBe("string");
         }
@@ -897,7 +909,9 @@ describe("Grammar Optimizer - bound StringPart / PhraseSetPart factoring", () =>
             },
         });
         // Top-level alternative count drops (factored under wrapper).
-        expect(optimized.rules.length).toBeLessThan(baseline.rules.length);
+        expect(optimized.alternatives.length).toBeLessThan(
+            baseline.alternatives.length,
+        );
         for (const input of ["good morning world", "good morning friend"]) {
             expect(match(optimized, input)).toStrictEqual(
                 match(baseline, input),
@@ -954,7 +968,9 @@ describe("Grammar Optimizer - bound StringPart / PhraseSetPart factoring", () =>
                 factorCommonPrefixes: true,
             },
         });
-        expect(optimized.rules.length).toBeLessThan(baseline.rules.length);
+        expect(optimized.alternatives.length).toBeLessThan(
+            baseline.alternatives.length,
+        );
         // Structural check: only one phraseSet edge remains, and
         // it's bound to a fresh canonical.
         const phraseSetParts: GrammarPart[] = [];
@@ -962,11 +978,11 @@ describe("Grammar Optimizer - bound StringPart / PhraseSetPart factoring", () =>
             for (const p of parts) {
                 if (p.type === "phraseSet") phraseSetParts.push(p);
                 else if (p.type === "rules") {
-                    for (const r of p.rules) collect(r.parts);
+                    for (const r of p.alternatives) collect(r.parts);
                 }
             }
         };
-        for (const r of optimized.rules) collect(r.parts);
+        for (const r of optimized.alternatives) collect(r.parts);
         expect(phraseSetParts.length).toBe(1);
         expect((phraseSetParts[0] as { variable?: string }).variable).toMatch(
             /^__opt_v_/,
@@ -1009,7 +1025,7 @@ describe("Grammar Optimizer - bound StringPart / PhraseSetPart factoring", () =>
             },
         });
         // Sanity: shared "play" prefix factored.
-        expect(optimized.rules.length).toBe(1);
+        expect(optimized.alternatives.length).toBe(1);
         expect(match(optimized, "play good morning")).toStrictEqual(
             match(baseline, "play good morning"),
         );

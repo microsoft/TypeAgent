@@ -19,7 +19,7 @@ describe("NFA Priority System", () => {
         // Rule A: "play music" -> 2 fixed strings, 0 wildcards (highest priority)
         // Rule B: "play $(track:string)" -> 1 fixed + 1 unchecked wildcard
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -76,7 +76,7 @@ describe("NFA Priority System", () => {
         // Rule A: "play track $(name:string)" -> 2 fixed + 1 unchecked
         // Rule B: "play $(track:string)" -> 1 fixed + 1 unchecked (should lose)
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -135,7 +135,7 @@ describe("NFA Priority System", () => {
         // Rule A: "play $(track:number) by $(artist:number)" -> 2 checked wildcards
         // Rule B: "play $(track:number)" -> 1 checked wildcard (should lose)
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -201,7 +201,7 @@ describe("NFA Priority System", () => {
         // Rule A: "play $(track:string) by $(artist:string)" -> 2 unchecked
         // Rule B: "play $(track:string)" -> 1 unchecked (should win)
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -267,7 +267,7 @@ describe("NFA Priority System", () => {
         // Rule A: "play music now" -> 3 fixed strings, 0 wildcards (priority level 1)
         // Rule B: "play $(x:string) $(y:string) $(z:string) $(w:string)" -> 1 fixed + 4 unchecked (priority level 2)
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -337,7 +337,7 @@ describe("NFA Priority System", () => {
         // Rule A: "play $(track:string)" with track as checked variable -> 1 checked
         // Rule B: "play $(song:string)" without checked -> 1 unchecked (should lose)
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -397,7 +397,7 @@ describe("NFA Priority System", () => {
         // Rule A: "play $(n:number)" -> entity type = checked
         // Rule B: "play $(track:string)" -> no entity = unchecked (should lose)
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -455,7 +455,7 @@ describe("NFA Priority System", () => {
     test("Complex scenario: All priority levels", () => {
         // Test all priority levels in one grammar
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 // Lowest priority: 1 fixed + 2 unchecked wildcards
                 {
                     parts: [
@@ -561,7 +561,7 @@ describe("NFA Priority System", () => {
         // Both rules have identical priority (1 fixed + 1 unchecked wildcard)
         // Should return first valid match found
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -621,14 +621,14 @@ describe("NFA Priority System", () => {
         // Rule A: "play (please)? music" -> If "please" is matched: 3 fixed, else: 2 fixed
         // Rule B: "play music" -> 2 fixed
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
                         {
                             type: "rules",
                             optional: true,
-                            rules: [
+                            alternatives: [
                                 {
                                     parts: [
                                         { type: "string", value: ["please"] },
@@ -685,7 +685,7 @@ describe("NFA Priority System", () => {
         // Rule A: "play $(track:string) by $(artist:number)" -> 1 unchecked + 1 checked
         // Rule B: "play $(a:string) by $(b:string)" -> 2 unchecked (should lose - fewer checked)
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },

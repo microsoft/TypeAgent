@@ -19,7 +19,7 @@ import {
 describe("Wildcard Length Variations - NFA", () => {
     test("1-token wildcard in middle", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["show"] },
@@ -53,7 +53,7 @@ describe("Wildcard Length Variations - NFA", () => {
 
     test("2-token wildcard in middle", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["show"] },
@@ -87,7 +87,7 @@ describe("Wildcard Length Variations - NFA", () => {
 
     test("3-token wildcard in middle", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["show"] },
@@ -127,7 +127,7 @@ describe("Wildcard Length Variations - NFA", () => {
 
     test("4-token wildcard in middle", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["show"] },
@@ -168,7 +168,7 @@ describe("Wildcard Length Variations - NFA", () => {
 
     test("5-token wildcard at end", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["show"] },
@@ -211,7 +211,7 @@ describe("Wildcard Length Variations - NFA", () => {
 
     test("Two wildcards: 1 + 2 tokens", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -262,7 +262,7 @@ describe("Wildcard Length Variations - NFA", () => {
 
     test("Two wildcards: 3 + 2 tokens", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -315,7 +315,7 @@ describe("Wildcard Length Variations - NFA", () => {
 
     test("Two wildcards: 2 + 3 tokens", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -368,7 +368,7 @@ describe("Wildcard Length Variations - NFA", () => {
 
     test("Three wildcards with varying lengths", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["move"] },
@@ -436,7 +436,7 @@ describe("Wildcard Length Variations - NFA", () => {
 
     test("Wildcard at beginning with 3 tokens", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         {
@@ -475,7 +475,7 @@ describe("Wildcard Length Variations - NFA", () => {
 
     test("Wildcard at beginning with 5 tokens", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         {
@@ -517,7 +517,7 @@ describe("Wildcard Length Variations - NFA", () => {
 
     test("7-token wildcard", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["search", "for"] },
@@ -563,7 +563,7 @@ describe("Wildcard Length Variations - NFA", () => {
 
     test("Four wildcards with varying lengths", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["copy"] },
@@ -648,7 +648,7 @@ describe("Wildcard Length Variations - NFA", () => {
 describe("Wildcard Length Variations - DFA", () => {
     test("1-token wildcard in middle", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["show"] },
@@ -683,7 +683,7 @@ describe("Wildcard Length Variations - DFA", () => {
 
     test("2-token wildcard in middle", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["show"] },
@@ -718,7 +718,7 @@ describe("Wildcard Length Variations - DFA", () => {
 
     test("3-token wildcard in middle", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["show"] },
@@ -759,7 +759,7 @@ describe("Wildcard Length Variations - DFA", () => {
 
     test("5-token wildcard at end", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["show"] },
@@ -803,7 +803,7 @@ describe("Wildcard Length Variations - DFA", () => {
 
     test("Two wildcards with 3+2 tokens", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -857,7 +857,7 @@ describe("Wildcard Length Variations - DFA", () => {
 
     test("Three wildcards with varying lengths", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["move"] },
@@ -926,7 +926,7 @@ describe("Wildcard Length Variations - DFA", () => {
 
     test("7-token wildcard", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["search", "for"] },
@@ -973,7 +973,7 @@ describe("Wildcard Length Variations - DFA", () => {
 
     test("Four wildcards with varying lengths", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["copy"] },

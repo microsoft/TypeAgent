@@ -203,7 +203,7 @@ export class GrammarStoreImpl implements GrammarStore {
                       ? "NFA"
                       : "simple";
             debug(
-                `Matching "${request}" against ${schemaName} (${matchMode}) - NFA states: ${entry.nfa?.states.length || 0}, DFA states: ${entry.dfa?.states.length || 0}, rules: ${entry.grammar.rules.length}`,
+                `Matching "${request}" against ${schemaName} (${matchMode}) - NFA states: ${entry.nfa?.states.length || 0}, DFA states: ${entry.dfa?.states.length || 0}, rules: ${entry.grammar.alternatives.length}`,
             );
 
             // Choose matcher: DFA > NFA > simple

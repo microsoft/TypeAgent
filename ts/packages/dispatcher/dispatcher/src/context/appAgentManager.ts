@@ -455,7 +455,7 @@ export class AppAgentManager implements ActionConfigProvider {
                         debug(
                             `No grammar file found for ${schemaName}, creating empty grammar for dynamic generation`,
                         );
-                        g = { rules: [] };
+                        g = { alternatives: [] };
                     }
 
                     if (g) {
@@ -496,7 +496,7 @@ export class AppAgentManager implements ActionConfigProvider {
                                     nfa,
                                 );
                                 debug(
-                                    `Added NFA grammar for schema: ${schemaName} (${g.rules.length} rules)`,
+                                    `Added NFA grammar for schema: ${schemaName} (${g.alternatives.length} rules)`,
                                 );
                             } catch (nfaError) {
                                 debugError(
@@ -999,18 +999,21 @@ export class AppAgentManager implements ActionConfigProvider {
             }
         }
 
-        if (!dynamicGrammar || dynamicGrammar.rules.length === 0) return;
+        if (!dynamicGrammar || dynamicGrammar.alternatives.length === 0) return;
 
         const config = this.actionConfigs.get(schemaName);
         const staticGrammar = config ? loadGrammar(config) : undefined;
 
         const merged: Grammar = {
-            rules: [...(staticGrammar?.rules ?? []), ...dynamicGrammar.rules],
+            alternatives: [
+                ...(staticGrammar?.alternatives ?? []),
+                ...dynamicGrammar.alternatives,
+            ],
         };
 
         context.agentCache.grammarStore.addGrammar(schemaName, merged);
         debug(
-            `Loaded dynamic grammar for ${schemaName} (${dynamicGrammar.rules.length} dynamic rules merged with ${staticGrammar?.rules.length ?? 0} static rules)`,
+            `Loaded dynamic grammar for ${schemaName} (${dynamicGrammar.alternatives.length} dynamic rules merged with ${staticGrammar?.alternatives.length ?? 0} static rules)`,
         );
     }
 

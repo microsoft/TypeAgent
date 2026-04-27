@@ -17,11 +17,12 @@ import {
     VarStringPart,
     DispatchModeBucket,
 } from "./grammarTypes.js";
+import { wordBoundaryScriptRe } from "./spacingScripts.js";
 import {
-    leadingWordBoundaryScriptPrefix,
-    wordBoundaryScriptRe,
-} from "./spacingScripts.js";
-import { getDispatchEffectiveMembers } from "./dispatchHelpers.js";
+    getDispatchEffectiveMembers,
+    getDispatchMergedSingle,
+    getDispatchMergedMulti,
+} from "./dispatchHelpers.js";
 
 // Separator mode for completion results.  Structurally identical to
 // SeparatorMode from @typeagent/agent-sdk (command.ts); independently
@@ -1138,6 +1139,18 @@ export function nextNonSeparatorIndex(request: string, index: number) {
 // regexes into local state at use sites.
 const nonSeparatorRunRegExp = new RegExp(`[^${separatorRegExpStr}]+`, "yu");
 const singleSeparatorRegExp = new RegExp(`[${separatorRegExpStr}]`, "u");
+// Auto-mode peek regex: matches either the leading run of
+// word-boundary-script characters (Latin / Cyrillic / ...) OR a
+// single non-WB code point (CJK, digit, punctuation).  Used by
+// `peekNextToken` in `tokenMode === undefined` (auto) - replaces
+// the previous two-pass `nonSeparatorRunRegExp.exec` followed by
+// `leadingWordBoundaryScriptRe.exec` with a single sticky exec.
+// `u` flag makes `.` match a single code point so surrogate pairs
+// stay intact.
+const peekAutoTokenRegExp = new RegExp(
+    `(?:${wordBoundaryScriptRe.source})+|.`,
+    "yu",
+);
 
 /**
  * Peek the next "token" (lowercased run of non-separator chars) from
@@ -1208,34 +1221,28 @@ export function peekNextToken(
     if (start >= request.length) {
         return undefined;
     }
+    if (tokenMode === undefined) {
+        // auto: single-shot regex returns either the leading
+        // word-boundary-script run OR a single non-WB code point
+        // (CJK, digit, punctuation).  Mirrors what the StringPart
+        // regex would consume in auto mode and matches the bucket
+        // key derived by `classifyDispatchMember`.  Surrogate pairs
+        // stay intact (the `u` flag makes `.` match a code point).
+        peekAutoTokenRegExp.lastIndex = start;
+        const m = peekAutoTokenRegExp.exec(request);
+        if (m === null) {
+            return undefined;
+        }
+        return m[0].toLowerCase();
+    }
+    // required / optional / none: return the whole non-separator
+    // run unchanged.
     nonSeparatorRunRegExp.lastIndex = start;
     const m = nonSeparatorRunRegExp.exec(request);
     if (m === null) {
         return undefined;
     }
-    const token = m[0].toLowerCase();
-    if (tokenMode !== undefined) {
-        // required / optional / none: return the whole non-separator
-        // run unchanged.
-        return token;
-    }
-    // auto: cut at the first script transition so the peeked
-    // token matches what the StringPart regex would consume.
-    const pref = leadingWordBoundaryScriptPrefix(token);
-    if (pref.length > 0) {
-        return pref;
-    }
-    // Non-word-boundary-script leading char (CJK, digit,
-    // punctuation): the WB-prefix is empty.  Bucket on the
-    // leading code point instead, mirroring
-    // `classifyDispatchMember`'s first-code-point fallback
-    // in the optimizer.  `m[0]` is non-empty (the regex
-    // matched at least one char), so `codePointAt(0)` is
-    // always defined.  Surrogate pairs return the
-    // supplementary code point and `fromCodePoint` rebuilds
-    // a 2-UTF-16-unit string that matches the bucket key.
-    const cp = token.codePointAt(0)!;
-    return String.fromCodePoint(cp);
+    return m[0].toLowerCase();
 }
 
 // Finalize the state to capture the last wildcard if any
@@ -1848,7 +1855,7 @@ function enterTailRulesPart(state: MatchState, part: RulesPart): void {
     // repeat/optional/variable, member spacingMode matches parent's)
     // are caught at construction time at the offending site.
     const namePrefix = part.name ? `<${part.name}>` : getStateName(state);
-    enterTailAlternation(state, part, part.rules, namePrefix);
+    enterTailAlternation(state, part, part.alternatives, namePrefix);
 }
 
 /**
@@ -2009,11 +2016,19 @@ export function matchState(state: MatchState, request: string) {
                     // continue the loop (without incrementing partIndex)
                     continue;
                 }
-                debugMatch(state, `expanding ${part.rules.length} rules`);
+                debugMatch(
+                    state,
+                    `expanding ${part.alternatives.length} rules`,
+                );
                 const namePrefix = part.name
                     ? `<${part.name}>`
                     : getStateName(state);
-                enterRulesAlternation(state, part, part.rules, namePrefix);
+                enterRulesAlternation(
+                    state,
+                    part,
+                    part.alternatives,
+                    namePrefix,
+                );
                 // continue the loop (without incrementing partIndex)
                 continue;
             }
@@ -2112,32 +2127,12 @@ function enterRulesAlternation(
  * members, and the matcher will re-match the token via each
  * suffix's `StringPart` regex.
  *
- * **Per-part cache.**  `merged` keys the merged effective rule
- * array on the *single hit bucket* identity (used when only one
- * `dispatch` entry's peek hits and `part.rules` is non-empty - the
- * most common case, including all uniform-mode dispatches).
- * `mergedMulti` keys on (bucketA, bucketB) - used when two
- * `dispatch` entries both hit on the same input (rare).  Both maps
- * are identity-keyed so equal bucket arrays reuse the same merged
- * result.  The full effective list (used by the pending-wildcard
- * path) is shared with the optimizer and validator via
- * `getDispatchEffectiveMembers` from `dispatchHelpers.ts` (one
- * allocation per dispatched `RulesPart`).
+ * Caching of merged `[...bucket(s), ...fallback]` arrays lives in
+ * `dispatchHelpers.ts` (`getDispatchMergedSingle` /
+ * `getDispatchMergedMulti`), keyed on the same per-`RulesPart`
+ * `WeakMap` that backs `getDispatchEffectiveMembers` so all three
+ * dispatch caches share one weakly-held entry per part.
  */
-type DispatchCaches = {
-    merged?: Map<GrammarRule[], GrammarRule[]>;
-    mergedMulti?: Map<GrammarRule[], Map<GrammarRule[], GrammarRule[]>>;
-};
-const dispatchCaches = new WeakMap<RulesPart, DispatchCaches>();
-
-function getDispatchCaches(part: RulesPart): DispatchCaches {
-    let c = dispatchCaches.get(part);
-    if (c === undefined) {
-        c = {};
-        dispatchCaches.set(part, c);
-    }
-    return c;
-}
 
 /**
  * Peek the next input token under each per-mode `dispatch` entry
@@ -2179,53 +2174,6 @@ function peekDispatchHits(
         }
     }
     return [firstHit, secondHit];
-}
-
-function getDispatchMergedSingle(
-    part: RulesPart,
-    bucket: GrammarRule[],
-    fallback: GrammarRule[],
-): GrammarRule[] {
-    const c = getDispatchCaches(part);
-    let m = c.merged;
-    if (m === undefined) {
-        m = new Map();
-        c.merged = m;
-    }
-    let merged = m.get(bucket);
-    if (merged === undefined) {
-        merged = bucket.concat(fallback);
-        m.set(bucket, merged);
-    }
-    return merged;
-}
-
-function getDispatchMergedMulti(
-    part: RulesPart,
-    bucketA: GrammarRule[],
-    bucketB: GrammarRule[],
-    fallback: GrammarRule[],
-): GrammarRule[] {
-    const c = getDispatchCaches(part);
-    let outer = c.mergedMulti;
-    if (outer === undefined) {
-        outer = new Map();
-        c.mergedMulti = outer;
-    }
-    let inner = outer.get(bucketA);
-    if (inner === undefined) {
-        inner = new Map();
-        outer.set(bucketA, inner);
-    }
-    let merged = inner.get(bucketB);
-    if (merged === undefined) {
-        merged =
-            fallback.length === 0
-                ? bucketA.concat(bucketB)
-                : bucketA.concat(bucketB, fallback);
-        inner.set(bucketB, merged);
-    }
-    return merged;
 }
 
 function enterDispatchPart(
@@ -2295,7 +2243,7 @@ function enterDispatchPart(
     // `part.rules` doubles as the fallback subset for a dispatched
     // RulesPart (members that could not be assigned to any bucket).
     // An empty array means "no fallback".
-    if (firstHit === undefined && part.rules.length === 0) {
+    if (firstHit === undefined && part.alternatives.length === 0) {
         debugMatch(state, `dispatch: no hits or fallback`);
         return false;
     }
@@ -2320,18 +2268,18 @@ function enterDispatchPart(
     // and reuse across every match that hits the same combination.
     let effective: GrammarRule[];
     if (firstHit === undefined) {
-        effective = part.rules;
+        effective = part.alternatives;
     } else if (secondHit === undefined) {
         effective =
-            part.rules.length === 0
+            part.alternatives.length === 0
                 ? firstHit
-                : getDispatchMergedSingle(part, firstHit, part.rules);
+                : getDispatchMergedSingle(part, firstHit, part.alternatives);
     } else {
         effective = getDispatchMergedMulti(
             part,
             firstHit,
             secondHit,
-            part.rules,
+            part.alternatives,
         );
     }
 
@@ -2354,6 +2302,28 @@ function enterDispatchPart(
 // reverse order so rule 1 is on top of the stack and gets
 // restored first by `tryNextBacktrack`, matching source
 // order.  Returns `undefined` for an empty grammar (no rules).
+//
+// Per-`Grammar` synthesized `RulesPart` used purely as a stable
+// identity key for caching merged top-level dispatch arrays via
+// the same `dispatchHelpers` machinery used by nested dispatched
+// parts.  Allocated lazily on the first match against a grammar
+// that has `grammar.dispatch` set; reused for every subsequent
+// match against the same grammar.  Held weakly so unreachable
+// grammars (and their cached merged arrays) are reclaimed.
+const topLevelDispatchCacheParts = new WeakMap<Grammar, RulesPart>();
+function getTopLevelDispatchCachePart(grammar: Grammar): RulesPart {
+    let p = topLevelDispatchCacheParts.get(grammar);
+    if (p === undefined) {
+        p = {
+            type: "rules",
+            alternatives: grammar.alternatives,
+            dispatch: grammar.dispatch,
+        };
+        topLevelDispatchCacheParts.set(grammar, p);
+    }
+    return p;
+}
+
 export function initialMatchState(
     grammar: Grammar,
     request: string,
@@ -2365,23 +2335,25 @@ export function initialMatchState(
 
     // Compute the effective top-level alternation.  When
     // `grammar.dispatch` is set, peek the first input token under
-    // each per-mode bucket (mirroring `enterDispatchPart` but at
-    // the grammar level): selected bucket members come first, then
+    // each per-mode bucket: selected bucket members come first, then
     // `grammar.rules` (the fallback subset) - same hits-before-
-    // fallback ordering used inside RulesPart.dispatch.  Without
+    // fallback ordering used inside `RulesPart.dispatch`.  Without
     // dispatch, `grammar.rules` IS the full alternation.
     //
-    // Top-level peek uses an auto-mode leading separator (skip any
-    // leading whitespace).  Each per-mode bucket entry contributes
-    // its own `tokenMode` for the token-boundary script-prefix
-    // logic.  This matches what `enterDispatchPart` does for nested
-    // dispatch parts at `partIndex === 0` with no parent.
+    // Top-level peek hardcodes auto-mode `leading`.  Justification:
+    // `tryDispatchifyRulesPart` only emits dispatch entries with
+    // `spacingMode` in `{"required", undefined}` - members in
+    // `optional`/`none` mode are routed to the fallback `rules`
+    // subset directly.  For both eligible modes the matcher's
+    // `StringPart` regex allows leading whitespace at the start of
+    // input (the regex prefixes `[separators]*?`), so a peek that
+    // skips whitespace agrees with what the matcher will consume.
+    // (`enterDispatchPart` derives `leading` from
+    // `leadingSpacingMode(state)` because it has a parent context;
+    // the top-level path has no parent and no preceding part, so
+    // there is no surrounding mode to mirror.)
     let effective: GrammarRule[];
     if (grammar.dispatch !== undefined) {
-        // Top-level peek uses an auto-mode leading separator (skip
-        // any leading whitespace) - matching what
-        // `enterDispatchPart` does for a nested dispatch part at
-        // `partIndex === 0` with no parent.
         const [firstHit, secondHit] = peekDispatchHits(
             grammar.dispatch,
             request,
@@ -2389,20 +2361,34 @@ export function initialMatchState(
             undefined,
         );
         if (firstHit === undefined) {
-            effective = grammar.rules;
-        } else if (secondHit === undefined) {
-            effective =
-                grammar.rules.length === 0
-                    ? firstHit
-                    : firstHit.concat(grammar.rules);
+            effective = grammar.alternatives;
         } else {
-            effective =
-                grammar.rules.length === 0
-                    ? firstHit.concat(secondHit)
-                    : firstHit.concat(secondHit, grammar.rules);
+            // Cache merged arrays per-Grammar via a synthesized
+            // RulesPart pinned in `topLevelDispatchPart` - reuses
+            // the same `dispatchHelpers` cache machinery as nested
+            // dispatched parts so each (hit-bucket, fallback)
+            // combination only allocates its merged array once.
+            const cachePart = getTopLevelDispatchCachePart(grammar);
+            if (secondHit === undefined) {
+                effective =
+                    grammar.alternatives.length === 0
+                        ? firstHit
+                        : getDispatchMergedSingle(
+                              cachePart,
+                              firstHit,
+                              grammar.alternatives,
+                          );
+            } else {
+                effective = getDispatchMergedMulti(
+                    cachePart,
+                    firstHit,
+                    secondHit,
+                    grammar.alternatives,
+                );
+            }
         }
     } else {
-        effective = grammar.rules;
+        effective = grammar.alternatives;
     }
     if (effective.length === 0) {
         return undefined;

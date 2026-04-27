@@ -24,13 +24,7 @@
  */
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
-import { matchGrammar } from "../src/grammarMatcher.js";
-
-function match(grammar: ReturnType<typeof loadGrammarRules>, request: string) {
-    return matchGrammar(grammar, request)
-        .map((m) => JSON.stringify(m.match))
-        .sort();
-}
+import { match } from "./dispatchTestHelpers.js";
 
 describe("Grammar Optimizer - top-level mixed-mode dispatch", () => {
     // Mix one [spacing=none] rule with several auto-mode

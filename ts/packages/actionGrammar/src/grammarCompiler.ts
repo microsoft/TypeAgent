@@ -512,7 +512,7 @@ export function compileGrammar(
         }
     }
 
-    const grammar: Grammar = { rules: grammarRules };
+    const grammar: Grammar = { alternatives: grammarRules };
     if (allEntities.size > 0) {
         grammar.entities = Array.from(allEntities);
     }
@@ -1134,7 +1134,7 @@ function createGrammarRule(
                     );
                     parts.push({
                         type: "rules",
-                        rules: record.grammarRules,
+                        alternatives: record.grammarRules,
                         variable: name,
                         name: referencedName,
                         optional: expr.optional,
@@ -1230,7 +1230,7 @@ function createGrammarRule(
                 defaultValue = record.hasValue;
                 parts.push({
                     type: "rules",
-                    rules: record.grammarRules,
+                    alternatives: record.grammarRules,
                     name: expr.refName.name,
                 });
                 // RuleRefExpr has no optional modifier; it is always non-optional.
@@ -1254,7 +1254,7 @@ function createGrammarRule(
                 defaultValue = groupHasValue;
                 const rulesPart: RulesPart = {
                     type: "rules",
-                    rules: grammarRules,
+                    alternatives: grammarRules,
                     optional,
                 };
                 if (repeat) rulesPart.repeat = true;
