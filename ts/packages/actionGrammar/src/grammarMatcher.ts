@@ -15,6 +15,7 @@ import {
     StringPartRegExpEntry,
     VarNumberPart,
     VarStringPart,
+    DispatchModeBucket,
 } from "./grammarTypes.js";
 import {
     leadingWordBoundaryScriptPrefix,
@@ -2138,6 +2139,48 @@ function getDispatchCaches(part: RulesPart): DispatchCaches {
     return c;
 }
 
+/**
+ * Peek the next input token under each per-mode `dispatch` entry
+ * and collect up to two bucket hits.  Shared by the in-rule
+ * `enterDispatchPart` path and the top-level `initialMatchState`
+ * path - both partition members the same way (peek per
+ * `spacingMode`, look up the bucket by lowercased token, stop at
+ * two hits since `dispatch` has at most one entry per spacingMode
+ * and typically <= 2 entries total).
+ *
+ * Returns `[firstHit, secondHit]`.  Either may be `undefined` when
+ * fewer than two entries hit.  Callers merge with their own
+ * fallback (`part.rules` or `grammar.rules`) and apply any
+ * per-RulesPart caching.
+ */
+function peekDispatchHits(
+    dispatch: ReadonlyArray<DispatchModeBucket>,
+    request: string,
+    index: number,
+    leading: CompiledSpacingMode,
+): [GrammarRule[] | undefined, GrammarRule[] | undefined] {
+    let firstHit: GrammarRule[] | undefined;
+    let secondHit: GrammarRule[] | undefined;
+    for (const m of dispatch) {
+        const token = peekNextToken(request, index, leading, m.spacingMode);
+        if (token === undefined) continue;
+        const bucket = m.tokenMap.get(token);
+        if (bucket === undefined) continue;
+        if (firstHit === undefined) {
+            firstHit = bucket;
+        } else {
+            secondHit = bucket;
+            // dispatch has at most one entry per spacingMode and
+            // typically <= 2 entries total, so we can stop after
+            // collecting two hits.  (If a future change ever allows
+            // more eligible modes, extend by widening the merged
+            // helper and the cache key.)
+            break;
+        }
+    }
+    return [firstHit, secondHit];
+}
+
 function getDispatchMergedSingle(
     part: RulesPart,
     bucket: GrammarRule[],
@@ -2243,30 +2286,12 @@ function enterDispatchPart(
     //     dispatch entry (typically 1; up to 2 for mixed-mode
     //     dispatches with both `required`- and `auto`-mode members).
     const leading = leadingSpacingMode(state);
-    let firstHit: GrammarRule[] | undefined;
-    let secondHit: GrammarRule[] | undefined;
-    for (const m of part.dispatch!) {
-        const token = peekNextToken(
-            request,
-            state.index,
-            leading,
-            m.spacingMode,
-        );
-        if (token === undefined) continue;
-        const bucket = m.tokenMap.get(token);
-        if (bucket === undefined) continue;
-        if (firstHit === undefined) {
-            firstHit = bucket;
-        } else {
-            secondHit = bucket;
-            // dispatch has at most one entry per spacingMode and
-            // typically <= 2 entries total, so we can stop after
-            // collecting two hits.  (If a future change ever allows
-            // more eligible modes, extend by widening the merged
-            // helper and the cache key.)
-            break;
-        }
-    }
+    const [firstHit, secondHit] = peekDispatchHits(
+        part.dispatch!,
+        request,
+        state.index,
+        leading,
+    );
     // `part.rules` doubles as the fallback subset for a dispatched
     // RulesPart (members that could not be assigned to any bucket).
     // An empty array means "no fallback".
@@ -2331,20 +2356,62 @@ function enterDispatchPart(
 // order.  Returns `undefined` for an empty grammar (no rules).
 export function initialMatchState(
     grammar: Grammar,
+    request: string,
     options?: GrammarMatchOptions,
 ): MatchState | undefined {
-    const rules = grammar.rules;
-    if (rules.length === 0) {
-        return undefined;
-    }
     const wildcardPolicy = options?.wildcardPolicy ?? "exhaustive";
     const optionalPolicy = options?.optionalPolicy ?? "exhaustive";
     const repeatPolicy = options?.repeatPolicy ?? "exhaustive";
 
+    // Compute the effective top-level alternation.  When
+    // `grammar.dispatch` is set, peek the first input token under
+    // each per-mode bucket (mirroring `enterDispatchPart` but at
+    // the grammar level): selected bucket members come first, then
+    // `grammar.rules` (the fallback subset) - same hits-before-
+    // fallback ordering used inside RulesPart.dispatch.  Without
+    // dispatch, `grammar.rules` IS the full alternation.
+    //
+    // Top-level peek uses an auto-mode leading separator (skip any
+    // leading whitespace).  Each per-mode bucket entry contributes
+    // its own `tokenMode` for the token-boundary script-prefix
+    // logic.  This matches what `enterDispatchPart` does for nested
+    // dispatch parts at `partIndex === 0` with no parent.
+    let effective: GrammarRule[];
+    if (grammar.dispatch !== undefined) {
+        // Top-level peek uses an auto-mode leading separator (skip
+        // any leading whitespace) - matching what
+        // `enterDispatchPart` does for a nested dispatch part at
+        // `partIndex === 0` with no parent.
+        const [firstHit, secondHit] = peekDispatchHits(
+            grammar.dispatch,
+            request,
+            0,
+            undefined,
+        );
+        if (firstHit === undefined) {
+            effective = grammar.rules;
+        } else if (secondHit === undefined) {
+            effective =
+                grammar.rules.length === 0
+                    ? firstHit
+                    : firstHit.concat(grammar.rules);
+        } else {
+            effective =
+                grammar.rules.length === 0
+                    ? firstHit.concat(secondHit)
+                    : firstHit.concat(secondHit, grammar.rules);
+        }
+    } else {
+        effective = grammar.rules;
+    }
+    if (effective.length === 0) {
+        return undefined;
+    }
+
     const state: MatchState = {
         name: `<Start>[0]`,
-        parts: rules[0].parts,
-        value: rules[0].value,
+        parts: effective[0].parts,
+        value: effective[0].value,
         partIndex: 0,
         valueIds: undefined,
         nextValueId: 0,
@@ -2352,8 +2419,8 @@ export function initialMatchState(
         parent: undefined,
         nestedLevel: 0,
         suppressOptionalFork: undefined,
-        leadingSpacingMode: rules[0].spacingMode,
-        spacingMode: rules[0].spacingMode,
+        leadingSpacingMode: effective[0].spacingMode,
+        spacingMode: effective[0].spacingMode,
         index: 0,
         pendingWildcard: undefined,
         lastMatchedPartInfo: undefined,
@@ -2362,14 +2429,14 @@ export function initialMatchState(
         repeatPolicy,
     };
     // Top-level alternation: push a single compressed cursor frame
-    // covering rules 1..N-1.  The cursor advances forward (rule 1
-    // first, then rule 2, ...) - same source order as the prior
-    // reverse-push of one frame per rule.  `base` is rule-0's
+    // covering effective[1..N-1].  The cursor advances forward
+    // (rule 1 first, then rule 2, ...) - same source order as the
+    // prior reverse-push of one frame per rule.  `base` is rule-0's
     // initial state; per-rule `parts/value/spacingMode` are read
-    // from `rules[i]` directly on restore, and the debug name is
+    // from `effective[i]` directly on restore, and the debug name is
     // built lazily as `<Start>[i]`.
-    if (rules.length > 1) {
-        pushAlternation(state, forkMatchState(state), rules, "<Start>");
+    if (effective.length > 1) {
+        pushAlternation(state, forkMatchState(state), effective, "<Start>");
     }
     return state;
 }
@@ -2388,11 +2455,7 @@ function getStateName(state: MatchState): string {
     return `${state.name}{${state.partIndex}}`;
 }
 
-function getNestedStateName(
-    state: MatchState,
-    part: RulesPart,
-    index: number,
-) {
+function getNestedStateName(state: MatchState, part: RulesPart, index: number) {
     return `${part.name ? `<${part.name}>` : getStateName(state)}[${index}]`;
 }
 
@@ -2401,7 +2464,7 @@ export function matchGrammar(
     request: string,
     options?: GrammarMatchOptions,
 ) {
-    const state = initialMatchState(grammar, options);
+    const state = initialMatchState(grammar, request, options);
     const results: GrammarMatchResult[] = [];
     if (state === undefined) {
         return results;

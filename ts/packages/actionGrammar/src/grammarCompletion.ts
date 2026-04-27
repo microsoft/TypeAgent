@@ -1176,7 +1176,7 @@ function collectCandidates(
     // nested-rule alternation, repeat continuation) pushes its
     // alternative onto the live state's `backtracks` rather
     // than a global work-list.
-    const state = initialMatchState(grammar, matchOptions);
+    const state = initialMatchState(grammar, input, matchOptions);
     if (state === undefined) {
         return ctx;
     }

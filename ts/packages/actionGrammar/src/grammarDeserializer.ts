@@ -18,14 +18,14 @@ import registerDebug from "debug";
 const debug = registerDebug("typeagent:grammar:deserializer");
 
 function grammarFromJsonInternal(json: GrammarJson): Grammar {
-    const start = json[0];
+    const start = json.rules[0];
     const indexToRules: Map<number, GrammarRule[]> = new Map();
     function rulesFor(idx: number, json: GrammarJson): GrammarRule[] {
         let rules = indexToRules.get(idx);
         if (rules === undefined) {
             rules = [];
             indexToRules.set(idx, rules);
-            for (const r of json[idx]) {
+            for (const r of json.rules[idx]) {
                 rules.push(grammarRuleFromJson(r, json));
             }
         }
@@ -122,9 +122,32 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
         }
     }
 
-    return {
+    const grammar: Grammar = {
         rules: start.map((r) => grammarRuleFromJson(r, json)),
     };
+    if (json.dispatch !== undefined) {
+        const dispatch: DispatchModeBucket[] = [];
+        let totalTokenKeys = 0;
+        for (const m of json.dispatch) {
+            const tokenMap = new Map<string, GrammarRule[]>();
+            for (const [token, idx] of m.tokenMap) {
+                tokenMap.set(token, rulesFor(idx, json));
+            }
+            totalTokenKeys += tokenMap.size;
+            dispatch.push({ spacingMode: m.spacingMode, tokenMap });
+        }
+        grammar.dispatch = dispatch;
+        // Same non-canonical-shape advisories as the part-level
+        // dispatched RulesPart deserializer above.
+        if (totalTokenKeys === 0) {
+            debug(`non-canonical top-level dispatch: empty dispatch`);
+        } else if (totalTokenKeys === 1 && grammar.rules.length === 0) {
+            debug(
+                `non-canonical top-level dispatch: single-bucket with no fallback`,
+            );
+        }
+    }
+    return grammar;
 }
 
 /**
@@ -144,7 +167,7 @@ export function grammarFromJson(
 ): Grammar {
     const grammar = grammarFromJsonInternal(json);
     if (options?.validate !== false) {
-        validateTailRulesParts(grammar.rules);
+        validateTailRulesParts(grammar.rules, grammar.dispatch);
     }
     return grammar;
 }

@@ -193,10 +193,29 @@ function isSingleLiteralRule(rule: GrammarRule): { literal: string } | false {
 export function normalizeGrammar(grammar: Grammar): Grammar {
     // Cache to avoid re-normalizing shared rule arrays (handles recursive grammars)
     const rulesCache = new Map<GrammarRule[], GrammarRule[]>();
-    return {
+    // Top-level dispatch: re-fold all bucket members + the
+    // fallback subset into a flat rules alternation, mirroring
+    // `stripDispatch` for nested dispatched RulesParts.  The NFA
+    // compiler does its own first-token dispatch via
+    // `buildFirstTokenIndex`, so the optimizer-only `dispatch`
+    // index adds nothing here.
+    let topRules = grammar.rules;
+    if (grammar.dispatch !== undefined) {
+        const expanded: GrammarRule[] = [];
+        for (const m of grammar.dispatch) {
+            for (const bucket of m.tokenMap.values()) {
+                for (const r of bucket) expanded.push(r);
+            }
+        }
+        for (const r of grammar.rules) expanded.push(r);
+        topRules = expanded;
+    }
+    const out: Grammar = {
         ...grammar,
-        rules: normalizeRulesArray(grammar.rules, rulesCache),
+        rules: normalizeRulesArray(topRules, rulesCache),
     };
+    delete out.dispatch;
+    return out;
 }
 
 /**

@@ -18,7 +18,7 @@
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
-import { GrammarRule } from "../src/grammarTypes.js";
+import { Grammar, GrammarRule } from "../src/grammarTypes.js";
 import { grammarToJson } from "../src/grammarSerializer.js";
 import { grammarFromJson } from "../src/grammarDeserializer.js";
 import {
@@ -34,8 +34,15 @@ function match(grammar: ReturnType<typeof loadGrammarRules>, request: string) {
 }
 
 function findDispatchPart(
-    rules: GrammarRule[],
+    grammar: Grammar,
 ): DispatchedRulesPart | undefined {
+    if (grammar.dispatch !== undefined) {
+        return {
+            type: "rules",
+            rules: grammar.rules,
+            dispatch: grammar.dispatch,
+        } as DispatchedRulesPart;
+    }
     const seen = new Set<GrammarRule[]>();
     const visit = (rs: GrammarRule[]): DispatchedRulesPart | undefined => {
         if (seen.has(rs)) return undefined;
@@ -53,7 +60,7 @@ function findDispatchPart(
         }
         return undefined;
     };
-    return visit(rules);
+    return visit(grammar.rules);
 }
 
 describe("Grammar Optimizer - DispatchPart with optional/repeat", () => {
@@ -64,7 +71,7 @@ describe("Grammar Optimizer - DispatchPart with optional/repeat", () => {
             const optimized = loadGrammarRules("t.grammar", text, {
                 optimizations: { dispatchifyAlternations: true },
             });
-            const dispatch = findDispatchPart(optimized.rules);
+            const dispatch = findDispatchPart(optimized);
             expect(dispatch).toBeDefined();
             expect(dispatch!.optional).toBe(true);
             expect(
@@ -98,7 +105,7 @@ describe("Grammar Optimizer - DispatchPart with optional/repeat", () => {
             const optimized = loadGrammarRules("t.grammar", text, {
                 optimizations: { dispatchifyAlternations: true },
             });
-            const dispatch = findDispatchPart(optimized.rules);
+            const dispatch = findDispatchPart(optimized);
             expect(dispatch).toBeDefined();
             expect(dispatch!.repeat).toBe(true);
             expect(

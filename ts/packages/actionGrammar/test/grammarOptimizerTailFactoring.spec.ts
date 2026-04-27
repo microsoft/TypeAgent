@@ -344,14 +344,14 @@ describe("validateTailRulesParts", () => {
         });
         const json = grammarToJson(optimized);
         // Mutate the JSON to break the >=2 invariant.
-        for (const ruleSet of json) {
+        for (const ruleSet of json.rules) {
             for (const rule of ruleSet) {
                 for (const p of rule.parts) {
                     if (p.type === "rules" && p.tailCall) {
                         // Force the referenced rules array to have
                         // length 1 by replacing the index target with
                         // a single-rule array.
-                        json[p.index] = [json[p.index][0]];
+                        json.rules[p.index] = [json.rules[p.index][0]];
                     }
                 }
             }

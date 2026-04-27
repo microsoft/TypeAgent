@@ -98,5 +98,22 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
 
     rulesToIndex.set(grammar.rules, 0);
     json[0] = grammar.rules.map(grammarRuleToJson);
-    return json;
+    if (grammar.dispatch === undefined) {
+        return { rules: json };
+    }
+    const dispatchJson: NonNullable<GrammarJson["dispatch"]> = [];
+    for (const m of grammar.dispatch) {
+        const tokenMap: Array<[string, number]> = [];
+        for (const [token, suffixRules] of m.tokenMap) {
+            tokenMap.push([token, indexFor(suffixRules)]);
+        }
+        const entry: NonNullable<GrammarJson["dispatch"]>[number] = {
+            tokenMap,
+        };
+        if (m.spacingMode !== undefined) {
+            entry.spacingMode = m.spacingMode;
+        }
+        dispatchJson.push(entry);
+    }
+    return { rules: json, dispatch: dispatchJson };
 }

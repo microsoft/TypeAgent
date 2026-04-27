@@ -19,7 +19,7 @@
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
-import { GrammarRule, RulesPart } from "../src/grammarTypes.js";
+import { Grammar, GrammarRule, RulesPart } from "../src/grammarTypes.js";
 import { grammarToJson } from "../src/grammarSerializer.js";
 import { grammarFromJson } from "../src/grammarDeserializer.js";
 import {
@@ -36,8 +36,19 @@ function match(grammar: ReturnType<typeof loadGrammarRules>, request: string) {
 }
 
 function findDispatchPart(
-    rules: GrammarRule[],
+    grammar: Grammar,
 ): DispatchedRulesPart | undefined {
+    // Top-level dispatch hoisted onto `grammar.dispatch` (Phase 2):
+    // synthesize a `DispatchedRulesPart`-shaped view so existing
+    // assertions (`isDispatched`, `getDispatchAllTokenMap`, etc.)
+    // keep working without rewriting every test.
+    if (grammar.dispatch !== undefined) {
+        return {
+            type: "rules",
+            rules: grammar.rules,
+            dispatch: grammar.dispatch,
+        } as DispatchedRulesPart;
+    }
     const seen = new Set<GrammarRule[]>();
     const visit = (rs: GrammarRule[]): DispatchedRulesPart | undefined => {
         if (seen.has(rs)) return undefined;
@@ -55,7 +66,7 @@ function findDispatchPart(
         }
         return undefined;
     };
-    return visit(rules);
+    return visit(grammar.rules);
 }
 
 describe("Grammar Optimizer - dispatchifyAlternations", () => {
@@ -67,7 +78,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         expect(dispatch!.type).toBe("rules");
         expect(dispatch!.dispatch).toBeDefined();
@@ -109,7 +120,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         // "play" bucket has 3 members, "stop" has 1.
         expect(getDispatchAllTokenMap(dispatch!).get("play")).toHaveLength(3);
@@ -136,7 +147,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         // Wildcard-first member ("play $(t:string)") goes to fallback;
         // "stop" / "next" go into tokenMap.  Note: the leading literal
@@ -164,7 +175,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        expect(findDispatchPart(optimized.rules)).toBeUndefined();
+        expect(findDispatchPart(optimized)).toBeUndefined();
     });
 
     it("emits dispatch even for two single-bucket alternatives", () => {
@@ -178,7 +189,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         expect(
             Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
@@ -212,7 +223,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
             optimizations: { dispatchifyAlternations: true },
         });
         const roundTripped = grammarFromJson(grammarToJson(optimized));
-        const dispatch = findDispatchPart(roundTripped.rules);
+        const dispatch = findDispatchPart(roundTripped);
         expect(dispatch).toBeDefined();
         expect(
             Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
@@ -234,7 +245,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
             optimizations: { dispatchifyAlternations: true },
         });
         // A RulesPart with multiple members should remain.
-        expect(findDispatchPart(optimized.rules)).toBeUndefined();
+        expect(findDispatchPart(optimized)).toBeUndefined();
         // findRulesPartByMembers with min 2 members may not exist for
         // top-level (top-level isn't a RulesPart) - just verify
         // results match unoptimized.
@@ -267,7 +278,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         expect(
             Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
@@ -293,7 +304,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         expect(
             Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
@@ -318,7 +329,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         expect(
             Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
@@ -344,7 +355,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         expect(
             Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
@@ -370,7 +381,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         expect(
             Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
@@ -393,7 +404,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         expect(
             Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
@@ -429,7 +440,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         expect(
             Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
@@ -462,7 +473,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         expect(
             Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
@@ -490,7 +501,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        expect(findDispatchPart(optimized.rules)).toBeDefined();
+        expect(findDispatchPart(optimized)).toBeDefined();
 
         const baseline = loadGrammarRules("t.grammar", text);
         for (const input of [
@@ -518,7 +529,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         // "play" / "stop" in tokenMap, wildcard rule in fallback.
         expect(dispatch!.rules?.length ?? 0).toBe(1);
@@ -546,7 +557,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        expect(findDispatchPart(optimized.rules)).toBeDefined();
+        expect(findDispatchPart(optimized)).toBeDefined();
         for (const input of [
             "play你好", // Latin→CJK transition, no separator
             "play 你好", // explicit separator
@@ -570,7 +581,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        expect(findDispatchPart(optimized.rules)).toBeDefined();
+        expect(findDispatchPart(optimized)).toBeDefined();
         for (const input of ["play你好", "play hello", "stop", "next"]) {
             expect(match(optimized, input)).toStrictEqual(
                 match(baseline, input),
@@ -606,7 +617,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        expect(findDispatchPart(optimized.rules)).toBeDefined();
+        expect(findDispatchPart(optimized)).toBeDefined();
         for (const input of [
             "play你好", // hits dispatch via WB-script-prefix "play"
             "play 你好", // explicit separator (auto inner accepts it)
@@ -633,7 +644,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        expect(findDispatchPart(optimized.rules)).toBeDefined();
+        expect(findDispatchPart(optimized)).toBeDefined();
         for (const input of [" play", "  stop", "\tnext", "play", "stop"]) {
             expect(match(optimized, input)).toStrictEqual(
                 match(baseline, input),
@@ -702,7 +713,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         // Without tailCall: the alternation isn't the rule's last
         // part, so the optimizer cannot mark it as a tail call.
@@ -737,7 +748,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         expect(
             Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
@@ -768,7 +779,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         // The wildcard-first arm goes to fallback.
         expect(dispatch!.rules?.length ?? 0).toBeGreaterThanOrEqual(1);
@@ -804,7 +815,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         expect(
             Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
@@ -828,7 +839,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         expect(
             Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
@@ -855,7 +866,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         const keys = Array.from(getDispatchAllTokenMap(dispatch!).keys());
         expect(keys).toContain("🎵");
@@ -881,7 +892,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         const optimized = loadGrammarRules("t.grammar", text, {
             optimizations: { dispatchifyAlternations: true },
         });
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         expect(
             Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
@@ -931,7 +942,7 @@ describe("Grammar Optimizer - dispatchifyAlternations", () => {
         });
         // Confirm a DispatchPart was emitted at the top level with
         // the wildcard rule in fallback.
-        const dispatch = findDispatchPart(optimized.rules);
+        const dispatch = findDispatchPart(optimized);
         expect(dispatch).toBeDefined();
         expect((dispatch!.rules ?? []).length).toBe(1);
         expect(

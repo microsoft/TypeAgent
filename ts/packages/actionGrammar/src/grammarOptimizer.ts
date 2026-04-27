@@ -6,6 +6,7 @@ import {
     CompiledObjectElement,
     CompiledSpacingMode,
     CompiledValueNode,
+    DispatchModeBucket,
     getCapturedVariableName,
     Grammar,
     GrammarPart,
@@ -207,13 +208,20 @@ export function optimizeGrammar(
             }
         }
     }
+    let topLevelDispatch: DispatchModeBucket[] | undefined;
     if (options.dispatchifyAlternations) {
-        rules = dispatchifyAlternations(rules);
+        const result = dispatchifyAlternations(rules);
+        rules = result.rules;
+        topLevelDispatch = result.dispatch;
     }
-    if (rules === grammar.rules) {
+    if (rules === grammar.rules && topLevelDispatch === undefined) {
         return grammar;
     }
-    return { ...grammar, rules };
+    const out: Grammar = { ...grammar, rules };
+    if (topLevelDispatch !== undefined) {
+        out.dispatch = topLevelDispatch;
+    }
+    return out;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2115,9 +2123,15 @@ function tryDispatchifyRulesPart(part: RulesPart): RulesPart | undefined {
 /**
  * Walk every rule array in `rules` post-order, attempting to
  * attach a first-token dispatch index to each `RulesPart` whose
- * alternatives can be partitioned by first input token.  Top-level
- * `Grammar.rules` is also dispatched when eligible (as a synthesized
- * outer RulesPart - effectively the same logic).
+ * alternatives can be partitioned by first input token.  The
+ * top-level alternation is also dispatched when eligible - the
+ * result rides on the returned `dispatch` field, sitting next to
+ * the trimmed `rules` (the fallback subset).  No wrapper rule is
+ * synthesized: hoisting dispatch onto the grammar shape lets each
+ * surviving top-level alternative remain a true top-level frame
+ * with its own `spacingMode`, restoring per-rule leading-spacing
+ * semantics in mixed-mode grammars (a wrapper would impose a
+ * single uniform mode on every member).
  *
  * Identity-sharing of `GrammarRule[]` arrays (the dedup invariant
  * the serializer relies on) is preserved via memoization.
@@ -2139,53 +2153,39 @@ function tryDispatchifyRulesPart(part: RulesPart): RulesPart | undefined {
  * permissively, only when the fallback's first part could overlap
  * with a tokenMap key).  Not yet wired up - no measured need.
  */
-export function dispatchifyAlternations(rules: GrammarRule[]): GrammarRule[] {
+export function dispatchifyAlternations(rules: GrammarRule[]): {
+    rules: GrammarRule[];
+    dispatch?: DispatchModeBucket[];
+} {
     const counter = { dispatched: 0 };
     const memo = new Map<GrammarRule[], GrammarRule[]>();
 
     const result = visitRulesArray(rules, counter, memo);
 
-    // Top-level dispatch: synthesize a transient RulesPart over the
-    // top-level alternatives and try to dispatch it.  If successful,
-    // wrap the dispatched RulesPart as the only part of a single
-    // outer rule - preserves the matcher's "rule i drives one
-    // alternative" semantics through the dispatch entry.
-    //
-    // The wrapper rule's `spacingMode` is intentionally left unset
-    // (auto).  Without the wrapper, each top-level alternative was
-    // queued as its own `MatchState` with `state.spacingMode =
-    // rule.spacingMode`; with the wrapper there is exactly one outer
-    // frame whose `spacingMode` would otherwise apply uniformly to
-    // every member - which is wrong for any top level that mixes
-    // modes (the `optional` / `none` rules routed to the fallback
-    // `rules` subset would suddenly run under the bucket members'
-    // mode).  The dispatch peek doesn't need the wrapper's mode
-    // either: it reads each `dispatch` entry's own `spacingMode`
-    // directly, and once a member rule is entered, that rule's own
-    // `spacingMode` seeds its frame.  Leaving the wrapper as auto
-    // keeps top-level leading-whitespace handling identical to the
-    // unwrapped shape (auto and required both allow leading
-    // whitespace at top level).
-    let finalResult = result;
+    // Top-level dispatch: build a transient `RulesPart` over the
+    // top-level alternatives and try to dispatch it.  On success,
+    // hoist the dispatch index and the trimmed fallback subset
+    // onto the grammar shape directly - no wrapper rule synthesized.
+    const out: { rules: GrammarRule[]; dispatch?: DispatchModeBucket[] } = {
+        rules: result,
+    };
     if (result.length >= 2) {
-        const synthetic: RulesPart = {
+        const dispatched = tryDispatchifyRulesPart({
             type: "rules",
             rules: result,
-        };
-        const dispatched = tryDispatchifyRulesPart(synthetic);
-        if (dispatched !== undefined) {
+        });
+        if (dispatched?.dispatch !== undefined) {
             counter.dispatched++;
-            const wrapper: GrammarRule = { parts: [dispatched] };
-            finalResult = [wrapper];
+            out.rules = dispatched.rules;
+            out.dispatch = dispatched.dispatch;
         }
     }
-
     if (counter.dispatched > 0) {
         debug(
             `dispatched ${counter.dispatched} alternations into token tables`,
         );
     }
-    return finalResult;
+    return out;
 }
 
 function visitRulesArray(
@@ -2314,14 +2314,15 @@ function visitPart(
  * Members are recursed into so that nested tail parts are also
  * validated.
  */
-export function validateTailRulesParts(rules: GrammarRule[]): void {
+export function validateTailRulesParts(
+    rules: GrammarRule[],
+    dispatch?: DispatchModeBucket[] | undefined,
+): void {
     const visited = new WeakSet<GrammarRule[]>();
     const visitRules = (rs: GrammarRule[]): void => {
         if (visited.has(rs)) return;
         visited.add(rs);
-        for (const r of rs) {
-            visitRule(r);
-        }
+        for (const r of rs) visitRule(r);
     };
     const visitRule = (rule: GrammarRule): void => {
         const parts = rule.parts;
@@ -2346,6 +2347,18 @@ export function validateTailRulesParts(rules: GrammarRule[]): void {
         }
     };
     visitRules(rules);
+    // Top-level dispatch buckets (Phase 2): walk member rules
+    // hoisted onto `grammar.dispatch` so nested tail parts inside
+    // them are also validated.  The grammar level itself cannot
+    // carry `tailCall` (only RulesPart can), so no contract check
+    // applies here - just walk the rule contents.
+    if (dispatch !== undefined) {
+        for (const m of dispatch) {
+            for (const bucket of m.tokenMap.values()) {
+                visitRules(bucket);
+            }
+        }
+    }
 }
 
 /**

@@ -104,7 +104,7 @@ describe("Grammar Optimizer - Shared rule identity preservation", () => {
             // The body of <Common> should appear in exactly one
             // GrammarRulesJson entry on both sides.
             const countCommonEntries = (json: typeof baseJson) =>
-                json.filter(
+                json.rules.filter(
                     (entry) =>
                         Array.isArray(entry) &&
                         entry.length === 3 &&
@@ -179,7 +179,7 @@ describe("Grammar Optimizer - Shared single-alternative rule is not inlined", ()
         const json = grammarToJson(optimized);
         // Exactly one GrammarRulesJson entry should hold the "the song"
         // body (the shared <Inner>).
-        const entries = json.filter(
+        const entries = json.rules.filter(
             (entry) =>
                 Array.isArray(entry) &&
                 entry.length === 1 &&

@@ -419,6 +419,19 @@ export type GrammarRule = {
 
 export type Grammar = {
     rules: GrammarRule[];
+    /**
+     * Optimizer-only first-token dispatch index over the top-level
+     * alternation.  Mirrors `RulesPart.dispatch` but lives at the
+     * grammar level so the optimizer doesn't need to synthesize a
+     * wrapper rule (which would impose a single uniform
+     * `spacingMode` on the wrapper that is wrong for top-level
+     * alternations mixing modes; see `dispatchifyAlternations`).
+     *
+     * When set, `rules` is the *fallback subset* (members not
+     * assigned to any bucket); when unset, `rules` is the full
+     * top-level alternation.
+     */
+    dispatch?: DispatchModeBucket[] | undefined;
     entities?: string[] | undefined; // Entity types this grammar depends on (e.g. ["Ordinal", "CalendarDate"])
     checkedVariables?: Set<string> | undefined; // Variable names with validation (checked_wildcard paramSpec)
 };
@@ -501,4 +514,19 @@ export type GrammarRuleJson = {
     spacingMode?: CompiledSpacingMode | undefined; // undefined = auto (default)
 };
 export type GrammarRulesJson = GrammarRuleJson[];
-export type GrammarJson = GrammarRulesJson[];
+/**
+ * Serialized grammar shape.  Slot 0 of `rules` is the top-level
+ * alternation (or, when `dispatch` is set, the fallback subset).
+ * `dispatch` is the serialized form of `Grammar.dispatch`: each
+ * entry's `tokenMap` is `[lowercased-token, rulesArrayIndex][]` (an
+ * index into `rules`), mirroring the part-level `RulePartJson.dispatch`
+ * encoding.
+ */
+export type GrammarJson = {
+    rules: GrammarRulesJson[];
+    dispatch?: Array<{
+        spacingMode?: CompiledSpacingMode | undefined;
+        /** [lowercased-token, rulesArrayIndex][] */
+        tokenMap: Array<[string, number]>;
+    }>;
+};

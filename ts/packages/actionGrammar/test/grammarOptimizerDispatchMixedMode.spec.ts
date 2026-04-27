@@ -22,12 +22,19 @@
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
-import { GrammarPart, GrammarRule } from "../src/grammarTypes.js";
+import { Grammar, GrammarPart, GrammarRule } from "../src/grammarTypes.js";
 import { DispatchedRulesPart, isDispatched } from "./dispatchTestHelpers.js";
 
 function findFirstDispatch(
-    rules: GrammarRule[],
+    grammar: Grammar,
 ): DispatchedRulesPart | undefined {
+    if (grammar.dispatch !== undefined) {
+        return {
+            type: "rules",
+            rules: grammar.rules,
+            dispatch: grammar.dispatch,
+        } as DispatchedRulesPart;
+    }
     const visited = new WeakSet<GrammarRule[]>();
     let found: DispatchedRulesPart | undefined;
     const visitParts = (parts: GrammarPart[]) => {
@@ -45,7 +52,7 @@ function findFirstDispatch(
             }
         }
     };
-    for (const r of rules) {
+    for (const r of grammar.rules) {
         visitParts(r.parts);
         if (found !== undefined) break;
     }
@@ -74,7 +81,7 @@ function compareWithBaseline(
             .sort();
         expect(got).toStrictEqual(exp);
     }
-    return { optimized, dispatch: findFirstDispatch(optimized.rules) };
+    return { optimized, dispatch: findFirstDispatch(optimized) };
 }
 
 describe("Grammar Optimizer - mixed-mode DispatchPart", () => {
