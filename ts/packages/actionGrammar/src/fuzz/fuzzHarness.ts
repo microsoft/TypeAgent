@@ -342,14 +342,14 @@ export function runFuzz(config: FuzzConfig): FuzzResult[] {
         // Build the input set.
         const extraCount = Math.max(
             0,
-            config.inputsPerGrammar - gen.matchingInputs.length,
+            config.inputsPerGrammar - gen.testInputs.length,
         );
         const extraInputs = generateExtraInputs(
             rng,
             extraCount,
             config.generator.words,
         );
-        const inputs = [...gen.matchingInputs, ...extraInputs];
+        const inputs = [...gen.testInputs, ...extraInputs];
 
         for (const validation of config.validations) {
             let results: FuzzResult[];

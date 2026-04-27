@@ -476,6 +476,10 @@ function tryInlineRulesPart(
     // case.  When the parent HAS an explicit value, `createValue` uses
     // that expression (not the implicit-default path), so the extra
     // bindings are harmless.
+    //
+    // When `parts.length === 1` this guard is not needed: the matcher's
+    // single-part implicit-default rule forwards the child's result
+    // directly, so inlining preserves those semantics.
     if (
         part.variable === undefined &&
         parentRule.value === undefined &&

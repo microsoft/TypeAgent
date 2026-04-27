@@ -87,8 +87,12 @@ export const DEFAULT_GENERATOR_CONFIG: GeneratorConfig = {
 export type GeneratedGrammar = {
     /** Full `.agr` source text. */
     text: string;
-    /** Inputs that should match the grammar (first-alt expansion, etc.). */
-    matchingInputs: string[];
+    /**
+     * Pre-computed test inputs: a matching expansion, a non-matching
+     * token, and a truncated prefix.  Not all entries are expected to
+     * match; the set is designed for equivalence checking.
+     */
+    testInputs: string[];
     /** Whether the grammar uses value expressions (needs enableValueExpressions). */
     usesValueExpressions: boolean;
     /** Whether the grammar needs startValueRequired=false. */
@@ -142,14 +146,19 @@ function buildWildcardPart(
     };
 }
 
-function buildNumberPart(varCounter: { n: number }): {
+function buildNumberPart(
+    rng: () => number,
+    varCounter: { n: number },
+): {
     text: string;
     matchTokens: string[];
     varName: string;
 } {
     const name = `n${varCounter.n++}`;
-    // Matching input uses a small integer.
-    const num = String(varCounter.n + 10);
+    // Matching input uses a random small integer so that repeated
+    // number parts can receive the same value, exercising value-binding
+    // edge cases.
+    const num = String(intInRange(rng, 1, 99));
     return {
         text: `$(${name}:number)`,
         matchTokens: [num],
@@ -261,7 +270,7 @@ export function buildRandomGrammar(
                         break;
                     }
                     case "number": {
-                        const np = buildNumberPart(varCounter);
+                        const np = buildNumberPart(rng, varCounter);
                         partTexts.push(np.text);
                         partMatch.push(...np.matchTokens);
                         altBoundVars.push(np.varName);
@@ -322,13 +331,9 @@ export function buildRandomGrammar(
     // Reverse so <R0> is defined first (cosmetic).
     lines.reverse();
 
-    // Anchor the start symbol to <R0>.  If the top rule has a value,
-    // the Start rule needs one too.
-    const startState = ruleStates[0];
-    if (startState.hasValue && startState.boundVars.length > 0) {
-        // The Start rule wraps R0, so it can't see R0's inner variables.
-        // R0's alternatives already carry their own value expressions.
-    }
+    // Anchor the start symbol to <R0>.  The Start rule wraps R0 and
+    // can't see R0's inner variables; R0's alternatives already carry
+    // their own value expressions, so Start never needs one.
     const text = `<Start> = <R0>;\n${lines.join("\n")}`;
 
     // Matching input: the first-alternative expansion of <R0>.
@@ -340,7 +345,7 @@ export function buildRandomGrammar(
 
     return {
         text,
-        matchingInputs: [matching, nonMatching, truncated],
+        testInputs: [matching, nonMatching, truncated],
         usesValueExpressions,
         // When inner rules produce values, the Start wrapper doesn't have
         // its own value expression, so set startValueRequired to false.

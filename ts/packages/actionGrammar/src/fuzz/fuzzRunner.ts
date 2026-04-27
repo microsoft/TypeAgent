@@ -56,7 +56,9 @@ function printUsage(): void {
         "  --count <N>          Number of grammars to generate (default: 40)",
         "  --inputs <N>         Extra random inputs per grammar (default: 6)",
         "  --features <csv>     Comma-separated feature flags (default: literals,ruleRefs)",
-        "                       Options: literals, ruleRefs, wildcards, numbers,",
+        "                       Literals are always implicitly enabled as the",
+        "                       fallback part kind.  Other options:",
+        "                       ruleRefs, wildcards, numbers,",
         "                                optionals (NYI), repeats (NYI), values, spacing",
         "  --validation <csv>   Comma-separated validations (default: all)",
         "                       Options: optimizer, roundtrip-text, roundtrip-json",
@@ -161,12 +163,15 @@ function parseArgs(argv: string[]): ParsedArgs {
                 break;
             case "--features": {
                 if (!featuresExplicit) {
-                    // First --features resets all to false.
+                    // First --features resets all to false, then enables
+                    // the listed features.  Literals are always kept on
+                    // as the fallback part kind.
                     for (const k of Object.keys(
                         config.features,
                     ) as (keyof FuzzFeatureFlags)[]) {
                         config.features[k] = false;
                     }
+                    config.features.literals = true;
                     featuresExplicit = true;
                 }
                 const parts = argv[++i].split(",");
@@ -302,7 +307,7 @@ function replayReproCases(dir: string): number {
         // Construct a minimal GeneratedGrammar for the validation functions.
         const gen: GeneratedGrammar = {
             text: grammarText,
-            matchingInputs: [],
+            testInputs: [],
             usesValueExpressions: meta.features.values,
             startValueRequired: false,
         };

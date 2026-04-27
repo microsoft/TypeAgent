@@ -395,13 +395,13 @@ export type PendingMatchState = {
     // Spacing mode that governs the leading separator before the
     // first part of the current rule.  Precomputed at rule-entry
     // time so `leadingSpacingMode` returns it directly (O(1))
-    // instead of walking the parent chain.  Updated at three
-    // transition points:
+    // instead of walking the parent chain.  Set at four points:
     //   - `initialMatchState`: set to the rule's own `spacingMode`
-    //   - non-tail rules entry: computed from parent context
-    //   - tail-call rules entry: computed from wrapper context
-    // Saved/restored in `ParentMatchState` so repeat re-entry and
-    // finalize do not observe a stale value.
+    //   - non-tail rule entry: computed from parent context
+    //   - tail-call rule entry: computed from wrapper context
+    //   - `finalizeNestedRule` / snapshot restore: restored from
+    //     the saved `ParentMatchState` so repeat re-entry and
+    //     backtracking always see the correct value.
     leadingSpacingMode: CompiledSpacingMode;
 
     spacingMode: CompiledSpacingMode; // active spacing mode for this rule
