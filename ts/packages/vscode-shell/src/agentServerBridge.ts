@@ -206,6 +206,19 @@ export class AgentServerBridge {
         return this.isConnected;
     }
 
+    /** Current session id, if joined. */
+    getSessionId(): string | undefined {
+        return this.session?.sessionId;
+    }
+
+    /** True when the current session is the bridge's own ephemeral session. */
+    isOnEphemeralSession(): boolean {
+        return (
+            this.ephemeralSessionId !== undefined &&
+            this.session?.sessionId === this.ephemeralSessionId
+        );
+    }
+
     /** Subscribe to connection / session-name changes. */
     onStatusChange(cb: () => void): vscode.Disposable {
         this.onStatusChanged = cb;

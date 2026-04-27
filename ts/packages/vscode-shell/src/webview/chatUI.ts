@@ -533,6 +533,13 @@ export class ChatUI {
             this._applyGrammarRule(requestId, data);
             return true;
         }
+        if (event === "commandComplete") {
+            // Server-broadcast completion: lets peer tabs (which didn't
+            // await processCommand locally) clear lingering temporary
+            // status messages and render timing metrics.
+            this.onCommandComplete(requestId, data?.result);
+            return true;
+        }
         return false;
     }
 

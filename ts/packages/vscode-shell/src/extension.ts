@@ -29,10 +29,29 @@ export function activate(context: vscode.ExtensionContext): void {
     statusBarItem.command = "vscode-shell.focusChat";
     context.subscriptions.push(statusBarItem);
 
+    const SIDEBAR_LAST_SESSION_KEY = "sidebar.lastSessionId";
+    const sidebarRestoreId = context.globalState.get<string>(
+        SIDEBAR_LAST_SESSION_KEY,
+    );
     sidebarBridge = new AgentServerBridge({
         ownsStatusBar: false,
         displayName: "Sidebar",
+        restoreSessionId: sidebarRestoreId,
     });
+
+    // Persist the sidebar's current session so reopening VS Code rejoins it
+    // instead of dropping back to the default. Registered eagerly (before
+    // connect()) so the very first successful join is captured too.
+    // NOTE: onStatusChange supports a single subscriber per bridge, and
+    // refreshStatusBar must also run from this same callback.
+    const sidebarStatusDisposable = sidebarBridge.onStatusChange(() => {
+        refreshStatusBar();
+        const id = sidebarBridge!.getSessionId();
+        if (id) {
+            context.globalState.update(SIDEBAR_LAST_SESSION_KEY, id);
+        }
+    });
+    context.subscriptions.push(sidebarStatusDisposable);
 
     const provider = new ChatViewProvider(context.extensionUri, sidebarBridge);
 
@@ -50,9 +69,7 @@ export function activate(context: vscode.ExtensionContext): void {
         const entry: ChatEntry = {
             bridge: sidebarBridge!,
             sidebarView: view,
-            statusDisposable: sidebarBridge!.onStatusChange(() =>
-                refreshStatusBar(),
-            ),
+            statusDisposable: { dispose: () => {} },
             focusDisposable: sidebarBridge!.onWebviewFocus((f) => {
                 setEntryFocused(entry, f);
             }),
@@ -115,9 +132,11 @@ export function activate(context: vscode.ExtensionContext): void {
                     panel.title = `TypeAgent ${friendly}`;
                     attachChatPanel(context, provider, panel, {
                         displayName: friendly,
-                        ephemeralSessionName: sessionId
-                            ? undefined
-                            : `cli-ephemeral-vscode-${n}-${Date.now()}`,
+                        // Always provide a fresh ephemeral name so that if the
+                        // saved session is gone (e.g. it was an ephemeral that
+                        // got swept on server start), we create a new ephemeral
+                        // for this tab instead of joining the default session.
+                        ephemeralSessionName: `cli-ephemeral-vscode-${n}-${Date.now()}`,
                         restoreSessionId: sessionId,
                     });
                 },

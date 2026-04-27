@@ -28,6 +28,7 @@ import registerDebug from "debug";
 const debugConnect = registerDebug("agent-server:connect");
 const debugClientIOError = registerDebug("agent-server:clientIO:error");
 const debugInteraction = registerDebug("agent-server:interaction");
+const debugCommand = registerDebug("agent-server:command");
 
 type ClientRecord = {
     clientIO: ClientIO;
@@ -401,6 +402,37 @@ export async function createSharedDispatcher(
                     context.displayLog.saveQueued();
                 } catch {
                     // best effort
+                }
+                try {
+                    // Broadcast a "commandComplete" notify to all clients in
+                    // this session so peer tabs (which did not await the
+                    // local processCommand promise) can clear lingering
+                    // temporary status messages and apply timing metrics.
+                    // The Electron shell ignores unknown notify events.
+                    const sent = broadcast(
+                        "notify",
+                        {
+                            connectionId,
+                            requestId: "",
+                            clientRequestId,
+                        },
+                        (cio) =>
+                            cio.notify(
+                                {
+                                    connectionId,
+                                    requestId: "",
+                                    clientRequestId,
+                                },
+                                "commandComplete",
+                                { result: result ?? null },
+                                "system",
+                            ),
+                    );
+                    debugCommand(
+                        `commandComplete broadcast: connectionId=${connectionId} clientRequestId=${clientRequestId} sent=${sent} clients=${clients.size}`,
+                    );
+                } catch (e) {
+                    debugCommand(`commandComplete broadcast failed: ${e}`);
                 }
                 return result;
             };
