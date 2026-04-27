@@ -7,9 +7,11 @@
  * Generates structurally valid `.agr` grammar text along with inputs
  * that are guaranteed to match (and a few that deliberately do not).
  *
- * Each grammar feature (wildcards, numbers, optional groups, spacing
- * modes, value expressions, ...) is toggled independently via
- * {@link FuzzFeatureFlags} so callers can explore specific dimensions.
+ * Generation is controlled by {@link FuzzFeatureFlags}, a record
+ * grouped by **area of impact** (part kinds, value expressions,
+ * spacing, groups).  Within each group, fields named `*Prob` are
+ * probabilities in `[0, 1]`; other numeric fields are relative
+ * weights for a weighted random pick.
  */
 
 // ── PRNG ──────────────────────────────────────────────────────────────────────
@@ -36,35 +38,153 @@ export function intInRange(rng: () => number, lo: number, hi: number): number {
 
 // ── Feature flags ─────────────────────────────────────────────────────────────
 
+/**
+ * Knobs that bias which kind of part the generator emits in each
+ * token slot of an alternative.  Values are **relative weights** for
+ * a weighted random pick.  `0` disables a kind; equal positive values
+ * yield uniform selection; larger values bias toward that kind
+ * (e.g. `wildcard: 5` with the others at `1` picks wildcards ~5x as
+ * often).  `literal` is the safe fallback when no other kind is
+ * available in a position.
+ */
+export type PartKindWeights = {
+    /** Weight for literal string tokens. */
+    literal: number;
+    /** Weight for `<RuleName>` references (DAG-shaped, no cycles). */
+    ruleRef: number;
+    /** Weight for `$(varN:string)` wildcard captures. */
+    wildcard: number;
+    /** Weight for `$(varN:number)` numeric captures. */
+    number: number;
+};
+
+/**
+ * Knobs controlling `-> value` expressions on alternates.
+ */
+export type ValueFeatures = {
+    /**
+     * Probability in `[0, 1]` of attaching a `-> value` expression
+     * to an alternate that has at least one capture.  Clamped.
+     */
+    attachProb: number;
+};
+
+/**
+ * Relative weights for which `[spacing=...]` mode to pick when an
+ * annotation is attached.  Same semantics as {@link PartKindWeights}.
+ * If all four are 0, modes are picked uniformly.
+ */
+export type SpacingModeWeights = {
+    required: number;
+    optional: number;
+    none: number;
+    auto: number;
+};
+
+/**
+ * Knobs controlling `[spacing=...]` annotations on alternates and
+ * rules.  Probabilities are independent: `altProb` is checked once
+ * per alternate; `ruleProb` once per rule.
+ */
+export type SpacingFeatures = {
+    /** Probability per alternate of attaching a spacing annotation. */
+    altProb: number;
+    /** Probability per rule of attaching a spacing annotation. */
+    ruleProb: number;
+    /** Relative weights for the spacing mode that gets picked. */
+    modes: SpacingModeWeights;
+};
+
+/**
+ * Knobs for optional / repeat groups around parts.  NOT YET
+ * IMPLEMENTED: accepted for forward compatibility but ignored by the
+ * generator.
+ */
+export type GroupFeatures = {
+    /** Probability per part of being wrapped in `(...)?`. */
+    optionalProb: number;
+    /** Probability per part of being wrapped in `()*` / `()+`. */
+    repeatProb: number;
+};
+
+/**
+ * Composable feature configuration for the random grammar generator.
+ *
+ * Knobs are grouped by **area of impact** so callers can tell at a
+ * glance which dimension they are tuning.  Within each group:
+ *
+ *   - Fields named `*Prob` are probabilities in `[0, 1]` (clamped).
+ *   - Other numeric fields are relative weights for a weighted random
+ *     pick (`0` disables; equal positive values are uniform).
+ */
 export type FuzzFeatureFlags = {
-    /** Literal string tokens (always safe to enable). */
-    literals: boolean;
-    /** `<RuleName>` references (DAG-shaped, no cycles). */
-    ruleRefs: boolean;
-    /** `$(varN:string)` wildcard captures. */
-    wildcards: boolean;
-    /** `$(varN:number)` numeric captures. */
-    numbers: boolean;
-    /** `(...)?` optional groups. NOT YET IMPLEMENTED: accepted but ignored by the generator. */
-    optionals: boolean;
-    /** `()*` / `()+` repeat groups. NOT YET IMPLEMENTED: accepted but ignored by the generator. */
-    repeats: boolean;
-    /** Value expressions after `->` (object literals, binary ops, etc.). */
-    values: boolean;
-    /** Random `[spacing=required|optional|none|auto]` per rule/alternate. */
-    spacingModes: boolean;
+    /** Which kind of part to emit in each token slot. */
+    partKinds: PartKindWeights;
+    /** `-> value` expressions on alternates. */
+    values: ValueFeatures;
+    /** `[spacing=...]` annotations and which modes to pick. */
+    spacing: SpacingFeatures;
+    /** Optional / repeat groups around parts.  NOT YET IMPLEMENTED. */
+    groups: GroupFeatures;
 };
 
 export const DEFAULT_FEATURES: FuzzFeatureFlags = {
-    literals: true,
-    ruleRefs: true,
-    wildcards: false,
-    numbers: false,
-    optionals: false,
-    repeats: false,
-    values: false,
-    spacingModes: false,
+    partKinds: {
+        literal: 1,
+        ruleRef: 1,
+        wildcard: 0,
+        number: 0,
+    },
+    values: {
+        attachProb: 0,
+    },
+    spacing: {
+        altProb: 0,
+        ruleProb: 0,
+        modes: {
+            required: 1,
+            optional: 1,
+            none: 1,
+            auto: 1,
+        },
+    },
+    groups: {
+        optionalProb: 0,
+        repeatProb: 0,
+    },
 };
+
+function clamp01(x: number): number {
+    if (!(x > 0)) return 0;
+    if (x > 1) return 1;
+    return x;
+}
+
+/**
+ * Weighted pick from `(item, weight)` entries.  Negative weights are
+ * treated as 0.  Returns `undefined` if all weights are <= 0.
+ */
+function weightedPick<T>(
+    rng: () => number,
+    entries: ReadonlyArray<readonly [T, number]>,
+): T | undefined {
+    let total = 0;
+    for (const [, w] of entries) {
+        if (w > 0) total += w;
+    }
+    if (total <= 0) return undefined;
+    let r = rng() * total;
+    for (const [item, w] of entries) {
+        if (w <= 0) continue;
+        r -= w;
+        if (r < 0) return item;
+    }
+    // Numeric edge case: return the last positive-weight item.
+    for (let i = entries.length - 1; i >= 0; i--) {
+        if (entries[i][1] > 0) return entries[i][0];
+    }
+    return undefined;
+}
 
 // ── Generation config ─────────────────────────────────────────────────────────
 
@@ -107,7 +227,19 @@ type SpacingMode = (typeof SPACING_MODES)[number];
 function spacingAnnotation(mode: SpacingMode): string {
     return ` [spacing=${mode}]`;
 }
-
+function pickSpacingMode(
+    rng: () => number,
+    weights: SpacingModeWeights,
+): SpacingMode {
+    const entries: ReadonlyArray<readonly [SpacingMode, number]> = [
+        ["required", weights.required],
+        ["optional", weights.optional],
+        ["none", weights.none],
+        ["auto", weights.auto],
+    ];
+    // Fall back to uniform if all weights are 0.
+    return weightedPick(rng, entries) ?? pick(rng, SPACING_MODES);
+}
 // ── Internal state while building a single grammar ────────────────────────────
 
 type RuleState = {
@@ -280,8 +412,13 @@ export function buildRandomGrammar(
             }
 
             // Build value expression for this alternative if enabled.
+            // `features.values.attachProb` is the per-alternate attach
+            // probability (only eligible when captures exist).
             let valueText = "";
-            if (features.values && altBoundVars.length > 0 && rng() < 0.7) {
+            if (
+                altBoundVars.length > 0 &&
+                rng() < clamp01(features.values.attachProb)
+            ) {
                 const expr = buildValueExpr(rng, altBoundVars);
                 valueText = ` -> ${expr}`;
                 state.hasValue = true;
@@ -298,8 +435,8 @@ export function buildRandomGrammar(
 
             // Per-alternate spacing annotation.
             let spacingText = "";
-            if (features.spacingModes && rng() < 0.3) {
-                const mode = pick(rng, SPACING_MODES);
+            if (rng() < clamp01(features.spacing.altProb)) {
+                const mode = pickSpacingMode(rng, features.spacing.modes);
                 spacingText = spacingAnnotation(mode);
             }
 
@@ -321,8 +458,10 @@ export function buildRandomGrammar(
         const state = ruleStates[i];
         // Rule-level spacing annotation.
         let ruleSpacing = "";
-        if (features.spacingModes && rng() < 0.4) {
-            ruleSpacing = spacingAnnotation(pick(rng, SPACING_MODES));
+        if (rng() < clamp01(features.spacing.ruleProb)) {
+            ruleSpacing = spacingAnnotation(
+                pickSpacingMode(rng, features.spacing.modes),
+            );
         }
         lines.push(
             `<${ruleName(i)}>${ruleSpacing} = ${state.altTexts.join(" | ")};`,
@@ -363,20 +502,18 @@ function choosePartKind(
     ruleIndex: number,
     ruleCount: number,
 ): PartKind {
-    const candidates: PartKind[] = [];
-
-    // Literals are always a candidate when enabled (and always the fallback).
-    if (features.literals) candidates.push("literal");
-    // Rule refs only when there's a forward rule available.
-    if (features.ruleRefs && ruleIndex + 1 < ruleCount)
-        candidates.push("ruleRef");
-    if (features.wildcards) candidates.push("wildcard");
-    if (features.numbers) candidates.push("number");
-
-    // Fallback: if nothing else is available, emit a literal.
-    if (candidates.length === 0) return "literal";
-
-    return pick(rng, candidates);
+    // ruleRef requires a forward rule to point at; otherwise force its
+    // weight to 0.  Other kinds are always available.
+    const ruleRefAvailable = ruleIndex + 1 < ruleCount;
+    const kinds = features.partKinds;
+    const entries: ReadonlyArray<readonly [PartKind, number]> = [
+        ["literal", kinds.literal],
+        ["ruleRef", ruleRefAvailable ? kinds.ruleRef : 0],
+        ["wildcard", kinds.wildcard],
+        ["number", kinds.number],
+    ];
+    // Fallback to literal if no kind has positive weight in this slot.
+    return weightedPick(rng, entries) ?? "literal";
 }
 
 // ── Random input generator ────────────────────────────────────────────────────

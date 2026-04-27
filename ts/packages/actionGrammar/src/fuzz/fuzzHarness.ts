@@ -69,11 +69,21 @@ export const DEFAULT_CONFIG: FuzzConfig = {
     seed: 0xc0ffee,
     count: 40,
     inputsPerGrammar: 6,
-    features: { ...DEFAULT_FEATURES },
+    features: cloneFeatures(DEFAULT_FEATURES),
     validations: ["optimizer", "roundtrip-text", "roundtrip-json"],
     generator: { ...DEFAULT_GENERATOR_CONFIG },
     verbose: false,
 };
+
+/** Deep clone of a {@link FuzzFeatureFlags} record. */
+export function cloneFeatures(f: FuzzFeatureFlags): FuzzFeatureFlags {
+    return {
+        partKinds: { ...f.partKinds },
+        values: { ...f.values },
+        spacing: { ...f.spacing, modes: { ...f.spacing.modes } },
+        groups: { ...f.groups },
+    };
+}
 
 export type FuzzResult = {
     grammarIndex: number;

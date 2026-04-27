@@ -23,13 +23,43 @@ import {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
+ * Deep-merge a partial feature override over the defaults.  Each
+ * sub-group (`partKinds`, `values`, `spacing`, `groups`) is merged
+ * independently, with `spacing.modes` merged one level deeper.
+ */
+type FeaturesOverride = {
+    partKinds?: Partial<FuzzConfig["features"]["partKinds"]>;
+    values?: Partial<FuzzConfig["features"]["values"]>;
+    spacing?: Partial<Omit<FuzzConfig["features"]["spacing"], "modes">> & {
+        modes?: Partial<FuzzConfig["features"]["spacing"]["modes"]>;
+    };
+    groups?: Partial<FuzzConfig["features"]["groups"]>;
+};
+
+function mergeFeatures(
+    base: FuzzConfig["features"],
+    over: FeaturesOverride | undefined,
+): FuzzConfig["features"] {
+    return {
+        partKinds: { ...base.partKinds, ...(over?.partKinds ?? {}) },
+        values: { ...base.values, ...(over?.values ?? {}) },
+        spacing: {
+            ...base.spacing,
+            ...(over?.spacing ?? {}),
+            modes: { ...base.spacing.modes, ...(over?.spacing?.modes ?? {}) },
+        },
+        groups: { ...base.groups, ...(over?.groups ?? {}) },
+    };
+}
+
+/**
  * Run the harness and emit one `it()` per result so Jest reports
  * individual grammar/input failures.
  */
 function fuzzDescribe(
     name: string,
     configOverrides: Omit<Partial<FuzzConfig>, "features" | "generator"> & {
-        features?: Partial<FuzzConfig["features"]>;
+        features?: FeaturesOverride;
         generator?: Partial<FuzzConfig["generator"]>;
     },
 ): void {
@@ -38,10 +68,10 @@ function fuzzDescribe(
         const config: FuzzConfig = {
             ...DEFAULT_CONFIG,
             ...configOverrides,
-            features: {
-                ...DEFAULT_CONFIG.features,
-                ...(configOverrides.features ?? {}),
-            },
+            features: mergeFeatures(
+                DEFAULT_CONFIG.features,
+                configOverrides.features,
+            ),
             generator: {
                 ...DEFAULT_CONFIG.generator,
                 ...(configOverrides.generator ?? {}),
@@ -90,8 +120,7 @@ fuzzDescribe("Fuzz: optimizer equivalence (literals + ruleRefs)", {
     count: 40,
     inputsPerGrammar: 6,
     features: {
-        literals: true,
-        ruleRefs: true,
+        partKinds: { literal: 1, ruleRef: 1 },
     },
     generator: {
         maxRules: 4,
@@ -106,11 +135,8 @@ fuzzDescribe("Fuzz: optimizer equivalence (wildcards + values)", {
     seed: 0xf0221,
     count: 30,
     features: {
-        literals: true,
-        ruleRefs: true,
-        wildcards: true,
-        numbers: true,
-        values: true,
+        partKinds: { literal: 1, ruleRef: 1, wildcard: 1, number: 1 },
+        values: { attachProb: 0.7 },
     },
     validations: ["optimizer"],
 });
@@ -119,11 +145,8 @@ fuzzDescribe("Fuzz: parse-write round-trip", {
     seed: 0xf0222,
     count: 30,
     features: {
-        literals: true,
-        ruleRefs: true,
-        wildcards: true,
-        numbers: true,
-        values: true,
+        partKinds: { literal: 1, ruleRef: 1, wildcard: 1, number: 1 },
+        values: { attachProb: 0.7 },
     },
     validations: ["roundtrip-text"],
 });
@@ -132,9 +155,8 @@ fuzzDescribe("Fuzz: spacing modes (optimizer equivalence)", {
     seed: 0xf0223,
     count: 30,
     features: {
-        literals: true,
-        ruleRefs: true,
-        spacingModes: true,
+        partKinds: { literal: 1, ruleRef: 1 },
+        spacing: { altProb: 0.3, ruleProb: 0.4 },
     },
     validations: ["optimizer"],
 });
@@ -143,10 +165,7 @@ fuzzDescribe("Fuzz: JSON serialization round-trip", {
     seed: 0xf0224,
     count: 30,
     features: {
-        literals: true,
-        ruleRefs: true,
-        wildcards: true,
-        numbers: true,
+        partKinds: { literal: 1, ruleRef: 1, wildcard: 1, number: 1 },
     },
     validations: ["roundtrip-json"],
 });
