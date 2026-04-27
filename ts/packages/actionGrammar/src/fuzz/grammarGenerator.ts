@@ -96,14 +96,24 @@ export type SpacingFeatures = {
 };
 
 /**
- * Knobs for optional / repeat groups around parts.  NOT YET
- * IMPLEMENTED: accepted for forward compatibility but ignored by the
- * generator.
+ * Knobs for optional / repeat groups around individual parts.
+ *
+ * For each emitted part, the generator independently rolls
+ * `optionalProb` and `repeatProb`; the combination determines the
+ * quantifier wrapped around the part text:
+ *
+ *   - neither: bare part (no group)
+ *   - optional only: `(part)?`
+ *   - repeat only:   `(part)+`
+ *   - both:          `(part)*`
+ *
+ * The matching input always emits the inner expansion exactly once,
+ * which satisfies all three quantifier forms.
  */
 export type GroupFeatures = {
-    /** Probability per part of being wrapped in `(...)?`. */
+    /** Probability per part of being wrapped in an optional group. */
     optionalProb: number;
-    /** Probability per part of being wrapped in `()*` / `()+`. */
+    /** Probability per part of being wrapped in a repeat group. */
     repeatProb: number;
 };
 
@@ -124,7 +134,7 @@ export type FuzzFeatureFlags = {
     values: ValueFeatures;
     /** `[spacing=...]` annotations and which modes to pick. */
     spacing: SpacingFeatures;
-    /** Optional / repeat groups around parts.  NOT YET IMPLEMENTED. */
+    /** Optional / repeat group quantifiers around individual parts. */
     groups: GroupFeatures;
 };
 
@@ -381,34 +391,52 @@ export function buildRandomGrammar(
             for (let p = 0; p < partCount; p++) {
                 const partKind = choosePartKind(rng, features, i, ruleCount);
 
+                let innerText: string;
+                let innerMatch: string[];
                 switch (partKind) {
                     case "literal": {
                         const lit = buildLiteralPart(rng, words);
-                        partTexts.push(lit.text);
-                        partMatch.push(...lit.matchTokens);
+                        innerText = lit.text;
+                        innerMatch = lit.matchTokens;
                         break;
                     }
                     case "ruleRef": {
                         const target = intInRange(rng, i + 1, ruleCount - 1);
-                        partTexts.push(`<${ruleName(target)}>`);
-                        partMatch.push(...ruleStates[target].firstAltMatch);
+                        innerText = `<${ruleName(target)}>`;
+                        innerMatch = ruleStates[target].firstAltMatch;
                         break;
                     }
                     case "wildcard": {
                         const wc = buildWildcardPart(rng, varCounter, words);
-                        partTexts.push(wc.text);
-                        partMatch.push(...wc.matchTokens);
+                        innerText = wc.text;
+                        innerMatch = wc.matchTokens;
                         altBoundVars.push(wc.varName);
                         break;
                     }
                     case "number": {
                         const np = buildNumberPart(rng, varCounter);
-                        partTexts.push(np.text);
-                        partMatch.push(...np.matchTokens);
+                        innerText = np.text;
+                        innerMatch = np.matchTokens;
                         altBoundVars.push(np.varName);
                         break;
                     }
                 }
+
+                // Optionally wrap the part in an optional / repeat
+                // group.  The two probabilities are rolled
+                // independently and combined into a single quantifier.
+                const optional = rng() < clamp01(features.groups.optionalProb);
+                const repeat = rng() < clamp01(features.groups.repeatProb);
+                let partText = innerText;
+                if (optional && repeat) partText = `(${innerText})*`;
+                else if (optional) partText = `(${innerText})?`;
+                else if (repeat) partText = `(${innerText})+`;
+
+                partTexts.push(partText);
+                // The matching input includes the inner expansion
+                // exactly once: this satisfies `?` (present), `+`
+                // (one repetition), and `*` (one repetition) alike.
+                partMatch.push(...innerMatch);
             }
 
             // Build value expression for this alternative if enabled.

@@ -169,3 +169,23 @@ fuzzDescribe("Fuzz: JSON serialization round-trip", {
     },
     validations: ["roundtrip-json"],
 });
+
+fuzzDescribe("Fuzz: optional / repeat groups (optimizer equivalence)", {
+    seed: 0xf0225,
+    count: 30,
+    features: {
+        partKinds: { literal: 1, ruleRef: 1 },
+        groups: { optionalProb: 0.4, repeatProb: 0.3 },
+    },
+    validations: ["optimizer"],
+});
+
+fuzzDescribe("Fuzz: optional / repeat groups (parse-write round-trip)", {
+    seed: 0xf0226,
+    count: 30,
+    features: {
+        partKinds: { literal: 1, ruleRef: 1, wildcard: 1, number: 1 },
+        groups: { optionalProb: 0.3, repeatProb: 0.3 },
+    },
+    validations: ["roundtrip-text", "roundtrip-json"],
+});
