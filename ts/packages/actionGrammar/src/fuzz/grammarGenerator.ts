@@ -138,7 +138,50 @@ export type FuzzFeatureFlags = {
     groups: GroupFeatures;
 };
 
+/**
+ * Broad-coverage defaults for the fuzz generator.  Every feature
+ * group is exercised so a caller who passes `DEFAULT_FEATURES` (or
+ * runs the CLI with no `--features`) gets a representative sweep
+ * across part kinds, value expressions, spacing, and quantifier
+ * groups.  Literals are weighted 2x to keep them dominant since they
+ * are the cheap, always-valid baseline.
+ *
+ * For a minimum-coverage baseline (only literals + rule refs) use
+ * {@link MINIMAL_FEATURES}.
+ */
 export const DEFAULT_FEATURES: FuzzFeatureFlags = {
+    partKinds: {
+        literal: 2,
+        ruleRef: 1,
+        wildcard: 1,
+        number: 1,
+    },
+    values: {
+        attachProb: 0.5,
+    },
+    spacing: {
+        altProb: 0.2,
+        ruleProb: 0.2,
+        modes: {
+            required: 1,
+            optional: 1,
+            none: 1,
+            auto: 1,
+        },
+    },
+    groups: {
+        optionalProb: 0.2,
+        repeatProb: 0.2,
+    },
+};
+
+/**
+ * Minimum-coverage feature set: only literals and rule references are
+ * enabled, every probability is 0.  Useful for narrow regression
+ * checks or as a starting point for callers that want to enable a
+ * single dimension at a time.
+ */
+export const MINIMAL_FEATURES: FuzzFeatureFlags = {
     partKinds: {
         literal: 1,
         ruleRef: 1,
@@ -393,6 +436,7 @@ export function buildRandomGrammar(
 
                 let innerText: string;
                 let innerMatch: string[];
+                let captureVar: string | undefined;
                 switch (partKind) {
                     case "literal": {
                         const lit = buildLiteralPart(rng, words);
@@ -410,14 +454,14 @@ export function buildRandomGrammar(
                         const wc = buildWildcardPart(rng, varCounter, words);
                         innerText = wc.text;
                         innerMatch = wc.matchTokens;
-                        altBoundVars.push(wc.varName);
+                        captureVar = wc.varName;
                         break;
                     }
                     case "number": {
                         const np = buildNumberPart(rng, varCounter);
                         innerText = np.text;
                         innerMatch = np.matchTokens;
-                        altBoundVars.push(np.varName);
+                        captureVar = np.varName;
                         break;
                     }
                 }
@@ -431,6 +475,14 @@ export function buildRandomGrammar(
                 if (optional && repeat) partText = `(${innerText})*`;
                 else if (optional) partText = `(${innerText})?`;
                 else if (repeat) partText = `(${innerText})+`;
+
+                // Captures inside a quantifier group are not visible to
+                // the alternate's value expression (they're either
+                // optional or aggregated), so only expose unwrapped
+                // captures as bound variables.
+                if (captureVar !== undefined && !optional && !repeat) {
+                    altBoundVars.push(captureVar);
+                }
 
                 partTexts.push(partText);
                 // The matching input includes the inner expansion

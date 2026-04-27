@@ -18,6 +18,7 @@ import {
     type FuzzConfig,
     type FuzzResult,
     DEFAULT_CONFIG,
+    MINIMAL_FEATURES,
 } from "../src/fuzz/fuzzHarness.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -64,14 +65,14 @@ function fuzzDescribe(
     },
 ): void {
     describe(name, () => {
-        // Merge config.
+        // Merge config.  Per-dimension tests intentionally start from
+        // MINIMAL_FEATURES (only literals + ruleRefs enabled) so they
+        // isolate the dimension under test rather than inheriting the
+        // broad-coverage defaults.
         const config: FuzzConfig = {
             ...DEFAULT_CONFIG,
             ...configOverrides,
-            features: mergeFeatures(
-                DEFAULT_CONFIG.features,
-                configOverrides.features,
-            ),
+            features: mergeFeatures(MINIMAL_FEATURES, configOverrides.features),
             generator: {
                 ...DEFAULT_CONFIG.generator,
                 ...(configOverrides.generator ?? {}),

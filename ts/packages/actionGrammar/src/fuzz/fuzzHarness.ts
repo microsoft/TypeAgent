@@ -404,6 +404,7 @@ export { makeRng, pick, intInRange, generateExtraInputs };
 export type { FuzzFeatureFlags, GeneratorConfig, GeneratedGrammar };
 export {
     DEFAULT_FEATURES,
+    MINIMAL_FEATURES,
     DEFAULT_GENERATOR_CONFIG,
     buildRandomGrammar,
 } from "./grammarGenerator.js";
