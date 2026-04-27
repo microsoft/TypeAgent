@@ -15,43 +15,13 @@
 
 import {
     runFuzz,
+    mergeFeatures,
     type FuzzConfig,
     type FuzzResult,
+    type FeaturesOverride,
     DEFAULT_CONFIG,
     MINIMAL_FEATURES,
 } from "../src/fuzz/fuzzHarness.js";
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/**
- * Deep-merge a partial feature override over the defaults.  Each
- * sub-group (`partKinds`, `values`, `spacing`, `groups`) is merged
- * independently, with `spacing.modes` merged one level deeper.
- */
-type FeaturesOverride = {
-    partKinds?: Partial<FuzzConfig["features"]["partKinds"]>;
-    values?: Partial<FuzzConfig["features"]["values"]>;
-    spacing?: Partial<Omit<FuzzConfig["features"]["spacing"], "modes">> & {
-        modes?: Partial<FuzzConfig["features"]["spacing"]["modes"]>;
-    };
-    groups?: Partial<FuzzConfig["features"]["groups"]>;
-};
-
-function mergeFeatures(
-    base: FuzzConfig["features"],
-    over: FeaturesOverride | undefined,
-): FuzzConfig["features"] {
-    return {
-        partKinds: { ...base.partKinds, ...(over?.partKinds ?? {}) },
-        values: { ...base.values, ...(over?.values ?? {}) },
-        spacing: {
-            ...base.spacing,
-            ...(over?.spacing ?? {}),
-            modes: { ...base.spacing.modes, ...(over?.spacing?.modes ?? {}) },
-        },
-        groups: { ...base.groups, ...(over?.groups ?? {}) },
-    };
-}
 
 /**
  * Run the harness and emit one `it()` per result so Jest reports

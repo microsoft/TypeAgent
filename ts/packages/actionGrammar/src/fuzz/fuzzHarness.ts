@@ -27,6 +27,7 @@ import {
     generateExtraInputs,
     DEFAULT_FEATURES,
     DEFAULT_GENERATOR_CONFIG,
+    FEATURE_FIELDS,
     type FuzzFeatureFlags,
     type GeneratorConfig,
     type GeneratedGrammar,
@@ -82,6 +83,55 @@ export function cloneFeatures(f: FuzzFeatureFlags): FuzzFeatureFlags {
         values: { ...f.values },
         spacing: { ...f.spacing, modes: { ...f.spacing.modes } },
         groups: { ...f.groups },
+    };
+}
+
+/** Reset every numeric field in `f` to 0 in place. */
+export function zeroAllFeatures(f: FuzzFeatureFlags): void {
+    for (const field of FEATURE_FIELDS) field.set(f, 0);
+}
+
+/** Iterate `(path, value)` pairs in canonical order for diagnostic output. */
+export function* featureEntries(
+    f: FuzzFeatureFlags,
+): Iterable<readonly [string, number]> {
+    for (const field of FEATURE_FIELDS) {
+        yield [field.path, field.get(f)];
+    }
+}
+
+/**
+ * Nested partial override of a {@link FuzzFeatureFlags} record, used
+ * by tests and other callers that prefer a structural literal to the
+ * dotted-path setter API.
+ */
+export type FeaturesOverride = {
+    partKinds?: Partial<FuzzFeatureFlags["partKinds"]>;
+    values?: Partial<FuzzFeatureFlags["values"]>;
+    spacing?: Partial<Omit<FuzzFeatureFlags["spacing"], "modes">> & {
+        modes?: Partial<FuzzFeatureFlags["spacing"]["modes"]>;
+    };
+    groups?: Partial<FuzzFeatureFlags["groups"]>;
+};
+
+/**
+ * Deep-merge a {@link FeaturesOverride} on top of `base`, returning a
+ * fresh record.  Each sub-group is merged independently;
+ * `spacing.modes` is merged one level deeper.
+ */
+export function mergeFeatures(
+    base: FuzzFeatureFlags,
+    over: FeaturesOverride | undefined,
+): FuzzFeatureFlags {
+    return {
+        partKinds: { ...base.partKinds, ...(over?.partKinds ?? {}) },
+        values: { ...base.values, ...(over?.values ?? {}) },
+        spacing: {
+            ...base.spacing,
+            ...(over?.spacing ?? {}),
+            modes: { ...base.spacing.modes, ...(over?.spacing?.modes ?? {}) },
+        },
+        groups: { ...base.groups, ...(over?.groups ?? {}) },
     };
 }
 
@@ -406,5 +456,10 @@ export {
     DEFAULT_FEATURES,
     MINIMAL_FEATURES,
     DEFAULT_GENERATOR_CONFIG,
+    FEATURE_FIELDS,
     buildRandomGrammar,
+    weightedPick,
+    pickSpacingMode,
+    clamp01,
 } from "./grammarGenerator.js";
+export type { FeatureFieldDescriptor } from "./grammarGenerator.js";

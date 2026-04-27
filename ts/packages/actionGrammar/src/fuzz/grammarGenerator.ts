@@ -207,7 +207,7 @@ export const MINIMAL_FEATURES: FuzzFeatureFlags = {
     },
 };
 
-function clamp01(x: number): number {
+export function clamp01(x: number): number {
     if (!(x > 0)) return 0;
     if (x > 1) return 1;
     return x;
@@ -217,13 +217,17 @@ function clamp01(x: number): number {
  * Weighted pick from `(item, weight)` entries.  Negative weights are
  * treated as 0.  Returns `undefined` if all weights are <= 0.
  */
-function weightedPick<T>(
+export function weightedPick<T>(
     rng: () => number,
     entries: ReadonlyArray<readonly [T, number]>,
 ): T | undefined {
     let total = 0;
-    for (const [, w] of entries) {
-        if (w > 0) total += w;
+    let lastPositive: T | undefined;
+    for (const [item, w] of entries) {
+        if (w > 0) {
+            total += w;
+            lastPositive = item;
+        }
     }
     if (total <= 0) return undefined;
     let r = rng() * total;
@@ -232,12 +236,122 @@ function weightedPick<T>(
         r -= w;
         if (r < 0) return item;
     }
-    // Numeric edge case: return the last positive-weight item.
-    for (let i = entries.length - 1; i >= 0; i--) {
-        if (entries[i][1] > 0) return entries[i][0];
-    }
-    return undefined;
+    // Floating-point fall-through: by construction `r` should reach
+    // <0 above, but rounding can leave it at exactly 0 on the last
+    // entry.  Return the last positive-weight item in that case.
+    return lastPositive;
 }
+
+// ── Feature field descriptors ─────────────────────────────────────────────────
+
+/**
+ * Single source of truth for the {@link FuzzFeatureFlags} schema.
+ * Each descriptor knows its canonical dotted path and how to read /
+ * write its slot.  All other tables (CLI parser, diagnostic
+ * summary, zero-out helper) derive from this list.
+ */
+export type FeatureFieldDescriptor = {
+    /** Canonical dotted path, e.g. `"partKinds.wildcard"`. */
+    readonly path: string;
+    /** Read the field's current value. */
+    readonly get: (f: FuzzFeatureFlags) => number;
+    /** Write a value into the field. */
+    readonly set: (f: FuzzFeatureFlags, value: number) => void;
+};
+
+export const FEATURE_FIELDS: readonly FeatureFieldDescriptor[] = [
+    {
+        path: "partKinds.literal",
+        get: (f) => f.partKinds.literal,
+        set: (f, v) => {
+            f.partKinds.literal = v;
+        },
+    },
+    {
+        path: "partKinds.ruleRef",
+        get: (f) => f.partKinds.ruleRef,
+        set: (f, v) => {
+            f.partKinds.ruleRef = v;
+        },
+    },
+    {
+        path: "partKinds.wildcard",
+        get: (f) => f.partKinds.wildcard,
+        set: (f, v) => {
+            f.partKinds.wildcard = v;
+        },
+    },
+    {
+        path: "partKinds.number",
+        get: (f) => f.partKinds.number,
+        set: (f, v) => {
+            f.partKinds.number = v;
+        },
+    },
+    {
+        path: "values.attachProb",
+        get: (f) => f.values.attachProb,
+        set: (f, v) => {
+            f.values.attachProb = v;
+        },
+    },
+    {
+        path: "spacing.altProb",
+        get: (f) => f.spacing.altProb,
+        set: (f, v) => {
+            f.spacing.altProb = v;
+        },
+    },
+    {
+        path: "spacing.ruleProb",
+        get: (f) => f.spacing.ruleProb,
+        set: (f, v) => {
+            f.spacing.ruleProb = v;
+        },
+    },
+    {
+        path: "spacing.modes.required",
+        get: (f) => f.spacing.modes.required,
+        set: (f, v) => {
+            f.spacing.modes.required = v;
+        },
+    },
+    {
+        path: "spacing.modes.optional",
+        get: (f) => f.spacing.modes.optional,
+        set: (f, v) => {
+            f.spacing.modes.optional = v;
+        },
+    },
+    {
+        path: "spacing.modes.none",
+        get: (f) => f.spacing.modes.none,
+        set: (f, v) => {
+            f.spacing.modes.none = v;
+        },
+    },
+    {
+        path: "spacing.modes.auto",
+        get: (f) => f.spacing.modes.auto,
+        set: (f, v) => {
+            f.spacing.modes.auto = v;
+        },
+    },
+    {
+        path: "groups.optionalProb",
+        get: (f) => f.groups.optionalProb,
+        set: (f, v) => {
+            f.groups.optionalProb = v;
+        },
+    },
+    {
+        path: "groups.repeatProb",
+        get: (f) => f.groups.repeatProb,
+        set: (f, v) => {
+            f.groups.repeatProb = v;
+        },
+    },
+];
 
 // ── Generation config ─────────────────────────────────────────────────────────
 
@@ -280,19 +394,25 @@ type SpacingMode = (typeof SPACING_MODES)[number];
 function spacingAnnotation(mode: SpacingMode): string {
     return ` [spacing=${mode}]`;
 }
-function pickSpacingMode(
+
+/**
+ * Pick a spacing mode by weight.  Returns `undefined` if every mode
+ * weight is `0` so the caller can skip the annotation entirely
+ * (rather than silently falling back to a uniform pick).
+ */
+export function pickSpacingMode(
     rng: () => number,
     weights: SpacingModeWeights,
-): SpacingMode {
+): SpacingMode | undefined {
     const entries: ReadonlyArray<readonly [SpacingMode, number]> = [
         ["required", weights.required],
         ["optional", weights.optional],
         ["none", weights.none],
         ["auto", weights.auto],
     ];
-    // Fall back to uniform if all weights are 0.
-    return weightedPick(rng, entries) ?? pick(rng, SPACING_MODES);
+    return weightedPick(rng, entries);
 }
+
 // ── Internal state while building a single grammar ────────────────────────────
 
 type RuleState = {
@@ -413,6 +533,13 @@ export function buildRandomGrammar(
     const varCounter = { n: 0 };
     let usesValueExpressions = false;
 
+    // Hoist clamped probabilities out of the inner loop.
+    const optionalProb = clamp01(features.groups.optionalProb);
+    const repeatProb = clamp01(features.groups.repeatProb);
+    const valueAttachProb = clamp01(features.values.attachProb);
+    const altSpacingProb = clamp01(features.spacing.altProb);
+    const ruleSpacingProb = clamp01(features.spacing.ruleProb);
+
     // Build rules in reverse so rule i can reference rules > i.
     const ruleStates: RuleState[] = new Array(ruleCount);
 
@@ -469,36 +596,49 @@ export function buildRandomGrammar(
                 // Optionally wrap the part in an optional / repeat
                 // group.  The two probabilities are rolled
                 // independently and combined into a single quantifier.
-                const optional = rng() < clamp01(features.groups.optionalProb);
-                const repeat = rng() < clamp01(features.groups.repeatProb);
+                //
+                // Captures inside a quantifier group are not visible
+                // to the alternate's value expression (they would be
+                // optional or aggregated), so we keep capture parts
+                // unwrapped.  This decouples the `groups.*Prob` and
+                // `values.attachProb` dimensions: every capture stays
+                // exposed regardless of group rolls.
+                const canWrap = captureVar === undefined;
+                const optional = canWrap && rng() < optionalProb;
+                const repeat = canWrap && rng() < repeatProb;
                 let partText = innerText;
-                if (optional && repeat) partText = `(${innerText})*`;
-                else if (optional) partText = `(${innerText})?`;
-                else if (repeat) partText = `(${innerText})+`;
+                let repCount = 1;
+                if (optional && repeat) {
+                    partText = `(${innerText})*`;
+                    // `*` matches 0..N: emit 0..2 copies.
+                    repCount = intInRange(rng, 0, 2);
+                } else if (optional) {
+                    partText = `(${innerText})?`;
+                    // `?` matches 0..1.
+                    repCount = intInRange(rng, 0, 1);
+                } else if (repeat) {
+                    partText = `(${innerText})+`;
+                    // `+` matches 1..N: emit 1..3 copies.
+                    repCount = intInRange(rng, 1, 3);
+                }
 
-                // Captures inside a quantifier group are not visible to
-                // the alternate's value expression (they're either
-                // optional or aggregated), so only expose unwrapped
-                // captures as bound variables.
-                if (captureVar !== undefined && !optional && !repeat) {
+                if (captureVar !== undefined) {
                     altBoundVars.push(captureVar);
                 }
 
                 partTexts.push(partText);
-                // The matching input includes the inner expansion
-                // exactly once: this satisfies `?` (present), `+`
-                // (one repetition), and `*` (one repetition) alike.
-                partMatch.push(...innerMatch);
+                // Replicate the inner expansion `repCount` times to
+                // exercise multi-rep semantics for `+` and `*` (and
+                // zero-rep elision for `?` and `*`).
+                for (let r = 0; r < repCount; r++)
+                    partMatch.push(...innerMatch);
             }
 
             // Build value expression for this alternative if enabled.
             // `features.values.attachProb` is the per-alternate attach
             // probability (only eligible when captures exist).
             let valueText = "";
-            if (
-                altBoundVars.length > 0 &&
-                rng() < clamp01(features.values.attachProb)
-            ) {
+            if (altBoundVars.length > 0 && rng() < valueAttachProb) {
                 const expr = buildValueExpr(rng, altBoundVars);
                 valueText = ` -> ${expr}`;
                 state.hasValue = true;
@@ -513,11 +653,15 @@ export function buildRandomGrammar(
                 }
             }
 
-            // Per-alternate spacing annotation.
+            // Per-alternate spacing annotation.  If every mode weight
+            // is 0 the picker returns undefined and we skip the
+            // annotation rather than fall back to uniform.
             let spacingText = "";
-            if (rng() < clamp01(features.spacing.altProb)) {
+            if (rng() < altSpacingProb) {
                 const mode = pickSpacingMode(rng, features.spacing.modes);
-                spacingText = spacingAnnotation(mode);
+                if (mode !== undefined) {
+                    spacingText = spacingAnnotation(mode);
+                }
             }
 
             state.altTexts.push(
@@ -536,12 +680,14 @@ export function buildRandomGrammar(
     const lines: string[] = [];
     for (let i = ruleCount - 1; i >= 0; i--) {
         const state = ruleStates[i];
-        // Rule-level spacing annotation.
+        // Rule-level spacing annotation.  Skip when every mode weight
+        // is 0 (see per-alternate annotation above).
         let ruleSpacing = "";
-        if (rng() < clamp01(features.spacing.ruleProb)) {
-            ruleSpacing = spacingAnnotation(
-                pickSpacingMode(rng, features.spacing.modes),
-            );
+        if (rng() < ruleSpacingProb) {
+            const mode = pickSpacingMode(rng, features.spacing.modes);
+            if (mode !== undefined) {
+                ruleSpacing = spacingAnnotation(mode);
+            }
         }
         lines.push(
             `<${ruleName(i)}>${ruleSpacing} = ${state.altTexts.join(" | ")};`,

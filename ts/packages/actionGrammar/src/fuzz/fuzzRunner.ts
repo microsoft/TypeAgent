@@ -33,6 +33,9 @@ import {
     runFuzz,
     DEFAULT_CONFIG,
     cloneFeatures,
+    zeroAllFeatures,
+    featureEntries,
+    FEATURE_FIELDS,
     validateOptimizerEquivalence,
     validateTextRoundTrip,
     validateJsonRoundTrip,
@@ -64,13 +67,16 @@ function printUsage(): void {
         "                         values.attachProb",
         "                         spacing.{altProb,ruleProb}",
         "                         spacing.modes.{required,optional,none,auto}",
-        "                         groups.{optionalProb,repeatProb}     [NYI]",
+        "                         groups.{optionalProb,repeatProb}",
         "                       Fields named `*Prob` are probabilities in",
         "                       [0,1]; other numeric fields are relative",
         "                       weights for a weighted random pick.  When",
         "                       --features is given, all weights/probs reset",
         "                       to 0 first; partKinds.literal stays at 1 as",
-        "                       the fallback part kind unless overridden.",
+        "                       the fallback part kind unless overridden",
+        "                       (e.g. `--features partKinds.wildcard=5`",
+        "                       leaves literal=1, so wildcards are 5x as",
+        "                       common as literals).",
         "  --validation <csv>   Comma-separated validations (default: all)",
         "                       Options: optimizer, roundtrip-text, roundtrip-json",
         "  --depth <N>          Max rules / nesting depth (default: 4)",
@@ -93,49 +99,17 @@ function printUsage(): void {
     console.log(lines.join("\n"));
 }
 
-// Dotted-path setters into FuzzFeatureFlags.  Each entry maps a
-// canonical lower-case path (e.g. `partkinds.wildcard`) to a setter
-// that writes the numeric value into the right slot of the record.
+// Dotted-path setters into FuzzFeatureFlags, derived from the
+// canonical FEATURE_FIELDS table in grammarGenerator.ts.  Keys are
+// lower-cased so CLI lookup is case-insensitive; canonical (camelCase)
+// paths are kept around for human-readable diagnostics.
 type FeatureSetter = (f: FuzzFeatureFlags, value: number) => void;
-const FEATURE_PATHS: Record<string, FeatureSetter> = {
-    "partkinds.literal": (f, v) => (f.partKinds.literal = v),
-    "partkinds.ruleref": (f, v) => (f.partKinds.ruleRef = v),
-    "partkinds.wildcard": (f, v) => (f.partKinds.wildcard = v),
-    "partkinds.number": (f, v) => (f.partKinds.number = v),
-    "values.attachprob": (f, v) => (f.values.attachProb = v),
-    "spacing.altprob": (f, v) => (f.spacing.altProb = v),
-    "spacing.ruleprob": (f, v) => (f.spacing.ruleProb = v),
-    "spacing.modes.required": (f, v) => (f.spacing.modes.required = v),
-    "spacing.modes.optional": (f, v) => (f.spacing.modes.optional = v),
-    "spacing.modes.none": (f, v) => (f.spacing.modes.none = v),
-    "spacing.modes.auto": (f, v) => (f.spacing.modes.auto = v),
-    "groups.optionalprob": (f, v) => (f.groups.optionalProb = v),
-    "groups.repeatprob": (f, v) => (f.groups.repeatProb = v),
-};
-
-/** Reset every feature value to 0 (used before applying --features). */
-function zeroAllFeatures(f: FuzzFeatureFlags): void {
-    for (const setter of Object.values(FEATURE_PATHS)) setter(f, 0);
-}
-
-/** Iterate (path, value) pairs for diagnostic / summary printing. */
-function* featureEntries(
-    f: FuzzFeatureFlags,
-): Iterable<readonly [string, number]> {
-    yield ["partKinds.literal", f.partKinds.literal];
-    yield ["partKinds.ruleRef", f.partKinds.ruleRef];
-    yield ["partKinds.wildcard", f.partKinds.wildcard];
-    yield ["partKinds.number", f.partKinds.number];
-    yield ["values.attachProb", f.values.attachProb];
-    yield ["spacing.altProb", f.spacing.altProb];
-    yield ["spacing.ruleProb", f.spacing.ruleProb];
-    yield ["spacing.modes.required", f.spacing.modes.required];
-    yield ["spacing.modes.optional", f.spacing.modes.optional];
-    yield ["spacing.modes.none", f.spacing.modes.none];
-    yield ["spacing.modes.auto", f.spacing.modes.auto];
-    yield ["groups.optionalProb", f.groups.optionalProb];
-    yield ["groups.repeatProb", f.groups.repeatProb];
-}
+const FEATURE_PATHS: Record<string, FeatureSetter> = Object.fromEntries(
+    FEATURE_FIELDS.map((field) => [field.path.toLowerCase(), field.set]),
+);
+const CANONICAL_FEATURE_PATHS: readonly string[] = FEATURE_FIELDS.map(
+    (field) => field.path,
+);
 
 const VALIDATION_MAP: Record<string, FuzzValidationKind> = {
     optimizer: "optimizer",
@@ -225,7 +199,7 @@ function parseArgs(argv: string[]): ParsedArgs {
                     const setter = FEATURE_PATHS[rawPath.trim().toLowerCase()];
                     if (!setter) {
                         console.error(
-                            `Unknown feature path: ${rawPath.trim()}.  Valid paths: ${Object.keys(FEATURE_PATHS).join(", ")}`,
+                            `Unknown feature path: ${rawPath.trim()}.  Valid paths: ${CANONICAL_FEATURE_PATHS.join(", ")}`,
                         );
                         process.exit(1);
                     }
