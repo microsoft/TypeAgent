@@ -303,16 +303,19 @@ function normalizePart(
 /**
  * Expand a `DispatchPart` into the equivalent `RulesPart`.  The
  * dispatch part stores the original alternation rules unchanged in
- * its `tokenMap` buckets (and `fallback`); expansion just unions
- * them into a flat alternation in `[...hits..., ...fallback]` order.
+ * its `perMode` buckets (and `fallback`); expansion just unions
+ * them into a flat alternation in
+ * `[...perModeBuckets.flat()..., ...fallback]` order.
  */
 function expandDispatchPart(
     part: import("./grammarTypes.js").DispatchPart,
 ): RulesPart {
     const expanded: GrammarRule[] = [];
-    for (const suffixRules of part.tokenMap.values()) {
-        for (const r of suffixRules) {
-            expanded.push(r);
+    for (const m of part.perMode) {
+        for (const suffixRules of m.tokenMap.values()) {
+            for (const r of suffixRules) {
+                expanded.push(r);
+            }
         }
     }
     if (part.fallback) {

@@ -24,8 +24,10 @@ export function getDispatchEffectiveMembers(p: DispatchPart): GrammarRule[] {
     let cached = dispatchEffectiveCache.get(p);
     if (cached !== undefined) return cached;
     const members: GrammarRule[] = [];
-    for (const bucket of p.tokenMap.values()) {
-        for (const m of bucket) members.push(m);
+    for (const m of p.perMode) {
+        for (const bucket of m.tokenMap.values()) {
+            for (const r of bucket) members.push(r);
+        }
     }
     if (p.fallback !== undefined) {
         for (const m of p.fallback) members.push(m);

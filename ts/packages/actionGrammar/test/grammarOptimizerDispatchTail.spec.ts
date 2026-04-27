@@ -31,6 +31,7 @@ import {
     GrammarPart,
     GrammarRule,
 } from "../src/grammarTypes.js";
+import { getDispatchEffectiveMembers } from "../src/dispatchHelpers.js";
 
 function match(grammar: ReturnType<typeof loadGrammarRules>, request: string) {
     return matchGrammar(grammar, request)
@@ -45,10 +46,12 @@ function findAllDispatchParts(rules: GrammarRule[]): DispatchPart[] {
         for (const p of parts) {
             if (p.type === "dispatch") {
                 out.push(p);
-                for (const bucket of p.tokenMap.values()) {
-                    if (!visited.has(bucket)) {
-                        visited.add(bucket);
-                        for (const r of bucket) visitParts(r.parts);
+                for (const m of p.perMode) {
+                    for (const bucket of m.tokenMap.values()) {
+                        if (!visited.has(bucket)) {
+                            visited.add(bucket);
+                            for (const r of bucket) visitParts(r.parts);
+                        }
                     }
                 }
                 if (p.fallback !== undefined && !visited.has(p.fallback)) {
@@ -98,18 +101,16 @@ describe("Grammar Optimizer - DispatchPart with tailCall", () => {
                 expect(dp.variable).toBeUndefined();
                 expect(dp.optional).toBeFalsy();
                 expect(dp.repeat).toBeFalsy();
-                const effective =
-                    Array.from(dp.tokenMap.values()).reduce(
-                        (n, b) => n + b.length,
-                        0,
-                    ) + (dp.fallback?.length ?? 0);
+                const effective = getDispatchEffectiveMembers(dp).length;
                 expect(effective).toBeGreaterThanOrEqual(2);
             }
             // The `by` / `from` suffix split should produce a
             // dispatch with both keys present.
             const keys = new Set<string>();
             for (const dp of tailDispatches) {
-                for (const k of dp.tokenMap.keys()) keys.add(k);
+                for (const m of dp.perMode) {
+                    for (const k of m.tokenMap.keys()) keys.add(k);
+                }
             }
             expect(keys.has("by")).toBe(true);
             expect(keys.has("from")).toBe(true);
@@ -206,10 +207,15 @@ describe("Grammar Optimizer - DispatchPart with tailCall", () => {
             };
             const dispatch: DispatchPart = {
                 type: "dispatch",
-                tokenMap: new Map([
-                    ["alpha", [memberA]],
-                    ["beta", [memberB]],
-                ]),
+                perMode: [
+                    {
+                        spacingMode: undefined,
+                        tokenMap: new Map([
+                            ["alpha", [memberA]],
+                            ["beta", [memberB]],
+                        ]),
+                    },
+                ],
                 tailCall: true,
             };
             const rule: GrammarRule = { parts: [dispatch] };
@@ -266,7 +272,11 @@ describe("Grammar Optimizer - DispatchPart with tailCall", () => {
             const g = buildBaseline();
             const dp = g.rules[0].parts[0] as DispatchPart;
             // Drop one of the two buckets, leaving a single member.
-            dp.tokenMap = new Map([["alpha", dp.tokenMap.get("alpha")!]]);
+            const tm = dp.perMode[0].tokenMap;
+            dp.perMode[0] = {
+                spacingMode: dp.perMode[0].spacingMode,
+                tokenMap: new Map([["alpha", tm.get("alpha")!]]),
+            };
             expect(() => validateTailRulesParts(g.rules)).toThrow(
                 /effective member count >= 2/,
             );
@@ -275,7 +285,7 @@ describe("Grammar Optimizer - DispatchPart with tailCall", () => {
         it("rejects when a member's spacingMode disagrees with the parent's", () => {
             const g = buildBaseline();
             const dp = g.rules[0].parts[0] as DispatchPart;
-            dp.tokenMap.get("alpha")![0].spacingMode = "required";
+            dp.perMode[0].tokenMap.get("alpha")![0].spacingMode = "required";
             expect(() => validateTailRulesParts(g.rules)).toThrow(
                 /spacingMode must match/,
             );
@@ -330,8 +340,10 @@ describe("Grammar Optimizer - DispatchPart with tailCall", () => {
             expect(tailDispatches.length).toBeGreaterThanOrEqual(1);
             const tail = tailDispatches[0];
             expect(tail.fallback ?? []).toHaveLength(0);
-            for (const bucket of tail.tokenMap.values()) {
-                expect(bucket).toHaveLength(1);
+            for (const m of tail.perMode) {
+                for (const bucket of m.tokenMap.values()) {
+                    expect(bucket).toHaveLength(1);
+                }
             }
 
             const baseline = loadGrammarRules(

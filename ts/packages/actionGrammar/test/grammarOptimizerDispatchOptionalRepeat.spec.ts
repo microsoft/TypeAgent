@@ -21,6 +21,7 @@ import { matchGrammar } from "../src/grammarMatcher.js";
 import { DispatchPart, GrammarRule } from "../src/grammarTypes.js";
 import { grammarToJson } from "../src/grammarSerializer.js";
 import { grammarFromJson } from "../src/grammarDeserializer.js";
+import { getDispatchAllTokenMap } from "./dispatchTestHelpers.js";
 
 function match(grammar: ReturnType<typeof loadGrammarRules>, request: string) {
     return matchGrammar(grammar, request)
@@ -58,11 +59,9 @@ describe("Grammar Optimizer - DispatchPart with optional/repeat", () => {
             const dispatch = findDispatchPart(optimized.rules);
             expect(dispatch).toBeDefined();
             expect(dispatch!.optional).toBe(true);
-            expect(Array.from(dispatch!.tokenMap.keys()).sort()).toEqual([
-                "bar",
-                "baz",
-                "foo",
-            ]);
+            expect(
+                Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
+            ).toEqual(["bar", "baz", "foo"]);
         });
 
         it("matches identically to the unoptimized grammar", () => {
@@ -94,11 +93,9 @@ describe("Grammar Optimizer - DispatchPart with optional/repeat", () => {
             const dispatch = findDispatchPart(optimized.rules);
             expect(dispatch).toBeDefined();
             expect(dispatch!.repeat).toBe(true);
-            expect(Array.from(dispatch!.tokenMap.keys()).sort()).toEqual([
-                "bar",
-                "baz",
-                "foo",
-            ]);
+            expect(
+                Array.from(getDispatchAllTokenMap(dispatch!).keys()).sort(),
+            ).toEqual(["bar", "baz", "foo"]);
         });
 
         it("re-peeks per iteration and matches identically", () => {

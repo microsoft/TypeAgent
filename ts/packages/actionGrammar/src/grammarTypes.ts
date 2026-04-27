@@ -303,15 +303,28 @@ export type PhraseSetPart = {
  * members, bound first-StringPart, empty parts) live in `fallback`
  * and are tried as ordinary alternatives after the tokenMap hits.
  *
+ * Per-mode bucketing.  A dispatch may carry buckets for more than
+ * one spacing mode at once: the optimizer partitions the original
+ * alternation's members by each rule's own `spacingMode` and builds
+ * a separate tokenMap per dispatch-eligible mode (`required` and/or
+ * `undefined`/auto).  At match time the matcher peeks once per
+ * `perMode` entry (passing that entry's `spacingMode` as `tokenMode`
+ * to `peekNextToken`) and unions any hits.
+ *
  * Eligibility (computed by `dispatchifyAlternations`):
- *   - Containing partition's `spacingMode === "required"` always OK.
- *   - `spacingMode === undefined` (auto) OK iff every key consists
- *     entirely of word-boundary-script chars; the matcher applies a
- *     runtime auto-mode boundary check after the hit.
- *   - `optional` / `none` modes are NOT eligible (peek-by-separator
- *     would mismatch keys against unseparated input).  In those
- *     partitions the optimizer leaves the original `RulesPart`
- *     unchanged.
+ *   - A member with `spacingMode === "required"` always dispatches
+ *     into the `required` perMode bucket.
+ *   - A member with `spacingMode === undefined` (auto) dispatches
+ *     into the auto perMode bucket; its bucket key is the leading
+ *     word-boundary-script prefix of its first literal token (or
+ *     the leading code point when that prefix is empty).  The
+ *     matcher applies the same prefix logic on the input side.
+ *   - Members with `spacingMode === "optional"` or `"none"` are
+ *     never dispatch-eligible (peek-by-separator would mismatch
+ *     keys against unseparated input).  They go to `fallback`
+ *     unconditionally if any of the *other* members are eligible;
+ *     a partition where every member is optional/none is left as
+ *     a plain `RulesPart`.
  *
  * Not exposed in `.agr` source.  The NFA/DFA compile path expands
  * `DispatchPart` back into an equivalent `RulesPart` before
@@ -321,35 +334,41 @@ export type PhraseSetPart = {
 export type DispatchPart = {
     type: "dispatch";
     /**
-     * Lowercased first token -> rules whose first `StringPart` begins
-     * with that token.  The rules are the *original* alternation
-     * members, unmodified - the matcher re-matches the leading token
-     * via each rule's normal `StringPart` regex (see filter-only
-     * semantics in the type-level docstring above).
+     * One bucket table per dispatch-eligible spacing mode that
+     * appears among the original alternation's members.  Each entry
+     * pairs a spacing mode (`"required"` or `undefined` / auto) with
+     * a `Map<lowercased first token, rules>` whose rules are the
+     * *original* alternation members, unmodified - the matcher
+     * re-matches the leading token via each rule's normal
+     * `StringPart` regex (see filter-only semantics above).
      *
-     * Canonical shapes produced by `tryDispatchifyRulesPart`: at
-     * least 2 buckets, OR 1 bucket with a non-empty `fallback`.
-     * Other shapes (empty `tokenMap`, single-bucket with no
-     * fallback) are semantically valid - the matcher handles them
-     * correctly - but offer no filtering benefit over an equivalent
-     * `RulesPart`.  `grammarDeserializer.ts` logs a `debug` advisory
-     * when it sees one.
+     * Invariants enforced by `tryDispatchifyRulesPart`:
+     *   - `perMode.length >= 1`
+     *   - every entry's `tokenMap` is non-empty
+     *   - every entry's `spacingMode` is `"required"` or `undefined`
+     *   - entries have distinct `spacingMode` values
+     *   - entries appear in member-source order of first appearance
+     *     (so a partition starting with a `required` member lists
+     *     `required` before `auto`, etc.)
+     *
+     * Canonical shapes: total bucket count >= 2, OR total bucket
+     * count == 1 with non-empty `fallback`.  Other shapes are
+     * semantically valid - the matcher handles them correctly - but
+     * offer no filtering benefit over an equivalent `RulesPart`.
+     * `grammarDeserializer.ts` logs a `debug` advisory when it sees
+     * one.
      */
-    tokenMap: Map<string, GrammarRule[]>;
+    perMode: DispatchModeBucket[];
     /**
-     * Members whose first token is not statically known.  Tried as
-     * ordinary alternatives after `tokenMap` hits at match time.
-     * Absent / empty when every member dispatches.
+     * Members whose first token is not statically known, plus any
+     * members whose own `spacingMode` is `"optional"` or `"none"`
+     * (which can never dispatch).  Tried as ordinary alternatives
+     * after the per-mode hits at match time.  Absent / empty when
+     * every member dispatches.
      */
     fallback?: GrammarRule[] | undefined;
     name?: string | undefined; // For debugging
     variable?: string | undefined;
-    /**
-     * Spacing mode of the original `RulesPart` partition this dispatch
-     * was built from.  Drives `state.spacingMode` on entry (mirrors
-     * `RulesPart` member-spacing handling).
-     */
-    spacingMode?: CompiledSpacingMode | undefined;
     /**
      * `repeat` / `optional` mirror the same flags on `RulesPart` and
      * are honored by the AST-walking matcher: optional handling fires
@@ -376,6 +395,17 @@ export type DispatchPart = {
      * ...fallback]`).
      */
     tailCall?: boolean | undefined;
+};
+
+/**
+ * One per-spacing-mode bucket table within a `DispatchPart`.  See
+ * `DispatchPart.perMode` for the full contract; in brief: the
+ * matcher peeks once with `spacingMode` as `tokenMode` and looks
+ * the peeked token up in `tokenMap` to find candidate rules.
+ */
+export type DispatchModeBucket = {
+    spacingMode: CompiledSpacingMode;
+    tokenMap: Map<string, GrammarRule[]>;
 };
 
 export type GrammarPart =
@@ -482,21 +512,25 @@ export type PhraseSetPartJson = {
 };
 
 /**
- * Serialized form of `DispatchPart`.  `tokenMap` becomes an array of
- * `[token, ruleArrayIndex]` tuples (Maps don't survive JSON round-trip
- * directly).  Each entry's `index` is a `GrammarRulesJson` index in
- * the same shared `GrammarJson` table that `RulePartJson.index`
- * references, so suffix arrays dedup with named-rule arrays via the
- * existing identity-sharing mechanism.  `fallback` (when present) is
- * also a single shared rules-array index.
+ * Serialized form of `DispatchPart`.  Each `perMode` entry's
+ * `tokenMap` becomes an array of `[token, ruleArrayIndex]` tuples
+ * (Maps don't survive JSON round-trip directly).  Each entry's
+ * `index` is a `GrammarRulesJson` index in the same shared
+ * `GrammarJson` table that `RulePartJson.index` references, so
+ * suffix arrays dedup with named-rule arrays via the existing
+ * identity-sharing mechanism.  `fallback` (when present) is also a
+ * single shared rules-array index.
  */
 export type DispatchPartJson = {
     type: "dispatch";
     name?: string | undefined;
     variable?: string | undefined;
-    spacingMode?: CompiledSpacingMode | undefined;
-    /** [lowercased-token, rulesArrayIndex][] */
-    tokenMap: Array<[string, number]>;
+    /** Per spacing-mode buckets - see `DispatchPart.perMode`. */
+    perMode: Array<{
+        spacingMode?: CompiledSpacingMode | undefined;
+        /** [lowercased-token, rulesArrayIndex][] */
+        tokenMap: Array<[string, number]>;
+    }>;
     /** rulesArrayIndex pointing to fallback rules; absent when no fallback. */
     fallbackIndex?: number | undefined;
     optional?: boolean | undefined;

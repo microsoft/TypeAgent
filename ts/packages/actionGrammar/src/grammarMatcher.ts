@@ -2093,8 +2093,9 @@ function enterRulesAlternation(
 
 /**
  * Set up `state` to enter a `DispatchPart`.  Peeks the next input
- * token, partitions members into hits + fallback to form the
- * effective alternation list, then delegates to
+ * token (once per `perMode` entry, typically 1; up to 2 for
+ * mixed-mode dispatch), partitions members into hits + fallback to
+ * form the effective alternation list, then delegates to
  * `enterRulesAlternation` so dispatch shares all entry plumbing
  * (parent frame, repeat handling, alternation cursor) with the
  * non-tail `RulesPart` path.  Returns `false` when neither a
@@ -2108,17 +2109,22 @@ function enterRulesAlternation(
  * members, and the matcher will re-match the token via each
  * suffix's `StringPart` regex.
  *
- * **Per-`DispatchPart` cache.**  `merged` is a `Map<bucketArray,
- * [...bucket, ...fallback]>` keyed by each tokenMap bucket, used on
- * a peek hit when `fallback` is non-empty.  Identity-keyed so two
- * buckets sharing the same array reuse the same merged result.
- * The full effective list (`[...allBuckets, ...fallback]`) used by
- * the pending-wildcard path is shared with the optimizer and
- * validator via `getDispatchEffectiveMembers` from
- * `dispatchHelpers.ts` (one allocation per `DispatchPart`).
+ * **Per-`DispatchPart` cache.**  `merged` keys the merged effective
+ * rule array on the *single hit bucket* identity (used when only one
+ * `perMode` entry's peek hits and `fallback` is non-empty - the most
+ * common case, including all uniform-mode dispatches).
+ * `mergedMulti` keys on (bucketA, bucketB) - used when two perMode
+ * entries both hit on the same input (rare).  Both maps are
+ * identity-keyed so equal bucket arrays reuse the same merged
+ * result.  The full effective list
+ * (`[...allBuckets.flat(), ...fallback]`) used by the pending-
+ * wildcard path is shared with the optimizer and validator via
+ * `getDispatchEffectiveMembers` from `dispatchHelpers.ts` (one
+ * allocation per `DispatchPart`).
  */
 type DispatchCaches = {
     merged?: Map<GrammarRule[], GrammarRule[]>;
+    mergedMulti?: Map<GrammarRule[], Map<GrammarRule[], GrammarRule[]>>;
 };
 const dispatchCaches = new WeakMap<DispatchPart, DispatchCaches>();
 
@@ -2131,7 +2137,7 @@ function getDispatchCaches(part: DispatchPart): DispatchCaches {
     return c;
 }
 
-function getDispatchMergedBucket(
+function getDispatchMergedSingle(
     part: DispatchPart,
     bucket: GrammarRule[],
     fallback: GrammarRule[],
@@ -2146,6 +2152,34 @@ function getDispatchMergedBucket(
     if (merged === undefined) {
         merged = bucket.concat(fallback);
         m.set(bucket, merged);
+    }
+    return merged;
+}
+
+function getDispatchMergedMulti(
+    part: DispatchPart,
+    bucketA: GrammarRule[],
+    bucketB: GrammarRule[],
+    fallback: GrammarRule[] | undefined,
+): GrammarRule[] {
+    const c = getDispatchCaches(part);
+    let outer = c.mergedMulti;
+    if (outer === undefined) {
+        outer = new Map();
+        c.mergedMulti = outer;
+    }
+    let inner = outer.get(bucketA);
+    if (inner === undefined) {
+        inner = new Map();
+        outer.set(bucketA, inner);
+    }
+    let merged = inner.get(bucketB);
+    if (merged === undefined) {
+        merged =
+            fallback === undefined || fallback.length === 0
+                ? bucketA.concat(bucketB)
+                : bucketA.concat(bucketB, fallback);
+        inner.set(bucketB, merged);
     }
     return merged;
 }
@@ -2169,17 +2203,18 @@ function enterDispatchPart(
     // wildcard.
     //
     // Future optimization (deferred, no measured need yet): build a
-    // combined alternation regex over `tokenMap.keys()` at dispatch-
-    // build time, `exec()` it once from the wildcard's start to find
-    // which bucket keys actually appear in the remaining input, and
-    // try only those buckets (plus all fallback rules, which have
-    // no fixed leading literal).  This collapses N per-rule forward
-    // scans in `matchStringPartWithWildcard` into one combined
-    // scan + a smaller alternation.  See "Variant A" in the
-    // CJK-dispatch design discussion - keep semantics identical
-    // (wildcard policy, capture frames, ordering); pre-scan is a
-    // pure pruning pass.  Worth doing if profiling on a real
-    // grammar shows wildcard-prefix dispatch is a hot path.
+    // combined alternation regex over each perMode bucket's
+    // tokenMap.keys() at dispatch-build time, `exec()` it once from
+    // the wildcard's start to find which bucket keys actually appear
+    // in the remaining input, and try only those buckets (plus all
+    // fallback rules, which have no fixed leading literal).  This
+    // collapses N per-rule forward scans in
+    // `matchStringPartWithWildcard` into one combined scan + a
+    // smaller alternation.  See "Variant A" in the CJK-dispatch
+    // design discussion - keep semantics identical (wildcard
+    // policy, capture frames, ordering); pre-scan is a pure pruning
+    // pass.  Worth doing if profiling on a real grammar shows
+    // wildcard-prefix dispatch is a hot path.
     if (state.pendingWildcard !== undefined) {
         const all = getDispatchEffectiveMembers(part);
         if (all.length === 0) {
@@ -2198,47 +2233,77 @@ function enterDispatchPart(
     }
     // Two spacing modes govern peek independently:
     //   - leading-separator handling at `state.index` follows the
-    //     surrounding context (`leadingSpacingMode(state)`), so that
-    //     a `none`-mode preceding part rejects an unexpected
-    //     leading separator.
+    //     surrounding context (`leadingSpacingMode(state)`), which
+    //     is shared across every perMode entry's peek.
     //   - token-boundary handling (auto-mode script-transition
-    //     truncation) follows the dispatched member rules' own
-    //     `part.spacingMode`, since the suffix's StringPart regex
-    //     uses that mode and peek must agree with it.
-    const token = peekNextToken(
-        request,
-        state.index,
-        leadingSpacingMode(state),
-        part.spacingMode,
-    );
-    const hits = token !== undefined ? part.tokenMap.get(token) : undefined;
+    //     truncation) follows each perMode entry's own
+    //     `spacingMode`, since the suffix's StringPart regex uses
+    //     that mode and peek must agree with it.  We peek once per
+    //     perMode entry (typically 1; up to 2 for mixed-mode
+    //     dispatches with both `required`- and `auto`-mode members).
+    const leading = leadingSpacingMode(state);
+    let firstHit: GrammarRule[] | undefined;
+    let secondHit: GrammarRule[] | undefined;
+    for (const m of part.perMode) {
+        const token = peekNextToken(
+            request,
+            state.index,
+            leading,
+            m.spacingMode,
+        );
+        if (token === undefined) continue;
+        const bucket = m.tokenMap.get(token);
+        if (bucket === undefined) continue;
+        if (firstHit === undefined) {
+            firstHit = bucket;
+        } else {
+            secondHit = bucket;
+            // perMode has at most one entry per spacingMode and
+            // typically <= 2 entries total, so we can stop after
+            // collecting two hits.  (If a future change ever allows
+            // more eligible modes, extend by widening the merged
+            // helper and the cache key.)
+            break;
+        }
+    }
     const fallback = part.fallback;
     if (
-        hits === undefined &&
+        firstHit === undefined &&
         (fallback === undefined || fallback.length === 0)
     ) {
         debugMatch(state, `dispatch: no hits or fallback`);
         return false;
     }
-    // Hits-before-fallback ordering: the bucket members are tried
-    // first (in source order within the bucket), then `fallback` (in
-    // source order).  This is *not* a faithful preservation of the
-    // pre-dispatch alternation's source order: a fallback member that
-    // originally appeared *before* a token-bucket member in source
-    // order is now tried after the bucket on a peek-hit.  See the
-    // `dispatchifyAlternations` doc for the full rationale (this is
-    // accepted as part of the dispatch optimization; a future
-    // `preserveSourceOrder` opt-in could bail out at such forks).
+    // Hits-before-fallback ordering: bucket members are tried first
+    // (in source order within each bucket; with multiple perMode
+    // hits, the entry that appears earlier in `perMode` wins -
+    // perMode entries are stored in member-source order of first
+    // appearance, see `tryDispatchifyRulesPart`).  Then `fallback`
+    // (in source order).  This is *not* a faithful preservation of
+    // the pre-dispatch alternation's source order: a fallback member
+    // that originally appeared *before* a token-bucket member is now
+    // tried after the bucket on a peek-hit, and a `required`-mode
+    // member's bucket may now precede an earlier-source `auto`-mode
+    // bucket member if `required` happens to appear first in
+    // `perMode`.  See the `dispatchifyAlternations` doc for the full
+    // rationale (this is accepted as part of the dispatch
+    // optimization; a future `preserveSourceOrder` opt-in could bail
+    // out at such forks).
     //
-    // When both `hits` and `fallback` exist we use a per-DispatchPart
-    // cache so the merged array is allocated once and reused across
-    // every match that hits the same bucket.
-    const effective: GrammarRule[] =
-        hits === undefined
-            ? fallback!
-            : fallback === undefined || fallback.length === 0
-              ? hits
-              : getDispatchMergedBucket(part, hits, fallback);
+    // Cache the merged array on the per-DispatchPart cache so we
+    // allocate it once per (hit-bucket-set, fallback) combination
+    // and reuse across every match that hits the same combination.
+    let effective: GrammarRule[];
+    if (firstHit === undefined) {
+        effective = fallback!;
+    } else if (secondHit === undefined) {
+        effective =
+            fallback === undefined || fallback.length === 0
+                ? firstHit
+                : getDispatchMergedSingle(part, firstHit, fallback);
+    } else {
+        effective = getDispatchMergedMulti(part, firstHit, secondHit, fallback);
+    }
 
     const namePrefix = part.name
         ? `<${part.name}>`

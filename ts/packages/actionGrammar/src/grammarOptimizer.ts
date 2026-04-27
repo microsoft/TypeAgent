@@ -1945,8 +1945,9 @@ function substituteValueVariables(
  *     applies the same rule on the input side so the buckets line
  *     up.  A literal that is empty stays in `fallback`.
  *
- * `optional` / `none` modes never reach this function (the partition
- * is rejected upstream in `tryDispatchifyRulesPart`).
+ * `optional` / `none` modes never reach this function (members in
+ * those modes are routed to `fallback` directly by
+ * `tryDispatchifyRulesPart` without classification).
  */
 function classifyDispatchMember(
     rule: GrammarRule,
@@ -2001,16 +2002,29 @@ function classifyDispatchMember(
  * entry (no parent frame, inherits `valueIds`).  See
  * `DispatchPart.tailCall` for the structural contract that the
  * effective member list must satisfy; `validateTailRulesParts`
- * enforces it.
+ * enforces it.  (Note: the tail contract requires every member's
+ * spacingMode to match the parent rule's, so a tail-eligible
+ * partition is naturally uniform-mode here - no special handling is
+ * needed for mixed-mode tail.)
+ *
+ * Mixed-mode partitions: members are partitioned by their own
+ * `rule.spacingMode` and a separate `tokenMap` is built for each
+ * dispatch-eligible mode (`required` and/or `undefined`/auto).  The
+ * matcher peeks once per perMode entry and unions the hits.
+ * Members with `spacingMode === "optional"` or `"none"` are not
+ * peek-dispatchable (peek-by-separator would mismatch keys against
+ * unseparated input) and go straight to `fallback`.
  *
  * Skip conditions:
- *   - The partition's spacing mode is `optional` or `none`: peek's
- *     token boundary doesn't agree with what the StringPart regex
- *     would consume in those modes, so dispatch can't be a pure
- *     filter.  Mixed-mode partitions are also rejected.
- *   - tokenMap would be empty (every rule went to fallback).
- *   - tokenMap wouldn't filter (one bucket containing every member,
- *     no fallback): the matcher's work is unchanged.
+ *   - Single-rule "alternation" - nothing to dispatch.
+ *   - No member is dispatch-eligible (every member is
+ *     `optional`/`none` mode, or every dispatch-eligible member's
+ *     first part is wildcard / number / phraseSet / nested rule
+ *     etc.): every rule lands in `fallback`, dispatch adds a
+ *     useless peek + hash miss.
+ *   - Total bucket count == 1 with no `fallback`: the dispatch
+ *     always picks the same bucket, no filtering benefit over the
+ *     original `RulesPart`.
  */
 function tryDispatchifyRulesPart(part: RulesPart): DispatchPart | undefined {
     if (part.rules.length < 2) {
@@ -2018,58 +2032,65 @@ function tryDispatchifyRulesPart(part: RulesPart): DispatchPart | undefined {
         debug(`dispatch skip (single-rule) name='${part.name ?? "<unnamed>"}'`);
         return undefined;
     }
-    // Determine the partition spacing mode.  We only dispatch when
-    // every member rule shares a single spacingMode; mixed-mode
-    // partitions stay as RulesPart in the initial cut.
-    //
-    // TODO: split mixed-mode partitions into per-mode dispatches
-    // wrapped in an outer alternation.  Today this rejects any
-    // RulesPart whose members differ in spacingMode (e.g. one
-    // `required` member alongside `auto` members), even when each
-    // sub-partition could dispatch on its own.
-    const partitionMode = part.rules[0].spacingMode;
-    for (let i = 1; i < part.rules.length; i++) {
-        if (part.rules[i].spacingMode !== partitionMode) {
-            debug(
-                `dispatch skip (mixed-spacing) name='${part.name ?? "<unnamed>"}'`,
-            );
-            return undefined;
-        }
-    }
-    if (partitionMode === "optional" || partitionMode === "none") {
-        debug(
-            `dispatch skip (spacing=${partitionMode}) name='${part.name ?? "<unnamed>"}'`,
-        );
-        return undefined;
-    }
 
-    const tokenMap = new Map<string, GrammarRule[]>();
+    // Partition members by their own spacing mode.  Build per-mode
+    // tokenMaps in member-source order of first appearance: the
+    // first member's mode seeds perMode[0], a later member with a
+    // different eligible mode appends a new perMode entry, and so
+    // on.  Members in `optional`/`none` mode are not peek-eligible
+    // and go to fallback unconditionally.
+    type ModeBucket = {
+        spacingMode: CompiledSpacingMode;
+        tokenMap: Map<string, GrammarRule[]>;
+    };
+    const perMode: ModeBucket[] = [];
     const fallback: GrammarRule[] = [];
+    const findMode = (mode: CompiledSpacingMode): ModeBucket | undefined => {
+        for (const m of perMode) {
+            if (m.spacingMode === mode) return m;
+        }
+        return undefined;
+    };
     for (const rule of part.rules) {
-        const cls = classifyDispatchMember(rule, partitionMode);
-        if (cls.kind === "token") {
-            const existing = tokenMap.get(cls.token);
-            if (existing !== undefined) {
-                existing.push(rule);
-            } else {
-                tokenMap.set(cls.token, [rule]);
-            }
-        } else {
+        const mode = rule.spacingMode;
+        if (mode === "optional" || mode === "none") {
+            // Not peek-eligible - peek's separator handling
+            // doesn't agree with what the StringPart regex would
+            // consume in these modes.
             fallback.push(rule);
+            continue;
+        }
+        const cls = classifyDispatchMember(rule, mode);
+        if (cls.kind === "fallback") {
+            fallback.push(rule);
+            continue;
+        }
+        let bucket = findMode(mode);
+        if (bucket === undefined) {
+            bucket = { spacingMode: mode, tokenMap: new Map() };
+            perMode.push(bucket);
+        }
+        const existing = bucket.tokenMap.get(cls.token);
+        if (existing !== undefined) {
+            existing.push(rule);
+        } else {
+            bucket.tokenMap.set(cls.token, [rule]);
         }
     }
 
-    if (tokenMap.size === 0) {
+    if (perMode.length === 0) {
         debug(
             `dispatch skip (all-fallback) name='${part.name ?? "<unnamed>"}'`,
         );
         return undefined;
     }
-    // No filtering: a single-bucket dispatch with no fallback is
-    // equivalent to the original RulesPart minus the leading-token
-    // factoring (one regex try per member instead of N hash misses).
-    // Skip to avoid pessimization.
-    if (tokenMap.size === 1 && fallback.length === 0) {
+    // Total token-key count: sum of `tokenMap.size` across every
+    // perMode entry.  A single token key (with no fallback) means the
+    // dispatch always picks the same single rule list, offering no
+    // filtering benefit over the original `RulesPart`.
+    let totalTokenKeys = 0;
+    for (const m of perMode) totalTokenKeys += m.tokenMap.size;
+    if (totalTokenKeys === 1 && fallback.length === 0) {
         debug(
             `dispatch skip (single-bucket-no-fallback) name='${part.name ?? "<unnamed>"}'`,
         );
@@ -2078,8 +2099,7 @@ function tryDispatchifyRulesPart(part: RulesPart): DispatchPart | undefined {
 
     const dispatch: DispatchPart = {
         type: "dispatch",
-        tokenMap,
-        spacingMode: partitionMode,
+        perMode,
     };
     if (part.name !== undefined) dispatch.name = part.name;
     if (part.variable !== undefined) dispatch.variable = part.variable;
@@ -2129,16 +2149,21 @@ export function dispatchifyAlternations(rules: GrammarRule[]): GrammarRule[] {
     // DispatchPart - preserves the matcher's "rule i drives one
     // alternative" semantics through the dispatch frame.
     //
-    // The synthesized wrapper rule inherits `partitionMode` as its
-    // `spacingMode` so `initialMatchState`'s `state.spacingMode =
-    // rules[0].spacingMode` seeds the parent-level mode that
-    // `leadingSpacingMode` will read for the dispatch peek.  Without
-    // this the wrapper's mode would be `undefined` (auto) regardless
-    // of partitionMode - a no-op for `auto`/`required` partitions at
-    // top level today (top level allows leading whitespace in both),
-    // but the explicit propagation matches `tryDispatchifyRulesPart`'s
-    // own `dispatch.spacingMode = partitionMode` and avoids surprises
-    // if the matcher's leading-separator rules ever change.
+    // The synthesized wrapper rule inherits the dispatch's spacing
+    // mode when the partition is uniform-mode (single perMode entry)
+    // so `initialMatchState`'s `state.spacingMode = rules[0].spacingMode`
+    // seeds the parent-level mode that `leadingSpacingMode` will read
+    // for the dispatch peek.  Without this the wrapper's mode would
+    // be `undefined` (auto) regardless of partition mode - a no-op
+    // for `auto`/`required` partitions at top level today (top level
+    // allows leading whitespace in both), but the explicit
+    // propagation matches the per-alt entry's spacingMode and avoids
+    // surprises if the matcher's leading-separator rules ever
+    // change.  For mixed-mode top-level dispatch we leave the
+    // wrapper's mode unset (auto): there is no single source mode
+    // to inherit, and auto handling at the top level is correct
+    // for both `required`- and `auto`-mode members (each member
+    // rule still enforces its own mode in its own frame).
     let finalResult = result;
     if (result.length >= 2) {
         const synthetic: RulesPart = {
@@ -2149,8 +2174,11 @@ export function dispatchifyAlternations(rules: GrammarRule[]): GrammarRule[] {
         if (dispatched !== undefined) {
             counter.dispatched++;
             const wrapper: GrammarRule = { parts: [dispatched] };
-            if (dispatched.spacingMode !== undefined) {
-                wrapper.spacingMode = dispatched.spacingMode;
+            if (
+                dispatched.perMode.length === 1 &&
+                dispatched.perMode[0].spacingMode !== undefined
+            ) {
+                wrapper.spacingMode = dispatched.perMode[0].spacingMode;
             }
             finalResult = [wrapper];
         }
@@ -2242,8 +2270,8 @@ function visitPart(
  *   - `repeat` / `optional` / `variable` all unset
  *   - effective member count >= 2 (for `RulesPart`, just
  *     `rules.length`; for `DispatchPart`, the *static* sum of
- *     tokenMap bucket sizes + fallback length).  Note this is a
- *     structural check on the AST shape, not a runtime guarantee:
+ *     bucket sizes across every `perMode` entry plus fallback
+ *     length).  Note this is a structural check on the AST shape, not a runtime guarantee:
  *     at match time `enterDispatchPart` peeks one input token and
  *     selects a *single* bucket (plus fallback) to form the
  *     effective alternation list, so the runtime list size for a
@@ -2293,8 +2321,10 @@ export function validateTailRulesParts(rules: GrammarRule[]): void {
                         dispatchEffectiveMembers(p),
                     );
                 }
-                for (const bucket of p.tokenMap.values()) {
-                    visitRules(bucket);
+                for (const m of p.perMode) {
+                    for (const bucket of m.tokenMap.values()) {
+                        visitRules(bucket);
+                    }
                 }
                 if (p.fallback !== undefined) {
                     visitRules(p.fallback);

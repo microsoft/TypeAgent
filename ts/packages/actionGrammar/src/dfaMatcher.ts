@@ -2034,13 +2034,18 @@ function matchesRuleStructure(
                 // Dispatch is a filter only - rules retain their
                 // original parts including the leading token.
                 let matched = false;
-                outer: for (const suffixRules of part.tokenMap.values()) {
-                    for (const suffix of suffixRules) {
-                        if (
-                            matchesRuleStructure(suffix, astParts.slice(astIdx))
-                        ) {
-                            matched = true;
-                            break outer;
+                outer: for (const m of part.perMode) {
+                    for (const suffixRules of m.tokenMap.values()) {
+                        for (const suffix of suffixRules) {
+                            if (
+                                matchesRuleStructure(
+                                    suffix,
+                                    astParts.slice(astIdx),
+                                )
+                            ) {
+                                matched = true;
+                                break outer;
+                            }
                         }
                     }
                 }

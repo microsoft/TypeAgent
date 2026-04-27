@@ -61,24 +61,32 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
                 return part;
             }
             case "dispatch": {
-                const tokenMap: Array<[string, number]> = [];
-                for (const [token, suffixRules] of p.tokenMap) {
-                    let index = rulesToIndex.get(suffixRules);
-                    if (index === undefined) {
-                        index = nextIndex++;
-                        rulesToIndex.set(suffixRules, index);
-                        json[index] = suffixRules.map(grammarRuleToJson);
+                const perMode: DispatchPartJson["perMode"] = [];
+                for (const m of p.perMode) {
+                    const tokenMap: Array<[string, number]> = [];
+                    for (const [token, suffixRules] of m.tokenMap) {
+                        let index = rulesToIndex.get(suffixRules);
+                        if (index === undefined) {
+                            index = nextIndex++;
+                            rulesToIndex.set(suffixRules, index);
+                            json[index] = suffixRules.map(grammarRuleToJson);
+                        }
+                        tokenMap.push([token, index]);
                     }
-                    tokenMap.push([token, index]);
+                    const entry: DispatchPartJson["perMode"][number] = {
+                        tokenMap,
+                    };
+                    if (m.spacingMode !== undefined) {
+                        entry.spacingMode = m.spacingMode;
+                    }
+                    perMode.push(entry);
                 }
                 const part: DispatchPartJson = {
                     type: "dispatch",
-                    tokenMap,
+                    perMode,
                 };
                 if (p.name !== undefined) part.name = p.name;
                 if (p.variable !== undefined) part.variable = p.variable;
-                if (p.spacingMode !== undefined)
-                    part.spacingMode = p.spacingMode;
                 if (p.fallback !== undefined && p.fallback.length > 0) {
                     let index = rulesToIndex.get(p.fallback);
                     if (index === undefined) {
