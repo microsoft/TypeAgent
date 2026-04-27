@@ -192,9 +192,8 @@ export class AgentCache {
 
         // Get the merged grammar (static + dynamic) from the registry
         const mergedGrammar = agentGrammar.getGrammar();
-        debug(
-            `syncAgentGrammar: Syncing ${schemaName}: ${mergedGrammar.rules.length} rule(s)`,
-        );
+        const ruleCount = mergedGrammar.alternatives.length;
+        debug(`syncAgentGrammar: Syncing ${schemaName}: ${ruleCount} rule(s)`);
 
         // Update the grammar store used for matching
         this._grammarStore.addGrammar(schemaName, mergedGrammar);
