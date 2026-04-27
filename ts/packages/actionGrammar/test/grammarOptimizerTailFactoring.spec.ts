@@ -449,7 +449,7 @@ describe("Grammar Optimizer - tail-call spacing regression", () => {
     });
 });
 
-describe("leadingBoundaryMode propagation through tail-call entries", () => {
+describe("leadingSpacingMode propagation through tail-call entries", () => {
     // Mixed spacing modes: outer rule enforces spacing=required while
     // the inner rule uses spacing=none. After tail-factoring, the
     // boundary between outer and inner content must use the outer mode,
@@ -541,10 +541,10 @@ describe("leadingBoundaryMode propagation through tail-call entries", () => {
     //   Start [required]: "do" $(x:<Wrapper>) "end" -> x
     //   Wrapper [none]: [tailCall: ("bar" -> "b") | ("baz" -> "z")]
     //
-    // Without the leadingBoundaryMode fix, the old tailCallEntry
+    // Without the leadingSpacingMode fix, the old tailCallEntry
     // flag would use the wrapper's "none" mode for the leading
     // separator, incorrectly allowing "dobar end" to match.
-    it("single-part tail-call wrapper propagates ancestor leadingBoundaryMode", () => {
+    it("single-part tail-call wrapper propagates ancestor leadingSpacingMode", () => {
         const json: any = [
             // Start rules
             [

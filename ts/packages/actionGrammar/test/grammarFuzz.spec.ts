@@ -83,6 +83,25 @@ function fuzzDescribe(
 
 // ── Fuzz dimensions ───────────────────────────────────────────────────────────
 
+// Original optimizer equivalence fuzz (formerly grammarOptimizerFuzz.spec.ts).
+// Preserves the original seed + config for regression stability.
+fuzzDescribe("Fuzz: optimizer equivalence (literals + ruleRefs)", {
+    seed: 0xc0ffee,
+    count: 40,
+    inputsPerGrammar: 6,
+    features: {
+        literals: true,
+        ruleRefs: true,
+    },
+    generator: {
+        maxRules: 4,
+        maxAlts: 4,
+        maxParts: 4,
+        words: ["a", "b", "c", "d", "e"],
+    },
+    validations: ["optimizer"],
+});
+
 fuzzDescribe("Fuzz: optimizer equivalence (wildcards + values)", {
     seed: 0xf0221,
     count: 30,

@@ -45,9 +45,9 @@ export type FuzzFeatureFlags = {
     wildcards: boolean;
     /** `$(varN:number)` numeric captures. */
     numbers: boolean;
-    /** `(...)?` optional groups. */
+    /** `(...)?` optional groups. NOT YET IMPLEMENTED: accepted but ignored by the generator. */
     optionals: boolean;
-    /** `()*` / `()+` repeat groups. */
+    /** `()*` / `()+` repeat groups. NOT YET IMPLEMENTED: accepted but ignored by the generator. */
     repeats: boolean;
     /** Value expressions after `->` (object literals, binary ops, etc.). */
     values: boolean;

@@ -181,7 +181,7 @@ type ParentMatchState = {
     // when `repeatPartIndex !== undefined`.
     repeatStartIndex?: number | undefined;
     spacingMode: CompiledSpacingMode; // parent rule's spacingMode, restored in MatchState on return from nested rule
-    leadingBoundaryMode: CompiledSpacingMode; // parent rule's leadingBoundaryMode, restored on return from nested rule
+    leadingSpacingMode: CompiledSpacingMode; // parent rule's leadingSpacingMode, restored on return from nested rule
 };
 
 // A wildcard slot awaiting its capture value.  Used on MatchState.pendingWildcard
@@ -402,7 +402,7 @@ export type PendingMatchState = {
     //   - tail-call rules entry: computed from wrapper context
     // Saved/restored in `ParentMatchState` so repeat re-entry and
     // finalize do not observe a stale value.
-    leadingBoundaryMode: CompiledSpacingMode;
+    leadingSpacingMode: CompiledSpacingMode;
 
     spacingMode: CompiledSpacingMode; // active spacing mode for this rule
 
@@ -484,7 +484,7 @@ function captureSnapshot(state: MatchState): SnapshotState {
         parent: state.parent,
         nestedLevel: state.nestedLevel,
         suppressOptionalFork: state.suppressOptionalFork,
-        leadingBoundaryMode: state.leadingBoundaryMode,
+        leadingSpacingMode: state.leadingSpacingMode,
         spacingMode: state.spacingMode,
         index: state.index,
         pendingWildcard: state.pendingWildcard,
@@ -1256,7 +1256,7 @@ export function finalizeNestedRule(
         state.parts = parent.parts;
         state.partIndex = parent.partIndex;
         state.spacingMode = parent.spacingMode;
-        state.leadingBoundaryMode = parent.leadingBoundaryMode;
+        state.leadingSpacingMode = parent.leadingSpacingMode;
 
         // For repeat parts ()*  or )+: after each successful match, queue a state
         // that tries to match the same group again.  suppressOptionalFork
@@ -1426,22 +1426,6 @@ function matchStringPartWithoutWildcard(
     return true;
 }
 
-// Compute the leadingBoundaryMode for a child rule about to be
-// entered at the current state's partIndex.  If the rules part is
-// not the first part (partIndex > 0), the flex-space before it is
-// governed by the current rule's spacing mode.  If it IS the first
-// part and the current rule is top-level (parent === undefined),
-// use the rule's own spacing mode.  Otherwise inherit the current
-// leadingBoundaryMode (the answer was already computed by an
-// ancestor).
-function computeChildLeadingBoundaryMode(
-    state: MatchState,
-): CompiledSpacingMode {
-    return state.partIndex > 0 || state.parent === undefined
-        ? state.spacingMode
-        : state.leadingBoundaryMode;
-}
-
 // Determine the spacing mode that governs the leading separator prefix
 // ([\s\p{P}]*?) for a part at the current position.
 //
@@ -1450,7 +1434,7 @@ function computeChildLeadingBoundaryMode(
 // previous part and this one.
 //
 // For the first part of a nested rule (partIndex === 0, parent exists),
-// `leadingBoundaryMode` provides the answer directly.  It was
+// `leadingSpacingMode` provides the answer directly.  It was
 // precomputed at rule-entry time (non-tail or tail-call) from the
 // parent context and is saved/restored in `ParentMatchState`, so
 // repeat re-entry and backtracking always see the correct value.
@@ -1462,7 +1446,7 @@ export function leadingSpacingMode(state: MatchState): CompiledSpacingMode {
     if (state.partIndex !== 0 || state.parent === undefined) {
         return state.spacingMode;
     }
-    return state.leadingBoundaryMode;
+    return state.leadingSpacingMode;
 }
 
 /**
@@ -1742,7 +1726,7 @@ function enterTailRulesPart(state: MatchState, part: RulesPart): void {
     // would otherwise check (rules.length >= 2, no
     // repeat/optional/variable, member spacingMode matches parent's)
     // are caught at construction time at the offending site.
-    state.leadingBoundaryMode = computeChildLeadingBoundaryMode(state);
+    state.leadingSpacingMode = leadingSpacingMode(state);
     state.name = getNestedStateName(state, part, 0);
     state.parts = rules[0].parts;
     state.value = rules[0].value;
@@ -1870,8 +1854,8 @@ export function matchState(state: MatchState, request: string) {
                     continue;
                 }
 
-                const childLeadingBoundaryMode =
-                    computeChildLeadingBoundaryMode(state);
+                // Compute before saving parent frame (reads current-rule context).
+                const childLeadingSpacingMode = leadingSpacingMode(state);
 
                 // Save the current state to be restored after finishing the nested rule.
                 const parent: ParentMatchState = {
@@ -1890,7 +1874,7 @@ export function matchState(state: MatchState, request: string) {
                     // field doc on `ParentMatchState`.
                     repeatStartIndex: part.repeat ? state.index : undefined,
                     spacingMode: state.spacingMode,
-                    leadingBoundaryMode: state.leadingBoundaryMode,
+                    leadingSpacingMode: state.leadingSpacingMode,
                 };
 
                 // The nested rule needs to track values if the current rule is tracking value AND
@@ -1909,7 +1893,7 @@ export function matchState(state: MatchState, request: string) {
                 state.parent = parent;
                 state.nestedLevel++;
                 state.suppressOptionalFork = undefined; // entering nested rules, clear suppression flag
-                state.leadingBoundaryMode = childLeadingBoundaryMode;
+                state.leadingSpacingMode = childLeadingSpacingMode;
                 state.spacingMode = rules[0].spacingMode;
 
                 // Push a single compressed alternation cursor frame
@@ -1970,7 +1954,7 @@ export function initialMatchState(
         parent: undefined,
         nestedLevel: 0,
         suppressOptionalFork: undefined,
-        leadingBoundaryMode: rules[0].spacingMode,
+        leadingSpacingMode: rules[0].spacingMode,
         spacingMode: rules[0].spacingMode,
         index: 0,
         pendingWildcard: undefined,

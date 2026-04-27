@@ -111,6 +111,7 @@ function isErrorResult(r: unknown): r is { error: string } {
  * without the recommended optimizer passes.
  */
 export function validateOptimizerEquivalence(
+    grammarIndex: number,
     grammarText: string,
     inputs: string[],
     gen: GeneratedGrammar,
@@ -131,7 +132,7 @@ export function validateOptimizerEquivalence(
         });
     } catch (e) {
         results.push({
-            grammarIndex: -1, // caller patches this
+            grammarIndex,
             grammarText,
             validation: "optimizer",
             passed: false,
@@ -171,7 +172,7 @@ export function validateOptimizerEquivalence(
         }
 
         results.push({
-            grammarIndex: -1,
+            grammarIndex,
             grammarText,
             validation: "optimizer",
             input,
@@ -192,6 +193,7 @@ export function validateOptimizerEquivalence(
  * written strings are identical.
  */
 export function validateTextRoundTrip(
+    grammarIndex: number,
     grammarText: string,
     gen: GeneratedGrammar,
 ): FuzzResult {
@@ -214,7 +216,7 @@ export function validateTextRoundTrip(
 
         if (written1 !== written2) {
             return {
-                grammarIndex: -1,
+                grammarIndex,
                 grammarText,
                 validation: "roundtrip-text",
                 passed: false,
@@ -225,14 +227,14 @@ export function validateTextRoundTrip(
             };
         }
         return {
-            grammarIndex: -1,
+            grammarIndex,
             grammarText,
             validation: "roundtrip-text",
             passed: true,
         };
     } catch (e) {
         return {
-            grammarIndex: -1,
+            grammarIndex,
             grammarText,
             validation: "roundtrip-text",
             passed: false,
@@ -245,20 +247,24 @@ export function validateTextRoundTrip(
  * Strip fields that may differ between a freshly compiled Grammar and
  * one that has been serialized/deserialized:
  *   - `regexpCache`: lazily populated at match time.
- *   - `name` on RulesPart: debug-only label, may be absent on the
- *     original but populated after deserialization.
+ *   - `name` on RulesPart (type === "rules"): debug-only label, may be
+ *     absent on the original but populated after deserialization.
  *
  * Both sides are normalized so comparison is purely structural.
  */
 function stripVolatileFields(obj: unknown): unknown {
     if (obj === null || typeof obj !== "object") return obj;
     if (Array.isArray(obj)) return obj.map(stripVolatileFields);
+    const rec = obj as Record<string, unknown>;
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(obj as Record<string, unknown>)) {
+    for (const [k, v] of Object.entries(rec)) {
         if (k === "regexpCache") continue;
-        // RulesPart.name is a debug label that the serializer round-trips
-        // but the compiler may or may not set.  Strip it from both sides.
-        if (k === "name") continue;
+        // RulesPart.name is a debug label that the serializer
+        // round-trips but the compiler may or may not set.  Only
+        // strip from RulesPart objects (type === "rules") to avoid
+        // masking meaningful `name` fields on other node types
+        // (e.g. CompiledVariableValueNode).
+        if (k === "name" && rec.type === "rules") continue;
         out[k] = stripVolatileFields(v);
     }
     return out;
@@ -269,6 +275,7 @@ function stripVolatileFields(obj: unknown): unknown {
  * a structurally identical Grammar.
  */
 export function validateJsonRoundTrip(
+    grammarIndex: number,
     grammarText: string,
     gen: GeneratedGrammar,
 ): FuzzResult {
@@ -285,7 +292,7 @@ export function validateJsonRoundTrip(
         const b = JSON.stringify(stripVolatileFields(restored));
         if (a !== b) {
             return {
-                grammarIndex: -1,
+                grammarIndex,
                 grammarText,
                 validation: "roundtrip-json",
                 passed: false,
@@ -297,14 +304,14 @@ export function validateJsonRoundTrip(
             };
         }
         return {
-            grammarIndex: -1,
+            grammarIndex,
             grammarText,
             validation: "roundtrip-json",
             passed: true,
         };
     } catch (e) {
         return {
-            grammarIndex: -1,
+            grammarIndex,
             grammarText,
             validation: "roundtrip-json",
             passed: false,
@@ -350,22 +357,18 @@ export function runFuzz(config: FuzzConfig): FuzzResult[] {
             switch (validation) {
                 case "optimizer":
                     results = validateOptimizerEquivalence(
+                        g,
                         gen.text,
                         inputs,
                         gen,
                     );
                     break;
                 case "roundtrip-text":
-                    results = [validateTextRoundTrip(gen.text, gen)];
+                    results = [validateTextRoundTrip(g, gen.text, gen)];
                     break;
                 case "roundtrip-json":
-                    results = [validateJsonRoundTrip(gen.text, gen)];
+                    results = [validateJsonRoundTrip(g, gen.text, gen)];
                     break;
-            }
-
-            // Patch grammarIndex into results.
-            for (const r of results) {
-                r.grammarIndex = g;
             }
 
             if (config.verbose) {

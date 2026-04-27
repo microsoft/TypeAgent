@@ -40,7 +40,7 @@ import {
     type FuzzFeatureFlags,
     type FuzzValidationKind,
 } from "./fuzzHarness.js";
-import type { GeneratedGrammar } from "./grammarGenerator.js";
+import type { GeneratedGrammar, GeneratorConfig } from "./grammarGenerator.js";
 
 // ── Flag parsing ──────────────────────────────────────────────────────────────
 
@@ -57,7 +57,7 @@ function printUsage(): void {
         "  --inputs <N>         Extra random inputs per grammar (default: 6)",
         "  --features <csv>     Comma-separated feature flags (default: literals,ruleRefs)",
         "                       Options: literals, ruleRefs, wildcards, numbers,",
-        "                                optionals, repeats, values, spacing",
+        "                                optionals (NYI), repeats (NYI), values, spacing",
         "  --validation <csv>   Comma-separated validations (default: all)",
         "                       Options: optimizer, roundtrip-text, roundtrip-json",
         "  --depth <N>          Max rules / nesting depth (default: 4)",
@@ -250,7 +250,7 @@ type ReproMeta = {
     input?: string;
     error?: string;
     features: FuzzFeatureFlags;
-    generator: { maxRules: number; maxAlts: number; maxParts: number };
+    generator: GeneratorConfig;
 };
 
 /**
@@ -312,6 +312,7 @@ function replayReproCases(dir: string): number {
             case "optimizer": {
                 const inputs = meta.input !== undefined ? [meta.input] : [];
                 results = validateOptimizerEquivalence(
+                    meta.grammarIndex,
                     grammarText,
                     inputs,
                     gen,
@@ -319,15 +320,15 @@ function replayReproCases(dir: string): number {
                 break;
             }
             case "roundtrip-text":
-                results = [validateTextRoundTrip(grammarText, gen)];
+                results = [
+                    validateTextRoundTrip(meta.grammarIndex, grammarText, gen),
+                ];
                 break;
             case "roundtrip-json":
-                results = [validateJsonRoundTrip(grammarText, gen)];
+                results = [
+                    validateJsonRoundTrip(meta.grammarIndex, grammarText, gen),
+                ];
                 break;
-        }
-
-        for (const r of results) {
-            r.grammarIndex = meta.grammarIndex;
         }
 
         const passed = results.every((r) => r.passed);
