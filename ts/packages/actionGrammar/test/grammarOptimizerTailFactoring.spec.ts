@@ -359,7 +359,9 @@ describe("validateTailRulesParts", () => {
         // Permissive (validate: false) load still works (cached path),
         // but the default load throws.
         expect(() => grammarFromJson(json, { validate: false })).not.toThrow();
-        expect(() => grammarFromJson(json)).toThrow(/effective member count >= 2/);
+        expect(() => grammarFromJson(json)).toThrow(
+            /effective member count >= 2/,
+        );
     });
 });
 
@@ -545,40 +547,42 @@ describe("leadingSpacingMode propagation through tail-call entries", () => {
     // flag would use the wrapper's "none" mode for the leading
     // separator, incorrectly allowing "dobar end" to match.
     it("single-part tail-call wrapper propagates ancestor leadingSpacingMode", () => {
-        const json: any = [
-            // Start rules
-            [
-                {
-                    parts: [
-                        { type: "string", value: ["do"] },
-                        { type: "rules", index: 1, variable: "x" },
-                        { type: "string", value: ["end"] },
-                    ],
-                    value: { type: "variable", name: "x" },
-                    spacingMode: "required",
-                },
+        const json: any = {
+            rules: [
+                // Start rules
+                [
+                    {
+                        parts: [
+                            { type: "string", value: ["do"] },
+                            { type: "rules", index: 1, variable: "x" },
+                            { type: "string", value: ["end"] },
+                        ],
+                        value: { type: "variable", name: "x" },
+                        spacingMode: "required",
+                    },
+                ],
+                // Wrapper: single-part, just the tailCall RulesPart
+                [
+                    {
+                        parts: [{ type: "rules", index: 2, tailCall: true }],
+                        spacingMode: "none",
+                    },
+                ],
+                // Tail members
+                [
+                    {
+                        parts: [{ type: "string", value: ["bar"] }],
+                        value: { type: "literal", value: "b" },
+                        spacingMode: "none",
+                    },
+                    {
+                        parts: [{ type: "string", value: ["baz"] }],
+                        value: { type: "literal", value: "z" },
+                        spacingMode: "none",
+                    },
+                ],
             ],
-            // Wrapper: single-part, just the tailCall RulesPart
-            [
-                {
-                    parts: [{ type: "rules", index: 2, tailCall: true }],
-                    spacingMode: "none",
-                },
-            ],
-            // Tail members
-            [
-                {
-                    parts: [{ type: "string", value: ["bar"] }],
-                    value: { type: "literal", value: "b" },
-                    spacingMode: "none",
-                },
-                {
-                    parts: [{ type: "string", value: ["baz"] }],
-                    value: { type: "literal", value: "z" },
-                    spacingMode: "none",
-                },
-            ],
-        ];
+        };
         const grammar = grammarFromJson(json);
 
         // Start's required mode governs the boundary before and after.
