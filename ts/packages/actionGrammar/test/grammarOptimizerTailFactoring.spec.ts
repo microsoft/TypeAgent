@@ -448,3 +448,147 @@ describe("Grammar Optimizer - tail-call spacing regression", () => {
         expect(match(optimized, "1d")).toStrictEqual([1]);
     });
 });
+
+describe("leadingBoundaryMode propagation through tail-call entries", () => {
+    // Mixed spacing modes: outer rule enforces spacing=required while
+    // the inner rule uses spacing=none. After tail-factoring, the
+    // boundary between outer and inner content must use the outer mode,
+    // while boundaries within the tail alternatives use the inner mode.
+    it("parent required, tail-factored child none: outer boundary enforced", () => {
+        const text = `<R> [spacing=none] = $(a:number) $(b:number) -> [a, b]
+                       | $(a:number) d -> a;
+<Start> [spacing=required] = do $(r:<R>) -> r;`;
+        const opts = {
+            startValueRequired: false,
+            enableValueExpressions: true,
+        };
+        const baseline = loadGrammarRules("t.grammar", text, opts);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            ...opts,
+            optimizations: {
+                inlineSingleAlternatives: true,
+                factorCommonPrefixes: true,
+                tailFactoring: true,
+            },
+        });
+        const tailParts = findAllRulesParts(optimized.rules).filter(
+            (rp) => rp.tailCall,
+        );
+        expect(tailParts.length).toBeGreaterThanOrEqual(1);
+
+        // Space between "do" and first number: Start's required mode.
+        // No space between numbers/literals: R's none mode.
+        expect(match(optimized, "do 12")).toStrictEqual(
+            match(baseline, "do 12"),
+        );
+        expect(match(optimized, "do 1d")).toStrictEqual(
+            match(baseline, "do 1d"),
+        );
+        // Space within R's none-mode region is forbidden.
+        expect(match(optimized, "do 1 2")).toStrictEqual(
+            match(baseline, "do 1 2"),
+        );
+        expect(match(optimized, "do 1 2")).toStrictEqual([]);
+        // Missing space before R: Start's required mode rejects.
+        expect(match(optimized, "do12")).toStrictEqual(match(baseline, "do12"));
+        expect(match(optimized, "do12")).toStrictEqual([]);
+    });
+
+    // Reverse: parent optional, tail-factored child required.
+    // The boundary before the child's first part uses the parent's
+    // optional mode, but internal boundaries use the child's required.
+    it("parent optional, tail-factored child required: inner boundary enforced", () => {
+        const text = `<R> [spacing=required] = $(a:number) $(b:number) -> [a, b]
+                       | $(a:number) d -> a;
+<Start> [spacing=optional] = do $(r:<R>) -> r;`;
+        const opts = {
+            startValueRequired: false,
+            enableValueExpressions: true,
+        };
+        const baseline = loadGrammarRules("t.grammar", text, opts);
+        const optimized = loadGrammarRules("t.grammar", text, {
+            ...opts,
+            optimizations: {
+                inlineSingleAlternatives: true,
+                factorCommonPrefixes: true,
+                tailFactoring: true,
+            },
+        });
+        const tailParts = findAllRulesParts(optimized.rules).filter(
+            (rp) => rp.tailCall,
+        );
+        expect(tailParts.length).toBeGreaterThanOrEqual(1);
+
+        // No space before R: Start's optional allows adjacency.
+        expect(match(optimized, "do1 2")).toStrictEqual(
+            match(baseline, "do1 2"),
+        );
+        // With space before R: also fine.
+        expect(match(optimized, "do 1 2")).toStrictEqual(
+            match(baseline, "do 1 2"),
+        );
+        // No space within R: R's required mode rejects.
+        expect(match(optimized, "do12")).toStrictEqual(match(baseline, "do12"));
+        expect(match(optimized, "do12")).toStrictEqual([]);
+    });
+
+    // Directly exercise the latent bug scenario: a single-part
+    // tail-call wrapper (no prefix before the tailCall RulesPart).
+    // This shape is valid per validateTailRulesParts but cannot be
+    // produced by the current optimizer. Constructed via JSON.
+    //
+    // Grammar:
+    //   Start [required]: "do" $(x:<Wrapper>) "end" -> x
+    //   Wrapper [none]: [tailCall: ("bar" -> "b") | ("baz" -> "z")]
+    //
+    // Without the leadingBoundaryMode fix, the old tailCallEntry
+    // flag would use the wrapper's "none" mode for the leading
+    // separator, incorrectly allowing "dobar end" to match.
+    it("single-part tail-call wrapper propagates ancestor leadingBoundaryMode", () => {
+        const json: any = [
+            // Start rules
+            [
+                {
+                    parts: [
+                        { type: "string", value: ["do"] },
+                        { type: "rules", index: 1, variable: "x" },
+                        { type: "string", value: ["end"] },
+                    ],
+                    value: { type: "variable", name: "x" },
+                    spacingMode: "required",
+                },
+            ],
+            // Wrapper: single-part, just the tailCall RulesPart
+            [
+                {
+                    parts: [{ type: "rules", index: 2, tailCall: true }],
+                    spacingMode: "none",
+                },
+            ],
+            // Tail members
+            [
+                {
+                    parts: [{ type: "string", value: ["bar"] }],
+                    value: { type: "literal", value: "b" },
+                    spacingMode: "none",
+                },
+                {
+                    parts: [{ type: "string", value: ["baz"] }],
+                    value: { type: "literal", value: "z" },
+                    spacingMode: "none",
+                },
+            ],
+        ];
+        const grammar = grammarFromJson(json);
+
+        // Start's required mode governs the boundary before and after.
+        expect(match(grammar, "do bar end")).toStrictEqual(["b"]);
+        expect(match(grammar, "do baz end")).toStrictEqual(["z"]);
+
+        // The wrapper's none mode must NOT leak to the leading
+        // boundary. Without the fix, these would incorrectly match.
+        expect(match(grammar, "dobar end")).toStrictEqual([]);
+        expect(match(grammar, "dobaz end")).toStrictEqual([]);
+        expect(match(grammar, "do barend")).toStrictEqual([]);
+    });
+});
