@@ -79,7 +79,8 @@ v1 value. Upgrade path is additive (add `parts?: PartDiff[]` to
 
 v1 emits per-rule and per-part hit counts **keyed by source location**,
 not by abstract IDs alone. This requires chunk 02's per-part `pos` /
-`end` guarantee and chunk 01's `GrammarDebugInfo.positions` map.
+`end` guarantee and chunk 01's `GrammarDebugInfo.rules` /
+`GrammarDebugInfo.parts` maps (emitted by Track A.5).
 
 ```ts
 type CoverageReport = {

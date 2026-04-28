@@ -5,9 +5,9 @@ Owner: TBD.
 Depends on: 01 (A.1 snapshot loader), 05, ADR
 [0003 - grammar snapshot transport](./decisions/0003-grammar-snapshot.md).
 
-Maps to PLAN: dispatcher RPC = [Track F](./PLAN.md#track-f---dispatcher-snapshot-parallel-after-0c--a1)
-(can land any time after A.1, independent of host work). Shell panel =
-[Track H](./PLAN.md#track-h---shell-integration-after-gate-parallel-with-track-g),
+Maps to PLAN: dispatcher RPC = [Track F](./PLAN.md#track-f---dispatcher-snapshot-parallel-after-0c--a1--a5)
+(can land any time after A.1 and A.5, independent of host work). Shell
+panel = [Track H](./PLAN.md#track-h---shell-integration-after-gate-parallel-with-track-g),
 which starts after the Phase 2 decision gate and runs in parallel with
 Track G.
 

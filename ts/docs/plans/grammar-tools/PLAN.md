@@ -306,14 +306,15 @@ ADR 0002 ┘
    │
    ▼
 Chunk 02 (0b) ──┬──► A.2 ──► C.1
-               ├──► B.2 ──► C.6 (with B.1 + D.1–D.2)
-               └──► B.3 ──► C.7
+               ├──► A.5 (debug-info emission) ──┬──► B.3 ──► C.7
+               │                                 └──► F.1 (with A.1)
+               └──► B.2 ──► C.6 (with B.1 + D.1–D.2)
 
 Chunk 01 scaffold (0c) ──┬──► A.1, A.3, A.4 ──► C.2–C.5
                         ├──► B.1, B.4 ──► C.6, C.8
                         └──► E.0–E.5 (parallel CLI smoke tests)
 
-F.1 (dispatcher RPC) is independent after A.1 lands.
+F.1 (dispatcher RPC) needs A.1 + A.5 (per ADR 0003).
 
 Decision gate (after C.\*) ──► G.\*  │
                            └──► H.\*  ┘ parallel

@@ -3,8 +3,8 @@
 Status: **Stub** - design pending.
 Owner: TBD.
 Depends on: ADR [0002 - trace hook strategy](./decisions/0002-trace-hook.md).
-Blocks: 01 (A.2 diagnostics, B.2 trace, B.3 coverage), 03 (C.6 / C.7),
-05, 07.
+Blocks: 01 (A.2 diagnostics, A.5 debug-info emission, B.2 trace, B.3
+coverage), 03 (C.6 / C.7), 05, 07.
 
 Maps to PLAN: [Critical path 0b](./PLAN.md#critical-path-track-0). This
 chunk is on the critical path - land it first.
@@ -68,8 +68,8 @@ export type PartId = number;
 `PartId` is a **compile-time integer assigned on the source AST at
 parse time** and threaded through every `grammarOptimizer.ts` pass.
 Each `GrammarPart` carries an `id?: number` field; the lookup table
-lives in `GrammarDebugInfo.positions: Map<PartId, SourceLocation>`
-(see chunk 01).
+lives in `GrammarDebugInfo.parts: Map<PartId, SourceLocation>`
+(see chunk 01; rule locations live in the sibling `rules` map).
 
 **Why not AST paths or rule-local indices.** The optimizer reshapes
 the compiled AST significantly (`dispatchifyAlternations` introduces
