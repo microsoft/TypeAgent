@@ -16,6 +16,7 @@ export type GithubCliActions =
     | GistListAction
     | IssueCreateAction
     | IssueCloseAction
+    | IssueDeleteAction
     | IssueReopenAction
     | IssueListAction
     | IssueViewAction
@@ -27,6 +28,7 @@ export type GithubCliActions =
     | PrListAction
     | PrViewAction
     | PrCheckoutAction
+    | PrChecksAction
     | ProjectCreateAction
     | ProjectDeleteAction
     | ProjectListAction
@@ -60,6 +62,8 @@ export type GithubCliActions =
     | SecretCreateAction
     | SshKeyAddAction
     | StatusPrintAction
+    | MyAssignedIssuesAction
+    | IssueAddLabelAction
     | VariableCreateAction
     | DependabotAlertsAction;
 
@@ -184,6 +188,15 @@ export type IssueCloseAction = {
     };
 };
 
+// Permanently delete a GitHub issue (uses `gh issue delete --yes`).
+export type IssueDeleteAction = {
+    actionName: "issueDelete";
+    parameters: {
+        number: number;
+        repo?: string;
+    };
+};
+
 export type IssueReopenAction = {
     actionName: "issueReopen";
     parameters: {
@@ -206,11 +219,23 @@ export type IssueListAction = {
     };
 };
 
+// View / open a specific GitHub issue by number.
+// USE THIS for: "show issue 2222", "view issue #42 in microsoft/TypeAgent", "open issue 2267".
+// DO NOT USE for recall/conversation queries like "remind me which issue we were just looking at",
+// "what issue was that", or "which issue did we open" — those are conversation-history questions
+// and should be routed to dispatcher lookup/reasoning, not to a fresh `gh issue view` call.
+// Only invoke when the user supplies (or has just referenced via "that issue" entity resolution)
+// a real issue number. Never fabricate a placeholder number or repo.
 export type IssueViewAction = {
     actionName: "issueView";
     parameters: {
+        // The issue number. Omit only when the user has clearly referenced an issue via entity
+        // resolution ("that issue", "the issue we just opened") and the dispatcher will substitute
+        // it. Never invent a number.
         number?: number;
 
+        // OWNER/REPO slug (e.g. "microsoft/TypeAgent"). Omit unless the user names the repo.
+        // Never use placeholders like "example/repo".
         repo?: string;
     };
 };
@@ -273,11 +298,23 @@ export type PrListAction = {
     };
 };
 
+// View / open a specific GitHub pull request by number.
+// USE THIS for: "show PR 2196", "view pull request #42", "open PR 2196 in microsoft/TypeAgent".
+// DO NOT USE for recall/conversation queries like "remind me which PR we were just looking at",
+// "what PR was that", or "which PR did we open" — those are conversation-history questions and
+// should be routed to dispatcher lookup/reasoning, not to a fresh `gh pr view` call.
+// Only invoke when the user supplies (or has just referenced via "that PR" entity resolution)
+// a real PR number. Never fabricate a placeholder number or repo.
 export type PrViewAction = {
     actionName: "prView";
     parameters: {
+        // The pull request number. Omit only when the user has clearly referenced a PR via
+        // entity resolution ("that PR", "the PR we just opened") and the dispatcher will
+        // substitute it. Never invent a number.
         number?: number;
 
+        // OWNER/REPO slug (e.g. "microsoft/TypeAgent"). Omit unless the user names the repo.
+        // Never use placeholders like "example/repo".
         repo?: string;
     };
 };
@@ -288,6 +325,14 @@ export type PrCheckoutAction = {
         number?: number;
 
         branch?: string;
+    };
+};
+
+export type PrChecksAction = {
+    actionName: "prChecks";
+    parameters: {
+        number: number;
+        repo?: string;
     };
 };
 
@@ -474,6 +519,17 @@ export type LabelCreateAction = {
     };
 };
 
+export type IssueAddLabelAction = {
+    actionName: "issueAddLabel";
+    parameters: {
+        number: number;
+
+        label: string;
+
+        repo?: string;
+    };
+};
+
 export type LicensesViewAction = {
     actionName: "licensesView";
     parameters: {};
@@ -546,6 +602,16 @@ export type SshKeyAddAction = {
 export type StatusPrintAction = {
     actionName: "statusPrint";
     parameters: {};
+};
+
+// List issues assigned to the current authenticated user across all
+// repositories. Maps to `gh search issues --assignee @me --state open`.
+export type MyAssignedIssuesAction = {
+    actionName: "myAssignedIssues";
+    parameters: {
+        // Maximum number of issues to return (default 20)
+        limit?: number;
+    };
 };
 
 export type VariableCreateAction = {

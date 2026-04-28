@@ -31,11 +31,20 @@ export type ColorTheme =
     | "Abyss"
     | "Default High Contrast Light";
 
-// Change the color scheme of the editor
+// ACTION: Change the VS Code editor's color theme (NOT a system / Windows desktop theme).
+// USE THIS for any request about an EDITOR / IDE / "code" / "vscode" / syntax color theme,
+// e.g. "change my vscode color theme to Monokai", "set the editor theme to Solarized Dark",
+// "switch theme to Dark+", "use the Monokai theme in vscode".
+// USE THIS even when the user just says "change my color theme to <name>" — by default
+// the user is talking about the editor they are looking at, NOT a Windows desktop theme.
+// The recognized names are common VS Code theme names: "Light+", "Dark+", "Monokai",
+// "Monokai Dimmed", "Solarized Dark", "Solarized Light", "Quiet Light", "Red", "Tomorrow Night Blue",
+// "Kimbie Dark", "Abyss", "Default High Contrast Light", etc.
+// DO NOT route these to a desktop / Windows personalization "ApplyTheme" action.
 export type ChangeColorThemeAction = {
     actionName: "changeColorScheme";
     parameters: {
-        // e.g., "Light+", "Dark+", "Monokai", "Solarized Dark", "Solarized Light"
+        // The VS Code color theme name, e.g. "Monokai", "Solarized Dark", "Dark+".
         theme: ColorTheme;
     };
 };
@@ -86,17 +95,33 @@ export type CodeLanguage =
     | "typeScript"
     | "markdown";
 
-// Create a new file, this is not same as opening a file or finding a file in the workspace
+// ACTION: Create a new file in the editor.
+// USE THIS for any "create a new <lang> file called X with <content>", "make a new file",
+// "new typescript/python/markdown file" — for both untitled scratch files and named files.
+// This is the SINGLE canonical action for creating files. Do NOT emit a schema name like
+// "code-editor" or "code-general" as the actionName — always use "newFile" exactly.
+// Distinct from opening or finding an existing file in the workspace.
+//
+// EXAMPLES (always route these to newFile):
+//   "create a new typescript file called scratch.ts with a hello world function"
+//     → { actionName: "newFile", parameters: { fileName: "scratch.ts", language: "typeScript",
+//          content: "function helloWorld() { console.log('Hello, World!'); }\n" } }
+//   "make a new python file"
+//     → { actionName: "newFile", parameters: { fileName: "Untitled", language: "python", content: "" } }
+//   "new markdown file called notes.md"
+//     → { actionName: "newFile", parameters: { fileName: "notes.md", language: "markdown", content: "" } }
+//
+// DO NOT route file-creation requests to dispatcher.reasoning, dispatcher.unknown,
+// dispatcher.clarify, or any code-editor/code-general sub-schema. Always pick newFile here.
 export type NewFileAction = {
     actionName: "newFile";
     parameters: {
-        fileName: string; // If not filename is provided, "Untitled" is used
+        fileName: string; // If no filename is provided, "Untitled" is used
         language: CodeLanguage; // plaintext, html, python, javaScript, typeScript, markdown etc.
-        // Content of the new file is based on language and user input, default is "Hello, World!",
-        // for ex: Create a markdown file with a list of top ten AI papers and links should fill
-        // the content field with a list of papers and their links from
-        // arxiv. If the user asks to create a python file with code to merge two arrays of strings
-        // the content field should be filled with the python function to merge the arrays
+        // Content of the new file based on language and user input, default is "Hello, World!".
+        // For "Create a markdown file with a list of top ten AI papers and links" → fill with a
+        // list of papers and arxiv links. For "Create a python file with code to merge two arrays
+        // of strings" → fill with the python function to merge the arrays.
         content: string;
     };
 };

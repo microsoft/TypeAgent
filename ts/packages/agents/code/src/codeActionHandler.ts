@@ -23,6 +23,22 @@ import {
 
 const debug = registerDebug("typeagent:code");
 
+// The Coda WebSocket server is shared across all sessions in this agent process.
+// It is created on first enable and closed when the last session disables the
+// code agent. Storing it per-session caused "No websocket connection" errors
+// when an action ran on a session different from the one that originally
+// created the server (e.g. after schema enable on a different conversation),
+// and also masked EADDRINUSE failures from a second bind attempt on port 8082.
+let sharedWebSocketServer: CodeAgentWebSocketServer | undefined;
+let sharedWebSocketRefCount = 0;
+const sharedPendingCalls: Map<
+    number,
+    {
+        resolve: (value?: undefined) => void;
+        context?: ActionContext<CodeActionContext> | undefined;
+    }
+> = new Map();
+
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeCodeContext,
@@ -39,7 +55,7 @@ type CodeActionContext = {
         number,
         {
             resolve: (value?: undefined) => void;
-            context: ActionContext<CodeActionContext>;
+            context?: ActionContext<CodeActionContext> | undefined;
         }
     >;
 };
@@ -60,28 +76,26 @@ async function updateCodeContext(
 ): Promise<void> {
     const agentContext = context.agentContext;
     if (enable) {
-        agentContext.enabled.add(schemaName);
-        if (agentContext.webSocketServer?.isConnected()) {
+        if (agentContext.enabled.has(schemaName)) {
             return;
         }
+        agentContext.enabled.add(schemaName);
 
-        if (!context.agentContext.webSocketServer) {
+        if (!sharedWebSocketServer) {
             const port = parseInt(process.env["CODE_WEBSOCKET_PORT"] || "8082");
-            const webSocketServer = new CodeAgentWebSocketServer(port);
-            agentContext.webSocketServer = webSocketServer;
-            agentContext.pendingCall = new Map();
+            sharedWebSocketServer = new CodeAgentWebSocketServer(port);
 
-            webSocketServer.onMessage = (message: string) => {
+            sharedWebSocketServer.onMessage = (message: string) => {
                 try {
                     const data = JSON.parse(message) as WebSocketMessageV2;
 
                     if (data.id !== undefined && data.result !== undefined) {
-                        const pendingCall = agentContext.pendingCall.get(
+                        const pendingCall = sharedPendingCalls.get(
                             Number(data.id),
                         );
 
                         if (pendingCall) {
-                            agentContext.pendingCall.delete(Number(data.id));
+                            sharedPendingCalls.delete(Number(data.id));
                             const { resolve, context } = pendingCall;
                             if (context?.actionIO) {
                                 context.actionIO.setDisplay(data.result);
@@ -93,15 +107,25 @@ async function updateCodeContext(
                     debug("Error parsing WebSocket message:", error);
                 }
             };
-        } else {
-            agentContext.enabled.delete(schemaName);
-            if (agentContext.enabled.size === 0) {
-                const webSocketServer = context.agentContext.webSocketServer;
-                if (webSocketServer) {
-                    webSocketServer.close();
-                }
-
-                delete context.agentContext.webSocketServer;
+        }
+        sharedWebSocketRefCount++;
+        agentContext.webSocketServer = sharedWebSocketServer;
+        agentContext.pendingCall = sharedPendingCalls;
+    } else {
+        if (!agentContext.enabled.has(schemaName)) {
+            return;
+        }
+        agentContext.enabled.delete(schemaName);
+        if (agentContext.enabled.size === 0) {
+            agentContext.webSocketServer = undefined;
+            sharedWebSocketRefCount = Math.max(
+                0,
+                sharedWebSocketRefCount - 1,
+            );
+            if (sharedWebSocketRefCount === 0 && sharedWebSocketServer) {
+                sharedWebSocketServer.close();
+                sharedWebSocketServer = undefined;
+                sharedPendingCalls.clear();
             }
         }
     }
@@ -311,8 +335,23 @@ async function executeCodeAction(
 
             const callId = agentContext.nextCallId++;
             return new Promise<undefined>((resolve) => {
+                const timeoutMs = 5000;
+                const timeoutHandle = setTimeout(() => {
+                    if (agentContext.pendingCall.has(callId)) {
+                        agentContext.pendingCall.delete(callId);
+                        if (context.actionIO) {
+                            context.actionIO.setDisplay(
+                                `No connected coda extension handled action "${action.actionName}". If multiple VS Code windows are open, reload the others (Ctrl+Shift+P → Developer: Reload Window) so they pick up the latest coda bundle.`,
+                            );
+                        }
+                        resolve(undefined);
+                    }
+                }, timeoutMs);
                 agentContext.pendingCall.set(callId, {
-                    resolve,
+                    resolve: (value?: undefined) => {
+                        clearTimeout(timeoutHandle);
+                        resolve(value);
+                    },
                     context,
                 });
                 webSocketServer.broadcast(

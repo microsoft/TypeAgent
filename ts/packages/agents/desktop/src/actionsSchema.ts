@@ -75,7 +75,12 @@ export type MinimizeWindowAction = {
     };
 };
 
-// Sets focus to a program window on a Windows Desktop
+// Sets focus to a program window on a Windows Desktop.
+// USE THIS for any of: "switch to <app>", "bring <app> to the foreground",
+// "focus on <app>", "go to <app>", "open <app>" when the app is already running.
+// The argument is an APPLICATION/WINDOW name (e.g. "Code", "Visual Studio Code",
+// "Chrome", "Outlook"), NOT a song or device. Window-focus requests are NEVER
+// music playback — do NOT route to player playTrack/selectDevice for these.
 export type SwitchToWindowAction = {
     actionName: "SwitchTo";
     parameters: {
@@ -135,11 +140,18 @@ export type ChangeThemeModeAction = {
     };
 };
 
-// Applies a Windows theme by name (e.g. "Captured Motion", "Glow", "Sunrise") or file path. Use this when the user wants to switch to a specific named theme.
+// ACTION: Apply a Windows DESKTOP theme (a .theme file or a named Windows personalization theme
+// like "Captured Motion", "Glow", "Sunrise") — these affect the WINDOWS WALLPAPER / SOUNDS /
+// CURSORS / WINDOW CHROME, not editor syntax colors.
+// USE THIS only when the user explicitly references the WINDOWS DESKTOP, WALLPAPER, SYSTEM, or
+// PERSONALIZATION theme, e.g. "change my windows theme to Glow", "apply the Sunrise wallpaper theme".
+// DO NOT USE for VS Code / editor / IDE color themes (e.g. "Monokai", "Solarized Dark", "Dark+",
+// "Light+") — those are editor color themes and must be handled by the code agent's
+// `changeColorScheme` action, NOT by ApplyTheme.
 export type ApplyThemeAction = {
     actionName: "ApplyTheme";
     parameters: {
-        filePath: string; // The theme name or .theme file path to apply (use "previous" to revert)
+        filePath: string; // The Windows theme name or .theme file path to apply (use "previous" to revert). Never a VS Code editor theme like "Monokai".
     };
 };
 

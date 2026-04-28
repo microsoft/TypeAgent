@@ -54,7 +54,11 @@ export interface PlayRandomAction {
     };
 }
 
-// Play a specific track
+// Play a specific track. ONLY for music playback requests where the user
+// clearly names a song (e.g. "play Bohemian Rhapsody", "play Yesterday by
+// the Beatles"). DO NOT use for "switch to <app>", "focus on <app>",
+// "open <app>", or other application/window focus requests — those go to
+// the desktop SwitchTo action.
 export interface PlayTrackAction {
     actionName: "playTrack";
     parameters: {

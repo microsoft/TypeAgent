@@ -4,12 +4,18 @@
 import { CodeActions } from "./codeActionsSchema.ts";
 
 // Start rule - all available actions
-<Start> : CodeActions = <changeColorScheme> | <splitEditor> | <changeEditorLayout> | <newFile> | <launchVSCode>;
+<Start> : CodeActions = <changeColorScheme> | <changeColorSchemeTo> | <splitEditor> | <splitEditorSimple> | <changeEditorLayout> | <newFile> | <launchVSCode>;
 
 // Main action rules
 <changeColorScheme> = <Polite> ('change' | 'switch' | 'set') ('to' | 'the')? $(theme:string) ('color scheme' | 'theme') -> { actionName: "changeColorScheme", parameters: { theme: theme } };
 
+// Theme name AFTER 'to': "change my [vscode] color theme to Monokai", "set the editor theme to Solarized Dark"
+<changeColorSchemeTo> = <Polite> ('change' | 'switch' | 'set') ('my' | 'the')? ('vscode' | 'code' | 'editor')? ('color scheme' | 'color theme' | 'theme') 'to' $(theme:string) -> { actionName: "changeColorScheme", parameters: { theme: theme } };
+
 <splitEditor> = <Polite> 'split' ('the'? 'editor')? $(direction:string) ('and'? ('open' | 'put' | 'place'))? $(fileName:string) ('in' | 'on' | 'to') 'the'? $(editorPosition:string) ('side' | 'panel' | 'half')? -> { actionName: "splitEditor", parameters: { direction: direction, editorPosition: editorPosition, fileName: fileName } };
+
+// Direction-only split for the active editor: "split the editor to the right", "split editor right"
+<splitEditorSimple> = <Polite> 'split' ('the')? 'editor' ('to' 'the'?)? $(direction:string) ('side' | 'panel' | 'half')? -> { actionName: "splitEditor", parameters: { direction: direction } };
 
 <changeEditorLayout> = <Polite> ('change' | 'switch' | 'set' | 'go back') ('to' | 'the'? 'editor' 'to')? ('a'? | 'up')? $(columnCount:string) ('column' | 'pane') ('layout' | 'view' | 'mode')? -> { actionName: "changeEditorLayout", parameters: { columnCount: columnCount } };
 

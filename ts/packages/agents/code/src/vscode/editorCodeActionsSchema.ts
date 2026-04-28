@@ -13,21 +13,21 @@ export type EditorCodeActions =
     | EditorActionSaveCurrentFile
     | EditorActionSaveAllFiles;
 
-// Action to create a new file in the editor
+// DEPRECATED in favor of the main code agent's `newFile` action. Do NOT use this for new
+// "create a file" / "make a new file" requests — those go to `newFile` in the main code schema.
+// Kept only for legacy editor-tooling integrations that need the extended folder/untitled options.
 export type EditorActionCreateFile = {
     actionName: "createFile";
     parameters: {
-        fileName?: string; // "utils.ts"
-        // Name of the folder to create the file in (e.g., "src")
+        fileName?: string;
         folderName?: string;
-        // Optional: restrict to folders under this path or name
         folderRelativeTo?: string;
-        language?: string; // "typescript", "python", "csharp", "javascript" etc.
-        untitled?: boolean; // true → don't save to disk
-        openInEditor?: boolean; // default: true
-        content?: string; // actual content to write to the file
-        overwriteIfExists?: boolean; // default: false
-        focusExistingIfOpen?: boolean; // default: true
+        language?: string;
+        untitled?: boolean;
+        openInEditor?: boolean;
+        content?: string;
+        overwriteIfExists?: boolean;
+        focusExistingIfOpen?: boolean;
     };
 };
 

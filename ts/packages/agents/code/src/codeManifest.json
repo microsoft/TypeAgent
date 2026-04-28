@@ -30,7 +30,7 @@
     },
     "code-general": {
       "schema": {
-        "description": "Code agent that helps you perform actions like finding a file, go to a symbol or a line in a file, Open new vscode window, show the command palette, user settings json etc.",
+        "description": "Code agent that helps you navigate within an already-open editor: find a file in the workspace, go to a symbol or line, open a new vscode window, show the command palette, open user settings json, etc. Does NOT create files (use the main 'code' schema's newFile action) and does NOT handle TypeAgent chat conversations.",
         "originalSchemaFile": "./vscode/generalActionsSchema.ts",
         "schemaFile": "../dist/generalSchema.pas.json",
         "schemaType": "CodeGeneralActions"
@@ -38,7 +38,7 @@
     },
     "code-editor": {
       "schema": {
-        "description": "Code agent that helps you perform vscode editor actions like create a new file, go to a reference, reveal a declaration, clipboard copy or paste, add a comment line etc.",
+        "description": "Code agent for in-editor refactor actions: insert/move cursor, fix code problems, generate code with Copilot, save current/all files. Does NOT create new files (use the main 'code' schema's newFile action instead).",
         "originalSchemaFile": "./vscode/editorCodeActionsSchema.ts",
         "schemaFile": "../dist/editorSchema.pas.json",
         "schemaType": "EditorCodeActions"

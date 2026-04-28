@@ -268,12 +268,48 @@ export async function handleBaseEditorActions(
 
     switch (actionName) {
         case "newFile": {
-            const document = await vscode.workspace.openTextDocument({
-                language: actionData.language,
-                content: actionData.content,
-            });
-            await vscode.window.showTextDocument(document);
-            actionResult.message = "New file created";
+            const fileName: string | undefined = actionData.fileName;
+            const content: string = actionData.content ?? "";
+            const language: string | undefined = actionData.language;
+
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            const hasRealName =
+                typeof fileName === "string" &&
+                fileName.trim().length > 0 &&
+                fileName.trim().toLowerCase() !== "untitled";
+
+            if (workspaceFolder && hasRealName) {
+                const fileUri = vscode.Uri.joinPath(
+                    workspaceFolder.uri,
+                    fileName!.trim(),
+                );
+                try {
+                    await vscode.workspace.fs.stat(fileUri);
+                    actionResult.message = `File ${fileName} already exists`;
+                    actionResult.handled = false;
+                    break;
+                } catch {
+                    // File does not exist — proceed to create it.
+                }
+                const encoder = new TextEncoder();
+                await vscode.workspace.fs.writeFile(
+                    fileUri,
+                    encoder.encode(content),
+                );
+                const document =
+                    await vscode.workspace.openTextDocument(fileUri);
+                await vscode.window.showTextDocument(document);
+                actionResult.message = `Created ${fileName}`;
+            } else {
+                const document = await vscode.workspace.openTextDocument({
+                    language,
+                    content,
+                });
+                await vscode.window.showTextDocument(document);
+                actionResult.message = hasRealName
+                    ? `Opened untitled file (no workspace open to save ${fileName})`
+                    : "New untitled file created";
+            }
             break;
         }
 
