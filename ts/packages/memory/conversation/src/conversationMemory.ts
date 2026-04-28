@@ -493,7 +493,10 @@ async function safeWriteConversationFile(
         try {
             await fs.promises.rename(src, bak);
             backups.push({ src, bak });
-        } catch {
+        } catch (err: any) {
+            if (err?.code !== "ENOENT") {
+                throw err;
+            }
             // File doesn't exist yet — no backup needed for this suffix.
         }
     }
@@ -505,8 +508,11 @@ async function safeWriteConversationFile(
         for (const { src, bak } of backups) {
             try {
                 await fs.promises.rename(bak, src);
-            } catch {
-                // Ignore restore errors; best-effort.
+            } catch (restoreErr: any) {
+                if (restoreErr?.code !== "ENOENT") {
+                    throw restoreErr;
+                }
+                // Backup file not found — nothing to restore for this suffix.
             }
         }
         throw err;

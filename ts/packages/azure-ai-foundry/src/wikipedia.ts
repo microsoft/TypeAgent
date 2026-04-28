@@ -102,7 +102,7 @@ export async function getPageObject(
     locale: string = "en",
 ) {
     const response = await fetch(
-        `${config.endpoint}core/v1/wikipedia/${locale}/page/${title}/bare`,
+        `${config.endpoint}core/v1/wikipedia/${locale}/page/${encodeWikipediaTitle(title)}/bare`,
         { method: "GET", headers: await config.getAPIHeaders() },
     );
 
