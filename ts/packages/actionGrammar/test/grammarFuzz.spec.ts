@@ -251,17 +251,17 @@ fuzzDescribe("Fuzz: tail-call promote shapes (optimizer equivalence)", {
     count: 40,
     features: {
         partKinds: {
-            literal: 2,
+            literal: 1,
             ruleRef: 3,
-            nestedRuleRef: 1,
+            nestedRuleRef: 2,
+            wildcard: 1,
+            number: 1,
         },
-        // Modest value-attach probability surfaces the substitution
+        // High value-attach probability surfaces the substitution
         // branch of promote (parent value references the trailing
-        // capture); rules without a value exercise the forwarding
-        // branch.  Higher values combined with high ruleRef weight
-        // produce generator-level "referenced rule has no value"
-        // compile errors that aren't promote-pass issues.
-        values: { attachProb: 0.4 },
+        // capture); the forwarding branch (no parent value) shows up
+        // on the rules where not every alt attached a value.
+        values: { attachProb: 0.7 },
     },
     validations: ["optimizer"],
 });
