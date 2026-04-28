@@ -66,6 +66,10 @@ export class PartialCompletion {
     private lastGeneration: number = -1;
     private lastPrefix: string = "";
 
+    // User's preferred mode for free-text input.  `@`-prefixed input
+    // always uses the dropdown menu regardless of this preference.
+    private userInline: boolean;
+
     private readonly cleanupEventListeners: () => void;
     constructor(
         private readonly container: HTMLDivElement,
@@ -74,6 +78,7 @@ export class PartialCompletion {
         inline: boolean = true,
         onToggleMode?: () => void,
     ) {
+        this.userInline = inline;
         // Create controller first.
         this.controller = createCompletionController(dispatcher);
 
@@ -96,7 +101,15 @@ export class PartialCompletion {
                 `onUpdate: ${state ? `prefix='${state.prefix}' items=${state.items.length}` : "hidden"}`,
             );
             if (state) {
+                // Pick effective mode based on the actual input being
+                // completed.  Done here (rather than eagerly in update())
+                // so the UI is only switched when we have something to
+                // show, avoiding a flash of empty state.
+                const effectiveInline = this.getEffectiveInline();
+                const modeChanged = this.searchMenu.switchMode(effectiveInline);
+
                 if (
+                    modeChanged ||
                     state.generation !== this.lastGeneration ||
                     state.prefix !== this.lastPrefix
                 ) {
@@ -184,12 +197,20 @@ export class PartialCompletion {
     }
 
     public switchMode(newInline: boolean) {
-        this.searchMenu.switchMode(newInline);
+        // Toggle reflects the user's free-text preference; for `@`-prefixed
+        // input we always stay in dropdown mode.
+        this.userInline = newInline;
+        const liveInline = this.getEffectiveInline();
+        this.searchMenu.switchMode(liveInline);
         // Always full render after mode switch (new UI instance).
         const state = this.controller.getCompletionState();
         if (state) {
             this.searchMenu.render(state.prefix, state.items);
         }
+    }
+
+    private getEffectiveInline(): boolean {
+        return this.previousInput.startsWith("@") ? false : this.userInline;
     }
 
     public close() {
@@ -334,10 +355,20 @@ export class PartialCompletion {
             return;
         }
 
-        const replaceText =
+        const quotedText =
             item.needQuotes !== false && /\s/.test(item.selectedText)
                 ? `"${item.selectedText.replaceAll('"', '\\"')}"`
                 : item.selectedText;
+
+        // Append a trailing space so the controller advances to the next
+        // completion level (e.g. "@list" → "@list " → subcommands) and
+        // the user can immediately type the next token.  Skip when the
+        // inserted text ends with a non-alphanumeric prefix character
+        // (e.g. the "@" Command Prefix item) where a space would break
+        // the command syntax.
+        const lastChar = quotedText.slice(-1);
+        const appendSpace = /[A-Za-z0-9_"'\)\]]/.test(lastChar);
+        const replaceText = appendSpace ? `${quotedText} ` : quotedText;
 
         const offset = this.getCurrentInput().length - completionPrefix.length;
         const leafNode = getLeafNode(this.input.getTextEntry(), offset);
@@ -393,10 +424,33 @@ export class PartialCompletion {
         // Clear previousInput so auto-detection picks "forward" for the
         // post-selection update (the new input won't be a prefix of "").
         this.previousInput = "";
-        this.update(false);
+        // Defer the refresh fetch to the next animation frame so that
+        // the browser has time to apply layout for the inserted text
+        // (Chromium can return zero ClientRects for a caret immediately
+        // after a trailing space until layout settles, which causes
+        // SearchMenu.render() to bail with "invalid rects" and hide).
+        requestAnimationFrame(() => {
+            if (!this.closed) {
+                this.update(false);
+            }
+        });
     }
 
     public handleSpecialKeys(event: KeyboardEvent) {
+        // Ctrl+Space: explicitly reactivate the menu (works even when
+        // the menu is currently hidden, e.g. after Escape).
+        if (event.key === " " && event.ctrlKey && !event.altKey && !event.metaKey) {
+            const input = this.getCurrentInputForCompletion();
+            const direction: CompletionDirection =
+                input.length < this.previousInput.length &&
+                this.previousInput.startsWith(input)
+                    ? "backward"
+                    : "forward";
+            this.previousInput = input;
+            this.controller.show(input, direction);
+            event.preventDefault();
+            return true;
+        }
         if (!this.searchMenu.isActive()) {
             return false;
         }

@@ -45,9 +45,9 @@ export class SearchMenu {
               : new LocalSearchMenuUI(this.onCompletion);
     }
 
-    public switchMode(newInline: boolean): void {
+    public switchMode(newInline: boolean): boolean {
         if (this.inline === newInline) {
-            return;
+            return false;
         }
         if (this.searchMenuUI) {
             this.searchMenuUI.close();
@@ -55,6 +55,7 @@ export class SearchMenu {
         }
         this.inline = newInline;
         this.toggle?.setDirection(newInline ? "expand" : "collapse");
+        return true;
     }
 
     // ── Rendering ───────────────────────────────────────────────────────────────
@@ -140,7 +141,18 @@ export class SearchMenu {
             return true;
         }
 
-        if (event.key === "Enter" || event.key === "Tab") {
+        if (event.key === "Tab") {
+            this.searchMenuUI.selectCompletion();
+            event.preventDefault();
+            return true;
+        }
+
+        // In dropdown mode, Enter accepts the highlighted item (and
+        // therefore does NOT submit the request).  In inline mode, we
+        // intentionally let Enter fall through to submit the request,
+        // matching the existing UX where ghost text is only accepted
+        // by Tab.
+        if (event.key === "Enter" && !this.inline && this._active) {
             this.searchMenuUI.selectCompletion();
             event.preventDefault();
             return true;
