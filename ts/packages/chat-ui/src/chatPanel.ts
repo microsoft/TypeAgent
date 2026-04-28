@@ -18,6 +18,46 @@ import {
 } from "./platformAdapter.js";
 
 /**
+ * Default per-agent emoji map used when a host calls add/replaceAgentMessage
+ * without an explicit `sourceIcon`. Sourced from the manifest emojiChar values
+ * in ts/packages/agents/* /src/*Manifest.json. Hosts can extend or override
+ * via `ChatPanel.setAvatarMap`.
+ */
+export const DEFAULT_AVATAR_MAP: Readonly<Record<string, string>> = {
+    androidmobile: "📱",
+    browser: "🌐",
+    calendar: "📅",
+    chat: "💬",
+    code: "⚛️",
+    desktop: "🪟",
+    dispatcher: "🤖",
+    email: "📩",
+    "github-cli": "🐙",
+    greeting: "🖐️",
+    image: "🖼️",
+    list: "📝",
+    localplayer: "🎵",
+    markdown: "🗎",
+    montage: "🎞",
+    music: "🎵",
+    onboarding: "🛠️",
+    photo: "📷",
+    player: "🎧",
+    scriptflow: "🔁",
+    settings: "⚙️",
+    shell: "🐚",
+    spelunker: "⛏",
+    system: "⚙",
+    taskflow: "📜",
+    test: "➕",
+    turtle: "🐢",
+    utility: "🔧",
+    video: "📹",
+    weather: "⛅",
+    word: "📄",
+};
+
+/**
  * Generate a unique request id for a user message.
  * Uses crypto.randomUUID() when available (modern browsers, VS Code webview,
  * Chrome extension contexts), falling back to a timestamp+random string.
@@ -101,6 +141,7 @@ export class ChatPanel {
     private activeRequestId?: string;
     private isSwitching = false;
     private isHistoryLoading = false;
+    private avatarMap: Record<string, string> = { ...DEFAULT_AVATAR_MAP };
 
     // Completion state
     private completions: string[] = [];
@@ -574,15 +615,13 @@ export class ChatPanel {
             this.statusContainer = undefined;
         }
 
+        const icon = sourceIcon ?? this.iconForSource(source);
+
         let container: AgentMessageContainer;
         if (requestId && this.agentContainersByRequestId.has(requestId)) {
             container = this.agentContainersByRequestId.get(requestId)!;
         } else if (!appendMode) {
-            // No append mode and no targeted bubble — start a fresh container.
-            container = this.createAgentContainer(
-                source ?? "assistant",
-                sourceIcon ?? "🤖",
-            );
+            container = this.createAgentContainer(source ?? "assistant", icon);
             this.currentAgentContainer = container;
             if (requestId) {
                 this.agentContainersByRequestId.set(requestId, container);
@@ -590,10 +629,7 @@ export class ChatPanel {
         } else if (this.currentAgentContainer) {
             container = this.currentAgentContainer;
         } else {
-            container = this.createAgentContainer(
-                source ?? "assistant",
-                sourceIcon ?? "🤖",
-            );
+            container = this.createAgentContainer(source ?? "assistant", icon);
             this.currentAgentContainer = container;
             if (requestId) {
                 this.agentContainersByRequestId.set(requestId, container);
@@ -627,13 +663,48 @@ export class ChatPanel {
         }
         const container = this.createAgentContainer(
             source ?? "assistant",
-            sourceIcon ?? "🤖",
+            sourceIcon ?? this.iconForSource(source),
         );
         this.currentAgentContainer = container;
         if (requestId) {
             this.agentContainersByRequestId.set(requestId, container);
         }
         return container;
+    }
+
+    /**
+     * Look up the avatar emoji/icon for a given agent source name. Falls back
+     * to "🤖" if the source is unknown. Source names are matched
+     * case-insensitively against the first dot-separated segment, so
+     * "code.code-editor" looks up "code".
+     */
+    public iconForSource(source?: string): string {
+        if (!source) return "🤖";
+        const root = source.split(".")[0].toLowerCase();
+        return this.avatarMap[root] ?? "🤖";
+    }
+
+    /**
+     * Override or extend the per-source avatar map. Passed entries are merged
+     * over DEFAULT_AVATAR_MAP. Pass an entry with value "" to suppress a
+     * default mapping.
+     */
+    public setAvatarMap(map: Record<string, string>): void {
+        this.avatarMap = { ...DEFAULT_AVATAR_MAP, ...map };
+    }
+
+    /**
+     * Add a non-conversational system message styled distinctly from agent
+     * messages (no avatar, no source label, no timestamp). Use for `@`-config
+     * confirmations, session lifecycle events, and similar host notices.
+     */
+    public addSystemMessage(text: string): void {
+        const sentinel = this.messageDiv.firstElementChild!;
+        const el = document.createElement("div");
+        el.className = "chat-message-system";
+        el.textContent = text;
+        sentinel.before(el);
+        this.scrollToBottom();
     }
 
     /** Update the source/agent label on the current agent message. */

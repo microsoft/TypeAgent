@@ -14,4 +14,5 @@ export {
     ChatPanelOptions,
     CompletionResult,
     DynamicDisplayResult,
+    DEFAULT_AVATAR_MAP,
 } from "./chatPanel.js";

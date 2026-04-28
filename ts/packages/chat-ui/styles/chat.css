@@ -728,3 +728,25 @@ span.ansi-bright-white-fg {
   color: darkgray;
   height: 20px;
 }
+
+/* =========================================================================
+   System messages (host notices: @config confirmations, session lifecycle)
+   ========================================================================= */
+.chat-message-system {
+  align-self: center;
+  font-size: 12px;
+  color: rgb(120, 120, 120);
+  background-color: rgba(0, 0, 0, 0.04);
+  border-radius: 4px;
+  padding: 4px 10px;
+  margin: 6px 0;
+  font-style: italic;
+}
+
+/* =========================================================================
+   Input state classes (added by setSwitching / setHistoryLoading)
+   ========================================================================= */
+.chat-input-switching .user-textarea,
+.chat-input-history-loading .user-textarea {
+  opacity: 0.6;
+}
