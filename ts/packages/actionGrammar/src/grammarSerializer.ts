@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 import {
+    DispatchJson,
+    DispatchModeBucket,
     Grammar,
     GrammarJson,
     GrammarPart,
@@ -25,6 +27,35 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
             index = nextIndex++;
             rulesToIndex.set(rules, index);
             json[index] = rules.map(grammarRuleToJson);
+        }
+        return index;
+    }
+
+    // Shared dispatch pool.  Two `RulesPart`s carrying the same
+    // `DispatchModeBucket[]` identity (compiler named-rule sharing
+    // round-tripped through the optimizer's per-input memo) point
+    // at a single serialized entry, and the deserializer can
+    // restore that in-memory identity sharing.
+    const dispatches: DispatchJson[] = [];
+    const dispatchToIndex: Map<DispatchModeBucket[], number> = new Map();
+    function dispatchIndexFor(d: DispatchModeBucket[]): number {
+        let index = dispatchToIndex.get(d);
+        if (index === undefined) {
+            const entries: DispatchJson = [];
+            for (const m of d) {
+                const tokenMap: Array<[string, number]> = [];
+                for (const [token, suffixRules] of m.tokenMap) {
+                    tokenMap.push([token, indexFor(suffixRules)]);
+                }
+                const entry: DispatchJson[number] = { tokenMap };
+                if (m.spacingMode !== undefined) {
+                    entry.spacingMode = m.spacingMode;
+                }
+                entries.push(entry);
+            }
+            index = dispatches.length;
+            dispatches.push(entries);
+            dispatchToIndex.set(d, index);
         }
         return index;
     }
@@ -58,22 +89,7 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
                 if (p.repeat) part.repeat = true;
                 if (p.tailCall) part.tailCall = true;
                 if (p.dispatch !== undefined) {
-                    const dispatchJson: NonNullable<RulePartJson["dispatch"]> =
-                        [];
-                    for (const m of p.dispatch) {
-                        const tokenMap: Array<[string, number]> = [];
-                        for (const [token, suffixRules] of m.tokenMap) {
-                            tokenMap.push([token, indexFor(suffixRules)]);
-                        }
-                        const entry: NonNullable<
-                            RulePartJson["dispatch"]
-                        >[number] = { tokenMap };
-                        if (m.spacingMode !== undefined) {
-                            entry.spacingMode = m.spacingMode;
-                        }
-                        dispatchJson.push(entry);
-                    }
-                    part.dispatch = dispatchJson;
+                    part.dispatch = dispatchIndexFor(p.dispatch);
                 }
                 return part;
             }
@@ -98,22 +114,12 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
 
     rulesToIndex.set(grammar.alternatives, 0);
     json[0] = grammar.alternatives.map(grammarRuleToJson);
-    if (grammar.dispatch === undefined) {
-        return { rules: json };
+    const out: GrammarJson = { rules: json };
+    if (grammar.dispatch !== undefined) {
+        out.dispatch = dispatchIndexFor(grammar.dispatch);
     }
-    const dispatchJson: NonNullable<GrammarJson["dispatch"]> = [];
-    for (const m of grammar.dispatch) {
-        const tokenMap: Array<[string, number]> = [];
-        for (const [token, suffixRules] of m.tokenMap) {
-            tokenMap.push([token, indexFor(suffixRules)]);
-        }
-        const entry: NonNullable<GrammarJson["dispatch"]>[number] = {
-            tokenMap,
-        };
-        if (m.spacingMode !== undefined) {
-            entry.spacingMode = m.spacingMode;
-        }
-        dispatchJson.push(entry);
+    if (dispatches.length > 0) {
+        out.dispatches = dispatches;
     }
-    return { rules: json, dispatch: dispatchJson };
+    return out;
 }

@@ -14,6 +14,7 @@
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
 import { grammarToJson } from "../src/grammarSerializer.js";
+import { grammarFromJson } from "../src/grammarDeserializer.js";
 import {
     Grammar,
     GrammarPart,
@@ -370,6 +371,54 @@ describe("Grammar Optimizer - Shared rule identity preserved through factoring",
             expect(match(optimized, input)).toStrictEqual(
                 match(baseline, input),
             );
+        }
+    });
+});
+
+describe("Grammar Serializer - Dispatch sharing across round-trip", () => {
+    // Same shared-rule grammar used by the dispatch-sharing block above.
+    // After optimization, all three `<Common>` reference sites get the
+    // same dispatch table.  Serialization must dedup it into the
+    // grammar-level `dispatches` pool so each `RulesPart.dispatch`
+    // serializes as a small index, and `grammarFromJson` must restore
+    // the in-memory identity sharing.
+    const text = `<Start> = <Use1> | <Use2> | <Use3>;
+<Use1> = sing $(name:<Common>);
+<Use2> = play $(name:<Common>);
+<Use3> = hum $(name:<Common>);
+<Common> = alpha song -> "a" | beta track -> "b" | gamma tune -> "g";`;
+
+    it("dedups identical dispatch tables into the dispatches pool", () => {
+        const grammar = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        const json = grammarToJson(grammar);
+        // All three `<Common>` references share the same dispatch
+        // identity, so the pool should hold exactly one entry, and
+        // each part should reference it by index.
+        expect(json.dispatches?.length).toBe(1);
+        const dispatchedParts = findAllRulesPartsInGrammar(grammar).filter(
+            (p) => p.name === "Common" && p.dispatch !== undefined,
+        );
+        expect(dispatchedParts.length).toBe(3);
+    });
+
+    it("restores shared dispatch identity after deserialize", () => {
+        const grammar = loadGrammarRules("t.grammar", text, {
+            optimizations: { dispatchifyAlternations: true },
+        });
+        const restored = grammarFromJson(grammarToJson(grammar));
+        const parts = findAllRulesPartsInGrammar(restored).filter(
+            (p) => p.name === "Common",
+        );
+        expect(parts.length).toBe(3);
+        // Both the alternatives array and the dispatch table must
+        // round-trip with their identity preserved (mirrors the
+        // optimizer's per-input-identity sharing - see the dispatch
+        // memo in `grammarOptimizer.ts`).
+        for (let i = 1; i < parts.length; i++) {
+            expect(parts[i].alternatives).toBe(parts[0].alternatives);
+            expect(parts[i].dispatch).toBe(parts[0].dispatch);
         }
     });
 });

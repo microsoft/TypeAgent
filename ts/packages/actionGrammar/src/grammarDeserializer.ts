@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    DispatchJson,
     DispatchModeBucket,
     Grammar,
     GrammarJson,
@@ -67,18 +68,17 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
         return rules;
     }
     /**
-     * Decode a serialized dispatch array into in-memory
+     * Decode a single dispatch entry array into in-memory
      * `DispatchModeBucket[]`, validate its invariants, and emit
      * `debug` advisories for non-canonical shapes (empty dispatch
      * or single-bucket with no fallback).  Both shapes are
      * semantically valid - the matcher handles them correctly -
      * but neither one is something the optimizer would ever emit,
      * so they almost certainly indicate a hand-written or buggy
-     * producer.  Shared by the part-level (`RulesPart.dispatch`)
-     * and top-level (`Grammar.dispatch`) decode paths.
+     * producer.
      */
-    function decodeDispatch(
-        jsonDispatch: NonNullable<GrammarJson["dispatch"]>,
+    function decodeDispatchEntry(
+        jsonDispatch: DispatchJson,
         fallbackLength: number,
         whereTag: string,
         nameTag: string,
@@ -100,6 +100,38 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
             debug(`non-canonical ${nameTag}: single-bucket with no fallback`);
         }
         return dispatch;
+    }
+    /**
+     * Memoize decoded dispatch tables by their `dispatches` pool
+     * index so two `RulesPart`s (or the top-level + a part) that
+     * pointed at the same pool entry restore to the same
+     * in-memory `DispatchModeBucket[]` identity.  Mirrors the
+     * `rulesFor` mechanism for shared rule arrays - preserves the
+     * optimizer's per-input-identity sharing across a
+     * serialize/deserialize round trip.
+     */
+    const indexToDispatch: Map<number, DispatchModeBucket[]> = new Map();
+    function dispatchFor(
+        idx: number,
+        fallbackLength: number,
+        whereTag: string,
+        nameTag: string,
+    ): DispatchModeBucket[] {
+        const cached = indexToDispatch.get(idx);
+        if (cached !== undefined) return cached;
+        if (json.dispatches === undefined || idx >= json.dispatches.length) {
+            throw new Error(
+                `Invalid grammar JSON: dispatch index ${idx} out of range (${whereTag})`,
+            );
+        }
+        const decoded = decodeDispatchEntry(
+            json.dispatches[idx],
+            fallbackLength,
+            whereTag,
+            nameTag,
+        );
+        indexToDispatch.set(idx, decoded);
+        return decoded;
     }
     function grammarRuleFromJson(r: GrammarRuleJson, json: GrammarJson) {
         return {
@@ -130,7 +162,7 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
                 if (p.tailCall) part.tailCall = true;
                 if (p.dispatch !== undefined) {
                     const tag = `dispatched RulesPart (name='${p.name ?? "<unnamed>"}')`;
-                    part.dispatch = decodeDispatch(
+                    part.dispatch = dispatchFor(
                         p.dispatch,
                         rules.length,
                         `RulesPart name='${p.name ?? "<unnamed>"}'`,
@@ -154,7 +186,7 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
         alternatives: start.map((r) => grammarRuleFromJson(r, json)),
     };
     if (json.dispatch !== undefined) {
-        grammar.dispatch = decodeDispatch(
+        grammar.dispatch = dispatchFor(
             json.dispatch,
             grammar.alternatives.length,
             "top-level",

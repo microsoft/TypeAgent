@@ -476,17 +476,16 @@ export type RulePartJson = {
     index: number;
     /**
      * Optimizer-only first-token dispatch index.  See `RulesPart.dispatch`.
-     * Each bucket entry's `tokenMap` is serialized as
-     * `[lowercased-token, rulesArrayIndex][]` (Maps don't survive
-     * JSON round-trip directly).  Each entry's `index` is a
+     * Stored as an index into the shared `GrammarJson.dispatches`
+     * pool so two `RulesPart`s that shared a `DispatchModeBucket[]`
+     * identity in the in-memory AST (e.g. multiple references to a
+     * named rule whose body was dispatched) point at a single
+     * serialized entry, and the deserializer can restore that
+     * identity sharing.  Each `tokenMap` entry's index is a
      * `GrammarRulesJson` index in the same shared `GrammarJson`
      * table that the outer `index` references.
      */
-    dispatch?: Array<{
-        spacingMode?: CompiledSpacingMode | undefined;
-        /** [lowercased-token, rulesArrayIndex][] */
-        tokenMap: Array<[string, number]>;
-    }>;
+    dispatch?: number;
     variable?: string | undefined;
     optional?: boolean | undefined;
     repeat?: boolean | undefined;
@@ -514,19 +513,33 @@ export type GrammarRuleJson = {
     spacingMode?: CompiledSpacingMode | undefined; // undefined = auto (default)
 };
 export type GrammarRulesJson = GrammarRuleJson[];
+
+/**
+ * Serialized form of a single in-memory `DispatchModeBucket[]`
+ * (the value carried by `RulesPart.dispatch` / `Grammar.dispatch`).
+ * Each entry's `tokenMap` is `[lowercased-token, rulesArrayIndex][]`
+ * - Maps don't survive JSON round-trip directly, and the indices
+ * point into the shared `GrammarJson.rules` table.
+ */
+export type DispatchJson = Array<{
+    spacingMode?: CompiledSpacingMode | undefined;
+    /** [lowercased-token, rulesArrayIndex][] */
+    tokenMap: Array<[string, number]>;
+}>;
+
 /**
  * Serialized grammar shape.  Slot 0 of `rules` is the top-level
  * alternation (or, when `dispatch` is set, the fallback subset).
- * `dispatch` is the serialized form of `Grammar.dispatch`: each
- * entry's `tokenMap` is `[lowercased-token, rulesArrayIndex][]` (an
- * index into `rules`), mirroring the part-level `RulePartJson.dispatch`
- * encoding.
+ * `dispatches` is a shared pool of dispatch tables; both
+ * `RulePartJson.dispatch` and the top-level `dispatch` field below
+ * are indices into this pool, so a `DispatchModeBucket[]` shared
+ * across multiple in-memory `RulesPart`s (or hoisted from a named
+ * rule that's referenced from multiple sites) serializes once.
+ * Absent when no dispatch tables exist anywhere in the grammar.
  */
 export type GrammarJson = {
     rules: GrammarRulesJson[];
-    dispatch?: Array<{
-        spacingMode?: CompiledSpacingMode | undefined;
-        /** [lowercased-token, rulesArrayIndex][] */
-        tokenMap: Array<[string, number]>;
-    }>;
+    dispatches?: DispatchJson[];
+    /** Index into `dispatches` for the top-level dispatch table. */
+    dispatch?: number;
 };
