@@ -254,6 +254,19 @@ class ShellRunDemoInteractiveCommandHandler implements CommandHandlerNoParams {
     }
 }
 
+class ShellBreakDemoCommandHandler implements CommandHandlerNoParams {
+    public readonly description = "Abort the currently running demo";
+    public async run(context: ActionContext<ShellContext>) {
+        const stopped =
+            context.sessionContext.agentContext.shellWindow.breakDemo();
+        if (stopped) {
+            displaySuccess("Demo aborted.", context);
+        } else {
+            displayWarn("No demo is currently running.", context);
+        }
+    }
+}
+
 class ShellSetTopMostCommandHandler implements CommandHandlerNoParams {
     public readonly description =
         "Always keep the shell window on top of other windows";
@@ -332,6 +345,7 @@ const handlers: CommandHandlerTable = {
                 interactive: new ShellRunDemoInteractiveCommandHandler(),
             },
         },
+        break: new ShellBreakDemoCommandHandler(),
         topmost: new ShellSetTopMostCommandHandler(),
         localWhisper: getLocalWhisperCommandHandlers(),
         theme: getThemeCommandHandlers(),

@@ -39,10 +39,14 @@ function getActionCompleteEvent(awaitKeyboardInput: boolean) {
         ipcMain.on("send-demo-event", callback);
     });
 
+    const abortPromise = new Promise<void>((resolve) => {
+        abortListeners.push(resolve);
+    });
+
     if (awaitKeyboardInput) {
-        return actionPromise;
+        return Promise.race([actionPromise, abortPromise]);
     } else {
-        return Promise.race([actionPromise, timeoutPromise]);
+        return Promise.race([actionPromise, timeoutPromise, abortPromise]);
     }
 }
 
@@ -59,45 +63,81 @@ function sendChatInputText(message: string, chatView: WebContentsView) {
         ipcMain.on("send-input-text-complete", callback);
     });
 
+    const abortPromise = new Promise<void>((resolve) => {
+        abortListeners.push(resolve);
+    });
+
     chatView.webContents.send("send-input-text", message);
-    return Promise.race([actionPromise, timeoutPromise]);
+    return Promise.race([actionPromise, timeoutPromise, abortPromise]);
 }
 
 let demoRunning = false;
+let demoAborted = false;
+const abortListeners: Array<() => void> = [];
+
+export type DemoState = "running" | "paused" | "idle";
+
+function sendDemoState(chatView: WebContentsView, state: DemoState) {
+    chatView.webContents.send("demo-state", state);
+}
+
+/** Request that the currently-running demo abort at the next safe point. */
+export function breakDemo(): boolean {
+    if (!demoRunning) return false;
+    demoAborted = true;
+    const listeners = abortListeners.splice(0);
+    for (const l of listeners) l();
+    return true;
+}
 
 export async function runDemo(
     window: BrowserWindow,
     chatView: WebContentsView,
     awaitKeyboardInput: boolean,
+    onStart?: () => void,
 ) {
     if (demoRunning) {
         await dialog.showMessageBox(window, {
             type: "warning",
             title: "Demo already running",
             message:
-                "A demo is already running. Wait for it to finish (or restart the shell) before starting another.",
+                "A demo is already running. Wait for it to finish, press Esc to abort it, or restart the shell before starting another.",
         });
         return;
     }
 
-    demoRunning = true;
-    try {
-        const data = await openDemoFile(window);
-        if (data) {
-            const lines = data.split(/\r?\n/);
+    const data = await openDemoFile(window);
+    if (!data) {
+        return;
+    }
 
-            for (let line of lines) {
-                if (line.startsWith("@pauseForInput")) {
-                    await getActionCompleteEvent(true);
-                } else if (line && !line.startsWith("#")) {
-                    await sendChatInputText(line, chatView);
-                    var manualInput =
-                        awaitKeyboardInput && !line.startsWith("@");
-                    await getActionCompleteEvent(manualInput);
-                }
+    demoRunning = true;
+    demoAborted = false;
+    onStart?.();
+    sendDemoState(chatView, "running");
+    try {
+        const lines = data.split(/\r?\n/);
+
+        for (let line of lines) {
+            if (demoAborted) break;
+            if (line.startsWith("@pauseForInput")) {
+                sendDemoState(chatView, "paused");
+                await getActionCompleteEvent(true);
+                if (demoAborted) break;
+                sendDemoState(chatView, "running");
+            } else if (line && !line.startsWith("#")) {
+                var manualInput =
+                    awaitKeyboardInput && !line.startsWith("@");
+                if (manualInput) sendDemoState(chatView, "paused");
+                await sendChatInputText(line, chatView);
+                await getActionCompleteEvent(manualInput);
+                if (manualInput && !demoAborted)
+                    sendDemoState(chatView, "running");
             }
         }
     } finally {
         demoRunning = false;
+        demoAborted = false;
+        sendDemoState(chatView, "idle");
     }
 }

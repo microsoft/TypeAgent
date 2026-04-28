@@ -778,6 +778,9 @@ function registerClient(
                 child.classList.add("history");
             }
         },
+        demoStateChanged(state: "running" | "paused" | "idle"): void {
+            chatView.setDemoState(state);
+        },
     };
 
     getClientAPI().registerClient(client);

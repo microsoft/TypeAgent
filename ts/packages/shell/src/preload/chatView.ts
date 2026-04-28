@@ -53,6 +53,9 @@ function registerClient(client: Client) {
         await client.showInputText(message);
         ipcRenderer.send("send-input-text-complete");
     });
+    ipcRenderer.on("demo-state", (_, state) => {
+        client.demoStateChanged?.(state);
+    });
     ipcRenderer.on("show-dialog", (_, key) => {
         client.showDialog(key);
     });

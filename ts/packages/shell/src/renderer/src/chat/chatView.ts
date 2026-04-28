@@ -863,6 +863,19 @@ export class ChatView {
         this._voiceBanner.textContent = active ? "Claude Focus" : "Voice Mode";
     }
 
+    public setDemoState(state: "running" | "paused" | "idle"): void {
+        const textEntry = this.chatInput?.textarea.getTextEntry();
+        if (!textEntry) return;
+        if (state === "paused") {
+            textEntry.dataset.placeholder =
+                "Ctrl+Right to continue • Esc to break demo";
+        } else if (state === "running") {
+            textEntry.dataset.placeholder = "Demo running… Esc to break";
+        } else {
+            delete textEntry.dataset.placeholder;
+        }
+    }
+
     getMessageElm() {
         return this.topDiv;
     }

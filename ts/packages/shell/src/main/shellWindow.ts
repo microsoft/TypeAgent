@@ -11,7 +11,7 @@ import {
 } from "electron";
 import path from "node:path";
 import type { WebSocketMessageV2 } from "websocket-utils";
-import { runDemo } from "./demo.js";
+import { runDemo, breakDemo } from "./demo.js";
 import {
     ShellUserSettings,
     ShellWindowState,
@@ -510,8 +510,51 @@ export class ShellWindow {
         this.chatView.webContents.send("mark-history");
     }
 
-    public runDemo(interactive: boolean = false) {
-        runDemo(this.mainWindow, this.chatView, interactive);
+    public async runDemo(interactive: boolean = false) {
+        await runDemo(this.mainWindow, this.chatView, interactive, () => {
+            this.setDemoMode(true);
+        });
+        this.setDemoMode(false);
+    }
+
+    public breakDemo(): boolean {
+        return breakDemo();
+    }
+
+    private demoMode = false;
+    private demoEscHandler:
+        | ((event: Electron.Event, input: Electron.Input) => void)
+        | undefined;
+    private setDemoMode(active: boolean) {
+        if (this.demoMode === active) return;
+        this.demoMode = active;
+        this.mainWindow.webContents.send("demo-mode-changed", active);
+        if (active) {
+            this.demoEscHandler = (event, input) => {
+                if (input.type === "keyDown" && input.key === "Escape") {
+                    event.preventDefault();
+                    breakDemo();
+                }
+            };
+            this.chatView.webContents.on(
+                "before-input-event",
+                this.demoEscHandler,
+            );
+            this.mainWindow.webContents.on(
+                "before-input-event",
+                this.demoEscHandler,
+            );
+        } else if (this.demoEscHandler) {
+            this.chatView.webContents.off(
+                "before-input-event",
+                this.demoEscHandler,
+            );
+            this.mainWindow.webContents.off(
+                "before-input-event",
+                this.demoEscHandler,
+            );
+            this.demoEscHandler = undefined;
+        }
     }
 
     // ================================================================

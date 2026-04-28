@@ -106,6 +106,7 @@ export interface Client {
     systemNotification?(message: string, id: string, timestamp: number): void;
     conversationChanged?(conversationId: string, name: string): void;
     markHistoryEntries?(): void;
+    demoStateChanged?(state: "running" | "paused" | "idle"): void;
 }
 
 export interface ElectronWindowFields {
