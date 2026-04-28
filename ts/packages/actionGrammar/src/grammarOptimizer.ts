@@ -733,7 +733,21 @@ export function factorCommonPrefixes(
 ): GrammarRule[] {
     const counter = { factored: 0 };
     const memo: RulesArrayMemo = new Map();
-    let result = factorRulesArray(rules, counter, memo, tailFactoring);
+    // Cache `factorRules` per input `GrammarRule[]` identity so that two
+    // `RulesPart`s pointing at the same alternatives array (compiler
+    // named-rule sharing) emit the same factored array - preserving the
+    // serializer's array-identity dedup invariant.  The transformation
+    // is a pure function of the input alternatives (the wrapping
+    // `RulesPart`'s flags only get re-stamped onto the output by
+    // `factorRulesPart` and never feed into the trie build).
+    const factorMemo: FactorMemo = new Map();
+    let result = factorRulesArray(
+        rules,
+        counter,
+        memo,
+        factorMemo,
+        tailFactoring,
+    );
 
     // Top-level factoring: the matcher treats top-level alternatives the
     // same way it treats inner `RulesPart` alternatives (each is queued
@@ -741,7 +755,7 @@ export function factorCommonPrefixes(
     // trie-based factoring applies.  Newly synthesized suffix
     // `RulesPart`s produced here are not themselves re-walked, matching
     // the existing behavior for nested factoring.
-    result = factorRules(result, counter, tailFactoring);
+    result = factorRulesCached(result, counter, factorMemo, tailFactoring);
 
     if (counter.factored > 0) {
         debug(`factored ${counter.factored} common prefix groups`);
@@ -749,10 +763,42 @@ export function factorCommonPrefixes(
     return result;
 }
 
+/**
+ * Per-invocation memo over `factorRules` keyed on the input
+ * `GrammarRule[]` identity.  Ensures two `RulesPart`s sharing the
+ * same alternatives array (named-rule dedup from the compiler) share
+ * the same factored output array, so the serializer's identity-based
+ * dedup still collapses them to a single JSON slot.
+ */
+type FactorMemo = Map<GrammarRule[], GrammarRule[]>;
+
+/**
+ * `factorRules` with input-identity memoization.  Always returns the
+ * cached result for a previously-seen input array; otherwise computes,
+ * caches, and returns.  Note: the cached output array is also stored
+ * under its own identity (mapped to itself) so that a second pass that
+ * happens to receive the post-factored array as input doesn't refactor
+ * it.
+ */
+function factorRulesCached(
+    rules: GrammarRule[],
+    counter: { factored: number },
+    factorMemo: FactorMemo,
+    tailFactoring: boolean,
+): GrammarRule[] {
+    const cached = factorMemo.get(rules);
+    if (cached !== undefined) return cached;
+    const result = factorRules(rules, counter, tailFactoring);
+    factorMemo.set(rules, result);
+    if (result !== rules) factorMemo.set(result, result);
+    return result;
+}
+
 function factorRulesArray(
     rules: GrammarRule[],
     counter: { factored: number },
     memo: RulesArrayMemo,
+    factorMemo: FactorMemo,
     tailFactoring: boolean,
 ): GrammarRule[] {
     const cached = memo.get(rules);
@@ -762,7 +808,13 @@ function factorRulesArray(
     // (see inlineRulesArray for rationale).
     let next: GrammarRule[] | undefined;
     for (let i = 0; i < rules.length; i++) {
-        const r = factorRule(rules[i], counter, memo, tailFactoring);
+        const r = factorRule(
+            rules[i],
+            counter,
+            memo,
+            factorMemo,
+            tailFactoring,
+        );
         if (next !== undefined) {
             next.push(r);
         } else if (r !== rules[i]) {
@@ -779,12 +831,14 @@ function factorRule(
     rule: GrammarRule,
     counter: { factored: number },
     memo: RulesArrayMemo,
+    factorMemo: FactorMemo,
     tailFactoring: boolean,
 ): GrammarRule {
     const { parts, changed } = factorParts(
         rule.parts,
         counter,
         memo,
+        factorMemo,
         tailFactoring,
     );
     if (!changed) return rule;
@@ -795,6 +849,7 @@ function factorParts(
     parts: GrammarPart[],
     counter: { factored: number },
     memo: RulesArrayMemo,
+    factorMemo: FactorMemo,
     tailFactoring: boolean,
 ): { parts: GrammarPart[]; changed: boolean } {
     // Single-pass: only allocate `out` once an element actually changes
@@ -812,6 +867,7 @@ function factorParts(
             p.alternatives,
             counter,
             memo,
+            factorMemo,
             tailFactoring,
         );
         const recursed: RulesPart =
@@ -819,7 +875,12 @@ function factorParts(
                 ? { ...p, alternatives: recursedRules }
                 : p;
 
-        const working = factorRulesPart(recursed, counter, tailFactoring);
+        const working = factorRulesPart(
+            recursed,
+            counter,
+            factorMemo,
+            tailFactoring,
+        );
         if (out !== undefined) {
             out.push(working);
         } else if (working !== p) {
@@ -837,11 +898,14 @@ function factorParts(
  * around `factorRules` that respects the `RulesPart`'s repeat/optional
  * flags (which change matcher loop-back semantics and so block
  * factoring) and re-wraps the factored alternatives back into the
- * `RulesPart` shape on success.
+ * `RulesPart` shape on success.  Routes through `factorRulesCached`
+ * so two `RulesPart`s sharing the same `alternatives` identity emit
+ * the same factored array (preserves the serializer dedup invariant).
  */
 function factorRulesPart(
     part: RulesPart,
     counter: { factored: number },
+    factorMemo: FactorMemo,
     tailFactoring: boolean,
 ): RulesPart {
     if (part.repeat || part.optional) {
@@ -849,7 +913,12 @@ function factorRulesPart(
         // such groups untouched to stay safe.
         return part;
     }
-    const factored = factorRules(part.alternatives, counter, tailFactoring);
+    const factored = factorRulesCached(
+        part.alternatives,
+        counter,
+        factorMemo,
+        tailFactoring,
+    );
     if (factored === part.alternatives) return part;
     return { ...part, alternatives: factored };
 }
@@ -2051,10 +2120,66 @@ function classifyDispatchMember(
  *     always picks the same bucket, no filtering benefit over
  *     the non-dispatched form.
  */
-function tryDispatchifyRulesPart(part: RulesPart): RulesPart | undefined {
-    if (part.alternatives.length < 2) {
+/**
+ * Pure-input payload produced by the dispatch transformation.  Two
+ * `RulesPart`s sharing the same input `alternatives` identity must
+ * produce the same payload (and the same array identities for the
+ * trimmed fallback and per-mode bucket arrays), so the serializer's
+ * identity-based dedup still collapses them to single JSON slots.
+ */
+type DispatchPayload = {
+    alternatives: GrammarRule[];
+    dispatch: DispatchModeBucket[];
+};
+
+/**
+ * Per-invocation memo over `computeDispatchPayload` keyed on the
+ * input `GrammarRule[]` identity.  Stores `null` for ineligible
+ * inputs so the bail-out is also cached.  Shared across the whole
+ * `dispatchifyAlternations` invocation including the top-level
+ * dispatch hoist.
+ */
+type DispatchMemo = Map<GrammarRule[], DispatchPayload | null>;
+
+function tryDispatchifyRulesPart(
+    part: RulesPart,
+    memo?: DispatchMemo,
+): RulesPart | undefined {
+    let payload: DispatchPayload | null | undefined = memo?.get(
+        part.alternatives,
+    );
+    if (payload === undefined) {
+        payload = computeDispatchPayload(part.alternatives, part.name) ?? null;
+        memo?.set(part.alternatives, payload);
+    }
+    if (payload === null) return undefined;
+
+    const out: RulesPart = {
+        type: "rules",
+        alternatives: payload.alternatives,
+        dispatch: payload.dispatch,
+    };
+    if (part.name !== undefined) out.name = part.name;
+    if (part.variable !== undefined) out.variable = part.variable;
+    if (part.optional) out.optional = true;
+    if (part.repeat) out.repeat = true;
+    if (part.tailCall) out.tailCall = true;
+    return out;
+}
+
+/**
+ * Pure-of-input dispatch computation.  Depends only on the input
+ * `alternatives` array (and the per-rule `spacingMode`s within it);
+ * outer wrapper flags do not affect the partition.  `name` is
+ * threaded in only for diagnostic logging on the bail-out paths.
+ */
+function computeDispatchPayload(
+    alternatives: GrammarRule[],
+    name: string | undefined,
+): DispatchPayload | undefined {
+    if (alternatives.length < 2) {
         // Single-rule "alternation" - nothing to dispatch.
-        debug(`dispatch skip (single-rule) name='${part.name ?? "<unnamed>"}'`);
+        debug(`dispatch skip (single-rule) name='${name ?? "<unnamed>"}'`);
         return undefined;
     }
 
@@ -2076,7 +2201,7 @@ function tryDispatchifyRulesPart(part: RulesPart): RulesPart | undefined {
         }
         return undefined;
     };
-    for (const rule of part.alternatives) {
+    for (const rule of alternatives) {
         const mode = rule.spacingMode;
         if (mode === "optional" || mode === "none") {
             // Not peek-eligible - peek's separator handling
@@ -2104,9 +2229,7 @@ function tryDispatchifyRulesPart(part: RulesPart): RulesPart | undefined {
     }
 
     if (perMode.length === 0) {
-        debug(
-            `dispatch skip (all-fallback) name='${part.name ?? "<unnamed>"}'`,
-        );
+        debug(`dispatch skip (all-fallback) name='${name ?? "<unnamed>"}'`);
         return undefined;
     }
     // Total token-key count: sum of `tokenMap.size` across every
@@ -2117,13 +2240,12 @@ function tryDispatchifyRulesPart(part: RulesPart): RulesPart | undefined {
     for (const m of perMode) totalTokenKeys += m.tokenMap.size;
     if (totalTokenKeys === 1 && fallback.length === 0) {
         debug(
-            `dispatch skip (single-bucket-no-fallback) name='${part.name ?? "<unnamed>"}'`,
+            `dispatch skip (single-bucket-no-fallback) name='${name ?? "<unnamed>"}'`,
         );
         return undefined;
     }
 
-    const out: RulesPart = {
-        type: "rules",
+    return {
         // Canonicalize empty fallback to a shared frozen sentinel so
         // the serializer can dedup empty-rules slots across every
         // dispatched part: each fallback `[]` would otherwise be a
@@ -2132,12 +2254,6 @@ function tryDispatchifyRulesPart(part: RulesPart): RulesPart | undefined {
         alternatives: fallback.length === 0 ? EMPTY_FALLBACK_RULES : fallback,
         dispatch: perMode,
     };
-    if (part.name !== undefined) out.name = part.name;
-    if (part.variable !== undefined) out.variable = part.variable;
-    if (part.optional) out.optional = true;
-    if (part.repeat) out.repeat = true;
-    if (part.tailCall) out.tailCall = true;
-    return out;
 }
 
 /**
@@ -2179,8 +2295,15 @@ export function dispatchifyAlternations(rules: GrammarRule[]): {
 } {
     const counter = { dispatched: 0 };
     const memo = new Map<GrammarRule[], GrammarRule[]>();
+    // Cache the dispatch transformation per input `alternatives`
+    // identity so two `RulesPart`s sharing the same alternatives
+    // array (compiler named-rule sharing) emit the same trimmed
+    // fallback array and the same `DispatchModeBucket[]` - preserving
+    // the serializer's identity-based dedup invariant.  Shared
+    // across the whole pass including the top-level hoist below.
+    const dispatchMemo: DispatchMemo = new Map();
 
-    const result = visitRulesArray(rules, counter, memo);
+    const result = visitRulesArray(rules, counter, memo, dispatchMemo);
 
     // Top-level dispatch: build a transient `RulesPart` over the
     // top-level alternatives and try to dispatch it.  On success,
@@ -2193,10 +2316,13 @@ export function dispatchifyAlternations(rules: GrammarRule[]): {
         alternatives: result,
     };
     if (result.length >= 2) {
-        const dispatched = tryDispatchifyRulesPart({
-            type: "rules",
-            alternatives: result,
-        });
+        const dispatched = tryDispatchifyRulesPart(
+            {
+                type: "rules",
+                alternatives: result,
+            },
+            dispatchMemo,
+        );
         if (dispatched?.dispatch !== undefined) {
             counter.dispatched++;
             out.alternatives = dispatched.alternatives;
@@ -2215,13 +2341,14 @@ function visitRulesArray(
     rules: GrammarRule[],
     counter: { dispatched: number },
     memo: Map<GrammarRule[], GrammarRule[]>,
+    dispatchMemo: DispatchMemo,
 ): GrammarRule[] {
     const cached = memo.get(rules);
     if (cached !== undefined) return cached;
     memo.set(rules, rules);
     let next: GrammarRule[] | undefined;
     for (let i = 0; i < rules.length; i++) {
-        const r = visitRule(rules[i], counter, memo);
+        const r = visitRule(rules[i], counter, memo, dispatchMemo);
         if (next !== undefined) {
             next.push(r);
         } else if (r !== rules[i]) {
@@ -2238,11 +2365,12 @@ function visitRule(
     rule: GrammarRule,
     counter: { dispatched: number },
     memo: Map<GrammarRule[], GrammarRule[]>,
+    dispatchMemo: DispatchMemo,
 ): GrammarRule {
     let outParts: GrammarPart[] | undefined;
     for (let i = 0; i < rule.parts.length; i++) {
         const p = rule.parts[i];
-        const visited = visitPart(p, counter, memo);
+        const visited = visitPart(p, counter, memo, dispatchMemo);
         if (outParts !== undefined) {
             outParts.push(visited);
         } else if (visited !== p) {
@@ -2258,6 +2386,7 @@ function visitPart(
     part: GrammarPart,
     counter: { dispatched: number },
     memo: Map<GrammarRule[], GrammarRule[]>,
+    dispatchMemo: DispatchMemo,
 ): GrammarPart {
     if (part.type !== "rules") {
         return part;
@@ -2271,7 +2400,12 @@ function visitPart(
             const newTokenMap = new Map<string, GrammarRule[]>();
             let bucketDirty = false;
             for (const [tok, bucket] of m.tokenMap) {
-                const visited = visitRulesArray(bucket, counter, memo);
+                const visited = visitRulesArray(
+                    bucket,
+                    counter,
+                    memo,
+                    dispatchMemo,
+                );
                 if (visited !== bucket) bucketDirty = true;
                 newTokenMap.set(tok, visited);
             }
@@ -2281,7 +2415,12 @@ function visitPart(
             }
             return m;
         });
-        const innerRules = visitRulesArray(part.alternatives, counter, memo);
+        const innerRules = visitRulesArray(
+            part.alternatives,
+            counter,
+            memo,
+            dispatchMemo,
+        );
         if (innerRules !== part.alternatives) dirty = true;
         if (!dirty) return part;
         return {
@@ -2292,12 +2431,17 @@ function visitPart(
     }
     // Recurse first (post-order) so nested dispatch attempts run
     // before the outer one decides classification.
-    const innerRules = visitRulesArray(part.alternatives, counter, memo);
+    const innerRules = visitRulesArray(
+        part.alternatives,
+        counter,
+        memo,
+        dispatchMemo,
+    );
     const innerPart: RulesPart =
         innerRules !== part.alternatives
             ? { ...part, alternatives: innerRules }
             : part;
-    const dispatched = tryDispatchifyRulesPart(innerPart);
+    const dispatched = tryDispatchifyRulesPart(innerPart, dispatchMemo);
     if (dispatched !== undefined) {
         counter.dispatched++;
         return dispatched;
