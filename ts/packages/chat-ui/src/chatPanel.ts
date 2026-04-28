@@ -437,6 +437,41 @@ export class ChatPanel {
         this.onSend?.(text, id, attachments);
     }
 
+    /**
+     * Programmatically type `text` into the input character-by-character
+     * (25-40ms per char, matching the Electron shell's expandableTextArea)
+     * and submit it via the same path as a manual Enter press, using the
+     * supplied `requestId` so the user bubble and the host's command share
+     * the same id.
+     *
+     * Used by demo replay drivers to produce a natural typing animation
+     * instead of an instant paste-and-send.
+     *
+     * Resolves once the message has been submitted (after onSend fires).
+     */
+    public async typeAndSend(text: string, requestId: string): Promise<void> {
+        // Wait for any in-flight disable (e.g., session loading) to clear.
+        for (
+            let i = 0;
+            this.textInput.contentEditable !== "true" && i < 50;
+            i++
+        ) {
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        this.textInput.focus();
+        this.textInput.textContent = "";
+        for (let i = 0; i < text.length; i++) {
+            this.textInput.textContent =
+                (this.textInput.textContent ?? "") + text[i];
+            // 25-40ms per char (random within range), matches Electron shell.
+            const delay = 25 + Math.floor(Math.random() * 15);
+            await new Promise((r) => setTimeout(r, delay));
+        }
+        // Defer to send() so all bookkeeping (command history, attachments,
+        // user-bubble creation, sendButton/ghost reset) stays in one place.
+        this.send(requestId);
+    }
+
     /** Set the active request ID and show the stop button. */
     public setProcessing(requestId: string) {
         this.activeRequestId = requestId;
