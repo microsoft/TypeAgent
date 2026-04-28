@@ -17,9 +17,24 @@ import {
     StringPart,
 } from "./grammarTypes.js";
 import { leadingWordBoundaryScriptPrefix } from "./spacingScripts.js";
+import { separatorRegExpStr } from "./grammarMatcher.js";
 import { getDispatchEffectiveMembers } from "./dispatchHelpers.js";
 
 const debug = registerDebug("typeagent:grammar:opt");
+
+// Leading non-separator run.  Mirrors `nonSeparatorRunRegExp` in
+// `grammarMatcher.ts` (used by `peekNextToken` for required /
+// optional / none modes).  We keep a separate, anchored copy here so
+// the optimizer doesn't import a non-exported sticky regex from the
+// matcher and doesn't pay for the matcher's `lastIndex` mutation.
+const leadingNonSeparatorRunRegExp = new RegExp(
+    `^[^${separatorRegExpStr}]+`,
+    "u",
+);
+function leadingNonSeparatorRun(s: string): string {
+    const m = leadingNonSeparatorRunRegExp.exec(s);
+    return m === null ? "" : m[0];
+}
 
 export type GrammarOptimizationOptions = {
     /**
@@ -2065,7 +2080,18 @@ function classifyDispatchMember(
         return { kind: "fallback" };
     }
     if (mode === "required") {
-        return { kind: "token", token: literal };
+        // Bucket on the leading non-separator run, mirroring what
+        // `peekNextToken` returns for required / optional / none
+        // modes.  Using the full `literal` here would cause a key
+        // mismatch when the literal embeds a separator char (e.g.
+        // `"d?"` buckets under `"d"` since peek returns `"d"`).  If
+        // the literal starts with a separator, the prefix is empty
+        // and we can't dispatch this member - send it to fallback.
+        const pref = leadingNonSeparatorRun(literal);
+        if (pref.length === 0) {
+            return { kind: "fallback" };
+        }
+        return { kind: "token", token: pref };
     }
     // auto: bucket on the leading word-boundary-script run.  When
     // the literal starts with a non-WB-script char (CJK, digit,

@@ -1054,4 +1054,119 @@ describe("Grammar Optimizer - non-canonical DispatchPart shapes", () => {
             expect(got).toStrictEqual(exp);
         }
     });
+
+    // ── Regression: separator chars embedded in literal first tokens ──
+    //
+    // Discovered by the `vocabulary.separatorInLiteralProb` fuzz
+    // dimension.  In `required` mode, `peekNextToken` truncates the
+    // input at the first separator (it returns the leading
+    // non-separator run).  The dispatch bucket key must be derived
+    // the same way; using the full literal token caused a key
+    // mismatch when the literal embedded a separator char like `?`
+    // or `@`, dropping the match entirely.
+    describe("regression: separator char inside required-mode literal", () => {
+        it("matches a required-mode alternation whose first token embeds '?'", () => {
+            const text = `<Start> [spacing=required] = d? b@ a% -> "first"
+                                                | b d d d@ -> "second";`;
+            const baseline = loadGrammarRules("t.grammar", text);
+            const optimized = loadGrammarRules("t.grammar", text, {
+                optimizations: { dispatchifyAlternations: true },
+            });
+            // Sanity: dispatch fired and bucketed on the truncated
+            // (peek-equivalent) token, not the full literal.
+            const dispatch = findDispatchPart(optimized);
+            expect(dispatch).toBeDefined();
+            const keys = Array.from(
+                getDispatchAllTokenMap(dispatch!).keys(),
+            ).sort();
+            expect(keys).toEqual(["b", "d"]);
+
+            for (const input of ["d? b@ a%", "b d d d@", "zzz", "d?"]) {
+                expect(match(optimized, input)).toStrictEqual(
+                    match(baseline, input),
+                );
+            }
+        });
+
+        it("dispatches each separator char (`,`, `.`, `:`, `!`, `?`, `@`, `#`, `%`, `&`, `+`, `=`, `'`, `\"`)", () => {
+            // One alternative per separator character, each with the
+            // separator embedded in its first literal.  Bucket keys
+            // must all be `"x"` (the leading non-separator run),
+            // collapsing every alternative into a single bucket -
+            // the fallback subset must be empty and dispatch must
+            // still produce the right matches.
+            const text = `<Start> [spacing=required] = x, a -> "comma"
+                | x. a -> "dot"
+                | x: a -> "colon"
+                | x! a -> "bang"
+                | x? a -> "qmark"
+                | x@ a -> "at"
+                | x# a -> "hash"
+                | x% a -> "pct"
+                | x& a -> "amp"
+                | x+ a -> "plus"
+                | x= a -> "eq"
+                | x' a -> "apos"
+                | x" a -> "quot";`;
+            const baseline = loadGrammarRules("t.grammar", text);
+            const optimized = loadGrammarRules("t.grammar", text, {
+                optimizations: { dispatchifyAlternations: true },
+            });
+            const inputs = [
+                ["x, a", "comma"],
+                ["x. a", "dot"],
+                ["x: a", "colon"],
+                ["x! a", "bang"],
+                ["x? a", "qmark"],
+                ["x@ a", "at"],
+                ["x# a", "hash"],
+                ["x% a", "pct"],
+                ["x& a", "amp"],
+                ["x+ a", "plus"],
+                ["x= a", "eq"],
+                ["x' a", "apos"],
+                ['x" a', "quot"],
+            ];
+            for (const [input, expected] of inputs) {
+                expect(match(optimized, input)).toStrictEqual(
+                    match(baseline, input),
+                );
+                expect(match(optimized, input)).toStrictEqual([
+                    JSON.stringify(expected),
+                ]);
+            }
+        });
+
+        it("sends a literal that starts with a separator to the fallback bucket", () => {
+            // Leading non-separator run of `?x` is empty - the
+            // dispatch can't bucket this rule (peek would never
+            // return a key matching `?x`), so it must land in the
+            // fallback subset and still match correctly.
+            const text = `<Start> [spacing=required] = ?x -> "lead-sep"
+                                                | yy -> "normal";`;
+            const baseline = loadGrammarRules("t.grammar", text);
+            const optimized = loadGrammarRules("t.grammar", text, {
+                optimizations: { dispatchifyAlternations: true },
+            });
+            const dispatch = findDispatchPart(optimized);
+            // Dispatch may or may not fire (depends on whether the
+            // single non-fallback bucket survives the
+            // single-bucket-no-fallback skip), but if it does the
+            // fallback subset must contain the leading-separator
+            // alternative.
+            if (dispatch !== undefined) {
+                const keys = Array.from(
+                    getDispatchAllTokenMap(dispatch).keys(),
+                );
+                expect(keys).not.toContain("?x");
+                expect(keys).not.toContain("?");
+            }
+            // The actual match must work either way.
+            for (const input of ["?x", "yy", "zzz"]) {
+                expect(match(optimized, input)).toStrictEqual(
+                    match(baseline, input),
+                );
+            }
+        });
+    });
 });

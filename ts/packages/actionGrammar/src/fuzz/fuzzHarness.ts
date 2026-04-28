@@ -140,6 +140,7 @@ export function cloneFeatures(f: FuzzFeatureFlags): FuzzFeatureFlags {
         groups: { ...f.groups },
         vocabulary: { ...f.vocabulary },
         shapes: { ...f.shapes },
+        comments: { ...f.comments },
     };
 }
 
@@ -171,6 +172,7 @@ export type FeaturesOverride = {
     groups?: Partial<FuzzFeatureFlags["groups"]>;
     vocabulary?: Partial<FuzzFeatureFlags["vocabulary"]>;
     shapes?: Partial<FuzzFeatureFlags["shapes"]>;
+    comments?: Partial<FuzzFeatureFlags["comments"]>;
 };
 
 /**
@@ -193,6 +195,7 @@ export function mergeFeatures(
         groups: { ...base.groups, ...(over?.groups ?? {}) },
         vocabulary: { ...base.vocabulary, ...(over?.vocabulary ?? {}) },
         shapes: { ...base.shapes, ...(over?.shapes ?? {}) },
+        comments: { ...base.comments, ...(over?.comments ?? {}) },
     };
 }
 

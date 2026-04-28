@@ -160,3 +160,80 @@ fuzzDescribe("Fuzz: optional / repeat groups (parse-write round-trip)", {
     },
     validations: ["roundtrip-text", "roundtrip-json"],
 });
+
+// ── Expanded value expression coverage (binary / unary / ternary /
+// member access / spread / templates).  Exercises the writer's
+// parenthesization logic and the optimizer-equivalence of expression
+// evaluation across passes.
+fuzzDescribe("Fuzz: rich value expressions (optimizer equivalence)", {
+    seed: 0xf0227,
+    count: 50,
+    features: {
+        partKinds: { literal: 1, ruleRef: 1, wildcard: 1, number: 1 },
+        values: { attachProb: 1.0 },
+    },
+    validations: ["optimizer", "roundtrip-text", "roundtrip-json"],
+});
+
+// ── Comments at flex-space slots.  Pure parser-only fluff: matching
+// behavior is unchanged, so the optimizer-equivalence check verifies
+// comments don't perturb match results, and the round-trip checks
+// verify the writer preserves them idempotently.
+fuzzDescribe("Fuzz: comment injection (line + block)", {
+    seed: 0xf0228,
+    count: 30,
+    features: {
+        partKinds: { literal: 1, ruleRef: 1, wildcard: 1, number: 1 },
+        comments: { lineProb: 0.3, blockProb: 0.3 },
+    },
+    validations: ["optimizer", "roundtrip-text", "roundtrip-json"],
+});
+
+// ── Escape sequences inside literal tokens.  Literal text differs
+// (identity / hex / unicode escapes) but the decoded character is
+// unchanged, so matching behavior must remain identical.  Covers the
+// parser's `<EscapeSequence>` paths and the writer's escape
+// preservation.
+fuzzDescribe("Fuzz: literal escape sequences", {
+    seed: 0xf0229,
+    count: 30,
+    features: {
+        partKinds: { literal: 2, ruleRef: 1 },
+        vocabulary: { escapeProb: 0.5 },
+    },
+    validations: ["optimizer", "roundtrip-text", "roundtrip-json"],
+});
+
+// ── Nested rule captures `$(x:<Inner>)`.  The only fully
+// unrepresented part-kind variant in `.agr` source.  Exercises the
+// `RulesPart.variable` capture path on the parser, compiler, and
+// matcher.
+fuzzDescribe("Fuzz: nested rule captures", {
+    seed: 0xf022a,
+    count: 30,
+    features: {
+        partKinds: { literal: 1, ruleRef: 0, wildcard: 0, nestedRuleRef: 2 },
+        values: { attachProb: 0.5 },
+    },
+    validations: ["optimizer", "roundtrip-text", "roundtrip-json"],
+});
+
+// ── Separator characters embedded inside literal tokens.  A known
+// bug-risk surface: punctuation and escaped-space chars are normally
+// consumed by the matcher's flex-space regex, but inside a literal
+// they must be matched as part of the token.  Hand-written tests
+// live in `grammarMatcherKeywordSpacePunct.spec.ts`; this fuzzes the
+// space.
+fuzzDescribe("Fuzz: separator chars embedded in literals", {
+    seed: 0xf022b,
+    count: 50,
+    features: {
+        partKinds: { literal: 2, ruleRef: 1 },
+        vocabulary: { separatorInLiteralProb: 0.5 },
+        // Mix in spacing modes - the bug-risk interaction is
+        // strongest when the rule is `none` or `optional` (where
+        // input-side separators behave differently).
+        spacing: { altProb: 0.3, ruleProb: 0.3 },
+    },
+    validations: ["optimizer", "roundtrip-text", "roundtrip-json"],
+});
