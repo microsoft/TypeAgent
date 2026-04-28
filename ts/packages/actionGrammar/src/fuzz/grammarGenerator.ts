@@ -302,12 +302,47 @@ export type FuzzFeatureFlags = {
  *     partition (which random per-alt rolls almost never produce
  *     across 4 modes in a small grammar).
  *
- * Knobs that change the AST shape profile noticeably
- * (`partKinds.sharedPrefix`, `partKinds.nestedRuleRef`,
- * `partKinds.nonBoundaryProb`, `groups.singleAltGroupProb`, every
- * `shapes.*`) stay at 0 here so the broad-pass output remains a
- * recognizable random grammar; targeted `fuzzDescribe` blocks turn
- * those on individually for attribution.
+ * Knobs that change the AST shape profile noticeably stay at 0
+ * here so the broad-pass output remains a recognizable random
+ * grammar; targeted `fuzzDescribe` blocks turn those on
+ * individually so a regression points at the right pass.  Per-knob
+ * reasons (why even a small nonzero is worse than 0):
+ *
+ *   - `partKinds.sharedPrefix` and `shapes.tailFriendlyAltProb`
+ *     force every alt of a rule to share a leading literal.  Each
+ *     fired roll converts a whole rule into the
+ *     factor/dispatch-eligible shape, so the broad pass would
+ *     spend a fraction of its budget exercising the same passes
+ *     the dedicated blocks already cover - and a regression in
+ *     `factorCommonPrefixes` or `dispatchifyAlternations` would
+ *     surface ambiguously across both surfaces.
+ *   - `partKinds.nestedRuleRef` requires a value-producing forward
+ *     target; it degrades silently to a plain ruleRef when none
+ *     exists, so the *actual* rate depends on which rule slot rolls
+ *     it.  At nonzero the broad pass mostly produces unobservable
+ *     no-ops, with rare bursts of capture-chain activity that the
+ *     `partKinds.nestedRuleRef` block already covers cleanly.
+ *   - `vocabulary.nonBoundaryProb` is double-gated: it has no
+ *     effect unless `GeneratorConfig.nonBoundaryWords` is also
+ *     configured (the default config has none).  Setting it nonzero
+ *     here would be a silent no-op for the default CLI run, and
+ *     for callers that *do* configure the pool it would override
+ *     their intent.  Left to the targeted block that wires both
+ *     ends.
+ *   - `groups.singleAltGroupProb` wraps individual parts in
+ *     `(...)`.  Even at 0.05, with ~4 parts × 4 alts × ~4 rules
+ *     per grammar, the inliner runs on most grammars - making the
+ *     "did inlining change behavior" question harder to attribute
+ *     when an unrelated pass regresses.
+ *   - `shapes.singleAltRuleProb` forces whole rules to one alt.
+ *     At even 0.05 a meaningful fraction of generated grammars
+ *     get a forced single-alt rule, materially shifting the
+ *     reference-count distribution that `inlineSingleAlternatives`
+ *     keys on - again better isolated.
+ *   - `shapes.ruleRefReuseProb` increases shared-array refcounts,
+ *     which *suppresses* inlining.  Mixing this into the broad
+ *     pass would silently lower inliner activity in baseline runs
+ *     for reasons unrelated to the pass under test.
  *
  * Literals are weighted 2x to keep them dominant since they are the
  * cheap, always-valid baseline.
