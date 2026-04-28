@@ -1,6 +1,7 @@
 # ADR 0003 - Live grammar snapshot transport
 
-Status: **Open**.
+Status: **Open**. Resolve before: **Track F start** (dispatcher RPC F.1)
+and chunk 06 scaffolding.
 Blocks: 06.
 
 ## Context

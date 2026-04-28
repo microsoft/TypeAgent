@@ -638,6 +638,93 @@ since the bench scripts execute the compiled `dist/bench/` output).
 
 ### Matching backend
 
+The package ships three matching backends that share the same `Grammar`
+data model but trade off differently between simplicity, speed, and
+completion fidelity.
+
+| Backend                             | Style                              | Used for                                                         | Key files                                                           |
+| ----------------------------------- | ---------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------- |
+| String interpreter (`matchGrammar`) | Recursive AST walk over characters | Full matching; completion via `matchGrammarCompletion`           | `grammarMatcher.ts`, `grammarCompletion.ts`                         |
+| NFA interpreter (`matchNFA`)        | Token-based NFA execution          | NFA-driven completion (`computeNFACompletions`)                  | `nfa.ts`, `nfaCompiler.ts`, `nfaInterpreter.ts`, `nfaCompletion.ts` |
+| DFA interpreter (`matchDFA`)        | Compiled DFA, slot-based state     | Fast deterministic matching + completion via `getDFACompletions` | `dfa.ts`, `dfaCompiler.ts`, `dfaMatcher.ts`                         |
+
+The string interpreter is the canonical backend and the only one that
+implements the full forward / backward completion contract documented
+later in this section. The NFA and DFA backends exist primarily to
+support fast token-level matching and completion in the cache layer.
+
+#### NFA / DFA pipeline
+
+The NFA and DFA paths share a compilation pipeline:
+
+```
+.agr source → Grammar (AST) → NFA (compileGrammarToNFA) → DFA (compileNFAToDFA)
+```
+
+- **NFA** (`nfa.ts`, `nfaCompiler.ts`). Token-based - works with
+  complete words / tokens, not characters. Transition kinds: `token`,
+  `epsilon`, `wildcard`, `phraseSet`. Variables compile to slot
+  indices; each execution thread carries an environment stack tracking
+  captured values. Multi-word wildcards use an `appendToSlot` flag for
+  space-separated continuation.
+- **DFA** (`dfa.ts`, `dfaCompiler.ts`). Built from the NFA by subset
+  construction (`compileNFAToDFA`). Used for fast deterministic
+  matching and for completion generation that does not need character-
+  level direction handling.
+
+##### NFA completion (`computeNFACompletions`)
+
+Defined in `nfaCompletion.ts`:
+
+1. `walkPrefixTokens()` consumes complete tokens from the input,
+   following NFA transitions and taking epsilon closure at each state.
+   Token transitions take priority over wildcards: if any reachable
+   state has a matching token transition, wildcard self-loops are
+   suppressed (e.g. for `play <song> by <artist>` and input `"play by "`,
+   the wildcard self-loop is suppressed once the literal `"by"` keyword
+   has matched).
+2. `exploreCompletions()` gathers next options from the reachable
+   states. Token transitions become literal completions; _checked_
+   wildcards (typed, validated) become property completions carrying
+   `actionName` / `propertyPath`; _unchecked_ wildcards (plain
+   string / wildcard) are dropped.
+
+##### DFA completion (`getDFACompletions`)
+
+Defined in `dfaMatcher.ts`:
+
+1. Walk the DFA deterministically, matching prefix tokens.
+2. From the current state, collect token transitions (literal
+   completions), the wildcard transition (capture metadata), and
+   `phraseSet` transitions (first token of each phrase).
+3. Build one `DFACompletionGroup` per active rule, plus
+   `DFAPropertyCompletion` entries for checked wildcards.
+
+##### Wildcard capture metadata
+
+Both NFA and DFA transitions carry the same fields when describing a
+wildcard:
+
+- `variable` - the variable name (e.g. `"songName"`).
+- `typeName` - the entity type constraint (e.g. `"TrackName"`).
+- `checked` - whether the wildcard is validated.
+- `actionName` - for completion metadata (e.g. `"play"`).
+- `propertyPath` - the nested path in the action (e.g.
+  `"parameters.songName"`).
+
+`isCheckedWildcard()` decides which path a wildcard takes in completion:
+checked wildcards become property completions; unchecked wildcards are
+dropped.
+
+##### Priority counts
+
+All three backends rank competing matches using the same three counts
+(highest priority first):
+
+1. `fixedStringPartCount` - number of literal token transitions.
+2. `checkedWildcardCount` - number of typed wildcards.
+3. `uncheckedWildcardCount` - number of plain wildcards.
+
 #### Full matching (`matchGrammar`)
 
 `grammarMatcher.ts` provides a direct interpreter over the `Grammar`:

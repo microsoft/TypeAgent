@@ -106,9 +106,13 @@ the dependencies called out below.
 These are the only strictly serial items. Everything else fans out from
 here.
 
-0a. Resolve ADR [0001](./decisions/0001-shared-ui-tech.md) (UI tech) and
-ADR [0002](./decisions/0002-trace-hook.md) (trace hook). Both small,
-parallelizable with each other.
+0a. Resolve ADR [0001](./decisions/0001-shared-ui-tech.md) (UI tech)
+and ADR [0002](./decisions/0002-trace-hook.md) (trace hook). 0002 is
+**Accepted**; 0001 must land before Track D can scaffold (D.0).
+ADRs [0003](./decisions/0003-grammar-snapshot.md) (snapshot
+transport) and [0004](./decisions/0004-monaco-lsp-transport.md) (LSP
+transport) are not on the critical path; they are sequenced into
+Tracks F and G below.
 0b. **Chunk 02**: matcher instrumentation in `actionGrammar` (source
 spans + trace hook). _Blocks A.2, B.\*, and the trace-consuming
 parts of E._
@@ -149,6 +153,8 @@ C.1–C.5 are mutually independent and individually deliverable.
 
 ### Track D - Shared UI (parallel after ADR 0001)
 
+**Resolve [ADR 0001](./decisions/0001-shared-ui-tech.md) before D.0.**
+
 D.0 Scaffold `packages/grammarTools/ui` with chosen UI tech and a
 fixture `GrammarBackend` so D.1–D.5 do not block on real core.
 D.1 `<completion-preview>` component.
@@ -171,6 +177,9 @@ is the cheapest smoke-test for each service.
 
 ### Track F - Dispatcher snapshot (parallel after 0c + A.1)
 
+**Resolve [ADR 0003](./decisions/0003-grammar-snapshot.md) before F.1**
+(it pins the RPC payload shape).
+
 F.1 New dispatcher RPC `getCompiledGrammarSnapshot(sessionId)` returning
 `grammarToJson` output. _Independent of host work; can land any time
 after the snapshot loader contract is settled in A.1._
@@ -180,7 +189,16 @@ after the snapshot loader contract is settled in A.1._
 After Track C (LSP features + debug panel) reaches a usable VS Code
 build, do the manual E2E. **Gate** before starting Tracks G and H.
 
+**Resolve before opening the gate:**
+
+- [ADR 0003](./decisions/0003-grammar-snapshot.md) (snapshot transport)
+  - blocks Track H.
+- [ADR 0004](./decisions/0004-monaco-lsp-transport.md) (LSP transport)
+  - blocks Track G.
+
 ### Track G - Web app (after gate)
+
+**Resolve [ADR 0004](./decisions/0004-monaco-lsp-transport.md) before G.0.**
 
 G.0 Scaffold `packages/grammarTools/explorer` (Express + Vite).
 G.1 Express server: list / load grammars, REST endpoints proxying core,
@@ -265,12 +283,12 @@ Architectural decisions are tracked as ADRs under
 [`decisions/`](./decisions/). Open decisions block the chunks that depend
 on them.
 
-| ADR  | Topic                                    | Status                                           |
-| ---- | ---------------------------------------- | ------------------------------------------------ |
-| 0001 | Shared UI tech (Lit vs React vs vanilla) | [Open](./decisions/0001-shared-ui-tech.md)       |
-| 0002 | Match trace hook strategy                | [Open](./decisions/0002-trace-hook.md)           |
-| 0003 | Live grammar snapshot transport          | [Open](./decisions/0003-grammar-snapshot.md)     |
-| 0004 | Monaco LSP transport                     | [Open](./decisions/0004-monaco-lsp-transport.md) |
+| ADR  | Topic                                    | Status                                                                    |
+| ---- | ---------------------------------------- | ------------------------------------------------------------------------- |
+| 0001 | Shared UI tech (Lit vs React vs vanilla) | [Open - resolve before Track D](./decisions/0001-shared-ui-tech.md)       |
+| 0002 | Match trace hook strategy                | [Accepted (option A)](./decisions/0002-trace-hook.md)                     |
+| 0003 | Live grammar snapshot transport          | [Open - resolve before Track F](./decisions/0003-grammar-snapshot.md)     |
+| 0004 | Monaco LSP transport                     | [Open - resolve before Track G](./decisions/0004-monaco-lsp-transport.md) |
 
 ## Relevant existing files
 

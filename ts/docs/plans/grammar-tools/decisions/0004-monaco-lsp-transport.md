@@ -1,6 +1,7 @@
 # ADR 0004 - Monaco LSP transport
 
-Status: **Open**.
+Status: **Open**. Resolve before: **Track G start** (chunk 05 web app
+scaffold, step G.0). Part of the Phase 2 decision gate.
 Blocks: 05.
 
 ## Context
