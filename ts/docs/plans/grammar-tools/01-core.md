@@ -32,6 +32,10 @@ Grouped by PLAN track. Each item is independently shippable.
 - A.2 Diagnostics (LSP-shaped `Diagnostic[]` with source ranges).
 - A.3 Symbol index (definitions, references, signatures).
 - A.4 Formatter (wraps `writeGrammarRules`).
+- A.5 `GrammarDebugInfo` emission in `actionGrammar` (compiler
+  sidecar; depends on chunk 02 `PartId` assignment). Re-exported
+  from `grammar-tools-core`. **Blocks B.3 coverage shipping with
+  source coordinates and C.7 decorations.**
 
 ### Track B - debug + quality services
 
@@ -455,9 +459,10 @@ packages/grammarTools/core/
 - Diff granularity (rule-only vs part-level) - see chunk 08.
 - Coverage output shape - simple counts vs. range-addressed hits suitable
   for editor decorations - see chunk 08.
-- `GrammarDebugInfo` emission belongs in `actionGrammar` (next to the
-  compiler) or in `grammar-tools-core` (post-processing). Decide when
-  the sidecar persistence format is locked.
+- ~~`GrammarDebugInfo` emission belongs in `actionGrammar` (next to the
+  compiler) or in `grammar-tools-core` (post-processing).~~ Decided
+  2026-04-28: lives in `actionGrammar` as Track A.5, alongside the
+  `PartId` assignment from chunk 02; `grammar-tools-core` re-exports.
 - Whether the dispatcher snapshot (ADR 0003) ships `debugInfo` alongside
   `grammar`, source bytes, both, or neither. Updates ADR 0003.
 

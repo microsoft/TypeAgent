@@ -147,8 +147,9 @@ transport) and [0004](./decisions/0004-monaco-lsp-transport.md) (LSP
 transport) are not on the critical path; they are sequenced into
 Tracks F and G below.
 0b. **Chunk 02**: matcher instrumentation in `actionGrammar` (source
-spans + trace hook). _Blocks A.2, B.\*, and the trace-consuming
-parts of E._
+spans + trace hook + **`PartId` assignment on the source AST,
+propagated through every optimizer pass**). _Blocks A.2, A.5,
+B.\*, and the trace-consuming parts of E._
 0c. **Chunk 01 scaffold**: `packages/grammarTools/core` package layout,
 `pnpm-workspace.yaml` glob, public types stubbed.
 _Blocks A.\*, C.\*, D backend, E.\*, F._
@@ -159,6 +160,13 @@ A.1 Loader (file, agent, snapshot). _Needs 0c._
 A.2 Diagnostics. _Needs 0c + 0b spans._
 A.3 Symbol index (definitions / references / signatures). _Needs 0c._
 A.4 Formatter (wraps `writeGrammarRules`). _Needs 0c._
+A.5 `GrammarDebugInfo` emission in `actionGrammar` (compiler-side
+sidecar that maps `RuleId` / `PartId` to `SourceLocation`).
+_Needs 0b (PartId assignment + optimizer propagation). Lives in
+`actionGrammar` alongside the compiler; `grammar-tools-core`
+re-exports it. **B.3 coverage and C.7 decorations are unusable
+until A.5 lands** - until then, `runCoverage` throws
+`MissingDebugInfoError` per chunk-01 contract._
 
 ### Track B - Core debug + quality services (parallel after 0c)
 
@@ -248,9 +256,9 @@ build, do the manual E2E. **Gate** before starting Tracks G and H.
    (LSP transport) blocks Track G.
 5. **Open chunk-01 follow-ups closed or scheduled.** The dispatcher
    snapshot's debug-info contract (chunk 01 open question, surfaces
-   in ADR 0003) and the `decompile()` / `GrammarDebugInfo` emission
-   work (Track A.5 candidate from chunk-01) are either landed or have
-   an owner and a target track.
+   in ADR 0003) is resolved. **A.5 (`GrammarDebugInfo` emission)
+   has landed** - without it, B.3 / C.7 are inert and the gate's
+   coverage criteria are vacuous.
 
 **Decision and owner.** A single named owner runs the manual E2E (item 3) and signs off the gate; sign-off is a comment on the tracking issue
 or a short note in [STATUS.md](./STATUS.md). If any criterion slips,

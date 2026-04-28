@@ -27,6 +27,11 @@ Add the minimum hooks to
   list, rule reference, string part, wildcard, etc.). Existing nodes
   carry a single `pos?: number` (start offset only); add an `end?: number`
   where missing, and ensure every node tooling cares about has both.
+- **`PartId` assignment.** At parse time, assign a unique
+  compile-time integer `id` to every source-level `GrammarPart`.
+  Thread `id` through every `grammarOptimizer.ts` pass per the
+  contract in "PartId stability" below. Optimizer-internal parts
+  with no source counterpart leave `id` undefined.
 - Add an opt-in `trace?: (event: TraceEvent) => void` parameter to the
   rule-level matcher in
   [`grammarMatcher.ts`](../../../packages/actionGrammar/src/grammarMatcher.ts).
@@ -36,6 +41,11 @@ Add the minimum hooks to
 - Hook must be **opt-in and zero-cost when unused** (see ADR 0002
   conditions: single `if (trace !== undefined)` guard, no allocation on
   the no-trace path, bench-validated within ~1%).
+
+**Out of this chunk; in Track A.5.** Compiler-side emission of the
+`GrammarDebugInfo` sidecar (the `PartId` -> `SourceLocation` map
+consumed by chunk 01 / chunk 08). A.5 depends on this chunk's
+`PartId` assignment and is what unblocks B.3 / C.7.
 
 ## Type sketches (placeholders)
 
