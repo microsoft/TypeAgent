@@ -30,9 +30,9 @@
   ],
   "scripts": {
     "bench": "npm run bench:synthetic && npm run bench:real && npm run bench:dfa",
+    "bench:dfa": "node ./dist/bench/dfaBenchmark.js",
     "bench:real": "node ./dist/bench/grammarOptimizerBenchmark.js",
     "bench:synthetic": "node ./dist/bench/grammarOptimizerSyntheticBenchmark.js",
-    "bench:dfa": "node ./dist/bench/dfaBenchmark.js",
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "fuzz": "node ./dist/fuzz/fuzzRunner.js",
