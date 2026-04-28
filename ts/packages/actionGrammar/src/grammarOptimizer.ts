@@ -268,11 +268,6 @@ export function optimizeGrammar(
                 : mapDispatchBuckets(topLevelDispatch, (bucket) =>
                       promoteRulesArray(bucket, counter, memo),
                   );
-        if (counter.promoted > 0) {
-            debug(
-                `promoted ${counter.promoted} trailing RulesParts to tail calls`,
-            );
-        }
         if (
             validateTailPassOutput(
                 "promoteTailRulesParts",
@@ -282,6 +277,15 @@ export function optimizeGrammar(
                 warnings,
             )
         ) {
+            // Log only after validation accepts the candidate so the
+            // count reflects what's actually committed to the
+            // returned grammar.  A discarded candidate logs nothing
+            // beyond the validator's own discard message.
+            if (counter.promoted > 0) {
+                debug(
+                    `promoted ${counter.promoted} trailing RulesParts to tail calls`,
+                );
+            }
             rules = promotedRules;
             topLevelDispatch = promotedDispatch;
         }
@@ -2706,6 +2710,11 @@ function promoteInsideRulesPart(
  *   - that part has no `repeat` / `optional` / existing `tailCall`
  *   - effective member count >= 2
  *   - every member's `spacingMode` matches the parent rule's
+ *
+ * On success delegates per-shape work to `tryPromoteForwarding` (no
+ * member rewrite needed) or `tryPromoteSubstitution` (members
+ * rewritten via direct dispatch+fallback walk - no implicit
+ * ordering contract with `getDispatchEffectiveMembers`).
  */
 function tryPromoteTrailing(
     rule: GrammarRule,
@@ -2716,136 +2725,40 @@ function tryPromoteTrailing(
     if (last.type !== "rules") return undefined;
     if (last.tailCall) return undefined;
     if (last.repeat || last.optional) return undefined;
+    // Read-only spacing/effective-count check via the shared helper.
+    // No write-back contract: rewrites below walk the dispatch shape
+    // directly so member ordering between read and write paths is
+    // not an implicit invariant.
     const members = getDispatchEffectiveMembers(last);
     if (members.length < 2) return undefined;
     for (const m of members) {
         if (m.spacingMode !== rule.spacingMode) return undefined;
     }
 
-    let newMembers: GrammarRule[] | undefined;
+    let newDispatch: DispatchModeBucket[] | undefined;
+    let newAlternatives: GrammarRule[];
     if (rule.value === undefined) {
-        // Pure-forwarding case.  The parent has no explicit value, so
-        // the matcher's implicit-default rule fires.  We only promote
-        // when the trailing `RulesPart` is *exactly* the part that
-        // would have contributed under that rule:
-        //
-        //   - Single-part rule (`parts.length === 1`): the lone part
-        //     is the trailing `RulesPart`, which contributes its
-        //     captured value regardless of binding.  Always safe.
-        //   - Multi-part rule: the matcher requires exactly one
-        //     implicit-default-contributing part (else
-        //     `createValue` throws "missing/multiple values for
-        //     default" at finalize time).  Promoting masks that
-        //     error - the tail-entry mechanism bypasses the parent's
-        //     `createValue` entirely.  Require the trailing
-        //     `RulesPart` to be that sole contributor (which means
-        //     it must be bound: `last.variable !== undefined`); bail
-        //     out at any other shape so baseline-throw paths stay
-        //     observable on the optimized AST.
-        if (parts.length > 1) {
-            if (last.variable === undefined) return undefined;
-            for (let i = 0; i < parts.length - 1; i++) {
-                if (partContributesToImplicitDefault(parts[i])) {
-                    return undefined;
-                }
-            }
-        }
+        if (!checkForwardingPromotable(parts, last)) return undefined;
         // Members are unchanged: their existing values / implicit
         // defaults flow up directly via tail entry.
-        newMembers = undefined;
+        newDispatch = last.dispatch;
+        newAlternatives = last.alternatives;
     } else {
-        // Value-substitution case.  Need parent.value to actually
-        // reference the wrapper variable - otherwise dropping
-        // parent.value would silently lose its computed result.
-        const v = last.variable;
-        if (v === undefined) return undefined;
-        const refs = collectVariableReferences(rule.value);
-        if (!refs.has(v)) return undefined;
-        // α-rename every member's top-level bindings to opaque
-        // `__opt_inline_<n>` names before substituting.  Without
-        // this, a member-bound name that matches a prefix-bound
-        // name referenced from `parent.value` would silently
-        // shadow the prefix binding at runtime: tail entry
-        // inherits the parent's `valueIds` chain and the member's
-        // own bindings cons onto it, so a substituted reference
-        // intended for the prefix would resolve to the member's
-        // value instead.  Opaque rename names cannot collide with
-        // any user-named outer binding.  One `RenameState` per
-        // promotion site - all members of this fork draw fresh
-        // names from the same counter, so renames within this
-        // tail-RulesPart never repeat.
-        const renameState: RenameState = { next: 0 };
-        const subbed: GrammarRule[] = [];
-        for (const m of members) {
-            const renamed = renameAllChildBindings(
-                m.parts,
-                m.value,
-                renameState,
-            );
-            const effective =
-                renamed.value !== undefined
-                    ? renamed.value
-                    : getImplicitDefaultValue({
-                          ...m,
-                          parts: renamed.parts,
-                          value: renamed.value,
-                      });
-            if (effective === undefined) {
-                // Member has no explicit value and we can't
-                // synthesize one to substitute (e.g. unbound
-                // single-part rules / phraseSet).  Bail out at this
-                // fork; the rule stays unchanged.
-                return undefined;
-            }
-            const subs = new Map<string, CompiledValueNode>();
-            subs.set(v, effective);
-            const newValue = substituteValueVariables(rule.value, subs);
-            const newMember: GrammarRule = {
-                ...m,
-                parts: renamed.parts,
-                value: newValue,
-            };
-            subbed.push(newMember);
-        }
-        newMembers = subbed;
+        const subbed = trySubstituteMembers(rule.value, last);
+        if (subbed === undefined) return undefined;
+        newDispatch = subbed.dispatch;
+        newAlternatives = subbed.alternatives;
     }
 
     // Build the rewritten last part: drop variable / repeat /
     // optional (already verified absent), set tailCall.
     const newLast: RulesPart = {
         type: "rules",
-        alternatives: last.alternatives,
+        alternatives: newAlternatives,
         tailCall: true,
     };
     if (last.name !== undefined) newLast.name = last.name;
-    if (last.dispatch !== undefined) newLast.dispatch = last.dispatch;
-
-    if (newMembers !== undefined) {
-        // Members were rewritten: distribute the new members back
-        // into the same bucket+fallback shape, in the same order
-        // `getDispatchEffectiveMembers` produced them
-        // (dispatch buckets in order, then fallback).
-        if (last.dispatch === undefined) {
-            newLast.alternatives = newMembers;
-        } else {
-            let idx = 0;
-            const newDispatch = last.dispatch.map((m) => {
-                const newMap = new Map<string, GrammarRule[]>();
-                for (const [tok, bucket] of m.tokenMap) {
-                    newMap.set(
-                        tok,
-                        newMembers!.slice(idx, idx + bucket.length),
-                    );
-                    idx += bucket.length;
-                }
-                return { ...m, tokenMap: newMap };
-            });
-            const newAlts = newMembers.slice(idx);
-            newLast.dispatch = newDispatch;
-            newLast.alternatives =
-                newAlts.length === 0 ? EMPTY_FALLBACK_RULES : newAlts;
-        }
-    }
+    if (newDispatch !== undefined) newLast.dispatch = newDispatch;
 
     const newParts = parts.slice();
     newParts[newParts.length - 1] = newLast;
@@ -2857,6 +2770,130 @@ function tryPromoteTrailing(
 }
 
 /**
+ * Forwarding-mode (parent has no `value`) precondition check.  The
+ * matcher's implicit-default rule fires for the parent, so we only
+ * promote when the trailing `RulesPart` is *exactly* the part that
+ * would have contributed under that rule:
+ *
+ *   - Single-part rule (`parts.length === 1`): the lone part is the
+ *     trailing `RulesPart`, which contributes its captured value
+ *     regardless of binding.  Always safe.
+ *   - Multi-part rule: the matcher requires exactly one
+ *     implicit-default-contributing part (else `createValue` throws
+ *     "missing/multiple values for default" at finalize time).
+ *     Promoting masks that error - the tail-entry mechanism bypasses
+ *     the parent's `createValue` entirely.  Require the trailing
+ *     `RulesPart` to be that sole contributor (which means it must
+ *     be bound: `last.variable !== undefined`); bail out at any
+ *     other shape so baseline-throw paths stay observable on the
+ *     optimized AST.
+ */
+function checkForwardingPromotable(
+    parts: GrammarPart[],
+    last: RulesPart,
+): boolean {
+    if (parts.length <= 1) return true;
+    if (last.variable === undefined) return false;
+    for (let i = 0; i < parts.length - 1; i++) {
+        if (partContributesToImplicitDefault(parts[i])) return false;
+    }
+    return true;
+}
+
+/**
+ * Substitution-mode rewrite.  For each member of `last`'s dispatch
+ * buckets and fallback alternatives, α-rename top-level bindings
+ * (to avoid shadowing prefix-bound names referenced from
+ * `parentValue`), materialize the member's effective value, then
+ * substitute that into a copy of `parentValue` and write the result
+ * as the member's new `value`.  Returns the rewritten `dispatch` /
+ * `alternatives` pair, or `undefined` if any member can't be
+ * rewritten (signals a local bailout).
+ *
+ * Walks the dispatch + fallback shape directly so the rewritten AST
+ * shape mirrors the source shape without any implicit ordering
+ * contract with `getDispatchEffectiveMembers`.
+ */
+function trySubstituteMembers(
+    parentValue: CompiledValueNode,
+    last: RulesPart,
+):
+    | {
+          dispatch: DispatchModeBucket[] | undefined;
+          alternatives: GrammarRule[];
+      }
+    | undefined {
+    const v = last.variable;
+    if (v === undefined) return undefined;
+    const refs = collectVariableReferences(parentValue);
+    if (!refs.has(v)) return undefined;
+    // One `RenameState` per promotion site so all members of this
+    // fork draw fresh names from the same counter; renames within
+    // this tail-RulesPart never repeat.  Names are opaque
+    // (`__opt_inline_<n>`) and cannot collide with any user-named
+    // outer binding, so a substituted reference intended for the
+    // prefix can't be shadowed by a member's own binding.
+    const renameState: RenameState = { next: 0 };
+    let bailed = false;
+    const rewriteOne = (m: GrammarRule): GrammarRule => {
+        const renamed = renameAllChildBindings(m.parts, m.value, renameState);
+        const effective =
+            renamed.value !== undefined
+                ? renamed.value
+                : getImplicitDefaultValue({
+                      ...m,
+                      parts: renamed.parts,
+                      value: renamed.value,
+                  });
+        if (effective === undefined) {
+            // Member has no explicit value and we can't synthesize
+            // one to substitute (e.g. unbound single-part
+            // string / phraseSet).  Signal a local bailout.
+            bailed = true;
+            return m;
+        }
+        const subs = new Map<string, CompiledValueNode>();
+        subs.set(v, effective);
+        const newValue = substituteValueVariables(parentValue, subs);
+        return { ...m, parts: renamed.parts, value: newValue };
+    };
+    const rewriteBucket = (bucket: GrammarRule[]): GrammarRule[] => {
+        const out: GrammarRule[] = [];
+        for (const r of bucket) {
+            out.push(rewriteOne(r));
+            if (bailed) return bucket;
+        }
+        return out;
+    };
+
+    const newAlts: GrammarRule[] = rewriteBucket(last.alternatives);
+    if (bailed) return undefined;
+    let newDispatch: DispatchModeBucket[] | undefined = last.dispatch;
+    if (last.dispatch !== undefined) {
+        newDispatch = last.dispatch.map((m) => {
+            const newMap = new Map<string, GrammarRule[]>();
+            for (const [tok, bucket] of m.tokenMap) {
+                newMap.set(tok, rewriteBucket(bucket));
+            }
+            return { ...m, tokenMap: newMap };
+        });
+        if (bailed) return undefined;
+    }
+    // EMPTY_FALLBACK_RULES is a frozen sentinel used elsewhere in
+    // the optimizer (see `dispatchifyAlternations`) to mark "no
+    // fallback".  `validateTailRulesParts` accepts it (the contract
+    // checks effective-member count, which counts dispatched
+    // buckets); the matcher's tail-entry path never indexes into
+    // an empty fallback.  Reuse the same sentinel here so the
+    // serializer's identity-based dedup keeps working.
+    const fallback =
+        last.dispatch !== undefined && newAlts.length === 0
+            ? EMPTY_FALLBACK_RULES
+            : newAlts;
+    return { dispatch: newDispatch, alternatives: fallback };
+}
+
+/**
  * Mirrors the matcher's implicit-default contributor predicate for
  * multi-part rules: a part contributes iff it is variable-bearing
  * (wildcard / number always; rules / string / phraseSet only when
@@ -2864,11 +2901,26 @@ function tryPromoteTrailing(
  * finalize time; zero contributors throw too.
  */
 function partContributesToImplicitDefault(p: GrammarPart): boolean {
-    if (p.type === "wildcard" || p.type === "number") return true;
-    if (p.type === "rules" || p.type === "string" || p.type === "phraseSet") {
-        return p.variable !== undefined;
-    }
-    return false;
+    return getImplicitDefaultBindingName(p) !== undefined;
+}
+
+/**
+ * Single source of truth for "what binding (if any) does this part
+ * contribute to its parent rule's implicit default?".  Returns the
+ * variable name when the part is var-bearing in a way the matcher
+ * would forward via the implicit-default rule, otherwise
+ * `undefined`.
+ *
+ * Every `GrammarPart` variant carries a `variable` field
+ * (required on `wildcard` / `number`, optional on `rules` /
+ * `string` / `phraseSet`), so the union is structurally
+ * indexable.  See `CaptureBearingPart` in `grammarTypes.ts`.
+ *
+ * Shared by `partContributesToImplicitDefault` (predicate) and
+ * `getImplicitDefaultValue` (which needs the actual name).
+ */
+function getImplicitDefaultBindingName(p: GrammarPart): string | undefined {
+    return p.variable;
 }
 
 /**
@@ -2889,45 +2941,24 @@ function getImplicitDefaultValue(
     const parts = rule.parts;
     if (parts.length === 0) return undefined;
     if (parts.length === 1) {
-        const p = parts[0];
-        switch (p.type) {
-            case "wildcard":
-            case "number":
-                return { type: "variable", name: p.variable };
-            case "rules":
-            case "string":
-            case "phraseSet":
-                if (p.variable !== undefined) {
-                    return { type: "variable", name: p.variable };
-                }
-                // Unbound: matcher computes value from matched text
-                // (string / phraseSet) or nested rule's value (rules).
-                // We can't reify that here without changing the AST
-                // (e.g. minting a fresh binding on the part), so bail.
-                return undefined;
-        }
-        return undefined;
+        // Single-part rule: matcher forwards the part's value.  For
+        // var-bearing parts we can express that as a variable
+        // reference; for unbound `string` / `phraseSet` (whose
+        // matcher value derives from the matched text) and unbound
+        // `rules` (whose value derives from the inner match) we
+        // can't reify the result without changing the AST, so bail.
+        const name = parts[0].variable;
+        return name !== undefined ? { type: "variable", name } : undefined;
     }
     // Multi-part: implicit default requires exactly one
     // var-bearing part.  Same predicate as the inliner's
     // binding-friendly check for multi-part children.
     let theVar: string | undefined;
     for (const p of parts) {
-        let name: string | undefined;
-        if (p.type === "wildcard" || p.type === "number") {
-            name = p.variable;
-        } else if (
-            (p.type === "rules" ||
-                p.type === "string" ||
-                p.type === "phraseSet") &&
-            p.variable !== undefined
-        ) {
-            name = p.variable;
-        }
-        if (name !== undefined) {
-            if (theVar !== undefined) return undefined;
-            theVar = name;
-        }
+        const name = getImplicitDefaultBindingName(p);
+        if (name === undefined) continue;
+        if (theVar !== undefined) return undefined;
+        theVar = name;
     }
     return theVar !== undefined
         ? { type: "variable", name: theVar }

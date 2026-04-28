@@ -4,6 +4,7 @@
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
 import { GrammarPart, GrammarRule, RulesPart } from "../src/grammarTypes.js";
+import { findAllRulesParts } from "./testUtils.js";
 
 function findFirstRulesPart(rules: GrammarRule[]): RulesPart | undefined {
     const visit = (parts: GrammarPart[]): RulesPart | undefined => {
@@ -432,19 +433,6 @@ describe("Grammar Optimizer - Factoring Repro", () => {
 });
 
 // ─── Merged from grammarOptimizerTrieRisks.spec.ts ──────────────────────────
-function findAllRulesParts(rules: GrammarRule[]): RulesPart[] {
-    const out: RulesPart[] = [];
-    const visit = (parts: GrammarPart[]) => {
-        for (const p of parts) {
-            if (p.type === "rules") {
-                out.push(p);
-                for (const r of p.alternatives) visit(r.parts);
-            }
-        }
-    };
-    for (const r of rules) visit(r.parts);
-    return out;
-}
 
 describe("Grammar Optimizer - Trie risks", () => {
     // ── Risk: cross-scope reference forces bailout, but factoring above

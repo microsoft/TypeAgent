@@ -15,49 +15,8 @@ import { loadGrammarRules } from "../src/grammarLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
 import { grammarToJson } from "../src/grammarSerializer.js";
 import { grammarFromJson } from "../src/grammarDeserializer.js";
-import {
-    Grammar,
-    GrammarPart,
-    GrammarRule,
-    RulesPart,
-} from "../src/grammarTypes.js";
-
-function findAllRulesParts(rules: GrammarRule[]): RulesPart[] {
-    const out: RulesPart[] = [];
-    const seen = new Set<unknown>();
-    const visit = (parts: GrammarPart[]) => {
-        for (const p of parts) {
-            if (p.type !== "rules") continue;
-            out.push(p);
-            if (seen.has(p.alternatives)) continue;
-            seen.add(p.alternatives);
-            for (const r of p.alternatives) visit(r.parts);
-        }
-    };
-    for (const r of rules) visit(r.parts);
-    return out;
-}
-
-/**
- * Like `findAllRulesParts` but also walks the grammar-level dispatch
- * buckets - needed when the optimizer's dispatch pass hoists the
- * top-level alternation onto `grammar.dispatch`, leaving
- * `grammar.alternatives` (the fallback subset) empty or trimmed.
- */
-function findAllRulesPartsInGrammar(grammar: Grammar): RulesPart[] {
-    const out = findAllRulesParts(grammar.alternatives);
-    if (grammar.dispatch !== undefined) {
-        const seen = new Set<unknown>();
-        for (const m of grammar.dispatch) {
-            for (const bucket of m.tokenMap.values()) {
-                if (seen.has(bucket)) continue;
-                seen.add(bucket);
-                for (const inner of findAllRulesParts(bucket)) out.push(inner);
-            }
-        }
-    }
-    return out;
-}
+import { GrammarRule, RulesPart } from "../src/grammarTypes.js";
+import { findAllRulesParts, findAllRulesPartsInGrammar } from "./testUtils.js";
 
 function match(grammar: ReturnType<typeof loadGrammarRules>, s: string) {
     return matchGrammar(grammar, s).map((m) => m.match);

@@ -17,35 +17,10 @@
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
-import { GrammarPart, GrammarRule, RulesPart } from "../src/grammarTypes.js";
+import { findAllRulesParts } from "./testUtils.js";
 
 function match(grammar: ReturnType<typeof loadGrammarRules>, request: string) {
     return matchGrammar(grammar, request).map((m) => m.match);
-}
-
-function findAllRulesParts(rules: GrammarRule[]): RulesPart[] {
-    const out: RulesPart[] = [];
-    const visited = new WeakSet<GrammarRule[]>();
-    const visit = (parts: GrammarPart[]) => {
-        for (const p of parts) {
-            if (p.type === "rules") {
-                out.push(p);
-                if (!visited.has(p.alternatives)) {
-                    visited.add(p.alternatives);
-                    for (const r of p.alternatives) visit(r.parts);
-                }
-                if (p.dispatch !== undefined) {
-                    for (const m of p.dispatch) {
-                        for (const bucket of m.tokenMap.values()) {
-                            for (const r of bucket) visit(r.parts);
-                        }
-                    }
-                }
-            }
-        }
-    };
-    for (const r of rules) visit(r.parts);
-    return out;
 }
 
 describe("Grammar Optimizer - promoteTailRulesParts", () => {
@@ -66,12 +41,24 @@ describe("Grammar Optimizer - promoteTailRulesParts", () => {
             const tailParts = findAllRulesParts(optimized.alternatives).filter(
                 (rp) => rp.tailCall,
             );
-            expect(tailParts.length).toBeGreaterThanOrEqual(1);
+            // Exactly one promotion site: the single trailing
+            // <Inner> reference in <Start>.  Asserting the exact
+            // count (rather than `>= 1`) catches a regression that
+            // accidentally promotes inside <Inner>'s own member
+            // rules or emits multiple wrappers per fork.
+            expect(tailParts).toHaveLength(1);
             for (const tp of tailParts) {
                 expect(tp.variable).toBeUndefined();
                 expect(tp.repeat).toBeFalsy();
                 expect(tp.optional).toBeFalsy();
             }
+            // Top-level: still a single <Start> rule whose last
+            // part is the promoted tail RulesPart.
+            expect(optimized.alternatives).toHaveLength(1);
+            const startRule = optimized.alternatives[0];
+            expect(startRule.parts[startRule.parts.length - 1]).toBe(
+                tailParts[0],
+            );
         });
 
         // Multi-part rule where the trailing RulesPart is the sole
@@ -93,25 +80,6 @@ describe("Grammar Optimizer - promoteTailRulesParts", () => {
                 (rp) => rp.tailCall,
             );
             expect(tailParts.length).toBeGreaterThanOrEqual(1);
-        });
-
-        // Multi-part rule with an additional capture preceding the
-        // trailing RulesPart - two implicit-default contributors.
-        // The compiler rejects such a grammar at the start-rule
-        // level (no implicit value), so we exercise the guard via
-        // a nested rule that the parent forwards through unchanged.
-        it("does not promote when there are multiple implicit-default contributors", () => {
-            const text = `<Inner> = a -> 1 | b -> 2;
-<Mid> = $(s:string) $(v:<Inner>);
-<Start> = pre $(m:<Mid>) -> m;`;
-            // The grammar compiler accepts <Mid> structurally
-            // because $(m:<Mid>) requires <Mid>.hasValue, which is
-            // false here - so this branch isn't actually loadable
-            // either.  Skip the assertion; the negative case is
-            // already covered by the value-substitution
-            // bail-out test ("does not promote when parent.value
-            // does not reference the wrapper var") below.
-            void text;
         });
     });
 
