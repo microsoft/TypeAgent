@@ -919,11 +919,15 @@ export class ChatPanel {
         source: string,
         sourceIcon?: string,
         action?: unknown,
+        requestId?: string,
     ) {
-        if (this.currentAgentContainer) {
-            this.currentAgentContainer.updateSource(source, sourceIcon);
+        const target =
+            (requestId && this.agentContainersByRequestId.get(requestId)) ||
+            this.currentAgentContainer;
+        if (target) {
+            target.updateSource(source, sourceIcon);
             if (action !== undefined) {
-                this.currentAgentContainer.setActionData(action);
+                target.setActionData(action);
             }
             return;
         }
@@ -931,6 +935,11 @@ export class ChatPanel {
         // attached (the dispatcher fires setDisplayInfo before the
         // agent's first setDisplay/appendDisplay).
         this.pendingDisplayInfo = { source, sourceIcon, action };
+    }
+
+    /** Returns true if a user-message bubble for `requestId` already exists. */
+    public hasUserMessage(requestId: string): boolean {
+        return this.userMessageById.has(requestId);
     }
 
     /** Clear all messages. */
@@ -941,6 +950,11 @@ export class ChatPanel {
         this.currentAgentContainer = undefined;
         this.agentContainersByRequestId.clear();
         this.userMessageById.clear();
+        this.pendingDisplayInfo = undefined;
+        if (this.statusContainer) {
+            this.statusContainer.remove();
+            this.statusContainer = undefined;
+        }
     }
 
     /**
@@ -1006,29 +1020,43 @@ export class ChatPanel {
      * Signal that the current request has finished. Mirrors the shell's
      * `statusMessage.complete()` hook — clears any lingering status /
      * dispatcher-temporary bubble regardless of the arrival order of the
-     * agent's real response. If `result` is provided, finalize the
-     * current agent bubble's hover-reveal metrics with overall duration
-     * and token usage. Also resets the current agent container so the
-     * next request starts a fresh bubble.
+     * agent's real response. If `result` is provided, finalize the target
+     * agent bubble's hover-reveal metrics with overall duration and token
+     * usage. If `requestId` is supplied, that bubble is finalized;
+     * otherwise the most recently created bubble is used. Also resets the
+     * current agent container so the next request starts a fresh bubble.
      */
-    public completeRequest(result?: {
-        actionPhase?: PhaseTiming;
-        totalDuration?: number;
-        tokenUsage?: CompletionUsageStats;
-    }) {
+    public completeRequest(
+        requestId?: string,
+        result?: {
+            actionPhase?: PhaseTiming;
+            totalDuration?: number;
+            tokenUsage?: CompletionUsageStats;
+        },
+    ) {
         if (this.statusContainer) {
             this.statusContainer.remove();
             this.statusContainer = undefined;
         }
-        if (result && this.currentAgentContainer) {
-            this.currentAgentContainer.updateMetrics(
+        const target =
+            (requestId && this.agentContainersByRequestId.get(requestId)) ||
+            this.currentAgentContainer;
+        if (result && target) {
+            target.updateMetrics(
                 "Action",
                 result.actionPhase,
                 result.totalDuration,
                 result.tokenUsage,
             );
         }
-        this.currentAgentContainer = undefined;
+        if (requestId) {
+            this.agentContainersByRequestId.delete(requestId);
+        }
+        // If we just finalized the active bubble, reset it so the next
+        // request starts fresh.
+        if (!requestId || target === this.currentAgentContainer) {
+            this.currentAgentContainer = undefined;
+        }
     }
 
     /** Show a status message (temporary, removed when the next real message arrives). */
