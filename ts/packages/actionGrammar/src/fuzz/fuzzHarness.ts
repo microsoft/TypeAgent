@@ -86,6 +86,16 @@ export const DEFAULT_OPTIMIZER_VARIANTS: readonly OptimizerVariant[] = [
         name: "dispatchOnly",
         options: { dispatchifyAlternations: true },
     },
+    {
+        // Isolates `promoteTailRulesParts`.  The pass is independent
+        // of factor / dispatch (it walks rules looking for trailing
+        // `RulesPart`s already in the AST and promotes them to tail
+        // calls), so running it alone is meaningful and surfaces a
+        // promote-only regression that the bundled `recommended`
+        // variant might mask.
+        name: "promoteTailOnly",
+        options: { promoteTailRulesParts: true },
+    },
 ];
 
 export type FuzzConfig = {
