@@ -37,6 +37,7 @@ import { getConfigCommandHandlers } from "./handlers/configCommandHandlers.js";
 import { getConstructionCommandHandlers } from "./handlers/constructionCommandHandlers.js";
 import { DebugCommandHandler } from "./handlers/debugCommandHandlers.js";
 import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js";
+import { getConversationCommandHandlers } from "./handlers/conversationCommandHandlers.js";
 import { getHistoryCommandHandlers } from "./handlers/historyCommandHandler.js";
 import { TraceCommandHandler } from "./handlers/traceCommandHandler.js";
 import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
@@ -60,6 +61,7 @@ export const systemHandlers: CommandHandlerTable = {
     commands: {
         action: new ActionCommandHandler(),
         session: getSessionCommandHandlers(),
+        conversation: getConversationCommandHandlers(),
         history: getHistoryCommandHandlers(),
         memory: getMemoryCommandHandlers(),
         const: getConstructionCommandHandlers(),
