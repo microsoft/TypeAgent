@@ -99,6 +99,8 @@ export class ChatPanel {
     private commandHistory: string[] = [];
     private historyIndex = -1;
     private activeRequestId?: string;
+    private isSwitching = false;
+    private isHistoryLoading = false;
 
     // Completion state
     private completions: string[] = [];
@@ -939,6 +941,79 @@ export class ChatPanel {
 
     /** Enable or disable the input. */
     public setEnabled(enabled: boolean) {
+        // setSwitching/setHistoryLoading take precedence: if either is active,
+        // the host should not be able to re-enable the input until they clear.
+        if (enabled && (this.isSwitching || this.isHistoryLoading)) {
+            return;
+        }
+        this.textInput.contentEditable = enabled ? "true" : "false";
+        this.sendButton.disabled = !enabled;
+        if (enabled) {
+            this.inputArea.classList.remove("chat-input-disabled");
+        } else {
+            this.inputArea.classList.add("chat-input-disabled");
+        }
+    }
+
+    /**
+     * Disable input and show a placeholder while a conversation switch is in
+     * progress. Re-enables input on `setSwitching(false)` (unless history is
+     * still loading).
+     */
+    public setSwitching(switching: boolean, targetName?: string) {
+        this.isSwitching = switching;
+        if (switching) {
+            this.setEnabledInternal(false);
+            const label = targetName
+                ? `Switching to conversation "${targetName}"…`
+                : "Switching conversation…";
+            this.textInput.setAttribute("data-placeholder", label);
+            this.inputArea.classList.add("chat-input-switching");
+        } else {
+            this.inputArea.classList.remove("chat-input-switching");
+            if (!this.isHistoryLoading) {
+                this.setEnabledInternal(true);
+                this.textInput.setAttribute(
+                    "data-placeholder",
+                    "Type a message...",
+                );
+            }
+        }
+    }
+
+    /**
+     * Disable input and show a "Loading history…" placeholder until the host
+     * finishes replaying past messages on (re)connect or session restore.
+     * Re-enables input on `setHistoryLoading(false)` (unless a switch is
+     * still in progress).
+     */
+    public setHistoryLoading(loading: boolean) {
+        this.isHistoryLoading = loading;
+        if (loading) {
+            this.setEnabledInternal(false);
+            this.textInput.setAttribute(
+                "data-placeholder",
+                "Loading history…",
+            );
+            this.inputArea.classList.add("chat-input-history-loading");
+        } else {
+            this.inputArea.classList.remove("chat-input-history-loading");
+            if (!this.isSwitching) {
+                this.setEnabledInternal(true);
+                this.textInput.setAttribute(
+                    "data-placeholder",
+                    "Type a message...",
+                );
+            }
+        }
+    }
+
+    /**
+     * Internal enable/disable that bypasses the isSwitching/isHistoryLoading
+     * guard in setEnabled. Used by setSwitching and setHistoryLoading
+     * themselves to actually toggle input state.
+     */
+    private setEnabledInternal(enabled: boolean) {
         this.textInput.contentEditable = enabled ? "true" : "false";
         this.sendButton.disabled = !enabled;
         if (enabled) {
