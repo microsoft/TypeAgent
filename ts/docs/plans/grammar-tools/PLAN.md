@@ -193,12 +193,36 @@ after the snapshot loader contract is settled in A.1._
 After Track C (LSP features + debug panel) reaches a usable VS Code
 build, do the manual E2E. **Gate** before starting Tracks G and H.
 
-**Resolve before opening the gate:**
+**Exit criteria.** All of the following must be true to open the gate:
 
-- [ADR 0003](./decisions/0003-grammar-snapshot.md) (snapshot transport)
-  - blocks Track H.
-- [ADR 0004](./decisions/0004-monaco-lsp-transport.md) (LSP transport)
-  - blocks Track G.
+1. **Tracks A and B shipped end-to-end in core.** Every Track A / B
+   item has merged with tests; `pnpm --filter grammar-tools-core test`
+   green; CLI commands E.1 - E.5 work against fixture grammars.
+2. **VS Code extension landed.** C.1 - C.5 (LSP diagnostics, go-to-def,
+   find-refs, hover, format) and C.6 (debug webview with completion
+   preview + rule trace) all merged. C.7 (coverage decorations) and
+   C.8 (diff command) are nice-to-have, not blocking.
+3. **Manual E2E pass on three representative grammars.** Open
+   [`extensions/agr-language/sample.agr`](../../../extensions/agr-language/sample.agr),
+   one fixture grammar from
+   [`packages/actionGrammar/test-data`](../../../packages/actionGrammar/test-data),
+   and one real agent grammar (e.g. `player`); for each, verify:
+   parse-error squiggles, F12 / Shift+F12 navigation, hover, format,
+   and the debug-panel completion trace matches Jest expectations.
+4. **ADRs 0003 and 0004 resolved.**
+   [ADR 0003](./decisions/0003-grammar-snapshot.md) (snapshot transport)
+   blocks Track H; [ADR 0004](./decisions/0004-monaco-lsp-transport.md)
+   (LSP transport) blocks Track G.
+5. **Open chunk-01 follow-ups closed or scheduled.** The dispatcher
+   snapshot's debug-info contract (chunk 01 open question, surfaces
+   in ADR 0003) and the `decompile()` / `GrammarDebugInfo` emission
+   work (Track A.5 candidate from chunk-01) are either landed or have
+   an owner and a target track.
+
+**Decision and owner.** A single named owner runs the manual E2E (item 3) and signs off the gate; sign-off is a comment on the tracking issue
+or a short note in [STATUS.md](./STATUS.md). If any criterion slips,
+the gate stays closed and Tracks G / H wait. There is no partial
+opening.
 
 ### Track G - Web app (after gate)
 
@@ -280,6 +304,22 @@ this top-level plan stable.
 | 06  | Shell integration                                    | [06-shell-integration.md](./06-shell-integration.md)             |
 | 07  | CLI                                                  | [07-cli.md](./07-cli.md)                                         |
 | 08  | Coverage and diff (services in Phase 1; UI per host) | [08-coverage-and-diff.md](./08-coverage-and-diff.md)             |
+
+### Reading order
+
+The chunk file numbers are stable identifiers, not a recommended reading
+order. To follow the design dependency-first, read in this order:
+
+| Order | File                                                             | Track / Phase     | Why here                                                     |
+| ----- | ---------------------------------------------------------------- | ----------------- | ------------------------------------------------------------ |
+| 1     | [02-matcher-instrumentation.md](./02-matcher-instrumentation.md) | Track 0 / Phase 0 | Trace + span prereqs that everything else cites.             |
+| 2     | [01-core.md](./01-core.md)                                       | Track A / Phase 1 | `LoadedGrammar`, services, error contract.                   |
+| 3     | [08-coverage-and-diff.md](./08-coverage-and-diff.md)             | Track B / Phase 1 | Last two core services; locks chunk-02 trace consumer shape. |
+| 4     | [07-cli.md](./07-cli.md)                                         | Track E / Phase 1 | First host; cheapest validation of the core API.             |
+| 5     | [03-vscode-extension.md](./03-vscode-extension.md)               | Track C / Phase 1 | Second host; first LSP / webview surface.                    |
+| 6     | [04-shared-ui.md](./04-shared-ui.md)                             | Track D / Phase 1 | Reused by VS Code webview, web app, and shell.               |
+| 7     | [05-web-app.md](./05-web-app.md)                                 | Track G / Phase 2 | Post-gate; Monaco + LSP transport.                           |
+| 8     | [06-shell-integration.md](./06-shell-integration.md)             | Track H / Phase 2 | Post-gate; embeds web bundle in live mode.                   |
 
 ## Decisions
 

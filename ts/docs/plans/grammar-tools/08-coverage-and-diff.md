@@ -50,18 +50,74 @@ Deliver coverage and diff in two layers:
 - Mutation testing of grammars.
 - Performance profiling of the matcher.
 
-## Open questions
+## Locked decisions (v1)
 
-- Diff granularity - rule-level only, or down to part / token level?
-  Locking this early in Phase 1 is important because the API shape
-  cascades to every host.
-- Coverage output format - simple counts, or more like Istanbul
-  (line / branch coverage in source coordinates)? The latter unlocks
-  editor decorations for free but requires per-part source spans (chunk
-  02 must guarantee these).
-- Should the **coverage event stream** reuse the chunk 02 `TraceEvent`
-  hook, or should the matcher emit a distinct (cheaper) coverage
-  event? Affects the size of the chunk 02 contract.
+These are locked for Phase 1 so the Track B API can freeze. Revisit
+post-Phase-2 only if a host surface demands more granularity.
+
+### Diff granularity: rule-level
+
+v1 reports **rule-level changes only**: `added`, `removed`, `changed`.
+For `changed` rules we include both rules' canonical text (or AST) but
+do **not** compute a structural sub-rule diff. Hosts that want a
+sub-rule view can run a text diff on the canonical form.
+
+```ts
+type GrammarDiff = {
+  added: RuleId[];
+  removed: RuleId[];
+  changed: Array<{ rule: RuleId; before: string; after: string }>;
+};
+```
+
+Rationale: rule-level is the unit users reason about; sub-rule diff
+multiplies API surface and pulls in tree-diff dependencies for marginal
+v1 value. Upgrade path is additive (add `parts?: PartDiff[]` to
+`changed` entries) so freezing now is safe.
+
+### Coverage shape: source-coordinated, Istanbul-flavored
+
+v1 emits per-rule and per-part hit counts **keyed by source location**,
+not by abstract IDs alone. This requires chunk 02's per-part `pos` /
+`end` guarantee and chunk 01's `GrammarDebugInfo.positions` map.
+
+```ts
+type CoverageReport = {
+  grammarHash: string;
+  totals: { rules: number; ruleHits: number; parts: number; partHits: number };
+  rules: Array<{
+    id: RuleId;
+    location: SourceLocation; // requires debugInfo
+    hits: number;
+    parts: Array<{
+      id: PartId;
+      location: SourceLocation;
+      hits: number;
+    }>;
+  }>;
+  unmatched: Array<{ input: string; reason?: string }>;
+};
+```
+
+Rationale: source coordinates unlock editor decorations (C.7) and web
+gutter rendering (G.4) for free, and make the JSON shape close enough
+to Istanbul that downstream tooling (badges, dashboards) can consume
+it. The cost is a hard dependency on `GrammarDebugInfo`: coverage
+**throws `MissingDebugInfoError`** when run against a `LoadedGrammar`
+without `debugInfo` (per chunk 01's error contract). Hosts that load a
+debug-info-less snapshot must surface this clearly.
+
+### Coverage event source: reuse `TraceEvent`
+
+v1 derives coverage by subscribing to chunk 02's `TraceEvent` stream
+(`partMatched` increments part + rule hit counts; unmatched inputs
+captured at the matcher boundary). No separate cheaper coverage event.
+
+Rationale: keeps chunk 02's contract small; the trace hook is already
+zero-overhead when no subscriber is attached, so coverage runs pay
+exactly the trace cost and nothing extra. If benchmarks (per ADR 0002)
+show coverage-only consumers want a cheaper path, we add a dedicated
+event in a follow-up; the public coverage API does not change.
 
 ## Verification
 
