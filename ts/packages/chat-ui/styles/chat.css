@@ -575,6 +575,7 @@ table.table-message td {
   position: absolute;
   top: 0;
   right: 0;
+  line-height: 0;
 }
 
 .chat-message-explained[data-expl]:hover::after {
@@ -587,8 +588,9 @@ table.table-message td {
   color: gray;
   background-color: lightyellow;
   border: 1px solid black;
-  padding: 1px 5px 1px 5px;
+  padding: 1px 5px;
   font-size: 70%;
+  z-index: 10;
 }
 
 /* =========================================================================
