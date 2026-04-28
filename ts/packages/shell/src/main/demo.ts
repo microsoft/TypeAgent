@@ -63,23 +63,41 @@ function sendChatInputText(message: string, chatView: WebContentsView) {
     return Promise.race([actionPromise, timeoutPromise]);
 }
 
+let demoRunning = false;
+
 export async function runDemo(
     window: BrowserWindow,
     chatView: WebContentsView,
     awaitKeyboardInput: boolean,
 ) {
-    const data = await openDemoFile(window);
-    if (data) {
-        const lines = data.split(/\r?\n/);
+    if (demoRunning) {
+        await dialog.showMessageBox(window, {
+            type: "warning",
+            title: "Demo already running",
+            message:
+                "A demo is already running. Wait for it to finish (or restart the shell) before starting another.",
+        });
+        return;
+    }
 
-        for (let line of lines) {
-            if (line.startsWith("@pauseForInput")) {
-                await getActionCompleteEvent(true);
-            } else if (line && !line.startsWith("#")) {
-                await sendChatInputText(line, chatView);
-                var manualInput = awaitKeyboardInput && !line.startsWith("@");
-                await getActionCompleteEvent(manualInput);
+    demoRunning = true;
+    try {
+        const data = await openDemoFile(window);
+        if (data) {
+            const lines = data.split(/\r?\n/);
+
+            for (let line of lines) {
+                if (line.startsWith("@pauseForInput")) {
+                    await getActionCompleteEvent(true);
+                } else if (line && !line.startsWith("#")) {
+                    await sendChatInputText(line, chatView);
+                    var manualInput =
+                        awaitKeyboardInput && !line.startsWith("@");
+                    await getActionCompleteEvent(manualInput);
+                }
             }
         }
+    } finally {
+        demoRunning = false;
     }
 }
