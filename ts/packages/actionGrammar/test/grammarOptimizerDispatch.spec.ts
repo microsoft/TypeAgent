@@ -1090,11 +1090,13 @@ describe("Grammar Optimizer - non-canonical DispatchPart shapes", () => {
 
         it("dispatches each separator char (`,`, `.`, `:`, `!`, `?`, `@`, `#`, `%`, `&`, `+`, `=`, `'`, `\"`)", () => {
             // One alternative per separator character, each with the
-            // separator embedded in its first literal.  Bucket keys
-            // must all be `"x"` (the leading non-separator run),
-            // collapsing every alternative into a single bucket -
-            // the fallback subset must be empty and dispatch must
-            // still produce the right matches.
+            // separator embedded in its first literal.  All 13 alts
+            // collapse into a SINGLE `"x"` bucket (the leading
+            // non-separator run is identical), so the dispatch must
+            // still discriminate among them via the member rules'
+            // StringPart regexes after routing.  The fallback subset
+            // must be empty and dispatch must still produce the
+            // right match for each input.
             const text = `<Start> [spacing=required] = x, a -> "comma"
                 | x. a -> "dot"
                 | x: a -> "colon"

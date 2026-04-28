@@ -60,8 +60,12 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
     // form omits `index` (the empty-alternatives case - typically
     // a fully-dispatched part with no fallback).  One per grammar
     // load; the matcher only iterates `alternatives`, so sharing
-    // is safe.
-    const emptyRules: GrammarRule[] = [];
+    // is safe.  Frozen so an accidental `push` from downstream code
+    // would throw rather than silently corrupting every
+    // empty-fallback `RulesPart` in the loaded grammar.
+    const emptyRules: GrammarRule[] = Object.freeze(
+        [] as GrammarRule[],
+    ) as GrammarRule[];
     function rulesFor(idx: number): GrammarRule[] {
         let rules = indexToRules.get(idx);
         if (rules === undefined) {
@@ -156,6 +160,25 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
             case "number":
                 return p;
             case "rules": {
+                // A `tailCall` part with no `index` AND no
+                // `dispatch` has zero effective members - it can
+                // never satisfy `validateTailRulesParts`'s
+                // >= 2-member requirement, and the compiler /
+                // optimizer never emit this shape.  Catch it at
+                // load time rather than as a confusing match-time
+                // failure on the shared `emptyRules` sentinel.
+                // (A fully-dispatched tail with no fallback is
+                // legitimate: the dispatch table holds the members
+                // and `index` is omitted.)
+                if (
+                    p.tailCall &&
+                    p.index === undefined &&
+                    p.dispatch === undefined
+                ) {
+                    throw new Error(
+                        `Invalid grammar JSON: tailCall RulesPart (name='${p.name ?? "<unnamed>"}') has no 'index' and no 'dispatch'`,
+                    );
+                }
                 const rules =
                     p.index === undefined ? emptyRules : rulesFor(p.index);
                 const part: RulesPart = {

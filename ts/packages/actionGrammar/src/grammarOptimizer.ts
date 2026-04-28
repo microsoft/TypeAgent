@@ -17,24 +17,10 @@ import {
     StringPart,
 } from "./grammarTypes.js";
 import { leadingWordBoundaryScriptPrefix } from "./spacingScripts.js";
-import { separatorRegExpStr } from "./grammarMatcher.js";
+import { leadingNonSeparatorRun } from "./grammarMatcher.js";
 import { getDispatchEffectiveMembers } from "./dispatchHelpers.js";
 
 const debug = registerDebug("typeagent:grammar:opt");
-
-// Leading non-separator run.  Mirrors `nonSeparatorRunRegExp` in
-// `grammarMatcher.ts` (used by `peekNextToken` for required /
-// optional / none modes).  We keep a separate, anchored copy here so
-// the optimizer doesn't import a non-exported sticky regex from the
-// matcher and doesn't pay for the matcher's `lastIndex` mutation.
-const leadingNonSeparatorRunRegExp = new RegExp(
-    `^[^${separatorRegExpStr}]+`,
-    "u",
-);
-function leadingNonSeparatorRun(s: string): string {
-    const m = leadingNonSeparatorRunRegExp.exec(s);
-    return m === null ? "" : m[0];
-}
 
 export type GrammarOptimizationOptions = {
     /**
@@ -2082,11 +2068,21 @@ function classifyDispatchMember(
     if (mode === "required") {
         // Bucket on the leading non-separator run, mirroring what
         // `peekNextToken` returns for required / optional / none
-        // modes.  Using the full `literal` here would cause a key
-        // mismatch when the literal embeds a separator char (e.g.
-        // `"d?"` buckets under `"d"` since peek returns `"d"`).  If
-        // the literal starts with a separator, the prefix is empty
-        // and we can't dispatch this member - send it to fallback.
+        // modes.  Two consequences worth being explicit about:
+        //   1. Key alignment: using the full `literal` would cause
+        //      a key mismatch when the literal embeds a separator
+        //      char (e.g. `"d?"` buckets under `"d"` since peek
+        //      returns `"d"` for input `"d? ..."`).
+        //   2. Bucket collapse: literals like `"d?"`, `"d!"`,
+        //      `"d."` all share bucket key `"d"`, so dispatch
+        //      fan-out can be smaller than the number of distinct
+        //      first-token literals.  This is correct - peek will
+        //      route all such inputs to the same bucket, and the
+        //      member rules' StringPart regexes discriminate
+        //      among them.
+        // If the literal starts with a separator, the prefix is
+        // empty and we can't dispatch this member - send it to
+        // fallback.
         const pref = leadingNonSeparatorRun(literal);
         if (pref.length === 0) {
             return { kind: "fallback" };

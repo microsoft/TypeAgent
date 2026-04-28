@@ -281,10 +281,21 @@ export type FuzzFeatureFlags = {
 };
 
 /**
- * Broad-coverage defaults for the fuzz generator.  Mixes the four
- * core part kinds with low-rate background activity in dimensions
- * whose outputs are matcher-invariant or cheap parser/writer
- * stress:
+ * Broad-coverage defaults for the fuzz generator.
+ *
+ * Decision rubric for whether a new knob should default-on here:
+ *   default-on iff the knob is matcher-invariant OR cheap
+ *   parser/writer-only stress AND a small probability (<= 0.1)
+ *   does not materially shift the AST shape distribution that any
+ *   single optimizer pass keys on.  Anything that converts whole
+ *   rules into the factor / dispatch / inline-eligible shape, or
+ *   that depends on a separately-configured pool, belongs in a
+ *   targeted `fuzzDescribe` block instead so a regression points
+ *   at the right pass.
+ *
+ * Mixes the four core part kinds with low-rate background
+ * activity in dimensions whose outputs are matcher-invariant or
+ * cheap parser/writer stress:
  *
  *   - `comments.lineProb` / `comments.blockProb` exercise the
  *     parser's comment attachment and the writer's round-trip

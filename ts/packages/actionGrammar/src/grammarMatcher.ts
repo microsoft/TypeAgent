@@ -1139,6 +1139,28 @@ export function nextNonSeparatorIndex(request: string, index: number) {
 // regexes into local state at use sites.
 const nonSeparatorRunRegExp = new RegExp(`[^${separatorRegExpStr}]+`, "yu");
 const singleSeparatorRegExp = new RegExp(`[${separatorRegExpStr}]`, "u");
+
+// Anchored, non-sticky companion to `nonSeparatorRunRegExp` for use
+// outside the hot matcher path.  Same character class semantics as
+// `peekNextToken`'s `required` / `optional` / `none` branches but
+// without the `lastIndex` mutation - safe to call from the
+// optimizer / completion / any other reentrant context.
+const leadingNonSeparatorRunRegExp = new RegExp(
+    `^[^${separatorRegExpStr}]+`,
+    "u",
+);
+
+/**
+ * Return the leading run of non-separator characters in `s`, or `""`
+ * if `s` starts with a separator (or is empty).  Mirrors what
+ * `peekNextToken` returns for `required` / `optional` / `none`
+ * `tokenMode` so dispatch-bucket keys derived from literal first
+ * tokens stay aligned with what the matcher will actually peek.
+ */
+export function leadingNonSeparatorRun(s: string): string {
+    const m = leadingNonSeparatorRunRegExp.exec(s);
+    return m === null ? "" : m[0];
+}
 // Auto-mode peek regex: matches either the leading run of
 // word-boundary-script characters (Latin / Cyrillic / ...) OR a
 // single non-WB code point (CJK, digit, punctuation).  Used by
