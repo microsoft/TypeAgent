@@ -167,6 +167,98 @@ snapshot without debug info call `decompile()` first.
   `decompile(grammar)` to synthesize a read-only `SourceFile` plus
   matching `debugInfo` for display purposes.
 
+## Error handling
+
+Three kinds of failure show up in `grammar-tools-core`. Each has one
+canonical channel; services do not mix channels.
+
+| Failure kind                                                                                    | Channel                                                             | Example                                                 |
+| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------- |
+| **Recoverable, in-source.** Parse / semantic problem in user content                            | `Diagnostic[]` (returned by `getDiagnostics()` or by `LoadResult`)  | Unknown rule reference, unclosed bracket, type mismatch |
+| **Catastrophic load.** No usable grammar can be produced                                        | `LoadResult.ok = false` carries `Diagnostic[]` plus partial `files` | File doesn't parse at all; agent manifest missing       |
+| **Misuse / missing fidelity layer.** Caller asked for something the loaded handle can't provide | Typed exception                                                     | `getSymbolIndex()` on a snapshot without `debugInfo`    |
+
+### Diagnostics, not exceptions, for in-source problems
+
+Anything that originates in user-authored grammar text is a
+`Diagnostic`, never an exception. This includes parse errors, dangling
+references, and any future semantic checks. Diagnostics carry source
+ranges so editor / LSP hosts can render them inline.
+
+```ts
+const result = await loadGrammarFromFile(path);
+if (!result.ok) {
+  // Catastrophic load - render result.diagnostics, keep last-known-good.
+} else {
+  const diags = getDiagnostics(result.grammar); // semantic warnings/errors
+  // Render diagnostics; grammar is still usable.
+}
+```
+
+`LoadResult.ok = false` is reserved for the case where **no compiled
+grammar can be produced at all**. A grammar that compiles but has
+warnings is `ok: true` with non-empty diagnostics.
+
+### Typed exceptions for caller misuse
+
+Services that depend on a fidelity layer beyond `grammar` throw a
+typed exception when that layer is absent. This is **caller misuse**
+(host called the wrong service for the handle it loaded), not a data
+problem, so an exception is appropriate. Hosts that want to handle
+the case gracefully test the handle before calling.
+
+```ts
+export class GrammarToolsError extends Error {
+  readonly code: string;
+}
+
+export class MissingDebugInfoError extends GrammarToolsError {
+  readonly code = "MISSING_DEBUG_INFO";
+  constructor(public readonly source: GrammarSource) {
+    /* ... */
+  }
+}
+
+export class MissingSourceError extends GrammarToolsError {
+  readonly code = "MISSING_SOURCE";
+  constructor(public readonly source: GrammarSource) {
+    /* ... */
+  }
+}
+```
+
+Service-by-service rules:
+
+| Service             | Throws                  | When                                                 |
+| ------------------- | ----------------------- | ---------------------------------------------------- |
+| `previewCompletion` | -                       | Never throws on a `LoadedGrammar`                    |
+| `traceMatch`        | -                       | Never throws on a `LoadedGrammar`                    |
+| `runCoverage`       | -                       | Returns a `CoverageReport` even on empty corpus      |
+| `diffGrammars`      | -                       | -                                                    |
+| `getSymbolIndex`    | `MissingDebugInfoError` | Handle has no `debugInfo`                            |
+| `getDiagnostics`    | `MissingSourceError`    | Handle has no `files`                                |
+| `format`            | -                       | Returns input unchanged when source is not parseable |
+
+**Cheap guard helpers.** Core exposes type-guard predicates so hosts
+can avoid try/catch for the common case:
+
+```ts
+export function hasDebugInfo(
+  g: LoadedGrammar,
+): g is LoadedGrammar & { debugInfo: GrammarDebugInfo };
+export function hasSource(
+  g: LoadedGrammar,
+): g is LoadedGrammar & { files: readonly SourceFile[] };
+```
+
+### Internal invariant violations
+
+Anything that indicates a bug inside `grammar-tools-core` or
+`actionGrammar` (e.g. a grammar node missing an expected field,
+inconsistent identifier index) throws a plain `Error` and is **not** a
+public API contract. Hosts should not catch these; they should crash and
+report.
+
 ## Type sketches (placeholders)
 
 These are **starting points to unblock parallel work**, not frozen
