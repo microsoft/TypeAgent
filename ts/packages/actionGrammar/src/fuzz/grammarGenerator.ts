@@ -56,6 +56,36 @@ export type PartKindWeights = {
     wildcard: number;
     /** Weight for `$(varN:number)` numeric captures. */
     number: number;
+    /**
+     * Weight for literals drawn from a per-rule "shared prefix" pool.
+     * When picked, the generator emits a literal from a small pool
+     * shared across the alternatives of the current rule, biasing
+     * toward common leading literals across alternates.  Stresses
+     * `factorCommonPrefixes` and the `dispatchifyAlternations` pass
+     * which both rely on observing identical leading parts in
+     * sibling alternatives.  At weight 0 the shared pool is never
+     * sampled and behavior matches plain `literal` tokens.
+     */
+    sharedPrefix: number;
+};
+
+/**
+ * Knobs controlling which vocabulary pool literal-bearing tokens
+ * draw from.  The base `words` pool is always available; when a
+ * `nonBoundaryWords` pool is configured on {@link GeneratorConfig}
+ * the generator can also draw tokens that don't begin with a
+ * word-boundary character.  These cases exercise the dispatch
+ * pass's eligibility logic - non-boundary keys disqualify the
+ * `auto` (undefined) spacing-mode partition.
+ */
+export type VocabularyFeatures = {
+    /**
+     * Probability in `[0, 1]` per literal slot of drawing from the
+     * `nonBoundaryWords` pool instead of the default `words` pool.
+     * Has no effect if `GeneratorConfig.nonBoundaryWords` is empty
+     * or undefined.
+     */
+    nonBoundaryProb: number;
 };
 
 /**
@@ -93,6 +123,17 @@ export type SpacingFeatures = {
     ruleProb: number;
     /** Relative weights for the spacing mode that gets picked. */
     modes: SpacingModeWeights;
+    /**
+     * Probability in `[0, 1]` of forcing every alternate within a
+     * rule to share the same spacing-mode annotation (picked once at
+     * rule scope and stamped on each alt).  When fired, overrides
+     * the per-alternate roll for that rule.  Stresses
+     * `dispatchifyAlternations`, which only buckets alternatives
+     * sharing a spacing-mode partition - random per-alt
+     * annotations almost never collide on the same mode in a small
+     * grammar.
+     */
+    alignWithinRuleProb: number;
 };
 
 /**
@@ -115,6 +156,49 @@ export type GroupFeatures = {
     optionalProb: number;
     /** Probability per part of being wrapped in a repeat group. */
     repeatProb: number;
+    /**
+     * Probability per part of being wrapped in a bare `(...)` group
+     * with no quantifier.  Produces a single-alternative `RulesPart`
+     * around the inner part, exercising `inlineSingleAlternatives`
+     * and the variable-leakage / value-substitution branches inside
+     * `tryInlineRulesPart`.  Capture parts are skipped (the
+     * surrounding wrapper would shift their visibility to the
+     * alternate's value expression) so this composes cleanly with
+     * `partKinds.wildcard` / `partKinds.number`.
+     */
+    singleAltGroupProb: number;
+};
+
+/**
+ * Knobs producing AST shapes that target specific optimizer passes.
+ * Each is a probability in `[0, 1]`.
+ */
+export type ShapeFeatures = {
+    /**
+     * Probability per generated rule of being forced to a single
+     * alternative (overrides the random `altCount` roll).  When the
+     * rule is then referenced from another rule's parts, the
+     * referencing site holds a `RulesPart` with one member - the
+     * exact precondition for `inlineSingleAlternatives`.
+     */
+    singleAltRuleProb: number;
+    /**
+     * Probability per `ruleRef` slot of reusing a rule already
+     * referenced earlier in the current rule (when any).  Increases
+     * `RulesPart` reference counts on shared `GrammarRule[]` arrays,
+     * stressing the `countRulesArrayRefs` path of the inliner (which
+     * refuses to inline a body shared by more than one reference).
+     */
+    ruleRefReuseProb: number;
+    /**
+     * Probability per multi-alternate rule of being shaped for
+     * `tailFactoring`: forces a shared leading literal across alts
+     * and suppresses any value attachment on those alts.  Together
+     * these create the "factorable fork in tail position of a
+     * value-less parent rule" shape that turns into a `tailCall`
+     * `RulesPart`.
+     */
+    tailFriendlyAltProb: number;
 };
 
 /**
@@ -136,6 +220,10 @@ export type FuzzFeatureFlags = {
     spacing: SpacingFeatures;
     /** Optional / repeat group quantifiers around individual parts. */
     groups: GroupFeatures;
+    /** Vocabulary-pool selection knobs. */
+    vocabulary: VocabularyFeatures;
+    /** AST-shape biases targeting specific optimizer passes. */
+    shapes: ShapeFeatures;
 };
 
 /**
@@ -155,6 +243,7 @@ export const DEFAULT_FEATURES: FuzzFeatureFlags = {
         ruleRef: 1,
         wildcard: 1,
         number: 1,
+        sharedPrefix: 0,
     },
     values: {
         attachProb: 0.5,
@@ -168,10 +257,20 @@ export const DEFAULT_FEATURES: FuzzFeatureFlags = {
             none: 1,
             auto: 1,
         },
+        alignWithinRuleProb: 0,
     },
     groups: {
         optionalProb: 0.2,
         repeatProb: 0.2,
+        singleAltGroupProb: 0,
+    },
+    vocabulary: {
+        nonBoundaryProb: 0,
+    },
+    shapes: {
+        singleAltRuleProb: 0,
+        ruleRefReuseProb: 0,
+        tailFriendlyAltProb: 0,
     },
 };
 
@@ -187,6 +286,7 @@ export const MINIMAL_FEATURES: FuzzFeatureFlags = {
         ruleRef: 1,
         wildcard: 0,
         number: 0,
+        sharedPrefix: 0,
     },
     values: {
         attachProb: 0,
@@ -200,10 +300,20 @@ export const MINIMAL_FEATURES: FuzzFeatureFlags = {
             none: 1,
             auto: 1,
         },
+        alignWithinRuleProb: 0,
     },
     groups: {
         optionalProb: 0,
         repeatProb: 0,
+        singleAltGroupProb: 0,
+    },
+    vocabulary: {
+        nonBoundaryProb: 0,
+    },
+    shapes: {
+        singleAltRuleProb: 0,
+        ruleRefReuseProb: 0,
+        tailFriendlyAltProb: 0,
     },
 };
 
@@ -351,6 +461,55 @@ export const FEATURE_FIELDS: readonly FeatureFieldDescriptor[] = [
             f.groups.repeatProb = v;
         },
     },
+    {
+        path: "partKinds.sharedPrefix",
+        get: (f) => f.partKinds.sharedPrefix,
+        set: (f, v) => {
+            f.partKinds.sharedPrefix = v;
+        },
+    },
+    {
+        path: "vocabulary.nonBoundaryProb",
+        get: (f) => f.vocabulary.nonBoundaryProb,
+        set: (f, v) => {
+            f.vocabulary.nonBoundaryProb = v;
+        },
+    },
+    {
+        path: "spacing.alignWithinRuleProb",
+        get: (f) => f.spacing.alignWithinRuleProb,
+        set: (f, v) => {
+            f.spacing.alignWithinRuleProb = v;
+        },
+    },
+    {
+        path: "groups.singleAltGroupProb",
+        get: (f) => f.groups.singleAltGroupProb,
+        set: (f, v) => {
+            f.groups.singleAltGroupProb = v;
+        },
+    },
+    {
+        path: "shapes.singleAltRuleProb",
+        get: (f) => f.shapes.singleAltRuleProb,
+        set: (f, v) => {
+            f.shapes.singleAltRuleProb = v;
+        },
+    },
+    {
+        path: "shapes.ruleRefReuseProb",
+        get: (f) => f.shapes.ruleRefReuseProb,
+        set: (f, v) => {
+            f.shapes.ruleRefReuseProb = v;
+        },
+    },
+    {
+        path: "shapes.tailFriendlyAltProb",
+        get: (f) => f.shapes.tailFriendlyAltProb,
+        set: (f, v) => {
+            f.shapes.tailFriendlyAltProb = v;
+        },
+    },
 ];
 
 // ── Generation config ─────────────────────────────────────────────────────────
@@ -360,6 +519,23 @@ export type GeneratorConfig = {
     maxAlts: number;
     maxParts: number;
     words: readonly string[];
+    /**
+     * Optional secondary literal pool whose tokens are biased toward
+     * non-word-boundary leading characters (e.g. punctuation, digits)
+     * so the dispatch optimizer's eligibility check (which requires
+     * word-boundary-script characters in the `auto` partition) is
+     * exercised on disqualifying inputs.  Drawn from when
+     * `vocabulary.nonBoundaryProb > 0`.
+     */
+    nonBoundaryWords?: readonly string[];
+    /**
+     * Pool of literals to draw from when emitting a `partKinds.sharedPrefix`
+     * token.  Kept small so multiple alternatives in a rule are
+     * likely to roll the same word, producing a shared leading
+     * literal across alternates that the prefix-factoring pass can
+     * collapse.  Defaults to the first two words of `words`.
+     */
+    sharedPrefixWords?: readonly string[];
 };
 
 export const DEFAULT_GENERATOR_CONFIG: GeneratorConfig = {
@@ -434,6 +610,26 @@ function buildLiteralPart(
 ): { text: string; matchTokens: string[] } {
     const w = pick(rng, words);
     return { text: w, matchTokens: [w] };
+}
+
+/**
+ * Pick a literal pool for a slot, honoring
+ * `vocabulary.nonBoundaryProb` when a non-boundary pool is configured.
+ */
+function pickLiteralPool(
+    rng: () => number,
+    config: GeneratorConfig,
+    features: FuzzFeatureFlags,
+): readonly string[] {
+    const nb = config.nonBoundaryWords;
+    if (
+        nb &&
+        nb.length > 0 &&
+        rng() < clamp01(features.vocabulary.nonBoundaryProb)
+    ) {
+        return nb;
+    }
+    return config.words;
 }
 
 function buildWildcardPart(
@@ -536,21 +732,66 @@ export function buildRandomGrammar(
     // Hoist clamped probabilities out of the inner loop.
     const optionalProb = clamp01(features.groups.optionalProb);
     const repeatProb = clamp01(features.groups.repeatProb);
+    const singleAltGroupProb = clamp01(features.groups.singleAltGroupProb);
     const valueAttachProb = clamp01(features.values.attachProb);
     const altSpacingProb = clamp01(features.spacing.altProb);
     const ruleSpacingProb = clamp01(features.spacing.ruleProb);
+    const alignWithinRuleProb = clamp01(features.spacing.alignWithinRuleProb);
+    const singleAltRuleProb = clamp01(features.shapes.singleAltRuleProb);
+    const ruleRefReuseProb = clamp01(features.shapes.ruleRefReuseProb);
+    const tailFriendlyAltProb = clamp01(features.shapes.tailFriendlyAltProb);
+
+    // Per-rule shared-prefix word pool.  Kept small (default: first
+    // two words) so multiple alternatives are likely to roll the
+    // same word, producing a literal common to all alts that the
+    // prefix-factoring pass can collapse.
+    const sharedPrefixPool: readonly string[] =
+        config.sharedPrefixWords && config.sharedPrefixWords.length > 0
+            ? config.sharedPrefixWords
+            : words.slice(0, Math.min(2, words.length));
 
     // Build rules in reverse so rule i can reference rules > i.
     const ruleStates: RuleState[] = new Array(ruleCount);
 
     for (let i = ruleCount - 1; i >= 0; i--) {
-        const altCount = intInRange(rng, 1, maxAlts);
+        // Roll alt count, optionally forcing 1 to feed
+        // `inlineSingleAlternatives`.
+        const altCount =
+            rng() < singleAltRuleProb ? 1 : intInRange(rng, 1, maxAlts);
         const state: RuleState = {
             altTexts: [],
             firstAltMatch: [],
             boundVars: [],
             hasValue: false,
         };
+
+        // Per-rule decisions made up-front so all alternates see them.
+        //
+        //   - `tailFriendlyAlt`: shape this rule to feed `tailFactoring`
+        //     by forcing a shared leading literal across alts AND
+        //     suppressing all value attachments (parent rule must have
+        //     no value of its own for tail factoring to fire).
+        //   - `forceSharedPrefixLiteral`: a single literal that every
+        //     alternate of this rule will emit as its first token
+        //     (selected from the shared-prefix pool).
+        //   - `ruleAlignedSpacingMode`: if `alignWithinRuleProb`
+        //     fires, every alternate gets stamped with this mode
+        //     instead of rolling the per-alt annotation.
+        const tailFriendlyAlt =
+            altCount >= 2 &&
+            sharedPrefixPool.length > 0 &&
+            rng() < tailFriendlyAltProb;
+        const forceSharedPrefixLiteral: string | undefined = tailFriendlyAlt
+            ? pick(rng, sharedPrefixPool)
+            : undefined;
+        const ruleAlignedSpacingMode: SpacingMode | undefined =
+            rng() < alignWithinRuleProb
+                ? pickSpacingMode(rng, features.spacing.modes)
+                : undefined;
+
+        // Track rule references emitted in this rule so the
+        // `ruleRefReuse` knob can replay an earlier target.
+        const usedRuleRefs: number[] = [];
 
         for (let a = 0; a < altCount; a++) {
             const partCount = intInRange(rng, 1, maxParts);
@@ -559,26 +800,64 @@ export function buildRandomGrammar(
             const altBoundVars: string[] = [];
 
             for (let p = 0; p < partCount; p++) {
-                const partKind = choosePartKind(rng, features, i, ruleCount);
+                // First-position override: when this rule is shaped
+                // for tail factoring or sharedPrefix is rolled into
+                // position 0, emit a literal from the shared pool so
+                // every alt of this rule shares a leading token.
+                let partKind: PartKind;
+                if (p === 0 && forceSharedPrefixLiteral !== undefined) {
+                    partKind = "sharedPrefix";
+                } else {
+                    partKind = choosePartKind(
+                        rng,
+                        features,
+                        i,
+                        ruleCount,
+                        p === 0,
+                    );
+                }
 
                 let innerText: string;
                 let innerMatch: string[];
                 let captureVar: string | undefined;
                 switch (partKind) {
                     case "literal": {
-                        const lit = buildLiteralPart(rng, words);
+                        const pool = pickLiteralPool(rng, config, features);
+                        const lit = buildLiteralPart(rng, pool);
                         innerText = lit.text;
                         innerMatch = lit.matchTokens;
                         break;
                     }
+                    case "sharedPrefix": {
+                        const w =
+                            forceSharedPrefixLiteral ??
+                            pick(rng, sharedPrefixPool);
+                        innerText = w;
+                        innerMatch = [w];
+                        break;
+                    }
                     case "ruleRef": {
-                        const target = intInRange(rng, i + 1, ruleCount - 1);
+                        // Reuse-an-earlier-target roll: when there is
+                        // any previous reference in this rule and the
+                        // probability fires, replay one of them.  Otherwise
+                        // pick a fresh forward target.
+                        let target: number;
+                        if (
+                            usedRuleRefs.length > 0 &&
+                            rng() < ruleRefReuseProb
+                        ) {
+                            target = pick(rng, usedRuleRefs);
+                        } else {
+                            target = intInRange(rng, i + 1, ruleCount - 1);
+                            usedRuleRefs.push(target);
+                        }
                         innerText = `<${ruleName(target)}>`;
                         innerMatch = ruleStates[target].firstAltMatch;
                         break;
                     }
                     case "wildcard": {
-                        const wc = buildWildcardPart(rng, varCounter, words);
+                        const pool = pickLiteralPool(rng, config, features);
+                        const wc = buildWildcardPart(rng, varCounter, pool);
                         innerText = wc.text;
                         innerMatch = wc.matchTokens;
                         captureVar = wc.varName;
@@ -622,6 +901,21 @@ export function buildRandomGrammar(
                     repCount = intInRange(rng, 1, 3);
                 }
 
+                // Bare `(part)` group with no quantifier: only
+                // applied when no other quantifier ran.  Forces a
+                // single-alt RulesPart wrapper around the part,
+                // exercising the inliner.  Skipped on captures so
+                // visibility semantics remain unchanged (matches the
+                // canWrap convention above).
+                if (
+                    canWrap &&
+                    !optional &&
+                    !repeat &&
+                    rng() < singleAltGroupProb
+                ) {
+                    partText = `(${innerText})`;
+                }
+
                 if (captureVar !== undefined) {
                     altBoundVars.push(captureVar);
                 }
@@ -636,9 +930,16 @@ export function buildRandomGrammar(
 
             // Build value expression for this alternative if enabled.
             // `features.values.attachProb` is the per-alternate attach
-            // probability (only eligible when captures exist).
+            // probability (only eligible when captures exist).  When
+            // shaping for tail factoring, the parent rule MUST have no
+            // value of its own - suppress all value attachments for
+            // this rule.
             let valueText = "";
-            if (altBoundVars.length > 0 && rng() < valueAttachProb) {
+            if (
+                !tailFriendlyAlt &&
+                altBoundVars.length > 0 &&
+                rng() < valueAttachProb
+            ) {
                 const expr = buildValueExpr(rng, altBoundVars);
                 valueText = ` -> ${expr}`;
                 state.hasValue = true;
@@ -653,11 +954,16 @@ export function buildRandomGrammar(
                 }
             }
 
-            // Per-alternate spacing annotation.  If every mode weight
-            // is 0 the picker returns undefined and we skip the
-            // annotation rather than fall back to uniform.
+            // Per-alternate spacing annotation.  When the rule has a
+            // pre-picked aligned mode, stamp it on every alternate
+            // unconditionally.  Otherwise roll the per-alt
+            // probability.  If every mode weight is 0 the picker
+            // returns undefined and we skip the annotation rather
+            // than fall back to uniform.
             let spacingText = "";
-            if (rng() < altSpacingProb) {
+            if (ruleAlignedSpacingMode !== undefined) {
+                spacingText = spacingAnnotation(ruleAlignedSpacingMode);
+            } else if (rng() < altSpacingProb) {
                 const mode = pickSpacingMode(rng, features.spacing.modes);
                 if (mode !== undefined) {
                     spacingText = spacingAnnotation(mode);
@@ -720,16 +1026,19 @@ export function buildRandomGrammar(
 
 // ── Part kind selection ───────────────────────────────────────────────────────
 
-type PartKind = "literal" | "ruleRef" | "wildcard" | "number";
+type PartKind = "literal" | "ruleRef" | "wildcard" | "number" | "sharedPrefix";
 
 function choosePartKind(
     rng: () => number,
     features: FuzzFeatureFlags,
     ruleIndex: number,
     ruleCount: number,
+    isFirstSlot: boolean,
 ): PartKind {
     // ruleRef requires a forward rule to point at; otherwise force its
-    // weight to 0.  Other kinds are always available.
+    // weight to 0.  `sharedPrefix` is only useful at the first slot of
+    // an alternative (later positions wouldn't share with a sibling's
+    // first part) - zero its weight elsewhere.
     const ruleRefAvailable = ruleIndex + 1 < ruleCount;
     const kinds = features.partKinds;
     const entries: ReadonlyArray<readonly [PartKind, number]> = [
@@ -737,6 +1046,7 @@ function choosePartKind(
         ["ruleRef", ruleRefAvailable ? kinds.ruleRef : 0],
         ["wildcard", kinds.wildcard],
         ["number", kinds.number],
+        ["sharedPrefix", isFirstSlot ? kinds.sharedPrefix : 0],
     ];
     // Fallback to literal if no kind has positive weight in this slot.
     return weightedPick(rng, entries) ?? "literal";

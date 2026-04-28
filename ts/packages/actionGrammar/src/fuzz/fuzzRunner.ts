@@ -39,10 +39,12 @@ import {
     validateOptimizerEquivalence,
     validateTextRoundTrip,
     validateJsonRoundTrip,
+    DEFAULT_OPTIMIZER_VARIANTS,
     type FuzzConfig,
     type FuzzResult,
     type FuzzFeatureFlags,
     type FuzzValidationKind,
+    type OptimizerVariant,
 } from "./fuzzHarness.js";
 import type { GeneratedGrammar, GeneratorConfig } from "./grammarGenerator.js";
 
@@ -63,11 +65,13 @@ function printUsage(): void {
         "                       Each entry is `path` (= weight 1) or",
         "                       `path=<value>` where `path` is a dotted",
         "                       reference into the FuzzFeatureFlags tree:",
-        "                         partKinds.{literal,ruleRef,wildcard,number}",
+        "                         partKinds.{literal,ruleRef,wildcard,number,sharedPrefix}",
         "                         values.attachProb",
-        "                         spacing.{altProb,ruleProb}",
+        "                         spacing.{altProb,ruleProb,alignWithinRuleProb}",
         "                         spacing.modes.{required,optional,none,auto}",
-        "                         groups.{optionalProb,repeatProb}",
+        "                         groups.{optionalProb,repeatProb,singleAltGroupProb}",
+        "                         vocabulary.nonBoundaryProb",
+        "                         shapes.{singleAltRuleProb,ruleRefReuseProb,tailFriendlyAltProb}",
         "                       Fields named `*Prob` are probabilities in",
         "                       [0,1]; other numeric fields are relative",
         "                       weights for a weighted random pick.  When",
@@ -82,6 +86,26 @@ function printUsage(): void {
         "  --depth <N>          Max rules / nesting depth (default: 4)",
         "  --width <N>          Max alternatives per rule (default: 4)",
         "  --parts <N>          Max parts per alternative (default: 4)",
+        "  --non-boundary-words <csv>",
+        "                       Comma-separated secondary literal pool whose",
+        "                       tokens are biased toward non-word-boundary",
+        "                       characters (e.g. punctuation, digits).  Used",
+        "                       in conjunction with `--features vocabulary.nonBoundaryProb=...`",
+        "                       to stress dispatch eligibility logic.",
+        "  --shared-prefix-words <csv>",
+        "                       Comma-separated pool sampled by the",
+        "                       `partKinds.sharedPrefix` and",
+        "                       `shapes.tailFriendlyAltProb` knobs.",
+        "                       Defaults to the first two of `words`.",
+        "  --optimizer-variants <csv>",
+        "                       Subset of {recommended, inlineOnly, factorOnly,",
+        "                       dispatchOnly} to test under the optimizer",
+        "                       validation.  Defaults to all four.",
+        "  --require-optimizer-activity",
+        "                       Fail the run if no grammar produced",
+        "                       observable optimizer activity.  Useful to",
+        "                       catch silent regressions where a refactor",
+        "                       turns the optimizer into a no-op.",
         "  --repro <dir>        Write repro cases for failures into <dir>",
         "  --replay <dir>       Replay repro case(s) from a directory",
         "  --verbose            Print each grammar and per-input results",
@@ -229,6 +253,50 @@ function parseArgs(argv: string[]): ParsedArgs {
                 }
                 break;
             }
+            case "--non-boundary-words": {
+                const list = argv[++i]
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter((s) => s.length > 0);
+                config.generator.nonBoundaryWords = list;
+                break;
+            }
+            case "--shared-prefix-words": {
+                const list = argv[++i]
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter((s) => s.length > 0);
+                config.generator.sharedPrefixWords = list;
+                break;
+            }
+            case "--optimizer-variants": {
+                const wanted = argv[++i]
+                    .split(",")
+                    .map((s) => s.trim().toLowerCase())
+                    .filter((s) => s.length > 0);
+                const byName = new Map<string, OptimizerVariant>(
+                    DEFAULT_OPTIMIZER_VARIANTS.map((v) => [
+                        v.name.toLowerCase(),
+                        v,
+                    ]),
+                );
+                const picked: OptimizerVariant[] = [];
+                for (const name of wanted) {
+                    const v = byName.get(name);
+                    if (!v) {
+                        console.error(
+                            `Unknown optimizer variant: ${name}.  Valid: ${DEFAULT_OPTIMIZER_VARIANTS.map((x) => x.name).join(", ")}`,
+                        );
+                        process.exit(1);
+                    }
+                    picked.push(v);
+                }
+                config.optimizerVariants = picked;
+                break;
+            }
+            case "--require-optimizer-activity":
+                config.requireAnyOptimizerActivity = true;
+                break;
             default:
                 console.error(`Unknown flag: ${arg}`);
                 printUsage();
@@ -249,7 +317,9 @@ function writeReproCases(
     fs.mkdirSync(reproDir, { recursive: true });
 
     for (const f of failures) {
-        const slug = `grammar-${String(f.grammarIndex).padStart(3, "0")}-${f.validation}`;
+        const variantSlug =
+            f.optimizerVariant !== undefined ? `-${f.optimizerVariant}` : "";
+        const slug = `grammar-${String(f.grammarIndex).padStart(3, "0")}-${f.validation}${variantSlug}`;
         const caseDir = path.join(reproDir, slug);
         fs.mkdirSync(caseDir, { recursive: true });
 
@@ -261,6 +331,7 @@ function writeReproCases(
             seed: `0x${config.seed.toString(16)}`,
             grammarIndex: f.grammarIndex,
             validation: f.validation,
+            optimizerVariant: f.optimizerVariant,
             input: f.input,
             error: f.error,
             features: config.features,
@@ -279,6 +350,7 @@ type ReproMeta = {
     seed: string;
     grammarIndex: number;
     validation: FuzzValidationKind;
+    optimizerVariant?: string;
     input?: string;
     error?: string;
     features: FuzzFeatureFlags;
@@ -343,11 +415,20 @@ function replayReproCases(dir: string): number {
         switch (meta.validation) {
             case "optimizer": {
                 const inputs = meta.input !== undefined ? [meta.input] : [];
+                // Honor the variant the failure was originally captured
+                // under (defaults to all variants if absent).
+                const variants =
+                    meta.optimizerVariant !== undefined
+                        ? DEFAULT_OPTIMIZER_VARIANTS.filter(
+                              (v) => v.name === meta.optimizerVariant,
+                          )
+                        : undefined;
                 results = validateOptimizerEquivalence(
                     meta.grammarIndex,
                     grammarText,
                     inputs,
                     gen,
+                    variants ?? DEFAULT_OPTIMIZER_VARIANTS,
                 );
                 break;
             }
@@ -423,9 +504,30 @@ function main(): void {
     console.log(`  inputs/gram: ${config.inputsPerGrammar}`);
     console.log(`  features:    ${enabledFeatures || "(none)"}`);
     console.log(`  validations: ${config.validations.join(", ")}`);
+    if (config.validations.includes("optimizer")) {
+        const variantNames = (
+            config.optimizerVariants ?? DEFAULT_OPTIMIZER_VARIANTS
+        )
+            .map((v) => v.name)
+            .join(", ");
+        console.log(`  opt variants: ${variantNames}`);
+    }
     console.log(
         `  generator:   depth=${config.generator.maxRules} width=${config.generator.maxAlts} parts=${config.generator.maxParts}`,
     );
+    if (config.generator.nonBoundaryWords?.length) {
+        console.log(
+            `  non-boundary words: ${config.generator.nonBoundaryWords.join(",")}`,
+        );
+    }
+    if (config.generator.sharedPrefixWords?.length) {
+        console.log(
+            `  shared-prefix words: ${config.generator.sharedPrefixWords.join(",")}`,
+        );
+    }
+    if (config.requireAnyOptimizerActivity) {
+        console.log(`  require optimizer activity: yes`);
+    }
     console.log();
 
     const results = runFuzz(config);
@@ -434,6 +536,42 @@ function main(): void {
     const passed = results.filter((r) => r.passed).length;
     const failed = results.filter((r) => !r.passed).length;
     const total = results.length;
+
+    // Optimizer-activity rollup: per-variant count of grammars that
+    // produced any observable optimizer change.  Useful diagnostic
+    // when a fuzz run otherwise has nothing to report - tells the
+    // caller whether the configured features actually feed the
+    // optimizer's preconditions.
+    if (config.validations.includes("optimizer")) {
+        const perVariant = new Map<
+            string,
+            { active: Set<number>; total: Set<number> }
+        >();
+        for (const r of results) {
+            if (
+                r.validation !== "optimizer" ||
+                r.optimizerVariant === undefined
+            ) {
+                continue;
+            }
+            let bucket = perVariant.get(r.optimizerVariant);
+            if (!bucket) {
+                bucket = { active: new Set(), total: new Set() };
+                perVariant.set(r.optimizerVariant, bucket);
+            }
+            bucket.total.add(r.grammarIndex);
+            if (r.optimizerActivity === true) {
+                bucket.active.add(r.grammarIndex);
+            }
+        }
+        if (perVariant.size > 0) {
+            console.log();
+            console.log(chalk.bold("Optimizer activity (grammars/total):"));
+            for (const [name, b] of perVariant) {
+                console.log(`  ${name}: ${b.active.size}/${b.total.size}`);
+            }
+        }
+    }
 
     console.log();
     if (failed > 0) {
@@ -444,9 +582,13 @@ function main(): void {
         for (let i = 0; i < show; i++) {
             const f = failures[i];
             const inputTag = f.input !== undefined ? ` input='${f.input}'` : "";
+            const variantTag =
+                f.optimizerVariant !== undefined
+                    ? ` [${f.optimizerVariant}]`
+                    : "";
             console.log(
                 chalk.red(
-                    `  grammar #${f.grammarIndex} ${f.validation}${inputTag}`,
+                    `  grammar #${f.grammarIndex} ${f.validation}${variantTag}${inputTag}`,
                 ),
             );
             if (f.error) {
