@@ -220,14 +220,16 @@ E.5 `grammar diff`. _Needs B.4._
 E.\* commands ship as the corresponding core service lands - the CLI
 is the cheapest smoke-test for each service.
 
-### Track F - Dispatcher snapshot (parallel after 0c + A.1)
+### Track F - Dispatcher snapshot (parallel after 0c + A.1 + A.5)
 
-**Resolve [ADR 0003](./decisions/0003-grammar-snapshot.md) before F.1**
-(it pins the RPC payload shape).
+[ADR 0003](./decisions/0003-grammar-snapshot.md) is **Accepted**: the
+RPC ships `{ grammar, debugInfo }` as JSON. F.1 therefore depends on
+A.5 (compiler-side `GrammarDebugInfo` emission) as well as A.1.
 
 F.1 New dispatcher RPC `getCompiledGrammarSnapshot(sessionId)` returning
-`grammarToJson` output. _Independent of host work; can land any time
-after the snapshot loader contract is settled in A.1._
+`{ grammar: GrammarJson; debugInfo: GrammarDebugInfoJson }` (no source
+bytes in v1; see ADR 0003). _Independent of host work; can land any
+time after A.1 and A.5._
 
 ### Phase 2 sync point (decision gate)
 
@@ -372,7 +374,7 @@ on them.
 | ---- | ---------------------------------------- | ------------------------------------------------------------------------- |
 | 0001 | Shared UI tech (Lit vs React vs vanilla) | [Open - resolve before Track D](./decisions/0001-shared-ui-tech.md)       |
 | 0002 | Match trace hook strategy                | [Accepted (option A)](./decisions/0002-trace-hook.md)                     |
-| 0003 | Live grammar snapshot transport          | [Open - resolve before Track F](./decisions/0003-grammar-snapshot.md)     |
+| 0003 | Live grammar snapshot transport          | [Accepted](./decisions/0003-grammar-snapshot.md)                          |
 | 0004 | Monaco LSP transport                     | [Open - resolve before Track G](./decisions/0004-monaco-lsp-transport.md) |
 | 0005 | Shared service contract                  | [Accepted](./decisions/0005-shared-service-contract.md)                   |
 

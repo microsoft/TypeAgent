@@ -138,15 +138,14 @@ itself is stateless; this caching lives in the host (see chunks 03,
 
 ### Scenarios
 
-| #   | Scenario                                     | Host provides                |   `files`   | `debugInfo` | `grammar` | Notes                                                                   |
-| --- | -------------------------------------------- | ---------------------------- | :---------: | :---------: | :-------: | ----------------------------------------------------------------------- |
-| 1   | VS Code editor, single `.agr`                | path + live buffer text      |      ✓      |  ✓ emitted  |     ✓     | Failed parse → `LoadResult.ok = false`; host keeps last-known-good      |
-| 2   | Web editor (Vite SPA)                        | text buffer (+ virtual id)   |      ✓      |  ✓ emitted  |     ✓     | Same as #1                                                              |
-| 3   | Agent grammar (file mode)                    | agent name / manifest path   | ✓ (N files) |  ✓ emitted  |     ✓     | Compiles N source files, emits unified debug info                       |
-| 4a  | Live dispatcher snapshot **with** debug info | RPC `{ grammar, debugInfo }` |      ✗      |      ✓      |     ✓     | Symbol service works ("rule X is in agent Y file Z"); diagnostics empty |
-| 4b  | Live dispatcher snapshot **without** debug   | RPC `{ grammar }`            |      ✗      |      ✗      |     ✓     | Match / trace / coverage work; symbols throw `MissingDebugInfoError`    |
-| 5   | CLI coverage run                             | path or agent + corpus       |  (loaded)   |  (emitted)  |     ✓     | Cheapest path: load → run → exit                                        |
-| 6   | Decompiled view (any of 4a / 4b)             | `decompile(grammar)`         | ✓ synthetic | ✓ synthetic |     ✓     | Read-only; lets snapshot mode show source-shaped UI                     |
+| #   | Scenario                                          | Host provides                |   `files`   | `debugInfo` | `grammar` | Notes                                                                                                                        |
+| --- | ------------------------------------------------- | ---------------------------- | :---------: | :---------: | :-------: | ---------------------------------------------------------------------------------------------------------------------------- |
+| 1   | VS Code editor, single `.agr`                     | path + live buffer text      |      ✓      |  ✓ emitted  |     ✓     | Failed parse → `LoadResult.ok = false`; host keeps last-known-good                                                           |
+| 2   | Web editor (Vite SPA)                             | text buffer (+ virtual id)   |      ✓      |  ✓ emitted  |     ✓     | Same as #1                                                                                                                   |
+| 3   | Agent grammar (file mode)                         | agent name / manifest path   | ✓ (N files) |  ✓ emitted  |     ✓     | Compiles N source files, emits unified debug info                                                                            |
+| 4   | Live dispatcher snapshot                          | RPC `{ grammar, debugInfo }` |      ✗      |      ✓      |     ✓     | Per [ADR 0003](./decisions/0003-grammar-snapshot.md): debug info always shipped; symbol service works; no source bytes in v1 |
+| 5   | CLI coverage run                                  | path or agent + corpus       |  (loaded)   |  (emitted)  |     ✓     | Cheapest path: load → run → exit                                                                                             |
+| 6   | Decompiled view (e.g. a future grammar-only host) | `decompile(grammar)`         | ✓ synthetic | ✓ synthetic |     ✓     | Read-only; lets a grammar-only handle show source-shaped UI                                                                  |
 
 ### Per-service requirements
 
@@ -471,8 +470,11 @@ packages/grammarTools/core/
   compiler) or in `grammar-tools-core` (post-processing).~~ Decided
   2026-04-28: lives in `actionGrammar` as Track A.5, alongside the
   `PartId` assignment from chunk 02; `grammar-tools-core` re-exports.
-- Whether the dispatcher snapshot (ADR 0003) ships `debugInfo` alongside
-  `grammar`, source bytes, both, or neither. Updates ADR 0003.
+- ~~Whether the dispatcher snapshot (ADR 0003) ships `debugInfo` alongside
+  `grammar`, source bytes, both, or neither.~~ Resolved 2026-04-28 by
+  [ADR 0003](./decisions/0003-grammar-snapshot.md): ships
+  `{ grammar, debugInfo }` as JSON; no source bytes in v1. Scenario
+  4a is the only live-mode case; 4b is removed.
 
 ## Verification
 

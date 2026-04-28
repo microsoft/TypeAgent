@@ -39,8 +39,11 @@ session's compiled grammar** via a new RPC method.
 - Where does the debug panel live in the shell UI - menu item, command
   palette, or hidden behind a `DEBUG=` flag? See parent
   [PLAN.md](./PLAN.md).
-- Should the snapshot include source spans, or only the compiled
-  rules / NFA / DFA? See chunk 02 open questions.
+- ~~Should the snapshot include source spans, or only the compiled
+  rules / NFA / DFA?~~ Resolved by
+  [ADR 0003](./decisions/0003-grammar-snapshot.md): ships
+  `{ grammar, debugInfo }`, no source bytes in v1. F.1 therefore
+  depends on A.5 as well as A.1.
 
 ## Verification
 
