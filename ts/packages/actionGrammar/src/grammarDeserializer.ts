@@ -56,6 +56,12 @@ function validateDispatchInvariants(
 function grammarFromJsonInternal(json: GrammarJson): Grammar {
     const start = json.rules[0];
     const indexToRules: Map<number, GrammarRule[]> = new Map();
+    // Shared sentinel returned for `RulesPart`s whose serialized
+    // form omits `index` (the empty-alternatives case - typically
+    // a fully-dispatched part with no fallback).  One per grammar
+    // load; the matcher only iterates `alternatives`, so sharing
+    // is safe.
+    const emptyRules: GrammarRule[] = [];
     function rulesFor(idx: number): GrammarRule[] {
         let rules = indexToRules.get(idx);
         if (rules === undefined) {
@@ -150,7 +156,8 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
             case "number":
                 return p;
             case "rules": {
-                const rules = rulesFor(p.index);
+                const rules =
+                    p.index === undefined ? emptyRules : rulesFor(p.index);
                 const part: RulesPart = {
                     type: "rules",
                     name: p.name,

@@ -354,8 +354,12 @@ describe("validateTailRulesParts", () => {
                     if (p.type === "rules" && p.tailCall) {
                         // Force the referenced rules array to have
                         // length 1 by replacing the index target with
-                        // a single-rule array.
-                        json.rules[p.index] = [json.rules[p.index][0]];
+                        // a single-rule array.  `tailCall` parts
+                        // always carry an index (a tail call into
+                        // an empty rule array would never be emitted
+                        // by the compiler), so the assertion is safe.
+                        const idx = p.index!;
+                        json.rules[idx] = [json.rules[idx][0]];
                     }
                 }
             }

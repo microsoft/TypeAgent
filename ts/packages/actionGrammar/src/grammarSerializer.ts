@@ -75,17 +75,23 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
                 return p;
             case "rules": {
                 // For both plain and dispatched parts, `index` points
-                // at `p.rules` (the full alternation, or - in a
-                // dispatched part - the fallback subset; may be
-                // empty, which still gets a unique slot via
-                // identity-sharing).
+                // at `p.alternatives` (the full alternation, or - in
+                // a dispatched part - the fallback subset).  When
+                // the alternatives are empty (typical for a
+                // fully-dispatched alternation with no fallback) we
+                // omit `index` entirely - the deserializer
+                // substitutes a shared empty array.  This avoids
+                // both an `[]` pool slot and a per-site `index`
+                // field for that case.
                 const part: RulePartJson = {
                     name: p.name,
                     type: "rules",
-                    index: indexFor(p.alternatives),
                     variable: p.variable,
                     optional: p.optional,
                 };
+                if (p.alternatives.length > 0) {
+                    part.index = indexFor(p.alternatives);
+                }
                 if (p.repeat) part.repeat = true;
                 if (p.tailCall) part.tailCall = true;
                 if (p.dispatch !== undefined) {

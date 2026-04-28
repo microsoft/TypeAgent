@@ -469,11 +469,13 @@ export type RulePartJson = {
      * assigned to any bucket).  Suffix arrays dedup with named-rule
      * arrays via the existing identity-sharing mechanism.
      *
-     * When a dispatched part has no fallback rules the in-memory
-     * shape uses `rules: []` and the serializer points `index` at a
-     * shared empty-rules-array slot (deduped like any other).
+     * Omitted entirely when the alternatives array is empty (the
+     * common case for a dispatched part with no fallback): the
+     * deserializer substitutes a frozen shared empty array.  This
+     * avoids both an `[]` pool slot *and* a per-site `"index": N`
+     * field for that case.
      */
-    index: number;
+    index?: number;
     /**
      * Optimizer-only first-token dispatch index.  See `RulesPart.dispatch`.
      * Stored as an index into the shared `GrammarJson.dispatches`
