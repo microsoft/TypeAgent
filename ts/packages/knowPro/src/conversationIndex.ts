@@ -389,7 +389,7 @@ async function addBatchToSemanticRefIndex(
 
 function beginIndexing(conversation: IConversation) {
     if (conversation.semanticRefIndex === undefined) {
-        conversation.semanticRefIndex = new ConversationIndex();
+        conversation.semanticRefIndex = new TermToSemanticRefIndex();
     }
     if (conversation.semanticRefs === undefined) {
         conversation.semanticRefs = new SemanticRefCollection();
@@ -406,11 +406,9 @@ function verifyHasSemanticRefIndex(conversation: IConversation) {
 }
 
 /**
- * TODO: Should rename this to TermToSemanticRefIndex
- * Notes:
- *  Case-insensitive
+ * Case-insensitive term-to-semantic-ref index.
  */
-export class ConversationIndex implements ITermToSemanticRefIndex {
+export class TermToSemanticRefIndex implements ITermToSemanticRefIndex {
     private map: Map<string, ScoredSemanticRefOrdinal[]> = new Map();
 
     constructor(data?: ITermToSemanticRefIndexData | undefined) {

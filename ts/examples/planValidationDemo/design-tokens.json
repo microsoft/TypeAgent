@@ -1,0 +1,31 @@
+{
+  "color": {
+    "primary": "#4f46e5",
+    "primaryHover": "#4338ca",
+    "surface": "#0b0d10",
+    "surfaceRaised": "#141820",
+    "textPrimary": "#f5f6f8",
+    "textMuted": "#9aa3b2",
+    "border": "#1f2630"
+  },
+  "font": {
+    "family": "\"Inter\", \"Segoe UI\", system-ui, sans-serif",
+    "sizeBody": "16px",
+    "sizeHeadline": "48px",
+    "sizeSubhead": "20px",
+    "weightBody": "400",
+    "weightHeadline": "700"
+  },
+  "space": {
+    "xs": "4px",
+    "sm": "8px",
+    "md": "16px",
+    "lg": "32px",
+    "xl": "64px"
+  },
+  "radius": {
+    "sm": "4px",
+    "md": "8px",
+    "lg": "16px"
+  }
+}

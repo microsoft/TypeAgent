@@ -5,11 +5,11 @@
  * Tests for the @conversation command handler in conversationCommands.ts.
  *
  * Subcommands:
- *   new <name>      — create a session, optionally switch to it
- *   switch <name>   — switch to a named session
- *   list [filter]   — list sessions with current marker
- *   rename <name>   — rename the current session
- *   delete <name>   — delete a session after confirmation
+ *   new <name>      — create a conversation, optionally switch to it
+ *   switch <name>   — switch to a named conversation
+ *   list [filter]   — list conversations with current marker
+ *   rename <name>   — rename the current conversation
+ *   delete <name>   — delete a conversation after confirmation
  *
  * The tests mock AgentServerConnection methods and readline to verify
  * routing, argument validation, and interactive confirmation flows.
@@ -29,8 +29,8 @@ import {
 } from "@jest/globals";
 import type {
     AgentServerConnection,
-    SessionDispatcher,
-    SessionInfo,
+    ConversationDispatcher,
+    ConversationInfo,
 } from "@typeagent/agent-server-client";
 
 // ── readline mock (must be installed before importing the module under test) ─
@@ -58,10 +58,13 @@ type ConversationCommandContext =
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Minimal SessionInfo factory. */
+/** Minimal ConversationInfo factory. */
 function makeSession(
-    overrides: Partial<SessionInfo> & { sessionId: string; name: string },
-): SessionInfo {
+    overrides: Partial<ConversationInfo> & {
+        conversationId: string;
+        name: string;
+    },
+): ConversationInfo {
     return {
         clientCount: 1,
         createdAt: new Date().toISOString(),
@@ -72,19 +75,23 @@ function makeSession(
 /** Build mock AgentServerConnection with jest.fn() stubs. */
 function makeConnection() {
     return {
-        listSessions: jest.fn<AgentServerConnection["listSessions"]>(),
-        createSession: jest.fn<AgentServerConnection["createSession"]>(),
-        renameSession: jest.fn<AgentServerConnection["renameSession"]>(),
-        deleteSession: jest.fn<AgentServerConnection["deleteSession"]>(),
+        listConversations:
+            jest.fn<AgentServerConnection["listConversations"]>(),
+        createConversation:
+            jest.fn<AgentServerConnection["createConversation"]>(),
+        renameConversation:
+            jest.fn<AgentServerConnection["renameConversation"]>(),
+        deleteConversation:
+            jest.fn<AgentServerConnection["deleteConversation"]>(),
         // Unused stubs required by the interface
-        joinSession: jest.fn(),
-        leaveSession: jest.fn(),
+        joinConversation: jest.fn(),
+        leaveConversation: jest.fn(),
         close: jest.fn(),
     } as unknown as AgentServerConnection & {
-        listSessions: jest.Mock;
-        createSession: jest.Mock;
-        renameSession: jest.Mock;
-        deleteSession: jest.Mock;
+        listConversations: jest.Mock;
+        createConversation: jest.Mock;
+        renameConversation: jest.Mock;
+        deleteConversation: jest.Mock;
     };
 }
 
@@ -131,20 +138,20 @@ function makeCtx(
     overrides: Partial<ConversationCommandContext> = {},
 ): ConversationCommandContext & {
     connection: ReturnType<typeof makeConnection>;
-    switchSession: jest.Mock;
+    switchConversation: jest.Mock;
 } {
     const connection = makeConnection();
-    const switchSession =
-        jest.fn<(sessionId: string) => Promise<SessionDispatcher>>();
+    const switchConversation =
+        jest.fn<(conversationId: string) => Promise<ConversationDispatcher>>();
     return {
         connection,
-        getCurrentSessionId: () => "current-id",
-        getCurrentSessionName: () => "Current Session",
-        switchSession,
+        getCurrentConversationId: () => "current-id",
+        getCurrentConversationName: () => "Current Session",
+        switchConversation,
         ...overrides,
     } as ConversationCommandContext & {
         connection: ReturnType<typeof makeConnection>;
-        switchSession: jest.Mock;
+        switchConversation: jest.Mock;
     };
 }
 
@@ -179,10 +186,10 @@ describe("@conversation new", () => {
         expect(capturedLog()).toContain("@conversation new");
     });
 
-    it("creates session and does NOT switch when user answers 'n'", async () => {
+    it("creates conversation and does NOT switch when user answers 'n'", async () => {
         const ctx = makeCtx();
-        ctx.connection.createSession.mockResolvedValue(
-            makeSession({ sessionId: "new-id", name: "MyChat" }),
+        ctx.connection.createConversation.mockResolvedValue(
+            makeSession({ conversationId: "new-id", name: "MyChat" }),
         );
 
         const promise = handleConversationCommand(ctx, "new MyChat");
@@ -192,15 +199,17 @@ describe("@conversation new", () => {
         answerPrompt("n");
         await promise;
 
-        expect(ctx.connection.createSession).toHaveBeenCalledWith("MyChat");
+        expect(ctx.connection.createConversation).toHaveBeenCalledWith(
+            "MyChat",
+        );
         expect(capturedLog()).toContain("Created conversation");
-        expect(ctx.switchSession).not.toHaveBeenCalled();
+        expect(ctx.switchConversation).not.toHaveBeenCalled();
     });
 
-    it("creates session and switches when user answers 'y'", async () => {
+    it("creates conversation and switches when user answers 'y'", async () => {
         const ctx = makeCtx();
-        ctx.connection.createSession.mockResolvedValue(
-            makeSession({ sessionId: "new-id", name: "MyChat" }),
+        ctx.connection.createConversation.mockResolvedValue(
+            makeSession({ conversationId: "new-id", name: "MyChat" }),
         );
 
         const promise = handleConversationCommand(ctx, "new MyChat");
@@ -209,15 +218,17 @@ describe("@conversation new", () => {
         answerPrompt("y");
         await promise;
 
-        expect(ctx.connection.createSession).toHaveBeenCalledWith("MyChat");
-        // switchSession called with the sessionId from createSession's return value
-        expect(ctx.switchSession).toHaveBeenCalledWith("new-id");
+        expect(ctx.connection.createConversation).toHaveBeenCalledWith(
+            "MyChat",
+        );
+        // switchConversation called with the conversationId from createConversation's return value
+        expect(ctx.switchConversation).toHaveBeenCalledWith("new-id");
     });
 
     it("handles quoted name argument", async () => {
         const ctx = makeCtx();
-        ctx.connection.createSession.mockResolvedValue(
-            makeSession({ sessionId: "new-id", name: "My Chat Room" }),
+        ctx.connection.createConversation.mockResolvedValue(
+            makeSession({ conversationId: "new-id", name: "My Chat Room" }),
         );
 
         const promise = handleConversationCommand(ctx, 'new "My Chat Room"');
@@ -226,7 +237,7 @@ describe("@conversation new", () => {
         answerPrompt("n");
         await promise;
 
-        expect(ctx.connection.createSession).toHaveBeenCalledWith(
+        expect(ctx.connection.createConversation).toHaveBeenCalledWith(
             "My Chat Room",
         );
     });
@@ -242,46 +253,46 @@ describe("@conversation switch", () => {
 
     it("prints error when name is not found", async () => {
         const ctx = makeCtx();
-        ctx.connection.listSessions.mockResolvedValue([]);
+        ctx.connection.listConversations.mockResolvedValue([]);
 
         await handleConversationCommand(ctx, "switch ghost");
 
         expect(capturedLog()).toContain("No conversation named 'ghost' found");
-        expect(ctx.switchSession).not.toHaveBeenCalled();
+        expect(ctx.switchConversation).not.toHaveBeenCalled();
     });
 
-    it("prints message when already in that session", async () => {
+    it("prints message when already in that conversation", async () => {
         const ctx = makeCtx({
-            getCurrentSessionId: () => "already-here",
+            getCurrentConversationId: () => "already-here",
         });
-        ctx.connection.listSessions.mockResolvedValue([
-            makeSession({ sessionId: "already-here", name: "Current" }),
+        ctx.connection.listConversations.mockResolvedValue([
+            makeSession({ conversationId: "already-here", name: "Current" }),
         ]);
 
         await handleConversationCommand(ctx, "switch Current");
 
         expect(capturedLog()).toContain("Already in conversation");
-        expect(ctx.switchSession).not.toHaveBeenCalled();
+        expect(ctx.switchConversation).not.toHaveBeenCalled();
     });
 
     it("resolves case-insensitively and switches", async () => {
         const ctx = makeCtx({
-            getCurrentSessionId: () => "old-id",
+            getCurrentConversationId: () => "old-id",
         });
-        ctx.connection.listSessions.mockResolvedValue([
-            makeSession({ sessionId: "target-id", name: "MyChat" }),
+        ctx.connection.listConversations.mockResolvedValue([
+            makeSession({ conversationId: "target-id", name: "MyChat" }),
         ]);
 
         await handleConversationCommand(ctx, "switch mychat");
 
-        expect(ctx.switchSession).toHaveBeenCalledWith("target-id");
+        expect(ctx.switchConversation).toHaveBeenCalledWith("target-id");
     });
 
-    it("prints error when multiple sessions match", async () => {
+    it("prints error when multiple conversations match", async () => {
         const ctx = makeCtx();
-        ctx.connection.listSessions.mockResolvedValue([
-            makeSession({ sessionId: "id-1", name: "dup" }),
-            makeSession({ sessionId: "id-2", name: "Dup" }),
+        ctx.connection.listConversations.mockResolvedValue([
+            makeSession({ conversationId: "id-1", name: "dup" }),
+            makeSession({ conversationId: "id-2", name: "Dup" }),
         ]);
 
         await handleConversationCommand(ctx, "switch dup");
@@ -289,27 +300,27 @@ describe("@conversation switch", () => {
         expect(capturedLog()).toContain(
             "Multiple conversations named 'dup' found",
         );
-        expect(ctx.switchSession).not.toHaveBeenCalled();
+        expect(ctx.switchConversation).not.toHaveBeenCalled();
     });
 });
 
 describe("@conversation list", () => {
     it("prints 'No conversations found.' for empty list", async () => {
         const ctx = makeCtx();
-        ctx.connection.listSessions.mockResolvedValue([]);
+        ctx.connection.listConversations.mockResolvedValue([]);
 
         await handleConversationCommand(ctx, "list");
 
         expect(capturedLog()).toContain("No conversations found.");
     });
 
-    it("shows single session with current marker", async () => {
+    it("shows single conversation with current marker", async () => {
         const ctx = makeCtx({
-            getCurrentSessionId: () => "sess-1",
+            getCurrentConversationId: () => "sess-1",
         });
-        ctx.connection.listSessions.mockResolvedValue([
+        ctx.connection.listConversations.mockResolvedValue([
             makeSession({
-                sessionId: "sess-1",
+                conversationId: "sess-1",
                 name: "OnlySession",
                 clientCount: 2,
                 createdAt: "2026-01-15T10:00:00.000Z",
@@ -324,25 +335,25 @@ describe("@conversation list", () => {
         expect(output).toContain("(current)");
     });
 
-    it("shows multiple sessions sorted by createdAt descending, current marked", async () => {
+    it("shows multiple conversations sorted by createdAt descending, current marked", async () => {
         const ctx = makeCtx({
-            getCurrentSessionId: () => "sess-2",
+            getCurrentConversationId: () => "sess-2",
         });
-        ctx.connection.listSessions.mockResolvedValue([
+        ctx.connection.listConversations.mockResolvedValue([
             makeSession({
-                sessionId: "sess-1",
+                conversationId: "sess-1",
                 name: "Older",
                 clientCount: 1,
                 createdAt: "2026-01-01T00:00:00.000Z",
             }),
             makeSession({
-                sessionId: "sess-2",
+                conversationId: "sess-2",
                 name: "Middle",
                 clientCount: 3,
                 createdAt: "2026-02-01T00:00:00.000Z",
             }),
             makeSession({
-                sessionId: "sess-3",
+                conversationId: "sess-3",
                 name: "Newest",
                 clientCount: 0,
                 createdAt: "2026-03-01T00:00:00.000Z",
@@ -375,31 +386,35 @@ describe("@conversation list", () => {
         expect(newestLine).not.toContain("▸");
     });
 
-    it("passes filter to listSessions", async () => {
+    it("passes filter to listConversations", async () => {
         const ctx = makeCtx();
-        ctx.connection.listSessions.mockResolvedValue([]);
+        ctx.connection.listConversations.mockResolvedValue([]);
 
         await handleConversationCommand(ctx, "list myFilter");
 
-        expect(ctx.connection.listSessions).toHaveBeenCalledWith("myFilter");
+        expect(ctx.connection.listConversations).toHaveBeenCalledWith(
+            "myFilter",
+        );
     });
 
     it("passes undefined filter when no filter given", async () => {
         const ctx = makeCtx();
-        ctx.connection.listSessions.mockResolvedValue([]);
+        ctx.connection.listConversations.mockResolvedValue([]);
 
         await handleConversationCommand(ctx, "list");
 
-        expect(ctx.connection.listSessions).toHaveBeenCalledWith(undefined);
+        expect(ctx.connection.listConversations).toHaveBeenCalledWith(
+            undefined,
+        );
     });
 
-    it("displays clientCount for each session", async () => {
+    it("displays clientCount for each conversation", async () => {
         const ctx = makeCtx({
-            getCurrentSessionId: () => "sess-1",
+            getCurrentConversationId: () => "sess-1",
         });
-        ctx.connection.listSessions.mockResolvedValue([
+        ctx.connection.listConversations.mockResolvedValue([
             makeSession({
-                sessionId: "sess-1",
+                conversationId: "sess-1",
                 name: "Chat",
                 clientCount: 5,
                 createdAt: "2026-01-15T10:00:00.000Z",
@@ -420,15 +435,15 @@ describe("@conversation rename", () => {
         expect(capturedLog()).toContain("@conversation rename");
     });
 
-    it("calls renameSession with current session ID and new name", async () => {
+    it("calls renameConversation with current conversation ID and new name", async () => {
         const ctx = makeCtx({
-            getCurrentSessionId: () => "my-session-id",
+            getCurrentConversationId: () => "my-session-id",
         });
-        ctx.connection.renameSession.mockResolvedValue(undefined);
+        ctx.connection.renameConversation.mockResolvedValue(undefined);
 
         await handleConversationCommand(ctx, "rename NewName");
 
-        expect(ctx.connection.renameSession).toHaveBeenCalledWith(
+        expect(ctx.connection.renameConversation).toHaveBeenCalledWith(
             "my-session-id",
             "NewName",
         );
@@ -438,13 +453,13 @@ describe("@conversation rename", () => {
 
     it("handles quoted new name", async () => {
         const ctx = makeCtx({
-            getCurrentSessionId: () => "my-session-id",
+            getCurrentConversationId: () => "my-session-id",
         });
-        ctx.connection.renameSession.mockResolvedValue(undefined);
+        ctx.connection.renameConversation.mockResolvedValue(undefined);
 
         await handleConversationCommand(ctx, 'rename "New Name With Spaces"');
 
-        expect(ctx.connection.renameSession).toHaveBeenCalledWith(
+        expect(ctx.connection.renameConversation).toHaveBeenCalledWith(
             "my-session-id",
             "New Name With Spaces",
         );
@@ -459,12 +474,12 @@ describe("@conversation delete", () => {
         expect(capturedLog()).toContain("@conversation delete");
     });
 
-    it("prints error when trying to delete the current session", async () => {
+    it("prints error when trying to delete the current conversation", async () => {
         const ctx = makeCtx({
-            getCurrentSessionId: () => "current-id",
+            getCurrentConversationId: () => "current-id",
         });
-        ctx.connection.listSessions.mockResolvedValue([
-            makeSession({ sessionId: "current-id", name: "ActiveChat" }),
+        ctx.connection.listConversations.mockResolvedValue([
+            makeSession({ conversationId: "current-id", name: "ActiveChat" }),
         ]);
 
         await handleConversationCommand(ctx, "delete ActiveChat");
@@ -472,15 +487,15 @@ describe("@conversation delete", () => {
         expect(capturedLog()).toContain(
             "Cannot delete the active conversation",
         );
-        expect(ctx.connection.deleteSession).not.toHaveBeenCalled();
+        expect(ctx.connection.deleteConversation).not.toHaveBeenCalled();
     });
 
     it("does not delete when user cancels confirmation", async () => {
         const ctx = makeCtx({
-            getCurrentSessionId: () => "other-id",
+            getCurrentConversationId: () => "other-id",
         });
-        ctx.connection.listSessions.mockResolvedValue([
-            makeSession({ sessionId: "target-id", name: "OldChat" }),
+        ctx.connection.listConversations.mockResolvedValue([
+            makeSession({ conversationId: "target-id", name: "OldChat" }),
         ]);
 
         const promise = handleConversationCommand(ctx, "delete OldChat");
@@ -490,17 +505,17 @@ describe("@conversation delete", () => {
         await promise;
 
         expect(capturedLog()).toContain("Cancelled");
-        expect(ctx.connection.deleteSession).not.toHaveBeenCalled();
+        expect(ctx.connection.deleteConversation).not.toHaveBeenCalled();
     });
 
     it("deletes when user confirms", async () => {
         const ctx = makeCtx({
-            getCurrentSessionId: () => "other-id",
+            getCurrentConversationId: () => "other-id",
         });
-        ctx.connection.listSessions.mockResolvedValue([
-            makeSession({ sessionId: "target-id", name: "OldChat" }),
+        ctx.connection.listConversations.mockResolvedValue([
+            makeSession({ conversationId: "target-id", name: "OldChat" }),
         ]);
-        ctx.connection.deleteSession.mockResolvedValue(undefined);
+        ctx.connection.deleteConversation.mockResolvedValue(undefined);
 
         const promise = handleConversationCommand(ctx, "delete OldChat");
 
@@ -508,19 +523,21 @@ describe("@conversation delete", () => {
         answerPrompt("y");
         await promise;
 
-        expect(ctx.connection.deleteSession).toHaveBeenCalledWith("target-id");
+        expect(ctx.connection.deleteConversation).toHaveBeenCalledWith(
+            "target-id",
+        );
         expect(capturedLog()).toContain("Deleted conversation");
     });
 
-    it("prints error when session name is not found", async () => {
+    it("prints error when conversation name is not found", async () => {
         const ctx = makeCtx({
-            getCurrentSessionId: () => "other-id",
+            getCurrentConversationId: () => "other-id",
         });
-        ctx.connection.listSessions.mockResolvedValue([]);
+        ctx.connection.listConversations.mockResolvedValue([]);
 
         await handleConversationCommand(ctx, "delete ghost");
 
         expect(capturedLog()).toContain("No conversation named 'ghost' found");
-        expect(ctx.connection.deleteSession).not.toHaveBeenCalled();
+        expect(ctx.connection.deleteConversation).not.toHaveBeenCalled();
     });
 });

@@ -90,8 +90,9 @@ describe("Grammar", () => {
                 const g = loadGrammarRules("test", grammar);
                 const matched = matchGrammar(g, requestAction.request);
 
-                // TODO: once MatchPart allow matches ignoring diacritical marks,
-                // we can use normalizeParamString instead toLowerCase here.
+                // The grammar matcher is case-insensitive but not
+                // diacritic-insensitive, so use toLowerCase (not
+                // normalizeParamString) for the lower-case round-trip.
                 const matchedLowerCase = matchGrammar(
                     g,
                     requestAction.request.toLowerCase(),

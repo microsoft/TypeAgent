@@ -226,7 +226,7 @@ describe("GrammarStore", () => {
 
             const grammar = store.compileToGrammar();
             expect(grammar).toBeDefined();
-            expect(grammar!.rules.length).toBeGreaterThan(0);
+            expect(grammar!.alternatives.length).toBeGreaterThan(0);
         });
 
         it("should persist compiledGrammar in the saved JSON", async () => {

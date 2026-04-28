@@ -155,13 +155,17 @@ export async function createEmbeddingFolder(
         names: string[];
         embeddings: Embedding[];
     }> {
-        // TODO: parallelize
-        let names: string[] = [];
-        let embeddings: Embedding[] = [];
-        for (const name of nameSubset) {
-            const entry = await folder.get(name);
+        const loaded = await asyncArray.mapAsync(
+            nameSubset,
+            concurrency!,
+            (name) => folder.get(name),
+        );
+        const names: string[] = [];
+        const embeddings: Embedding[] = [];
+        for (let i = 0; i < nameSubset.length; i++) {
+            const entry = loaded[i];
             if (entry) {
-                names.push(name);
+                names.push(nameSubset[i]);
                 embeddings.push(entry);
             }
         }

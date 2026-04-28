@@ -642,9 +642,15 @@ export async function createAgentRpcClient(
 
     const invokeCloseAgentContext = result.closeAgentContext;
     result.closeAgentContext = async (context: SessionContext<ShimContext>) => {
-        // TODO: Clean up the associated options.
         const result = await invokeCloseAgentContext?.(context);
         contextMap.close(context);
+        // Clean up the options RPC channel once this agent context is closed.
+        // Options are agent-scoped (created once per initializeAgentContext call)
+        // so they can be released when the context is torn down.
+        if (optionsRpc !== undefined) {
+            channelProvider.deleteChannel(`options:${name}`);
+            optionsRpc = undefined;
+        }
         return result;
     };
 

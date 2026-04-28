@@ -36,7 +36,7 @@ function match(grammar: Grammar, request: string) {
 describe("flex-space — two-segment compound (hip hop)", () => {
     // Grammar: <R> = hip hop -> "hiphop";
     const grammar: Grammar = {
-        rules: [
+        alternatives: [
             {
                 parts: [
                     { type: "string", value: ["hip"] },
@@ -84,7 +84,7 @@ describe("flex-space — two-segment compound (hip hop)", () => {
 // ---------------------------------------------------------------------------
 describe("flex-space — case-insensitive normalisation", () => {
     const grammar: Grammar = {
-        rules: [
+        alternatives: [
             {
                 parts: [
                     { type: "string", value: ["Hip"] },
@@ -112,7 +112,7 @@ describe("flex-space — case-insensitive normalisation", () => {
 describe("auto split candidates — apostrophe morpheme splitting", () => {
     // Grammar: <R> = $(artist:wildcard) 's -> artist;
     const grammar: Grammar = {
-        rules: [
+        alternatives: [
             {
                 parts: [
                     {
@@ -159,7 +159,7 @@ describe("auto split candidates — contraction splitting", () => {
     // Grammar: <R> = $(v:wildcard) 't -> v;
     // (captures the verb stem before "'t", e.g. "don't" → v="don")
     const grammar: Grammar = {
-        rules: [
+        alternatives: [
             {
                 parts: [
                     { type: "wildcard", variable: "v", typeName: "wildcard" },
@@ -197,7 +197,7 @@ describe("auto split candidates — contraction splitting", () => {
 // ---------------------------------------------------------------------------
 describe("two-pass matching — literal contraction wins over wildcard + suffix", () => {
     const grammar: Grammar = {
-        rules: [
+        alternatives: [
             // Literal rule — expects "don't" as one token
             {
                 parts: [{ type: "string", value: ["don't"] }],
@@ -266,12 +266,12 @@ describe("spacing=auto (undefined) — CJK token pre-splitting", () => {
     };
 
     const grammar: Grammar = {
-        rules: [
+        alternatives: [
             {
                 parts: [
                     {
                         type: "rules",
-                        rules: [yellowRule, blueRule, greenRule],
+                        alternatives: [yellowRule, blueRule, greenRule],
                         variable: "color",
                     },
                     { type: "string", value: ["汽車"] },
@@ -327,7 +327,7 @@ describe("spacing=auto — Latin token NOT registered as split candidate", () =>
     // A rule with "play" (Latin) and "'s" (non-word-starting) in auto mode.
     // Only "'s" should be a split candidate; "play" starts with a Latin letter.
     const grammar: Grammar = {
-        rules: [
+        alternatives: [
             {
                 parts: [
                     { type: "string", value: ["play"] },
@@ -354,7 +354,7 @@ describe("spacing=auto — Latin token NOT registered as split candidate", () =>
 // ---------------------------------------------------------------------------
 describe("flex-space — three-segment English compound (rock and roll)", () => {
     const grammar: Grammar = {
-        rules: [
+        alternatives: [
             {
                 parts: [
                     { type: "string", value: ["rock"] },
@@ -392,7 +392,7 @@ describe("flex-space — three-segment English compound (rock and roll)", () => 
 describe("flex-space — German two-morpheme compound (Fahrrad = bicycle)", () => {
     // Fahr (travel/ride) + Rad (wheel) → Fahrrad
     const grammar: Grammar = {
-        rules: [
+        alternatives: [
             {
                 parts: [
                     { type: "string", value: ["Fahr"] },
@@ -423,7 +423,7 @@ describe("flex-space — German two-morpheme compound (Fahrrad = bicycle)", () =
 describe("flex-space — German three-morpheme compound (Kraftfahrzeug = motor vehicle)", () => {
     // Kraft (power/force) + Fahr (travel/drive) + Zeug (tool/device) → Kraftfahrzeug
     const grammar: Grammar = {
-        rules: [
+        alternatives: [
             {
                 parts: [
                     { type: "string", value: ["Kraft"] },
@@ -469,7 +469,7 @@ describe("flex-space — German four-morpheme compound (Donaudampfschifffahrt)",
     // A fragment of the celebrated Donaudampfschiffahrtsgesellschaft
     // (Danube Steamship Company) — a touchstone of German morphology.
     const grammar: Grammar = {
-        rules: [
+        alternatives: [
             {
                 parts: [
                     { type: "string", value: ["Donau"] },
@@ -536,7 +536,7 @@ describe("flex-space — Swahili noun-class prefix (kitabu / vitabu = book / boo
     // Class 8 plural:    vi + tabu → vitabu  (books)
     // The noun root "tabu" is shared; only the noun-class prefix changes.
     const grammar: Grammar = {
-        rules: [
+        alternatives: [
             {
                 parts: [
                     { type: "string", value: ["ki"] },
@@ -609,14 +609,14 @@ describe("flex-space — Swahili <Tense> rule reference: fused and spaced forms 
     //
     // This is the same flex-space mechanism used for CJK (e.g. "黄色汽車").
     const grammar: Grammar = {
-        rules: [
+        alternatives: [
             {
                 parts: [
                     { type: "string", value: ["ni"] },
                     {
                         type: "rules",
                         name: "Tense",
-                        rules: [
+                        alternatives: [
                             {
                                 parts: [{ type: "string", value: ["li"] }],
                             },
@@ -710,7 +710,7 @@ describe("flex-space — Swahili subject-agreement: person variation (ninasoma /
     //   u  (2sg) + na + soma → unasoma    (you are reading)
     //   a  (3sg) + na + soma → anasoma    (he / she is reading)
     const grammar: Grammar = {
-        rules: [
+        alternatives: [
             {
                 parts: [
                     { type: "string", value: ["ni"] },

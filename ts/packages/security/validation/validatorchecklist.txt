@@ -1,0 +1,98 @@
+ 1. Structural Validation (Parse Phase)
+
+  □ All required fields present on AgentPlan
+  □ version === "1.1"
+  □ id is non-empty string
+  □ goal is non-empty string
+  □ All nested objects have correct shape
+
+  2. Index Integrity
+
+  □ All step indices are unique (across ALL nodes including nested)
+  □ Indices are non-negative integers
+  □ dependsOn only references indices < current index (linear progression)
+  □ No circular dependencies in the dependency graph
+  □ checkpoints[] all reference existing step indices
+
+  3. Binding Validity
+
+  □ All binding names in bindings[] are unique
+  □ bindings[].producedBy references an existing step index
+  □ Producing step executes BEFORE any step that consumes the binding
+  □ Every { type: 'var', name: 'x' } reference has 'x' in bindings[]
+  □ Every { type: 'stepOutput', stepIndex: n } references existing step n
+  □ Binding types match usage (file_list used where array expected)
+
+  4. Predicate Well-formedness
+
+  □ All PathExpr resolve (literal, var exists, stepOutput exists)
+  □ Quantifiers (forAll, exists, unique) bind over collection types
+  □ Quantifier bind variables don't shadow existing bindings
+  □ Temporal predicates (before, after) reference existing steps
+  □ Comparison predicates have type-compatible operands
+  □ Semantic predicates (function_exists, etc.) reference valid paths
+
+  5. Control Flow Validity
+
+  □ ForEachNode.in resolves to an array/collection
+  □ WhileNode.maxIterations > 0
+  □ ParallelNode.branches is non-empty
+  □ IfNode.condition is a valid predicate
+  □ TransactionNode.rollback steps don't depend on transaction internals
+  □ CallNode.planId references a valid import
+
+  6. InputSpec Constraints
+
+  □ All constraint types are valid for the expected input type
+  □ { type: 'ref' } references a step that executes before this one
+  □ { type: 'var' } references a defined binding
+  □ Compound constraints (and, or, not) have valid children
+  □ regex patterns are valid regular expressions
+  □ oneOf/noneOf values are type-compatible
+
+  7. Effect Declarations
+
+  □ effect.produces binding name exists in bindings[]
+  □ effect.produces type matches binding declaration
+  □ modifies_file/creates_file paths are resolvable
+  □ Multiple effects don't conflict (create and delete same file)
+
+  8. Error Handling
+
+  □ onError.retry.maxAttempts > 0
+  □ onError.retry.delayMs >= 0
+  □ onError.skip.continueWith references valid, reachable step
+  □ onError.fallback.steps are themselves valid
+  □ rollback[] steps don't depend on bindings from failed step
+
+  9. Limits & Permissions
+
+  □ limits.maxTotalSteps >= actual step count
+  □ limits.maxNestingDepth >= actual max nesting
+  □ limits.maxParallelBranches >= max branches in any ParallelNode
+  □ All positive numeric limits > 0
+  □ permissions.allowedWritePaths covers all Write/Edit effects
+  □ permissions.allowedReadPaths covers all Read/Grep operations
+  □ No path is in both allowedWritePaths and deniedPaths
+  □ metadata.allowedTools contains every tool used in steps
+
+  10. Import & Call Validation
+
+  □ imports[].name is unique
+  □ imports[].as alias is unique (if present)
+  □ No circular imports
+  □ CallNode.arguments provides all required parameters
+  □ CallNode.arguments types match parameter types
+
+  11. Cache & Lock Validity
+
+  □ cache.key is a deterministic expression (no randomness)
+  □ cache.ttlMs > 0 if present
+  □ locks.lockedPaths are subset of allowedWritePaths
+  □ locks.waitTimeoutMs > 0 if present
+
+  12. Cleanup Safety
+
+  □ cleanup[] steps don't depend on bindings that might not exist
+  □ cleanup[] steps are idempotent (safe to run multiple times)
+  □ cleanup[] steps don't have complex error handlers (keep simple)

@@ -45,6 +45,17 @@ export class ImageMeta implements IKnowledgeSource, IMessageMetadata {
         return undefined;
     }
 
+    private getImageTakerName(): string {
+        const exifKeys = ["Artist", "Camera Owner Name", "OwnerName"];
+        for (const key of exifKeys) {
+            const value = this.dataFrameValues[key];
+            if (typeof value === "string" && value.trim().length > 0) {
+                return value.trim();
+            }
+        }
+        return "ME";
+    }
+
     getKnowledge() {
         this.imageEntity = {
             name: `${path.basename(this.img.fileName)} - ${this.img.title}`,
@@ -148,7 +159,7 @@ export class ImageMeta implements IKnowledgeSource, IMessageMetadata {
                     verbTense: "present",
                     subjectEntityName: this.img.fileName,
                     objectEntityName: this.img.nearbyPOI[i].name!,
-                    indirectObjectEntityName: "ME", // TODO: image taker name
+                    indirectObjectEntityName: this.getImageTakerName(),
                 });
             }
         }
@@ -353,9 +364,7 @@ export class ImageMeta implements IKnowledgeSource, IMessageMetadata {
             return undefined;
         }
 
-        // TODO: Ensure localization
         const latlong: dataFrame.DataFrameRecord = {};
-        //        if (!this.dataFrameValues["latlong"]) {
         const latRef: dataFrame.DataFrameValue =
             this.dataFrameValues["GPSLatitudeRef"];
         const longRef: dataFrame.DataFrameValue =
@@ -365,15 +374,17 @@ export class ImageMeta implements IKnowledgeSource, IMessageMetadata {
         const long: dataFrame.DataFrameValue =
             this.dataFrameValues["GPSLongitude"];
 
-        //const latlong: dataFrame.DataFrameValue = { ...lat, ...long };
-        //const latlong2: dataFrame.DataFrameValue = { lat: lat["lat"], long: long["long"] };
-        if (latRef?.toString().startsWith("South")) {
+        // Accept either the single-letter EXIF reference ("S"/"W") or the
+        // spelled-out form ("South"/"West") regardless of locale case.
+        const latRefStr = latRef?.toString().trim().toUpperCase() ?? "";
+        const longRefStr = longRef?.toString().trim().toUpperCase() ?? "";
+        if (latRefStr === "S" || latRefStr.startsWith("SOUTH")) {
             latlong.latitude = parseFloat(`-${lat}`);
         } else {
             latlong.latitude = lat;
         }
 
-        if (longRef?.toString().startsWith("West")) {
+        if (longRefStr === "W" || longRefStr.startsWith("WEST")) {
             latlong.longitude = parseFloat(`-${long}`);
         } else {
             latlong.longitude = long;

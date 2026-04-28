@@ -1,0 +1,616 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Plan Validation Dashboard</title>
+    <style>
+      :root {
+        --bg: #0d1117;
+        --surface: #161b22;
+        --border: #30363d;
+        --text: #e6edf3;
+        --dim: #8b949e;
+        --accent: #58a6ff;
+        --green: #3fb950;
+        --red: #f85149;
+        --yellow: #d29922;
+        --purple: #bc8cff;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 14px;
+      }
+      .header {
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        padding: 16px 24px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .header h1 {
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .header .status {
+        font-size: 13px;
+        color: var(--dim);
+        margin-left: auto;
+      }
+      .header .dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 6px;
+      }
+      .dot.green {
+        background: var(--green);
+      }
+      .dot.red {
+        background: var(--red);
+      }
+      .dot.yellow {
+        background: var(--yellow);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto auto;
+        gap: 1px;
+        background: var(--border);
+        margin: 1px;
+      }
+      .panel {
+        background: var(--surface);
+        padding: 16px;
+        min-height: 200px;
+      }
+      .panel-title {
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--dim);
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .panel-title .badge {
+        background: var(--accent);
+        color: #fff;
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 8px;
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: 140px 1fr;
+        gap: 4px 12px;
+        font-size: 13px;
+      }
+      .kv .key {
+        color: var(--dim);
+      }
+      .kv .val {
+        color: var(--text);
+        word-break: break-all;
+      }
+      .val.allow {
+        color: var(--green);
+      }
+      .val.deny {
+        color: var(--red);
+      }
+      .val.warn {
+        color: var(--yellow);
+      }
+      .trace-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+        font-family: "SF Mono", "Cascadia Code", monospace;
+      }
+      .trace-table th {
+        text-align: left;
+        color: var(--dim);
+        font-weight: 500;
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--border);
+      }
+      .trace-table td {
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+      .trace-table tr.success td:first-child {
+        border-left: 3px solid var(--green);
+      }
+      .trace-table tr.failed td:first-child {
+        border-left: 3px solid var(--red);
+      }
+      .trace-table tr.pending td:first-child {
+        border-left: 3px solid var(--border);
+      }
+      .hash {
+        color: var(--purple);
+        font-size: 11px;
+      }
+      .chain-arrow {
+        color: var(--dim);
+        font-size: 10px;
+      }
+      .tag {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 500;
+      }
+      .tag.success {
+        background: #0d2818;
+        color: var(--green);
+      }
+      .tag.failed {
+        background: #2d1215;
+        color: var(--red);
+      }
+      .tag.running {
+        background: #1a1f2e;
+        color: var(--accent);
+      }
+      .tag.blocked {
+        background: #2d1e0f;
+        color: var(--yellow);
+      }
+      .tag.pending {
+        background: #1a1a1a;
+        color: var(--dim);
+      }
+      .event-log {
+        max-height: 300px;
+        overflow-y: auto;
+      }
+      .event {
+        padding: 6px 8px;
+        border-bottom: 1px solid var(--border);
+        font-size: 12px;
+        font-family: monospace;
+        display: flex;
+        gap: 8px;
+      }
+      .event .time {
+        color: var(--dim);
+        flex-shrink: 0;
+      }
+      .event .msg {
+        word-break: break-word;
+      }
+      .event.violation .msg {
+        color: var(--red);
+      }
+      .event.success .msg {
+        color: var(--green);
+      }
+      .event.info .msg {
+        color: var(--accent);
+      }
+      .steps-list {
+        list-style: none;
+      }
+      .steps-list li {
+        padding: 6px 0;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+      }
+      .step-idx {
+        color: var(--dim);
+        font-family: monospace;
+        width: 24px;
+        text-align: right;
+      }
+      .step-tool {
+        color: var(--accent);
+        font-weight: 500;
+        width: 60px;
+      }
+      .step-desc {
+        color: var(--text);
+        flex: 1;
+      }
+      .container-visual {
+        display: flex;
+        align-items: stretch;
+        gap: 12px;
+        margin-top: 12px;
+      }
+      .container-box {
+        border: 2px dashed var(--border);
+        border-radius: 8px;
+        padding: 12px;
+        flex: 1;
+        position: relative;
+      }
+      .container-box.active {
+        border-color: var(--accent);
+        border-style: solid;
+      }
+      .container-box .label {
+        position: absolute;
+        top: -10px;
+        left: 12px;
+        background: var(--surface);
+        padding: 0 6px;
+        font-size: 11px;
+        color: var(--dim);
+      }
+      .container-box .label.active {
+        color: var(--accent);
+      }
+      .mount {
+        font-size: 11px;
+        color: var(--dim);
+        padding: 2px 0;
+        font-family: monospace;
+      }
+      .mount .arrow {
+        color: var(--accent);
+      }
+      .progress-bar {
+        height: 4px;
+        background: var(--border);
+        border-radius: 2px;
+        margin-top: 8px;
+        overflow: hidden;
+      }
+      .progress-fill {
+        height: 100%;
+        background: var(--green);
+        transition: width 0.5s ease;
+        border-radius: 2px;
+      }
+      .metrics {
+        display: flex;
+        gap: 24px;
+        margin-top: 12px;
+      }
+      .metric {
+        text-align: center;
+      }
+      .metric .value {
+        font-size: 24px;
+        font-weight: 600;
+      }
+      .metric .label {
+        font-size: 11px;
+        color: var(--dim);
+      }
+      #noData {
+        color: var(--dim);
+        padding: 40px;
+        text-align: center;
+        font-size: 16px;
+      }
+      .full-width {
+        grid-column: 1 / -1;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>Plan Validation Dashboard</h1>
+      <div class="status">
+        <span class="dot" id="serverDot"></span>
+        <span id="serverStatus">Connecting...</span>
+      </div>
+    </div>
+
+    <div class="grid">
+      <!-- Policy Panel -->
+      <div class="panel">
+        <div class="panel-title">
+          Organization Policy <span class="badge" id="policyBadge">—</span>
+        </div>
+        <div id="policyContent">
+          <span style="color: var(--dim)">Loading...</span>
+        </div>
+      </div>
+
+      <!-- Plan Panel -->
+      <div class="panel">
+        <div class="panel-title">
+          Active Plan <span class="badge" id="planBadge">—</span>
+        </div>
+        <div id="planContent">
+          <span style="color: var(--dim)">No active plan</span>
+        </div>
+      </div>
+
+      <!-- Trace Panel -->
+      <div class="panel full-width">
+        <div class="panel-title">
+          Execution Trace <span class="badge" id="traceBadge">0 entries</span>
+        </div>
+        <div id="traceContent">
+          <span style="color: var(--dim)">No trace data</span>
+        </div>
+      </div>
+
+      <!-- Container Panel -->
+      <div class="panel">
+        <div class="panel-title">Container Sandbox</div>
+        <div id="containerContent">
+          <span style="color: var(--dim)">Loading...</span>
+        </div>
+      </div>
+
+      <!-- Events Panel -->
+      <div class="panel">
+        <div class="panel-title">
+          Event Log <span class="badge" id="eventBadge">0</span>
+        </div>
+        <div class="event-log" id="eventLog"></div>
+      </div>
+    </div>
+
+    <script>
+      const API = ""; // Same origin
+      let pollInterval;
+
+      async function fetchJSON(url) {
+        try {
+          const r = await fetch(url);
+          return r.ok ? await r.json() : null;
+        } catch {
+          return null;
+        }
+      }
+
+      function time(ts) {
+        if (!ts) return "";
+        const d = new Date(ts);
+        return d.toLocaleTimeString("en-US", {
+          hour12: false,
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
+      }
+
+      function renderPolicy(data) {
+        const el = document.getElementById("policyContent");
+        const badge = document.getElementById("policyBadge");
+        if (!data || !data.policy) {
+          el.innerHTML =
+            '<span style="color:var(--dim)">No policy loaded</span>';
+          badge.textContent = "none";
+          return;
+        }
+        const p = data.policy;
+        badge.textContent = p.name || "loaded";
+        const bashMode = p.bash?.mode || "policy-checked";
+        const denied = (p.deniedTools || []).join(", ") || "none";
+        const containerEnabled = p.container?.enabled ?? false;
+        const writePaths =
+          (p.paths?.allowedWritePatterns || [])
+            .map((s) => `<div class="val allow">${s}</div>`)
+            .join("") || '<span class="val allow">all</span>';
+        const deniedPaths =
+          (p.paths?.deniedPatterns || [])
+            .map((s) => `<div class="val deny">${s}</div>`)
+            .join("") || '<span class="val allow">none</span>';
+        const limits = p.limitCaps || {};
+        el.innerHTML = `
+    <div class="kv">
+      <span class="key">Bash mode</span><span class="val ${bashMode === "capabilities-only" ? "allow" : "warn"}">${bashMode}</span>
+      <span class="key">Denied tools</span><span class="val deny">${denied}</span>
+      <span class="key">Container</span><span class="val ${containerEnabled ? "allow" : ""}">${containerEnabled ? p.container.image : "disabled"}</span>
+      <span class="key">Write paths</span><div>${writePaths}</div>
+      <span class="key">Denied paths</span><div>${deniedPaths}</div>
+      <span class="key">Max steps</span><span class="val">${limits.maxTotalSteps ?? "unlimited"}</span>
+      <span class="key">Max duration</span><span class="val">${limits.maxDurationMs ? limits.maxDurationMs / 1000 + "s" : "unlimited"}</span>
+    </div>`;
+      }
+
+      function renderPlan(data) {
+        const el = document.getElementById("planContent");
+        const badge = document.getElementById("planBadge");
+        if (!data || !data.plan) {
+          el.innerHTML = '<span style="color:var(--dim)">No active plan</span>';
+          badge.textContent = "—";
+          return;
+        }
+        const p = data.plan;
+        const completed = data.completedSteps || [];
+        const total = data.totalSteps || 0;
+        const pct =
+          total > 0 ? Math.round((completed.length / total) * 100) : 0;
+        badge.textContent = data.aborted
+          ? "ABORTED"
+          : `${completed.length}/${total}`;
+        const statusTag = data.aborted
+          ? '<span class="tag failed">Aborted</span>'
+          : completed.length === total
+            ? '<span class="tag success">Complete</span>'
+            : '<span class="tag running">Running</span>';
+        const stepsHtml = (data.steps || [])
+          .map((s) => {
+            const done = completed.includes(s.index);
+            const current = s.index === data.currentStep && !data.aborted;
+            const icon = done ? "&#10003;" : current ? "&#9654;" : "&#8226;";
+            const cls = done ? "allow" : current ? "warn" : "";
+            return `<li><span class="step-idx">${icon}</span><span class="step-tool">${s.tool}</span><span class="step-desc val ${cls}">${s.description || ""}</span></li>`;
+          })
+          .join("");
+        el.innerHTML = `
+    <div style="margin-bottom:8px"><strong>${p.goal || p.id}</strong> ${statusTag}</div>
+    <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+    <ul class="steps-list">${stepsHtml}</ul>`;
+      }
+
+      function renderTrace(data) {
+        const el = document.getElementById("traceContent");
+        const badge = document.getElementById("traceBadge");
+        if (!data || !data.entries || data.entries.length === 0) {
+          el.innerHTML = '<span style="color:var(--dim)">No trace data</span>';
+          badge.textContent = "0 entries";
+          return;
+        }
+        badge.textContent = `${data.entries.length} entries`;
+        const chainIcon = data.chainValid
+          ? '<span class="tag success">Chain Valid</span>'
+          : '<span class="tag failed">Chain Broken</span>';
+        const metricsHtml = data.metrics
+          ? `
+    <div class="metrics">
+      <div class="metric"><div class="value">${data.metrics.totalSteps ?? 0}</div><div class="label">Steps</div></div>
+      <div class="metric"><div class="value">${data.metrics.durationMs ? (data.metrics.durationMs / 1000).toFixed(1) + "s" : "—"}</div><div class="label">Duration</div></div>
+      <div class="metric"><div class="value" style="color:var(--green)">${data.metrics.successCount ?? 0}</div><div class="label">Success</div></div>
+      <div class="metric"><div class="value" style="color:var(--red)">${data.metrics.failedCount ?? 0}</div><div class="label">Failed</div></div>
+    </div>`
+          : "";
+        const rows = data.entries
+          .map(
+            (e) => `
+    <tr class="${e.status}">
+      <td>${e.index}</td>
+      <td>${e.tool || "—"}</td>
+      <td><span class="tag ${e.status}">${e.status}</span></td>
+      <td>${e.durationMs}ms</td>
+      <td><span class="hash">${e.hash}</span><br><span class="chain-arrow">&#8592;</span> <span class="hash">${e.previousHash}</span></td>
+      <td style="color:var(--red)">${e.error || ""}</td>
+    </tr>`,
+          )
+          .join("");
+        el.innerHTML = `
+    <div style="margin-bottom:8px">${chainIcon} <span style="color:var(--dim);margin-left:8px">${data.status || ""}</span></div>
+    ${metricsHtml}
+    <table class="trace-table" style="margin-top:12px">
+      <thead><tr><th>#</th><th>Tool</th><th>Status</th><th>Time</th><th>Hash Chain</th><th>Error</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+      }
+
+      function renderContainer(data) {
+        const el = document.getElementById("containerContent");
+        if (!data) {
+          el.innerHTML = '<span style="color:var(--dim)">No data</span>';
+          return;
+        }
+        const docker = data.dockerAvailable
+          ? `<span class="val allow">Docker ${data.dockerVersion || ""}</span>`
+          : `<span class="val deny">Not available</span>`;
+        if (!data.containerEnabled) {
+          el.innerHTML = `<div class="kv"><span class="key">Docker</span>${docker}<span class="key">Sandbox</span><span class="val">Disabled</span></div>`;
+          return;
+        }
+        const mounts = [];
+        if (data.workDir)
+          mounts.push({
+            host: "working dir",
+            container: data.workDir,
+            rw: true,
+          });
+        el.innerHTML = `
+    <div class="kv">
+      <span class="key">Docker</span>${docker}
+      <span class="key">Image</span><span class="val">${data.image || "—"}</span>
+      <span class="key">Network</span><span class="val ${data.networkMode === "none" ? "allow" : "warn"}">${data.networkMode}</span>
+      <span class="key">Read-only</span><span class="val">${data.readOnly ? "yes" : "no"}</span>
+      <span class="key">Memory</span><span class="val">${data.memoryLimit || "unlimited"}</span>
+      <span class="key">CPU</span><span class="val">${data.cpuLimit || "unlimited"}</span>
+    </div>
+    <div class="container-visual">
+      <div class="container-box active">
+        <div class="label active">${data.image || "container"}</div>
+        <div class="mount"><span class="arrow">&#8594;</span> ${data.workDir || "/workspace"} (rw)</div>
+        <div style="margin-top:8px;font-size:11px;color:var(--dim)">network: ${data.networkMode}</div>
+      </div>
+    </div>`;
+      }
+
+      let eventCount = 0;
+      function addEvent(type, msg) {
+        const log = document.getElementById("eventLog");
+        const badge = document.getElementById("eventBadge");
+        eventCount++;
+        badge.textContent = eventCount;
+        const div = document.createElement("div");
+        div.className = `event ${type}`;
+        div.innerHTML = `<span class="time">${time(Date.now())}</span><span class="msg">${msg}</span>`;
+        log.prepend(div);
+        if (log.children.length > 100) log.removeChild(log.lastChild);
+      }
+
+      let prevTraceLen = 0;
+      let prevPlanStatus = "";
+
+      async function poll() {
+        const state = await fetchJSON("/api/state");
+        if (!state) {
+          document.getElementById("serverDot").className = "dot red";
+          document.getElementById("serverStatus").textContent = "Disconnected";
+          return;
+        }
+        document.getElementById("serverDot").className = "dot green";
+        document.getElementById("serverStatus").textContent = "Connected";
+
+        renderPolicy(state);
+        renderPlan(state);
+        renderContainer(state.container);
+
+        if (state.trace) {
+          renderTrace(state.trace);
+          // Emit events for new trace entries
+          if (state.trace.entries.length > prevTraceLen) {
+            for (let i = prevTraceLen; i < state.trace.entries.length; i++) {
+              const e = state.trace.entries[i];
+              const type = e.status === "success" ? "success" : "violation";
+              addEvent(
+                type,
+                `Step ${e.index}: ${e.tool} — ${e.status}${e.error ? " — " + e.error : ""} (${e.durationMs}ms)`,
+              );
+            }
+            prevTraceLen = state.trace.entries.length;
+          }
+        }
+
+        // Detect plan state changes
+        const planStatus = state.aborted
+          ? "aborted"
+          : state.plan
+            ? "active"
+            : "none";
+        if (planStatus !== prevPlanStatus) {
+          if (planStatus === "active" && prevPlanStatus !== "active")
+            addEvent(
+              "info",
+              `Plan activated: ${state.plan?.goal || state.plan?.id || "?"}`,
+            );
+          if (planStatus === "aborted")
+            addEvent("violation", `Plan aborted: ${state.abortReason || "?"}`);
+          prevPlanStatus = planStatus;
+        }
+      }
+
+      // Start polling
+      poll();
+      pollInterval = setInterval(poll, 1000);
+    </script>
+  </body>
+</html>

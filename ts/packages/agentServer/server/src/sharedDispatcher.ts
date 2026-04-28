@@ -112,6 +112,10 @@ export async function createSharedDispatcher(
             callback(requestId, (clientIO) =>
                 clientIO.exit(requestId, ...args),
             ),
+        shutdown: (requestId, ...args) =>
+            callback(requestId, (clientIO) =>
+                clientIO.shutdown(requestId, ...args),
+            ),
         setUserRequest: (requestId, ...args) => {
             broadcast("setUserRequest", requestId, (clientIO) =>
                 clientIO.setUserRequest(requestId, ...args),

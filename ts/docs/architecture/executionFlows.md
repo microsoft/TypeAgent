@@ -1,7 +1,7 @@
 # Execution Flows — Architecture & Design
 
 > **Scope:** This document is the architecture reference for TypeAgent's three
-> execution flow systems — ScriptFlow, WebFlow, and TaskFlow — covering
+> execution flow systems — PowerShell, WebFlow, and TaskFlow — covering
 > definition formats, execution sandboxes, storage, the dynamic schema/grammar
 > API, and self-repair. For the grammar language and matching algorithms that
 > route user input to flow actions, see `actionGrammar.md`. For how matched
@@ -42,8 +42,8 @@ without LLM involvement, reducing latency from seconds to milliseconds.
               +------------------+------------------+
               |                  |                  |
      +--------v-------+ +-------v--------+ +-------v--------+
-     |   ScriptFlow   | |    WebFlow     | |   TaskFlow     |
-     |  (PowerShell)  | | (TypeScript)   | | (TypeScript)   |
+     |   PowerShell   | |    WebFlow     | |   TaskFlow     |
+     |   (PS Script)  | | (TypeScript)   | | (TypeScript)   |
      +--------+-------+ +-------+--------+ +-------+--------+
               |                  |                  |
      +--------v-------+ +-------v--------+ +-------v--------+
@@ -53,7 +53,7 @@ without LLM involvement, reducing latency from seconds to milliseconds.
      +----------------+ +----------------+ +----------------+
 ```
 
-| Aspect        | ScriptFlow                              | WebFlow                                           | TaskFlow                                           |
+| Aspect        | PowerShell                              | WebFlow                                           | TaskFlow                                           |
 | ------------- | --------------------------------------- | ------------------------------------------------- | -------------------------------------------------- |
 | **Domain**    | OS / filesystem / processes             | Web page interaction                              | Cross-agent workflows                              |
 | **Language**  | PowerShell                              | TypeScript                                        | TypeScript                                         |
@@ -84,8 +84,8 @@ How flows are created depends on the flow type and trigger:
 
 | Flow type  | Trigger                       | Pipeline                                                                                                    |
 | ---------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| ScriptFlow | `@scriptflow import file.ps1` | `ScriptAnalyzer` sends script to LLM (Claude Sonnet), generates recipe                                      |
-| ScriptFlow | `createScriptFlow` action     | User or LLM provides script, parameters, patterns, sandbox directly                                         |
+| PowerShell | `@powershell import file.ps1` | `ScriptAnalyzer` sends script to LLM (Claude Sonnet), generates recipe                                      |
+| PowerShell | `createPowerShellFlow` action | User or LLM provides script, parameters, patterns, sandbox directly                                         |
 | WebFlow    | `startGoalDrivenTask` action  | `BrowserReasoningAgent` navigates autonomously, trace captured, `scriptGenerator` produces parameterized JS |
 | WebFlow    | Extension recording           | User demonstrates task, `recordingNormalizer` + LLM generalizes to script                                   |
 | TaskFlow   | Manual authoring              | Developer writes `.recipe.json` files with embedded TypeScript scripts                                      |
@@ -95,7 +95,7 @@ How flows are created depends on the flow type and trigger:
 > The `ReasoningRecipeGenerator` extracts multi-agent action sequences
 > from successful reasoning traces and generates TaskFlow recipes. The
 > `ScriptRecipeGenerator` watches for PowerShell commands executed via
-> Bash during reasoning and generates ScriptFlow recipes. Both generators
+> Bash during reasoning and generates PowerShell recipes. Both generators
 > run automatically after successful reasoning if enabled in config
 > (`execution.scriptReuse`). Users can trigger explicit recording with
 > `learn: [task]` or `remember how to [task]` prefixes.
@@ -117,7 +117,7 @@ On agent activation (or after a flow mutation), the agent calls
 ### Phase 4 — Execute
 
 Each flow type has a domain-specific execution sandbox. See the per-type
-sections ([ScriptFlow](#scriptflow), [WebFlow](#webflow),
+sections ([PowerShell](#powershell), [WebFlow](#webflow),
 [TaskFlow](#taskflow)) for architecture details.
 
 ### Phase 5 — Feedback and self-repair
@@ -129,7 +129,7 @@ context about the failure. See [Self-repair and reasoning fallback](#self-repair
 
 ## Flow definition formats
 
-### ScriptFlow recipe (`ScriptRecipe`)
+### PowerShell recipe (`ScriptRecipe`)
 
 ```typescript
 interface ScriptRecipe {
@@ -255,7 +255,7 @@ other agents.
 
 ### Format comparison
 
-| Field                 | ScriptFlow                             | WebFlow                                                   | TaskFlow                               |
+| Field                 | PowerShell                             | WebFlow                                                   | TaskFlow                               |
 | --------------------- | -------------------------------------- | --------------------------------------------------------- | -------------------------------------- |
 | **Action identifier** | `actionName`                           | `name`                                                    | `name`                                 |
 | **Parameters**        | `ScriptParameter[]`                    | `Record<string, WebFlowParameter>`                        | `RecipeParameter[]`                    |
@@ -267,19 +267,19 @@ other agents.
 
 ---
 
-## ScriptFlow
+## PowerShell
 
-ScriptFlow manages parameterized PowerShell scripts and executes them in
+PowerShell manages parameterized PowerShell scripts and executes them in
 a sandboxed constrained runspace.
 
 ### Capture paths
 
-ScriptFlow supports two creation paths:
+PowerShell supports two creation paths:
 
-**Import** (`importScriptFlow` action or `@scriptflow import file.ps1`):
+**Import** (`importPowerShellFlow` action or `@powershell import file.ps1`):
 
 ```
-  User: "@scriptflow import ./cleanup.ps1"
+  User: "@powershell import ./cleanup.ps1"
      |
      v  ScriptAnalyzer reads .ps1 file (max 100 KB)
      v  LLM (Claude Sonnet) analyzes script:
@@ -290,10 +290,10 @@ ScriptFlow supports two creation paths:
      v  reloadAgentSchema() -> grammar + schema updated
 ```
 
-**Explicit creation** (`createScriptFlow` action, typically from LLM reasoning):
+**Explicit creation** (`createPowerShellFlow` action, typically from LLM reasoning):
 
 ```
-  LLM reasoning generates: createScriptFlow {
+  LLM reasoning generates: createPowerShellFlow {
       actionName, description, script, scriptParameters,
       grammarPatterns, allowedCmdlets
   }
@@ -306,7 +306,7 @@ ScriptFlow supports two creation paths:
 > **Note:** Automatic capture from reasoning traces (intercepting
 > PowerShell commands executed via Bash during reasoning) is not yet
 > implemented. Flows are currently created via explicit import,
-> `createScriptFlow`, or seed samples.
+> `createPowerShellFlow`, or seed samples.
 
 ### Execution architecture
 
@@ -337,7 +337,7 @@ running `scriptHost.ps1`. Arguments are passed via command-line flags:
 
 ### Sandbox: constrained runspace
 
-ScriptFlow defines category-based cmdlet whitelists:
+PowerShell defines category-based cmdlet whitelists:
 
 | Category             | Representative cmdlets                                               |
 | -------------------- | -------------------------------------------------------------------- |
@@ -379,7 +379,7 @@ All `SandboxPolicy` features are fully enforced at runtime:
 
 Violations of sandbox policies result in immediate script termination with
 descriptive error messages, and trigger `fallbackToReasoning` to allow
-LLM-assisted correction via `editScriptFlow`.
+LLM-assisted correction via `editPowerShellFlow`.
 
 ### Execution result
 
@@ -546,8 +546,8 @@ interface WebFlowResult {
 ## TaskFlow
 
 TaskFlow orchestrates multi-agent workflows through TypeScript scripts
-that call other TypeAgent actions via a sandboxed API. Unlike ScriptFlow
-(PowerShell) and WebFlow (browser JavaScript), TaskFlow scripts execute
+that call other TypeAgent actions via a sandboxed API. Unlike PowerShell
+(PS scripts) and WebFlow (browser JavaScript), TaskFlow scripts execute
 server-side in Node.js with access to all TypeAgent agents.
 
 ### Capture paths
@@ -809,9 +809,9 @@ reloadAgentSchema(): Promise<void>;
 | `"agr"` | Raw grammar rule text | Returned by `getDynamicGrammar()`. Parsed via `loadGrammarRulesNoThrow()`. |
 | `"ag"`  | Compiled grammar JSON | Parsed via `grammarFromJson()`.                                            |
 
-### Example: ScriptFlow dynamic schema
+### Example: PowerShell dynamic schema
 
-ScriptFlow generates a **per-flow action type** for each registered
+PowerShell generates a **per-flow action type** for each registered
 flow, plus the built-in management actions. With flows `listFiles` and
 `findLargeFiles` registered, the dynamic schema is:
 
@@ -834,26 +834,26 @@ export type FindLargeFilesAction = {
 };
 
 // Built-in management actions (always present)
-export type ListScriptFlows = { actionName: "listScriptFlows"; };
-export type DeleteScriptFlow = { actionName: "deleteScriptFlow"; parameters: { name: string; }; };
-export type CreateScriptFlow = { actionName: "createScriptFlow"; parameters: { ... }; };
-export type EditScriptFlow = { actionName: "editScriptFlow"; parameters: { ... }; };
-export type ImportScriptFlow = { actionName: "importScriptFlow"; parameters: { ... }; };
+export type ListPowerShellFlows = { actionName: "listPowerShellFlows"; };
+export type DeletePowerShellFlow = { actionName: "deletePowerShellFlow"; parameters: { name: string; }; };
+export type CreatePowerShellFlow = { actionName: "createPowerShellFlow"; parameters: { ... }; };
+export type EditPowerShellFlow = { actionName: "editPowerShellFlow"; parameters: { ... }; };
+export type ImportPowerShellFlow = { actionName: "importPowerShellFlow"; parameters: { ... }; };
 
 // Union of all
-export type ScriptFlowActions =
+export type PowerShellActions =
     | ListFilesAction
     | FindLargeFilesAction
-    | ListScriptFlows
-    | DeleteScriptFlow
-    | CreateScriptFlow
-    | EditScriptFlow
-    | ImportScriptFlow;
+    | ListPowerShellFlows
+    | DeletePowerShellFlow
+    | CreatePowerShellFlow
+    | EditPowerShellFlow
+    | ImportPowerShellFlow;
 ```
 
 The LLM translator sees the full union and can only generate valid
 action names with correctly typed parameters. The static schema also
-includes `ExecuteScriptFlow` (with a `flowName` string) as a fallback
+includes `ExecutePowerShellFlow` (with a `flowName` string) as a fallback
 for grammar matching.
 
 ### Key components
@@ -873,13 +873,13 @@ for grammar matching.
 All flow stores use the `Storage` interface from `@typeagent/agent-sdk`
 backed by instance storage at `~/.typeagent/profiles/<profile>/`.
 
-### ScriptFlow storage layout
+### PowerShell storage layout
 
 ```
-scriptflow/
-  index.json                        # ScriptFlowIndex
+powershell/
+  index.json                        # PowerShellIndex
   flows/
-    listFiles.flow.json             # ScriptFlowDefinition (metadata + sandbox)
+    listFiles.flow.json             # PowerShellDefinition (metadata + sandbox)
     findLargeFiles.flow.json
   scripts/
     listFiles.ps1                   # PowerShell script body (separate file)
@@ -922,22 +922,22 @@ taskflow/
 
 All three index types share a common pattern:
 
-| Field            | ScriptFlowIndex                        | TaskFlowIndex                        | WebFlowIndex                        |
+| Field            | PowerShellIndex                        | TaskFlowIndex                        | WebFlowIndex                        |
 | ---------------- | -------------------------------------- | ------------------------------------ | ----------------------------------- |
 | `version`        | 1                                      | 1                                    | number                              |
-| `flows`          | `Record<string, ScriptFlowIndexEntry>` | `Record<string, TaskFlowIndexEntry>` | `Record<string, WebFlowIndexEntry>` |
+| `flows`          | `Record<string, PowerShellIndexEntry>` | `Record<string, TaskFlowIndexEntry>` | `Record<string, WebFlowIndexEntry>` |
 | `deletedSamples` | `string[]`                             | `string[]`                           | (not present)                       |
 | `lastModified`   | ISO timestamp                          | ISO timestamp                        | `lastUpdated`                       |
 
 ### Index entry common fields
 
-| Field                       | ScriptFlow                          | TaskFlow                            | WebFlow                  |
+| Field                       | PowerShell                          | TaskFlow                            | WebFlow                  |
 | --------------------------- | ----------------------------------- | ----------------------------------- | ------------------------ |
 | `actionName` / key          | yes                                 | yes                                 | key = name               |
 | `description`               | yes                                 | yes                                 | yes                      |
 | `flowPath`                  | yes                                 | yes                                 | `flowFile`               |
 | `grammarRuleText`           | yes                                 | yes                                 | yes (optional)           |
-| `parameters`                | `ScriptFlowParameterMeta[]`         | `FlowParameterMeta[]`               | `WebFlowParameterMeta[]` |
+| `parameters`                | `PowerShellParameterMeta[]`         | `FlowParameterMeta[]`               | `WebFlowParameterMeta[]` |
 | `source`                    | `"reasoning" \| "manual" \| "seed"` | `"reasoning" \| "manual" \| "seed"` | `WebFlowSource["type"]`  |
 | `usageCount`                | yes                                 | yes                                 | (not present)            |
 | `lastUsed`                  | optional                            | optional                            | (not present)            |
@@ -952,11 +952,11 @@ first activation:
 
 | Flow type  | Sample location                    | Seeding behavior                                                  |
 | ---------- | ---------------------------------- | ----------------------------------------------------------------- |
-| ScriptFlow | `samples/*.recipe.json` in package | Copied to instance storage; skipped if flow exists or was deleted |
+| PowerShell | `samples/*.recipe.json` in package | Copied to instance storage; skipped if flow exists or was deleted |
 | TaskFlow   | `samples/*.recipe.json` in package | Same behavior                                                     |
 | WebFlow    | `samples/*.json` in package        | Same; discovered placeholders upgraded to real samples            |
 
-Deleted sample tracking (`deletedSamples[]` in ScriptFlow/TaskFlow
+Deleted sample tracking (`deletedSamples[]` in PowerShell/TaskFlow
 indexes) prevents re-seeding flows the user has intentionally removed.
 
 ---
@@ -966,7 +966,7 @@ indexes) prevents re-seeding flows the user has intentionally removed.
 When a flow execution fails, the action handler can signal the dispatcher
 to retry via LLM reasoning with context about the failure.
 
-### ScriptFlow self-repair
+### PowerShell self-repair
 
 ```
   Script fails (stderr or non-zero exit)
@@ -978,7 +978,7 @@ to retry via LLM reasoning with context about the failure.
       fallbackContext: {
           failedFlow: "listNodeProcesses",
           errorMessage: "...",
-          hint: "Use editScriptFlow to fix the script"
+          hint: "Use editPowerShellFlow to fix the script"
       }
   }
        |
@@ -989,7 +989,7 @@ to retry via LLM reasoning with context about the failure.
   LLM reasoning sees: failed flow name, error details, hint
        |
        v
-  LLM generates: editScriptFlow { flowName, script, allowedCmdlets }
+  LLM generates: editPowerShellFlow { flowName, script, allowedCmdlets }
        |
        v
   Flow fixed in-place, grammar unchanged, next invocation works
@@ -1016,7 +1016,7 @@ The fallback context includes:
 - Error message from script execution
 - Hint to use `editWebFlow` to fix the script
 
-This mirrors ScriptFlow's self-repair mechanism, providing a consistent
+This mirrors PowerShell's self-repair mechanism, providing a consistent
 error recovery experience across all flow types.
 
 ---
@@ -1166,7 +1166,7 @@ interface GrammarContent {
 
 ## End-to-end scenarios
 
-### Scenario 1 — ScriptFlow: first use to instant reuse
+### Scenario 1 — PowerShell: first use to instant reuse
 
 ```
   === First request (no existing flow) ===
@@ -1180,17 +1180,17 @@ interface GrammarContent {
   Alternatively, if no seed flow exists:
     |
     v Grammar: no match
-    v LLM translation: routes to scriptflow or utility
-    v Reasoning: uses createScriptFlow to define a flow with
+    v LLM translation: routes to powershell or utility
+    v Reasoning: uses createPowerShellFlow to define a flow with
     v   script body, parameters, grammar patterns, sandbox policy
     v Flow saved, reloadAgentSchema() called
-    v Display: "Here are your files..." + "Script flow registered: listFiles"
+    v Display: "Here are your files..." + "PowerShell flow registered: listFiles"
 
   === Second request (flow exists) ===
 
   User: "list the files in c:\users\me\documents"
     |
-    v Grammar: MATCH -> executeScriptFlow { flowName: "listFiles", ... }
+    v Grammar: MATCH -> executePowerShellFlow { flowName: "listFiles", ... }
     v Direct execution: scriptHost.ps1 runs Get-ChildItem with Path param
     v Display: "Here are your files..." (~500ms, no reasoning)
 ```
@@ -1251,7 +1251,7 @@ interface GrammarContent {
 ```
   User: "list node processes"
     |
-    v Grammar: MATCH -> executeScriptFlow { flowName: "listNodeProcesses" }
+    v Grammar: MATCH -> executePowerShellFlow { flowName: "listNodeProcesses" }
     v scriptHost.ps1 executes: Get-CimInstance Win32_Process | Where-Object ...
     v Error: "Get-CimInstance: The term is not recognized"
     v   (cmdlet not in allowedCmdlets whitelist)
@@ -1261,16 +1261,16 @@ interface GrammarContent {
     v Dispatcher calls executeReasoning() with context:
     v   "Failed flow: listNodeProcesses"
     v   "Error: Get-CimInstance not in allowed cmdlets"
-    v   "Hint: Use editScriptFlow to fix the script and sandbox"
+    v   "Hint: Use editPowerShellFlow to fix the script and sandbox"
     v
-    v LLM generates: editScriptFlow {
+    v LLM generates: editPowerShellFlow {
     v   flowName: "listNodeProcesses",
     v   script: "Get-Process | Where-Object { $_.ProcessName -match 'node' }",
     v   allowedCmdlets: ["Get-Process", "Where-Object", "Format-Table"]
     v }
     v
     v Flow updated in-place, grammar unchanged
-    v LLM then executes: executeScriptFlow { flowName: "listNodeProcesses" }
+    v LLM then executes: executePowerShellFlow { flowName: "listNodeProcesses" }
     v Success: process list displayed
 ```
 

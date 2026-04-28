@@ -44,6 +44,15 @@ export interface NFATransition {
     slotIndex?: number | undefined;
     // If true, append to existing value (for multi-word wildcards)
     appendToSlot?: boolean | undefined;
+    // For token transitions only: when set together with slotIndex,
+    // overrides the matched value written to the slot.  Used for
+    // StringPart captures so the slot receives the joined fixed string
+    // (`value.join(" ")`) rather than the single normalized token from
+    // the consumed transition.  PhraseSet transitions don't carry this
+    // (no parameter on `addPhraseSetTransition`); for phraseSet
+    // captures the matcher writes the joined matched phrase tokens at
+    // runtime (the matched phrase varies per input).
+    slotValue?: string | undefined;
 
     // For epsilon transitions exiting nested rules:
     // When true, evaluate the current rule's actionValue and write to parent slot
@@ -171,6 +180,7 @@ export class NFABuilder {
         appendToSlot?: boolean,
         actionName?: string,
         propertyPath?: string,
+        slotValue?: string,
     ): void {
         const state = this.states[from];
         if (!state) {
@@ -188,11 +198,36 @@ export class NFABuilder {
         };
         if (actionName) trans.actionName = actionName;
         if (propertyPath) trans.propertyPath = propertyPath;
+        if (slotValue !== undefined) trans.slotValue = slotValue;
         state.transitions.push(trans);
     }
 
-    addTokenTransition(from: number, to: number, tokens: string[]): void {
-        this.addTransition(from, to, "token", tokens);
+    addTokenTransition(
+        from: number,
+        to: number,
+        tokens: string[],
+        slotIndex?: number,
+        slotValue?: string,
+    ): void {
+        // Route through addTransition so token transitions have the
+        // same property shape as wildcard / epsilon transitions
+        // (variable / typeName / checked / appendToSlot keys present
+        // as `undefined`).  Avoids divergence in any consumer that
+        // fingerprints transitions by `Object.keys`.
+        this.addTransition(
+            from,
+            to,
+            "token",
+            tokens,
+            undefined, // variable
+            undefined, // typeName
+            undefined, // checked
+            slotIndex,
+            undefined, // appendToSlot
+            undefined, // actionName
+            undefined, // propertyPath
+            slotValue,
+        );
     }
 
     addEpsilonTransition(from: number, to: number): void {
@@ -240,12 +275,15 @@ export class NFABuilder {
         from: number,
         to: number,
         matcherName: string,
+        slotIndex?: number,
     ): void {
         const state = this.states[from];
         if (!state) {
             throw new Error(`State ${from} does not exist`);
         }
-        state.transitions.push({ type: "phraseSet", matcherName, to });
+        const trans: NFATransition = { type: "phraseSet", matcherName, to };
+        if (slotIndex !== undefined) trans.slotIndex = slotIndex;
+        state.transitions.push(trans);
     }
 
     addWildcardTransition(

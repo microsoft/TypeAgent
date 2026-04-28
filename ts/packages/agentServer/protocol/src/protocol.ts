@@ -6,19 +6,19 @@ import type { PendingInteractionRequest } from "@typeagent/dispatcher-types";
 export type DispatcherConnectOptions = {
     filter?: boolean; // filter to message for own request. Default is false (no filtering)
     clientType?: "shell" | "extension"; // identifies the connecting client type
-    sessionId?: string; // join a specific session by UUID. If omitted, connects to the default session.
+    conversationId?: string; // join a specific conversation by UUID. If omitted, connects to the default conversation.
 };
 
-export type SessionInfo = {
-    sessionId: string;
+export type ConversationInfo = {
+    conversationId: string;
     name: string;
     clientCount: number;
     createdAt: string; // ISO 8601
 };
 
-export type JoinSessionResult = {
+export type JoinConversationResult = {
     connectionId: string;
-    sessionId: string;
+    conversationId: string;
     name: string;
     /**
      * Any pending interactions that are awaiting a client response.
@@ -28,27 +28,30 @@ export type JoinSessionResult = {
 };
 
 export type AgentServerInvokeFunctions = {
-    joinSession: (
+    joinConversation: (
         options?: DispatcherConnectOptions,
-    ) => Promise<JoinSessionResult>;
-    leaveSession: (sessionId: string) => Promise<void>;
-    createSession: (name: string) => Promise<SessionInfo>;
-    listSessions: (name?: string) => Promise<SessionInfo[]>;
-    renameSession: (sessionId: string, newName: string) => Promise<void>;
-    deleteSession: (sessionId: string) => Promise<void>;
+    ) => Promise<JoinConversationResult>;
+    leaveConversation: (conversationId: string) => Promise<void>;
+    createConversation: (name: string) => Promise<ConversationInfo>;
+    listConversations: (name?: string) => Promise<ConversationInfo[]>;
+    renameConversation: (
+        conversationId: string,
+        newName: string,
+    ) => Promise<void>;
+    deleteConversation: (conversationId: string) => Promise<void>;
     shutdown: () => Promise<void>;
 };
 
 export const AgentServerChannelName = "agent-server";
 
-/** Build the dispatcher channel name for a given session. */
-export function getDispatcherChannelName(sessionId: string): string {
-    return `dispatcher:${sessionId}`;
+/** Build the dispatcher channel name for a given conversation. */
+export function getDispatcherChannelName(conversationId: string): string {
+    return `dispatcher:${conversationId}`;
 }
 
-/** Build the clientIO channel name for a given session. */
-export function getClientIOChannelName(sessionId: string): string {
-    return `clientio:${sessionId}`;
+/** Build the clientIO channel name for a given conversation. */
+export function getClientIOChannelName(conversationId: string): string {
+    return `clientio:${conversationId}`;
 }
 
 // =============================================

@@ -138,15 +138,15 @@ There are 3 commands under `agent-cli run`:
 
 All three commands support the following flags:
 
-| Flag             | Short | Description                                                                         |
-| ---------------- | ----- | ----------------------------------------------------------------------------------- |
-| `--port <port>`  | `-p`  | Port for the agent server (default: 8999)                                           |
-| `--session <id>` | `-s`  | Session ID to use. Defaults to the `'CLI'` session if not specified.                |
-| `--show`         |       | Start the server in a visible window if it is not already running (default: hidden) |
+| Flag                  | Short | Description                                                                         |
+| --------------------- | ----- | ----------------------------------------------------------------------------------- |
+| `--port <port>`       | `-p`  | Port for the agent server (default: 8999)                                           |
+| `--conversation <id>` | `-s`  | Conversation ID to use. Defaults to the `'CLI'` conversation if not specified.      |
+| `--show`              |       | Start the server in a visible window if it is not already running (default: hidden) |
 
 ### `agent-cli replay`
 
-`agent-cli replay <history.json>` replays a chat history file against an isolated ephemeral session. Useful for regression testing and generating test files. The ephemeral session is deleted on exit.
+`agent-cli replay <history.json>` replays a chat history file against an isolated ephemeral conversation. Useful for regression testing and generating test files. The ephemeral conversation is deleted on exit.
 
 | Flag                    | Short | Description                                                                         |
 | ----------------------- | ----- | ----------------------------------------------------------------------------------- |
@@ -160,20 +160,20 @@ All three commands support the following flags:
 `agent-cli connect` is the default command. It starts the interactive agent, attaching to a running (or auto-started) agent server.
 
 ```bash
-agent-cli connect                        # connect to the 'CLI' session (created if absent)
-agent-cli connect --resume               # resume the last used session
-agent-cli connect --session <id>         # connect to a specific session by ID
+agent-cli connect                        # connect to the 'CLI' conversation (created if absent)
+agent-cli connect --resume               # resume the last used conversation
+agent-cli connect --conversation <id>    # connect to a specific conversation by ID
 agent-cli connect --port <port>          # connect to a server on a non-default port (default: 8999)
 agent-cli connect --hidden               # start the server hidden (no visible window)
-agent-cli connect --memory               # use an ephemeral session (deleted on exit)
+agent-cli connect --memory               # use an ephemeral conversation (deleted on exit)
 ```
 
-- By default, `connect` targets a session named `"CLI"`. If no such session exists on the server it is created automatically.
-- Pass `--resume` / `-r` to instead resume the last used session (persisted client-side in `~/.typeagent/cli-state.json`). If that session no longer exists, you will be prompted to join the `"CLI"` session.
-- Pass `--session` / `-s <id>` to connect to any specific session by its UUID. Takes priority over `--resume` if both are provided.
-- Pass `--memory` to use an ephemeral session that is created fresh and automatically deleted when you exit. Cannot be combined with `--session` or `--resume`.
+- By default, `connect` targets a conversation named `"CLI"`. If no such conversation exists on the server it is created automatically.
+- Pass `--resume` / `-r` to instead resume the last used conversation (persisted client-side in `~/.typeagent/cli-state.json`). If that conversation no longer exists, you will be prompted to join the `"CLI"` conversation.
+- Pass `--conversation` / `-s <id>` to connect to any specific conversation by its UUID. Takes priority over `--resume` if both are provided.
+- Pass `--memory` to use an ephemeral conversation that is created fresh and automatically deleted when you exit. Cannot be combined with `--conversation` or `--resume`.
 - The server is started automatically if it is not already running. By default it starts in a visible window; pass `--hidden` to suppress the window.
-- On connect (and on every conversation switch), the session name is printed after any replayed history, just below the `─── now ─────` separator.
+- On connect (and on every conversation switch), the conversation name is printed after any replayed history, just below the `─── now ─────` separator.
 
 ### `@conversation` Commands (Connect Mode)
 
@@ -229,45 +229,45 @@ agent-cli server status --port <port>    # check a non-default port
 agent-cli server stop --port <port>      # stop a server on a non-default port
 ```
 
-### `agent-cli sessions`
+### `agent-cli conversations`
 
-`agent-cli sessions` provides full CRUD management of agent server sessions.
+`agent-cli conversations` provides full CRUD management of agent server conversations.
 
-#### `agent-cli sessions create [name]`
+#### `agent-cli conversations create [name]`
 
-Create a new named session on the server and print its session ID. If `name` is omitted, defaults to `"CLI"`.
+Create a new named conversation on the server and print its session ID. If `name` is omitted, defaults to `"CLI"`.
 
 ```bash
-agent-cli sessions create                          # Created session 'CLI' (a1b2c3d4-e5f6-...)
-agent-cli sessions create "workout playlist setup" # Created session 'workout playlist setup' (a1b2c3d4-e5f6-...)
+agent-cli conversations create                          # Created conversation 'CLI' (a1b2c3d4-e5f6-...)
+agent-cli conversations create "workout playlist setup" # Created conversation 'workout playlist setup' (a1b2c3d4-e5f6-...)
 ```
 
-#### `agent-cli sessions list`
+#### `agent-cli conversations list`
 
-List all sessions on the server in a formatted table.
+List all conversations on the server in a formatted table.
 
 ```bash
-agent-cli sessions list
-agent-cli sessions list --name <substring>   # filter by name (case-insensitive)
+agent-cli conversations list
+agent-cli conversations list --name <substring>   # filter by name (case-insensitive)
 ```
 
 Output columns: `SESSION ID`, `NAME`, `CLIENTS` (currently connected), `CREATED AT`.
 
-#### `agent-cli sessions rename <id> <newName>`
+#### `agent-cli conversations rename <id> <newName>`
 
-Rename an existing session.
+Rename an existing conversation.
 
 ```bash
-agent-cli sessions rename a1b2c3d4-e5f6-... "evening playlist"
+agent-cli conversations rename a1b2c3d4-e5f6-... "evening playlist"
 ```
 
-#### `agent-cli sessions delete <id>`
+#### `agent-cli conversations delete <id>`
 
-Delete a session and all its persisted data (chat history, conversation memory). Prompts for confirmation unless `--yes` / `-y` is passed.
+Delete a conversation and all its persisted data (chat history, conversation memory). Prompts for confirmation unless `--yes` / `-y` is passed.
 
 ```bash
-agent-cli sessions delete a1b2c3d4-e5f6-...         # prompts: Delete session ...? (y/N)
-agent-cli sessions delete a1b2c3d4-e5f6-... --yes   # skip confirmation
+agent-cli conversations delete a1b2c3d4-e5f6-...         # prompts: Delete conversation ...? (y/N)
+agent-cli conversations delete a1b2c3d4-e5f6-... --yes   # skip confirmation
 ```
 
 ### `agent-cli data`: Test data management

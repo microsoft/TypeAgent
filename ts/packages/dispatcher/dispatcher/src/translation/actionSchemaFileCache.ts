@@ -63,7 +63,19 @@ function loadParsedActionSchema(
         const parsedActionSchemaJSON = JSON.parse(
             source,
         ) as ParsedActionSchemaJSON;
-        // TODO: validate the json
+        if (
+            typeof parsedActionSchemaJSON !== "object" ||
+            parsedActionSchemaJSON === null ||
+            typeof parsedActionSchemaJSON.version !== "number" ||
+            typeof parsedActionSchemaJSON.entry !== "object" ||
+            parsedActionSchemaJSON.entry === null ||
+            typeof parsedActionSchemaJSON.types !== "object" ||
+            parsedActionSchemaJSON.types === null
+        ) {
+            throw new Error(
+                "Invalid action schema cache: malformed JSON structure",
+            );
+        }
         const parsedActionSchema = fromJSONParsedActionSchema(
             parsedActionSchemaJSON,
         );

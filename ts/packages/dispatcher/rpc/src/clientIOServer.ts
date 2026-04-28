@@ -31,6 +31,7 @@ export function createClientIORpcServer(
     const clientIOCallFunctions: ClientIOCallFunctions = {
         clear: (...args) => clientIO.clear(...args),
         exit: (...args) => clientIO.exit(...args),
+        shutdown: (...args) => clientIO.shutdown(...args),
         setUserRequest: (...args) => clientIO.setUserRequest(...args),
         setDisplayInfo: (...args) => clientIO.setDisplayInfo(...args),
         setDisplay: (...args) => clientIO.setDisplay(...args),

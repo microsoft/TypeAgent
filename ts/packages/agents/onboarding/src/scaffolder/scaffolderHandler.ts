@@ -837,7 +837,7 @@ async function handleListPatterns(): Promise<ActionResult> {
         `| \`llm-streaming\` | Agent calls an LLM and streams partial results | chat, greeting |`,
         `| \`sub-agent-orchestrator\` | API surface too large for one schema; split into groups | desktop, code, browser |`,
         `| \`websocket-bridge\` | Automate an app via a host-side plugin over WebSocket | browser, code |`,
-        `| \`state-machine\` | Multi-phase workflow with approval gates and disk persistence | onboarding, scriptflow |`,
+        `| \`state-machine\` | Multi-phase workflow with approval gates and disk persistence | onboarding, powershell |`,
         `| \`native-platform\` | OS/device APIs via child_process or SDK; no cloud | androidMobile, playerLocal |`,
         `| \`view-ui\` | Rich interactive UI rendered in a local web view | turtle, montage, markdown |`,
         `| \`command-handler\` | Simple settings-style agent; direct dispatch, no schema | settings, test |`,

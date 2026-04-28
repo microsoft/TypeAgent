@@ -163,7 +163,7 @@ describe("Dynamic Grammar Loader", () => {
 
             // Existing grammar with one rule
             const existingGrammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["pause"] }],
                     },
@@ -186,7 +186,7 @@ describe("Dynamic Grammar Loader", () => {
             );
 
             expect(result.success).toBe(true);
-            expect(result.grammar!.rules.length).toBe(2); // pause + play (Start refs play)
+            expect(result.grammar!.alternatives.length).toBe(2); // pause + play (Start refs play)
 
             // Test that both rules work
             const pauseResult = matchNFA(result.nfa!, ["pause"]);
@@ -201,7 +201,7 @@ describe("Dynamic Grammar Loader", () => {
 
             // Start with one play rule
             const existingGrammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [
                             { type: "string", value: ["play"] },
@@ -238,7 +238,7 @@ describe("Dynamic Grammar Loader", () => {
             const result = loader.loadAndMerge(agrText, existingGrammar);
 
             expect(result.success).toBe(true);
-            expect(result.grammar!.rules.length).toBe(2); // original + play (Start refs play)
+            expect(result.grammar!.alternatives.length).toBe(2); // original + play (Start refs play)
 
             // Both patterns should match
             const simple = matchNFA(result.nfa!, ["play", "Song"]);
@@ -257,7 +257,7 @@ describe("Dynamic Grammar Loader", () => {
     describe("DynamicGrammarCache", () => {
         it("should maintain grammar and NFA in cache", () => {
             const initialGrammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["pause"] }],
                     },
@@ -268,7 +268,7 @@ describe("Dynamic Grammar Loader", () => {
             const cache = new DynamicGrammarCache(initialGrammar, initialNFA);
 
             // Verify initial state
-            expect(cache.getGrammar().rules.length).toBe(1);
+            expect(cache.getGrammar().alternatives.length).toBe(1);
             const stats1 = cache.getStats();
             expect(stats1.ruleCount).toBe(1);
 
@@ -285,7 +285,7 @@ describe("Dynamic Grammar Loader", () => {
             expect(result.success).toBe(true);
 
             // Verify updated state
-            expect(cache.getGrammar().rules.length).toBe(2); // pause + play (Start refs play)
+            expect(cache.getGrammar().alternatives.length).toBe(2); // pause + play (Start refs play)
             const stats2 = cache.getStats();
             expect(stats2.ruleCount).toBe(2);
             expect(stats2.stateCount).toBeGreaterThan(stats1.stateCount);
@@ -297,7 +297,7 @@ describe("Dynamic Grammar Loader", () => {
 
         it("should handle multiple incremental additions", () => {
             const initialGrammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["pause"] }],
                     },
@@ -317,7 +317,7 @@ describe("Dynamic Grammar Loader", () => {
 };`;
             const result1 = cache.addRules(rule1);
             expect(result1.success).toBe(true);
-            expect(cache.getGrammar().rules.length).toBe(2); // pause + play (Start refs play)
+            expect(cache.getGrammar().alternatives.length).toBe(2); // pause + play (Start refs play)
 
             // Add second rule
             const rule2 = `<Start> = <resume>;
@@ -326,7 +326,7 @@ describe("Dynamic Grammar Loader", () => {
 };`;
             const result2 = cache.addRules(rule2);
             expect(result2.success).toBe(true);
-            expect(cache.getGrammar().rules.length).toBe(3); // + resume (Start refs resume)
+            expect(cache.getGrammar().alternatives.length).toBe(3); // + resume (Start refs resume)
 
             // Add third rule with same action as first (alternative)
             const rule3 = `<Start> = <play>;
@@ -339,7 +339,7 @@ describe("Dynamic Grammar Loader", () => {
 };`;
             const result3 = cache.addRules(rule3);
             expect(result3.success).toBe(true);
-            expect(cache.getGrammar().rules.length).toBe(4); // + play (another play alternative)
+            expect(cache.getGrammar().alternatives.length).toBe(4); // + play (another play alternative)
 
             // All patterns should work
             const nfa = cache.getNFA();
@@ -353,7 +353,7 @@ describe("Dynamic Grammar Loader", () => {
 
         it("should reject invalid additions and maintain state", () => {
             const initialGrammar: Grammar = {
-                rules: [
+                alternatives: [
                     {
                         parts: [{ type: "string", value: ["pause"] }],
                     },

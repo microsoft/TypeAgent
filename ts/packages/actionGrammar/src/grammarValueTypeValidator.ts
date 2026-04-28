@@ -15,6 +15,7 @@ import type {
     SchemaObjectField,
 } from "@typeagent/action-schema";
 import { SchemaCreator } from "@typeagent/action-schema";
+import { getDispatchEffectiveMembers } from "./dispatchHelpers.js";
 
 // Sentinel for "any" — can't determine type
 const ANY_TYPE: SchemaType = SchemaCreator.any();
@@ -508,9 +509,17 @@ export function classifyRuleValue(rule: GrammarRule): RuleValueKind {
     if (variableParts.length === 0 && rule.parts.length === 1) {
         const part = rule.parts[0];
         if (part.type === "rules") {
+            // For dispatched parts, the effective member list spans
+            // both the bucket members and `part.rules` (the fallback
+            // subset).  `getDispatchEffectiveMembers` returns the
+            // union (or just `part.rules` when there is no dispatch).
+            // Using it unconditionally keeps downstream logic
+            // (`deriveAlternativeType`, `collectLeafValues`) walking
+            // the same alternatives it would have walked before
+            // `dispatchifyAlternations` ran.
             return {
                 kind: "passthrough",
-                rules: part.rules,
+                rules: getDispatchEffectiveMembers(part),
                 name: part.name,
             };
         }
@@ -572,15 +581,42 @@ function derivePartType(
             baseType = SchemaCreator.number();
             break;
         case "rules":
-            baseType = deriveRuleValueType(part.rules, cache, part.name);
+            // Walk the unified effective member list (covers plain
+            // and dispatched RulesParts).
+            baseType = deriveRuleValueType(
+                getDispatchEffectiveMembers(part),
+                cache,
+                part.name,
+            );
             break;
         case "string":
         case "phraseSet":
-            // DEAD CODE: StringPart.variable and PhraseSetPart.variable are
-            // typed as `undefined` — these parts never carry a variable name,
-            // so callers (buildVariableTypeMap, deriveAlternativeType) will
-            // never invoke derivePartType for them.  Kept for exhaustiveness.
-            baseType = SchemaCreator.string();
+            // Reachable in principle when an optimizer-emitted
+            // bound StringPart / PhraseSetPart (the factorer mints
+            // synthesized `__opt_v_<n>` canonicals on shared first
+            // tokens) flows through here.  Today this is dead code
+            // at the only call sites: `derivePartType` is invoked
+            // from `classifyRuleValue` (kind=variable) and
+            // `buildVariableTypeMap`, both used by `grammarCompiler`
+            // *before* the optimizer runs.  User-authored `.agr`
+            // syntax does not allow binding a StringPart or
+            // PhraseSetPart, so at compile time `part.variable` is
+            // always undefined for these kinds and the filter
+            // `part.variable !== undefined` (or `if (part.variable)`)
+            // skips them before the call.
+            //
+            // Defensive future-proofing: if validation is ever re-run
+            // after optimization (e.g. on a deserialized grammar that
+            // was optimized at build time), bound StringParts /
+            // PhraseSetParts would reach here.  Producing a real
+            // SchemaType (string-union for StringPart, plain string
+            // for PhraseSetPart) is what callers expect; throwing or
+            // returning ANY would silently weaken downstream type
+            // checks.
+            baseType =
+                part.type === "string" && part.value.length > 0
+                    ? SchemaCreator.string(part.value.join(" "))
+                    : SchemaCreator.string();
             break;
     }
     // Optional captures produce T | undefined at runtime

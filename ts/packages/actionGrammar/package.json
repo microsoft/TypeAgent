@@ -24,11 +24,18 @@
   },
   "files": [
     "dist",
-    "!dist/test"
+    "!dist/test",
+    "!dist/bench",
+    "!dist/fuzz"
   ],
   "scripts": {
+    "bench": "npm run bench:synthetic && npm run bench:real && npm run bench:dfa",
+    "bench:dfa": "node ./dist/bench/dfaBenchmark.js",
+    "bench:real": "node ./dist/bench/grammarOptimizerBenchmark.js",
+    "bench:synthetic": "node ./dist/bench/grammarOptimizerSyntheticBenchmark.js",
     "build": "npm run tsc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "fuzz": "node ./dist/fuzz/fuzzRunner.js",
     "jest-esm": "node --no-warnings --experimental-vm-modules ./node_modules/jest/bin/jest.js",
     "prettier": "prettier --check . --ignore-path ../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../.prettierignore",
@@ -41,7 +48,6 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.101",
     "@typeagent/action-schema": "workspace:*",
-    "chalk": "^5.4.1",
     "debug": "^4.4.0",
     "dotenv": "^16.4.5",
     "regexp.escape": "^2.0.1"
@@ -51,6 +57,7 @@
     "@types/debug": "^4.1.12",
     "@types/jest": "^29.5.7",
     "@types/regexp.escape": "^2.0.0",
+    "chalk": "^5.4.1",
     "jest": "^29.7.0",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",

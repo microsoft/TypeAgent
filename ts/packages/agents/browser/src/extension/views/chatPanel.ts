@@ -32,7 +32,6 @@ const platformAdapter: PlatformAdapter = {
 
 let chatPanel: ChatPanel;
 let connectionBanner: HTMLDivElement;
-let requestCounter = 0;
 let reconnectTimer: ReturnType<typeof setInterval> | undefined;
 let bannerHideTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -380,8 +379,8 @@ function handleInternalCommand(text: string): boolean {
  */
 function handleUserMessage(
     text: string,
+    attachments: string[] | undefined,
     requestId: string,
-    attachments?: string[],
 ) {
     // Handle internal commands (save/discard recording) without going to dispatcher
     if (handleInternalCommand(text)) return;
@@ -396,7 +395,7 @@ function handleUserMessage(
             const learnCommand = `@browser learn "${text}"`;
             rpc.invoke("chatPanelProcessCommand", {
                 command: learnCommand,
-                clientRequestId: `ext-${++requestCounter}`,
+                clientRequestId: requestId,
                 attachments: [],
             })
                 .then(() => {

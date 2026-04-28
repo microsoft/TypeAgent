@@ -74,7 +74,7 @@ export class DynamicGrammarLoader {
         // Step 3: Merge into existing grammar
         const mergedGrammar = mergeGrammarRules(
             existingGrammar,
-            newGrammar.rules,
+            newGrammar.alternatives,
         );
 
         // Merge entity declarations
@@ -191,7 +191,7 @@ export class DynamicGrammarLoader {
         }
 
         // Check wildcard types in rules
-        for (const rule of grammar.rules) {
+        for (const rule of grammar.alternatives) {
             this.checkPartsForEntities(rule.parts, unresolved, builtInTypes);
         }
 
@@ -214,7 +214,7 @@ export class DynamicGrammarLoader {
                 }
             } else if (part.type === "rules") {
                 // Recursively check nested rules
-                for (const nestedRule of part.rules) {
+                for (const nestedRule of part.alternatives) {
                     this.checkPartsForEntities(
                         nestedRule.parts,
                         unresolved,
@@ -277,7 +277,7 @@ export class DynamicGrammarCache {
      */
     getStats() {
         return {
-            ruleCount: this.grammar.rules.length,
+            ruleCount: this.grammar.alternatives.length,
             stateCount: this.nfa.states.length,
             transitionCount: this.nfa.states.reduce(
                 (sum, s) => sum + s.transitions.length,

@@ -6,7 +6,80 @@ import { ActionSchemaFileCache } from "../src/translation/actionSchemaFileCache.
 import { ActionConfig } from "../src/translation/actionConfig.js";
 import { SchemaContent } from "@typeagent/agent-sdk";
 
+function makePasActionConfig(content: string): ActionConfig {
+    const schemaFile: SchemaContent = {
+        format: "pas",
+        content,
+        config: undefined,
+    };
+    return {
+        emojiChar: "🔧",
+        cachedActivities: undefined,
+        schemaDefaultEnabled: true,
+        actionDefaultEnabled: true,
+        transient: false,
+        schemaName: "testSchema",
+        schemaFilePath: undefined,
+        originalSchemaFilePath: undefined,
+        description: "test",
+        schemaType: "TestAction",
+        schemaFile,
+        grammarFile: undefined,
+    } as unknown as ActionConfig;
+}
+
 describe("ActionSchemaFileCache", () => {
+    describe("loadParsedActionSchema JSON validation", () => {
+        it("throws for JSON missing version field", () => {
+            const cache = new ActionSchemaFileCache();
+            const content = JSON.stringify({ entry: {}, types: {} });
+            expect(() =>
+                cache.getActionSchemaFile(makePasActionConfig(content)),
+            ).toThrow("Failed to load parsed action schema 'testSchema'");
+        });
+
+        it("throws for JSON with non-number version", () => {
+            const cache = new ActionSchemaFileCache();
+            const content = JSON.stringify({
+                version: "1",
+                entry: {},
+                types: {},
+            });
+            expect(() =>
+                cache.getActionSchemaFile(makePasActionConfig(content)),
+            ).toThrow("malformed JSON structure");
+        });
+
+        it("throws for JSON missing entry field", () => {
+            const cache = new ActionSchemaFileCache();
+            const content = JSON.stringify({ version: 1, types: {} });
+            expect(() =>
+                cache.getActionSchemaFile(makePasActionConfig(content)),
+            ).toThrow("malformed JSON structure");
+        });
+
+        it("throws for JSON missing types field", () => {
+            const cache = new ActionSchemaFileCache();
+            const content = JSON.stringify({ version: 1, entry: {} });
+            expect(() =>
+                cache.getActionSchemaFile(makePasActionConfig(content)),
+            ).toThrow("malformed JSON structure");
+        });
+
+        it("passes structure validation for valid JSON (fails on type name mismatch)", () => {
+            const cache = new ActionSchemaFileCache();
+            // Valid structure but wrong version — will fail at fromJSONParsedActionSchema
+            const content = JSON.stringify({
+                version: 99,
+                entry: {},
+                types: {},
+            });
+            expect(() =>
+                cache.getActionSchemaFile(makePasActionConfig(content)),
+            ).toThrow("Unsupported ParsedActionSchema version");
+        });
+    });
+
     describe("getSchemaSource preserves config", () => {
         it("should include config in hash when schema has a config", () => {
             const schemaContentWithConfig: SchemaContent = {

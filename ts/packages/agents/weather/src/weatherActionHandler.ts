@@ -209,28 +209,18 @@ async function validateWeatherWildcardMatch(
         case "getCurrentConditions":
         case "getForecast":
         case "getAlerts":
-            // Validate location parameter
             return validateLocation(action.parameters.location);
         default:
             return true;
     }
 }
 
-// Validate location string
-// For now, accept any non-empty string
-// Future: validate against known cities, valid zip codes, etc.
-function validateLocation(location: string): boolean {
+async function validateLocation(location: string): Promise<boolean> {
     if (!location || location.trim().length === 0) {
         return false;
     }
-
-    // TODO: Add more sophisticated validation:
-    // - Check against list of known cities
-    // - Validate zip code format (5 digits or 5+4 format)
-    // - Check against geocoding API for valid locations
-    // - Support international location formats
-
-    return true;
+    const coords = await geocodeLocation(location);
+    return coords !== null;
 }
 
 // Export agent instantiation function

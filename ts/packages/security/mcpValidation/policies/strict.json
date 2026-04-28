@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "name": "strict",
+  "description": "Maximum restriction. No arbitrary bash, no network, no devices. Use capability tools only.",
+  "deniedTools": ["WebFetch", "WebSearch"],
+  "paths": {
+    "allowedReadPatterns": ["{{projectDir}}/**"],
+    "allowedWritePatterns": [
+      "{{projectDir}}/src/**",
+      "{{projectDir}}/test/**",
+      "{{projectDir}}/tests/**"
+    ],
+    "deniedPatterns": [
+      "**/.env",
+      "**/.env.*",
+      "**/credentials*",
+      "**/secrets*",
+      "**/*.pem",
+      "**/*.key",
+      "**/.git/config"
+    ]
+  },
+  "bash": {
+    "mode": "capabilities-only"
+  },
+  "limitCaps": {
+    "maxTotalSteps": 30,
+    "maxDurationMs": 300000,
+    "maxFileWrites": 10,
+    "maxBytesWritten": 524288
+  }
+}

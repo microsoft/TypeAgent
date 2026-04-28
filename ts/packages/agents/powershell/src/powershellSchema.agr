@@ -1,0 +1,17 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+import { PowerShellActions } from "./schema/scriptActions.mts";
+
+<Start> : PowerShellActions = <listPowerShellFlows> | <deletePowerShellFlow> | <importPowerShellFlow>;
+
+// Built-in action rules (dynamic flows are registered at runtime via addGeneratedRules)
+<listPowerShellFlows> = (<Polite>)? (<Greeting>)? (<Acknowledgement>)? (show me | list | display) (all)? (the)? (available)? powershell flows -> { actionName: "listPowerShellFlows" };
+
+<deletePowerShellFlow> [spacing=optional] =
+    (delete | remove) (the)? powershell flow $(name:wildcard)
+      -> { actionName: "deletePowerShellFlow", parameters: { name } };
+
+<importPowerShellFlow> [spacing=optional] =
+    import (a)? (powershell)? script (flow)? (from)? $(filePath:wildcard)
+      -> { actionName: "importPowerShellFlow", parameters: { filePath } };

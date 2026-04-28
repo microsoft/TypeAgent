@@ -15,4 +15,5 @@ export {
     CompletionResult,
     DynamicDisplayResult,
     DEFAULT_AVATAR_MAP,
+    NotifyExplainedData,
 } from "./chatPanel.js";

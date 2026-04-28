@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "actionName": "logGrep",
+  "description": "Searches log files for a pattern with context lines",
+  "displayName": "Log Grep",
+  "parameters": [
+    {
+      "name": "logPath",
+      "type": "path",
+      "required": true,
+      "description": "Path to the log file"
+    },
+    {
+      "name": "pattern",
+      "type": "string",
+      "required": true,
+      "description": "Pattern to search for"
+    },
+    {
+      "name": "context",
+      "type": "number",
+      "required": false,
+      "description": "Number of context lines to show",
+      "default": "2"
+    }
+  ],
+  "script": {
+    "language": "powershell",
+    "body": "param([string]$LogPath, [string]$Pattern, [int]$Context = 2)\nSelect-String -Path $LogPath -Pattern $Pattern -Context $Context | ForEach-Object {\n    Write-Output \"=== Match at line $($_.LineNumber) ===\"\n    if ($_.Context.PreContext) {\n        $_.Context.PreContext | ForEach-Object { Write-Output \"  $_\" }\n    }\n    Write-Output \"> $($_.Line)\"\n    if ($_.Context.PostContext) {\n        $_.Context.PostContext | ForEach-Object { Write-Output \"  $_\" }\n    }\n    Write-Output ''\n}",
+    "expectedOutputFormat": "text"
+  },
+  "grammarPatterns": [
+    {
+      "pattern": "(search|grep) (for)? $(pattern:wildcard) in $(logPath:wildcard)",
+      "isAlias": false,
+      "examples": ["search for error in app.log", "grep error in server.log"]
+    },
+    {
+      "pattern": "find $(pattern:wildcard) in (log)? $(logPath:wildcard)",
+      "isAlias": false,
+      "examples": ["find ERROR in app.log", "find warnings in log server.log"]
+    },
+    {
+      "pattern": "(search|grep) logs for $(pattern:wildcard) (in)? $(logPath:wildcard)?",
+      "isAlias": false,
+      "examples": ["search logs for errors in app.log"]
+    }
+  ],
+  "sandbox": {
+    "allowedCmdlets": ["Select-String", "ForEach-Object", "Write-Output"],
+    "allowedPaths": ["$PWD", "$env:USERPROFILE", "$env:TEMP"],
+    "allowedModules": [
+      "Microsoft.PowerShell.Management",
+      "Microsoft.PowerShell.Utility"
+    ],
+    "maxExecutionTime": 60,
+    "networkAccess": false
+  },
+  "source": {
+    "type": "manual",
+    "timestamp": "2026-04-23T00:00:00Z"
+  }
+}

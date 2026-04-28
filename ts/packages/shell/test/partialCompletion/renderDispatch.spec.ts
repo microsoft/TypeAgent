@@ -86,7 +86,29 @@ describe("render vs updatePosition dispatch", () => {
         expect(menu.updatePositionCalls.length).toBe(0);
     });
 
-    test("same generation + same prefix calls updatePosition", async () => {
+    test("same input + direction is deduplicated (no callback)", async () => {
+        const result = makeCompletionResult(["song", "shuffle"], 4, {
+            separatorMode: "optionalSpace",
+        });
+        const dispatcher = makeDispatcher(result);
+        const controller = createCompletionController(dispatcher);
+        const menu = new MockSearchMenu();
+        wireController(controller, menu);
+
+        controller.update("play", "forward");
+        await Promise.resolve();
+
+        const rendersBefore = menu.renderCalls.length;
+        const updatePosBefore = menu.updatePositionCalls.length;
+
+        // Same input, same direction — controller skips entirely.
+        controller.update("play", "forward");
+
+        expect(menu.renderCalls.length).toBe(rendersBefore);
+        expect(menu.updatePositionCalls.length).toBe(updatePosBefore);
+    });
+
+    test("same input + different direction calls updatePosition", async () => {
         const result = makeCompletionResult(["song", "shuffle"], 4, {
             separatorMode: "optionalSpace",
         });
@@ -100,8 +122,8 @@ describe("render vs updatePosition dispatch", () => {
 
         const rendersBefore = menu.renderCalls.length;
 
-        // Same input — same generation, same prefix.
-        controller.update("play", "forward");
+        // Same input, different direction — passes dedup, reuse triggers updatePosition.
+        controller.update("play", "backward");
 
         expect(menu.renderCalls.length).toBe(rendersBefore);
         expect(menu.updatePositionCalls.length).toBe(1);

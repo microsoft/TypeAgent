@@ -235,5 +235,99 @@ describeForEachMatcher(
                 ]);
             });
         });
+
+        describe("Nullable repeat body (must-advance guard)", () => {
+            // These grammars have a repeat group whose body can match the
+            // empty string.  Without the runtime must-advance guard in
+            // grammarMatcher.finalizeNestedRule, the matcher would push an
+            // unbounded chain of zero-progress CONTINUE frames and hang.
+            // The guard short-circuits any iteration that consumed no
+            // input, so these tests must terminate (jest's 90s suite
+            // timeout would catch a regression).  Multiple distinct parse
+            // trees are expected for ambiguous inputs - we assert
+            // termination AND produce a small, exact set of parse trees.
+            // Expected parse counts (one `true` per distinct parse):
+            //   ((foo)?)*  on ""    -> 2 (zero-iters; one ε-iter)
+            //   ((foo)?)*  on "foo" -> 2 (one iter consuming "foo"; one
+            //                         iter consuming "foo" + a final
+            //                         ε-iter through the optional)
+            //   ((foo)?)+  on ""    -> 1 (`+` requires >=1 iteration; only
+            //                         the single ε-iter parse remains
+            //                         after the must-advance guard)
+            //   (<X>)*     on ""    -> 2 (zero-iters; one ε-iter via the
+            //                         nullable <X>)
+            it("((X)?)* on empty input has exactly 2 parses", () => {
+                const g = `<Start> = ((foo)?)* -> true;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                expect(testMatchGrammar(grammar, "")).toStrictEqual([
+                    true,
+                    true,
+                ]);
+            });
+            it("((X)?)* on 'foo' has exactly 2 parses", () => {
+                const g = `<Start> = ((foo)?)* -> true;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                expect(testMatchGrammar(grammar, "foo")).toStrictEqual([
+                    true,
+                    true,
+                ]);
+            });
+            it("((X)?)+ on empty input has exactly 1 parse", () => {
+                const g = `<Start> = ((foo)?)+ -> true;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                expect(testMatchGrammar(grammar, "")).toStrictEqual([true]);
+            });
+            it("(<X>)* with nullable <X> on empty input has exactly 2 parses", () => {
+                const g = `
+                    <Start> = (<X>)* -> true;
+                    <X> = (foo)?;
+                `;
+                const grammar = loadGrammarRules("test.grammar", g);
+                expect(testMatchGrammar(grammar, "")).toStrictEqual([
+                    true,
+                    true,
+                ]);
+            });
+
+            // Wildcard interaction: wildcards always advance index >= 1,
+            // so the must-advance guard never fires on a non-empty wildcard
+            // capture.  But when the wildcard is wrapped in an optional
+            // inside the repeat body, the body becomes nullable via the
+            // skipped-optional path, and the guard MUST fire to prevent
+            // an infinite chain of zero-progress iterations.
+            it("(($(w))?)* on empty input terminates", () => {
+                const g = `<Start> = (($(w))?)* -> true;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                // Body is fully nullable via the skipped optional.
+                // Must-advance guard short-circuits after the single
+                // ε-iteration: zero-iters + one ε-iter = 2 parses.
+                expect(testMatchGrammar(grammar, "")).toStrictEqual([
+                    true,
+                    true,
+                ]);
+            });
+            it("(($(w))?)* on non-empty input terminates", () => {
+                const g = `<Start> = (($(w))?)* -> true;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                // The wildcard can absorb the entire input in one
+                // iteration; the optional can also be skipped (body=ε).
+                // Must terminate with at least one parse (the wildcard
+                // capture); exact count depends on wildcard-length axis
+                // enumeration but must be finite and non-empty.
+                const results = testMatchGrammar(grammar, "hello");
+                expect(results.length).toBeGreaterThan(0);
+                expect(results.every((r) => r === true)).toBe(true);
+            });
+            it("((foo)? ($(w))?)* with two nullable parts terminates", () => {
+                // Body is two optional parts in sequence - fully nullable.
+                // Stresses the guard against multiple ε-paths through the
+                // body (skip both, skip first, skip second).
+                const g = `<Start> = ((foo)? ($(w))?)* -> true;`;
+                const grammar = loadGrammarRules("test.grammar", g);
+                const results = testMatchGrammar(grammar, "");
+                expect(results.length).toBeGreaterThan(0);
+                expect(results.every((r) => r === true)).toBe(true);
+            });
+        });
     },
 );

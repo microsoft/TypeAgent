@@ -3,6 +3,15 @@
 
 /// <reference path="../../lib/lib.android.d.ts" />
 
+// Augment Window with the test hook exposed by registerClient() so that
+// Playwright tests can inject interactions without requiring a live
+// agent-server connection.
+declare global {
+    interface Window {
+        __clientIO__?: import("agent-dispatcher").ClientIO;
+    }
+}
+
 import {
     ClientAPI,
     NotifyCommands,
@@ -23,11 +32,16 @@ import { CameraView } from "./cameraView";
 import { createWebSocket, webapi } from "./webSocketAPI";
 import * as jose from "jose";
 import { AppAgentEvent } from "@typeagent/agent-sdk";
-import { ClientIO, Dispatcher, RequestId } from "agent-dispatcher";
+import {
+    ClientIO,
+    Dispatcher,
+    PendingInteractionResponse,
+    RequestId,
+} from "agent-dispatcher";
 import { swapContent } from "./setContent";
 import { remoteSearchMenuUIOnCompletion } from "./searchMenuUI/remoteSearchMenuUI";
 import { ChatInput } from "./chat/chatInput";
-import { escapeHtml } from "./chat/sessionCommands";
+import { escapeHtml } from "./chat/conversationCommands";
 
 export function isElectron(): boolean {
     return globalThis.api !== undefined;
@@ -139,11 +153,18 @@ function registerClient(
     cameraView: CameraView,
     chatHistoryReady: Promise<void>,
 ) {
+    // Tracks open deferred interaction prompts so they can be dismissed when
+    // another client answers or the server cancels the interaction.
+    const activeInteractions = new Map<string, AbortController>();
+
     const clientIO: ClientIO = {
         clear: () => {
             chatView.clear();
         },
         exit: () => {
+            window.close();
+        },
+        shutdown: () => {
             window.close();
         },
         setUserRequest: (requestId, command, seq?) => {
@@ -176,8 +197,7 @@ function registerClient(
             chatView.addAgentMessage(message, { appendMode: mode });
         },
         appendDiagnosticData: (requestId, data) => {
-            // TODO: append data instead of replace
-            chatView.setActionData(requestId, data);
+            chatView.appendDiagnosticData(requestId, data);
         },
         setDynamicDisplay: (
             requestId,
@@ -194,21 +214,33 @@ function registerClient(
                 nextRefreshMs,
             );
         },
-        question: async (requestId, message, choices) => {
-            // For binary Yes/No with a known requestId, delegate to the existing chatView UI.
-            if (
-                requestId !== undefined &&
-                choices.length === 2 &&
-                choices[0] === "Yes" &&
-                choices[1] === "No"
-            ) {
-                const yes = await chatView.askYesNo(requestId, message, "");
-                return yes ? 0 : 1;
+        // Called only in standalone mode (shell running its own dispatcher).
+        // In connected mode the SharedDispatcher implements question() by
+        // assigning an interactionId and broadcasting requestInteraction() to
+        // all connected clients — so the shell receives requestInteraction(),
+        // not question(), when attached to an agent-server.
+        question: async (requestId, message, choices, defaultId) => {
+            if (requestId !== undefined) {
+                // Route through the unified interaction question UI which handles
+                // both binary Yes/No and arbitrary multi-choice prompts.
+                // interactionId is left empty because this path has no
+                // server-assigned lifecycle — there are no other clients that
+                // could call interactionResolved/Cancelled for this prompt.
+                return chatView.showInteractionQuestion({
+                    interactionId: "",
+                    type: "question",
+                    requestId,
+                    source: "",
+                    timestamp: Date.now(),
+                    message,
+                    choices,
+                    defaultId,
+                });
             }
-            // General multi-choice and broadcast (no requestId) are not yet implemented
-            // in the Shell renderer — the main process handles those via dialog.showMessageBox.
+            // No requestId — main process should have handled this via
+            // dialog.showMessageBox before it reached the renderer.
             throw new Error(
-                "Main process should have handled multi-choice question",
+                "Main process should have handled question with no requestId",
             );
         },
         requestChoice: (
@@ -321,24 +353,89 @@ function registerClient(
         closeLocalView: async () => {
             throw new Error("Main process should have handled closeLocalView");
         },
-        requestInteraction: () => {
-            // TODO: Implement deferred interaction support for agent-server connect mode.
-            // When the shell connects to a SharedDispatcher, requestInteraction is pushed
-            // from the server. Without handling it, the server-side promise hangs for the
-            // full 10-minute timeout before resolving with the defaultId (question) or
-            // rejecting (proposeAction).
-            //
-            // The fix (Option A): on requestInteraction, dispatch into the existing
-            // chatView.askYesNo / chatView.proposeAction / dialog.showMessageBox UI (all
-            // already implemented for direct mode), await the result, then call
-            // dispatcher.respondToInteraction({ interactionId, type, value }). Hold a
-            // Map<interactionId, cancelFn> and dismiss open prompts on interactionCancelled.
+        requestInteraction: (interaction) => {
+            const ac = new AbortController();
+            activeInteractions.set(interaction.interactionId, ac);
+            (async () => {
+                let response: PendingInteractionResponse;
+                try {
+                    if (interaction.type === "question") {
+                        const value = await chatView.showInteractionQuestion(
+                            interaction,
+                            ac.signal,
+                        );
+                        response = {
+                            interactionId: interaction.interactionId,
+                            type: "question",
+                            value,
+                        };
+                    } else {
+                        const requestId = interaction.requestId;
+                        if (requestId === undefined) {
+                            console.error(
+                                `[requestInteraction] proposeAction interaction ${interaction.interactionId} has no requestId — skipping`,
+                            );
+                            activeInteractions.delete(
+                                interaction.interactionId,
+                            );
+                            return;
+                        }
+                        const value = await chatView.proposeAction(
+                            requestId,
+                            interaction.actionTemplates,
+                            interaction.source,
+                        );
+                        response = {
+                            interactionId: interaction.interactionId,
+                            type: "proposeAction",
+                            value,
+                        };
+                    }
+                } catch (e) {
+                    // Expected: aborted by interactionResolved / interactionCancelled.
+                    // The abort reason is either { kind: "resolved-by-other" } or
+                    // the string "cancelled".  Anything else is unexpected and logged.
+                    const isKnownAbort =
+                        e === "cancelled" ||
+                        (e !== null &&
+                            typeof e === "object" &&
+                            (e as any).kind === "resolved-by-other");
+                    if (!isKnownAbort) {
+                        console.error(
+                            `[requestInteraction] unexpected error for ${interaction.interactionId}:`,
+                            e,
+                        );
+                    }
+                    activeInteractions.delete(interaction.interactionId);
+                    return;
+                }
+                activeInteractions.delete(interaction.interactionId);
+                try {
+                    await chatView.respondToInteraction(response);
+                } catch {
+                    // Interaction may have already timed out on the server.
+                }
+            })().catch((e) => {
+                console.error(
+                    `[requestInteraction] unhandled error for ${interaction.interactionId}:`,
+                    e,
+                );
+                activeInteractions.delete(interaction.interactionId);
+            });
         },
-        interactionResolved: () => {
-            // Shell does not yet support deferred interactions
+        interactionResolved: (interactionId) => {
+            const ac = activeInteractions.get(interactionId);
+            if (ac) {
+                activeInteractions.delete(interactionId);
+                ac.abort({ kind: "resolved-by-other" });
+            }
         },
-        interactionCancelled: () => {
-            // Shell does not yet support deferred interactions
+        interactionCancelled: (interactionId) => {
+            const ac = activeInteractions.get(interactionId);
+            if (ac) {
+                activeInteractions.delete(interactionId);
+                ac.abort("cancelled");
+            }
         },
         takeAction: (_, action, data) => {
             // Android object gets injected on Android devices, otherwise unavailable
@@ -394,17 +491,18 @@ function registerClient(
                                                     "A name is required to create a new conversation.",
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                         break;
                                     }
-                                    const created = await api.sessionCreate(
-                                        payload.name,
-                                    );
+                                    const created =
+                                        await api.conversationCreate(
+                                            payload.name,
+                                        );
                                     const switchResult =
-                                        await api.sessionSwitch(
-                                            created.sessionId,
+                                        await api.conversationSwitch(
+                                            created.conversationId,
                                         );
                                     const msg = switchResult.success
                                         ? `✅ Created and switched to conversation "<b>${escapeHtml(created.name)}</b>"`
@@ -415,15 +513,16 @@ function registerClient(
                                             content: msg,
                                             kind: "info",
                                         },
-                                        "session",
+                                        "conversation",
                                         undefined,
                                     );
                                     break;
                                 }
                                 case "list": {
-                                    const sessions = await api.sessionList();
+                                    const sessions =
+                                        await api.conversationList();
                                     const current =
-                                        await api.sessionGetCurrent();
+                                        await api.conversationGetCurrent();
                                     let html: string;
                                     if (sessions.length === 0) {
                                         html = "No conversations found.";
@@ -431,15 +530,15 @@ function registerClient(
                                         const lines = sessions.map((s) => {
                                             const isCurrent =
                                                 current &&
-                                                s.sessionId ===
-                                                    current.sessionId;
+                                                s.conversationId ===
+                                                    current.conversationId;
                                             const marker = isCurrent
                                                 ? " ← <b>current</b>"
                                                 : "";
                                             const date = new Date(
                                                 s.createdAt,
                                             ).toLocaleDateString();
-                                            return `• <b>${escapeHtml(s.name)}</b> (${escapeHtml(s.sessionId)}) — ${s.clientCount} client(s), created ${date}${marker}`;
+                                            return `• <b>${escapeHtml(s.name)}</b> (${escapeHtml(s.conversationId)}) — ${s.clientCount} client(s), created ${date}${marker}`;
                                         });
                                         html = `<b>Conversations (${sessions.length})</b><br>${lines.join("<br>")}`;
                                     }
@@ -449,15 +548,16 @@ function registerClient(
                                             content: html,
                                             kind: "info",
                                         },
-                                        "session",
+                                        "conversation",
                                         undefined,
                                     );
                                     break;
                                 }
                                 case "info": {
-                                    const cur = await api.sessionGetCurrent();
+                                    const cur =
+                                        await api.conversationGetCurrent();
                                     const html = cur
-                                        ? `Current conversation: <b>${escapeHtml(cur.name)}</b> (${escapeHtml(cur.sessionId)})`
+                                        ? `Current conversation: <b>${escapeHtml(cur.name)}</b> (${escapeHtml(cur.conversationId)})`
                                         : "No active conversation.";
                                     chatView.addNotificationMessage(
                                         {
@@ -465,7 +565,7 @@ function registerClient(
                                             content: html,
                                             kind: "info",
                                         },
-                                        "session",
+                                        "conversation",
                                         undefined,
                                     );
                                     break;
@@ -479,12 +579,13 @@ function registerClient(
                                                     "A conversation name is required to switch.",
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                         break;
                                     }
-                                    const sessions = await api.sessionList();
+                                    const sessions =
+                                        await api.conversationList();
                                     const match = sessions.find(
                                         (s) =>
                                             s.name.toLowerCase() ===
@@ -497,13 +598,13 @@ function registerClient(
                                                 content: `No conversation named "<b>${escapeHtml(payload.name)}</b>" found.`,
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                         break;
                                     }
-                                    const result = await api.sessionSwitch(
-                                        match.sessionId,
+                                    const result = await api.conversationSwitch(
+                                        match.conversationId,
                                     );
                                     if (!result.success) {
                                         chatView.addNotificationMessage(
@@ -512,7 +613,7 @@ function registerClient(
                                                 content: `❌ ${escapeHtml(result.error ?? "Failed to switch conversation")}`,
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                     }
@@ -527,15 +628,15 @@ function registerClient(
                                                     "A new name is required to rename the conversation.",
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                         break;
                                     }
-                                    let sessionId: string;
+                                    let conversationId: string;
                                     if (payload.name) {
                                         const sessions =
-                                            await api.sessionList();
+                                            await api.conversationList();
                                         const match = sessions.find(
                                             (s) =>
                                                 s.name.toLowerCase() ===
@@ -548,15 +649,15 @@ function registerClient(
                                                     content: `No conversation named "<b>${escapeHtml(payload.name)}</b>" found.`,
                                                     kind: "warning",
                                                 },
-                                                "session",
+                                                "conversation",
                                                 undefined,
                                             );
                                             break;
                                         }
-                                        sessionId = match.sessionId;
+                                        conversationId = match.conversationId;
                                     } else {
                                         const cur =
-                                            await api.sessionGetCurrent();
+                                            await api.conversationGetCurrent();
                                         if (!cur) {
                                             chatView.addNotificationMessage(
                                                 {
@@ -565,15 +666,15 @@ function registerClient(
                                                         "No active conversation to rename.",
                                                     kind: "warning",
                                                 },
-                                                "session",
+                                                "conversation",
                                                 undefined,
                                             );
                                             break;
                                         }
-                                        sessionId = cur.sessionId;
+                                        conversationId = cur.conversationId;
                                     }
-                                    await api.sessionRename(
-                                        sessionId,
+                                    await api.conversationRename(
+                                        conversationId,
                                         payload.newName,
                                     );
                                     chatView.addNotificationMessage(
@@ -582,7 +683,7 @@ function registerClient(
                                             content: `✅ Renamed conversation to "<b>${escapeHtml(payload.newName)}</b>"`,
                                             kind: "info",
                                         },
-                                        "session",
+                                        "conversation",
                                         undefined,
                                     );
                                     break;
@@ -596,12 +697,13 @@ function registerClient(
                                                     "A conversation name is required to delete.",
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                         break;
                                     }
-                                    const sessions = await api.sessionList();
+                                    const sessions =
+                                        await api.conversationList();
                                     const match = sessions.find(
                                         (s) =>
                                             s.name.toLowerCase() ===
@@ -614,19 +716,21 @@ function registerClient(
                                                 content: `❌ Conversation "<b>${escapeHtml(payload.name)}</b>" not found.`,
                                                 kind: "warning",
                                             },
-                                            "session",
+                                            "conversation",
                                             undefined,
                                         );
                                         break;
                                     }
-                                    await api.sessionDelete(match.sessionId);
+                                    await api.conversationDelete(
+                                        match.conversationId,
+                                    );
                                     chatView.addNotificationMessage(
                                         {
                                             type: "html",
                                             content: `🗑️ Deleted conversation "<b>${escapeHtml(match.name)}</b>"`,
                                             kind: "info",
                                         },
-                                        "session",
+                                        "conversation",
                                         undefined,
                                     );
                                     break;
@@ -638,7 +742,7 @@ function registerClient(
                                             content: `Unknown manage-conversation subcommand: "<b>${escapeHtml(payload.subcommand)}</b>"`,
                                             kind: "warning",
                                         },
-                                        "session",
+                                        "conversation",
                                         undefined,
                                     );
                                     break;
@@ -651,7 +755,7 @@ function registerClient(
                                     content: `❌ ${escapeHtml(e?.message ?? String(e))}`,
                                     kind: "warning",
                                 },
-                                "session",
+                                "conversation",
                                 undefined,
                             ),
                         );
@@ -666,8 +770,8 @@ function registerClient(
 
     const client: Client = {
         clientIO,
-        async dispatcherInitialized(dispatcher: Dispatcher): Promise<void> {
-            chatView.initializeDispatcher(dispatcher);
+        async dispatcherInitialized(d: Dispatcher): Promise<void> {
+            chatView.initializeDispatcher(d);
             await chatHistoryReady;
 
             // Signal that the dispatcher is fully initialised.
@@ -763,8 +867,8 @@ function registerClient(
             }
             chatView.addNotificationMessage(message, "shell", id);
         },
-        sessionChanged(_sessionId: string, _name: string): void {
-            // Session changed — no UI to update (dropdown removed)
+        conversationChanged(_conversationId: string, _name: string): void {
+            // Conversation changed — no UI to update (dropdown removed)
         },
         markHistoryEntries(): void {
             for (const child of chatView.getScrollContainer().children) {
@@ -774,6 +878,16 @@ function registerClient(
     };
 
     getClientAPI().registerClient(client);
+
+    // Expose the clientIO object on window for integration tests so that tests
+    // can trigger requestInteraction / interactionResolved / interactionCancelled
+    // without requiring a live agent-server connection.
+    if (window.__clientIO__ !== undefined) {
+        console.warn(
+            "[registerClient] window.__clientIO__ is already set — registerClient() called more than once. The previous activeInteractions map will be orphaned.",
+        );
+    }
+    window.__clientIO__ = clientIO;
 }
 
 function showNotifications(

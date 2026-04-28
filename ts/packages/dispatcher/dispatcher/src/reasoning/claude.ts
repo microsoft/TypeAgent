@@ -154,16 +154,16 @@ function buildPromptWithContext(
         if (fallbackContext.error) {
             lines.push(`Error: ${fallbackContext.error}`);
         }
-        const isScriptflowFailure =
-            fallbackContext.failedSchema?.startsWith("scriptflow") === true ||
+        const isPowerShellFailure =
+            fallbackContext.failedSchema?.startsWith("powershell") === true ||
             fallbackContext.failedFlowName !== undefined;
-        if (isScriptflowFailure) {
+        if (isPowerShellFailure) {
             lines.push(
-                "You MUST use scriptflow actions (discover_actions, listScriptFlows, executeScriptFlow, createScriptFlow, editScriptFlow, deleteScriptFlow) to handle this request. Do NOT use the Bash tool for operations that scriptflow can handle.",
+                "You MUST use powershell actions (discover_actions, listPowerShellFlows, executePowerShellFlow, createPowerShellFlow, editPowerShellFlow, deletePowerShellFlow) to handle this request. Do NOT use the Bash tool for operations that powershell can handle.",
             );
             if (fallbackContext.failedFlowName) {
                 lines.push(
-                    `IMPORTANT: The flow '${fallbackContext.failedFlowName}' failed. Use editScriptFlow to fix its script rather than creating a duplicate flow. Only create a new flow if the existing one's parameters/grammar are fundamentally wrong.`,
+                    `IMPORTANT: The flow '${fallbackContext.failedFlowName}' failed. Use editPowerShellFlow to fix its script rather than creating a duplicate flow. Only create a new flow if the existing one's parameters/grammar are fundamentally wrong.`,
                 );
             }
         } else {
@@ -174,9 +174,9 @@ function buildPromptWithContext(
         parts.push(lines.join("\n"));
     }
 
-    // Reinforce scriptflow usage for Windows even when not in fallback mode.
+    // Reinforce powershell usage for Windows even when not in fallback mode.
     // Without this, reasoning often uses Bash + PowerShell directly and
-    // never creates a reusable scriptflow.
+    // never creates a reusable powershell.
     const systemContext = context.sessionContext.agentContext;
     const config = systemContext.session.getConfig();
     if (
@@ -185,10 +185,10 @@ function buildPromptWithContext(
         process.platform === "win32"
     ) {
         parts.push(
-            "[ScriptFlow REQUIRED] You MUST use scriptflow for system operations (file listing, " +
+            "[PowerShell REQUIRED] You MUST use powershell for system operations (file listing, " +
                 "process management, text search, disk space, service status). Do NOT use Bash/PowerShell directly.\n" +
-                "WORKFLOW: discover_actions('scriptflow') → listScriptFlows → " +
-                "executeScriptFlow (if flow exists) OR createScriptFlow (if no matching flow) → execute.\n" +
+                "WORKFLOW: discover_actions('powershell') → listPowerShellFlows → " +
+                "executePowerShellFlow (if flow exists) OR createPowerShellFlow (if no matching flow) → execute.\n" +
                 "This creates reusable flows. Using Bash directly bypasses reuse and is NOT allowed for these operations.",
         );
     }
@@ -639,24 +639,24 @@ function getClaudeOptions(
                 "",
                 ...(process.platform === "win32"
                     ? [
-                          "# ScriptFlow Recording (Windows)",
+                          "# PowerShell Recording (Windows)",
                           "",
-                          "WHEN TO USE SCRIPTFLOW instead of TaskFlow:",
+                          "WHEN TO USE POWERSHELL instead of TaskFlow:",
                           "- The task is a system operation: file listing, process management, text search,",
                           "  disk space, service status, or similar PowerShell-native operations",
                           "- The task can be accomplished with a single PowerShell script (no cross-agent orchestration)",
                           "- You are on Windows (which you are)",
                           "",
-                          "SCRIPTFLOW RECORDING STEPS (test-then-register pattern):",
-                          "1. discover_actions('scriptflow') to see available actions",
-                          "2. execute_action scriptflow.listScriptFlows to check for existing flows",
+                          "POWERSHELL RECORDING STEPS (test-then-register pattern):",
+                          "1. discover_actions('powershell') to see available actions",
+                          "2. execute_action powershell.listPowerShellFlows to check for existing flows",
                           "3. If a matching flow exists, tell user it's already available",
-                          "4. If no matching flow, first TEST the script with scriptflow.testScriptFlow:",
+                          "4. If no matching flow, first TEST the script with powershell.testPowerShellFlow:",
                           "   - script: PowerShell script body with param() block",
                           "   - allowedCmdlets: cmdlets the script uses",
                           "   - allowedModules: modules to load (e.g., ['NetTCPIP'])",
                           "   - testParameters: JSON string of test parameter values",
-                          "5. If testScriptFlow PASSES, register with scriptflow.createScriptFlow:",
+                          "5. If testPowerShellFlow PASSES, register with powershell.createPowerShellFlow:",
                           "   - actionName: camelCase identifier (e.g., 'findLargeFiles', 'listRunningServices')",
                           "   - description: what the script does",
                           "   - displayName: human-readable name",
@@ -664,10 +664,10 @@ function getClaudeOptions(
                           "   - scriptParameters: array of { name, type, required, description, default? }",
                           "   - grammarPatterns: array of { pattern, isAlias } with $(param:wildcard) captures",
                           "   - allowedCmdlets: cmdlets the script uses",
-                          "6. If testScriptFlow FAILS, fix the script and test again before registering",
-                          "7. Tell user: 'ScriptFlow registered: ACTION_NAME. It is now available for use.'",
+                          "6. If testPowerShellFlow FAILS, fix the script and test again before registering",
+                          "7. Tell user: 'PowerShell registered: ACTION_NAME. It is now available for use.'",
                           "",
-                          "SCRIPTFLOW SCRIPT RULES:",
+                          "POWERSHELL SCRIPT RULES:",
                           "- Scripts run in FullLanguage mode with cmdlet whitelisting",
                           "- Full PowerShell syntax is available: [PSCustomObject], [math]::Round(), etc.",
                           "",
@@ -690,7 +690,7 @@ function getClaudeOptions(
                           "- Output objects or text, avoid Format-Table (hard to parse)",
                           "- Use [PSCustomObject] for structured output",
                           "",
-                          "SCRIPTFLOW GRAMMAR PATTERN RULES:",
+                          "POWERSHELL GRAMMAR PATTERN RULES:",
                           "- Use $(name:wildcard) for string captures, $(name:number) for numbers",
                           "- Lead with 2-3 fixed tokens before wildcards",
                           "- Include flow-specific anchor words",
@@ -698,11 +698,11 @@ function getClaudeOptions(
                           "",
                       ]
                     : []),
-                "CHOOSING BETWEEN TASKFLOW, WEBFLOW, AND SCRIPTFLOW:",
-                "- ScriptFlow: Windows system operations (file/process/service/disk queries) — single PowerShell script",
+                "CHOOSING BETWEEN TASKFLOW, WEBFLOW, AND POWERSHELL:",
+                "- PowerShell: Windows system operations (file/process/service/disk queries) — single PowerShell script",
                 "- TaskFlow: cross-agent action sequences (e.g., fetch data → transform → create playlist)",
                 "- WebFlow: browser page interaction (e.g., search on Amazon, customize Starbucks order)",
-                "- If on Windows and task is system-related, prefer ScriptFlow",
+                "- If on Windows and task is system-related, prefer PowerShell",
                 "- If unsure between TaskFlow and WebFlow, prefer TaskFlow — it's more general",
                 "",
                 ...(config.execution.scriptReuse === "enabled" &&
@@ -711,7 +711,7 @@ function getClaudeOptions(
                           "",
                           "# PowerShell Script Guidelines (Windows)",
                           "",
-                          "ScriptFlow runs scripts in FullLanguage mode with cmdlet whitelisting.",
+                          "PowerShell runs scripts in FullLanguage mode with cmdlet whitelisting.",
                           "Full PowerShell syntax is supported including [PSCustomObject], [math]::Round(), etc.",
                           "",
                           "## Sandbox Policy",
@@ -742,9 +742,9 @@ function getClaudeOptions(
                           "Avoid using these as variable names (read-only):",
                           "- `$PID`, `$PWD`, `$HOME`, `$HOST` — use `$procId`, `$currentPath` instead",
                           "",
-                          "# ScriptFlow Integration (MANDATORY)",
+                          "# PowerShell Integration (MANDATORY)",
                           "",
-                          "**CRITICAL: You MUST use scriptflow actions instead of Bash/PowerShell for file system operations,",
+                          "**CRITICAL: You MUST use powershell actions instead of Bash/PowerShell for file system operations,",
                           "process management, text search, and system queries. Do NOT use the Bash tool for these tasks.**",
                           "",
                           "WRONG (do NOT do this):",
@@ -753,30 +753,30 @@ function getClaudeOptions(
                           "- Any direct PowerShell execution via Bash for system operations ❌",
                           "",
                           "CORRECT (do this instead):",
-                          "- discover_actions('scriptflow') → listScriptFlows → createScriptFlow/executeScriptFlow ✓",
+                          "- discover_actions('powershell') → listPowerShellFlows → createPowerShellFlow/executePowerShellFlow ✓",
                           "",
                           "Required workflow:",
-                          "1. discover_actions('scriptflow') to see available actions",
-                          "2. execute_action scriptflow.listScriptFlows to see registered flows",
-                          "3. If an existing flow fits, use scriptflow.executeScriptFlow with named flowParameters",
-                          "4. If a flow exists but its script is broken, use scriptflow.editScriptFlow to fix it, then execute",
-                          "5. If no flow fits, create one with scriptflow.createScriptFlow then execute it",
-                          "6. Use scriptflow.deleteScriptFlow to remove obsolete or duplicate flows",
+                          "1. discover_actions('powershell') to see available actions",
+                          "2. execute_action powershell.listPowerShellFlows to see registered flows",
+                          "3. If an existing flow fits, use powershell.executePowerShellFlow with named flowParameters",
+                          "4. If a flow exists but its script is broken, use powershell.editPowerShellFlow to fix it, then execute",
+                          "5. If no flow fits, create one with powershell.createPowerShellFlow then execute it",
+                          "6. Use powershell.deletePowerShellFlow to remove obsolete or duplicate flows",
                           "",
                           "PARAMETER PASSING (CRITICAL):",
                           "- Use flowParametersJson (JSON string of named params) instead of flowArgs when the flow has multiple parameters.",
                           '  Example: { "flowName": "listFiles", "flowParametersJson": "{\\"path\\":\\"C:\\\\\\\\Users\\\\\\\\name\\\\\\\\Downloads\\",\\"filter\\":\\"*safenet*\\"}" }',
-                          "- Parameter names are CASE-INSENSITIVE but should match the flow's parameter names from listScriptFlows.",
+                          "- Parameter names are CASE-INSENSITIVE but should match the flow's parameter names from listPowerShellFlows.",
                           "  The listFiles flow has params: path (directory) and filter (wildcard pattern).",
                           "  The listDownloadsWithFilter flow has param: FilterPattern (name filter).",
                           "- Use real Windows paths (C:\\\\Users\\\\...), NOT PowerShell variables like $env:USERPROFILE.",
                           "- Extract paths and filters from the user's request as separate parameters.",
                           "  e.g. 'list files in downloads with safenet' → path: 'C:\\\\Users\\\\name\\\\Downloads', filter: '*safenet*'",
                           "",
-                          "When invoked as a fallback from a failed scriptflow action, the [Fallback context] in your",
+                          "When invoked as a fallback from a failed powershell action, the [Fallback context] in your",
                           "prompt tells you which action failed and why. Parse the original request to extract the correct",
-                          "parameters (path, filter, etc.) and re-invoke the scriptflow action with corrected parameters,",
-                          "or create a new scriptflow if the existing one doesn't support the request.",
+                          "parameters (path, filter, etc.) and re-invoke the powershell action with corrected parameters,",
+                          "or create a new powershell if the existing one doesn't support the request.",
                       ]
                     : []),
             ].join("\n"),
@@ -1223,7 +1223,7 @@ async function executeReasoningWithTracing(
             }
 
             // Auto-generate script recipes from PowerShell scripts in trace
-            // and register them as active scriptflows for immediate reuse.
+            // and register them as active powershells for immediate reuse.
             const scriptReuseEnabled =
                 systemContext.session.getConfig().execution.scriptReuse ===
                 "enabled";
@@ -1249,12 +1249,12 @@ async function executeReasoningWithTracing(
                             // Reload schema so the new flows are available
                             try {
                                 await systemContext.agents.reloadAgentSchema(
-                                    "scriptflow",
+                                    "powershell",
                                     systemContext,
                                 );
                             } catch {
                                 debug(
-                                    "Failed to reload scriptflow schema after saving recipes",
+                                    "Failed to reload powershell schema after saving recipes",
                                 );
                             }
                         }
@@ -1414,9 +1414,9 @@ import type { Storage } from "@typeagent/agent-sdk";
 import type { ScriptRecipe as CapturedScriptRecipe } from "./scriptRecipeGenerator.js";
 
 /**
- * Save captured script recipes as active scriptflows by writing directly
- * to the scriptflow agent's instance storage in the format its store expects.
- * This avoids a dependency on the scriptflow package.
+ * Save captured script recipes as active powershells by writing directly
+ * to the powershell agent's instance storage in the format its store expects.
+ * This avoids a dependency on the powershell package.
  */
 async function saveScriptRecipesAsActiveFlows(
     recipes: CapturedScriptRecipe[],
@@ -1425,12 +1425,12 @@ async function saveScriptRecipesAsActiveFlows(
     const storage =
         systemContext.persistDir && systemContext.storageProvider
             ? systemContext.storageProvider.getStorage(
-                  "scriptflow",
+                  "powershell",
                   systemContext.persistDir,
               )
             : undefined;
     if (!storage) {
-        debug("No instance storage available for scriptflow");
+        debug("No instance storage available for powershell");
         return [];
     }
 

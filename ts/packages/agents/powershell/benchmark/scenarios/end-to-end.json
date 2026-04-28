@@ -1,0 +1,218 @@
+[
+  {
+    "id": "e2e-01",
+    "category": "end-to-end",
+    "description": "Import then match: import staleBranches.ps1 then match via grammar",
+    "setup": {
+      "requiredFlows": [],
+      "environmentSetup": "Setup-BenchmarkEnv"
+    },
+    "utterances": [
+      {
+        "text": "@powershell import ${POWERSHELL_PKG}\\test\\import-scenarios\\scripts\\staleBranches.ps1",
+        "expected": {
+          "routedTo": "grammar",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["Imported script flow"]
+          }
+        }
+      },
+      {
+        "text": "show stale branches",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "staleBranches",
+          "execution": {
+            "shouldSucceed": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "e2e-02",
+    "category": "end-to-end",
+    "description": "Delete then re-import: delete findLargeFiles, import from .ps1, then match",
+    "setup": {
+      "requiredFlows": ["findLargeFiles"],
+      "environmentSetup": "Setup-BenchmarkEnv"
+    },
+    "utterances": [
+      {
+        "text": "delete script flow findLargeFiles",
+        "expected": {
+          "routedTo": "grammar",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["Deleted"]
+          }
+        }
+      },
+      {
+        "text": "@powershell import ${POWERSHELL_PKG}\\test\\import-scenarios\\scripts\\findLargeFiles.ps1",
+        "expected": {
+          "routedTo": "grammar",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["Imported script flow"]
+          }
+        }
+      },
+      {
+        "text": "find large files",
+        "expected": {
+          "routedTo": "grammar",
+          "execution": { "shouldSucceed": true }
+        }
+      }
+    ]
+  },
+  {
+    "id": "e2e-03",
+    "category": "end-to-end",
+    "description": "Seed flows are immediately matchable after session start",
+    "setup": {
+      "requiredFlows": ["listFiles", "checkDiskSpace", "checkPorts"]
+    },
+    "utterances": [
+      {
+        "text": "list files in .",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listFiles",
+          "execution": { "shouldSucceed": true }
+        }
+      },
+      {
+        "text": "check disk space",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "checkDiskSpace",
+          "execution": { "shouldSucceed": true }
+        }
+      },
+      {
+        "text": "show port listeners",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "checkPorts",
+          "execution": { "shouldSucceed": true }
+        }
+      }
+    ]
+  },
+  {
+    "id": "e2e-04",
+    "category": "end-to-end",
+    "description": "List flows shows all registered flows",
+    "setup": {
+      "requiredFlows": ["listFiles", "findLargeFiles", "checkDiskSpace"]
+    },
+    "utterances": [
+      {
+        "text": "list script flows",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listPowerShellFlows",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["listFiles", "findLargeFiles", "checkDiskSpace"]
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "e2e-05",
+    "category": "end-to-end",
+    "description": "Check disk space execution produces valid system data",
+    "setup": { "requiredFlows": ["checkDiskSpace"] },
+    "utterances": [
+      {
+        "text": "check disk space",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "checkDiskSpace",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["SizeGB"],
+            "outputPattern": "\\d+\\.\\d+"
+          },
+          "llmJudge": {
+            "question": "Does the output show a table of disk drives with their sizes, free space, and status (OK or LOW)?",
+            "context": "The system should report at least the C: drive with SizeGB, FreeGB, FreePct, and Status columns."
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "e2e-06",
+    "category": "end-to-end",
+    "description": "Filter CSV with department filter produces correct subset",
+    "setup": {
+      "requiredFlows": ["filterCsv"],
+      "environmentSetup": "Setup-BenchmarkEnv"
+    },
+    "utterances": [
+      {
+        "text": "filter csv file ${BENCHMARK_DIR}\\csv\\employees.csv",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "filterCsv",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["Processed:", "rows"],
+            "outputPattern": "25 rows -> 25 rows"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "e2e-07",
+    "category": "end-to-end",
+    "description": "Scan test logs produces accurate error count",
+    "setup": {
+      "requiredFlows": ["scanLogErrors"],
+      "environmentSetup": "Setup-BenchmarkEnv"
+    },
+    "utterances": [
+      {
+        "text": "log errors in ${BENCHMARK_DIR}\\logs",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "scanLogErrors",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["ERROR", "WARN", "FATAL", "Summary by Severity"]
+          },
+          "llmJudge": {
+            "question": "Does the output show a summary of log errors by severity level including ERROR, WARN, and FATAL counts?",
+            "context": "The test logs contain 10 ERROR entries, 7 WARN entries, and 1 FATAL entry across two log files."
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "e2e-08",
+    "category": "end-to-end",
+    "description": "Service health check with custom services",
+    "setup": { "requiredFlows": ["checkServiceHealth"] },
+    "utterances": [
+      {
+        "text": "service status for EventLog, WinRM, FakeService999",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "checkServiceHealth",
+          "execution": {
+            "shouldSucceed": true,
+            "outputContains": ["Running", "MISSING"]
+          }
+        }
+      }
+    ]
+  }
+]

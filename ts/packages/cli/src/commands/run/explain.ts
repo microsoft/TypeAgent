@@ -23,7 +23,7 @@ const testRequest = new RequestAction(
     }),
 );
 
-const CLI_SESSION_NAME = "CLI";
+const CLI_CONVERSATION_NAME = "CLI";
 
 export default class ExplainCommand extends Command {
     static args = {
@@ -57,10 +57,10 @@ export default class ExplainCommand extends Command {
                 "Start the agent server in a visible window if it is not already running. Default is to start it hidden.",
             default: false,
         }),
-        session: Flags.string({
+        conversation: Flags.string({
             char: "s",
             description:
-                "Session ID to use. Defaults to the 'CLI' session if not specified.",
+                "Conversation ID to use. Defaults to the 'CLI' conversation if not specified.",
             required: false,
         }),
     };
@@ -99,29 +99,37 @@ export default class ExplainCommand extends Command {
         try {
             connection = await connectAgentServer(url);
 
-            // Use --session directly if provided, otherwise find-or-create the "CLI" session
-            let sessionId: string;
-            if (flags.session !== undefined) {
-                sessionId = flags.session;
+            // Use --conversation directly if provided, otherwise find-or-create the "CLI" conversation
+            let conversationId: string;
+            if (flags.conversation !== undefined) {
+                conversationId = flags.conversation;
             } else {
-                const existing =
-                    await connection.listSessions(CLI_SESSION_NAME);
+                const existing = await connection.listConversations(
+                    CLI_CONVERSATION_NAME,
+                );
                 const match = existing.find(
                     (s) =>
-                        s.name.toLowerCase() === CLI_SESSION_NAME.toLowerCase(),
+                        s.name.toLowerCase() ===
+                        CLI_CONVERSATION_NAME.toLowerCase(),
                 );
-                sessionId =
+                conversationId =
                     match !== undefined
-                        ? match.sessionId
-                        : (await connection.createSession(CLI_SESSION_NAME))
-                              .sessionId;
+                        ? match.conversationId
+                        : (
+                              await connection.createConversation(
+                                  CLI_CONVERSATION_NAME,
+                              )
+                          ).conversationId;
             }
 
             await withConsoleClientIO(async (clientIO) => {
-                const session = await connection!.joinSession(clientIO, {
-                    sessionId,
-                });
-                await session.dispatcher.processCommand(command.join(" "));
+                const conversation = await connection!.joinConversation(
+                    clientIO,
+                    {
+                        conversationId,
+                    },
+                );
+                await conversation.dispatcher.processCommand(command.join(" "));
             });
         } finally {
             await connection?.close();

@@ -322,18 +322,34 @@ export async function applyFilterExpr(
                 }
                 case FilterConstraintType.Year: {
                     const results = [] as SpotifyApi.TrackObjectFull[];
+                    // Check for year range (e.g. "1990 - 2000", produced by the
+                    // tokenizer from input like "year:1990-2000")
+                    const rangeMatch =
+                        filterExpr.constraintValue.match(/^(\d{4}) - (\d{4})$/);
                     for (const track of tracks) {
-                        // TODO year ranges
                         if (filterDiag) {
                             console.log(
                                 `${track.album.release_date} vs ${filterExpr.constraintValue}`,
                             );
                         }
-                        if (
-                            track.album.release_date.includes(
+                        let hit: boolean;
+                        if (rangeMatch) {
+                            const trackYear = parseInt(
+                                track.album.release_date.substring(0, 4),
+                                10,
+                            );
+                            const startYear = parseInt(rangeMatch[1], 10);
+                            const endYear = parseInt(rangeMatch[2], 10);
+                            hit =
+                                !isNaN(trackYear) &&
+                                trackYear >= startYear &&
+                                trackYear <= endYear;
+                        } else {
+                            hit = track.album.release_date.includes(
                                 filterExpr.constraintValue,
-                            )
-                        ) {
+                            );
+                        }
+                        if (hit) {
                             results.push(track);
                         }
                     }

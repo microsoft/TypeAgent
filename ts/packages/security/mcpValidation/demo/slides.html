@@ -1,0 +1,926 @@
+<!doctype html>
+<!-- Copyright (c) Microsoft Corporation.
+ Licensed under the MIT License. -->
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Plan-Validated Agent Execution — Architecture Overview</title>
+    <style>
+      :root {
+        --bg: #0d1117;
+        --surface: #161b22;
+        --border: #30363d;
+        --text: #e6edf3;
+        --dim: #8b949e;
+        --accent: #58a6ff;
+        --green: #3fb950;
+        --red: #f85149;
+        --yellow: #d29922;
+        --purple: #bc8cff;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        overflow: hidden;
+      }
+
+      /* Slide container */
+      .deck {
+        width: 100vw;
+        height: 100vh;
+        position: relative;
+      }
+      .slide {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 60px 80px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.4s ease;
+      }
+      .slide.active {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      /* Typography */
+      h1 {
+        font-size: 48px;
+        font-weight: 700;
+        margin-bottom: 16px;
+        line-height: 1.2;
+      }
+      h2 {
+        font-size: 36px;
+        font-weight: 600;
+        margin-bottom: 24px;
+        color: var(--accent);
+      }
+      h3 {
+        font-size: 24px;
+        font-weight: 600;
+        margin-bottom: 16px;
+        color: var(--purple);
+      }
+      p,
+      li {
+        font-size: 22px;
+        line-height: 1.6;
+        color: var(--text);
+      }
+      .subtitle {
+        font-size: 24px;
+        color: var(--dim);
+        margin-bottom: 32px;
+      }
+      .small {
+        font-size: 16px;
+        color: var(--dim);
+      }
+
+      /* Lists */
+      ul {
+        list-style: none;
+        margin-left: 0;
+      }
+      ul li {
+        padding: 8px 0;
+        padding-left: 28px;
+        position: relative;
+      }
+      ul li::before {
+        content: "→";
+        position: absolute;
+        left: 0;
+        color: var(--accent);
+      }
+      ul.checks li::before {
+        content: "✓";
+        color: var(--green);
+      }
+      ul.crosses li::before {
+        content: "✗";
+        color: var(--red);
+      }
+
+      /* Tables */
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        font-size: 18px;
+      }
+      th {
+        text-align: left;
+        color: var(--dim);
+        font-weight: 500;
+        padding: 10px 16px;
+        border-bottom: 2px solid var(--border);
+      }
+      td {
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      td:first-child {
+        font-weight: 500;
+        color: var(--accent);
+      }
+
+      /* Diagram boxes */
+      .diagram {
+        display: flex;
+        gap: 16px;
+        margin: 24px 0;
+        flex-wrap: wrap;
+        align-items: stretch;
+      }
+      .box {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 16px 20px;
+        flex: 1;
+        min-width: 200px;
+      }
+      .box.accent {
+        border-color: var(--accent);
+      }
+      .box.green {
+        border-color: var(--green);
+      }
+      .box.red {
+        border-color: var(--red);
+      }
+      .box.yellow {
+        border-color: var(--yellow);
+      }
+      .box .title {
+        font-size: 14px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--dim);
+        margin-bottom: 8px;
+      }
+      .box .content {
+        font-size: 16px;
+      }
+      .box.accent .title {
+        color: var(--accent);
+      }
+      .box.green .title {
+        color: var(--green);
+      }
+      .box.red .title {
+        color: var(--red);
+      }
+
+      /* Flow */
+      .flow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 24px 0;
+        flex-wrap: wrap;
+      }
+      .flow .step {
+        background: var(--surface);
+        border: 1px solid var(--accent);
+        border-radius: 8px;
+        padding: 12px 20px;
+        font-size: 16px;
+        text-align: center;
+      }
+      .flow .arrow {
+        color: var(--accent);
+        font-size: 24px;
+      }
+
+      /* Code */
+      pre {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 20px;
+        font-family: "SF Mono", "Cascadia Code", monospace;
+        font-size: 16px;
+        overflow-x: auto;
+        line-height: 1.5;
+      }
+      code {
+        font-family: "SF Mono", "Cascadia Code", monospace;
+        background: var(--surface);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 18px;
+      }
+
+      /* Tags */
+      .tag {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 4px;
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .tag.green {
+        background: #0d2818;
+        color: var(--green);
+      }
+      .tag.red {
+        background: #2d1215;
+        color: var(--red);
+      }
+      .tag.blue {
+        background: #1a1f2e;
+        color: var(--accent);
+      }
+      .tag.yellow {
+        background: #2d1e0f;
+        color: var(--yellow);
+      }
+
+      /* Grid layout */
+      .cols {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 32px;
+      }
+      .cols-3 {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 24px;
+      }
+
+      /* Navigation */
+      .nav {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        display: flex;
+        gap: 8px;
+        z-index: 100;
+      }
+      .nav button {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 8px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      .nav button:hover {
+        border-color: var(--accent);
+      }
+      .progress {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 3px;
+        background: var(--accent);
+        transition: width 0.4s ease;
+        z-index: 100;
+      }
+      .slide-num {
+        position: fixed;
+        bottom: 28px;
+        left: 24px;
+        color: var(--dim);
+        font-size: 14px;
+        z-index: 100;
+      }
+
+      /* Two-column slide */
+      .split {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 48px;
+        align-items: start;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="progress" id="progress"></div>
+    <div class="slide-num" id="slideNum"></div>
+    <div class="nav">
+      <button onclick="prev()">← Prev</button>
+      <button onclick="next()">Next →</button>
+    </div>
+
+    <div class="deck">
+      <!-- Slide 1: Title -->
+      <div class="slide active">
+        <h1>Plan-Validated<br />Agent Execution</h1>
+        <p class="subtitle">
+          Self-checking AI agents with organization policy enforcement
+        </p>
+        <div style="margin-top: 32px">
+          <p class="small">Architecture Overview — April 2026</p>
+          <p class="small" style="margin-top: 8px">
+            Works with Claude Code, GitHub Copilot, and Cursor
+          </p>
+        </div>
+      </div>
+
+      <!-- Slide 2: The Problem -->
+      <div class="slide">
+        <h2>The Problem</h2>
+        <p style="margin-bottom: 24px">
+          AI coding assistants operate with
+          <strong>unrestricted access</strong> to your codebase.
+        </p>
+        <div class="diagram">
+          <div class="box red">
+            <div class="title">No boundaries</div>
+            <div class="content">
+              Can read any file — including .env, credentials, secrets
+            </div>
+          </div>
+          <div class="box red">
+            <div class="title">No oversight</div>
+            <div class="content">
+              Can run any command — curl, ssh, rm -rf, python -c
+            </div>
+          </div>
+          <div class="box red">
+            <div class="title">No audit trail</div>
+            <div class="content">No record of what the agent did or why</div>
+          </div>
+          <div class="box red">
+            <div class="title">No policy</div>
+            <div class="content">
+              Organization has no way to enforce rules on agent behavior
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Slide 3: The Solution -->
+      <div class="slide">
+        <h2>The Solution: Plan → Validate → Execute → Verify</h2>
+        <div class="flow">
+          <div class="step">AI declares<br /><strong>a plan</strong></div>
+          <div class="arrow">→</div>
+          <div class="step">Plan is<br /><strong>validated</strong></div>
+          <div class="arrow">→</div>
+          <div class="step">Each tool call<br /><strong>checked</strong></div>
+          <div class="arrow">→</div>
+          <div class="step">Outcomes<br /><strong>verified</strong></div>
+          <div class="arrow">→</div>
+          <div class="step">Everything<br /><strong>logged</strong></div>
+        </div>
+        <p style="margin-top: 24px">
+          A validation server sits between the AI and your code. No client
+          modifications needed.
+        </p>
+      </div>
+
+      <!-- Slide 4: Architecture -->
+      <div class="slide">
+        <h2>Architecture</h2>
+        <div class="split">
+          <div>
+            <h3>AI Client</h3>
+            <p>
+              Unchanged — Claude Code, Copilot, or Cursor communicates via
+              standard MCP protocol
+            </p>
+            <h3 style="margin-top: 24px">Validation Server</h3>
+            <ul>
+              <li>15 MCP tools (planning + validated proxies)</li>
+              <li>Every call passes through <code>withValidation</code></li>
+              <li>Five enforcement layers checked in sequence</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Enforcement Layers</h3>
+            <div class="diagram" style="flex-direction: column">
+              <div class="box accent">
+                <div class="title">1. Plan Step Check</div>
+                <div class="content">
+                  Correct tool? Input constraints? Dependencies?
+                </div>
+              </div>
+              <div class="box accent">
+                <div class="title">2. Org Policy Check</div>
+                <div class="content">
+                  Tool allowed? Path allowed? Bash command allowed?
+                </div>
+              </div>
+              <div class="box accent">
+                <div class="title">3. Permission Check</div>
+                <div class="content">
+                  Within plan's declared read/write paths?
+                </div>
+              </div>
+              <div class="box green">
+                <div class="title">4. Execute</div>
+                <div class="content">
+                  Direct, capability tool, or container sandbox
+                </div>
+              </div>
+              <div class="box accent">
+                <div class="title">5. Record Trace</div>
+                <div class="content">Hash-chained audit entry with timing</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Slide 5: Organization Policy -->
+      <div class="slide">
+        <h2>Organization Policy</h2>
+        <p style="margin-bottom: 16px">
+          <strong>You define the rules. Not the AI.</strong>
+        </p>
+        <div class="split">
+          <div>
+            <h3>Manager says:</h3>
+            <p>
+              <em
+                >"Agents can read and write code in src/ and test/. They cannot
+                access credentials, run curl, or open network connections. Limit
+                to 30 steps."</em
+              >
+            </p>
+          </div>
+          <div>
+            <h3>Policy file:</h3>
+            <pre>
+{
+  "paths": {
+    "allowedWritePatterns": ["./src/**", "./test/**"],
+    "deniedPatterns": ["**/.env", "**/secrets/**"]
+  },
+  "bash": { "mode": "capabilities-only" },
+  "deniedTools": ["WebFetch", "WebSearch"],
+  "limitCaps": { "maxTotalSteps": 30 }
+}</pre
+            >
+          </div>
+        </div>
+        <p style="margin-top: 16px; color: var(--dim)">
+          JSON file, checked into your repo, version-controlled, auditable.
+        </p>
+      </div>
+
+      <!-- Slide 6: What Gets Blocked -->
+      <div class="slide">
+        <h2>What Gets Blocked</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Agent attempts</th>
+              <th>Result</th>
+              <th>Why</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>validated_read(.env)</code></td>
+              <td><span class="tag red">BLOCKED</span></td>
+              <td>Matches denied pattern <code>**/.env</code></td>
+            </tr>
+            <tr>
+              <td><code>validated_bash("curl ...")</code></td>
+              <td><span class="tag red">BLOCKED</span></td>
+              <td>Bash restricted to capabilities-only mode</td>
+            </tr>
+            <tr>
+              <td><code>validated_write(/etc/crontab)</code></td>
+              <td><span class="tag red">BLOCKED</span></td>
+              <td>Path not in allowed write paths</td>
+            </tr>
+            <tr>
+              <td>Calls Read when plan says Edit</td>
+              <td><span class="tag red">ABORTED</span></td>
+              <td>Tool doesn't match plan step</td>
+            </tr>
+            <tr>
+              <td>Plan with 100 steps</td>
+              <td><span class="tag red">REJECTED</span></td>
+              <td>Exceeds policy cap of 30</td>
+            </tr>
+            <tr>
+              <td><code>validated_npm("test")</code></td>
+              <td><span class="tag green">ALLOWED</span></td>
+              <td>Structured tool, no shell injection</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Slide 7: Bash Sandboxing -->
+      <div class="slide">
+        <h2>Bash: Three Tiers of Defense</h2>
+        <div class="cols-3">
+          <div class="box green">
+            <div class="title">Tier 1: Capability Tools</div>
+            <div class="content">
+              <p>
+                <code>validated_npm</code>, <code>validated_git</code>,
+                <code>validated_node</code>, <code>validated_tsc</code>
+              </p>
+              <p style="margin-top: 8px; font-size: 14px; color: var(--green)">
+                spawnSync with array args — no shell, no injection
+              </p>
+            </div>
+          </div>
+          <div class="box yellow">
+            <div class="title">Tier 2: Policy-Checked Bash</div>
+            <div class="content">
+              <p>
+                Command parsing, allow/deny lists, regex patterns, network
+                detection
+              </p>
+              <p style="margin-top: 8px; font-size: 14px; color: var(--yellow)">
+                Catches accidental violations
+              </p>
+            </div>
+          </div>
+          <div class="box accent">
+            <div class="title">Tier 3: Container Sandbox</div>
+            <div class="content">
+              <p>
+                Docker with <code>--network=none</code>, read-only filesystem,
+                resource limits
+              </p>
+              <p style="margin-top: 8px; font-size: 14px; color: var(--accent)">
+                Kernel enforces what string parsing can't
+              </p>
+            </div>
+          </div>
+        </div>
+        <p style="margin-top: 24px; color: var(--dim)">
+          Key insight: <code>python -c "import socket; ..."</code> bypasses
+          string analysis. Only the kernel (container) can stop it.
+        </p>
+      </div>
+
+      <!-- Slide 8: Container Sandbox -->
+      <div class="slide">
+        <h2>Container Sandbox</h2>
+        <div class="split">
+          <div>
+            <h3>Kernel-level enforcement</h3>
+            <ul class="checks">
+              <li>
+                <code>--network=none</code> — all sockets blocked at syscall
+                level
+              </li>
+              <li><code>--read-only</code> — filesystem immutable</li>
+              <li><code>--memory=512m</code> — OOM killed if exceeded</li>
+              <li><code>--pids-limit=100</code> — fork bomb protection</li>
+              <li>Volumes derived from policy paths automatically</li>
+            </ul>
+            <h3 style="margin-top: 24px">Device access (opt-in)</h3>
+            <ul>
+              <li><code>--gpus all</code> for ML training</li>
+              <li><code>--device /dev/video0</code> for camera</li>
+              <li>Port publishing from policy: <code>-p 8080:8080</code></li>
+            </ul>
+          </div>
+          <div>
+            <pre>
+{
+  "container": {
+    "enabled": true,
+    "image": "python:3.12-slim",
+    "networkMode": "none",
+    "readOnly": true,
+    "memoryLimit": "512m",
+    "deriveVolumesFromPolicy": true,
+    "devices": {
+      "gpu": true
+    }
+  }
+}</pre
+            >
+          </div>
+        </div>
+      </div>
+
+      <!-- Slide 9: Audit Trail -->
+      <div class="slide">
+        <h2>Tamper-Proof Audit Trail</h2>
+        <p style="margin-bottom: 16px">
+          Every action recorded as a hash-chained entry. Tampering breaks the
+          chain.
+        </p>
+        <div class="diagram">
+          <div class="box accent" style="text-align: center">
+            <div class="title">Entry 0</div>
+            <div class="content">
+              Read<br /><span class="small">hash: a3f2...→</span>
+            </div>
+          </div>
+          <div class="box accent" style="text-align: center">
+            <div class="title">Entry 1</div>
+            <div class="content">
+              Edit<br /><span class="small">←a3f2 hash: 7b1e...→</span>
+            </div>
+          </div>
+          <div class="box accent" style="text-align: center">
+            <div class="title">Entry 2</div>
+            <div class="content">
+              Edit<br /><span class="small">←7b1e hash: c9d4...→</span>
+            </div>
+          </div>
+          <div class="box green" style="text-align: center">
+            <div class="title">Verification</div>
+            <div class="content">
+              chainValid: true<br /><span class="small"
+                >All hashes recomputed ✓</span
+              >
+            </div>
+          </div>
+        </div>
+        <div style="margin-top: 24px">
+          <h3>Each entry records:</h3>
+          <p>
+            Step index, tool, input parameters, output (truncated), duration,
+            status, SHA-256 hash
+          </p>
+          <p style="margin-top: 8px; color: var(--dim)">
+            Aggregate metrics: total steps, duration, success/fail counts
+          </p>
+        </div>
+      </div>
+
+      <!-- Slide 10: Adoption -->
+      <div class="slide">
+        <h2>Adoption: One Command</h2>
+        <pre style="font-size: 22px; margin-bottom: 24px">
+npx mcp-plan-validation init --client claude --policy dev</pre
+        >
+        <div class="cols-3">
+          <div class="box">
+            <div class="title">Claude Code</div>
+            <div class="content">
+              <code>--client claude</code><br /><span class="small"
+                >.claude/settings.local.json<br />CLAUDE.md</span
+              >
+            </div>
+          </div>
+          <div class="box">
+            <div class="title">GitHub Copilot</div>
+            <div class="content">
+              <code>--client copilot</code><br /><span class="small"
+                >.vscode/mcp.json<br />.github/copilot-instructions.md</span
+              >
+            </div>
+          </div>
+          <div class="box">
+            <div class="title">Cursor</div>
+            <div class="content">
+              <code>--client cursor</code><br /><span class="small"
+                >.cursor/mcp.json<br />.cursorrules</span
+              >
+            </div>
+          </div>
+        </div>
+        <p style="margin-top: 24px">
+          <code>--client all</code> configures all three simultaneously. Policy
+          file is shared.
+        </p>
+        <p style="margin-top: 8px; color: var(--dim)">
+          Auto-detects from existing config directories when --client is
+          omitted.
+        </p>
+      </div>
+
+      <!-- Slide 11: Policy Templates -->
+      <div class="slide">
+        <h2>Policy Templates</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Template</th>
+              <th>Bash</th>
+              <th>Network</th>
+              <th>Container</th>
+              <th>Step Limit</th>
+              <th>Best For</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>strict</td>
+              <td>Capability tools only</td>
+              <td>Blocked</td>
+              <td>No</td>
+              <td>30</td>
+              <td>Code review, docs</td>
+            </tr>
+            <tr>
+              <td>dev</td>
+              <td>Policy-checked</td>
+              <td>Dev ports</td>
+              <td>Optional</td>
+              <td>50</td>
+              <td>Daily development</td>
+            </tr>
+            <tr>
+              <td>ml</td>
+              <td>Policy-checked</td>
+              <td>Blocked</td>
+              <td>GPU, 16GB</td>
+              <td>100</td>
+              <td>ML training</td>
+            </tr>
+            <tr>
+              <td>ci</td>
+              <td>Limited commands</td>
+              <td>Blocked</td>
+              <td>Read-only</td>
+              <td>20</td>
+              <td>CI/CD pipelines</td>
+            </tr>
+          </tbody>
+        </table>
+        <p style="margin-top: 24px; color: var(--dim)">
+          Each template is a starting point. Customize by editing
+          .plan-validation-policy.json.
+        </p>
+      </div>
+
+      <!-- Slide 12: Test Coverage -->
+      <div class="slide">
+        <h2>Test Coverage</h2>
+        <div class="split">
+          <div>
+            <h3>Unit Tests (111 assertions)</h3>
+            <ul class="checks">
+              <li>Bash command parsing (11 cases)</li>
+              <li>Command allow/deny/regex (14 cases)</li>
+              <li>Path policy with glob matching (8 cases)</li>
+              <li>Tool policy enforcement (6 cases)</li>
+              <li>Postcondition evaluation (26 cases)</li>
+              <li>Path resolution (6 cases)</li>
+              <li>Plan permissions (6 cases)</li>
+              <li>Capability tools + modes (9 cases)</li>
+              <li>Container volume/port/device derivation (25 cases)</li>
+            </ul>
+          </div>
+          <div>
+            <h3>Integration Tests (5 scenarios)</h3>
+            <ul class="checks">
+              <li>Happy path: plan → execute → verify</li>
+              <li>Block detection: wrong tool caught</li>
+              <li>Input constraints: mismatched inputs</li>
+              <li>Policy enforcement: curl blocked at runtime</li>
+              <li>Postconditions: verified after completion</li>
+            </ul>
+            <p style="margin-top: 16px; color: var(--dim)">
+              Integration tests use the Anthropic Agent SDK to drive Claude Code
+              through the full pipeline.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Slide 13: Limitations -->
+      <div class="slide">
+        <h2>Known Limitations</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Limitation</th>
+              <th>Impact</th>
+              <th>Mitigation</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Bash analysis is undecidable</td>
+              <td><code>python -c</code> bypasses string checks</td>
+              <td>Container sandbox (kernel enforcement)</td>
+            </tr>
+            <tr>
+              <td>No semantic predicates</td>
+              <td>Can't verify "function exists"</td>
+              <td>File-content predicates; AST parsing planned</td>
+            </tr>
+            <tr>
+              <td>Container needs Docker</td>
+              <td>Not everywhere</td>
+              <td>Capability tools work without Docker</td>
+            </tr>
+            <tr>
+              <td>Soft enforcement</td>
+              <td>Model could use raw tools if exposed</td>
+              <td>Configure client to only expose MCP tools</td>
+            </tr>
+            <tr>
+              <td>Trace output truncated</td>
+              <td>Large outputs cut to 500 chars</td>
+              <td>Sufficient for audit; full data in bindings</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Slide 14: Summary -->
+      <div class="slide">
+        <h2>Summary</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Question</th>
+              <th>Answer</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Can we restrict agents?</td>
+              <td>
+                Yes — org policy controls tools, paths, commands, network,
+                limits
+              </td>
+            </tr>
+            <tr>
+              <td>Prevent credential exposure?</td>
+              <td>Yes — denied patterns make sensitive files invisible</td>
+            </tr>
+            <tr>
+              <td>Audit trail?</td>
+              <td>Yes — hash-chained trace with integrity verification</td>
+            </tr>
+            <tr>
+              <td>Works with existing tools?</td>
+              <td>Yes — Claude Code, Copilot, Cursor with one command</td>
+            </tr>
+            <tr>
+              <td>Who controls policy?</td>
+              <td>Your team — JSON file in the repo, not the AI</td>
+            </tr>
+            <tr>
+              <td>What if AI breaks rules?</td>
+              <td>Blocked in real-time, logged, plan violations abort</td>
+            </tr>
+            <tr>
+              <td>How hard to adopt?</td>
+              <td><code>npx mcp-plan-validation init --policy dev</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <!-- /deck -->
+
+    <script>
+      const slides = document.querySelectorAll(".slide");
+      let current = 0;
+
+      function show(n) {
+        slides[current].classList.remove("active");
+        current = Math.max(0, Math.min(n, slides.length - 1));
+        slides[current].classList.add("active");
+        document.getElementById("progress").style.width =
+          (current / (slides.length - 1)) * 100 + "%";
+        document.getElementById("slideNum").textContent =
+          `${current + 1} / ${slides.length}`;
+      }
+
+      function next() {
+        show(current + 1);
+      }
+      function prev() {
+        show(current - 1);
+      }
+
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowRight" || e.key === " ") {
+          e.preventDefault();
+          next();
+        }
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          prev();
+        }
+        if (e.key === "Home") {
+          e.preventDefault();
+          show(0);
+        }
+        if (e.key === "End") {
+          e.preventDefault();
+          show(slides.length - 1);
+        }
+      });
+
+      show(0);
+    </script>
+  </body>
+</html>

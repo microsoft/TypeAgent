@@ -103,9 +103,12 @@ function registerClient(client: Client) {
         },
     );
 
-    ipcRenderer.on("session-changed", (_, sessionId: string, name: string) => {
-        client.sessionChanged?.(sessionId, name);
-    });
+    ipcRenderer.on(
+        "conversation-changed",
+        (_, conversationId: string, name: string) => {
+            client.conversationChanged?.(conversationId, name);
+        },
+    );
 
     ipcRenderer.on("mark-history", () => {
         client.markHistoryEntries?.();
@@ -170,24 +173,28 @@ const api: ClientAPI = {
         return ipcRenderer.invoke("continuous-speech-processing", text);
     },
 
-    // Session management
-    sessionList: () => {
-        return ipcRenderer.invoke("session-list");
+    // Conversation management
+    conversationList: () => {
+        return ipcRenderer.invoke("conversation-list");
     },
-    sessionCreate: (name: string) => {
-        return ipcRenderer.invoke("session-create", name);
+    conversationCreate: (name: string) => {
+        return ipcRenderer.invoke("conversation-create", name);
     },
-    sessionSwitch: (sessionId: string) => {
-        return ipcRenderer.invoke("session-switch", sessionId);
+    conversationSwitch: (conversationId: string) => {
+        return ipcRenderer.invoke("conversation-switch", conversationId);
     },
-    sessionRename: (sessionId: string, newName: string) => {
-        return ipcRenderer.invoke("session-rename", sessionId, newName);
+    conversationRename: (conversationId: string, newName: string) => {
+        return ipcRenderer.invoke(
+            "conversation-rename",
+            conversationId,
+            newName,
+        );
     },
-    sessionDelete: (sessionId: string) => {
-        return ipcRenderer.invoke("session-delete", sessionId);
+    conversationDelete: (conversationId: string) => {
+        return ipcRenderer.invoke("conversation-delete", conversationId);
     },
-    sessionGetCurrent: () => {
-        return ipcRenderer.invoke("session-get-current");
+    conversationGetCurrent: () => {
+        return ipcRenderer.invoke("conversation-get-current");
     },
 };
 

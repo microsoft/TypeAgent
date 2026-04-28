@@ -27,7 +27,7 @@ export function mergeGrammarRules(
     // Simple merge - just concatenate the rules
     // All rules become alternatives at the top level
     const result: Grammar = {
-        rules: [...existingGrammar.rules, ...newRules],
+        alternatives: [...existingGrammar.alternatives, ...newRules],
     };
 
     // Preserve entities from existing grammar
@@ -49,7 +49,7 @@ export function createGrammar(
     rules: GrammarRule[],
     entities?: string[],
 ): Grammar {
-    const grammar: Grammar = { rules };
+    const grammar: Grammar = { alternatives: rules };
     if (entities && entities.length > 0) {
         grammar.entities = entities;
     }
@@ -70,7 +70,7 @@ export function mergeGrammars(grammars: Grammar[]): Grammar {
     const allEntities = new Set<string>();
 
     for (const grammar of grammars) {
-        allRules.push(...grammar.rules);
+        allRules.push(...grammar.alternatives);
         if (grammar.entities) {
             for (const entity of grammar.entities) {
                 allEntities.add(entity);
@@ -79,7 +79,7 @@ export function mergeGrammars(grammars: Grammar[]): Grammar {
     }
 
     const result: Grammar = {
-        rules: allRules,
+        alternatives: allRules,
     };
 
     if (allEntities.size > 0) {
@@ -104,7 +104,7 @@ export function getGrammarStats(grammar: Grammar): GrammarStats {
     let wildcardCount = 0;
     let optionalPartCount = 0;
 
-    for (const rule of grammar.rules) {
+    for (const rule of grammar.alternatives) {
         totalParts += rule.parts.length;
 
         for (const part of rule.parts) {
@@ -118,7 +118,7 @@ export function getGrammarStats(grammar: Grammar): GrammarStats {
     }
 
     return {
-        ruleCount: grammar.rules.length,
+        ruleCount: grammar.alternatives.length,
         totalParts,
         wildcardCount,
         optionalPartCount,

@@ -12,10 +12,16 @@ export default class ServerStop extends Command {
             description: "Port the agent server is listening on",
             default: 8999,
         }),
+        force: Flags.boolean({
+            char: "f",
+            description:
+                "Force stop the server by killing the process if graceful shutdown fails",
+            default: false,
+        }),
     };
     async run(): Promise<void> {
         const { flags } = await this.parse(ServerStop);
-        await stopAgentServer(flags.port);
+        await stopAgentServer(flags.port, flags.force);
         process.exit(0);
     }
 }

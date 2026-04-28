@@ -73,14 +73,16 @@ export interface ClientAPI {
     searchMenuClose(id: number): void;
     continuousSpeechProcessing(text: string): Promise<string | undefined>;
 
-    // Session management
-    sessionList(): Promise<SessionInfo[]>;
-    sessionCreate(name: string): Promise<SessionInfo>;
-    sessionSwitch(sessionId: string): Promise<SessionSwitchResult>;
-    sessionRename(sessionId: string, newName: string): Promise<void>;
-    sessionDelete(sessionId: string): Promise<void>;
-    sessionGetCurrent(): Promise<
-        { sessionId: string; name: string } | undefined
+    // Conversation management
+    conversationList(): Promise<ConversationInfo[]>;
+    conversationCreate(name: string): Promise<ConversationInfo>;
+    conversationSwitch(
+        conversationId: string,
+    ): Promise<ConversationSwitchResult>;
+    conversationRename(conversationId: string, newName: string): Promise<void>;
+    conversationDelete(conversationId: string): Promise<void>;
+    conversationGetCurrent(): Promise<
+        { conversationId: string; name: string } | undefined
     >;
 }
 
@@ -102,7 +104,7 @@ export interface Client {
     continuousSpeechProcessed(userExpressions: UserExpression[]): void;
     tabRestoreStatus(count: number): void;
     systemNotification?(message: string, id: string, timestamp: number): void;
-    sessionChanged?(sessionId: string, name: string): void;
+    conversationChanged?(conversationId: string, name: string): void;
     markHistoryEntries?(): void;
 }
 
@@ -121,17 +123,17 @@ export type UserExpression = {
     text: string;
 };
 
-// Session management types
-export type SessionInfo = {
-    sessionId: string;
+// Conversation management types
+export type ConversationInfo = {
+    conversationId: string;
     name: string;
     clientCount: number;
     createdAt: string; // ISO 8601
 };
 
-export type SessionSwitchResult = {
+export type ConversationSwitchResult = {
     success: boolean;
-    sessionId?: string;
+    conversationId?: string;
     name?: string;
     error?: string;
 };

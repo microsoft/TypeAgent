@@ -1,0 +1,110 @@
+{
+  "version": "1.0",
+  "name": "dev",
+  "description": "Development workflow. Policy-checked bash with common dev tools allowed. Container sandbox with bridge networking for dev servers.",
+  "paths": {
+    "allowedReadPatterns": ["{{projectDir}}/**", "/tmp/**"],
+    "allowedWritePatterns": ["{{projectDir}}/**", "/tmp/**"],
+    "deniedPatterns": [
+      "**/.env",
+      "**/.env.*",
+      "**/credentials*",
+      "**/secrets*",
+      "**/*.pem",
+      "**/*.key"
+    ]
+  },
+  "bash": {
+    "mode": "policy-checked",
+    "allowedCommands": [
+      "ls",
+      "cat",
+      "head",
+      "tail",
+      "grep",
+      "find",
+      "wc",
+      "sort",
+      "uniq",
+      "echo",
+      "printf",
+      "date",
+      "pwd",
+      "whoami",
+      "which",
+      "env",
+      "git",
+      "npm",
+      "npx",
+      "pnpm",
+      "yarn",
+      "node",
+      "tsc",
+      "tsx",
+      "prettier",
+      "eslint",
+      "jest",
+      "vitest",
+      "mocha",
+      "mkdir",
+      "cp",
+      "mv",
+      "rm",
+      "touch",
+      "chmod",
+      "diff",
+      "patch",
+      "sed",
+      "awk",
+      "tr",
+      "cut",
+      "xargs",
+      "python",
+      "python3",
+      "pip",
+      "pip3",
+      "docker",
+      "docker-compose"
+    ],
+    "deniedCommands": [
+      "curl",
+      "wget",
+      "ssh",
+      "scp",
+      "nc",
+      "ncat",
+      "telnet",
+      "ftp",
+      "sftp",
+      "nmap"
+    ],
+    "denyPatterns": [
+      "rm\\s+-rf\\s+/[^t]",
+      ">(\\s|/dev/)(tcp|udp)/",
+      "\\|\\s*bash",
+      "\\|\\s*sh\\b"
+    ],
+    "network": {
+      "denyAll": false,
+      "allowedPorts": [3000, 3001, 4000, 5173, 5174, 8080, 8081, 9229]
+    },
+    "maxTimeoutMs": 120000
+  },
+  "container": {
+    "enabled": false,
+    "image": "node:20-slim",
+    "networkMode": "bridge",
+    "deriveVolumesFromPolicy": true,
+    "derivePortsFromPolicy": true,
+    "memoryLimit": "1g",
+    "cpuLimit": "2.0",
+    "pidsLimit": 200,
+    "timeoutMs": 120000
+  },
+  "limitCaps": {
+    "maxTotalSteps": 50,
+    "maxDurationMs": 600000,
+    "maxFileWrites": 30,
+    "maxBytesWritten": 2097152
+  }
+}

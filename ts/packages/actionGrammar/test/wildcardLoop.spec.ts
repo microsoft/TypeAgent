@@ -10,7 +10,7 @@ describe("Wildcard Loop Behavior", () => {
         // Pattern: show $(location:string) weather
         // Input: show peoria weather
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["show"] },
@@ -47,7 +47,7 @@ describe("Wildcard Loop Behavior", () => {
         // Pattern: show $(location:string) weather
         // Input: show des moines weather
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["show"] },
@@ -84,7 +84,7 @@ describe("Wildcard Loop Behavior", () => {
         // Pattern: play $(track:string) by $(artist:string)
         // Input: play kodachrome by paul simon
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -132,7 +132,7 @@ describe("Wildcard Loop Behavior", () => {
         // Pattern: show $(location:string)
         // Input: show des moines iowa
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["show"] },

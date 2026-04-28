@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "actionName": "gitStatus",
+  "description": "Shows the current git repository status including staged, unstaged, and untracked files",
+  "displayName": "Git Status",
+  "parameters": [
+    {
+      "name": "repoPath",
+      "type": "path",
+      "required": false,
+      "description": "Path to the git repository",
+      "default": "."
+    }
+  ],
+  "script": {
+    "language": "powershell",
+    "body": "param([string]$RepoPath = '.')\nPush-Location $RepoPath\ntry {\n    $status = git status --porcelain\n    if (-not $status) {\n        Write-Output 'Working tree clean - no changes'\n    } else {\n        Write-Output '=== Git Status ==='\n        $staged = $status | Where-Object { $_ -match '^[MADRCU]' }\n        $unstaged = $status | Where-Object { $_ -match '^.[MADRCU]' }\n        $untracked = $status | Where-Object { $_ -match '^\\?\\?' }\n        if ($staged) {\n            Write-Output \"`nStaged for commit:\"\n            $staged | ForEach-Object { Write-Output \"  $_\" }\n        }\n        if ($unstaged) {\n            Write-Output \"`nNot staged:\"\n            $unstaged | ForEach-Object { Write-Output \"  $_\" }\n        }\n        if ($untracked) {\n            Write-Output \"`nUntracked files:\"\n            $untracked | ForEach-Object { Write-Output \"  $_\" }\n        }\n    }\n} finally {\n    Pop-Location\n}",
+    "expectedOutputFormat": "text"
+  },
+  "grammarPatterns": [
+    {
+      "pattern": "git status (in|for)? $(repoPath:wildcard)?",
+      "isAlias": false,
+      "examples": ["git status", "git status in myrepo"]
+    },
+    {
+      "pattern": "(show|what are) (the)? uncommitted changes (in)? $(repoPath:wildcard)?",
+      "isAlias": false,
+      "examples": [
+        "show uncommitted changes",
+        "what are the uncommitted changes"
+      ]
+    },
+    {
+      "pattern": "what (files)? changed (in)? $(repoPath:wildcard)?",
+      "isAlias": false,
+      "examples": ["what changed", "what files changed"]
+    }
+  ],
+  "sandbox": {
+    "allowedCmdlets": [
+      "Push-Location",
+      "Pop-Location",
+      "Write-Output",
+      "Where-Object",
+      "ForEach-Object"
+    ],
+    "allowedPaths": ["$PWD", "$env:USERPROFILE"],
+    "allowedModules": [
+      "Microsoft.PowerShell.Management",
+      "Microsoft.PowerShell.Utility"
+    ],
+    "maxExecutionTime": 30,
+    "networkAccess": false
+  },
+  "source": {
+    "type": "manual",
+    "timestamp": "2026-04-23T00:00:00Z"
+  }
+}
