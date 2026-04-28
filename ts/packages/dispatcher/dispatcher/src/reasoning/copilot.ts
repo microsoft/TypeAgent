@@ -55,7 +55,7 @@ function withAbortSignal<T>(
     });
 }
 
-const defaultModel = "gpt-4o";
+const defaultModel = "claude-sonnet-4.5";
 
 // Track Copilot clients per dispatcher instance (WeakMap for GC)
 const copilotClients = new WeakMap<object, CopilotClient>();
