@@ -52,12 +52,10 @@ Grouped by PLAN track. Each item is independently shippable.
 > Concrete signatures land with each Track A / B item.
 
 ```ts
-// loader (A.1)
-export function loadGrammarFromFile(path: string): Promise<LoadedGrammar>;
-export function loadGrammarFromAgent(agentName: string): Promise<LoadedGrammar>;
-export function loadGrammarFromSnapshot(
-  snapshot: GrammarSnapshot,
-): LoadedGrammar;
+// loader (A.1) - returns LoadResult so compile failures don't poison the type
+export function loadGrammarFromFile(path: string): Promise<LoadResult>;
+export function loadGrammarFromAgent(agentName: string): Promise<LoadResult>;
+export function loadGrammarFromSnapshot(snapshot: GrammarSnapshot): LoadResult;
 
 // language services (A.2 - A.4)
 export function getDiagnostics(g: LoadedGrammar): Diagnostic[];
@@ -78,6 +76,246 @@ export function runCoverage(
   corpus: Iterable<string>,
 ): CoverageReport;
 export function diffGrammars(a: LoadedGrammar, b: LoadedGrammar): GrammarDiff;
+```
+
+## Loading model
+
+`LoadedGrammar` is a data envelope with `grammar` always present plus
+**two optional fidelity layers** (`debugInfo`, `files`). Hosts pick
+which loader to call based on what they have; services declare which
+layers they need.
+
+```
+┌─────────────────────────────────────────┐
+│  files: SourceFile[]                    │  ← edit / format / find-refs
+│  (text + AST + spans, per file)         │     [optional]
+├─────────────────────────────────────────┤
+│  debugInfo: GrammarDebugInfo            │  ← go-to-def, "rule X @ file:line"
+│  (Grammar node ↔ source position map)   │     [optional]
+├─────────────────────────────────────────┤
+│  grammar: Grammar                       │  ← match, complete, trace, coverage
+│  (the substrate, always present)        │     [required]
+└─────────────────────────────────────────┘
+```
+
+**Invariant.** Once you have a `LoadedGrammar`, `grammar` is always
+usable. Compile failures never produce a `LoadedGrammar` with a missing
+grammar - they're encoded at the loader boundary as `LoadResult` (see
+below), so every service can dereference `g.grammar` unconditionally.
+
+### Loader result and compile failure
+
+Loader factories return a discriminated `LoadResult` rather than
+throwing. This keeps editor / LSP hosts in control of how to react to a
+bad parse without forcing every downstream service to test for a
+missing grammar.
+
+```ts
+export type LoadResult =
+  | { ok: true; grammar: LoadedGrammar }
+  | { ok: false; diagnostics: Diagnostic[]; files: SourceFile[] };
+```
+
+For LSP-style hosts that want continuity across keystrokes, the
+recommended pattern is **last-known-good**: the host caches the most
+recent `ok: true` result and keeps offering services against it while a
+new edit re-parses; on `ok: false`, surface the diagnostics from the
+failure but keep the cached grammar live for completion / trace. Core
+itself is stateless; this caching lives in the host (see chunks 03,
+05, 06).
+
+### Scenarios
+
+| #   | Scenario                                     | Host provides                |   `files`   | `debugInfo` | `grammar` | Notes                                                                   |
+| --- | -------------------------------------------- | ---------------------------- | :---------: | :---------: | :-------: | ----------------------------------------------------------------------- |
+| 1   | VS Code editor, single `.agr`                | path + live buffer text      |      ✓      |  ✓ emitted  |     ✓     | Failed parse → `LoadResult.ok = false`; host keeps last-known-good      |
+| 2   | Web editor (Vite SPA)                        | text buffer (+ virtual id)   |      ✓      |  ✓ emitted  |     ✓     | Same as #1                                                              |
+| 3   | Agent grammar (file mode)                    | agent name / manifest path   | ✓ (N files) |  ✓ emitted  |     ✓     | Compiles N source files, emits unified debug info                       |
+| 4a  | Live dispatcher snapshot **with** debug info | RPC `{ grammar, debugInfo }` |      ✗      |      ✓      |     ✓     | Symbol service works ("rule X is in agent Y file Z"); diagnostics empty |
+| 4b  | Live dispatcher snapshot **without** debug   | RPC `{ grammar }`            |      ✗      |      ✗      |     ✓     | Match / trace / coverage work; symbols throw `MissingDebugInfoError`    |
+| 5   | CLI coverage run                             | path or agent + corpus       |  (loaded)   |  (emitted)  |     ✓     | Cheapest path: load → run → exit                                        |
+| 6   | Decompiled view (any of 4a / 4b)             | `decompile(grammar)`         | ✓ synthetic | ✓ synthetic |     ✓     | Read-only; lets snapshot mode show source-shaped UI                     |
+
+### Per-service requirements
+
+| Service             |       `grammar`        | `debugInfo` | `files` | Notes                                 |
+| ------------------- | :--------------------: | :---------: | :-----: | ------------------------------------- |
+| `previewCompletion` |   ✓ (always present)   |             |         |                                       |
+| `traceMatch`        |   ✓ (always present)   |             |         | `debugInfo` enriches event display    |
+| `runCoverage`       |   ✓ (always present)   |             |         | `debugInfo` enables source decoration |
+| `diffGrammars`      |    both `grammar`s     |             |         | `debugInfo` enables jump-to-source    |
+| `getSymbolIndex`    |   ✓ (always present)   |      ✓      |         | Index keyed by `RuleId` / `PartId`    |
+| `getDiagnostics`    |                        |             |    ✓    | Per-file parse + semantic errors      |
+| `format`            | (operates on raw text) |             |         |                                       |
+
+Services that need a fidelity layer the host did not provide return a
+typed error (`MissingDebugInfoError` / `MissingSourceError`) per the
+chunk-01 error contract. Hosts that want symbol navigation against a
+snapshot without debug info call `decompile()` first.
+
+### Lifecycle and regeneration
+
+- **Immutable.** Each parse / compile produces a new `LoadedGrammar`.
+  Editor mode replaces the handle on every (debounced) successful
+  reload. No incremental reparse for v1.
+- **Caching is the host's job.** Core exposes pure functions; the LSP
+  server holds the latest `LoadedGrammar` per open document and the
+  last-known-good when a new parse fails.
+- **Snapshot refresh.** Live mode (chunk 06) replaces the
+  `LoadedGrammar` whenever the dispatcher reports a new snapshot.
+- **Lazy decompile.** When `files` is absent, callers can opt in to
+  `decompile(grammar)` to synthesize a read-only `SourceFile` plus
+  matching `debugInfo` for display purposes.
+
+## Type sketches (placeholders)
+
+These are **starting points to unblock parallel work**, not frozen
+contracts. Concrete shapes land with each Track A / B item.
+
+### `LoadedGrammar`
+
+Three-layer envelope (see "Loading model" above). `grammar` is always
+present; `debugInfo` and `files` are optional fidelity layers.
+
+```ts
+export interface LoadedGrammar {
+  /** Where the grammar came from. */
+  readonly source: GrammarSource;
+
+  /** Compiled grammar - what the matcher consumes. Always present;
+   *  loader compile failures are reported via `LoadResult`, not by
+   *  omitting this field. */
+  readonly grammar: Grammar; // re-exported from actionGrammar
+
+  /** Maps grammar nodes back to source positions. Emitted by the
+   *  loader when compiling from source; may be supplied by the
+   *  snapshot RPC ([ADR 0003]); synthesized by `decompile()`. */
+  readonly debugInfo?: GrammarDebugInfo;
+
+  /** Source files that contributed. Empty / absent for snapshot mode
+   *  unless `decompile()` populated synthetic source. */
+  readonly files?: readonly SourceFile[];
+
+  /** Stable identifier table used by trace events and coverage to
+   *  refer to rules / parts. Derived from `grammar`. See chunk 02
+   *  "Stable rule + part identifier". */
+  readonly identifiers: GrammarIdentifierIndex;
+}
+
+export type GrammarSource =
+  | { kind: "file"; path: string }
+  | { kind: "buffer"; id: string } //  in-memory editor buffer
+  | { kind: "agent"; agentName: string; manifestPath: string }
+  | { kind: "snapshot"; sessionId?: string }
+  | { kind: "decompiled"; from: GrammarSource };
+```
+
+### `SourceFile`
+
+One `.agr` source contributing to a `LoadedGrammar`.
+
+```ts
+export interface SourceFile {
+  /** Stable identifier - file path, or virtual id for in-memory
+   *  buffers / decompiled output. Matches `SourceLocation.fileId`
+   *  in `GrammarDebugInfo`. */
+  readonly id: string;
+  readonly text: string;
+  /** Parser AST. Includes source spans. May reflect a partial parse
+   *  when there are errors - inspect `getDiagnostics()` to find them. */
+  readonly ast: GrammarParseResult;
+  /** True when the file is synthesized by `decompile()` and not
+   *  user-editable. */
+  readonly synthetic?: boolean;
+}
+```
+
+### `GrammarDebugInfo`
+
+Compiler-emitted sidecar mapping grammar nodes to source positions.
+Analogous to `.pdb` / source maps. Persisted as a separate JSON
+document (`.agr.debug.json`) so it can travel alongside the compiled
+grammar without bloating it.
+
+```ts
+export interface GrammarDebugInfo {
+  /** Stable hash of the Grammar this debug info describes; used to
+   *  detect drift if loaded separately. */
+  readonly grammarHash: string;
+
+  /** Map keyed by the same RuleId / PartId emitted in TraceEvents
+   *  (chunk 02). */
+  readonly positions: Map<RuleId | PartId, SourceLocation>;
+}
+
+export interface SourceLocation {
+  /** Logical id of the source file; matches `SourceFile.id` when
+   *  source is available. */
+  readonly fileId: string;
+  /** Display path; not necessarily readable from the host (e.g.
+   *  snapshot mode shows the path but cannot open the file). */
+  readonly displayPath: string;
+  readonly range: SourceRange;
+}
+```
+
+### `Diagnostic`
+
+LSP-shaped, no `vscode-languageserver-types` dependency in core.
+
+```ts
+export interface Diagnostic {
+  range: SourceRange;
+  severity: "error" | "warning" | "info" | "hint";
+  code?: string;
+  message: string;
+  source: "grammar-tools-core";
+}
+
+export interface SourceRange {
+  start: SourcePosition;
+  end: SourcePosition;
+}
+export interface SourcePosition {
+  line: number; // 0-based
+  character: number; // 0-based, UTF-16 code units
+  offset: number; // absolute byte / char offset (parser-native)
+}
+```
+
+### `CoverageReport` (placeholder, see chunk 08)
+
+```ts
+export interface CoverageReport {
+  totals: { rules: number; parts: number; ruleHits: number; partHits: number };
+  perRule: Map<RuleId, RuleCoverage>;
+  perPart: Map<PartId, PartCoverage>;
+  unmatchedInputs: string[];
+}
+```
+
+### `GrammarDiff` (placeholder, see chunk 08)
+
+Rule-level for v1.
+
+```ts
+export interface GrammarDiff {
+  added: RuleId[];
+  removed: RuleId[];
+  changed: Array<{ rule: RuleId; reason: "signature" | "body" | "value" }>;
+}
+```
+
+### Decompile API (placeholder)
+
+Declared here; implementation deferred to a later chunk (Track A.5 or
+folded into A.1). Lets hosts produce a viewable / traceable
+`LoadedGrammar` from a snapshot that lacks source.
+
+```ts
+/** Synthesize a read-only SourceFile + matching debugInfo from a
+ *  Grammar. Returns a new LoadedGrammar with `source.kind = "decompiled"`. */
+export function decompile(grammar: Grammar): LoadedGrammar;
 ```
 
 ## File layout
@@ -109,7 +347,8 @@ packages/grammarTools/core/
 
 ## Open questions
 
-- Exact shape of `LoadedGrammar` - what to expose vs. keep opaque?
+- ~~Exact shape of `LoadedGrammar` - what to expose vs. keep opaque?~~
+  See "Loading model" + type sketches above; refine when A.1 lands.
 - Should the package be browser-safe (Web Worker hosting an LSP server)?
   See [ADR 0004](./decisions/0004-monaco-lsp-transport.md).
 - Agent-grammar loader: does
@@ -118,6 +357,11 @@ packages/grammarTools/core/
 - Diff granularity (rule-only vs part-level) - see chunk 08.
 - Coverage output shape - simple counts vs. range-addressed hits suitable
   for editor decorations - see chunk 08.
+- `GrammarDebugInfo` emission belongs in `actionGrammar` (next to the
+  compiler) or in `grammar-tools-core` (post-processing). Decide when
+  the sidecar persistence format is locked.
+- Whether the dispatcher snapshot (ADR 0003) ships `debugInfo` alongside
+  `grammar`, source bytes, both, or neither. Updates ADR 0003.
 
 ## Verification
 

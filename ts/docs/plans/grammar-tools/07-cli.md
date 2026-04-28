@@ -9,8 +9,11 @@ The CLI is the cheapest smoke-test for each core service; commands ship
 as the corresponding A.\* / B.\* item lands rather than as a single
 batch.
 
-> Directory: `examples/grammarStudio` (if a new package) or extend
-> `examples/schemaStudio`. Package name (if new): `grammar-studio`.
+> Directory: `examples/grammarStudio`. Package name (in `package.json`
+> and `pnpm --filter`): `grammar-studio`. **New package**, not an
+> extension of [`examples/schemaStudio`](../../../examples/schemaStudio):
+> grammar and schema authoring are separate concerns and `schemaStudio`
+> stays the schema-only tool.
 
 ## TL;DR
 
@@ -27,7 +30,9 @@ Serves three roles:
 Commands (each corresponds to one PLAN Track E item; deps in italics):
 
 - **E.0** Scaffold the package (REPL, command dispatcher, output
-  formatting).
+  formatting). `--json` output mode is mandatory from E.0 so every
+  later command is CI-pipeable the day it lands; the human-readable
+  format is the default.
 - **E.1** `grammar load <path-or-agent>` - select active grammar.
   _Needs A.1._
 - **E.2** `grammar match <input>` - run completion preview, print
@@ -38,6 +43,10 @@ Commands (each corresponds to one PLAN Track E item; deps in italics):
   _Needs B.3._
 - **E.5** `grammar diff <a> <b>` - structural diff. _Needs B.4._
 
+Fixture grammars used by tests live under
+[`packages/actionGrammar/test-data`](../../../packages/actionGrammar/test-data);
+the CLI does not ship its own fixtures.
+
 ## Non-scope
 
 - UI / visualization (text output only).
@@ -47,9 +56,14 @@ Commands (each corresponds to one PLAN Track E item; deps in italics):
 
 ## Open questions
 
-- New package vs extending `schemaStudio`? Extending keeps one tool;
-  new package keeps grammar concerns separate.
-- Output format - human only, or `--json` mode for scripts?
+- ~~New package vs extending `schemaStudio`?~~ New package
+  (`examples/grammarStudio`, kebab name `grammar-studio`).
+- ~~Output format - human only, or `--json` mode for scripts?~~ Both;
+  `--json` mandatory from E.0.
+- REPL detail (history, multi-line input, `help`) - decide during E.0
+  scaffolding; default is whatever the
+  [`interactive-app`](../../../packages/interactiveApp) primitives offer
+  out of the box.
 
 ## Verification
 

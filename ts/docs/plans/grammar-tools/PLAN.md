@@ -166,7 +166,11 @@ D.1–D.5 are mutually independent.
 
 ### Track E - CLI (parallel after 0c, ships alongside core)
 
-E.0 Scaffold `examples/grammarStudio` (or extend `examples/schemaStudio`).
+E.0 Scaffold `examples/grammarStudio` (new package; package name
+`grammar-studio`). Not folded into `examples/schemaStudio` -
+schema authoring and grammar tooling are kept as separate tools.
+`--json` output mode is mandatory from E.0 so each later command
+is CI-pipeable on the day it lands.
 E.1 `grammar load`. _Needs A.1._
 E.2 `grammar match`. _Needs B.1._
 E.3 `grammar trace`. _Needs B.2._

@@ -24,15 +24,112 @@ Add the minimum hooks to
 - Audit
   [`grammarRuleParser.ts`](../../../packages/actionGrammar/src/grammarRuleParser.ts)
   for source spans on every relevant AST node (rule name, parameter
-  list, rule reference, string part, wildcard, etc.). Add what is
-  missing.
+  list, rule reference, string part, wildcard, etc.). Existing nodes
+  carry a single `pos?: number` (start offset only); add an `end?: number`
+  where missing, and ensure every node tooling cares about has both.
 - Add an opt-in `trace?: (event: TraceEvent) => void` parameter to the
   rule-level matcher in
   [`grammarMatcher.ts`](../../../packages/actionGrammar/src/grammarMatcher.ts).
 - Define the `TraceEvent` type (rule entered, part attempted, success /
   fail, slot env after step, position). Event identity must include a
   stable rule + part identifier so coverage can aggregate hits.
-- Hook must be **opt-in and zero-cost when unused**.
+- Hook must be **opt-in and zero-cost when unused** (see ADR 0002
+  conditions: single `if (trace !== undefined)` guard, no allocation on
+  the no-trace path, bench-validated within ~1%).
+
+## Type sketches (placeholders)
+
+Not frozen; refine when the matcher work lands.
+
+### Identifier shape
+
+```ts
+/** Rule definition identifier. */
+export type RuleId = string; // canonical: rule definition name
+
+/** Stable identifier for a part within a rule. AST path under the rule
+ *  definition, encoded as a dotted string. Stable across re-parses of
+ *  the same source. Examples: "rules.0.expressions.2",
+ *  "rules.1.expressions.0.rules.0.expressions.1". */
+export type PartId = string;
+```
+
+The encoding must survive the formatter / writer round-trip. If the
+audit reveals AST paths are not stable across re-formats, fall back to
+a rule-local index assigned at parse time.
+
+### `TraceEvent`
+
+Discriminated union covering everything the rule-level stepper and
+coverage need:
+
+```ts
+export type TraceEvent =
+  | RuleEnteredEvent
+  | RuleExitedEvent
+  | PartAttemptedEvent
+  | PartMatchedEvent
+  | PartFailedEvent
+  | BacktrackEvent;
+
+interface BaseEvent {
+  /** Monotonic counter within a single match call. */
+  readonly seq: number;
+  /** Input character offset at the time of the event. */
+  readonly inputPos: number;
+}
+
+export interface RuleEnteredEvent extends BaseEvent {
+  readonly kind: "ruleEntered";
+  readonly rule: RuleId;
+  /** Depth in the rule call stack (0 = top-level). */
+  readonly depth: number;
+}
+
+export interface RuleExitedEvent extends BaseEvent {
+  readonly kind: "ruleExited";
+  readonly rule: RuleId;
+  readonly result: "matched" | "failed";
+}
+
+export interface PartAttemptedEvent extends BaseEvent {
+  readonly kind: "partAttempted";
+  readonly rule: RuleId;
+  readonly part: PartId;
+  /** Discriminator on the AST node kind: "string" | "wildcard" |
+   *  "ruleReference" | "variable" | "rules". */
+  readonly partKind: string;
+}
+
+export interface PartMatchedEvent extends BaseEvent {
+  readonly kind: "partMatched";
+  readonly rule: RuleId;
+  readonly part: PartId;
+  /** End offset of the matched span in the input. */
+  readonly endPos: number;
+  /** Slot environment snapshot. Shape TBD; placeholder is the captured
+   *  variable name -> string map at this point. Empty when no slots
+   *  changed. */
+  readonly slots?: Readonly<Record<string, string>>;
+}
+
+export interface PartFailedEvent extends BaseEvent {
+  readonly kind: "partFailed";
+  readonly rule: RuleId;
+  readonly part: PartId;
+  readonly reason: string; // human-readable, not for programmatic use
+}
+
+export interface BacktrackEvent extends BaseEvent {
+  readonly kind: "backtrack";
+  /** Mirrors `BacktrackOrigin` already exported from grammarMatcher. */
+  readonly origin: "wildcard" | "optional" | "alternation" | "repeat";
+}
+```
+
+Coverage (chunk 08, B.3) consumes this same stream by counting
+`partMatched` events per `(rule, part)` and tracking unmatched inputs
+from the absence of a top-level `ruleExited.matched`.
 
 ## Non-scope
 
@@ -41,14 +138,21 @@ Add the minimum hooks to
 
 ## Open questions
 
-- Pick option A (in-matcher hook) vs option B (AST re-walk in core). See
-  [ADR 0002](./decisions/0002-trace-hook.md).
-- Should `TraceEvent` live in `actionGrammar` or in `grammar-tools-core`?
-  Probably `actionGrammar` so the matcher itself owns the contract.
+- ~~Pick option A (in-matcher hook) vs option B (AST re-walk in core).~~
+  [ADR 0002](./decisions/0002-trace-hook.md) accepted option A.
+- ~~Should `TraceEvent` live in `actionGrammar` or in
+  `grammar-tools-core`?~~ Lives in `actionGrammar` (matcher owns the
+  contract); `grammar-tools-core` re-exports.
 - Do source spans round-trip through the serializer
   ([`grammarSerializer.ts`](../../../packages/actionGrammar/src/grammarSerializer.ts))?
   If not, snapshot-loaded grammars cannot offer go-to-def to source. May
   be acceptable if snapshots only target the debug panel, not the editor.
+- Are AST paths stable across formatter round-trip (basis for `PartId`
+  encoding)? Audit during chunk 02 implementation; if not, fall back to
+  rule-local indices.
+- `slots` field shape on `PartMatchedEvent`: snapshot-of-changed vs
+  full-environment vs structural diff. Decide once the stepper UI in
+  chunk 04 has concrete needs.
 
 ## Verification
 
