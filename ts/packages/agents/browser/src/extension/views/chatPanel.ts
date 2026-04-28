@@ -378,7 +378,11 @@ function handleInternalCommand(text: string): boolean {
 /**
  * Handle a message typed by the user.
  */
-function handleUserMessage(text: string, attachments?: string[]) {
+function handleUserMessage(
+    text: string,
+    requestId: string,
+    attachments?: string[],
+) {
     // Handle internal commands (save/discard recording) without going to dispatcher
     if (handleInternalCommand(text)) return;
 
@@ -447,8 +451,6 @@ function handleUserMessage(text: string, attachments?: string[]) {
 
     chatPanel.setEnabled(false);
     chatPanel.showStatus("Processing...");
-
-    const requestId = `ext-${++requestCounter}`;
 
     rpc.invoke("chatPanelProcessCommand", {
         command: text,
