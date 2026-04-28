@@ -752,3 +752,20 @@ span.ansi-bright-white-fg {
 .chat-input-history-loading .user-textarea {
   opacity: 0.6;
 }
+/* =========================================================================
+   Demo paused banner
+   ========================================================================= */
+.chat-demo-banner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 4px 12px;
+  background: rgba(255, 196, 0, 0.18);
+  border-bottom: 1px solid rgba(255, 196, 0, 0.45);
+  color: #c08400;
+  font-size: 12px;
+  text-align: center;
+  z-index: 10;
+  pointer-events: none;
+}

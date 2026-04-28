@@ -231,6 +231,8 @@ export class ChatPanel {
     private activeRequestId?: string;
     private isSwitching = false;
     private isHistoryLoading = false;
+    private isDemoPaused = false;
+    private demoKeyHandler?: (e: KeyboardEvent) => void;
     private avatarMap: Record<string, string> = { ...DEFAULT_AVATAR_MAP };
 
     // Completion state
@@ -264,6 +266,13 @@ export class ChatPanel {
         requestId: string,
     ) => void;
     public onCancel?: (requestId: string) => void;
+    /**
+     * Fired when the user presses Ctrl/Meta+→ ("continue") or Esc
+     * ("cancel") while a demo script is paused. Hosts wire this to
+     * their own demo-runner to advance or abort the script. The panel
+     * owns the keystroke capture so the input field doesn't swallow it.
+     */
+    public onDemoAction?: (action: "continue" | "cancel") => void;
     public getCompletions?: (input: string) => Promise<CompletionResult | null>;
     public getDynamicDisplay?: (
         source: string,
@@ -1375,6 +1384,63 @@ export class ChatPanel {
                     "Type a message...",
                 );
             }
+        }
+    }
+
+    /**
+     * Toggle "demo paused" mode. While paused, the panel installs a
+     * window-level capture-phase keydown listener that swallows
+     * Ctrl/Meta+→ (continue) and Esc (cancel) before the focused input
+     * field sees them, and forwards the action via `onDemoAction`. An
+     * optional `message` is shown as a floating banner.
+     */
+    public setDemoPaused(paused: boolean, message?: string): void {
+        this.isDemoPaused = paused;
+        if (paused) {
+            if (!this.demoKeyHandler) {
+                this.demoKeyHandler = (e: KeyboardEvent) => {
+                    if (!this.isDemoPaused) return;
+                    if (e.key === "ArrowRight" && (e.ctrlKey || e.metaKey)) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        this.onDemoAction?.("continue");
+                    } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        this.onDemoAction?.("cancel");
+                    }
+                };
+                window.addEventListener("keydown", this.demoKeyHandler, true);
+            }
+            this.showDemoBanner(message);
+        } else {
+            if (this.demoKeyHandler) {
+                window.removeEventListener(
+                    "keydown",
+                    this.demoKeyHandler,
+                    true,
+                );
+                this.demoKeyHandler = undefined;
+            }
+            this.hideDemoBanner();
+        }
+    }
+
+    private demoBanner?: HTMLDivElement;
+    private showDemoBanner(message?: string): void {
+        if (!this.demoBanner) {
+            this.demoBanner = document.createElement("div");
+            this.demoBanner.className = "chat-demo-banner";
+            this.rootElement.appendChild(this.demoBanner);
+        }
+        const tail = message ? ` — ${message}` : "";
+        this.demoBanner.textContent =
+            `Demo paused${tail} (Ctrl+→ continue, Esc cancel)`;
+    }
+    private hideDemoBanner(): void {
+        if (this.demoBanner) {
+            this.demoBanner.remove();
+            this.demoBanner = undefined;
         }
     }
 
