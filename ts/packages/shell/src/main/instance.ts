@@ -257,6 +257,24 @@ async function initializeDispatcher(
                 throw new Error("Invalid request");
             }
 
+            // In agent-server connect mode the shell agent is not registered
+            // with the remote dispatcher (it lives only in this Electron
+            // process), so commands like "@shell run" can't be routed to it.
+            // Intercept the demo-runner commands locally so they continue
+            // to work regardless of connect mode.
+            const trimmed = text.trim();
+            if (
+                trimmed === "@shell run" ||
+                trimmed === "@shell run interactive"
+            ) {
+                shellWindow.runDemo(trimmed.endsWith("interactive"));
+                shellWindow.chatView.webContents.send(
+                    "send-demo-event",
+                    "CommandProcessed",
+                );
+                return undefined as any;
+            }
+
             // Update before processing the command in case there was change outside of command processing
             const summary = await updateSummary(dispatcher);
 

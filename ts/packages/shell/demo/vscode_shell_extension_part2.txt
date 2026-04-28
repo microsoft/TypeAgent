@@ -1,0 +1,83 @@
+# =============================================
+# VS Code Shell Extension Demo — PART 2 of 2
+# Type these into the TypeAgent sidebar in VS Code.
+# Companion file: vscode_shell_extension_part1.txt
+# =============================================
+
+# ---------------------------------------------
+# PRESENTER NOTES
+# ---------------------------------------------
+# Enter from Part 1 step 2 (`switch to Code` in the shell).
+#
+# Open the TypeAgent activity-bar icon in VS Code — the sidebar
+# chat appears with the SAME conversation that was running in
+# the Electron shell. No login, no session picker.
+# ---------------------------------------------
+
+# -------------------------------------
+# 1. Continue the conversation in the extension
+# -------------------------------------
+
+# Reference earlier turns to prove this is the same session.
+remind me which PR we were just looking at
+
+# Check that the PR's CI is happy
+# PRESENTER: substitute the PR number from Part 1 step 1.
+show check runs for PR 2196 in microsoft/TypeAgent
+
+# -------------------------------------
+# 2. Use the code (vscode) agent
+#    Drives the VS Code instance the chat lives in.
+# -------------------------------------
+
+change my vscode color theme to Monokai
+
+create a new typescript file called scratch.ts with a hello world function
+
+# PRESENTER PAUSE: theme flips and new file opens in the active
+# group. Let the audience absorb the visual change before moving
+# on.
+
+# -------------------------------------
+# 3. Multi-surface: a second chat panel
+# -------------------------------------
+
+# PRESENTER: Cmd/Ctrl+Shift+P → "TypeAgent: New Chat Panel".
+# Both the sidebar and the new editor tab are pinned to the
+# SAME conversation — every message mirrors live.
+
+# Send this from EITHER the sidebar or the new tab. Watch the
+# other surface stream the response in lockstep.
+summarize what we've done in this session so far
+
+# -------------------------------------
+# 4. Close the loop with github-cli
+# -------------------------------------
+
+# File a tracking issue from the chat
+create issue "Demo: vscode-shell extension cross-surface flow"
+
+# PRESENTER PAUSE: tab over to github.com on the browser and
+# refresh the repo's Issues tab — the new issue is right at
+# the top, freshly created from inside the editor.
+
+# Demonstrate entity resolution: "that issue" resolves to the
+# one we just created (no number needed).
+# The "demo" label must exist in the repo — pre-create with:
+#   gh label create demo --color BFD4F2 --repo microsoft/TypeAgent
+add the "demo" label to that issue
+
+# Confirm it landed
+get latest 3 issues in microsoft/TypeAgent
+
+# -------------------------------------
+# 5. Hand back to the shell
+# -------------------------------------
+
+# PRESENTER: switch focus back to the Electron shell window
+# and resume Part 1 at the "Welcome back to the shell" section.
+@pauseForInput
+
+# =============================================
+# End of Part 2 — return to vscode_shell_extension_part1.txt
+# =============================================

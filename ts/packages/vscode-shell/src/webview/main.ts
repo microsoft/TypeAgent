@@ -127,8 +127,44 @@ window.addEventListener("message", (event) => {
         case "pcState":
             partial?.applyState(msg.state);
             break;
+        case "demoPaused":
+            setDemoPaused(msg.paused, msg.message);
+            break;
+        case "demoTypeAndSend":
+            // Animate typing into the chat input then submit, so demo
+            // playback in the extension matches the Electron shell's
+            // natural-keystroke effect.
+            void chatUI.typeAndSend(msg.command, msg.requestId);
+            break;
     }
 });
+
+// Demo pause: while the extension's runDemoScript is awaiting Ctrl+Right
+// or Esc, the focused webview swallows those keystrokes before VS Code's
+// keybinding system can see them. We listen here in capture phase, prevent
+// the default (which would move the textarea cursor / blur the field),
+// and forward the action back to the extension host so it can resolve the
+// pause via the same demoContinue/demoCancel commands as the keybindings.
+let demoPausedActive = false;
+function setDemoPaused(paused: boolean, _message?: string): void {
+    demoPausedActive = paused;
+}
+window.addEventListener(
+    "keydown",
+    (e: KeyboardEvent) => {
+        if (!demoPausedActive) return;
+        if (e.key === "ArrowRight" && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            e.stopPropagation();
+            vscode.postMessage({ type: "demoCommand", action: "continue" });
+        } else if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            vscode.postMessage({ type: "demoCommand", action: "cancel" });
+        }
+    },
+    true,
+);
 
 // Wire up the send button and input
 chatUI.onSend((text, requestId) => {

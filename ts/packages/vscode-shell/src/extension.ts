@@ -180,7 +180,177 @@ export function activate(context: vscode.ExtensionContext): void {
             "vscode-shell.clearChat",
             () => activeChat?.bridge.clearChatUI(),
         ),
+        vscode.commands.registerCommand("vscode-shell.runDemo", () =>
+            runDemoScript(),
+        ),
+        vscode.commands.registerCommand("vscode-shell.demoContinue", () =>
+            demoResolve?.("continue"),
+        ),
+        vscode.commands.registerCommand("vscode-shell.demoCancel", () =>
+            demoResolve?.("cancel"),
+        ),
     );
+}
+
+// Demo runner state. demoResolve is set while a script is paused on
+// @pauseForInput; calling it advances or cancels the pause.
+let demoResolve: ((action: "continue" | "cancel") => void) | undefined;
+let demoStatusItem: vscode.StatusBarItem | undefined;
+
+function setDemoPaused(paused: boolean, message?: string): void {
+    vscode.commands.executeCommand(
+        "setContext",
+        "vscode-shell.demoPaused",
+        paused,
+    );
+    activeChat?.bridge.notifyDemoPaused(paused, message);
+    if (paused) {
+        if (!demoStatusItem) {
+            demoStatusItem = vscode.window.createStatusBarItem(
+                vscode.StatusBarAlignment.Right,
+                1000,
+            );
+            demoStatusItem.backgroundColor = new vscode.ThemeColor(
+                "statusBarItem.warningBackground",
+            );
+        }
+        demoStatusItem.text = `$(debug-pause) Demo paused — Ctrl+→ continue, Esc cancel${
+            message ? ` (${message})` : ""
+        }`;
+        demoStatusItem.show();
+    } else {
+        demoStatusItem?.hide();
+    }
+}
+
+/**
+ * Open a .txt demo script and replay it through the active chat,
+ * mirroring the Electron shell's @shell run command. Lines starting
+ * with '#' are comments. '@pauseForInput' pauses until the presenter
+ * presses Alt+Right to continue (or Alt+Left to cancel) — same as the
+ * Electron shell.
+ */
+async function runDemoScript(): Promise<void> {
+    if (!activeChat) {
+        vscode.window.showWarningMessage(
+            "TypeAgent: no active chat to run the demo in.",
+        );
+        return;
+    }
+    if (demoResolve) {
+        vscode.window.showWarningMessage(
+            "TypeAgent: a demo script is already running.",
+        );
+        return;
+    }
+    const picked = await vscode.window.showOpenDialog({
+        canSelectFiles: true,
+        canSelectFolders: false,
+        canSelectMany: false,
+        filters: { "Demo scripts": ["txt"] },
+        openLabel: "Run Demo",
+    });
+    if (!picked || picked.length === 0) return;
+
+    const fileUri = picked[0];
+    let content: string;
+    try {
+        const buf = await vscode.workspace.fs.readFile(fileUri);
+        content = Buffer.from(buf).toString("utf8");
+    } catch (e: any) {
+        vscode.window.showErrorMessage(
+            `Failed to read demo script: ${e?.message ?? String(e)}`,
+        );
+        return;
+    }
+
+    const bridge = activeChat.bridge;
+    const lines = content.split(/\r?\n/);
+    const fileName = fileUri.path.split(/[\\/]/).pop() ?? "demo";
+    let cancelled = false;
+
+    try {
+        await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: `Running demo: ${fileName}`,
+                cancellable: true,
+            },
+            async (progress, token) => {
+                token.onCancellationRequested(() => {
+                    cancelled = true;
+                    demoResolve?.("cancel");
+                });
+                for (let i = 0; i < lines.length && !cancelled; i++) {
+                    const raw = lines[i];
+                    const line = raw.trim();
+                    if (line.length === 0) continue;
+                    if (line.startsWith("#")) continue;
+
+                    if (line.startsWith("@pauseForInput")) {
+                        // Steal focus back to the chat webview so VS Code's
+                        // editor binding for Ctrl+Right doesn't shadow our
+                        // demoContinue keybinding (the previous line often
+                        // focused an editor, e.g. newFile / showTextDocument).
+                        try {
+                            await vscode.commands.executeCommand(
+                                "vscode-shell.focusChat",
+                            );
+                        } catch {
+                            // Best-effort; don't break the demo if focus fails.
+                        }
+                        setDemoPaused(
+                            true,
+                            `line ${i + 1}/${lines.length}`,
+                        );
+                        const action = await new Promise<
+                            "continue" | "cancel"
+                        >((resolve) => {
+                            demoResolve = resolve;
+                        });
+                        demoResolve = undefined;
+                        setDemoPaused(false);
+                        if (action === "cancel") {
+                            cancelled = true;
+                            break;
+                        }
+                        continue;
+                    }
+
+                    progress.report({
+                        message: `[${i + 1}/${lines.length}] ${line.slice(0, 60)}`,
+                    });
+                    try {
+                        // Hard timeout so a hung command (e.g. reasoning that
+                        // never returns) doesn't freeze the script — the user
+                        // can still hit Ctrl+Right at the next @pauseForInput
+                        // and recover the rest of the demo.
+                        const DEMO_LINE_TIMEOUT_MS = 60_000;
+                        await Promise.race([
+                            bridge.runCommand(line),
+                            new Promise<void>((_, reject) =>
+                                setTimeout(
+                                    () =>
+                                        reject(
+                                            new Error(
+                                                `Demo line timed out after ${DEMO_LINE_TIMEOUT_MS / 1000}s: ${line.slice(0, 80)}`,
+                                            ),
+                                        ),
+                                    DEMO_LINE_TIMEOUT_MS,
+                                ),
+                            ),
+                        ]);
+                    } catch {
+                        // runCommand surfaces errors through the webview;
+                        // keep going so the demo isn't derailed by one bad line.
+                    }
+                }
+            },
+        );
+    } finally {
+        demoResolve = undefined;
+        setDemoPaused(false);
+    }
 }
 
 function setActive(entry: ChatEntry): void {

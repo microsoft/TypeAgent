@@ -83,6 +83,21 @@
                 "command": "vscode-shell.clearChat",
                 "title": "Clear Chat View",
                 "category": "TypeAgent"
+            },
+            {
+                "command": "vscode-shell.runDemo",
+                "title": "Run Demo Script…",
+                "category": "TypeAgent"
+            },
+            {
+                "command": "vscode-shell.demoContinue",
+                "title": "Demo: Continue",
+                "category": "TypeAgent"
+            },
+            {
+                "command": "vscode-shell.demoCancel",
+                "title": "Demo: Cancel",
+                "category": "TypeAgent"
             }
         ],
         "keybindings": [
@@ -110,6 +125,16 @@
                 "command": "vscode-shell.clearChat",
                 "key": "ctrl+k ctrl+l",
                 "mac": "cmd+k cmd+l"
+            },
+            {
+                "command": "vscode-shell.demoContinue",
+                "key": "ctrl+right",
+                "when": "vscode-shell.demoPaused"
+            },
+            {
+                "command": "vscode-shell.demoCancel",
+                "key": "escape",
+                "when": "vscode-shell.demoPaused"
             }
         ],
         "configuration": {

@@ -405,6 +405,12 @@ body.chat-inactive .status.switching {
     flex-shrink: 0;
 }
 
+#send-btn svg {
+    width: 16px;
+    height: 16px;
+    display: block;
+}
+
 #send-btn:hover {
     background: var(--vscode-button-hoverBackground);
 }
@@ -484,6 +490,37 @@ body.vscode-light .message span.ansi-gray-fg { color: var(--vscode-descriptionFo
 /* ── Markdown content ────────────────────────────────────────── */
 
 .message p { margin: 0.25em 0; }
+.message h1, .message h2, .message h3, .message h4, .message h5, .message h6 {
+    margin: 0.6em 0 0.3em;
+    line-height: 1.25;
+    font-weight: 600;
+}
+.message h1 { font-size: 1.35em; }
+.message h2 { font-size: 1.2em; }
+.message h3 { font-size: 1.08em; }
+.message h4, .message h5, .message h6 { font-size: 1em; }
+.message strong { font-weight: 600; }
+.message em { font-style: italic; }
+.message a {
+    color: var(--vscode-textLink-foreground);
+    text-decoration: none;
+}
+.message a:hover {
+    color: var(--vscode-textLink-activeForeground);
+    text-decoration: underline;
+}
+.message blockquote {
+    margin: 0.4em 0;
+    padding: 0.2em 0.8em;
+    border-left: 3px solid var(--vscode-textBlockQuote-border, var(--vscode-panel-border));
+    background: var(--vscode-textBlockQuote-background, transparent);
+    color: var(--vscode-descriptionForeground);
+}
+.message hr {
+    border: 0;
+    border-top: 1px solid var(--vscode-panel-border);
+    margin: 0.6em 0;
+}
 .message pre {
     background: var(--vscode-textCodeBlock-background);
     padding: 6px 8px;
@@ -500,6 +537,8 @@ body.vscode-light .message span.ansi-gray-fg { color: var(--vscode-descriptionFo
 }
 .message pre code { background: transparent; padding: 0; }
 .message ul, .message ol { margin: 0.25em 0 0.25em 1.4em; padding: 0; }
+.message li { margin: 0.15em 0; }
+.message li > p { margin: 0.1em 0; }
 .message table {
     border-collapse: collapse;
     margin: 0.4em 0;

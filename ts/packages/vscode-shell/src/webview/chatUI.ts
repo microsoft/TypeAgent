@@ -128,6 +128,41 @@ export class ChatUI {
     }
 
     /**
+     * Programmatic typing for the demo runner. Animates `text` into the
+     * chat input character-by-character (matching the Electron shell's
+     * demo runner's natural-keystroke effect), then fires the same submit
+     * path as a real Enter press, using the supplied requestId so the
+     * extension host's per-request resolver can match the completion.
+     */
+    public async typeAndSend(text: string, requestId: string): Promise<void> {
+        // Wait for any in-flight "loading history" / "switching" disable to clear.
+        for (let i = 0; this._inputEl.disabled && i < 50; i++) {
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        this._inputEl.focus();
+        this._inputEl.value = "";
+        this._inputEl.style.height = "auto";
+        for (let i = 0; i < text.length; i++) {
+            this._inputEl.value += text[i];
+            this._inputEl.style.height = "auto";
+            this._inputEl.style.height =
+                Math.min(this._inputEl.scrollHeight, 120) + "px";
+            // 25-40ms per char, matching Electron shell's expandableTextArea.
+            const delay = 25 + Math.floor(Math.random() * 15);
+            await new Promise((r) => setTimeout(r, delay));
+        }
+        // Submit via the same path as a manual Enter press, but with the
+        // host-provided requestId instead of generating a new one.
+        const finalText = this._inputEl.value.trim();
+        if (!finalText) return;
+        this.addUserMessage(finalText, undefined, "pending", requestId);
+        this._inputEl.value = "";
+        this._inputEl.style.height = "auto";
+        this._partial?.reset();
+        this._sendCallback?.(finalText, requestId);
+    }
+
+    /**
      * Set the local user's display name and avatar initial.  Called once
      * from the host with the OS username; safe to call again to update.
      */

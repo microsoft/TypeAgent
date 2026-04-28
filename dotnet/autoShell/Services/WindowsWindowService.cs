@@ -49,6 +49,23 @@ internal class WindowsWindowService : IWindowService
     private static extern bool ShowWindow(IntPtr hWnd, uint nCmdShow);
 
     [DllImport(NativeDlls.User32)]
+    private static extern bool IsIconic(IntPtr hWnd);
+
+    [DllImport(NativeDlls.User32)]
+    private static extern bool BringWindowToTop(IntPtr hWnd);
+
+    [DllImport(NativeDlls.User32)]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    [DllImport(NativeDlls.User32, SetLastError = true)]
+    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+    private const uint SW_RESTORE = 9;
+
+    [DllImport(NativeDlls.User32)]
     private static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpClassName, string lpWindowName);
 
     private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
@@ -118,6 +135,57 @@ internal class WindowsWindowService : IWindowService
         }
     }
 
+    /// <summary>
+    /// Bring a window to the foreground reliably. Windows blocks
+    /// SetForegroundWindow from background processes by design (taskbar
+    /// flash only). The standard workaround is to attach the calling
+    /// thread's input queue to the current foreground window's thread,
+    /// during which SetForegroundWindow is permitted.
+    /// </summary>
+    private static void ForceForeground(IntPtr hWnd)
+    {
+        if (hWnd == IntPtr.Zero) return;
+
+        if (IsIconic(hWnd))
+        {
+            ShowWindow(hWnd, SW_RESTORE);
+        }
+
+        IntPtr foregroundHwnd = GetForegroundWindow();
+        uint foregroundThreadId = foregroundHwnd != IntPtr.Zero
+            ? GetWindowThreadProcessId(foregroundHwnd, out _)
+            : 0;
+        uint targetThreadId = GetWindowThreadProcessId(hWnd, out _);
+        uint currentThreadId = GetCurrentThreadId();
+
+        bool attachedFg = false;
+        bool attachedTarget = false;
+        try
+        {
+            if (foregroundThreadId != 0 && foregroundThreadId != currentThreadId)
+            {
+                attachedFg = AttachThreadInput(currentThreadId, foregroundThreadId, true);
+            }
+            if (targetThreadId != 0 && targetThreadId != currentThreadId && targetThreadId != foregroundThreadId)
+            {
+                attachedTarget = AttachThreadInput(currentThreadId, targetThreadId, true);
+            }
+            BringWindowToTop(hWnd);
+            SetForegroundWindow(hWnd);
+        }
+        finally
+        {
+            if (attachedFg)
+            {
+                AttachThreadInput(currentThreadId, foregroundThreadId, false);
+            }
+            if (attachedTarget)
+            {
+                AttachThreadInput(currentThreadId, targetThreadId, false);
+            }
+        }
+    }
+
     /// <inheritdoc/>
     public void RaiseWindow(string processName, string executablePath)
     {
@@ -126,7 +194,7 @@ internal class WindowsWindowService : IWindowService
         {
             if (p.MainWindowHandle != IntPtr.Zero)
             {
-                SetForegroundWindow(p.MainWindowHandle);
+                ForceForeground(p.MainWindowHandle);
                 Interaction.AppActivate(p.Id);
                 return;
             }
@@ -143,7 +211,7 @@ internal class WindowsWindowService : IWindowService
             (nint hWnd1, int pid) = FindWindowByTitle(processName);
             if (hWnd1 != nint.Zero)
             {
-                SetForegroundWindow(hWnd1);
+                ForceForeground(hWnd1);
                 Interaction.AppActivate(pid);
             }
         }
@@ -228,7 +296,6 @@ internal class WindowsWindowService : IWindowService
             uint showWindow = 0x40;
 
             // Restore windows first (SetWindowPos won't work on maximized windows)
-            uint SW_RESTORE = 9;
             ShowWindow(hWnd1, SW_RESTORE);
             ShowWindow(hWnd2, SW_RESTORE);
 

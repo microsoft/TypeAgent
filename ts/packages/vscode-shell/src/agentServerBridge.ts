@@ -54,6 +54,8 @@ export type BridgeToWebviewMessage =
     | { type: "switching"; switching: boolean; targetName?: string }
     | { type: "userInfo"; name: string }
     | { type: "setActive"; active: boolean }
+    | { type: "demoPaused"; paused: boolean; message?: string }
+    | { type: "demoTypeAndSend"; command: string; requestId: string }
     | { type: "historyLoading"; loading: boolean }
     | {
           type: "historyReplay";
@@ -96,7 +98,8 @@ export type BridgeFromWebviewMessage =
     | { type: "pcAccept" }
     | { type: "pcDismiss"; input: string; direction: CompletionDirection }
     | { type: "pcHide" }
-    | { type: "pcDispose" };
+    | { type: "pcDispose" }
+    | { type: "demoCommand"; action: "continue" | "cancel" };
 
 /**
  * Manages the RPC connection to the agent server from the extension host
@@ -134,6 +137,8 @@ export class AgentServerBridge {
     }
 
     private connection: AgentServerConnection | undefined;
+    /** In-flight connect promise — prevents parallel connect() races. */
+    private connectInFlight: Promise<void> | undefined;
     private session: SessionDispatcher | undefined;
     private webviews: Set<vscode.Webview> = new Set();
     private statusBarItem: vscode.StatusBarItem;
@@ -276,6 +281,24 @@ export class AgentServerBridge {
         if (this.isConnected) {
             return;
         }
+        // Coalesce parallel connect() calls — wireWebview is invoked once
+        // per surface (sidebar + each restored panel) and they can land
+        // before the first connect resolves. Without this guard, each
+        // call opens its own WebSocket, but the awaits in this method
+        // cross-pollute via `this.connection` (a later overwrite is
+        // visible to an earlier task after its next await), so two
+        // tasks end up calling joinSession on the same connection's
+        // channel adapter → "Channel 'clientio:<id>' already exists".
+        if (this.connectInFlight) {
+            return this.connectInFlight;
+        }
+        this.connectInFlight = this.connectImpl().finally(() => {
+            this.connectInFlight = undefined;
+        });
+        return this.connectInFlight;
+    }
+
+    private async connectImpl(): Promise<void> {
 
         const config = vscode.workspace.getConfiguration("typeagent");
         const serverUrl = config.get<string>(
@@ -302,6 +325,9 @@ export class AgentServerBridge {
                 this.onStatusChanged?.();
                 this.scheduleReconnect();
             });
+            // Capture locally so subsequent awaits aren't affected by
+            // any future reassignment of this.connection.
+            const connection = this.connection;
 
             // Join the session with our ClientIO implementation
             const clientIO = this.createClientIO();
@@ -319,7 +345,7 @@ export class AgentServerBridge {
                 // If it no longer exists on the server, fall through to the
                 // ephemeral / default behavior so we still have a chat.
                 try {
-                    const sessions = await this.connection.listSessions();
+                    const sessions = await connection.listSessions();
                     if (sessions.some((s) => s.sessionId === this.restoreSessionId)) {
                         joinOpts.sessionId = this.restoreSessionId;
                     } else {
@@ -336,7 +362,7 @@ export class AgentServerBridge {
                 this.ephemeralSessionId === undefined
             ) {
                 try {
-                    const info = await this.connection.createSession(
+                    const info = await connection.createSession(
                         this.ephemeralSessionName,
                     );
                     this.ephemeralSessionId = info.sessionId;
@@ -351,7 +377,7 @@ export class AgentServerBridge {
                 joinOpts.sessionId = this.ephemeralSessionId;
             }
 
-            this.session = await this.connection.joinSession(
+            this.session = await connection.joinSession(
                 clientIO,
                 joinOpts,
             );
@@ -854,6 +880,13 @@ export class AgentServerBridge {
             case "pcDispose":
                 this.disposeCompletionController();
                 break;
+            case "demoCommand":
+                vscode.commands.executeCommand(
+                    msg.action === "continue"
+                        ? "vscode-shell.demoContinue"
+                        : "vscode-shell.demoCancel",
+                );
+                break;
         }
     }
 
@@ -949,17 +982,46 @@ export class AgentServerBridge {
         }
     }
 
+    /**
+     * Send a command to the active session and wait for it to complete.
+     * Used by the in-extension demo runner so the user sees each line
+     * arrive as a normal user message and the agent responds in real
+     * time. Errors are surfaced via the webview, never thrown.
+     *
+     * The line is forwarded to the active webview which animates it being
+     * typed character-by-character into the chat input (parity with the
+     * Electron shell's demo runner) and then submits it through the normal
+     * onSend → sendCommand pipeline. We wait on a per-requestId resolver
+     * that sendCommand fires once processCommand returns.
+     */
+    public async runCommand(command: string): Promise<void> {
+        const requestId = `demo-${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2, 8)}`;
+
+        const completion = new Promise<void>((resolve) => {
+            this.demoCompletionResolvers.set(requestId, resolve);
+        });
+
+        this.broadcastToWebviews({
+            type: "demoTypeAndSend",
+            command,
+            requestId,
+        });
+
+        try {
+            await completion;
+        } finally {
+            this.demoCompletionResolvers.delete(requestId);
+        }
+    }
+
+    private demoCompletionResolvers = new Map<string, () => void>();
+
     private async sendCommand(
         command: string,
         requestId?: string,
     ): Promise<void> {
-        if (!this.session) {
-            this.broadcastToWebviews({
-                type: "error",
-                message: "Not connected to agent server",
-            });
-            return;
-        }
 
         // Once the user actually engages with an ephemeral panel session,
         // promote it to a persistent named session so it survives panel
@@ -990,6 +1052,15 @@ export class AgentServerBridge {
                 type: "error",
                 message: e?.message ?? String(e),
             });
+        } finally {
+            // Wake up any demo-runner await waiting on this requestId.
+            if (requestId) {
+                const resolve = this.demoCompletionResolvers.get(requestId);
+                if (resolve) {
+                    this.demoCompletionResolvers.delete(requestId);
+                    resolve();
+                }
+            }
         }
     }
 
@@ -1274,6 +1345,10 @@ export class AgentServerBridge {
             return;
         }
         await this.joinSpecificSession(match.sessionId, match.name);
+    }
+
+    public notifyDemoPaused(paused: boolean, message?: string): void {
+        this.broadcastToWebviews({ type: "demoPaused", paused, message });
     }
 
     private broadcastToWebviews(msg: BridgeToWebviewMessage): void {
