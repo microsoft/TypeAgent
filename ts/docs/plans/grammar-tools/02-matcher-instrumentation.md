@@ -44,19 +44,48 @@ Not frozen; refine when the matcher work lands.
 ### Identifier shape
 
 ```ts
-/** Rule definition identifier. */
-export type RuleId = string; // canonical: rule definition name
+/** Rule definition identifier. Canonical: source-level rule name. */
+export type RuleId = string;
 
-/** Stable identifier for a part within a rule. AST path under the rule
- *  definition, encoded as a dotted string. Stable across re-parses of
- *  the same source. Examples: "rules.0.expressions.2",
- *  "rules.1.expressions.0.rules.0.expressions.1". */
-export type PartId = string;
+/** Stable identifier for a part within a rule. Compile-time integer
+ *  assigned on the source AST at parse time and propagated through
+ *  every optimizer pass. See "PartId stability" below. */
+export type PartId = number;
 ```
 
-The encoding must survive the formatter / writer round-trip. If the
-audit reveals AST paths are not stable across re-formats, fall back to
-a rule-local index assigned at parse time.
+### PartId stability (decided 2026-04-28)
+
+`PartId` is a **compile-time integer assigned on the source AST at
+parse time** and threaded through every `grammarOptimizer.ts` pass.
+Each `GrammarPart` carries an `id?: number` field; the lookup table
+lives in `GrammarDebugInfo.positions: Map<PartId, SourceLocation>`
+(see chunk 01).
+
+**Why not AST paths or rule-local indices.** The optimizer reshapes
+the compiled AST significantly (`dispatchifyAlternations` introduces
+dispatch tables, the inliner promotes captures into `StringPart` /
+`PhraseSetPart`, the factorer introduces `tailCall` `RulesPart`s,
+prefix factoring rearranges parts). After optimization, compiled
+parts have no stable path or rule-local index back to source. A
+source-assigned id is the only encoding that survives.
+
+**Optimizer contract.** Every optimizer pass that produces a derived
+part must either (a) copy the source part's `id`, (b) pick one of
+the source parts when merging, or (c) leave `id` undefined when the
+resulting part is purely matcher-internal (e.g. dispatch wrappers).
+Parts with `id === undefined` are invisible to coverage and
+debug-info; this is acceptable because they have no source
+counterpart to navigate to.
+
+**Why integer.** Smallest possible `TraceEvent` payload (no string
+allocation on the matcher hot path), cheap equality. Aligns with the
+`.pdb` / source-map analogy already used by `GrammarDebugInfo` in
+chunk 01. ADR 0002's ~1% no-trace bench guard plus a trace-on bench
+guard the cost.
+
+Whether `id` lives directly on `GrammarPart` or in a side table is
+an implementation detail of chunk 02; the public `PartId` contract
+is the integer.
 
 ### `TraceEvent`
 
@@ -147,9 +176,9 @@ from the absence of a top-level `ruleExited.matched`.
   ([`grammarSerializer.ts`](../../../packages/actionGrammar/src/grammarSerializer.ts))?
   If not, snapshot-loaded grammars cannot offer go-to-def to source. May
   be acceptable if snapshots only target the debug panel, not the editor.
-- Are AST paths stable across formatter round-trip (basis for `PartId`
-  encoding)? Audit during chunk 02 implementation; if not, fall back to
-  rule-local indices.
+- ~~Are AST paths stable across formatter round-trip?~~ Moot: `PartId`
+  is a compile-time integer (decided 2026-04-28); see "PartId
+  stability" above.
 - `slots` field shape on `PartMatchedEvent`: snapshot-of-changed vs
   full-environment vs structural diff. Decide once the stepper UI in
   chunk 04 has concrete needs.

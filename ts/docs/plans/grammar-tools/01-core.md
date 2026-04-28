@@ -335,9 +335,15 @@ export interface GrammarDebugInfo {
    *  detect drift if loaded separately. */
   readonly grammarHash: string;
 
-  /** Map keyed by the same RuleId / PartId emitted in TraceEvents
-   *  (chunk 02). */
-  readonly positions: Map<RuleId | PartId, SourceLocation>;
+  /** Source location for each rule, keyed by `RuleId` (rule name). */
+  readonly rules: Map<RuleId, SourceLocation>;
+
+  /** Source location for each part with a source counterpart. Keyed
+   *  by `PartId` (compile-time integer assigned at parse and
+   *  propagated through optimization; see chunk 02 "PartId
+   *  stability"). Optimizer-internal parts (e.g. dispatch wrappers)
+   *  are not present. */
+  readonly parts: Map<PartId, SourceLocation>;
 }
 
 export interface SourceLocation {
