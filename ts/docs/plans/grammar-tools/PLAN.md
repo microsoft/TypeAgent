@@ -5,6 +5,39 @@ viewer / editor / debugger effort. Per-chunk design docs live alongside it
 and are linked from the [Chunks](#chunks) section. Architectural decisions
 live under [`decisions/`](./decisions/).
 
+## Motivation
+
+`.agr` grammars now sit on the critical path for natural-language
+understanding in TypeAgent: every agent ships one, the dispatcher
+loads them at startup, and they are the first thing that decides
+whether a user's utterance routes to the right action. Today they are
+authored by hand in plain text editors, debugged by reading matcher
+logs, and validated by writing Jest tests against the compiled output.
+There is no language service, no in-place trace of why a rule did or
+did not match, and no way to see grammar coverage against a real
+corpus of inputs.
+
+This effort exists to close that gap for three audiences:
+
+- **Agent authors** writing or editing a grammar need normal editor
+  affordances: parse-error squiggles, go-to-definition for rule
+  references, hover for rule expansions, format-on-save, and a way to
+  preview "what completions does this grammar offer for input X" without
+  spinning up the whole shell.
+- **Dispatcher / matcher developers** debugging match behavior need a
+  rule-level trace ("which rules were entered, which parts attempted,
+  where did it backtrack") tied back to the source line, so the answer
+  to "why didn't this match" stops being "read the debug log".
+- **Quality / release engineers** rolling out grammar changes need
+  coverage against a corpus and a structural diff between two versions,
+  so a refactor that silently drops a rule is caught before it ships.
+
+The same primitives serve all three, which is why the plan centers on a
+single framework-agnostic core service surface and reuses it across VS
+Code, the web app, the shell, and the CLI. The alternative - one-off
+tools per host - is what we have today, and it is why grammar work is
+slower than it needs to be.
+
 ## Naming conventions
 
 Following the repo convention (see `packages/memory/*` for an example of
