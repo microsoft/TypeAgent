@@ -90,6 +90,33 @@ export interface NotifyExplainedData {
     time: string;
 }
 
+/**
+ * One entry in a session history transcript replayed via
+ * `ChatPanel.replayHistory`. Discriminated by `kind`. Hosts construct
+ * these from whatever persisted format they use (file, IndexedDB,
+ * VS Code globalState, etc.) and hand them to the panel.
+ */
+export type HistoryEntry =
+    | { kind: "user"; text: string; requestId?: string; timestamp?: string }
+    | {
+          kind: "agent-replace";
+          content: DisplayContent;
+          source?: string;
+          sourceIcon?: string;
+          requestId?: string;
+          timestamp?: string;
+      }
+    | {
+          kind: "agent-append";
+          content: DisplayContent;
+          source?: string;
+          sourceIcon?: string;
+          mode?: DisplayAppendMode;
+          requestId?: string;
+          timestamp?: string;
+      }
+    | { kind: "system"; text: string };
+
 function formatDuration(ms: number): string {
     if (ms < 1) return `${ms.toFixed(2)}ms`;
     if (ms >= 1000) return `${(ms / 1000).toFixed(2)}s`;
@@ -803,6 +830,78 @@ export class ChatPanel {
         el.className = "chat-message-system";
         el.textContent = text;
         sentinel.before(el);
+        this.scrollToBottom();
+    }
+
+    /**
+     * Atomically replay a list of past entries from a session history.
+     * Each replayed DOM element is marked with the `.history` class so
+     * hosts can style replayed turns differently (e.g. dimmed).
+     *
+     * Recognized entry kinds:
+     * - `{ kind: "user", text, requestId?, timestamp? }`
+     * - `{ kind: "agent-replace", content, source?, sourceIcon?, requestId?, timestamp? }`
+     * - `{ kind: "agent-append", content, source?, sourceIcon?, mode?, requestId?, timestamp? }`
+     * - `{ kind: "system", text }`
+     *
+     * Temporary append entries (`mode === "temporary"`) are skipped — they're
+     * ephemeral status text from the original interaction and would otherwise
+     * appear as orphan status lines in the replayed transcript.
+     *
+     * After replay, the per-request bubble map is cleared so future live
+     * messages don't accidentally route into history bubbles.
+     */
+    public replayHistory(entries: HistoryEntry[]): void {
+        if (!entries || entries.length === 0) return;
+
+        const firstHistoryIdx = this.messageDiv.children.length;
+
+        // Reset live state so replay starts fresh.
+        this.currentAgentContainer = undefined;
+
+        for (const entry of entries) {
+            switch (entry.kind) {
+                case "user":
+                    this.addUserMessage(entry.text, entry.requestId);
+                    break;
+                case "agent-replace":
+                    this.replaceAgentMessage(
+                        entry.content,
+                        entry.source,
+                        entry.sourceIcon,
+                        entry.requestId,
+                    );
+                    break;
+                case "agent-append":
+                    if (entry.mode === "temporary") break;
+                    this.addAgentMessage(
+                        entry.content,
+                        entry.source,
+                        entry.sourceIcon,
+                        entry.mode,
+                        entry.requestId,
+                    );
+                    break;
+                case "system":
+                    this.addSystemMessage(entry.text);
+                    break;
+            }
+        }
+
+        // Mark everything just appended as history. Iteration is over the
+        // live NodeList so `children.length` reflects current count.
+        for (
+            let i = firstHistoryIdx;
+            i < this.messageDiv.children.length;
+            i++
+        ) {
+            this.messageDiv.children[i].classList.add("history");
+        }
+
+        // Reset state so the next live message starts a fresh bubble and
+        // doesn't reuse a history bubble via the requestId map.
+        this.currentAgentContainer = undefined;
+        this.agentContainersByRequestId.clear();
         this.scrollToBottom();
     }
 

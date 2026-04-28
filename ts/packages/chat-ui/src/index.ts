@@ -16,4 +16,5 @@ export {
     DynamicDisplayResult,
     DEFAULT_AVATAR_MAP,
     NotifyExplainedData,
+    HistoryEntry,
 } from "./chatPanel.js";
