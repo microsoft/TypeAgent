@@ -281,12 +281,36 @@ export type FuzzFeatureFlags = {
 };
 
 /**
- * Broad-coverage defaults for the fuzz generator.  Every feature
- * group is exercised so a caller who passes `DEFAULT_FEATURES` (or
- * runs the CLI with no `--features`) gets a representative sweep
- * across part kinds, value expressions, spacing, and quantifier
- * groups.  Literals are weighted 2x to keep them dominant since they
- * are the cheap, always-valid baseline.
+ * Broad-coverage defaults for the fuzz generator.  Mixes the four
+ * core part kinds with low-rate background activity in dimensions
+ * whose outputs are matcher-invariant or cheap parser/writer
+ * stress:
+ *
+ *   - `comments.lineProb` / `comments.blockProb` exercise the
+ *     parser's comment attachment and the writer's round-trip
+ *     without changing matching behavior.
+ *   - `vocabulary.escapeProb` rewrites literal characters as escape
+ *     sequences (matched text unchanged).
+ *   - `vocabulary.separatorInLiteralProb` embeds punctuation /
+ *     escaped-space inside literals - a known bug-risk surface
+ *     (see the regression in `grammarOptimizerDispatch.spec.ts`
+ *     for the dispatch-bucket-key bug this knob found in
+ *     `classifyDispatchMember`).
+ *   - `spacing.alignWithinRuleProb` makes
+ *     `dispatchifyAlternations` actually fire in the broad pass
+ *     by giving multiple alts of a rule a shared spacing-mode
+ *     partition (which random per-alt rolls almost never produce
+ *     across 4 modes in a small grammar).
+ *
+ * Knobs that change the AST shape profile noticeably
+ * (`partKinds.sharedPrefix`, `partKinds.nestedRuleRef`,
+ * `partKinds.nonBoundaryProb`, `groups.singleAltGroupProb`, every
+ * `shapes.*`) stay at 0 here so the broad-pass output remains a
+ * recognizable random grammar; targeted `fuzzDescribe` blocks turn
+ * those on individually for attribution.
+ *
+ * Literals are weighted 2x to keep them dominant since they are the
+ * cheap, always-valid baseline.
  *
  * For a minimum-coverage baseline (only literals + rule refs) use
  * {@link MINIMAL_FEATURES}.
@@ -312,7 +336,7 @@ export const DEFAULT_FEATURES: FuzzFeatureFlags = {
             none: 1,
             auto: 1,
         },
-        alignWithinRuleProb: 0,
+        alignWithinRuleProb: 0.1,
     },
     groups: {
         optionalProb: 0.2,
@@ -321,8 +345,8 @@ export const DEFAULT_FEATURES: FuzzFeatureFlags = {
     },
     vocabulary: {
         nonBoundaryProb: 0,
-        escapeProb: 0,
-        separatorInLiteralProb: 0,
+        escapeProb: 0.05,
+        separatorInLiteralProb: 0.05,
     },
     shapes: {
         singleAltRuleProb: 0,
@@ -330,8 +354,8 @@ export const DEFAULT_FEATURES: FuzzFeatureFlags = {
         tailFriendlyAltProb: 0,
     },
     comments: {
-        lineProb: 0,
-        blockProb: 0,
+        lineProb: 0.05,
+        blockProb: 0.05,
     },
 };
 
