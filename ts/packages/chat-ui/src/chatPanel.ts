@@ -86,6 +86,16 @@ export class ChatPanel {
     private currentAgentContainer: AgentMessageContainer | undefined;
     private statusContainer: AgentMessageContainer | undefined;
     private historyAgentContainer: AgentMessageContainer | undefined;
+    /**
+     * Per-requestId agent bubble lookup. Populated when add/replaceAgentMessage
+     * is called with a requestId. Allows out-of-order or concurrent flows to
+     * route follow-up content to the correct bubble (instead of always
+     * appending to the most recent one).
+     */
+    private agentContainersByRequestId = new Map<
+        string,
+        AgentMessageContainer
+    >();
     private commandHistory: string[] = [];
     private historyIndex = -1;
     private activeRequestId?: string;
@@ -452,6 +462,9 @@ export class ChatPanel {
         const container = document.createElement("div");
         container.className = "chat-message-container-user";
         container.dataset.requestId = requestId ?? generateRequestId();
+        // A new user request invalidates the previous "current" agent bubble so
+        // a follow-up addAgentMessage with no requestId starts a fresh one.
+        this.currentAgentContainer = undefined;
 
         const timestamp = this.createTimestamp("user", "You");
         container.appendChild(timestamp);
@@ -477,44 +490,46 @@ export class ChatPanel {
 
         sentinel.before(container);
         this.scrollToBottom();
-
-        // Reset current agent container for the new request
-        this.currentAgentContainer = undefined;
     }
 
     /**
      * Replace the current agent message content (reuses existing container).
      * If no container exists, creates one.
+     * If `requestId` is supplied, the per-request bubble is targeted; otherwise
+     * the most recently created agent bubble is used.
      */
     public replaceAgentMessage(
         content: DisplayContent,
         source?: string,
         sourceIcon?: string,
+        requestId?: string,
     ) {
         if (this.statusContainer) {
             this.statusContainer.remove();
             this.statusContainer = undefined;
         }
 
-        if (!this.currentAgentContainer) {
-            this.currentAgentContainer = this.createAgentContainer(
-                source ?? "assistant",
-                sourceIcon ?? "🤖",
-            );
-        }
-        this.currentAgentContainer.setMessage(content, source, undefined);
+        const container = this.getOrCreateAgentContainer(
+            source,
+            sourceIcon,
+            requestId,
+        );
+        container.setMessage(content, source, undefined);
         this.scrollToBottom();
     }
 
     /**
      * Display or append an agent message.
      * Call with appendMode to add to the current agent message.
+     * If `requestId` is supplied, the per-request bubble is targeted; otherwise
+     * the most recently created agent bubble is used.
      */
     public addAgentMessage(
         content: DisplayContent,
         source?: string,
         sourceIcon?: string,
         appendMode?: DisplayAppendMode,
+        requestId?: string,
     ) {
         // Remove lingering status message when a real response arrives
         if (this.statusContainer) {
@@ -522,16 +537,66 @@ export class ChatPanel {
             this.statusContainer = undefined;
         }
 
-        if (!this.currentAgentContainer || !appendMode) {
-            this.currentAgentContainer = this.createAgentContainer(
+        let container: AgentMessageContainer;
+        if (requestId && this.agentContainersByRequestId.has(requestId)) {
+            container = this.agentContainersByRequestId.get(requestId)!;
+        } else if (!appendMode) {
+            // No append mode and no targeted bubble — start a fresh container.
+            container = this.createAgentContainer(
                 source ?? "assistant",
                 sourceIcon ?? "🤖",
             );
+            this.currentAgentContainer = container;
+            if (requestId) {
+                this.agentContainersByRequestId.set(requestId, container);
+            }
+        } else if (this.currentAgentContainer) {
+            container = this.currentAgentContainer;
+        } else {
+            container = this.createAgentContainer(
+                source ?? "assistant",
+                sourceIcon ?? "🤖",
+            );
+            this.currentAgentContainer = container;
+            if (requestId) {
+                this.agentContainersByRequestId.set(requestId, container);
+            }
         }
 
-        this.currentAgentContainer.setMessage(content, source, appendMode);
+        container.setMessage(content, source, appendMode);
 
         this.scrollToBottom();
+    }
+
+    /**
+     * Drop the bubble association for a completed request id. Future
+     * add/replaceAgentMessage calls with this id will create a fresh bubble.
+     * Called by hosts when a request completes; safe to call for unknown ids.
+     */
+    public clearRequest(requestId: string): void {
+        this.agentContainersByRequestId.delete(requestId);
+    }
+
+    private getOrCreateAgentContainer(
+        source: string | undefined,
+        sourceIcon: string | undefined,
+        requestId: string | undefined,
+    ): AgentMessageContainer {
+        if (requestId && this.agentContainersByRequestId.has(requestId)) {
+            return this.agentContainersByRequestId.get(requestId)!;
+        }
+        if (!requestId && this.currentAgentContainer) {
+            return this.currentAgentContainer;
+        }
+        const container = this.createAgentContainer(
+            source ?? "assistant",
+            sourceIcon ?? "🤖",
+        );
+        this.currentAgentContainer = container;
+        if (requestId) {
+            this.agentContainersByRequestId.set(requestId, container);
+        }
+        return container;
     }
 
     /** Update the source/agent label on the current agent message. */
@@ -547,6 +612,7 @@ export class ChatPanel {
             this.messageDiv.removeChild(this.messageDiv.lastChild!);
         }
         this.currentAgentContainer = undefined;
+        this.agentContainersByRequestId.clear();
     }
 
     /** Show a status message (temporary, removed when the next real message arrives). */
