@@ -229,21 +229,19 @@ export function optimizeGrammar(
             // must satisfy the structural contract.  Catches
             // regressions in the wrapper builders at the offending
             // site rather than as confusing match failures or
-            // runtime throws deep in `enterTailRulesPart`.  Honors
-            // `onInvariantViolation`: throw on the strict path,
-            // demote to warning + debug log on the permissive path
-            // and discard the optimized output (return the input
-            // grammar unchanged) so callers get a known-good AST
-            // rather than a contract-violating one.
-            try {
-                validateTailRulesParts(rules);
-            } catch (e) {
-                const msg = `Optimizer self-check failed: ${(e as Error).message}`;
-                if (inlineConfig.onInvariantViolation === "throw") {
-                    throw new Error(msg);
-                }
-                debug(`${msg} - discarding optimized output`);
-                warnings?.push(msg);
+            // runtime throws deep in `enterTailRulesPart`.  On
+            // failure, discard the optimized output and return the
+            // input grammar unchanged so callers get a known-good
+            // AST.
+            if (
+                !validateTailPassOutput(
+                    "factorCommonPrefixes",
+                    rules,
+                    undefined,
+                    inlineConfig,
+                    warnings,
+                )
+            ) {
                 return grammar;
             }
         }
@@ -258,43 +256,34 @@ export function optimizeGrammar(
         // Run after dispatchify so we can also promote trailing parts
         // inside member rules of the (top-level or nested) dispatch
         // buckets.  Computed into locals first; only committed if the
-        // post-pass tail validation passes - mirrors the factor block's
-        // discard-on-failure behavior so callers always get a
-        // contract-valid AST back.
+        // post-pass tail validation passes - so on failure we leave
+        // `rules` / `topLevelDispatch` at their pre-promote values
+        // and downstream still gets a valid AST.
         const counter = { promoted: 0 };
         const memo: RulesArrayMemo = new Map();
         const promotedRules = promoteRulesArray(rules, counter, memo);
-        let promotedDispatch = topLevelDispatch;
-        if (topLevelDispatch !== undefined) {
-            promotedDispatch = topLevelDispatch.map((m) => {
-                let mapDirty = false;
-                const newMap = new Map<string, GrammarRule[]>();
-                for (const [tok, bucket] of m.tokenMap) {
-                    const v = promoteRulesArray(bucket, counter, memo);
-                    if (v !== bucket) mapDirty = true;
-                    newMap.set(tok, v);
-                }
-                return mapDirty ? { ...m, tokenMap: newMap } : m;
-            });
-        }
+        const promotedDispatch =
+            topLevelDispatch === undefined
+                ? topLevelDispatch
+                : mapDispatchBuckets(topLevelDispatch, (bucket) =>
+                      promoteRulesArray(bucket, counter, memo),
+                  );
         if (counter.promoted > 0) {
             debug(
                 `promoted ${counter.promoted} trailing RulesParts to tail calls`,
             );
         }
-        try {
-            validateTailRulesParts(promotedRules, promotedDispatch);
+        if (
+            validateTailPassOutput(
+                "promoteTailRulesParts",
+                promotedRules,
+                promotedDispatch,
+                inlineConfig,
+                warnings,
+            )
+        ) {
             rules = promotedRules;
             topLevelDispatch = promotedDispatch;
-        } catch (e) {
-            const msg = `Optimizer self-check failed (promoteTailRulesParts): ${(e as Error).message}`;
-            if (inlineConfig.onInvariantViolation === "throw") {
-                throw new Error(msg);
-            }
-            debug(`${msg} - discarding promote output`);
-            warnings?.push(msg);
-            // Leave `rules` / `topLevelDispatch` at their pre-promote
-            // values - downstream still gets a valid AST.
         }
     }
     if (rules === grammar.alternatives && topLevelDispatch === undefined) {
@@ -305,6 +294,74 @@ export function optimizeGrammar(
         out.dispatch = topLevelDispatch;
     }
     return out;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared helpers used across passes
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Apply `transform` to every bucket array in every per-mode entry of
+ * a dispatched `RulesPart`'s `dispatch` table.  Returns the same
+ * `dispatch` array identity when no bucket changed (preserving the
+ * serializer's identity-based dedup invariant); otherwise returns a
+ * new outer array with per-mode entries also reused-by-identity
+ * unless their `tokenMap` had at least one bucket replacement.
+ *
+ * Used by passes that walk-and-rewrite dispatched shapes
+ * (`dispatchifyAlternations` recursion, `promoteTailRulesParts`).
+ * Not used by `validateTailRulesParts`, which only needs read-only
+ * traversal of the same shape.
+ */
+function mapDispatchBuckets(
+    dispatch: DispatchModeBucket[],
+    transform: (bucket: GrammarRule[]) => GrammarRule[],
+): DispatchModeBucket[] {
+    let outerDirty = false;
+    const out = dispatch.map((m) => {
+        let bucketDirty = false;
+        const newMap = new Map<string, GrammarRule[]>();
+        for (const [tok, bucket] of m.tokenMap) {
+            const replaced = transform(bucket);
+            if (replaced !== bucket) bucketDirty = true;
+            newMap.set(tok, replaced);
+        }
+        if (!bucketDirty) return m;
+        outerDirty = true;
+        return { ...m, tokenMap: newMap };
+    });
+    return outerDirty ? out : dispatch;
+}
+
+/**
+ * Run `validateTailRulesParts` on a (rules, dispatch) pair and
+ * return whether the candidate AST passed.  On failure, honors
+ * `config.onInvariantViolation`: throws on the strict path,
+ * otherwise logs via `debug`, pushes a warning, and returns
+ * `false` so the caller can discard the candidate AST and fall
+ * back to its pre-pass state.  Used by both the
+ * `factorCommonPrefixes` (with `tailFactoring`) and
+ * `promoteTailRulesParts` blocks.
+ */
+function validateTailPassOutput(
+    passName: string,
+    rules: GrammarRule[],
+    dispatch: DispatchModeBucket[] | undefined,
+    config: InlineConfig,
+    warnings: string[] | undefined,
+): boolean {
+    try {
+        validateTailRulesParts(rules, dispatch);
+    } catch (e) {
+        const msg = `Optimizer self-check failed (${passName}): ${(e as Error).message}`;
+        if (config.onInvariantViolation === "throw") {
+            throw new Error(msg);
+        }
+        debug(`${msg} - discarding ${passName} output`);
+        warnings?.push(msg);
+        return false;
+    }
+    return true;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2499,34 +2556,18 @@ function visitPart(
     // fallback subset, then return.  We never re-dispatch (would
     // partition only the fallback subset, which is wrong).
     if (part.dispatch !== undefined) {
-        let dirty = false;
-        const newPerMode = part.dispatch.map((m) => {
-            const newTokenMap = new Map<string, GrammarRule[]>();
-            let bucketDirty = false;
-            for (const [tok, bucket] of m.tokenMap) {
-                const visited = visitRulesArray(
-                    bucket,
-                    counter,
-                    memo,
-                    dispatchMemo,
-                );
-                if (visited !== bucket) bucketDirty = true;
-                newTokenMap.set(tok, visited);
-            }
-            if (bucketDirty) {
-                dirty = true;
-                return { ...m, tokenMap: newTokenMap };
-            }
-            return m;
-        });
+        const newPerMode = mapDispatchBuckets(part.dispatch, (bucket) =>
+            visitRulesArray(bucket, counter, memo, dispatchMemo),
+        );
         const innerRules = visitRulesArray(
             part.alternatives,
             counter,
             memo,
             dispatchMemo,
         );
-        if (innerRules !== part.alternatives) dirty = true;
-        if (!dirty) return part;
+        if (innerRules === part.alternatives && newPerMode === part.dispatch) {
+            return part;
+        }
         return {
             ...part,
             alternatives: innerRules,
@@ -2639,32 +2680,16 @@ function promoteInsideRulesPart(
     counter: { promoted: number },
     memo: RulesArrayMemo,
 ): RulesPart {
-    let dirty = false;
     const newAlts = promoteRulesArray(part.alternatives, counter, memo);
-    if (newAlts !== part.alternatives) dirty = true;
-    let newDispatch = part.dispatch;
-    if (part.dispatch !== undefined) {
-        let dispatchDirty = false;
-        const replaced = part.dispatch.map((m) => {
-            let mapDirty = false;
-            const newMap = new Map<string, GrammarRule[]>();
-            for (const [tok, bucket] of m.tokenMap) {
-                const v = promoteRulesArray(bucket, counter, memo);
-                if (v !== bucket) mapDirty = true;
-                newMap.set(tok, v);
-            }
-            if (mapDirty) {
-                dispatchDirty = true;
-                return { ...m, tokenMap: newMap };
-            }
-            return m;
-        });
-        if (dispatchDirty) {
-            newDispatch = replaced;
-            dirty = true;
-        }
+    const newDispatch =
+        part.dispatch === undefined
+            ? part.dispatch
+            : mapDispatchBuckets(part.dispatch, (bucket) =>
+                  promoteRulesArray(bucket, counter, memo),
+              );
+    if (newAlts === part.alternatives && newDispatch === part.dispatch) {
+        return part;
     }
-    if (!dirty) return part;
     const out: RulesPart = { ...part, alternatives: newAlts };
     if (newDispatch !== undefined) out.dispatch = newDispatch;
     return out;
