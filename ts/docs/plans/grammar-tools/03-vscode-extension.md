@@ -52,8 +52,12 @@ Grouped by PLAN Track C item.
 
 - Should the extension also publish a tree view (rule outline) in the
   side bar, or rely on the document outline?
-- Webview <-> extension messaging contract - reuse the same JSON shape
-  that the web app's HTTP API uses?
+- ~~Webview <-> extension messaging contract - reuse the same JSON shape
+  that the web app's HTTP API uses?~~ Resolved by
+  [ADR 0005](./decisions/0005-shared-service-contract.md): both use
+  `grammar-tools-core` signatures over the chosen framing. Wire
+  framing (plain RPC vs JSON-RPC 2.0) is an open sub-decision in
+  ADR 0005 owned by Track C.
 
 ## Verification
 

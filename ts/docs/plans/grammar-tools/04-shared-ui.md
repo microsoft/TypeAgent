@@ -37,7 +37,11 @@ components so they can be developed and tested before real core lands.
   optionally D.4 / D.5) into the standard debug layout.
 - Build: Vite library mode producing an ESM bundle the hosts can load.
 - `interface GrammarBackend` mirrors `grammar-tools-core` services 1:1.
-  Hosts inject an implementation.
+  Hosts inject an implementation. Formal contract:
+  [ADR 0005](./decisions/0005-shared-service-contract.md). The
+  `traceMatch` return shape (one-shot vs streamed events) is an open
+  sub-decision in ADR 0005 owned by Track D + B.2; pin it once the
+  debug-panel UX is defined.
 
 ## Non-scope
 

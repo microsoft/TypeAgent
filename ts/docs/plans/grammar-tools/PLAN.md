@@ -374,6 +374,7 @@ on them.
 | 0002 | Match trace hook strategy                | [Accepted (option A)](./decisions/0002-trace-hook.md)                     |
 | 0003 | Live grammar snapshot transport          | [Open - resolve before Track F](./decisions/0003-grammar-snapshot.md)     |
 | 0004 | Monaco LSP transport                     | [Open - resolve before Track G](./decisions/0004-monaco-lsp-transport.md) |
+| 0005 | Shared service contract                  | [Accepted](./decisions/0005-shared-service-contract.md)                   |
 
 ## Relevant existing files
 

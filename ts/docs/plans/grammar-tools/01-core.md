@@ -55,6 +55,14 @@ Grouped by PLAN track. Each item is independently shippable.
 
 > Concrete signatures land with each Track A / B item.
 
+**Wire contract.** The signatures below are not just the in-process
+API; per [ADR 0005](./decisions/0005-shared-service-contract.md) they
+**are** the contract every transport (VS Code webview, web app HTTP /
+WebSocket, shell IPC, in-process) carries. `grammar-tools-ui`'s
+`GrammarBackend` is the typed mirror; transports serialize parameters
+and return values 1:1 as the types declared here. Schema versioning
+tracks the package version of `grammar-tools-core`.
+
 ```ts
 // loader (A.1) - returns LoadResult so compile failures don't poison the type
 export function loadGrammarFromFile(path: string): Promise<LoadResult>;
