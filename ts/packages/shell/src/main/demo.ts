@@ -22,32 +22,50 @@ async function openDemoFile(window: BrowserWindow) {
     return undefined;
 }
 
+function registerAbort(): {
+    promise: Promise<void>;
+    unregister: () => void;
+} {
+    let resolveFn!: () => void;
+    const promise = new Promise<void>((resolve) => {
+        resolveFn = resolve;
+    });
+    abortListeners.add(resolveFn);
+    return {
+        promise,
+        unregister: () => {
+            abortListeners.delete(resolveFn);
+        },
+    };
+}
+
 function getActionCompleteEvent(awaitKeyboardInput: boolean) {
     const timeoutPromise = new Promise((f) => setTimeout(f, 3000));
 
+    let ipcCallback:
+        | ((event: Electron.IpcMainEvent, name: string) => void)
+        | undefined;
     const actionPromise = new Promise<string | undefined>((resolve) => {
-        const callback = (_event: Electron.IpcMainEvent, name: string) => {
-            let targetName = "CommandProcessed";
-            if (awaitKeyboardInput) {
-                targetName = "Alt+Right";
-            }
+        ipcCallback = (_event: Electron.IpcMainEvent, name: string) => {
+            const targetName = awaitKeyboardInput
+                ? "Alt+Right"
+                : "CommandProcessed";
             if (name === targetName) {
-                ipcMain.removeListener("send-demo-event", callback);
                 resolve(undefined);
             }
         };
-        ipcMain.on("send-demo-event", callback);
+        ipcMain.on("send-demo-event", ipcCallback);
     });
 
-    const abortPromise = new Promise<void>((resolve) => {
-        abortListeners.push(resolve);
-    });
+    const abort = registerAbort();
+    const races: Promise<unknown>[] = awaitKeyboardInput
+        ? [actionPromise, abort.promise]
+        : [actionPromise, timeoutPromise, abort.promise];
 
-    if (awaitKeyboardInput) {
-        return Promise.race([actionPromise, abortPromise]);
-    } else {
-        return Promise.race([actionPromise, timeoutPromise, abortPromise]);
-    }
+    return Promise.race(races).finally(() => {
+        if (ipcCallback) ipcMain.removeListener("send-demo-event", ipcCallback);
+        abort.unregister();
+    });
 }
 
 function sendChatInputText(message: string, chatView: WebContentsView) {
@@ -55,25 +73,29 @@ function sendChatInputText(message: string, chatView: WebContentsView) {
         setTimeout(f, Math.max(2000, message.length * 50)),
     );
 
+    let ipcCallback: ((event: Electron.IpcMainEvent) => void) | undefined;
     const actionPromise = new Promise<string | undefined>((resolve) => {
-        const callback = (_event: Electron.IpcMainEvent) => {
-            ipcMain.removeListener("send-input-text-complete", callback);
+        ipcCallback = (_event: Electron.IpcMainEvent) => {
             resolve(undefined);
         };
-        ipcMain.on("send-input-text-complete", callback);
+        ipcMain.on("send-input-text-complete", ipcCallback);
     });
 
-    const abortPromise = new Promise<void>((resolve) => {
-        abortListeners.push(resolve);
-    });
+    const abort = registerAbort();
 
     chatView.webContents.send("send-input-text", message);
-    return Promise.race([actionPromise, timeoutPromise, abortPromise]);
+    return Promise.race([actionPromise, timeoutPromise, abort.promise]).finally(
+        () => {
+            if (ipcCallback)
+                ipcMain.removeListener("send-input-text-complete", ipcCallback);
+            abort.unregister();
+        },
+    );
 }
 
 let demoRunning = false;
 let demoAborted = false;
-const abortListeners: Array<() => void> = [];
+const abortListeners = new Set<() => void>();
 
 export type DemoState = "running" | "paused" | "idle";
 
@@ -85,7 +107,9 @@ function sendDemoState(chatView: WebContentsView, state: DemoState) {
 export function breakDemo(): boolean {
     if (!demoRunning) return false;
     demoAborted = true;
-    const listeners = abortListeners.splice(0);
+    // Snapshot + clear so re-entrant unregister calls during resolve are safe.
+    const listeners = Array.from(abortListeners);
+    abortListeners.clear();
     for (const l of listeners) l();
     return true;
 }
@@ -95,7 +119,7 @@ export async function runDemo(
     chatView: WebContentsView,
     awaitKeyboardInput: boolean,
     onStart?: () => void,
-) {
+): Promise<boolean> {
     if (demoRunning) {
         await dialog.showMessageBox(window, {
             type: "warning",
@@ -103,12 +127,12 @@ export async function runDemo(
             message:
                 "A demo is already running. Wait for it to finish, press Esc to abort it, or restart the shell before starting another.",
         });
-        return;
+        return false;
     }
 
     const data = await openDemoFile(window);
     if (!data) {
-        return;
+        return false;
     }
 
     demoRunning = true;
@@ -137,6 +161,9 @@ export async function runDemo(
     } finally {
         demoRunning = false;
         demoAborted = false;
+        // Defensive: drop any abort resolvers that escaped per-wait cleanup.
+        abortListeners.clear();
         sendDemoState(chatView, "idle");
     }
+    return true;
 }

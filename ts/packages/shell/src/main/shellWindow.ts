@@ -511,11 +511,18 @@ export class ShellWindow {
         this.chatView.webContents.send("mark-history");
     }
 
-    public async runDemo(interactive: boolean = false) {
-        await runDemo(this.mainWindow, this.chatView, interactive, () => {
+    public runDemo(interactive: boolean = false): void {
+        let started = false;
+        runDemo(this.mainWindow, this.chatView, interactive, () => {
+            started = true;
             this.setDemoMode(true);
-        });
-        this.setDemoMode(false);
+        })
+            .catch((error) => {
+                console.error("runDemo failed:", error);
+            })
+            .finally(() => {
+                if (started) this.setDemoMode(false);
+            });
     }
 
     public breakDemo(): boolean {
