@@ -1854,7 +1854,7 @@ function backtrack(
  * @returns The computed action value, or undefined if no value expression
  */
 export function evaluateMatchAST(ast: MatchAST, grammar: Grammar): any {
-    const rule = grammar.rules[ast.ruleIndex];
+    const rule = grammar.alternatives[ast.ruleIndex];
     if (!rule) return undefined;
 
     // Find the value expression — it may be nested in RulesPart structures.
@@ -1947,7 +1947,7 @@ function findValueExpression(
     for (const part of rule.parts) {
         if (part.type === "rules") {
             // Try structural matching against nested rule alternatives
-            for (const nestedRule of part.rules) {
+            for (const nestedRule of part.alternatives) {
                 if (
                     nestedRule.value &&
                     matchesRuleStructure(nestedRule, astParts)
@@ -2005,14 +2005,42 @@ function matchesRuleStructure(
             case "rules": {
                 // Nested rules — try to match recursively
                 // For now, skip past any non-token parts in the AST
-                // This handles cases where nested rules inline their content
+                // This handles cases where nested rules inline their
+                // content.  When the part has a `dispatch` index,
+                // bucket members live in `dispatch[*].tokenMap`
+                // (filter-only - they keep their leading token);
+                // `part.rules` is then the fallback subset.  We try
+                // bucket members first, then fallback, mirroring
+                // the matcher's hits-then-fallback ordering.
                 let matched = false;
-                for (const nestedRule of part.rules) {
-                    if (
-                        matchesRuleStructure(nestedRule, astParts.slice(astIdx))
-                    ) {
-                        matched = true;
-                        break;
+                if (part.dispatch !== undefined) {
+                    outer: for (const m of part.dispatch) {
+                        for (const suffixRules of m.tokenMap.values()) {
+                            for (const suffix of suffixRules) {
+                                if (
+                                    matchesRuleStructure(
+                                        suffix,
+                                        astParts.slice(astIdx),
+                                    )
+                                ) {
+                                    matched = true;
+                                    break outer;
+                                }
+                            }
+                        }
+                    }
+                }
+                if (!matched) {
+                    for (const nestedRule of part.alternatives) {
+                        if (
+                            matchesRuleStructure(
+                                nestedRule,
+                                astParts.slice(astIdx),
+                            )
+                        ) {
+                            matched = true;
+                            break;
+                        }
                     }
                 }
                 if (!matched) return false;

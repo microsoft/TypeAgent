@@ -10,7 +10,11 @@ import {
     readExplanationTestData,
     getAllActionConfigProvider,
 } from "agent-dispatcher/internal";
-import { fromJsonActions, RequestAction } from "agent-cache";
+import {
+    fromJsonActions,
+    normalizeParamString,
+    RequestAction,
+} from "agent-cache";
 import { getDefaultAppAgentProviders } from "../src/defaultAgentProviders.js";
 import { glob } from "glob";
 
@@ -71,10 +75,8 @@ describe("construction", () => {
                     matchConfig,
                 );
 
-                // TODO: once MatchPart allow matches ignoring diacritical marks,
-                // we can use normalizeParamString instead toLowerCase here.
                 const matchedLowerCase = construction.match(
-                    requestAction.request.toLowerCase(),
+                    normalizeParamString(requestAction.request),
                     matchConfig,
                 );
                 if (!tags.includes("failedRoundTripAction")) {
@@ -83,7 +85,11 @@ describe("construction", () => {
                     expect(matched[0].match).toEqual(requestAction);
 
                     expect(matchedLowerCase.length).not.toEqual(0);
-                    // TODO: Validating the lower case action
+                    // Lower-case match finds the right action but string parameter
+                    // values are also lowercased, so we only verify the action name.
+                    expect(
+                        matchedLowerCase[0].match.actions[0].action.actionName,
+                    ).toEqual(requestAction.actions[0].action.actionName);
                 } else {
                     // TODO: needs fix these
                     if (matched.length !== 0) {

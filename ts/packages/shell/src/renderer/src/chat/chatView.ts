@@ -17,12 +17,14 @@ import {
     Dispatcher,
     IAgentMessage,
     NotifyExplainedData,
+    PendingInteractionRequest,
+    PendingInteractionResponse,
     RequestId,
     TemplateEditConfig,
 } from "agent-dispatcher";
 
 import { PartialCompletion } from "../partial";
-import { InputChoice } from "../choicePanel";
+import { ChoicePanel, InputChoice } from "../choicePanel";
 import { MessageGroup } from "./messageGroup";
 import { SettingsView } from "../settingsView";
 import { uint8ArrayToBase64 } from "@typeagent/common-utils";
@@ -646,6 +648,10 @@ export class ChatView {
         this.getMessageGroup(requestId)?.setActionData(requestId, data);
     }
 
+    appendDiagnosticData(requestId: RequestId, data: any) {
+        this.getMessageGroup(requestId)?.appendDiagnosticData(requestId, data);
+    }
+
     private getNotificationMessageGroupId(
         requestId: string | RequestId | undefined,
         source: string,
@@ -781,6 +787,151 @@ export class ChatView {
         return p;
     }
 
+    /**
+     * Creates a numbered span element for use as a choice button label.
+     */
+    private static makeNumberSpan(n: number): HTMLSpanElement {
+        const span = document.createElement("span");
+        span.textContent = String(n);
+        return span;
+    }
+
+    /**
+     * Show an inline choice panel for a deferred interaction question.
+     *
+     * This is the unified entry point for both yes/no and multi-choice prompts
+     * arriving via the `requestInteraction` deferred-broadcast path (connected
+     * mode). The former `askYesNoWithContext` / `popupQuestion` distinction no
+     * longer exists at the protocol level — both arrive as a `"question"`
+     * interaction with an explicit `choices` array.
+     *
+     * For the binary `["Yes", "No"]` case we reuse the same icon elements as
+     * `askYesNo()` for visual consistency.  All other choice sets render a
+     * numbered button panel inline.
+     *
+     * @param interaction The full pending interaction request.
+     * @param signal      AbortSignal that dismisses the panel when another
+     *                    client answers or the server cancels the interaction.
+     */
+    public async showInteractionQuestion(
+        interaction: Extract<PendingInteractionRequest, { type: "question" }>,
+        signal?: AbortSignal,
+    ): Promise<number> {
+        const { requestId, message, choices, defaultId } = interaction;
+        const source = interaction.source ?? "";
+
+        if (choices.length === 0) {
+            throw new Error(
+                `Interaction ${interaction.interactionId} has no choices`,
+            );
+        }
+
+        const effectiveRequestId =
+            requestId ??
+            ({
+                requestId: "",
+                clientRequestId: `agent-interaction-${interaction.interactionId}`,
+            } as RequestId);
+
+        const agentMessage = this.ensureAgentMessage({
+            message: "",
+            requestId: effectiveRequestId,
+            source,
+        });
+        if (agentMessage === undefined) {
+            throw new Error(
+                `Could not create agent message for interaction ${interaction.interactionId}`,
+            );
+        }
+        agentMessage.setMessage(message, source, "inline");
+
+        // Build InputChoice[] for all choices.  For the binary ["Yes","No"] case
+        // reuse the same icon elements that askYesNo() uses so the panel looks
+        // identical — but we keep the panel reference here so the AbortSignal
+        // can remove it when another client answers or the server cancels.
+        const isYesNo =
+            choices.length === 2 && choices[0] === "Yes" && choices[1] === "No";
+
+        const inputChoices: InputChoice[] = isYesNo
+            ? [
+                  {
+                      text: "Yes",
+                      element: iconCheckMarkCircle(),
+                      selectKey: ["Enter"],
+                      value: 0,
+                  },
+                  {
+                      text: "No",
+                      element: iconX(),
+                      selectKey: ["Delete"],
+                      value: 1,
+                  },
+              ]
+            : choices.map((label, index) => ({
+                  text: label,
+                  element: ChatView.makeNumberSpan(index + 1),
+                  selectKey: [String(index + 1)],
+                  value: index,
+              }));
+
+        // Mark the default choice with an additional Enter key binding.
+        if (!isYesNo && defaultId !== undefined && inputChoices[defaultId]) {
+            inputChoices[defaultId].selectKey = [
+                ...(inputChoices[defaultId].selectKey ?? []),
+                "Enter",
+            ];
+        }
+
+        return new Promise<number>((resolve, reject) => {
+            // Capture signal as a non-optional local so onAbort can reference
+            // it without a non-null assertion.  onAbort is only reachable when
+            // signal is defined (via addEventListener or the aborted early-out).
+            const abortSignal = signal!;
+
+            // addChoicePanel removes the panel automatically on selection, but
+            // we need the ChoicePanel reference for the abort path.  We capture
+            // it by reaching into the ChoicePanel constructor directly here.
+            const choicePanel = new ChoicePanel(
+                agentMessage.getMessageDiv(),
+                inputChoices,
+                (choice: InputChoice) => {
+                    signal?.removeEventListener("abort", onAbort);
+                    choicePanel.remove();
+                    agentMessage.setMessage(
+                        `  ${choice.text}`,
+                        source,
+                        "inline",
+                    );
+                    resolve(choice.value as number);
+                },
+            );
+
+            const onAbort = () => {
+                choicePanel.remove();
+                // Append a dismissal notice inline in the message bubble.
+                const reason = abortSignal.reason;
+                const text =
+                    reason &&
+                    typeof reason === "object" &&
+                    reason.kind === "resolved-by-other"
+                        ? "answered by another client"
+                        : "interaction cancelled";
+                agentMessage.setMessage(`  [${text}]`, source, "inline");
+                reject(abortSignal.reason);
+            };
+
+            if (signal?.aborted) {
+                // Signal was already aborted before we could register — dismiss
+                // the panel immediately rather than leaving it permanently open.
+                onAbort();
+            } else {
+                signal?.addEventListener("abort", onAbort, { once: true });
+            }
+
+            this.updateScroll();
+        });
+    }
+
     public showChoice(
         requestId: RequestId,
         choiceId: string,
@@ -849,6 +1000,18 @@ export class ChatView {
             actionTemplates,
         );
     }
+
+    /**
+     * Forwards a client interaction response to the dispatcher.
+     * Delegates to `Dispatcher.respondToInteraction` while keeping the
+     * dispatcher reference private to ChatView.
+     */
+    public respondToInteraction(
+        response: PendingInteractionResponse,
+    ): Promise<void> {
+        return this.getDispatcher().respondToInteraction(response);
+    }
+
     public setVoiceMode(enabled: boolean): void {
         if (enabled) {
             document.body.classList.add("voice-mode");

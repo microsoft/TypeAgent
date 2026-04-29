@@ -124,7 +124,7 @@ jobs:
       - name: Get Keys
         if: ${{ steps.filter.outputs.ts != 'false' }}
         run: |
-          node tools/scripts/getKeys.mjs --vault build-pipeline-kv
+          node tools/scripts/getKeys.mjs --vault build-pipeline-kv --commit
         working-directory: ts
 
       - name: Test CLI - smoke 

@@ -62,6 +62,7 @@ const noop = () => {};
 const clientIO = {
     clear: noop,
     exit: () => process.exit(0),
+    shutdown: noop,
     setUserRequest: noop,
     setDisplayInfo: noop,
     setDisplay: noop,

@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "actionName": "findLargeFiles",
+  "description": "Finds the largest files in a directory, sorted by size",
+  "displayName": "Find Large Files",
+  "parameters": [
+    {
+      "name": "path",
+      "type": "path",
+      "required": false,
+      "description": "Directory to search",
+      "default": "."
+    },
+    {
+      "name": "minSizeMB",
+      "type": "number",
+      "required": false,
+      "description": "Minimum file size in MB",
+      "default": "10"
+    },
+    {
+      "name": "topN",
+      "type": "number",
+      "required": false,
+      "description": "Number of results to show",
+      "default": "20"
+    }
+  ],
+  "script": {
+    "language": "powershell",
+    "body": "param([string]$Path = '.', [int]$MinSizeMB = 10, [int]$TopN = 20)\nGet-ChildItem -Path $Path -Recurse -File -ErrorAction SilentlyContinue |\n    Where-Object { $_.Length -gt ($MinSizeMB * 1MB) } |\n    Sort-Object Length -Descending |\n    Select-Object -First $TopN @{N='Size';E={'{0:N2} MB' -f ($_.Length/1MB)}}, FullName |\n    Format-Table -AutoSize -Wrap",
+    "expectedOutputFormat": "table"
+  },
+  "grammarPatterns": [
+    {
+      "pattern": "find (large|big) files (in)? $(path:wildcard)?",
+      "isAlias": false,
+      "examples": ["find large files", "find big files in downloads"]
+    },
+    {
+      "pattern": "(what's|what is) taking up space (in)? $(path:wildcard)?",
+      "isAlias": false,
+      "examples": [
+        "what's taking up space",
+        "what is taking up space in downloads"
+      ]
+    },
+    {
+      "pattern": "(files|show files) over $(minSizeMB:number) (mb|MB) (in)? $(path:wildcard)?",
+      "isAlias": false,
+      "examples": ["files over 100 MB", "show files over 50 mb in downloads"]
+    },
+    {
+      "pattern": "(biggest|largest) files (in)? $(path:wildcard)?",
+      "isAlias": false,
+      "examples": ["biggest files", "largest files in this folder"]
+    }
+  ],
+  "sandbox": {
+    "allowedCmdlets": [
+      "Get-ChildItem",
+      "Where-Object",
+      "Sort-Object",
+      "Select-Object",
+      "Format-Table"
+    ],
+    "allowedPaths": ["$PWD", "$env:USERPROFILE", "$env:TEMP"],
+    "allowedModules": [
+      "Microsoft.PowerShell.Management",
+      "Microsoft.PowerShell.Utility"
+    ],
+    "maxExecutionTime": 60,
+    "networkAccess": false
+  },
+  "source": {
+    "type": "manual",
+    "timestamp": "2026-04-23T00:00:00Z"
+  }
+}

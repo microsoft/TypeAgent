@@ -53,8 +53,8 @@ describe("Grammar Imports with File Loading", () => {
 
             expect(errors).toEqual([]);
             expect(grammar).toBeDefined();
-            expect(grammar?.rules).toBeDefined();
-            expect(grammar?.rules.length).toBeGreaterThan(0);
+            expect(grammar?.alternatives).toBeDefined();
+            expect(grammar?.alternatives.length).toBeGreaterThan(0);
 
             // Test match functionality
             expect(testMatch(grammar, "hello world")).toEqual([

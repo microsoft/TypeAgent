@@ -117,6 +117,38 @@ export function matchNFA(
 }
 
 /**
+ * Apply the optimizer-introduced StringPart / PhraseSetPart capture (if
+ * any) for a transition: when `trans.slotIndex` is set, clone the
+ * thread's environment and write `value` into the slot.  Returns the
+ * (possibly cloned) environment to install on the successor state.
+ *
+ * Centralises the small asymmetry between the two capture paths:
+ *
+ *   - StringPart (token transition, see `tryTransition`): the matcher
+ *     prefers the precomputed `trans.slotValue` (joined fixed-string
+ *     literal) but falls back to the consumed `token` if absent.
+ *   - PhraseSet (phraseSet transition, see `matchNFACore`): the matcher
+ *     joins the actual matched phrase tokens at runtime — no
+ *     `trans.slotValue` because the matched text varies per input.
+ *
+ * The caller computes the appropriate `value`; this helper just wraps
+ * the env-clone + setSlotValue handshake so future transition kinds
+ * with capture can reuse it.
+ */
+function applySlotCapture(
+    env: Environment | undefined,
+    slotIndex: number | undefined,
+    value: string,
+): Environment | undefined {
+    if (slotIndex === undefined || env === undefined) {
+        return env;
+    }
+    const cloned = cloneEnvironment(env);
+    setSlotValue(cloned, slotIndex, value, false);
+    return cloned;
+}
+
+/**
  * Core NFA matching loop — shared by matchNFA and matchNFAWithIndex.
  *
  * Uses a work queue of (transition, threadState) pairs.  Only transitions
@@ -175,7 +207,16 @@ function matchNFACore(
         // Apply the transition to produce a new thread state
         let newState: NFAExecutionState | undefined;
         if (trans.type === "phraseSet" && matchedPhrase) {
-            // PhraseSet: build result state directly (phrase was validated in seedQueue)
+            // PhraseSet: build result state directly (phrase was validated in seedQueue).
+            // PhraseSet capture: write the actual matched phrase tokens
+            // joined with single spaces into the named slot.  Unlike
+            // StringPart, the matched phrase varies per input so the
+            // value can't be precomputed into trans.slotValue.
+            const environment = applySlotCapture(
+                state.environment,
+                trans.slotIndex,
+                matchedPhrase.join(" "),
+            );
             newState = {
                 stateId: trans.to,
                 tokenIndex: state.tokenIndex + 1,
@@ -186,7 +227,7 @@ function matchNFACore(
                 uncheckedWildcardCount: state.uncheckedWildcardCount,
                 ruleIndex: state.ruleIndex,
                 actionValue: state.actionValue,
-                environment: state.environment,
+                environment,
                 slotMap: state.slotMap,
                 skipCount:
                     matchedPhrase.length > 1
@@ -432,6 +473,15 @@ function tryTransition(
             // Match specific token(s); normalize input token so that
             // case and trailing punctuation don't prevent a match
             if (trans.tokens && trans.tokens.includes(normalizeToken(token))) {
+                // StringPart capture: the slot receives the
+                // pre-computed joined StringPart text (slotValue),
+                // not the consumed normalized token.  See
+                // `compileStringPart` in `nfaCompiler.ts`.
+                const environment = applySlotCapture(
+                    currentState.environment,
+                    trans.slotIndex,
+                    trans.slotValue ?? token,
+                );
                 return {
                     stateId: trans.to,
                     tokenIndex: tokenIndex + 1,
@@ -441,7 +491,7 @@ function tryTransition(
                     uncheckedWildcardCount: currentState.uncheckedWildcardCount,
                     ruleIndex: currentState.ruleIndex,
                     actionValue: currentState.actionValue,
-                    environment: currentState.environment,
+                    environment,
                     slotMap: currentState.slotMap,
                 };
             }

@@ -1,0 +1,74 @@
+{
+  "version": "1.0",
+  "name": "ml",
+  "description": "Machine learning workflow. GPU access, Python image, larger resource limits. Container sandboxed with no network.",
+  "paths": {
+    "allowedReadPatterns": ["{{projectDir}}/**", "/data/**"],
+    "allowedWritePatterns": ["{{projectDir}}/**", "/data/output/**", "/tmp/**"],
+    "deniedPatterns": [
+      "**/.env",
+      "**/.env.*",
+      "**/credentials*",
+      "**/*.pem",
+      "**/*.key"
+    ]
+  },
+  "bash": {
+    "mode": "policy-checked",
+    "allowedCommands": [
+      "python",
+      "python3",
+      "pip",
+      "pip3",
+      "conda",
+      "jupyter",
+      "ipython",
+      "git",
+      "ls",
+      "cat",
+      "head",
+      "tail",
+      "grep",
+      "find",
+      "wc",
+      "echo",
+      "mkdir",
+      "cp",
+      "mv",
+      "rm",
+      "touch",
+      "nvidia-smi",
+      "gpustat",
+      "tar",
+      "gzip",
+      "gunzip",
+      "unzip"
+    ],
+    "deniedCommands": ["curl", "wget", "ssh", "scp", "nc", "telnet"],
+    "denyPatterns": ["rm\\s+-rf\\s+/[^td]", "\\|\\s*bash", "\\|\\s*sh\\b"],
+    "network": {
+      "denyAll": true
+    },
+    "maxTimeoutMs": 600000
+  },
+  "container": {
+    "enabled": true,
+    "image": "pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime",
+    "networkMode": "none",
+    "deriveVolumesFromPolicy": true,
+    "readOnly": false,
+    "memoryLimit": "16g",
+    "cpuLimit": "4.0",
+    "pidsLimit": 500,
+    "timeoutMs": 600000,
+    "devices": {
+      "gpu": true
+    }
+  },
+  "limitCaps": {
+    "maxTotalSteps": 100,
+    "maxDurationMs": 3600000,
+    "maxFileWrites": 50,
+    "maxBytesWritten": 10485760
+  }
+}

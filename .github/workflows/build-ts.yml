@@ -38,7 +38,7 @@ jobs:
     steps:
       - if: runner.os == 'Linux'
         run: |
-          sudo apt install libsecret-1-0
+          sudo apt-get install -y libsecret-1-dev
       - name: Setup Git LF
         run: |
           git config --global core.autocrlf false

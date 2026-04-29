@@ -43,8 +43,10 @@ import { getFsStorageProvider } from "dispatcher-node-providers";
 import {
     ensureAgentServer,
     connectAgentServer,
+    stopAgentServer,
 } from "@typeagent/agent-server-client";
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
+import { loadUserSettings } from "agent-dispatcher/helpers/userSettings";
 
 type ShellInstance = {
     shellWindow: ShellWindow;
@@ -70,6 +72,8 @@ async function initializeDispatcher(
     updateSummary: (dispatcher: Dispatcher) => Promise<string>,
     startTime: number,
     connect?: number,
+    hidden?: boolean,
+    idleTimeout?: number,
 ): Promise<InitResult | undefined> {
     if (cleanupP !== undefined) {
         // Make sure the previous cleanup is done.
@@ -149,6 +153,24 @@ async function initializeDispatcher(
             exit: () => {
                 app.quit();
             },
+            shutdown: () => {
+                if (connection !== undefined) {
+                    connection
+                        .shutdown()
+                        .catch(() => {
+                            // Graceful failed — force kill via PID file
+                            return stopAgentServer(connect!, true);
+                        })
+                        .catch(() => {
+                            // Best-effort: server may already be stopped.
+                        })
+                        .finally(() => {
+                            app.quit();
+                        });
+                } else {
+                    app.quit();
+                }
+            },
         };
 
         const browserControl = createInlineBrowserControl(shellWindow);
@@ -161,8 +183,18 @@ async function initializeDispatcher(
         let initialConversationName: string | undefined;
         if (connect !== undefined) {
             // Connect to remote dispatcher — use connectAgentServer directly
-            // so we retain the connection reference for multi-conversation support.
-            await ensureAgentServer(connect, true);
+            // so we retain the connection reference for multi-session support.
+            const userSettings = loadUserSettings();
+            const effectiveHidden = hidden ?? userSettings.server.hidden;
+            const effectiveIdleTimeout =
+                idleTimeout !== undefined
+                    ? idleTimeout
+                    : userSettings.server.idleTimeout;
+            await ensureAgentServer(
+                connect,
+                effectiveHidden,
+                effectiveIdleTimeout,
+            );
             const url = `ws://localhost:${connect}`;
             connection = await connectAgentServer(url, () => {
                 if (!quitting) {
@@ -386,6 +418,9 @@ export function initializeInstance(
     inputOnly: boolean = false,
     startTime: number = performance.now(),
     connect?: number,
+    hidden?: boolean,
+    idleTimeout?: number,
+    _resume?: boolean, // reserved: shell conversation resume not yet implemented
 ) {
     if (instance !== undefined) {
         throw new Error("Instance already initialized");
@@ -438,6 +473,8 @@ export function initializeInstance(
         updateTitle,
         startTime,
         connect,
+        hidden,
+        idleTimeout,
     );
 
     const onChatViewReady = async (event: Electron.IpcMainEvent) => {

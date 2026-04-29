@@ -16,6 +16,7 @@
     ".": "./dist/index.js",
     "./helpers/console": "./dist/helpers/console.js",
     "./helpers/data": "./dist/helpers/userData.js",
+    "./helpers/userSettings": "./dist/helpers/userSettings.js",
     "./helpers/config": "./dist/helpers/config.js",
     "./helpers/status": "./dist/helpers/status.js",
     "./helpers/command": "./dist/helpers/command.js",

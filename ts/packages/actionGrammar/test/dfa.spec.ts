@@ -24,7 +24,7 @@ describe("DFA Compilation", () => {
     test("Simple grammar compiles to DFA", () => {
         // Create a simple grammar: "play music"
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -55,7 +55,7 @@ describe("DFA Compilation", () => {
 
     test("DFA matches correctly", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -88,7 +88,7 @@ describe("DFA Compilation", () => {
     test("DFA preserves priorities", () => {
         // Grammar with two rules that can both match
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -145,7 +145,7 @@ describe("DFA Compilation", () => {
 
     test("DFA completions work", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -186,7 +186,7 @@ describe("DFA Compilation", () => {
 
     test("DFA with wildcards matches correctly", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -223,7 +223,7 @@ describe("DFA Compilation", () => {
 
     test("DFA checked wildcards have higher priority", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -282,7 +282,7 @@ describe("DFA Compilation", () => {
 
     test("DFA printout is readable", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -310,7 +310,7 @@ describe("DFA Compilation", () => {
         // Rule A: "play $(track:string)" -> lower priority (unchecked wildcard)
         // Rule B: "play $(id:number)" -> higher priority (checked wildcard)
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -382,7 +382,7 @@ describe("DFA Compilation", () => {
 
     test("DFA captures string values correctly", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -444,7 +444,7 @@ describe("DFA Compilation", () => {
 
     test("DFA completions show wildcard categories", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -521,7 +521,7 @@ describe("DFA Compilation", () => {
     test("DFA captures only variables from best matching rule", () => {
         // Grammar where both rules can match but have different captures
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -615,7 +615,7 @@ describe("DFA Compilation", () => {
         // Rule B: "play $(track:number)" -> higher priority (checked wildcard)
         // This tests that we don't accidentally return the string capture when number wins
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -691,7 +691,7 @@ describe("DFA Compilation", () => {
     test("DFA tracks rule index correctly", () => {
         // Grammar with multiple rules
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     // Rule 0
                     parts: [
@@ -769,7 +769,7 @@ describe("DFA Compilation", () => {
 
     test("DFA completions are grouped by rule", () => {
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     // Rule 0
                     parts: [
@@ -824,7 +824,7 @@ describe("DFA Compilation", () => {
     test("DFA returns correct rule index with priority selection", () => {
         // When multiple rules can match, should return the highest priority rule's index
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     // Rule 0 - lower priority (wildcard)
                     parts: [
@@ -885,7 +885,7 @@ describe("DFA Compilation", () => {
     test("DFA completions on real player grammar - after 'play'", () => {
         // This test uses a simplified version of the player grammar
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     // play the first track
                     parts: [
@@ -984,7 +984,7 @@ describe("DFA Compilation", () => {
     test("DFA completions on real player grammar - after 'play kodachrome by'", () => {
         // This tests the completion for artist name after "play <track> by"
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     // play <trackName> by <artist>
                     parts: [
@@ -1068,7 +1068,7 @@ describe("DFA Compilation", () => {
     test("DFA completions provide wildcard metadata for getActionCompletion", () => {
         // Test that completions include metadata needed to call AppAgent.getActionCompletion
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     parts: [
                         { type: "string", value: ["play"] },
@@ -1146,7 +1146,7 @@ describe("DFA Compilation", () => {
         // Test grammar with multiple rules that have different wildcards at same position
         // After "play", you can either say "play <artist>" or "play <track>"
         const grammar: Grammar = {
-            rules: [
+            alternatives: [
                 {
                     // play <artist>
                     parts: [

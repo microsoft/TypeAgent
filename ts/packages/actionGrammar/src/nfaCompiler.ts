@@ -11,6 +11,7 @@ import {
     RulesPart,
     PhraseSetPart,
     CompiledSpacingMode,
+    getCapturedVariableName,
 } from "./grammarTypes.js";
 import { NFA, NFABuilder } from "./nfa.js";
 import {
@@ -192,10 +193,29 @@ function isSingleLiteralRule(rule: GrammarRule): { literal: string } | false {
 export function normalizeGrammar(grammar: Grammar): Grammar {
     // Cache to avoid re-normalizing shared rule arrays (handles recursive grammars)
     const rulesCache = new Map<GrammarRule[], GrammarRule[]>();
-    return {
+    // Top-level dispatch: re-fold all bucket members + the
+    // fallback subset into a flat rules alternation, mirroring
+    // `stripDispatch` for nested dispatched RulesParts.  The NFA
+    // compiler does its own first-token dispatch via
+    // `buildFirstTokenIndex`, so the optimizer-only `dispatch`
+    // index adds nothing here.
+    let topRules = grammar.alternatives;
+    if (grammar.dispatch !== undefined) {
+        const expanded: GrammarRule[] = [];
+        for (const m of grammar.dispatch) {
+            for (const bucket of m.tokenMap.values()) {
+                for (const r of bucket) expanded.push(r);
+            }
+        }
+        for (const r of grammar.alternatives) expanded.push(r);
+        topRules = expanded;
+    }
+    const out: Grammar = {
         ...grammar,
-        rules: normalizeRulesArray(grammar.rules, rulesCache),
+        alternatives: normalizeRulesArray(topRules, rulesCache),
     };
+    delete out.dispatch;
+    return out;
 }
 
 /**
@@ -281,12 +301,55 @@ function normalizePart(
     if (part.type !== "rules") {
         return part; // Only RulesParts need normalization
     }
+    if (part.dispatch !== undefined) {
+        // Strip the optimizer-only `dispatch` index and re-fold all
+        // bucket members into a flat `RulesPart` for NFA
+        // compilation.  Dispatch is a filter only - rules retain
+        // their original parts including the leading token - so the
+        // expansion is just a union in
+        // `[...buckets.flat()..., ...rules]` order.  The NFA
+        // compiler does its own first-token dispatch via
+        // `buildFirstTokenIndex`, so the `dispatch` index adds
+        // nothing here.
+        return normalizePart(stripDispatch(part), cache);
+    }
 
     // Normalize all nested rules within this RulesPart (using cache)
     return {
         ...part,
-        rules: normalizeRulesArray(part.rules, cache),
+        alternatives: normalizeRulesArray(part.alternatives, cache),
     };
+}
+
+/**
+ * Strip the optimizer-only `dispatch` index from a `RulesPart` and
+ * re-fold all bucket members into a flat `rules` alternation in
+ * `[...buckets.flat()..., ...rules]` order.  The dispatched part
+ * stores the original alternation rules unchanged in its
+ * `dispatch[*].tokenMap` buckets and in `rules` (the fallback
+ * subset); this is just a union back into the canonical order.
+ */
+function stripDispatch(part: RulesPart): RulesPart {
+    if (part.dispatch === undefined) return part;
+    const expanded: GrammarRule[] = [];
+    for (const m of part.dispatch) {
+        for (const suffixRules of m.tokenMap.values()) {
+            for (const r of suffixRules) {
+                expanded.push(r);
+            }
+        }
+    }
+    for (const r of part.alternatives) expanded.push(r);
+    const rulesPart: RulesPart = {
+        type: "rules",
+        alternatives: expanded,
+        name: part.name,
+        variable: part.variable,
+    };
+    if (part.optional) rulesPart.optional = true;
+    if (part.repeat) rulesPart.repeat = true;
+    if (part.tailCall) rulesPart.tailCall = true;
+    return rulesPart;
 }
 
 /**
@@ -329,32 +392,16 @@ function collectVariables(rule: GrammarRule): string[] {
         return variables;
     }
 
-    function collectFromPart(part: GrammarPart): void {
-        switch (part.type) {
-            case "wildcard":
-            case "number":
-                if (part.variable && !seen.has(part.variable)) {
-                    seen.add(part.variable);
-                    variables.push(part.variable);
-                }
-                break;
-            case "rules":
-                // For nested rules, if the RulesPart has a variable, that's what gets captured
-                if (part.variable && !seen.has(part.variable)) {
-                    seen.add(part.variable);
-                    variables.push(part.variable);
-                }
-                // Don't recurse into nested rule's inner variables - they use their own slots
-                break;
-            case "string":
-            case "phraseSet":
-                // No variables in string or phraseSet parts
-                break;
-        }
-    }
-
     for (const part of rule.parts) {
-        collectFromPart(part);
+        // For nested rules, only the RulesPart's own variable is captured
+        // here — the matcher writes the nested rule's value into that slot.
+        // We don't recurse into the nested rule's inner parts; they live
+        // in their own slot maps.
+        const v = getCapturedVariableName(part);
+        if (v && !seen.has(v)) {
+            seen.add(v);
+            variables.push(v);
+        }
     }
 
     return variables;
@@ -395,8 +442,8 @@ function createRuleTypeMap(rule: GrammarRule): Map<string, string> {
                 break;
             case "rules":
                 // RulesPart has nested rules
-                if (part.rules) {
-                    for (const nestedRule of part.rules) {
+                if (part.alternatives) {
+                    for (const nestedRule of part.alternatives) {
                         for (const nestedPart of nestedRule.parts) {
                             collectFromPart(nestedPart);
                         }
@@ -404,8 +451,18 @@ function createRuleTypeMap(rule: GrammarRule): Map<string, string> {
                 }
                 break;
             case "string":
+                // Optimizer-introduced capture binds the joined literal
+                // tokens (a string) to the named slot.
+                if (part.variable) {
+                    typeMap.set(part.variable, "string");
+                }
+                break;
             case "phraseSet":
-                // No variables
+                // Optimizer-introduced capture binds the matched phrase
+                // (a string of joined matched tokens) to the named slot.
+                if (part.variable) {
+                    typeMap.set(part.variable, "string");
+                }
                 break;
         }
     }
@@ -448,10 +505,10 @@ export function compileGrammarToNFA(grammar: Grammar, name?: string): NFA {
     // Compile each rule as an alternative path from start to accept
     for (
         let ruleIndex = 0;
-        ruleIndex < normalizedGrammar.rules.length;
+        ruleIndex < normalizedGrammar.alternatives.length;
         ruleIndex++
     ) {
-        const rule = normalizedGrammar.rules[ruleIndex];
+        const rule = normalizedGrammar.alternatives[ruleIndex];
 
         // VALIDATION: Multi-term rules MUST have value expressions
         // Single-term rules can omit value expressions (they inherit from the term)
@@ -644,6 +701,18 @@ function compilePart(
     checkedVariables?: Set<string>,
     overrideVariableName?: string,
 ): number {
+    // Deprecated path has no slot context, so optimizer-introduced
+    // captures on string / phraseSet parts (which require a slot to
+    // write into) cannot be honored.  Reject loudly rather than silently
+    // dropping the binding and producing a wrong action result.
+    if (
+        (part.type === "string" || part.type === "phraseSet") &&
+        part.variable !== undefined
+    ) {
+        throw new Error(
+            `compilePart (deprecated, no slot context) cannot honor capture variable '${part.variable}' on ${part.type}Part — caller must use compilePartWithSlots`,
+        );
+    }
     switch (part.type) {
         case "string":
             return compileStringPart(builder, part, fromState, toState);
@@ -673,7 +742,12 @@ function compilePart(
             );
 
         case "phraseSet":
-            return compilePhraseSetPart(builder, part, fromState, toState);
+            return compilePhraseSetPartNoSlots(
+                builder,
+                part,
+                fromState,
+                toState,
+            );
 
         default:
             throw new Error(`Unknown part type: ${(part as any).type}`);
@@ -701,6 +775,9 @@ function compilePartWithSlots(
                 toState,
                 context.spacingMode,
                 context.splitCandidatesCollector,
+                part.variable !== undefined
+                    ? context.slotMap.get(part.variable)
+                    : undefined,
             );
 
         case "wildcard":
@@ -732,7 +809,13 @@ function compilePartWithSlots(
             );
 
         case "phraseSet":
-            return compilePhraseSetPart(builder, part, fromState, toState);
+            return compilePhraseSetPartWithSlots(
+                builder,
+                part,
+                fromState,
+                toState,
+                context,
+            );
 
         default:
             throw new Error(`Unknown part type: ${(part as any).type}`);
@@ -749,14 +832,43 @@ function compilePartWithSlots(
  *
  * PhraseSetParts are always non-optional at this level; optionality is handled
  * by the enclosing RulesPart (e.g., from "(<Polite>)?").
+ *
+ * Two callers exist:
+ *  - `compilePhraseSetPartNoSlots` for the deprecated, slot-less compile
+ *    path (rejects optimizer-introduced captures upstream — see
+ *    `compilePart`).
+ *  - `compilePhraseSetPartWithSlots` for the slot-aware path; when
+ *    `part.variable` is set the matched phrase tokens are written as a
+ *    joined string into the named slot.  See `tryTransition` in
+ *    `nfaInterpreter.ts` for the runtime side.
  */
-function compilePhraseSetPart(
+function compilePhraseSetPartNoSlots(
     builder: NFABuilder,
     part: PhraseSetPart,
     fromState: number,
     toState: number,
 ): number {
     builder.addPhraseSetTransition(fromState, toState, part.matcherName);
+    return toState;
+}
+
+function compilePhraseSetPartWithSlots(
+    builder: NFABuilder,
+    part: PhraseSetPart,
+    fromState: number,
+    toState: number,
+    context: RuleCompilationContext,
+): number {
+    const slotIndex =
+        part.variable !== undefined
+            ? context.slotMap.get(part.variable)
+            : undefined;
+    builder.addPhraseSetTransition(
+        fromState,
+        toState,
+        part.matcherName,
+        slotIndex,
+    );
     return toState;
 }
 
@@ -777,6 +889,15 @@ function compileStringPart(
     toState: number,
     spacingMode?: CompiledSpacingMode,
     splitCandidatesCollector?: Set<string>,
+    /**
+     * Optional slot to write the joined StringPart value into.  When set
+     * (an optimizer-introduced capture), the slot receives
+     * `part.value.join(" ")` on the FINAL emitted transition — a single
+     * write per StringPart, regardless of how many sub-token transitions
+     * the chain emits.  See `tryTransition` in `nfaInterpreter.ts` for the
+     * runtime side (slotValue overrides the consumed token).
+     */
+    captureSlotIndex?: number,
 ): number {
     // Normalize grammar tokens (lowercase + strip trailing punctuation) so they
     // compare correctly against the normalized input tokens from tokenizeRequest().
@@ -790,12 +911,24 @@ function compileStringPart(
         return toState;
     }
 
+    // The captured slot value is the joined ORIGINAL StringPart tokens (not
+    // the normalized ones); this matches what `grammarMatcher.ts` writes via
+    // `addValue(state, part.variable, part.value.join(" "))`.
+    const captureSlotValue =
+        captureSlotIndex !== undefined ? part.value.join(" ") : undefined;
+
     // spacing=none: concatenate all segments into a single fused token.
     // The grammar author expects the input to contain no spaces between these
     // segments, so we emit one token transition for the concatenated form.
     if (spacingMode === "none") {
         const fused = normalized.join("");
-        builder.addTokenTransition(fromState, toState, [fused]);
+        builder.addTokenTransition(
+            fromState,
+            toState,
+            [fused],
+            captureSlotIndex,
+            captureSlotValue,
+        );
         return toState;
     }
 
@@ -812,18 +945,37 @@ function compileStringPart(
 
     // Emit individual token transitions (same as before for required/optional/auto).
     if (normalized.length === 1) {
-        builder.addTokenTransition(fromState, toState, normalized);
+        builder.addTokenTransition(
+            fromState,
+            toState,
+            normalized,
+            captureSlotIndex,
+            captureSlotValue,
+        );
         return toState;
     }
 
     // For multiple tokens, create a sequence chain
     // Each token must match in order: state1 --token1--> state2 --token2--> ... --> toState
+    // The capture slot (if any) is written only on the final transition so the
+    // joined StringPart value is recorded once — same single-write semantics as
+    // grammarMatcher.ts's `addValue` for a multi-token literal.
     let currentState = fromState;
     for (let i = 0; i < normalized.length; i++) {
         const token = normalized[i];
         const isLast = i === normalized.length - 1;
         const nextState = isLast ? toState : builder.createState(false);
-        builder.addTokenTransition(currentState, nextState, [token]);
+        if (isLast) {
+            builder.addTokenTransition(
+                currentState,
+                nextState,
+                [token],
+                captureSlotIndex,
+                captureSlotValue,
+            );
+        } else {
+            builder.addTokenTransition(currentState, nextState, [token]);
+        }
         currentState = nextState;
     }
     return toState;
@@ -1104,7 +1256,14 @@ function compileRulesPart(
     checkedVariables?: Set<string>,
     overrideVariableName?: string,
 ): number {
-    if (part.rules.length === 0) {
+    if (part.tailCall) {
+        throw new Error(
+            `compileRulesPart: tail RulesParts are not supported by the NFA compiler ` +
+                `(part.name='${part.name ?? "<unnamed>"}'). ` +
+                "Disable `tailFactoring` in the grammar optimizer for NFA/DFA paths.",
+        );
+    }
+    if (part.alternatives.length === 0) {
         // Empty rules - epsilon transition
         builder.addEpsilonTransition(fromState, toState);
         return toState;
@@ -1123,7 +1282,7 @@ function compileRulesPart(
     const nestedOverride = part.variable ?? overrideVariableName;
 
     // Compile each nested rule as an alternative
-    for (const rule of part.rules) {
+    for (const rule of part.alternatives) {
         const ruleEntry = builder.createState(false);
 
         // Try to find this nested rule in the main grammar to get its rule index
@@ -1176,7 +1335,14 @@ function compileRulesPartWithSlots(
     toState: number,
     context: RuleCompilationContext,
 ): number {
-    if (part.rules.length === 0) {
+    if (part.tailCall) {
+        throw new Error(
+            `compileRulesPartWithSlots: tail RulesParts are not supported by the NFA compiler ` +
+                `(part.name='${part.name ?? "<unnamed>"}'). ` +
+                "Disable `tailFactoring` in the grammar optimizer for NFA/DFA paths.",
+        );
+    }
+    if (part.alternatives.length === 0) {
         // Empty rules - epsilon transition
         builder.addEpsilonTransition(fromState, toState);
         return toState;
@@ -1217,7 +1383,7 @@ function compileRulesPartWithSlots(
     let anyRuleCreatedEnvironment = false;
 
     // Compile each nested rule as an alternative
-    for (const rule of part.rules) {
+    for (const rule of part.alternatives) {
         const ruleEntry = builder.createState(false);
 
         // Create a new slot map for the nested rule FIRST (needed for compilation)
@@ -1372,8 +1538,8 @@ function compileRulesPartWithSlots(
 function findRuleIndex(grammar: Grammar, rule: GrammarRule): number {
     // Match based on rule value (action object)
     // This is a simple comparison - we could make it more sophisticated
-    for (let i = 0; i < grammar.rules.length; i++) {
-        const grammarRule = grammar.rules[i];
+    for (let i = 0; i < grammar.alternatives.length; i++) {
+        const grammarRule = grammar.alternatives[i];
         if (grammarRule.value && rulesMatch(grammarRule, rule)) {
             return i;
         }
@@ -1399,12 +1565,23 @@ export function compileRuleToNFA(rule: GrammarRule, name?: string): NFA {
     const startState = builder.createState(false);
     const acceptState = builder.createState(true);
 
-    // Create a minimal grammar for this single rule
-    const grammar: Grammar = {
-        rules: [rule],
-    };
+    // Normalize unconditionally so single-rule compilation matches
+    // `compileGrammarToNFA`'s behavior: passthrough rules acquire
+    // their `_result` capture and single-literal rules acquire their
+    // implicit `-> "literal"` value, and dispatched `RulesPart`s
+    // (which the NFA compiler doesn't understand directly) are
+    // expanded back into a flat plain `RulesPart`.
+    const ruleToCompile = normalizeGrammar({ alternatives: [rule] })
+        .alternatives[0];
+    const grammar: Grammar = { alternatives: [ruleToCompile] };
 
-    compileRuleFromState(builder, grammar, rule, startState, acceptState);
+    compileRuleFromState(
+        builder,
+        grammar,
+        ruleToCompile,
+        startState,
+        acceptState,
+    );
 
     return builder.build(startState, name);
 }

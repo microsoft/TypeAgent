@@ -10,12 +10,15 @@ import {
     replayDisplayHistory,
     withEnhancedConsoleClientIO,
 } from "../enhancedConsole.js";
-import { setConversationCommandContext } from "../slashCommands.js";
+import {
+    setConversationCommandContext,
+    setServerPort,
+    setServerConnection,
+} from "../slashCommands.js";
 import type { ConversationCommandContext } from "../conversationCommands.js";
 import {
     connectAgentServer,
     ensureAgentServer,
-    ensureAndConnectConversation,
     AgentServerConnection,
 } from "@typeagent/agent-server-client";
 import { getStatusSummary } from "@typeagent/dispatcher-types/helpers/status";
@@ -24,6 +27,7 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 import * as readline from "readline";
+import { loadUserSettings } from "agent-dispatcher/helpers/userSettings";
 
 const CLI_STATE_FILE = path.join(os.homedir(), ".typeagent", "cli-state.json");
 const CLI_CONVERSATION_NAME = "CLI";
@@ -96,8 +100,8 @@ export default class Connect extends Command {
         resume: Flags.boolean({
             char: "r",
             description:
-                "Resume the last used conversation instead of defaulting to 'CLI'. Ignored if --conversation is provided.",
-            default: false,
+                "Resume the last used conversation instead of defaulting to 'CLI'. Ignored if --conversation is provided. Use --no-resume to override a saved user setting.",
+            allowNo: true,
         }),
         conversation: Flags.string({
             char: "c",
@@ -118,13 +122,12 @@ export default class Connect extends Command {
         }),
         hidden: Flags.boolean({
             description:
-                "Start the agent server without a visible window (background mode). Only applies when the server is not already running.",
-            default: false,
+                "Start the agent server without a visible window (background mode). Only applies when the server is not already running. Use --no-hidden to override a saved user setting.",
+            allowNo: true,
         }),
         idleTimeout: Flags.integer({
             description:
-                "Shut down the agent server after this many seconds with no connected clients. 0 disables (default). Only applies when the server is spawned by this command.",
-            default: 0,
+                "Shut down the agent server after this many seconds with no connected clients. 0 disables. Only applies when the server is spawned by this command. Omit to use saved user setting.",
         }),
     };
     static args = {
@@ -135,7 +138,19 @@ export default class Connect extends Command {
         }),
     };
     async run(): Promise<void> {
-        const { args, flags } = await this.parse(Connect);
+        const { args, flags: rawFlags } = await this.parse(Connect);
+
+        // Merge persistent user settings as defaults for flags not explicitly set.
+        // With allowNo / no default, omitted flags are undefined, so ?? falls
+        // through to the saved user setting. Explicit --flag or --no-flag wins.
+        const userSettings = loadUserSettings();
+        const flags = {
+            ...rawFlags,
+            hidden: rawFlags.hidden ?? userSettings.server.hidden,
+            idleTimeout:
+                rawFlags.idleTimeout ?? userSettings.server.idleTimeout,
+            resume: rawFlags.resume ?? userSettings.conversation.resume,
+        };
 
         if (flags.verbose !== undefined) {
             const { default: registerDebug } = await import("debug");
@@ -256,43 +271,47 @@ export default class Connect extends Command {
                 //   3. default: find-or-create the "CLI" conversation
                 const result =
                     persistedConversationId !== undefined
-                        ? await ensureAndConnectConversation(
-                              clientIO,
-                              flags.port,
-                              { conversationId: persistedConversationId },
-                              onDisconnect,
-                              flags.hidden,
-                              flags.idleTimeout,
-                          )
-                              .then((s) => ({
-                                  conversation: s,
-                                  connection: undefined as
-                                      | AgentServerConnection
-                                      | undefined,
-                              }))
-                              .catch(async (err: any) => {
-                                  if (
-                                      isDefaultConversation &&
-                                      typeof err?.message === "string" &&
-                                      err.message.startsWith(
-                                          "Conversation not found:",
-                                      )
-                                  ) {
-                                      console.log(
-                                          `The last used conversation no longer exists on the server.`,
-                                      );
-                                      const join = await promptYesNo(
-                                          `Join the default '${CLI_CONVERSATION_NAME}' conversation?`,
-                                      );
-                                      if (!join) {
-                                          clearLastConversationId();
-                                          return null;
-                                      }
+                        ? await (async () => {
+                              await ensureAgentServer(
+                                  flags.port,
+                                  flags.hidden,
+                                  flags.idleTimeout,
+                              );
+                              const conn = await connectAgentServer(
+                                  url,
+                                  onDisconnect,
+                              );
+                              const conv = await conn.joinConversation(
+                                  clientIO,
+                                  { conversationId: persistedConversationId },
+                              );
+                              conv.dispatcher.close = async () => {
+                                  await conn.close();
+                              };
+                              return { conversation: conv, connection: conn };
+                          })().catch(async (err: any) => {
+                              if (
+                                  isDefaultConversation &&
+                                  typeof err?.message === "string" &&
+                                  err.message.startsWith(
+                                      "Conversation not found:",
+                                  )
+                              ) {
+                                  console.log(
+                                      `The last used conversation no longer exists on the server.`,
+                                  );
+                                  const join = await promptYesNo(
+                                      `Join the default '${CLI_CONVERSATION_NAME}' conversation?`,
+                                  );
+                                  if (!join) {
                                       clearLastConversationId();
-                                      return connectToCliConversation();
+                                      return null;
                                   }
-                                  throw err;
-                              })
+                                  clearLastConversationId();
+                                  return connectToCliConversation();
+                              }
+                              throw err;
+                          })
                         : await connectToCliConversation();
 
                 if (result === null) {
@@ -320,10 +339,8 @@ export default class Connect extends Command {
             await replayDisplayHistory(activeDispatcher, clientIO, activeName);
 
             // Set up ConversationCommandContext for @conversation commands.
-            // Only available when the AgentServerConnection is accessible
-            // (connectToCliConversation / connectToEphemeralConversation paths).
-            // The ensureAndConnectConversation path (--session / --resume flags)
-            // does not expose the connection, so convCtx stays undefined there.
+            // Available on all connection paths since each path now exposes the
+            // AgentServerConnection.
             let convCtx: ConversationCommandContext | undefined;
             if (connection !== undefined) {
                 convCtx = {
@@ -359,6 +376,8 @@ export default class Connect extends Command {
                     },
                 };
                 setConversationCommandContext(convCtx);
+                setServerPort(flags.port);
+                setServerConnection(connection);
             }
 
             try {

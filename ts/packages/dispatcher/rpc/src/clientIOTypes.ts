@@ -29,6 +29,7 @@ export type ClientIOInvokeFunctions = {
 export type ClientIOCallFunctions = {
     clear(requestId: RequestId): void;
     exit(requestId: RequestId): void;
+    shutdown(requestId: RequestId): void;
 
     setUserRequest(requestId: RequestId, command: string, seq?: number): void;
     setDisplayInfo(

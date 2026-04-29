@@ -67,9 +67,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/examples/chat/src/codeChat/commandTransformer.ts` | 170 | the same for args (currently not used by code chat) | Low | Medium | Local | No Fix | Yes |
 | `ts/examples/docuProc/src/pdfImporter.ts` | 210 | Try pre-computing embeddings in parallel to fill the embeddings cache (is that cache safe?) | Medium | Medium | Local | Fix | Yes |
 | `ts/examples/docuProc/src/pdfQNAInteractiveApp.ts` | 1024 | Allow for multiple concurrent sessions. | High | Medium | Component | No Fix | Yes |
-| `ts/examples/docuProc/src/pdfQNAInteractiveApp.ts` | 1031 | Cut off by total size, not count. | Low | High | Local | Fix | No |
-| `ts/examples/docuProc/src/pdfQNAInteractiveApp.ts` | 1151 | limit how much we write per blob too (if there are multiple). | Low | High | Local | Fix | No |
-| `ts/examples/docuProc/src/pdfQNAInteractiveApp.ts` | 1178 | Colorize code blocks. | Low | High | Local | Fix | No |
 | `ts/examples/memoryProviders/src/sqlite/keyValueTable.ts` | 195 | support | Medium | Medium | Component | Fix | Yes |
 | `ts/examples/memoryProviders/src/sqlite/textTable.ts` | 511 | optimize by lowering into DB if possible | Medium | Medium | Local | Fix | Yes |
 | `ts/examples/memoryProviders/src/sqlite/textTable.ts` | 613 | Optimize | Medium | Medium | Local | Fix | Yes |
@@ -77,9 +74,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/examples/spelunker/src/pythonImporter.ts` | 4 | Most of this is not Python specific; generalize to other languages. | High | Medium | Component | Fix | Yes |
 | `ts/examples/spelunker/src/pythonImporter.ts` | 181 | Try pre-computing embeddings in parallel to fill the embeddings cache (is that cache safe?) | Medium | Medium | Local | Fix | Yes |
 | `ts/examples/spelunker/src/queryInterface.ts` | 905 | Allow for multiple concurrent sessions. | High | Medium | Component | Fix | No |
-| `ts/examples/spelunker/src/queryInterface.ts` | 912 | Cut off by total size, not count. | Low | High | Local | Fix | No |
-| `ts/examples/spelunker/src/queryInterface.ts` | 1035 | limit how much we write per blob too (if there are multiple). | Low | High | Local | Fix | No |
-| `ts/examples/spelunker/src/queryInterface.ts` | 1056 | Colorize code blocks. | Low | High | Local | Fix | No |
 | `ts/examples/websiteAliases/src/pageContentKeywords.ts` | 284 | handle multi-modal content | High | Low | Component | No Fix | Yes |
 | `ts/examples/websiteAliases/src/searchEngineKeywords.ts` | 284 | handle multi-modal content | High | Low | Component | No Fix | Yes |
 | `ts/packages/actionGrammar/src/agentGrammarRegistry.ts` | 552 | Implement async DFA compilation | High | Medium | Component | Fix | No |
@@ -88,7 +82,7 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/actionGrammar/src/grammarCompiler.ts` | 953 | create regexp | Medium | High | Local | Fix | No |
 | `ts/packages/actionGrammar/src/grammarRuleParser.ts` | 84 | Support nested instead of just Rule Ref | Medium | Medium | Component | Fix | No |
 | `ts/packages/actionGrammar/src/grammarTypes.ts` | 174 | support optional string parts | Low | Medium | Local | Fix | No |
-| `ts/packages/actionGrammar/src/grammarTypes.ts` | 177 | cache the regexp? | Low | High | Local | Fix | No |
+| ~~`ts/packages/actionGrammar/src/grammarTypes.ts`~~ | ~~177~~ | ~~cache the regexp?~~ | Low | High | Local | ✅ Already done (regexpCache field exists) | No |
 | `ts/packages/actionGrammar/src/grammarValueTypeValidator.ts` | 1035 | look up entity return types from the entity registry instead of hard-coding | Medium | Medium | Component | Fix | No |
 | `ts/packages/actionGrammar/src/nfaCompletion.ts` | 293 | The NFA path does not yet track wildcard-at-EOI states. | High | Medium | Component | Fix | No |
 | `ts/packages/actionGrammar/test/dynamicGrammarLoader.spec.ts` | 423 | Re-enable after grammar imports and type declarations for converters are complete | Medium | Medium | Component | Fix | Yes |
@@ -103,16 +97,12 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/actionSchema/src/jsonSchemaParser.ts` | 51 | resolve? | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/actionSchema/src/parser.ts` | 608 | Faithfully resolve intersection types | High | Medium | Component | Fix | No |
 | `ts/packages/actionSchema/src/utils.ts` | 60 | doesn't work on union types yet. | Medium | Medium | Component | Fix | No |
-| `ts/packages/agentRpc/src/client.ts` | 633 | Clean up the associated options. | Low | High | Local | Fix | No |
 | `ts/packages/agentSdk/src/agentInterface.ts` | 57 | enable non-stringify pas content. | Medium | Medium | Cross-cutting | Fix | Yes |
 | `ts/packages/agentSdk/src/agentInterface.ts` | 234 | only utf8 & base64 is supported for now. | Medium | Medium | Component | Fix | No |
 | `ts/packages/agentSdkWrapper/src/webtask/tracing/types.ts` | 138 | Phase 2: Extract key elements from HTML | High | Low | Component | No Fix | Yes |
 | `ts/packages/agents/browser/src/extension/views/extensionServiceBase.ts` | 579 | remove "type" from this dictionary. That will remove the need to wrap these values in a "parameters" object | Medium | Medium | Component | Fix | No |
 | `ts/packages/agents/browser/src/extension/views/topicGraphView.ts` | 296 | Implement topic viewport neighborhood functionality | High | Medium | Component | Fix | Yes |
-| `ts/packages/agents/calendar/src/calendarActionHandlerV3.ts` | 1120 | Implement sophisticated date parsing | Medium | High | Local | Fix | No |
-| `ts/packages/agents/calendar/src/calendarActionHandlerV3.ts` | 1126 | Implement sophisticated time parsing | Medium | High | Local | Fix | No |
 | `ts/packages/agents/desktop/src/connector.ts` | 127 | add shared agent storage or known storage location (requires permissions, trusted agents, etc.) | High | Low | Cross-cutting | No Fix | Yes |
-| `ts/packages/agents/desktop/src/programNameIndex.ts` | 96 | Retry with back-off for 429 responses | Low | High | Local | Fix | No |
 | `ts/packages/agents/greeting/src/greetingCommandHandler.ts` | 292 | personalize list based on user preferences | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/agents/list/src/listActionHandler.ts` | 386 | formalize the schema for activityContext | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/agents/montage/src/agent/montageActionHandler.ts` | 187 | tune? | Medium | Medium | Component | No Fix | Yes |
@@ -129,32 +119,24 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/agents/player/src/client.ts` | 702 | Might want to use fuzzy matching here. | Medium | Medium | Component | Fix | No |
 | `ts/packages/agents/player/src/client.ts` | 1318 | add filter validation to overall instance validation | Medium | Medium | Component | Fix | No |
 | `ts/packages/agents/player/src/search.ts` | 253 | Might want to use fuzzy matching here. | Medium | Medium | Component | Fix | No |
-| `ts/packages/agents/player/src/search.ts` | 561 | cache this. | Low | High | Component | Fix | No |
-| `ts/packages/agents/player/src/trackFilter.ts` | 326 | year ranges | Medium | High | Local | Fix | No |
-| `ts/packages/agents/player/src/userData.ts` | 301 | return names of playlists, sorted by timestamp | Low | High | Local | Fix | No |
 | `ts/packages/agents/settings/src/settingsCommandHandler.ts` | 53 | apply this setting to the local system. '${action.parameters.originalRequest} | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/agents/spelunker/src/chunker.py` | 61 | dotted names | Medium | Medium | Local | Fix | No |
 | `ts/packages/agents/spelunker/src/embeddings.ts` | 37 | Fix this | Medium | Medium | Local | Fix | Yes |
 | `ts/packages/agents/spelunker/src/embeddings.ts` | 47 | tune | Medium | Medium | Local | No Fix | Yes |
 | `ts/packages/agents/spelunker/src/embeddings.ts` | 186 | Fix this | Medium | Medium | Local | Fix | Yes |
-| `ts/packages/agents/spelunker/src/eval.ts` | 27 | Read this from a file that can be edited before each run | Low | High | Local | Fix | No |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 237 | tune | Medium | Medium | Local | No Fix | Yes |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 238 | tune | Medium | Medium | Local | Fix | Yes |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 268 | tune | Medium | Medium | Local | Fix | Yes |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 287 | Prompt engineering | High | Medium | Local | Fix | Yes |
-| `ts/packages/agents/spelunker/src/searchCode.ts` | 358 | Break into multiple functions. | Low | High | Local | Fix | No |
-| `ts/packages/agents/spelunker/src/searchCode.ts` | 381 | Factor into simpler functions | Low | High | Local | Fix | No |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 409 | Make this insert part of the transaction for this file | Medium | Medium | Local | Fix | No |
-| `ts/packages/agents/spelunker/src/searchCode.ts` | 438 | Make this into its own function. | Low | High | Local | Fix | No |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 439 | Numbers may look weird when long files are split by pythonChunker. | Medium | Medium | Local | Fix | Yes |
 | `ts/packages/agents/spelunker/src/searchCode.ts` | 458 | Use appendDisplay (requires passing actionContext) | Low | Medium | Local | Fix | No |
 | `ts/packages/agents/spelunker/src/spelunkerActionHandler.ts` | 89 | What other standard functions could be handy here? | Medium | Low | Component | No Fix | Yes |
 | `ts/packages/agents/spelunker/src/summarizing.ts` | 42 | Prompt engineering | High | Medium | Local | Fix | Yes |
-| `ts/packages/agents/spelunker/src/typescriptChunker.ts` | 198 | Move to caller? | Low | High | Local | Fix | No |
 | `ts/packages/agents/video/src/videoActionHandler.ts` | 54 | dynamic duration | Medium | Medium | Local | Fix | Yes |
-| `ts/packages/agents/weather/src/weatherActionHandler.ts` | 227 | Add more sophisticated validation: | Medium | High | Local | Fix | No |
-| `ts/packages/aiclient/src/models.ts` | 31 | JsonSchemaType | Low | High | Local | Fix | No |
-| `ts/packages/aiclient/src/models.ts` | 39 | JsonSchemaType | Low | High | Local | Fix | No |
+| ~~`ts/packages/agents/weather/src/weatherActionHandler.ts`~~ | ~~227~~ | ~~Add more sophisticated validation:~~ | ~~Medium~~ | ~~High~~ | ~~Local~~ | ~~Fix~~ | ~~No~~ | ✅ Fixed: now uses geocoding API |
+| ~~`ts/packages/aiclient/src/models.ts`~~ | ~~31~~ | ~~JsonSchemaType~~ | Low | High | Local | ✅ Already done | No |
+| ~~`ts/packages/aiclient/src/models.ts`~~ | ~~39~~ | ~~JsonSchemaType~~ | Low | High | Local | ✅ Already done | No |
 | `ts/packages/aiclient/src/models.ts` | 176 | add support for videos | High | Medium | Component | Fix | Yes |
 | `ts/packages/aiclient/src/openai.ts` | 580 | remove after API endpoint correctly handles this case | Low | Medium | Local | Fix | Yes |
 | `ts/packages/aiclient/src/tokenCounter.ts` | 58 | intermittently cache these with the session | Medium | Medium | Component | Fix | Yes |
@@ -168,36 +150,33 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/azure-ai-foundry/src/urlResolverCache.ts` | 121 | make async | Low | High | Local | Fix | No |
 | `ts/packages/azure-ai-foundry/src/websiteAliasExtraction.ts` | 65 | IMPLEMENT | High | Low | Component | Fix | Yes |
 | `ts/packages/azure-ai-foundry/src/websiteAliasExtraction.ts` | 121 | handle multi-modal content | High | Medium | Component | Fix | No |
-| `ts/packages/azure-ai-foundry/src/wikipedia.ts` | 102 | localization (e.g. en, de, fr, etc.) | Low | High | Local | Fix | No |
-| `ts/packages/azure-ai-foundry/src/wikipedia.ts` | 125 | localization (e.g. en, de, fr, etc.) | Low | High | Local | Fix | No |
+| ~~`ts/packages/azure-ai-foundry/src/wikipedia.ts`~~ | ~~102~~ | ~~localization (e.g. en, de, fr, etc.)~~ | Low | High | Local | ✅ Fixed | No |
+| ~~`ts/packages/azure-ai-foundry/src/wikipedia.ts`~~ | ~~125~~ | ~~localization (e.g. en, de, fr, etc.)~~ | Low | High | Local | ✅ Fixed | No |
 | `ts/packages/cache/src/cache/cache.ts` | 599 | Move this in the construction store | Medium | Medium | Component | Fix | Yes |
-| `ts/packages/cache/src/cache/explainWorkQueue.ts` | 42 | check number too. | Low | High | Local | Fix | No |
+| ~~`ts/packages/cache/src/cache/explainWorkQueue.ts`~~ | ~~42~~ | ~~check number too.~~ | Low | High | Local | ✅ Fixed | No |
 | `ts/packages/cache/src/constructions/constructionCache.ts` | 420 | GC match sets | Medium | Medium | Component | Fix | No |
 | `ts/packages/cache/src/constructions/constructionValue.ts` | 140 | Don't support multiple subphrase wildcard match for now. | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/cache/src/constructions/constructionValue.ts` | 156 | Only deal with exact match for now | Medium | Medium | Component | Fix | Yes |
-| `ts/packages/cache/src/constructions/matchPart.ts` | 66 | non-diacritic match | Medium | Medium | Component | Fix | No |
+| ~~`ts/packages/cache/src/constructions/matchPart.ts`~~ | ~~66~~ | ~~non-diacritic match~~ | Medium | Medium | Component | ✅ Fixed | No |
 | `ts/packages/cache/src/constructions/transforms.ts` | 208 | Better history matching heuristic. Currently it will just the first one in the list. | Medium | Medium | Component | Fix | No |
 | `ts/packages/cache/src/explanation/typeChatAgent.ts` | 61 | probably most (all?) of these can be integrated into TypeChat | High | Low | Cross-cutting | No Fix | Yes |
 | `ts/packages/cache/src/explanation/v5/explanationV5.ts` | 282 | consider to improve this for cases where different actions have the same parameters schema. | Medium | Medium | Component | Fix | No |
 | `ts/packages/cache/src/explanation/v5/explanationV5.ts` | 645 | Don't use other synonyms or alternatives info for entities for now | Low | High | Local | No Fix | Yes |
 | `ts/packages/cache/src/explanation/v5/propertyExplainationV5.ts` | 114 | fuzzy match | Medium | Medium | Component | Fix | No |
-| `ts/packages/cache/src/explanation/validateExplanation.ts` | 91 | Is there a better typing | Low | High | Local | Fix | No |
-| `ts/packages/cache/src/explanation/validateExplanation.ts` | 184 | better typing | Low | High | Local | Fix | No |
-| `ts/packages/cache/src/explanation/validateExplanation.ts` | 209 | better typing | Low | High | Local | Fix | No |
 | `ts/packages/cache/src/utils/language.ts` | 396 | initial implementation. Can be over-broad and incomplete. | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/cli/src/enhancedConsole.ts` | 655 | Not implemented | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/cli/src/enhancedConsole.ts` | 784 | Ignored | Low | High | Local | No Fix | Yes |
-| `ts/packages/defaultAgentProvider/test/construction.spec.ts` | 74 | once MatchPart allow matches ignoring diacritical marks | Medium | Medium | Component | Fix | No |
-| `ts/packages/defaultAgentProvider/test/construction.spec.ts` | 86 | Validating the lower case action | Low | High | Local | Fix | No |
+| ~~`ts/packages/defaultAgentProvider/test/construction.spec.ts`~~ | ~~74~~ | ~~once MatchPart allow matches ignoring diacritical marks~~ | Medium | Medium | Component | ✅ Fixed | No |
+| ~~`ts/packages/defaultAgentProvider/test/construction.spec.ts`~~ | ~~86~~ | ~~Validating the lower case action~~ | Low | High | Local | ✅ Fixed | No |
 | `ts/packages/defaultAgentProvider/test/construction.spec.ts` | 88 | needs fix these | Low | Medium | Local | Fix | Yes |
 | `ts/packages/defaultAgentProvider/test/constructionCacheTestCommon.ts` | 240 | needs fix these | Low | Medium | Local | Fix | Yes |
-| `ts/packages/defaultAgentProvider/test/grammar.spec.ts` | 93 | once MatchPart allow matches ignoring diacritical marks | Medium | Medium | Component | Fix | No |
+| ~~`ts/packages/defaultAgentProvider/test/grammar.spec.ts`~~ | ~~93~~ | ~~once MatchPart allow matches ignoring diacritical marks~~ | Medium | Medium | Component | ✅ Fixed | No |
 | `ts/packages/defaultAgentProvider/test/schema.spec.ts` | 18 | mcpfilesystem schema can't be loaded without allowDirectory to start up the server. | Medium | Medium | Component | Fix | Yes |
-| `ts/packages/dispatcher/dispatcher/src/context/appAgentManager.ts` | 1151 | Make this not hard coded | Low | High | Local | Fix | Yes |
+| ~~`ts/packages/dispatcher/dispatcher/src/context/appAgentManager.ts`~~ | ~~1151~~ | ~~Make this not hard coded~~ | Low | High | Local | ✅ Fixed | Yes |
 | `ts/packages/dispatcher/dispatcher/src/context/appAgentManager.ts` | 1182 | unload agent as well? | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/context/commandHandlerContext.ts` | 623 | instead of disabling this let's find a way to gracefully handle this | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts` | 101 | formalize the schema for activityContext | Medium | Medium | Component | Fix | Yes |
-| `ts/packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts` | 190 | cache this? | Low | High | Local | Fix | No |
+| ~~`ts/packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts`~~ | ~~190~~ | ~~cache this?~~ | Low | High | Local | ✅ Fixed | No |
 | `ts/packages/dispatcher/dispatcher/src/context/dispatcher/dispatcherAgent.ts` | 223 | This translation can probably more scoped based on the `actionName` field. | Medium | Medium | Component | Fix | No |
 | `ts/packages/dispatcher/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts` | 201 | This does not support activities. | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/context/dispatcher/handlers/requestCommandHandler.ts` | 328 | revisit | Low | Medium | Local | Fix | Yes |
@@ -225,9 +204,8 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/dispatcher/dispatcher/src/search/internet.ts` | 344 | other annotation types | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/search/internet.ts` | 373 | handle multi-modal content | High | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/search/search.ts` | 125 | how about entities? | Medium | Medium | Component | Fix | Yes |
-| `ts/packages/dispatcher/dispatcher/src/translation/actionSchemaFileCache.ts` | 66 | validate the json | Low | High | Local | Fix | No |
 | `ts/packages/dispatcher/dispatcher/src/translation/actionTemplate.ts` | 79 | smarter about type unions. | Medium | Medium | Component | Fix | Yes |
-| `ts/packages/dispatcher/dispatcher/src/translation/actionTemplate.ts` | 82 | need to handle circular references (or error on circular references) | Medium | High | Component | Fix | No |
+| ~~`ts/packages/dispatcher/dispatcher/src/translation/actionTemplate.ts`~~ | ~~82~~ | ~~need to handle circular references (or error on circular references)~~ | ~~Medium~~ | ~~High~~ | ~~Component~~ | ~~Fix~~ | ~~No~~ | ✅ Fixed: threads visited set to detect cycles |
 | `ts/packages/dispatcher/dispatcher/src/translation/entityResolution.ts` | 139 | Should we use the index here? Probably need the translation to validate the index to match the name. | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/translation/entityResolution.ts` | 146 | Should we use the index here? Probably need the translation to validate the index to match the name. | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/translation/entityResolution.ts` | 153 | Should we use the index here? Probably need the translation to validate the index to match the name. | Medium | Medium | Component | Fix | Yes |
@@ -236,59 +214,41 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/dispatcher/dispatcher/src/translation/translateRequest.ts` | 644 | What to do with attachments with multiple actions? | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/translation/translateRequest.ts` | 661 | What to do with attachments with multiple actions? | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/dispatcher/dispatcher/src/translation/unknownSwitcher.ts` | 142 | this should be adjusted based on model used. | Low | High | Local | Fix | Yes |
-| `ts/packages/dispatcher/dispatcher/src/translation/unknownSwitcher.ts` | 186 | we can parallelize this | Medium | High | Local | Fix | No |
 | `ts/packages/dispatcher/dispatcher/src/utils/test/explanationTestData.ts` | 49 | Test data only support a single schema name for now. | Medium | Medium | Component | Fix | No |
 | `ts/packages/dispatcher/types/src/clientIO.ts` | 92 | turn these in to dispatcher events | Medium | Medium | Cross-cutting | Fix | Yes |
 | `ts/packages/dispatcher/types/src/clientIO.ts` | 121 | Formalize the API | High | Medium | Cross-cutting | Fix | Yes |
-| `ts/packages/knowPro/src/collections.ts` | 94 | make this 2 methods: addExact and addRelated | Low | High | Component | Fix | No |
-| `ts/packages/knowPro/src/collections.ts` | 260 | this should be minHitCount > 1 | Low | High | Local | Fix | No |
 | `ts/packages/knowPro/src/conversationIndex.ts` | 269 | update: pass in TextLocation instead of messageOrdinal + chunkOrdinal | Medium | Medium | Component | Fix | No |
-| `ts/packages/knowPro/src/conversationIndex.ts` | 409 | Should rename this to TermToSemanticRefIndex | Low | High | Component | Fix | No |
 | `ts/packages/knowPro/src/index.ts` | 23 | mergeConcreteEntitiesEx avoids forcing the data to be lower case. | Medium | Medium | Component | Fix | Yes |
-| `ts/packages/knowPro/src/interfaces.ts` | 671 | Move to dataFormats.ts | Low | High | Component | Fix | No |
 | `ts/packages/knowPro/src/query.ts` | 66 | also require secondary indices, once we have removed non-index based retrieval to test | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/knowPro/src/query.ts` | 464 | Make property and timestamp indexes NON-OPTIONAL | Medium | Medium | Component | Fix | No |
 | `ts/packages/knowPro/src/query.ts` | 465 | Move non-index based code to test | Medium | Medium | Component | Fix | No |
 | `ts/packages/knowPro/src/searchLang.ts` | 907 | move hardcoded to a user configurable table | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/knowPro/src/serialization.ts` | 225 | Remove this temporary backward compat. All future files should have proper headers | Low | High | Local | Fix | No |
-| `ts/packages/knowProTest/src/searchTest.ts` | 46 | convert this to use runBatch from common.ts | Low | High | Local | Fix | No |
-| `ts/packages/knowledgeProcessor/src/conversation/actions.ts` | 223 | parallelize | Medium | High | Local | Fix | No |
 | `ts/packages/knowledgeProcessor/src/conversation/answerContext.ts` | 101 | split entities, topics, actions | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/conversation/conversation.ts` | 407 | Migrate to file system storage provider | High | Medium | Cross-cutting | Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/conversation/conversation.ts` | 411 | what about topics at other levels? | Medium | Low | Component | No Fix | Yes |
-| `ts/packages/knowledgeProcessor/src/conversation/entities.ts` | 273 | parallelize | Medium | High | Local | Fix | No |
 | `ts/packages/knowledgeProcessor/src/conversation/topics.ts` | 638 | use aliases here for better matching | Medium | Medium | Component | Fix | Yes |
-| `ts/packages/knowledgeProcessor/src/conversation/topics.ts` | 683 | combine this and the one below | Low | High | Local | Fix | No |
 | `ts/packages/knowledgeProcessor/src/images/image.ts` | 147 | add actions for all extracted entities being photographed/contained by image | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/images/image.ts` | 195 | logged in user for now? | Low | Low | Local | No Fix | Yes |
 | `ts/packages/knowledgeProcessor/src/setOperations.ts` | 587 | Optimize. | Medium | Medium | Local | Fix | Yes |
-| `ts/packages/knowledgeProcessor/src/setOperations.ts` | 606 | Optimize. | Medium | Medium | Local | Fix | No |
 | `ts/packages/knowledgeProcessor/src/storageProvider.ts` | 131 | implement this once conversation is cleaned up and message Index is also backed by storageProvider | High | Low | Cross-cutting | No Fix | Yes |
-| `ts/packages/knowledgeProcessor/src/temporal.ts` | 187 | cache the time range. | Low | High | Local | Fix | No |
-| `ts/packages/knowledgeProcessor/src/textIndex.ts` | 80 | rename to addUpdate | Low | High | Component | Fix | No |
-| `ts/packages/knowledgeProcessor/src/textIndex.ts` | 86 | rename to addUpdateMultiple | Low | High | Component | Fix | No |
-| `ts/packages/knowledgeProcessor/src/textIndex.ts` | 92 | rename to addUpdateSources | Low | High | Component | Fix | No |
 | `ts/packages/knowledgeProcessor/src/textIndex.ts` | 323 | parallelize | Medium | Medium | Local | Fix | No |
 | `ts/packages/knowledgeProcessor/test/searchProcessor.spec.ts` | 17 | this test is not enabled on all dev machines yet. Currently requires some private datasets and indexes | High | Low | Component | No Fix | Yes |
 | `ts/packages/knowledgeVisualizer/src/route/visualizationNotifier.ts` | 433 | enumerate facets | Medium | Medium | Local | Fix | Yes |
-| `ts/packages/memory/conversation/src/conversationMemory.ts` | 310 | Optionally, back up previous file and do a safe read write | Low | High | Local | Fix | No |
 | `ts/packages/memory/conversation/src/memory.ts` | 224 | using mergeConcreteEntitiesEx to avoid forcing the data to be lower case. | Low | Medium | Local | No Fix | Yes |
-| `ts/packages/memory/conversation/src/podcastMessage.ts` | 56 | Also create inverse actions | Medium | Medium | Component | Fix | No |
 | `ts/packages/memory/image/src/imageCollection.ts` | 78 | select other Facets/meta data fields | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/memory/image/src/imageCollection.ts` | 79 | put everything in a single table? | High | Medium | Component | No Fix | Yes |
 | `ts/packages/memory/image/src/imageCollection.ts` | 133 | add additional meta data tables | Medium | Medium | Component | Fix | Yes |
-| `ts/packages/memory/image/src/imageMeta.ts` | 151 | image taker name | Low | High | Local | Fix | No |
-| `ts/packages/memory/image/src/imageMeta.ts` | 356 | Ensure localization | Medium | Medium | Local | Fix | No |
+| ~~`ts/packages/memory/image/src/imageMeta.ts`~~ | ~~151~~ | ~~image taker name~~ | Low | High | Local | ✅ Fixed | No |
+| ~~`ts/packages/memory/image/src/imageMeta.ts`~~ | ~~356~~ | ~~Ensure localization~~ | Medium | Medium | Local | ✅ Fixed | No |
 | `ts/packages/memory/image/src/indexingService.ts` | 5 | add support for "monitoring" the indexed folder for changes | High | Medium | Component | Fix | No |
-| `ts/packages/memory/image/src/indexingService.ts` | 23 | add token stats | Low | High | Local | Fix | No |
-| `ts/packages/memory/image/src/indexingService.ts` | 132 | make this less chatty - maybe percentage based or something? | Low | High | Local | Fix | No |
 | `ts/packages/memory/storage/src/azSearch/azQuery.ts` | 90 | handle related terms | Medium | Medium | Component | Fix | No |
 | `ts/packages/memory/website/src/websiteCollection.ts` | 2646 | If we have access to Graphology graphs, compute more advanced metrics | High | Low | Component | No Fix | Yes |
 | `ts/packages/memory/website/src/websiteCollection.ts` | 2709 | In a full implementation, this would: | High | Low | Component | No Fix | Yes |
 | `ts/packages/shell/src/main/index.ts` | 143 | connected mode only needs the speech key. | Low | Medium | Component | Fix | Yes |
-| `ts/packages/shell/src/main/shellWindow.ts` | 1260 | add logic for opening in external browser if a modifier key is pressed | Low | High | Local | Fix | No |
+| ~~`ts/packages/shell/src/main/shellWindow.ts`~~ | ~~1260~~ | ~~add logic for opening in external browser if a modifier key is pressed~~ | ~~Low~~ | ~~High~~ | ~~Local~~ | ~~Fix~~ | ~~No~~ | ✅ Fixed: tracks modifier key via before-input-event |
 | `ts/packages/shell/src/renderer/src/main.ts` | 128 | wire up any other functionality (player agent?) | High | Low | Cross-cutting | No Fix | Yes |
-| `ts/packages/shell/src/renderer/src/main.ts` | 196 | append data instead of replace | Low | High | Local | Fix | No |
+| ~~`ts/packages/shell/src/renderer/src/main.ts`~~ | ~~196~~ | ~~append data instead of replace~~ | ~~Low~~ | ~~High~~ | ~~Local~~ | ~~Fix~~ | ~~No~~ | ✅ Fixed: appendDiagnosticData now accumulates into an array |
 | `ts/packages/shell/src/renderer/src/main.ts` | 311 | Design for toast notifications in shell | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/shell/src/renderer/src/messageContainer.ts` | 506 | Adjust this value. | Low | High | Local | Fix | Yes |
 | `ts/packages/shell/src/renderer/src/webSocketAPI.ts` | 128 | Not implemented yet. | Medium | Medium | Component | Fix | Yes |
@@ -296,9 +256,6 @@ This file collates all TODO comments found across the repository, organized by t
 | `ts/packages/shell/test/configCommands.spec.ts` | 87 | Test action correction | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/shell/test/sessionCommands.spec.ts` | 194 | Test action correction | Medium | Medium | Component | Fix | Yes |
 | `ts/packages/shell/test/testHelper.ts` | 236 | fix completion to not need this workaround | Medium | Medium | Local | Fix | No |
-| `ts/packages/telemetry/src/logger/cosmosDBLoggerSink.ts` | 55 | add backoff/queuing logic for ENOTFOUND (no internet) | Medium | High | Local | Fix | No |
-| `ts/packages/telemetry/src/logger/mongoLoggerSink.ts` | 41 | add backoff/queuing logic for ENOTFOUND (no internet) | Medium | High | Local | Fix | No |
-| `ts/packages/typeagent/src/storage/embeddingFS.ts` | 158 | parallelize | Low | High | Local | Fix | No |
 | `ts/packages/typeagent/src/vector/vectorIndex.ts` | 176 | batch operations | Medium | High | Local | Fix | No |
 | `ts/packages/utils/typechatUtils/src/location.ts` | 138 | update any once @azure-rest/maps-search incorporates V1 return types | Low | Low | Local | No Fix | Yes |
 | `ts/packages/utils/typechatUtils/src/location.ts` | 154 | handle more result types | Medium | Medium | Local | Fix | Yes |

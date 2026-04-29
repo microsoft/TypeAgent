@@ -141,6 +141,24 @@ Key test suites:
 - `nfaRealGrammars.spec.ts` — End-to-end tests with production grammars
 - `dfa.spec.ts` — DFA compiler correctness
 - `dfaBenchmark.spec.ts` — Performance benchmarks
+- `grammarOptimizer*.spec.ts` — Compile-time AST optimizer (inline + factor passes)
+
+## Optimizer benchmarks
+
+Standalone benchmarks for the opt-in compile-time grammar optimizer
+([`src/bench/`](src/bench/)) are not part of the jest suite. They
+execute the compiled output, so a build is required first:
+
+```bash
+pnpm run tsc
+pnpm run bench:synthetic   # synthetic pass-through / wide-prefix grammars
+pnpm run bench:real        # real agent grammars (player, list, calendar)
+pnpm run bench             # both
+```
+
+Each script prints a per-configuration table comparing baseline,
+inline-only, factor-only, and both. Speedup is colored once it moves
+more than 10% from baseline.
 
 ## Downstream consumers
 

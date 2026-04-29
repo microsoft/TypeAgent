@@ -24,6 +24,10 @@ const debugError = registerDebug("typeagent:spotify:search:error");
 /** Number of results to fetch for targeted searches */
 const searchResultLimit = 10;
 
+// Cache genre → raw track results to avoid repeated Spotify API calls.
+// Exported for testing purposes.
+export const genreTrackCache = new Map<string, SpotifyApi.TrackObjectFull[]>();
+
 export type SpotifyQuery = {
     track?: string[] | undefined;
     album?: string[] | undefined;
@@ -558,22 +562,25 @@ export async function findTracksWithGenre(
     genre: string,
     quantity: number = 0,
 ): Promise<SpotifyApi.TrackObjectFull[]> {
-    // TODO: cache this.
     const query: SpotifyQuery = {
         query: [genre],
     };
 
-    const queryString = toQueryString(query);
-    const param: SpotifyApi.SearchForItemParameterObject = {
-        q: queryString,
-        type: "track",
-        limit: searchResultLimit,
-        offset: 0,
-    };
-    const result = await search(param, context.service);
-    const tracks = result?.tracks?.items;
-    if (tracks === undefined || tracks.length === 0) {
-        throw new Error(`Unable find track with genre '${genre}'`);
+    let tracks = genreTrackCache.get(genre);
+    if (tracks === undefined) {
+        const queryString = toQueryString(query);
+        const param: SpotifyApi.SearchForItemParameterObject = {
+            q: queryString,
+            type: "track",
+            limit: searchResultLimit,
+            offset: 0,
+        };
+        const result = await search(param, context.service);
+        tracks = result?.tracks?.items;
+        if (tracks === undefined || tracks.length === 0) {
+            throw new Error(`Unable find track with genre '${genre}'`);
+        }
+        genreTrackCache.set(genre, tracks);
     }
 
     return sortAndExpandMovement(context, query, tracks, quantity);

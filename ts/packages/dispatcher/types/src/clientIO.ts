@@ -45,6 +45,7 @@ export type NotifyExplainedData = {
 export interface ClientIO {
     clear(requestId: RequestId): void;
     exit(requestId: RequestId): void;
+    shutdown(requestId: RequestId): void;
 
     // Display
     setUserRequest(requestId: RequestId, command: string, seq?: number): void;

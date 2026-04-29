@@ -138,7 +138,7 @@ The scaffolder supports nine architectural patterns. Use `list agent patterns` a
 | `llm-streaming`          | Agent calls an LLM, streams results      | `chat`, `greeting`              |
 | `sub-agent-orchestrator` | API surface too large for one schema     | `desktop`, `code`, `browser`    |
 | `websocket-bridge`       | Automate a host app via a plugin         | `browser`, `code`               |
-| `state-machine`          | Multi-phase workflow with approval gates | `onboarding`, `scriptflow`      |
+| `state-machine`          | Multi-phase workflow with approval gates | `onboarding`, `powershell`      |
 | `native-platform`        | OS / device APIs, no cloud               | `androidMobile`, `playerLocal`  |
 | `view-ui`                | Rich interactive web-view UI             | `turtle`, `montage`, `markdown` |
 | `command-handler`        | Simple settings-style direct dispatch    | `settings`, `test`              |

@@ -24,11 +24,14 @@ export type CompletionSettings = {
     verbosity?: "low" | "medium" | "high";
 };
 
+// A JSON Schema object passed opaquely to the OpenAI API.
+export type JsonSchemaType = Record<string, unknown>;
+
 export type StructuredOutputJsonSchema = {
     name: string;
     description?: string;
     strict?: true;
-    schema: any; // TODO: JsonSchemaType
+    schema: JsonSchemaType;
 };
 
 export type FunctionCallingJsonSchema = {
@@ -36,7 +39,7 @@ export type FunctionCallingJsonSchema = {
     function: {
         name: string;
         description?: string;
-        parameters?: any; // TODO: JsonSchemaType
+        parameters?: JsonSchemaType;
         strict?: true;
     };
 };

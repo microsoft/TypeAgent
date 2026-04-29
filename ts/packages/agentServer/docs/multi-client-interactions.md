@@ -167,13 +167,43 @@ interactionCancelled(interactionId): void {
 
 The abort reasons distinguish resolved vs. cancelled so the client can print the appropriate notice.
 
-## Shell Implementation Notes
+## Shell Implementation
 
-The Shell (`main.ts`) is not yet implemented (stubs in place). The same pattern applies: hold a `Map<interactionId, AbortController>` and call `abort()` from `interactionResolved`/`interactionCancelled`. The UI (modal dialog or inline card) should be dismissed programmatically and a toast shown if resolved by a remote client.
+The Shell (`main.ts`) implements the same `AbortController` pattern as the CLI. `registerClient()` holds a `Map<string, AbortController>` (called `activeInteractions`) scoped to the session. Each interaction is registered on `requestInteraction` and removed after the user responds or the interaction is dismissed.
+
+### `requestInteraction`
+
+Creates an `AbortController`, registers it in `activeInteractions`, and fires an async IIFE that calls `chatView.showInteractionQuestion()` (for `question`) or `chatView.proposeAction()` (for `proposeAction`). On success it calls `chatView.respondToInteraction(response)`. On abort it distinguishes known abort reasons (`{ kind: "resolved-by-other" }` / `"cancelled"`) from unexpected errors and logs the latter.
+
+`chatView.showInteractionQuestion()` renders the prompt inline in the chat scroll region using `ChoicePanel`. For binary `["Yes", "No"]` choices it reuses the same icon elements as the standalone `askYesNo()` path for visual consistency. All other choice sets render a numbered button panel. The method accepts an `AbortSignal` and dismisses the panel — appending a `[answered by another client]` or `[interaction cancelled]` inline notice — when the signal fires.
+
+### `interactionResolved` and `interactionCancelled`
+
+```typescript
+interactionResolved(interactionId): void {
+    const ac = activeInteractions.get(interactionId);
+    if (ac) {
+        activeInteractions.delete(interactionId);
+        ac.abort({ kind: "resolved-by-other" });
+    }
+},
+interactionCancelled(interactionId): void {
+    const ac = activeInteractions.get(interactionId);
+    if (ac) {
+        activeInteractions.delete(interactionId);
+        ac.abort("cancelled");
+    }
+},
+```
+
+### Standalone mode
+
+When the Shell runs its own dispatcher (not connected to an agent-server), `question()` is called directly on the renderer `ClientIO` — not via `requestInteraction`. In this path `showInteractionQuestion()` is called with `interactionId: ""` and no `AbortSignal`, since there are no other clients that could call `interactionResolved`/`interactionCancelled`.
+
+`popupQuestion` interactions (no `requestId`) use a synthesised `clientRequestId` with the `agent-interaction-` prefix, which triggers auto-creation of a standalone `MessageGroup` in the chat with no user bubble.
 
 ## Future Work
 
-- **Shell `question` support**: implement `requestInteraction` in `main.ts` using the same AbortController pattern as the CLI.
 - **`proposeAction` in CLI**: render the structured template editor inline in the terminal.
 - **Stable client identity**: allow a reconnecting client to reclaim its old `connectionId` so in-flight interactions are re-broadcast rather than orphaned (see `TODO` in `sharedDispatcher.ts` `join()`).
 - **Freeform text input**: add a `textInput` interaction type for open-ended questions where the agent needs a free-form string from the user (e.g. "What name should I use?"). This would follow the same broadcast-and-race pattern as `question`, with a `{ type: "textInput"; message: string; defaultValue?: string }` request and a `{ type: "textInput"; value: string }` response. A precedent exists in `typeagent/src/chat.ts` (`ChatUserInterface.getInput()`) and `knowledgeProcessor` which use this pattern outside the dispatcher layer.

@@ -32,13 +32,13 @@ class MongoDBLoggerSink implements LoggerSink {
 
     private async upload() {
         let attempt = 0;
+        let delay = UPLOAD_DELAY;
         while (attempt < MAX_RETRY) {
             attempt++;
             try {
                 await this.drain();
                 break;
             } catch (e: any) {
-                // TODO: add backoff/queuing logic for ENOTFOUND (no internet)
                 if (
                     typeof e.message === "string" &&
                     e.message.includes("Invalid key")
@@ -56,8 +56,14 @@ class MongoDBLoggerSink implements LoggerSink {
                     break;
                 }
 
-                // Retry
+                // Retry with exponential backoff (handles ENOTFOUND and other transient errors)
                 debugMongo(`ERROR: ${e}`);
+                if (attempt < MAX_RETRY) {
+                    await new Promise<void>((resolve) =>
+                        setTimeout(resolve, delay),
+                    );
+                    delay *= 2;
+                }
             }
         }
         // Clear the timeout so it can schedule after the next log event.

@@ -14,8 +14,18 @@ import {
     VideoGenerationJob,
     ImageInPaintItem,
 } from "./models.js";
-import { callApi, callJsonApi, FetchThrottler } from "./restClient.js";
+import {
+    BuildPoolRequest,
+    callApiWithPool,
+    callJsonApiWithPool,
+    FetchThrottler,
+} from "./restClient.js";
 import { getEnvSetting } from "./common.js";
+import {
+    discoverEndpointPool,
+    EndpointPool,
+    makeSingleMemberPool,
+} from "./endpointPool.js";
 import {
     PromptSection,
     Result,
@@ -244,42 +254,74 @@ function parseEndPointName(endpoint?: string): {
     return { provider: "azure", name: endpoint };
 }
 
-// Cache of the model settings
-const chatModels = new Map<string, ApiSettings>();
-export function getChatModelSettings(endpoint?: string) {
+// Cache of per-model endpoint pools. Keyed by
+// `${modelType}:${provider}:${endpointName}`.
+const modelPools = new Map<string, EndpointPool>();
+
+function defaultProvider(): ModelProviders {
+    return EnvVars.OPENAI_API_KEY in process.env ? "openai" : "azure";
+}
+
+function getModelPool(
+    provider: ModelProviders,
+    modelType: ModelType,
+    endpointName?: string,
+): EndpointPool {
+    const key = `${modelType}:${provider}:${endpointName ?? ""}`;
+    const existing = modelPools.get(key);
+    if (existing) return existing;
+    const pool = discoverEndpointPool(provider, modelType, endpointName);
+    modelPools.set(key, pool);
+    return pool;
+}
+
+export function getChatModelPool(endpoint?: string): EndpointPool {
     const endpointName = parseEndPointName(endpoint);
-    const endpointKey = `${endpointName.provider}:${endpointName.name}`;
-    const existing = chatModels.get(endpointKey);
+    const key = `${ModelType.Chat}:${endpointName.provider}:${endpointName.name ?? ""}`;
+    const existing = modelPools.get(key);
     if (existing) {
         return existing;
     }
 
-    const getApiSettingsFromEnv =
-        endpointName.provider === "openai"
-            ? openAIApiSettingsFromEnv
-            : endpointName.provider === "azure"
-              ? azureApiSettingsFromEnv
-              : ollamaApiSettingsFromEnv;
-    const settings = getApiSettingsFromEnv(
-        ModelType.Chat,
-        undefined,
-        endpointName.name,
-    );
-
-    if (settings.maxConcurrency !== undefined) {
-        const q = priorityQueue<() => Promise<any>>(async (task) => {
-            return task();
-        }, settings.maxConcurrency);
-
-        const throttler = (fn: () => Promise<any>, priority?: number) => {
-            return q.push<any>(fn, priority);
-        };
-
-        settings.throttler = throttler;
+    let pool: EndpointPool;
+    if (endpointName.provider === "ollama") {
+        // Ollama is single-endpoint; attach the throttler via the legacy path.
+        const settings = ollamaApiSettingsFromEnv(
+            ModelType.Chat,
+            undefined,
+            endpointName.name,
+        );
+        if (settings.maxConcurrency !== undefined) {
+            const q = priorityQueue<() => Promise<any>>(
+                async (task) => task(),
+                settings.maxConcurrency,
+            );
+            settings.throttler = (fn: () => Promise<any>, priority?: number) =>
+                q.push<any>(fn, priority);
+        }
+        pool = makeSingleMemberPool(settings, key);
+    } else {
+        pool = getModelPool(
+            endpointName.provider,
+            ModelType.Chat,
+            endpointName.name,
+        );
     }
 
-    chatModels.set(endpointKey, settings);
-    return settings;
+    modelPools.set(key, pool);
+    return pool;
+}
+
+/**
+ * Legacy accessor. Returns the preferred (tier-1 / bare) member's settings.
+ * Kept to preserve the public API used by dispatcher, kp, and modelResource.
+ * For multi-endpoint pools, callers who need pool-aware behavior should use
+ * {@link getChatModelPool}. Mutations to the returned settings affect only
+ * the preferred member, which is the same semantic callers had before pools.
+ */
+export function getChatModelSettings(endpoint?: string): ApiSettings {
+    const pool = getChatModelPool(endpoint);
+    return pool.members[0].settings;
 }
 
 export function supportsStreaming(
@@ -398,10 +440,11 @@ export function createChatModel(
     completionCallback?: (request: any, response: any) => void,
     tags?: string[],
 ): ChatModelWithStreaming {
-    const settings =
+    const pool =
         typeof endpoint === "object"
-            ? endpoint
-            : getChatModelSettings(endpoint);
+            ? makeSingleMemberPool(endpoint, `custom:${endpoint.provider}`)
+            : getChatModelPool(endpoint);
+    const settings = pool.members[0].settings;
 
     // GPT-5 models only support temperature=1; 0 is rejected by the API.
     if (typeof endpoint === "string" && /gpt.?5/i.test(endpoint)) {
@@ -418,7 +461,7 @@ export function createChatModel(
         );
     }
     return createAzureOpenAIChatModel(
-        settings,
+        pool,
         completionSettings,
         completionCallback,
         tags,
@@ -426,11 +469,18 @@ export function createChatModel(
 }
 
 function createAzureOpenAIChatModel(
-    settings: AzureApiSettings | OpenAIApiSettings,
+    pool: EndpointPool,
     completionSettings?: CompletionSettings,
     completionCallback?: (request: any, response: any) => void,
     tags?: string[],
 ) {
+    // The preferred member's settings drive global behavior (response_format
+    // support, model name for OpenAI, maxPromptChars). All members for a
+    // single model name should have matching shape — they're the same model
+    // in different regions.
+    const settings = pool.members[0].settings as
+        | AzureApiSettings
+        | OpenAIApiSettings;
     completionSettings ??= {};
     completionSettings.n ??= 1;
     completionSettings.temperature ??= 0;
@@ -456,6 +506,14 @@ function createAzureOpenAIChatModel(
         completeStream,
     };
     return model;
+
+    function buildRequest(params: any): BuildPoolRequest {
+        return async (member) => {
+            const headerResult = await createApiHeaders(member.settings);
+            if (!headerResult.success) return headerResult;
+            return success({ headers: headerResult.data, body: params });
+        };
+    }
 
     function getParams(
         messages: PromptSection[],
@@ -498,26 +556,15 @@ function createAzureOpenAIChatModel(
     ): Promise<Result<string>> {
         verifyPromptLength(settings, prompt);
 
-        const headerResult = await createApiHeaders(settings);
-        if (!headerResult.success) {
-            return headerResult;
-        }
-
         const messages: PromptSection[] =
             typeof prompt === "string"
                 ? [{ role: "user", content: prompt }]
                 : prompt;
 
         const params = getParams(messages, jsonSchema);
-        const result = await callJsonApi(
-            headerResult.data,
-            settings.endpoint,
-            params,
-            settings.maxRetryAttempts,
-            settings.retryPauseMs,
-            undefined,
-            settings.throttler,
-        );
+        const result = await callJsonApiWithPool(pool, buildRequest(params), {
+            retryPauseMs: settings.retryPauseMs,
+        });
         if (!result.success) {
             return result;
         }
@@ -575,11 +622,6 @@ function createAzureOpenAIChatModel(
     ): Promise<Result<AsyncIterableIterator<string>>> {
         verifyPromptLength(settings, prompt);
 
-        const headerResult = await createApiHeaders(settings);
-        if (!headerResult.success) {
-            return headerResult;
-        }
-
         const messages: PromptSection[] =
             typeof prompt === "string"
                 ? [{ role: "user", content: prompt }]
@@ -603,14 +645,9 @@ function createAzureOpenAIChatModel(
             stream: true,
             stream_options: { include_usage: true && !historyIncludesImages },
         });
-        const result = await callApi(
-            headerResult.data,
-            settings.endpoint,
-            params,
-            settings.maxRetryAttempts,
-            settings.retryPauseMs,
-            settings.timeout,
-        );
+        const result = await callApiWithPool(pool, buildRequest(params), {
+            retryPauseMs: settings.retryPauseMs,
+        });
         if (!result.success) {
             return result;
         }
@@ -832,17 +869,26 @@ export function createEmbeddingModel(
     apiSettingsOrEndpoint?: ApiSettings | string | undefined,
     dimensions?: number | undefined,
 ): TextEmbeddingModel {
-    if (typeof apiSettingsOrEndpoint === "string") {
-        apiSettingsOrEndpoint = apiSettingsFromEnv(
-            ModelType.Embedding,
-            undefined,
+    let pool: EndpointPool;
+    if (typeof apiSettingsOrEndpoint === "object") {
+        pool = makeSingleMemberPool(
             apiSettingsOrEndpoint,
+            `custom:${apiSettingsOrEndpoint.provider}`,
+        );
+    } else {
+        const provider = defaultProvider();
+        pool = getModelPool(
+            provider,
+            ModelType.Embedding,
+            typeof apiSettingsOrEndpoint === "string"
+                ? apiSettingsOrEndpoint
+                : undefined,
         );
     }
+    const settings = pool.members[0].settings;
+
     // https://platform.openai.com/docs/api-reference/embeddings/create#embeddings-create-input
     const maxBatchSize = 2048;
-    const settings =
-        apiSettingsOrEndpoint ?? apiSettingsFromEnv(ModelType.Embedding);
     const defaultParams: any =
         settings.provider === "azure"
             ? {}
@@ -890,21 +936,18 @@ export function createEmbeddingModel(
     }
 
     async function callApi(input: string | string[]): Promise<Result<unknown>> {
-        const headerResult = await createApiHeaders(settings);
-        if (!headerResult.success) {
-            return headerResult;
-        }
         const params = {
             ...defaultParams,
             input,
         };
-
-        return callJsonApi(
-            headerResult.data,
-            settings.endpoint,
-            params,
-            settings.maxRetryAttempts,
-            settings.retryPauseMs,
+        return callJsonApiWithPool(
+            pool,
+            async (member) => {
+                const headerResult = await createApiHeaders(member.settings);
+                if (!headerResult.success) return headerResult;
+                return success({ headers: headerResult.data, body: params });
+            },
+            { retryPauseMs: settings.retryPauseMs },
         );
     }
 
@@ -916,7 +959,10 @@ export function createEmbeddingModel(
  * @param apiSettings: settings to use to create the client
  */
 export function createImageModel(apiSettings?: ApiSettings): ImageModel {
-    const settings = apiSettings ?? apiSettingsFromEnv(ModelType.Image);
+    const pool = apiSettings
+        ? makeSingleMemberPool(apiSettings, `custom:${apiSettings.provider}`)
+        : getModelPool(defaultProvider(), ModelType.Image);
+    const settings = pool.members[0].settings;
     const defaultParams =
         settings.provider === "azure"
             ? {}
@@ -934,10 +980,6 @@ export function createImageModel(apiSettings?: ApiSettings): ImageModel {
         width: number,
         height: number,
     ): Promise<Result<ImageGeneration>> {
-        const headerResult = await createApiHeaders(settings);
-        if (!headerResult.success) {
-            return headerResult;
-        }
         if (imageCount != 1) {
             throw Error("n MUST equal 1"); // as of 10.03.2024 API will only accept n=1
         }
@@ -949,12 +991,14 @@ export function createImageModel(apiSettings?: ApiSettings): ImageModel {
             output_format: "png",
         };
 
-        const result = await callJsonApi(
-            headerResult.data,
-            settings.endpoint,
-            params,
-            settings.maxRetryAttempts,
-            settings.retryPauseMs,
+        const result = await callJsonApiWithPool(
+            pool,
+            async (member) => {
+                const headerResult = await createApiHeaders(member.settings);
+                if (!headerResult.success) return headerResult;
+                return success({ headers: headerResult.data, body: params });
+            },
+            { retryPauseMs: settings.retryPauseMs },
         );
 
         if (!result.success) {

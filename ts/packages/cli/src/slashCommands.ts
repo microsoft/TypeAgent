@@ -3,6 +3,7 @@
 
 import registerDebug from "debug";
 import chalk from "chalk";
+import { stopAgentServer } from "@typeagent/agent-server-client";
 import type { ConversationCommandContext } from "./conversationCommands.js";
 import { handleConversationCommand } from "./conversationCommands.js";
 
@@ -44,6 +45,31 @@ export function getConversationCommandContext():
     | ConversationCommandContext
     | undefined {
     return conversationContext;
+}
+
+// Late-binding server port for shutdown command.
+// Set from connect.ts after the connection is established.
+let serverPort: number | undefined;
+let serverConnection: { shutdown(): Promise<void> } | undefined;
+
+export function setServerPort(port: number): void {
+    serverPort = port;
+}
+
+export function getServerPort(): number | undefined {
+    return serverPort;
+}
+
+export function setServerConnection(
+    conn: { shutdown(): Promise<void> } | undefined,
+): void {
+    serverConnection = conn;
+}
+
+export function getServerConnection():
+    | { shutdown(): Promise<void> }
+    | undefined {
+    return serverConnection;
 }
 
 export function getVerboseIndicator(): string {
@@ -152,6 +178,31 @@ const slashCommands: SlashCommand[] = [
                 return;
             }
             return handleConversationCommand(conversationContext, args);
+        },
+    },
+    {
+        name: "shutdown",
+        description: "Shut down the agent server",
+        handler: async () => {
+            const port = serverPort ?? 8999;
+            console.log(
+                chalk.dim(
+                    `Sending shutdown request to server on port ${port}...`,
+                ),
+            );
+            try {
+                if (serverConnection) {
+                    await serverConnection.shutdown();
+                } else {
+                    await stopAgentServer(port, true);
+                }
+                console.log(chalk.green("Agent server stopped."));
+            } catch (e: any) {
+                console.log(
+                    chalk.red(`Failed to shut down agent server: ${e.message}`),
+                );
+            }
+            return { exit: true };
         },
     },
     {

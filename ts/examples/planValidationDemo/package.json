@@ -1,0 +1,24 @@
+{
+  "name": "plan-validation-demo",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Example project for plan-validated agent execution. Launches an MCP validation server with live dashboard and scopes Claude Code to a small landing-page scenario.",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/examples/planValidationDemo"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "scripts": {
+    "clean": "node setup.mjs --clean",
+    "reset": "node setup.mjs --clean && node setup.mjs",
+    "setup": "node setup.mjs"
+  },
+  "devDependencies": {
+    "mcp-plan-validation": "workspace:*",
+    "tsx": "^4.21.0"
+  }
+}

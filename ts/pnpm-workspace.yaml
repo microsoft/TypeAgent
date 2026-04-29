@@ -8,6 +8,7 @@ packages:
   - packages/dispatcher/*
   - packages/utils/*
   - packages/mcp/*
+  - packages/security/*
   - examples/*
   - examples/agentExamples/*
   - tools

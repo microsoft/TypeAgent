@@ -3,6 +3,7 @@
 
 import { defaultFileLoader } from "./defaultFileLoader.js";
 import { compileGrammar, FileLoader, SchemaLoader } from "./grammarCompiler.js";
+import { GrammarOptimizationOptions } from "./grammarOptimizer.js";
 import { parseGrammarRules } from "./grammarRuleParser.js";
 import { Grammar } from "./grammarTypes.js";
 
@@ -11,6 +12,8 @@ export type LoadGrammarRulesOptions = {
     startValueRequired?: boolean; // Whether the start rule must produce a value (default: true)
     schemaLoader?: SchemaLoader; // Optional loader for resolving .ts type imports
     enableValueExpressions?: boolean; // Enable JavaScript-like value expressions (default: false)
+    /** Compile-time AST optimizations.  All optimizations default to off. */
+    optimizations?: GrammarOptimizationOptions;
 };
 
 function parseAndCompileGrammar(
@@ -54,6 +57,7 @@ function parseAndCompileGrammar(
         warnings,
         parseResult.imports,
         options?.schemaLoader,
+        options?.optimizations,
     );
     return grammar;
 }

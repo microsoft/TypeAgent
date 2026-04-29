@@ -20,6 +20,10 @@ import {
     isObjectSpread,
 } from "./grammarRuleParser.js";
 import { getLineCol } from "./utils.js";
+import {
+    optimizeGrammar,
+    GrammarOptimizationOptions,
+} from "./grammarOptimizer.js";
 import { globalEntityRegistry } from "./entityRegistry.js";
 import { globalPhraseSetRegistry } from "./builtInPhraseMatchers.js";
 import { getBuiltInEntitiesGrammarContent } from "./builtInFileLoader.js";
@@ -417,6 +421,7 @@ export function compileGrammar(
     warnings?: string[],
     imports?: ImportStatement[],
     schemaLoader?: SchemaLoader,
+    optimizations?: GrammarOptimizationOptions,
 ): Grammar {
     const grammarFileMap = new Map<string, CompileContext>();
     const context = createCompileContext(
@@ -507,9 +512,14 @@ export function compileGrammar(
         }
     }
 
-    const grammar: Grammar = { rules: grammarRules };
+    const grammar: Grammar = { alternatives: grammarRules };
     if (allEntities.size > 0) {
         grammar.entities = Array.from(allEntities);
+    }
+    // Skip optimizations when there were errors — the AST may be partial
+    // and optimization invariants may not hold.
+    if (errors.length === 0 && optimizations !== undefined) {
+        return optimizeGrammar(grammar, optimizations, warnings);
     }
     return grammar;
 }
@@ -1124,7 +1134,7 @@ function createGrammarRule(
                     );
                     parts.push({
                         type: "rules",
-                        rules: record.grammarRules,
+                        alternatives: record.grammarRules,
                         variable: name,
                         name: referencedName,
                         optional: expr.optional,
@@ -1220,7 +1230,7 @@ function createGrammarRule(
                 defaultValue = record.hasValue;
                 parts.push({
                     type: "rules",
-                    rules: record.grammarRules,
+                    alternatives: record.grammarRules,
                     name: expr.refName.name,
                 });
                 // RuleRefExpr has no optional modifier; it is always non-optional.
@@ -1244,7 +1254,7 @@ function createGrammarRule(
                 defaultValue = groupHasValue;
                 const rulesPart: RulesPart = {
                     type: "rules",
-                    rules: grammarRules,
+                    alternatives: grammarRules,
                     optional,
                 };
                 if (repeat) rulesPart.repeat = true;

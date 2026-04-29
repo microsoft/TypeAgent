@@ -33,6 +33,7 @@ import type { CompletionController } from "agent-dispatcher/helpers/completion";
 import chalk from "chalk";
 import fs from "fs";
 import path from "path";
+import os from "os";
 import { EnhancedSpinner, ANSI, getDisplayWidth } from "interactive-app";
 import { createInterface } from "readline/promises";
 import readline from "readline";
@@ -45,6 +46,8 @@ import {
     getVerboseIndicator,
     getConversationCommandContext,
     getSlashCompletions,
+    getServerPort,
+    getServerConnection,
 } from "./slashCommands.js";
 import { handleConversationCommand } from "./conversationCommands.js";
 import {
@@ -52,6 +55,7 @@ import {
     getDebugPanel,
     PromptRenderer,
 } from "./debugInterceptor.js";
+import { stopAgentServer } from "@typeagent/agent-server-client";
 
 // Track current processing state
 let currentSpinner: EnhancedSpinner | null = null;
@@ -633,6 +637,33 @@ export function createEnhancedClientIO(
             }
             process.exit(0);
         },
+        shutdown(): void {
+            if (currentSpinner) {
+                currentSpinner.stop();
+                currentSpinner = null;
+            }
+            const conn = getServerConnection();
+            const port = getServerPort();
+            const doShutdown = conn
+                ? conn.shutdown().catch(() => {
+                      // Graceful via existing connection failed —
+                      // fall back to force kill via PID file.
+                      if (port !== undefined) {
+                          return stopAgentServer(port, true);
+                      }
+                  })
+                : port !== undefined
+                  ? stopAgentServer(port, true)
+                  : Promise.resolve();
+
+            doShutdown
+                .catch(() => {
+                    // Best-effort: server may already be stopped.
+                })
+                .finally(() => {
+                    process.exit(0);
+                });
+        },
 
         // Display
         setUserRequest(requestId: RequestId) {
@@ -1209,6 +1240,7 @@ async function questionWithCompletion(
         let savedInput = ""; // Saves current input when navigating history
         let filterStartIndex = -1; // Where filtering begins (render-cache)
         let completionPrefix = ""; // Fixed prefix before completions (render-cache)
+        let slashCompletionsDismissed = false; // Set by Escape; cleared when input changes
         const stdin = process.stdin;
         const stdout = process.stdout;
 
@@ -1234,7 +1266,7 @@ async function questionWithCompletion(
         const render = () => {
             // Recompute completions from controller state each frame.
             if (controller) {
-                if (isSlashCommand(input)) {
+                if (isSlashCommand(input) && !slashCompletionsDismissed) {
                     filteredCompletions = getSlashCompletions(input);
                     filterStartIndex = 0;
                     completionPrefix = "";
@@ -1377,6 +1409,7 @@ async function questionWithCompletion(
                         historyIndex--;
                         input = history[historyIndex];
                         cursorPos = input.length;
+                        slashCompletionsDismissed = false;
                         render();
                     }
                     return;
@@ -1394,6 +1427,7 @@ async function questionWithCompletion(
                                 ? savedInput
                                 : history[historyIndex];
                         cursorPos = input.length;
+                        slashCompletionsDismissed = false;
                         render();
                     }
                     return;
@@ -1417,7 +1451,13 @@ async function questionWithCompletion(
 
             if (data === "\x1b") {
                 if (controller && filteredCompletions.length > 0) {
-                    controller.dismiss(input, "forward");
+                    if (isSlashCommand(input)) {
+                        // Slash completions are recomputed every render; use a
+                        // flag to suppress them until the input changes.
+                        slashCompletionsDismissed = true;
+                    } else {
+                        controller.dismiss(input, "forward");
+                    }
                 } else {
                     // Esc with no completions — clear input.
                     // Also hide the controller in case a fetch is in-flight
@@ -1426,6 +1466,7 @@ async function questionWithCompletion(
                     input = "";
                     cursorPos = 0;
                     historyIndex = history.length;
+                    slashCompletionsDismissed = false;
                 }
                 render();
                 return;
@@ -1510,6 +1551,7 @@ async function questionWithCompletion(
                             : "") +
                         completion;
                     cursorPos = input.length; // Move cursor to end
+                    slashCompletionsDismissed = false;
                     if (controller) {
                         controller.accept();
                     }
@@ -1521,6 +1563,7 @@ async function questionWithCompletion(
                     input =
                         input.slice(0, cursorPos - 1) + input.slice(cursorPos);
                     cursorPos--;
+                    slashCompletionsDismissed = false;
                     if (controller) {
                         controller.update(input, "backward");
                     }
@@ -1531,6 +1574,7 @@ async function questionWithCompletion(
                 input =
                     input.slice(0, cursorPos) + data + input.slice(cursorPos);
                 cursorPos++;
+                slashCompletionsDismissed = false;
                 if (controller) {
                     controller.update(input, "forward");
                 }
@@ -1843,10 +1887,15 @@ export async function processCommandsEnhanced<T>(
     dispatcherForCancel?: Dispatcher,
 ) {
     const fs = await import("node:fs");
+    const historyFile = path.join(
+        os.homedir(),
+        ".typeagent",
+        "command_history.json",
+    );
     let history: string[] = [];
-    if (fs.existsSync("command_history.json")) {
+    if (fs.existsSync(historyFile)) {
         const hh = JSON.parse(
-            fs.readFileSync("command_history.json", { encoding: "utf-8" }),
+            fs.readFileSync(historyFile, { encoding: "utf-8" }),
         );
         history = hh.commands;
     }
@@ -1990,10 +2039,7 @@ export async function processCommandsEnhanced<T>(
         console.log("");
 
         // save command history
-        fs.writeFileSync(
-            "command_history.json",
-            JSON.stringify({ commands: history }),
-        );
+        fs.writeFileSync(historyFile, JSON.stringify({ commands: history }));
     }
 }
 

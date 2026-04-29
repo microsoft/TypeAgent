@@ -14,4 +14,5 @@ export {
     ChatPanelOptions,
     CompletionResult,
     DynamicDisplayResult,
+    NotifyExplainedData,
 } from "./chatPanel.js";

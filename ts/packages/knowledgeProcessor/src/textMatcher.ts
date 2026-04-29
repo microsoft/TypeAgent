@@ -98,7 +98,7 @@ export async function createAliasMatcher<TTextId extends ValueType = string>(
         const textId = await textTable.getId(targetText);
         if (textId) {
             // This will ensure no duplicates
-            return aliases.put(alias, [textId]);
+            return aliases.addUpdate(alias, [textId]);
         }
         return undefined;
     }

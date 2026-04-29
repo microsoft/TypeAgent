@@ -2,6 +2,24 @@
 // Licensed under the MIT License.
 
 import { escapeMatch } from "../utils/regexp.js";
+
+// For each character that has a combining diacritical mark, produce a
+// regex alternation that accepts either the accented form or its base
+// letter form. This lets "Beyonce" match a stored "beyoncé" match set entry.
+function buildDiacriticVariantPattern(match: string): string {
+    let result = "";
+    for (const ch of match) {
+        const decomposed = ch.normalize("NFD");
+        const combining = decomposed.slice(1);
+        if (combining.length > 0 && /^\p{M}+$/u.test(combining)) {
+            const base = decomposed[0];
+            result += `(?:${escapeMatch(ch)}|${escapeMatch(base)})`;
+        } else {
+            result += escapeMatch(ch);
+        }
+    }
+    return result;
+}
 import {
     MatchPartJSON,
     MatchSetJSON,
@@ -62,8 +80,8 @@ export class MatchSet {
         public readonly namespace: string | undefined,
         private readonly index: number = -1, // Assign an index as id for serialization and reference in construction
     ) {
-        // Case insensitive match
-        // TODO: non-diacritic match
+        // Case-insensitive storage; diacritic-insensitive matching is done by
+        // buildDiacriticVariantPattern on the regex side.
         this.matches = new Set(Array.from(matches).map((m) => m.toLowerCase()));
 
         // Error checking
@@ -95,7 +113,9 @@ export class MatchSet {
     public get regexPart() {
         return Array.from(this.matches)
             .sort((a, b) => b.length - a.length) // Match longest first
-            .map((m) => escapeMatch(m).replaceAll(/\s+/g, "\\s+")) // allow multiple spaces
+            .map((m) =>
+                buildDiacriticVariantPattern(m).replaceAll(/\s+/g, "\\s+"),
+            ) // allow multiple spaces
             .join("|");
     }
 

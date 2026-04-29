@@ -162,12 +162,34 @@ export class MessageContainer {
         if (this.action !== undefined && !Array.isArray(this.action)) {
             label.setAttribute(
                 "action-data",
-                "<pre>" + JSON.stringify(this.action, undefined, 2) + "</pre>",
+                JSON.stringify(this.action, undefined, 2),
             );
 
             // mark the span as clickable
             this.nameSpan.classList.add("clickable");
         }
+    }
+
+    private diagnosticData: any[] | undefined;
+
+    public appendDiagnosticData(data: any) {
+        if (this.diagnosticData === undefined) {
+            this.diagnosticData = [data];
+        } else {
+            this.diagnosticData.push(data);
+        }
+        const label = this.timestampDiv.firstChild as HTMLSpanElement;
+        label.setAttribute(
+            "action-data",
+            JSON.stringify(
+                this.diagnosticData.length === 1
+                    ? this.diagnosticData[0]
+                    : this.diagnosticData,
+                undefined,
+                2,
+            ),
+        );
+        this.nameSpan.classList.add("clickable");
     }
 
     private createTimestampDiv(timestamp: Date, className: string) {
@@ -246,6 +268,10 @@ export class MessageContainer {
 
     public getMessage() {
         return this.messageDiv.innerText;
+    }
+
+    public getMessageDiv() {
+        return this.messageDiv;
     }
 
     public setMessage(

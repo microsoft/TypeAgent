@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "actionName": "tailLog",
+  "description": "Shows the last N lines of a log file",
+  "displayName": "Tail Log",
+  "parameters": [
+    {
+      "name": "logPath",
+      "type": "path",
+      "required": true,
+      "description": "Path to the log file"
+    },
+    {
+      "name": "lines",
+      "type": "number",
+      "required": false,
+      "description": "Number of lines to show",
+      "default": "50"
+    }
+  ],
+  "script": {
+    "language": "powershell",
+    "body": "param([string]$LogPath, [int]$Lines = 50)\nGet-Content -Path $LogPath -Tail $Lines",
+    "expectedOutputFormat": "text"
+  },
+  "grammarPatterns": [
+    {
+      "pattern": "tail $(logPath:wildcard)",
+      "isAlias": true,
+      "examples": ["tail app.log"]
+    },
+    {
+      "pattern": "(show|get) (the)? last $(lines:number)? lines (of|from|in) $(logPath:wildcard)",
+      "isAlias": false,
+      "examples": [
+        "show the last 100 lines of app.log",
+        "get last 50 lines from server.log"
+      ]
+    },
+    {
+      "pattern": "tail $(lines:number)? (lines)? $(logPath:wildcard)",
+      "isAlias": true,
+      "examples": ["tail 100 app.log", "tail 50 lines server.log"]
+    }
+  ],
+  "sandbox": {
+    "allowedCmdlets": ["Get-Content"],
+    "allowedPaths": ["$PWD", "$env:USERPROFILE", "$env:TEMP"],
+    "allowedModules": ["Microsoft.PowerShell.Management"],
+    "maxExecutionTime": 30,
+    "networkAccess": false
+  },
+  "source": {
+    "type": "manual",
+    "timestamp": "2026-04-23T00:00:00Z"
+  }
+}

@@ -5,6 +5,7 @@ import {
     RequestAction,
     ParamValueType,
     ParamFieldType,
+    ParamObjectType,
     JSONAction,
 } from "./requestAction.js";
 import {
@@ -88,7 +89,7 @@ export function getActionProperty(
     propertyName: string,
 ) {
     const nameParts = propertyName.split(".");
-    let curr = actionProps as ParamFieldType; // TODO: Is there a better typing
+    let curr = actionProps as ParamFieldType;
     for (const part of nameParts) {
         const number = parseInt(part);
         if (Array.isArray(curr)) {
@@ -181,7 +182,7 @@ function ensureProperty(
                 ...ensureProperty(
                     explanationParamNameSet,
                     `${propertyName}.${key}`,
-                    value[key], // TODO: better typing
+                    value[key],
                 ),
             );
         }
@@ -206,7 +207,7 @@ export function ensureProperties(
             ...ensureProperty(
                 explanationParamNameSet,
                 key,
-                (actionProps as any)[key], // TODO: better typing
+                (actionProps as ParamObjectType)[key],
             ),
         );
     }

@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "plan-validation": {
+      "command": "node",
+      "args": [
+        "--import",
+        "tsx",
+        "../../packages/security/mcpValidation/demo/server.ts",
+        "--policy",
+        "./.plan-validation-policy.json"
+      ],
+      "env": {
+        "DEMO_PORT": "3100"
+      }
+    }
+  }
+}

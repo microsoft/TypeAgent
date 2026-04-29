@@ -27,6 +27,7 @@ function createTestClientIO(data: IAgentMessage[]): ClientIO {
     return {
         clear: () => {},
         exit: () => process.exit(0),
+        shutdown: () => process.exit(0),
         setUserRequest: () => {},
         setDisplayInfo: () => {},
         appendDiagnosticData: () => {},

@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "actionName": "findDuplicates",
+  "description": "Finds duplicate files by comparing file hashes",
+  "displayName": "Find Duplicate Files",
+  "parameters": [
+    {
+      "name": "path",
+      "type": "path",
+      "required": false,
+      "description": "Directory to search",
+      "default": "."
+    },
+    {
+      "name": "minSizeMB",
+      "type": "number",
+      "required": false,
+      "description": "Minimum file size in MB to consider",
+      "default": "1"
+    }
+  ],
+  "script": {
+    "language": "powershell",
+    "body": "param([string]$Path = '.', [int]$MinSizeMB = 1)\n$files = Get-ChildItem -Path $Path -Recurse -File -ErrorAction SilentlyContinue |\n    Where-Object { $_.Length -gt ($MinSizeMB * 1MB) }\n$hashes = @{}\nforeach ($file in $files) {\n    $hash = (Get-FileHash -Path $file.FullName -Algorithm MD5).Hash\n    if (-not $hashes.ContainsKey($hash)) {\n        $hashes[$hash] = @()\n    }\n    $hashes[$hash] += $file\n}\n$duplicates = $hashes.GetEnumerator() | Where-Object { $_.Value.Count -gt 1 }\nif ($duplicates) {\n    foreach ($dup in $duplicates) {\n        Write-Output \"=== Duplicates (Hash: $($dup.Key.Substring(0,8))...) ===\"\n        $dup.Value | ForEach-Object {\n            Write-Output \"  $($_.FullName) ({0:N2} MB)\" -f ($_.Length/1MB)\n        }\n        Write-Output ''\n    }\n} else {\n    Write-Output 'No duplicate files found.'\n}",
+    "expectedOutputFormat": "text"
+  },
+  "grammarPatterns": [
+    {
+      "pattern": "find duplicate (files)? (in)? $(path:wildcard)?",
+      "isAlias": false,
+      "examples": ["find duplicates", "find duplicate files in downloads"]
+    },
+    {
+      "pattern": "(what|which) files are duplicated (in)? $(path:wildcard)?",
+      "isAlias": false,
+      "examples": ["what files are duplicated", "which files are duplicated"]
+    }
+  ],
+  "sandbox": {
+    "allowedCmdlets": [
+      "Get-ChildItem",
+      "Where-Object",
+      "Get-FileHash",
+      "ForEach-Object",
+      "Write-Output"
+    ],
+    "allowedPaths": ["$PWD", "$env:USERPROFILE", "$env:TEMP"],
+    "allowedModules": [
+      "Microsoft.PowerShell.Management",
+      "Microsoft.PowerShell.Utility"
+    ],
+    "maxExecutionTime": 120,
+    "networkAccess": false
+  },
+  "source": {
+    "type": "manual",
+    "timestamp": "2026-04-23T00:00:00Z"
+  }
+}
