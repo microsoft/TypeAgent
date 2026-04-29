@@ -4,15 +4,23 @@
 // Webview entry point — runs in the browser sandbox inside VS Code.
 // Communicates with the extension host via postMessage.
 // The extension host manages the actual RPC connection to the agent server.
+//
+// Renders the shared `chat-ui` ChatPanel; the only host-managed UI element
+// is the connection status ribbon at the top (#status-bar).
 
-import { ChatUI } from "./chatUI";
-import completionStyles from "@typeagent/completion-ui/styles.css";
+import { ChatPanel, HistoryEntry } from "chat-ui";
+import chatPanelStyles from "chat-ui/styles";
+import vscodeThemeStyles from "./vscode-theme.css";
 
-// Inject the shared completion UI styles.  Insert at the top of <head> so
-// the extension's chat.css (linked later) can override these defaults.
-const styleEl = document.createElement("style");
-styleEl.textContent = completionStyles as unknown as string;
-document.head.insertBefore(styleEl, document.head.firstChild);
+// Inject the chat-ui base styles first, then the VS Code theme overlay so
+// it can override the defaults via --vscode-* CSS variables.
+function injectStyles(css: string): void {
+    const styleEl = document.createElement("style");
+    styleEl.textContent = css;
+    document.head.appendChild(styleEl);
+}
+injectStyles(chatPanelStyles as unknown as string);
+injectStyles(vscodeThemeStyles as unknown as string);
 
 declare function acquireVsCodeApi(): {
     postMessage(message: unknown): void;
@@ -21,24 +29,116 @@ declare function acquireVsCodeApi(): {
 };
 
 const vscode = acquireVsCodeApi();
-const chatUI = new ChatUI();
 
-// Mount command-completion (inline ghost text + dropdown menu) on the chat input.
-const partial = chatUI.attachCompletion((msg) => vscode.postMessage(msg));
+const statusEl = document.getElementById("status-bar")!;
+const rootEl = document.getElementById("chat-root")!;
 
-// Listen for messages from the extension host (bridged from agent server)
-// Helper: pull clientRequestId out of a RequestId object/string.
+// Track the higher-level disabled reasons so we can reconcile them when
+// any one of them flips. ChatPanel.setEnabled honors switching/history
+// loading internally, but we additionally require the websocket to be
+// connected before the input is enabled.
+let isConnected = false;
+
+const chatPanel = new ChatPanel(rootEl, {
+    platformAdapter: {
+        // Open links via the extension host — webviews can't call window.open
+        // for arbitrary URLs in a useful way.
+        handleLinkClick: (href: string, _target: string | null) => {
+            vscode.postMessage({ type: "openExternal", href });
+        },
+    },
+    onSend: (text: string, _attachments, requestId: string) => {
+        vscode.postMessage({ type: "sendCommand", command: text, requestId });
+    },
+    onCancel: (requestId: string) => {
+        vscode.postMessage({ type: "cancelCommand", requestId });
+    },
+});
+
+// `onDemoAction` is exposed as a settable public property on ChatPanel
+// (not part of ChatPanelOptions), so wire it after construction.
+chatPanel.onDemoAction = (action: "continue" | "cancel") => {
+    vscode.postMessage({ type: "demoCommand", action });
+};
+
+// Helper: pull clientRequestId out of a RequestId object/string. The
+// dispatcher emits both shapes depending on the source; chat-ui only deals
+// in plain strings.
 function clientIdOf(requestId: any): string | undefined {
     if (!requestId) return undefined;
     if (typeof requestId === "string") return requestId;
     return requestId.clientRequestId as string | undefined;
 }
 
+// Translate the bridge's history-entry shape (which mirrors the dispatcher's
+// internal recorded events) to chat-ui's HistoryEntry union.
+function toChatPanelHistory(entries: any[]): HistoryEntry[] {
+    const out: HistoryEntry[] = [];
+    for (const e of entries) {
+        switch (e.type) {
+            case "user-request":
+                out.push({
+                    kind: "user",
+                    text: e.command,
+                    requestId: clientIdOf(e.requestId),
+                    timestamp: e.timestamp,
+                });
+                break;
+            case "set-display":
+                out.push({
+                    kind: "agent-replace",
+                    content: e.message?.message,
+                    source: e.message?.source,
+                    requestId: clientIdOf(e.message?.requestId),
+                    timestamp: e.timestamp,
+                });
+                break;
+            case "append-display":
+                // Skip temporary status messages — they were ephemeral
+                // status lines (e.g. "Translating...") that were already
+                // replaced by real content during the original interaction.
+                if (e.mode === "temporary") break;
+                out.push({
+                    kind: "agent-append",
+                    content: e.message?.message,
+                    source: e.message?.source,
+                    mode: e.mode,
+                    requestId: clientIdOf(e.message?.requestId),
+                    timestamp: e.timestamp,
+                });
+                break;
+            // set-display-info and command-result aren't part of chat-ui's
+            // HistoryEntry union; drop them on replay (the action label /
+            // metrics tooltips will only show for live requests).
+        }
+    }
+    return out;
+}
+
+function setStatus(
+    connected: boolean,
+    sessionId?: string,
+    sessionName?: string,
+): void {
+    isConnected = connected;
+    if (connected) {
+        statusEl.className = "status connected";
+        const label = sessionName || sessionId?.substring(0, 8) || "";
+        statusEl.textContent = label
+            ? `Connected · ${label}`
+            : "Connected to TypeAgent";
+    } else {
+        statusEl.className = "status disconnected";
+        statusEl.textContent = "Disconnected";
+    }
+    chatPanel.setEnabled(connected);
+}
+
 window.addEventListener("message", (event) => {
     const msg = event.data;
     switch (msg.type) {
         case "status":
-            chatUI.setStatus(msg.connected, msg.sessionId, msg.sessionName);
+            setStatus(msg.connected, msg.sessionId, msg.sessionName);
             if (msg.connected && msg.sessionId) {
                 vscode.setState({
                     sessionId: msg.sessionId,
@@ -47,25 +147,25 @@ window.addEventListener("message", (event) => {
             }
             break;
         case "userInfo":
-            chatUI.setUserInfo(msg.name);
+            // chat-ui doesn't yet expose a user-name affordance; ignore.
             break;
         case "sessionChanged":
-            chatUI.onSessionChanged(msg.sessionName);
+            chatPanel.clear();
             break;
         case "setDisplay":
-            chatUI.setAgentDisplay(
+            chatPanel.replaceAgentMessage(
                 msg.message.message,
                 msg.message.source,
-                msg.timestamp,
+                undefined,
                 clientIdOf(msg.message.requestId),
             );
             break;
         case "appendDisplay":
-            chatUI.appendAgentDisplay(
+            chatPanel.addAgentMessage(
                 msg.message.message,
                 msg.message.source,
+                undefined,
                 msg.mode,
-                msg.timestamp,
                 clientIdOf(msg.message.requestId),
             );
             break;
@@ -74,101 +174,82 @@ window.addEventListener("message", (event) => {
             // is the originator), skip. Otherwise, another tab on the same
             // conversation sent it — render it so both tabs stay in sync.
             const rid = clientIdOf(msg.requestId);
-            if (rid && !chatUI.hasUserMessage(rid)) {
-                chatUI.addUserMessage(msg.command, undefined, "done", rid);
+            if (rid && !chatPanel.hasUserMessage(rid)) {
+                chatPanel.addUserMessage(msg.command, rid);
             }
             break;
         }
         case "setDisplayInfo":
-            chatUI.setDisplayInfo(
+            chatPanel.setDisplayInfo(
                 msg.source,
                 msg.action,
                 clientIdOf(msg.requestId),
             );
             break;
         case "clear":
-            chatUI.clearMessages();
+            chatPanel.clear();
             break;
-        case "notify":
-            // Let the chat UI consume status notifications (explained,
-            // grammarRule). Anything it doesn't handle becomes a visible
-            // system message.
-            if (!chatUI.onNotify(msg.event, msg.data, msg.source, msg.requestId)) {
-                chatUI.addNotification(msg.event, msg.data, msg.source);
+        case "notify": {
+            const rid = clientIdOf(msg.requestId);
+            if (msg.event === "explained" && rid) {
+                chatPanel.notifyExplained(rid, msg.data);
+            } else if (msg.event === "grammarRule" && rid) {
+                chatPanel.updateGrammarResult(rid, msg.data);
+            } else if (msg.event === "commandComplete" && rid) {
+                chatPanel.completeRequest(rid, msg.data?.result);
+            } else {
+                chatPanel.addSystemMessage(`[${msg.source}] ${msg.event}`);
             }
             break;
+        }
         case "error":
-            chatUI.addErrorMessage(msg.message);
+            chatPanel.addSystemMessage(`Error: ${msg.message}`);
             break;
         case "commandResult":
             // Legacy — no-op
             break;
-        case "commandComplete":
-            // Command finished — clean up any remaining temporary status
-            chatUI.onCommandComplete(msg.requestId, msg.result);
+        case "commandComplete": {
+            const rid = clientIdOf(msg.requestId);
+            if (rid) chatPanel.completeRequest(rid, msg.result);
             break;
-        case "peerMetrics":
+        }
+        case "peerMetrics": {
             // Forwarded from a peer tab on the same session — apply the
             // timing tooltip to our local bubble for that requestId.
-            chatUI.applyPeerMetrics(msg.requestId, msg.result);
+            const rid = clientIdOf(msg.requestId);
+            if (rid) chatPanel.completeRequest(rid, msg.result);
             break;
+        }
         case "switching":
-            chatUI.setSwitching(msg.switching, msg.targetName);
+            chatPanel.setSwitching(msg.switching, msg.targetName);
+            // Re-apply connection-derived enable state when the switch ends.
+            if (!msg.switching) chatPanel.setEnabled(isConnected);
             break;
         case "historyReplay":
-            chatUI.replayHistory(msg.entries);
+            chatPanel.replayHistory(toChatPanelHistory(msg.entries));
             break;
         case "setActive":
             document.body.classList.toggle("chat-inactive", !msg.active);
             break;
         case "historyLoading":
-            chatUI.setHistoryLoading(msg.loading);
+            chatPanel.setHistoryLoading(msg.loading);
+            if (!msg.loading) chatPanel.setEnabled(isConnected);
             break;
         case "pcState":
-            partial?.applyState(msg.state);
+            // Inline command-completion state from the extension host. Not
+            // wired through chat-ui yet (deferred to A9 — lift partialCompletion
+            // into chat-ui). For now this is a no-op.
             break;
         case "demoPaused":
-            setDemoPaused(msg.paused, msg.message);
+            chatPanel.setDemoPaused(msg.paused, msg.message);
             break;
         case "demoTypeAndSend":
             // Animate typing into the chat input then submit, so demo
             // playback in the extension matches the Electron shell's
             // natural-keystroke effect.
-            void chatUI.typeAndSend(msg.command, msg.requestId);
+            void chatPanel.typeAndSend(msg.command, msg.requestId);
             break;
     }
-});
-
-// Demo pause: while the extension's runDemoScript is awaiting Ctrl+Right
-// or Esc, the focused webview swallows those keystrokes before VS Code's
-// keybinding system can see them. We listen here in capture phase, prevent
-// the default (which would move the textarea cursor / blur the field),
-// and forward the action back to the extension host so it can resolve the
-// pause via the same demoContinue/demoCancel commands as the keybindings.
-let demoPausedActive = false;
-function setDemoPaused(paused: boolean, _message?: string): void {
-    demoPausedActive = paused;
-}
-window.addEventListener(
-    "keydown",
-    (e: KeyboardEvent) => {
-        if (!demoPausedActive) return;
-        if (e.key === "ArrowRight" && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            e.stopPropagation();
-            vscode.postMessage({ type: "demoCommand", action: "continue" });
-        } else if (e.key === "Escape") {
-            e.preventDefault();
-            e.stopPropagation();
-            vscode.postMessage({ type: "demoCommand", action: "cancel" });
-        }
-    },
-    true,
-);
-
-// Wire up the send button and input
-chatUI.onSend((text, requestId) => {
-    vscode.postMessage({ type: "sendCommand", command: text, requestId });
 });
 
 // Ask the extension host to connect
@@ -181,7 +262,7 @@ const reportFocus = (focused: boolean) => {
 window.addEventListener("focus", () => reportFocus(true));
 window.addEventListener("blur", () => reportFocus(false));
 document.addEventListener("focusin", () => reportFocus(true));
-document.addEventListener("focusout", (e: FocusEvent) => {
+document.addEventListener("focusout", () => {
     // Only report blur if focus left the document entirely
     if (!document.hasFocus()) reportFocus(false);
 });

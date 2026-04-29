@@ -176,6 +176,7 @@
         "@typeagent/dispatcher-types": "file:../dispatcher/types",
         "agent-dispatcher": "file:../dispatcher/dispatcher",
         "ansi_up": "^6.0.6",
+        "chat-ui": "workspace:*",
         "debug": "^4.4.0",
         "dompurify": "^3.4.1",
         "isomorphic-ws": "^5.0.0",

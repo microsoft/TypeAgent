@@ -89,11 +89,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 <body>
     <div id="chat-container">
         <div id="status-bar" class="status disconnected">Disconnected</div>
-        <div id="messages"></div>
-        <div id="input-area">
-            <textarea id="chat-input" placeholder="Ask TypeAgent..." rows="1"></textarea>
-            <button id="send-btn" title="Send"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 2048 2048"><path d="M2048 960q0 19-10 34t-27 24L91 1914q-12 6-27 6-28 0-46-18t-18-47v-9q0-4 2-8l251-878L2 82q-2-4-2-8t0-9q0-28 18-46T64 0q15 0 27 6l1920 896q37 17 37 58zM164 1739l1669-779L164 181l205 715h847q26 0 45 19t19 45q0 26-19 45t-45 19H369l-205 715z"/></svg></button>
-        </div>
+        <div id="chat-root"></div>
     </div>
     <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>

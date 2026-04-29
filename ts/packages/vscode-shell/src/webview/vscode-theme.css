@@ -1,0 +1,102 @@
+/* Copyright (c) Microsoft Corporation. Licensed under the MIT License. */
+
+/* VS Code theme overlay for the chat-ui ChatPanel.
+   chat-ui ships with a light-theme default palette; here we map those
+   surfaces to VS Code's --vscode-* CSS variables so the panel honors
+   the user's selected theme (light, dark, high-contrast). */
+
+/* The host page provides #chat-container as a column flex with
+   #status-bar above and #chat-root taking the rest. The ChatPanel
+   builds .chat-panel-wrapper into #chat-root. Make it fill. */
+#chat-root {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+}
+.chat-panel-wrapper {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--vscode-editor-background);
+    color: var(--vscode-foreground);
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+}
+
+/* Scrollable message area */
+.chat {
+    background: var(--vscode-editor-background);
+    color: var(--vscode-foreground);
+}
+
+/* ── Input row ────────────────────────────────────────────────── */
+
+.chat-input {
+    background-color: var(--vscode-input-background) !important;
+    border-color: var(--vscode-input-border, var(--vscode-panel-border)) !important;
+    color: var(--vscode-input-foreground);
+}
+.chat-input.listening {
+    background-color: var(--vscode-inputValidation-infoBackground) !important;
+}
+.user-textarea {
+    color: var(--vscode-input-foreground);
+    caret-color: var(--vscode-editorCursor-foreground, currentColor);
+}
+.user-textarea:empty::before {
+    color: var(--vscode-input-placeholderForeground, #888) !important;
+}
+.chat-input-button {
+    color: var(--vscode-button-foreground, var(--vscode-foreground));
+}
+.chat-input-button:hover:not(:disabled) {
+    color: var(--vscode-button-background, var(--vscode-textLink-foreground));
+}
+.chat-input-button:disabled svg {
+    color: var(--vscode-disabledForeground, #888);
+}
+.chat-input-ghost {
+    color: var(--vscode-editorGhostText-foreground, var(--vscode-disabledForeground, #888));
+}
+
+/* ── Bubbles / messages ───────────────────────────────────────── */
+
+/* Generic theme-friendly substitutes for the hard-coded light-mode
+   surfaces in chat-ui's stylesheet. We use attribute-style overrides
+   keyed off the same class names. */
+.user-message,
+.agent-message,
+.message-bubble {
+    background-color: var(--vscode-editorWidget-background, rgba(127, 127, 127, 0.08));
+    color: var(--vscode-foreground);
+    border: 1px solid var(--vscode-widget-border, transparent);
+}
+
+/* Notification / status / system banners */
+.notification,
+.system-notification {
+    background-color: var(--vscode-editorInfo-background, var(--vscode-editorWidget-background));
+    color: var(--vscode-editorInfo-foreground, var(--vscode-foreground));
+    border-color: var(--vscode-editorInfo-border, var(--vscode-widget-border));
+}
+
+/* Scrollbar — match VS Code's panel scrollbars */
+.chat::-webkit-scrollbar {
+    width: var(--vscode-scrollbar-width, 10px);
+}
+.chat::-webkit-scrollbar-thumb {
+    background-color: var(--vscode-scrollbarSlider-background) !important;
+}
+.chat::-webkit-scrollbar-thumb:hover {
+    background-color: var(--vscode-scrollbarSlider-hoverBackground) !important;
+}
+.chat::-webkit-scrollbar-thumb:active {
+    background-color: var(--vscode-scrollbarSlider-activeBackground) !important;
+}
+.chat::-webkit-scrollbar-track {
+    background-color: transparent !important;
+}
