@@ -368,9 +368,24 @@ export class PartialCompletion {
         // the command syntax.
         const lastChar = quotedText.slice(-1);
         const appendSpace = /[A-Za-z0-9_"'\)\]]/.test(lastChar);
-        const replaceText = appendSpace ? `${quotedText} ` : quotedText;
 
+        // Prepend a leading space when the menu's prefix is empty and the
+        // character immediately preceding the insertion point is
+        // alphanumeric (e.g. accepting a subcommand right after "@shell"
+        // with no separator yet typed).  Otherwise the inserted text
+        // would fuse with the previous token (e.g. "@shellbreak ").
         const offset = this.getCurrentInput().length - completionPrefix.length;
+        const charBefore =
+            completionPrefix === "" && offset > 0
+                ? this.getCurrentInput().charAt(offset - 1)
+                : "";
+        const firstChar = quotedText.charAt(0);
+        const prependSpace =
+            charBefore !== "" &&
+            /[A-Za-z0-9_]/.test(charBefore) &&
+            /[A-Za-z0-9_"']/.test(firstChar);
+        const replaceText =
+            (prependSpace ? " " : "") + quotedText + (appendSpace ? " " : "");
         const leafNode = getLeafNode(this.input.getTextEntry(), offset);
         if (leafNode === undefined) {
             debugError(
@@ -419,7 +434,9 @@ export class PartialCompletion {
         // Reset completion state so the next update requests fresh completions.
         this.controller.accept();
 
-        debug(`Partial completion replaced: ${replaceText}`);
+        debug(
+            `Partial completion replaced: '${replaceText}' textContent='${this.input.getTextEntry().textContent}' currentInput='${this.getCurrentInputForCompletion()}'`,
+        );
 
         // Clear previousInput so auto-detection picks "forward" for the
         // post-selection update (the new input won't be a prefix of "").
@@ -429,17 +446,30 @@ export class PartialCompletion {
         // (Chromium can return zero ClientRects for a caret immediately
         // after a trailing space until layout settles, which causes
         // SearchMenu.render() to bail with "invalid rects" and hide).
+        // Use show() (not update()) so the controller bypasses its
+        // dedup guard even if a synchronous selectionchange handler
+        // already advanced lastInput to the new value while we were
+        // mutating the DOM above.
         requestAnimationFrame(() => {
-            if (!this.closed) {
-                this.update(false);
-            }
+            if (this.closed) return;
+            const newInput = this.getCurrentInputForCompletion();
+            debug(
+                `Partial completion post-accept rAF: input='${newInput}' previousInput='${this.previousInput}'`,
+            );
+            this.previousInput = newInput;
+            this.controller.show(newInput, "forward");
         });
     }
 
     public handleSpecialKeys(event: KeyboardEvent) {
         // Ctrl+Space: explicitly reactivate the menu (works even when
         // the menu is currently hidden, e.g. after Escape).
-        if (event.key === " " && event.ctrlKey && !event.altKey && !event.metaKey) {
+        if (
+            event.key === " " &&
+            event.ctrlKey &&
+            !event.altKey &&
+            !event.metaKey
+        ) {
             const input = this.getCurrentInputForCompletion();
             const direction: CompletionDirection =
                 input.length < this.previousInput.length &&

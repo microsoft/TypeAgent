@@ -126,8 +126,7 @@ export async function runDemo(
                 if (demoAborted) break;
                 sendDemoState(chatView, "running");
             } else if (line && !line.startsWith("#")) {
-                var manualInput =
-                    awaitKeyboardInput && !line.startsWith("@");
+                var manualInput = awaitKeyboardInput && !line.startsWith("@");
                 if (manualInput) sendDemoState(chatView, "paused");
                 await sendChatInputText(line, chatView);
                 await getActionCompleteEvent(manualInput);

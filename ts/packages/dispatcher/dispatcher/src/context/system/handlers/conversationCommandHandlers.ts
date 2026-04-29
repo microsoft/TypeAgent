@@ -94,8 +94,7 @@ class ConversationRenameCommandHandler implements CommandHandler {
                     "New name (renames current) or existing name (when newName given)",
             },
             newName: {
-                description:
-                    "New name when renaming a specific conversation",
+                description: "New name when renaming a specific conversation",
                 optional: true,
             },
         },
