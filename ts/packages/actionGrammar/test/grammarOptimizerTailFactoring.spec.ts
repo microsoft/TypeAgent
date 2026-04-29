@@ -6,33 +6,11 @@ import { loadGrammarRules } from "../src/grammarLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
 import { validateTailRulesParts } from "../src/grammarOptimizer.js";
 import { grammarToJson } from "../src/grammarSerializer.js";
-import {
-    Grammar,
-    GrammarPart,
-    GrammarRule,
-    RulesPart,
-} from "../src/grammarTypes.js";
+import { Grammar, GrammarRule, RulesPart } from "../src/grammarTypes.js";
+import { findAllRulesParts } from "./testUtils.js";
 
 function match(grammar: ReturnType<typeof loadGrammarRules>, request: string) {
     return matchGrammar(grammar, request).map((m) => m.match);
-}
-
-function findAllRulesParts(rules: GrammarRule[]): RulesPart[] {
-    const out: RulesPart[] = [];
-    const visited = new WeakSet<GrammarRule[]>();
-    const visit = (parts: GrammarPart[]) => {
-        for (const p of parts) {
-            if (p.type === "rules") {
-                out.push(p);
-                if (!visited.has(p.alternatives)) {
-                    visited.add(p.alternatives);
-                    for (const r of p.alternatives) visit(r.parts);
-                }
-            }
-        }
-    };
-    for (const r of rules) visit(r.parts);
-    return out;
 }
 
 const PLAYER_SCHEMA = `<Start> = <Play>;

@@ -16,6 +16,11 @@ import { compileNFAToDFA } from "../src/dfaCompiler.js";
 import { matchDFAWithSplitting, getDFACompletions } from "../src/dfaMatcher.js";
 import { computeNFACompletions } from "../src/nfaCompletion.js";
 import { Grammar } from "../src/grammarTypes.js";
+import type {
+    DispatchModeBucket,
+    GrammarRule,
+    RulesPart,
+} from "../src/grammarTypes.js";
 
 export const spaces =
     " \t\v\f\u00a0\ufeff\n\r\u2028\u2029\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u202F\u205F\u3000";
@@ -669,6 +674,77 @@ export function expectMetadata(
             expect(sortProps(stripped)).toEqual(
                 sortProps(expected.properties ?? []),
             );
+        }
+    }
+}
+
+/**
+ * Collect every `RulesPart` reachable from `rules`, deduplicating
+ * traversal of identity-shared `alternatives` arrays *and*
+ * dispatch-bucket arrays.  Without bucket dedup, parts whose
+ * `dispatch` table maps multiple tokens to the same bucket array
+ * would have their `RulesPart`s counted once per token; tests that
+ * assert exact counts on dispatched grammars need the dedup.
+ *
+ * Each `RulesPart` is itself emitted exactly once even if it appears
+ * via multiple bucket references (since `p.alternatives` identity is
+ * the same).  Use `findAllRulesPartsInGrammar` when the optimizer's
+ * dispatch pass may have hoisted the top-level alternation onto
+ * `grammar.dispatch` (leaving `grammar.alternatives` empty / trimmed).
+ */
+export function findAllRulesParts(rules: GrammarRule[]): RulesPart[] {
+    const out: RulesPart[] = [];
+    collectRulesPartsInto(rules, undefined, out, new Set<GrammarRule[]>());
+    return out;
+}
+
+/**
+ * Like `findAllRulesParts` but also walks the grammar-level dispatch
+ * buckets - needed when the optimizer's dispatch pass hoists the
+ * top-level alternation onto `grammar.dispatch`, leaving
+ * `grammar.alternatives` (the fallback subset) empty or trimmed.
+ *
+ * Uses a single shared `visited` set across `grammar.alternatives`
+ * and every top-level dispatch bucket so a `RulesPart` reachable from
+ * multiple top-level entries is still emitted exactly once.
+ */
+export function findAllRulesPartsInGrammar(grammar: Grammar): RulesPart[] {
+    const out: RulesPart[] = [];
+    collectRulesPartsInto(
+        grammar.alternatives,
+        grammar.dispatch,
+        out,
+        new Set<GrammarRule[]>(),
+    );
+    return out;
+}
+
+function collectRulesPartsInto(
+    rules: GrammarRule[],
+    dispatch: DispatchModeBucket[] | undefined,
+    out: RulesPart[],
+    visited: Set<GrammarRule[]>,
+): void {
+    const walkBucket = (bucket: GrammarRule[]) => {
+        if (visited.has(bucket)) return;
+        visited.add(bucket);
+        for (const r of bucket) {
+            for (const p of r.parts) {
+                if (p.type !== "rules") continue;
+                out.push(p);
+                walkBucket(p.alternatives);
+                if (p.dispatch !== undefined) {
+                    for (const m of p.dispatch) {
+                        for (const b of m.tokenMap.values()) walkBucket(b);
+                    }
+                }
+            }
+        }
+    };
+    walkBucket(rules);
+    if (dispatch !== undefined) {
+        for (const m of dispatch) {
+            for (const b of m.tokenMap.values()) walkBucket(b);
         }
     }
 }

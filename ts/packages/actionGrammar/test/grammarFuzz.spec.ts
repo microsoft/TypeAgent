@@ -237,3 +237,34 @@ fuzzDescribe("Fuzz: separator chars embedded in literals", {
     },
     validations: ["optimizer", "roundtrip-text", "roundtrip-json"],
 });
+
+// ── Tail-call-friendly shapes for `promoteTailRulesParts`.  The pass
+// looks for a trailing `RulesPart` (a `<RuleName>` reference at the
+// end of a rule's parts) with effective member count >= 2 and either
+// a forwarding parent (no value) or a parent value referencing the
+// trailing capture.  Bias the generator toward ruleRef / nestedRuleRef
+// parts and value attachment so promote-eligible forks appear in most
+// generated grammars; the `promoteTailOnly` variant in the default
+// optimizer-variant set then runs the pass in isolation.
+fuzzDescribe("Fuzz: tail-call promote shapes (optimizer equivalence)", {
+    seed: 0xf022c,
+    count: 40,
+    features: {
+        partKinds: {
+            literal: 1,
+            ruleRef: 3,
+            nestedRuleRef: 2,
+            wildcard: 1,
+            number: 1,
+        },
+        // High value-attach probability surfaces the substitution
+        // branch of promote (parent value references the trailing
+        // capture); the forwarding branch (no parent value) shows up
+        // on the rules where not every alt attached a value.
+        values: { attachProb: 0.7 },
+    },
+    // Add `roundtrip-text` so promotions through the
+    // `EMPTY_FALLBACK_RULES` sentinel and synthesized opaque
+    // wrapper bindings are also exercised through the serializer.
+    validations: ["optimizer", "roundtrip-text"],
+});
