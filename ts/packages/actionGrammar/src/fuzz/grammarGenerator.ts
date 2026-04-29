@@ -771,7 +771,14 @@ type RuleState = {
     firstAltMatch: string[];
     /** Variable names bound by wildcard/number captures in this rule. */
     boundVars: string[];
-    /** True if any alternative produces a value via `->`. */
+    /**
+     * True iff *every* alternative attaches an explicit value
+     * expression.  The compiler's `nestedRuleRef` check requires
+     * every alternate of a captured rule to produce a value, so
+     * the generator only treats this rule as a value-producing
+     * `nestedRuleRef` target when the predicate holds for all alts
+     * (not just any alt).
+     */
     hasValue: boolean;
 };
 

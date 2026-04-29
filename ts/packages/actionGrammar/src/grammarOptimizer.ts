@@ -387,7 +387,7 @@ type InlineConfig = {
     onInvariantViolation: "debug" | "throw";
 };
 
-export function inlineSingleAlternativeRules(
+function inlineSingleAlternativeRules(
     rules: GrammarRule[],
     config: InlineConfig = { onInvariantViolation: "debug" },
 ): GrammarRule[] {
@@ -871,7 +871,7 @@ function tryInlineRulesPart(
  * after the pass - see `inlineSingleAlternativeRules` for rationale.
  */
 /** Per-invocation configuration for `factorCommonPrefixes`. */
-export function factorCommonPrefixes(
+function factorCommonPrefixes(
     rules: GrammarRule[],
     tailFactoring: boolean = false,
 ): GrammarRule[] {
@@ -2454,7 +2454,7 @@ function computeDispatchPayload(
  * permissively, only when the fallback's first part could overlap
  * with a tokenMap key).  Not yet wired up - no measured need.
  */
-export function dispatchifyAlternations(rules: GrammarRule[]): {
+function dispatchifyAlternations(rules: GrammarRule[]): {
     alternatives: GrammarRule[];
     dispatch?: DispatchModeBucket[];
 } {
@@ -2711,8 +2711,8 @@ function promoteInsideRulesPart(
  *   - effective member count >= 2
  *   - every member's `spacingMode` matches the parent rule's
  *
- * On success delegates per-shape work to `tryPromoteForwarding` (no
- * member rewrite needed) or `tryPromoteSubstitution` (members
+ * On success delegates per-shape work to `checkForwardingPromotable`
+ * (no member rewrite needed) or `trySubstituteMembers` (members
  * rewritten via direct dispatch+fallback walk - no implicit
  * ordering contract with `getDispatchEffectiveMembers`).
  */
@@ -2794,8 +2794,16 @@ function checkForwardingPromotable(
 ): boolean {
     if (parts.length <= 1) return true;
     if (last.variable === undefined) return false;
+    // Multi-part rule: matcher's implicit-default rule requires
+    // exactly one variable-bearing contributor (wildcard / number
+    // always; rules / string / phraseSet only when bound; every
+    // `GrammarPart` carries an optional `variable` field, so a
+    // single `p.variable !== undefined` test covers the union).
+    // Promoting masks the baseline missing/multiple-default throws
+    // at finalize time, so bail out unless the trailing RulesPart
+    // is the sole contributor.
     for (let i = 0; i < parts.length - 1; i++) {
-        if (partContributesToImplicitDefault(parts[i])) return false;
+        if (parts[i].variable !== undefined) return false;
     }
     return true;
 }
@@ -2858,6 +2866,11 @@ function trySubstituteMembers(
         return { ...m, parts: renamed.parts, value: newValue };
     };
     const rewriteBucket = (bucket: GrammarRule[]): GrammarRule[] => {
+        // Empty bucket (most commonly the `EMPTY_FALLBACK_RULES`
+        // sentinel from `dispatchifyAlternations`) has nothing to
+        // rewrite; return the input identity so the sentinel keeps
+        // sharing across promotions.
+        if (bucket.length === 0) return bucket;
         const out: GrammarRule[] = [];
         for (const r of bucket) {
             out.push(rewriteOne(r));
@@ -2868,7 +2881,7 @@ function trySubstituteMembers(
 
     const newAlts: GrammarRule[] = rewriteBucket(last.alternatives);
     if (bailed) return undefined;
-    let newDispatch: DispatchModeBucket[] | undefined = last.dispatch;
+    let newDispatch: DispatchModeBucket[] | undefined;
     if (last.dispatch !== undefined) {
         newDispatch = last.dispatch.map((m) => {
             const newMap = new Map<string, GrammarRule[]>();
@@ -2891,36 +2904,6 @@ function trySubstituteMembers(
             ? EMPTY_FALLBACK_RULES
             : newAlts;
     return { dispatch: newDispatch, alternatives: fallback };
-}
-
-/**
- * Mirrors the matcher's implicit-default contributor predicate for
- * multi-part rules: a part contributes iff it is variable-bearing
- * (wildcard / number always; rules / string / phraseSet only when
- * bound).  Two contributors in the same parent rule throw at
- * finalize time; zero contributors throw too.
- */
-function partContributesToImplicitDefault(p: GrammarPart): boolean {
-    return getImplicitDefaultBindingName(p) !== undefined;
-}
-
-/**
- * Single source of truth for "what binding (if any) does this part
- * contribute to its parent rule's implicit default?".  Returns the
- * variable name when the part is var-bearing in a way the matcher
- * would forward via the implicit-default rule, otherwise
- * `undefined`.
- *
- * Every `GrammarPart` variant carries a `variable` field
- * (required on `wildcard` / `number`, optional on `rules` /
- * `string` / `phraseSet`), so the union is structurally
- * indexable.  See `CaptureBearingPart` in `grammarTypes.ts`.
- *
- * Shared by `partContributesToImplicitDefault` (predicate) and
- * `getImplicitDefaultValue` (which needs the actual name).
- */
-function getImplicitDefaultBindingName(p: GrammarPart): string | undefined {
-    return p.variable;
 }
 
 /**
@@ -2955,7 +2938,7 @@ function getImplicitDefaultValue(
     // binding-friendly check for multi-part children.
     let theVar: string | undefined;
     for (const p of parts) {
-        const name = getImplicitDefaultBindingName(p);
+        const name = p.variable;
         if (name === undefined) continue;
         if (theVar !== undefined) return undefined;
         theVar = name;

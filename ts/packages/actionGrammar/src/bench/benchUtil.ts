@@ -53,6 +53,21 @@ export const CONFIGS: {
         },
     },
     {
+        // factor + tailFactoring + promoteTailRulesParts.  Isolates
+        // the interaction between prefix factoring (which synthesizes
+        // wrappers whose trailing RulesPart is itself promotable) and
+        // the in-place promote pass; comparing against `fac+tail`
+        // shows promote's marginal impact on the post-factored AST.
+        name: "fac+tail+promote",
+        opts: {
+            optimizations: {
+                factorCommonPrefixes: true,
+                tailFactoring: true,
+                promoteTailRulesParts: true,
+            },
+        },
+    },
+    {
         // dispatchifyAlternations alone - measures the impact of
         // first-token dispatch in isolation.  At alternation forks
         // whose members start with distinct, statically-known tokens,

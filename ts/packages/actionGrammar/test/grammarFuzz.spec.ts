@@ -263,5 +263,8 @@ fuzzDescribe("Fuzz: tail-call promote shapes (optimizer equivalence)", {
         // on the rules where not every alt attached a value.
         values: { attachProb: 0.7 },
     },
-    validations: ["optimizer"],
+    // Add `roundtrip-text` so promotions through the
+    // `EMPTY_FALLBACK_RULES` sentinel and synthesized opaque
+    // wrapper bindings are also exercised through the serializer.
+    validations: ["optimizer", "roundtrip-text"],
 });

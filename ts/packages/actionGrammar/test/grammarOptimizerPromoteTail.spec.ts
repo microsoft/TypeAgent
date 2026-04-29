@@ -79,7 +79,38 @@ describe("Grammar Optimizer - promoteTailRulesParts", () => {
             const tailParts = findAllRulesParts(optimized.alternatives).filter(
                 (rp) => rp.tailCall,
             );
-            expect(tailParts.length).toBeGreaterThanOrEqual(1);
+            // Exactly one promotion: the trailing <Inner> reference
+            // in <Start>.  <Inner>'s own alts are leaf StringParts
+            // and have no trailing RulesPart to promote.
+            expect(tailParts).toHaveLength(1);
+        });
+
+        // Multi-part rule with TWO implicit-default contributors
+        // before the trailing RulesPart (a wildcard capture and a
+        // bound trailing rule).  The matcher's implicit-default
+        // rule throws "multiple values for default" at finalize time
+        // for such shapes; promoting would mask that throw via
+        // tail-entry, so the pass must bail out.  Wrapped under a
+        // start rule that doesn't capture `<Mid>`'s value, so the
+        // compiler doesn't reject the multi-contributor shape up
+        // front (only the matcher would, on a successful match
+        // attempt).
+        it("does not promote when a prefix part also contributes to implicit default", () => {
+            const text = `<Inner> = a -> 1 | b -> 2;
+<Mid> = $(prefix:string) $(v:<Inner>);
+<Start> = run <Mid> -> "ok";`;
+            const optimized = loadGrammarRules("t.grammar", text, {
+                optimizations: { promoteTailRulesParts: true },
+            });
+            const tailParts = findAllRulesParts(optimized.alternatives).filter(
+                (rp) => rp.tailCall,
+            );
+            // <Mid>'s trailing <Inner> reference must not be
+            // promoted (multi-contributor bailout).  <Start>'s own
+            // trailing <Mid> reference is also not promoted: it
+            // has no value, only one alternative, so fails the
+            // effective-member-count >= 2 check.
+            expect(tailParts).toHaveLength(0);
         });
     });
 
@@ -102,7 +133,9 @@ describe("Grammar Optimizer - promoteTailRulesParts", () => {
             const tailParts = findAllRulesParts(optimized.alternatives).filter(
                 (rp) => rp.tailCall,
             );
-            expect(tailParts.length).toBeGreaterThanOrEqual(1);
+            // Exactly one promotion site: the trailing <Inner>
+            // reference in <Start>.
+            expect(tailParts).toHaveLength(1);
             // Wrapper variable has been dropped.
             for (const tp of tailParts) {
                 expect(tp.variable).toBeUndefined();
