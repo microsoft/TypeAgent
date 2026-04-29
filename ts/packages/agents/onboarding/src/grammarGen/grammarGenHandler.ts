@@ -284,14 +284,30 @@ function buildGrammarPrompt(
 }
 
 function extractGrammarContent(llmResponse: string): string {
-    // Try to parse as JSON first (when using json_object response format)
+    let body = llmResponse.trim();
+
+    // Strip an outer markdown fence (any language tag) before attempting JSON
+    // parse. Without this, a response like ```json\n{ "grammar": "..." }\n```
+    // fails JSON.parse on the literal backticks.
+    const outerFence = body.match(/^```[a-zA-Z]*\s*\n?([\s\S]*?)\n?```\s*$/);
+    if (outerFence) body = outerFence[1].trim();
+
     try {
-        const parsed = JSON.parse(llmResponse);
-        if (parsed.grammar) return parsed.grammar.trim();
+        const parsed = JSON.parse(body);
+        if (parsed && typeof parsed.grammar === "string") {
+            return parsed.grammar.trim();
+        }
     } catch {
-        // Not JSON, fall through to other extraction methods
+        // Fall through to template-literal salvage.
     }
-    const fenceMatch = llmResponse.match(/```(?:agr)?\n([\s\S]*?)```/);
-    if (fenceMatch) return fenceMatch[1].trim();
-    return llmResponse.trim();
+
+    // Salvage backtick-template-literal style: { "grammar": `...` }.
+    const tmplMatch = body.match(/["']?grammar["']?\s*:\s*`([\s\S]*?)`\s*[,}]/);
+    if (tmplMatch) return tmplMatch[1].trim();
+
+    // Inner agr fence (no JSON wrapper).
+    const agrFence = body.match(/```(?:agr)\s*\n([\s\S]*?)```/);
+    if (agrFence) return agrFence[1].trim();
+
+    return body;
 }

@@ -1,0 +1,170 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+<SummarizeChatThread> = summarize the chat thread with ID $(chatId:word) -> {
+  actionName: "summarizeChatThread",
+  parameters: {
+    chatId
+  }
+}
+| (provide | give me) a summary of the chat thread with (the )?ID $(chatId:word) -> {
+  actionName: "summarizeChatThread",
+  parameters: {
+    chatId
+  }
+}
+| summarize my chat with $(participantNames:wildcard) -> {
+  actionName: "summarizeChatThread",
+  parameters: {
+    participantNames: [participantNames]
+  }
+}
+| catch me up on (the )?$(participantNames:wildcard) thread -> {
+  actionName: "summarizeChatThread",
+  parameters: {
+    participantNames: [participantNames]
+  }
+}
+| what did $(participantNames:wildcard) and I talk about -> {
+  actionName: "summarizeChatThread",
+  parameters: {
+    participantNames: [participantNames]
+  }
+};
+
+<SendChatMessage> = send a message to the team chat with ID $(chatId:word) saying $(message:wildcard) -> {
+  actionName: "sendChatMessage",
+  parameters: {
+    chatId,
+    message
+  }
+}
+| post $(message:wildcard) in the chat with ID $(chatId:word) -> {
+  actionName: "sendChatMessage",
+  parameters: {
+    chatId,
+    message
+  }
+}
+| send $(recipients:wildcard) a (Teams )?message saying $(message:wildcard) -> {
+  actionName: "sendChatMessage",
+  parameters: {
+    recipients: [recipients],
+    message
+  }
+}
+| DM $(recipients:wildcard) (saying )?$(message:wildcard) -> {
+  actionName: "sendChatMessage",
+  parameters: {
+    recipients: [recipients],
+    message
+  }
+}
+| tell $(recipients:wildcard) (that )?$(message:wildcard) -> {
+  actionName: "sendChatMessage",
+  parameters: {
+    recipients: [recipients],
+    message
+  }
+}
+| message $(recipients:wildcard) $(message:wildcard) -> {
+  actionName: "sendChatMessage",
+  parameters: {
+    recipients: [recipients],
+    message
+  }
+};
+
+<ReplyToMessage> = reply to the message with ID $(messageId:word) in (the )?chat $(chatId:word) saying $(message:wildcard) -> {
+  actionName: "replyToMessage",
+  parameters: {
+    chatId,
+    messageId,
+    message
+  }
+}
+| (respond | reply) to (the )?message $(messageId:word) in chat $(chatId:word) with $(message:wildcard) -> {
+  actionName: "replyToMessage",
+  parameters: {
+    chatId,
+    messageId,
+    message
+  }
+}
+| reply $(message:wildcard) to that -> {
+  actionName: "replyToMessage",
+  parameters: {
+    message
+  }
+}
+| respond $(message:wildcard) in this thread -> {
+  actionName: "replyToMessage",
+  parameters: {
+    message
+  }
+};
+
+<GetJoinLink> = (give me | get me )?the join link for the meeting with ID $(meetingId:word) -> {
+  actionName: "getJoinLink",
+  parameters: {
+    meetingId
+  }
+}
+| I need the URL to join the Teams meeting with ID $(meetingId:word) -> {
+  actionName: "getJoinLink",
+  parameters: {
+    meetingId
+  }
+}
+| provide the join link for (the )?meeting ID $(meetingId:word) -> {
+  actionName: "getJoinLink",
+  parameters: {
+    meetingId
+  }
+}
+| what's the join link for $(meetingDescription:wildcard) -> {
+  actionName: "getJoinLink",
+  parameters: {
+    meetingDescription
+  }
+}
+| send me the link for $(meetingDescription:wildcard) -> {
+  actionName: "getJoinLink",
+  parameters: {
+    meetingDescription
+  }
+}
+| join (URL | link) for (the )?$(meetingDescription:wildcard) -> {
+  actionName: "getJoinLink",
+  parameters: {
+    meetingDescription
+  }
+};
+
+<FindMessage> = search for a message containing $(query:wildcard) -> {
+  actionName: "findMessage",
+  parameters: {
+    query
+  }
+}
+| (look up | find) messages with the keyword $(query:wildcard) -> {
+  actionName: "findMessage",
+  parameters: {
+    query
+  }
+}
+| find the message where we discussed $(query:wildcard) -> {
+  actionName: "findMessage",
+  parameters: {
+    query
+  }
+}
+| (search | look) for messages (about | mentioning) $(query:wildcard) -> {
+  actionName: "findMessage",
+  parameters: {
+    query
+  }
+};
+
+import { TeamsActions } from "./teamsSchema.ts";
+<Start> : TeamsActions = <SummarizeChatThread> | <SendChatMessage> | <ReplyToMessage> | <GetJoinLink> | <FindMessage>;

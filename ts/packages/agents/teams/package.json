@@ -1,0 +1,31 @@
+{
+  "name": "teams-agent",
+  "version": "0.0.1",
+  "private": true,
+  "description": "TypeAgent agent for teams",
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/teamsManifest.json",
+    "./agent/handlers": "./dist/teamsActionHandler.js"
+  },
+  "scripts": {
+    "asc": "asc -i ./src/teamsSchema.ts -o ./dist/teamsSchema.pas.json -t TeamsActions",
+    "agc": "agc -i ./src/teamsSchema.agr -o ./dist/teamsSchema.ag.json",
+    "tsc": "tsc -b",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "build": "concurrently npm:tsc npm:asc npm:agc"
+  },
+  "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
+    "aiclient": "workspace:*"
+  },
+  "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
+    "action-grammar-compiler": "workspace:*",
+    "concurrently": "^9.1.2",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  }
+}
