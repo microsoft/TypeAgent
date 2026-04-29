@@ -61,9 +61,10 @@ chatPanel.onDemoAction = (action: "continue" | "cancel") => {
     vscode.postMessage({ type: "demoCommand", action });
 };
 
-// Helper: pull clientRequestId out of a RequestId object/string. The
-// dispatcher emits both shapes depending on the source; chat-ui only deals
-// in plain strings.
+// Helper: pull clientRequestId out of a RequestId object/string. Most fields
+// arrive pre-normalized as plain strings from the bridge, but the
+// historyReplay payload still carries server `IAgentMessage`s whose nested
+// `requestId` can be either shape — so this is retained for that path only.
 function clientIdOf(requestId: any): string | undefined {
     if (!requestId) return undefined;
     if (typeof requestId === "string") return requestId;
@@ -80,7 +81,7 @@ function toChatPanelHistory(entries: any[]): HistoryEntry[] {
                 out.push({
                     kind: "user",
                     text: e.command,
-                    requestId: clientIdOf(e.requestId),
+                    requestId: e.requestId,
                     timestamp: e.timestamp,
                 });
                 break;
@@ -89,7 +90,7 @@ function toChatPanelHistory(entries: any[]): HistoryEntry[] {
                     kind: "agent-replace",
                     content: e.message?.message,
                     source: e.message?.source,
-                    requestId: clientIdOf(e.message?.requestId),
+                    requestId: e.requestId ?? clientIdOf(e.message?.requestId),
                     timestamp: e.timestamp,
                 });
                 break;
@@ -103,7 +104,7 @@ function toChatPanelHistory(entries: any[]): HistoryEntry[] {
                     content: e.message?.message,
                     source: e.message?.source,
                     mode: e.mode,
-                    requestId: clientIdOf(e.message?.requestId),
+                    requestId: e.requestId ?? clientIdOf(e.message?.requestId),
                     timestamp: e.timestamp,
                 });
                 break;
@@ -157,7 +158,7 @@ window.addEventListener("message", (event) => {
                 msg.message.message,
                 msg.message.source,
                 undefined,
-                clientIdOf(msg.message.requestId),
+                msg.requestId,
             );
             break;
         case "appendDisplay":
@@ -166,14 +167,14 @@ window.addEventListener("message", (event) => {
                 msg.message.source,
                 undefined,
                 msg.mode,
-                clientIdOf(msg.message.requestId),
+                msg.requestId,
             );
             break;
         case "setUserRequest": {
             // Echo from server. If we already rendered this locally (this tab
             // is the originator), skip. Otherwise, another tab on the same
             // conversation sent it — render it so both tabs stay in sync.
-            const rid = clientIdOf(msg.requestId);
+            const rid = msg.requestId;
             if (rid && !chatPanel.hasUserMessage(rid)) {
                 chatPanel.addUserMessage(msg.command, rid);
             }
@@ -183,14 +184,14 @@ window.addEventListener("message", (event) => {
             chatPanel.setDisplayInfo(
                 msg.source,
                 msg.action,
-                clientIdOf(msg.requestId),
+                msg.requestId,
             );
             break;
         case "clear":
             chatPanel.clear();
             break;
         case "notify": {
-            const rid = clientIdOf(msg.requestId);
+            const rid = msg.requestId;
             if (msg.event === "explained" && rid) {
                 chatPanel.notifyExplained(rid, msg.data);
             } else if (msg.event === "grammarRule" && rid) {
@@ -209,14 +210,14 @@ window.addEventListener("message", (event) => {
             // Legacy — no-op
             break;
         case "commandComplete": {
-            const rid = clientIdOf(msg.requestId);
+            const rid = msg.requestId;
             if (rid) chatPanel.completeRequest(rid, msg.result);
             break;
         }
         case "peerMetrics": {
             // Forwarded from a peer tab on the same session — apply the
             // timing tooltip to our local bubble for that requestId.
-            const rid = clientIdOf(msg.requestId);
+            const rid = msg.requestId;
             if (rid) chatPanel.completeRequest(rid, msg.result);
             break;
         }

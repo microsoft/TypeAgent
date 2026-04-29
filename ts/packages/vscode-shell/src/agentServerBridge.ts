@@ -16,22 +16,44 @@ import type { PendingInteractionRequest } from "@typeagent/dispatcher-types";
 import type { SessionInfo } from "@typeagent/agent-server-protocol";
 
 /**
+ * Coerce a RequestId (server-side `{requestId, clientRequestId}` shape) or
+ * already-string identifier down to the plain client request id used
+ * throughout the webview. Returns undefined if no usable id is present.
+ *
+ * The webview never deals in `RequestId` objects — every outgoing bridge
+ * message normalizes through this helper so `main.ts` can use plain string
+ * comparisons / map keys.
+ */
+function clientIdOf(rid: RequestId | string | undefined): string | undefined {
+    if (rid === undefined || rid === null) return undefined;
+    if (typeof rid === "string") return rid;
+    return (rid as { clientRequestId?: string }).clientRequestId;
+}
+
+/**
  * Messages from extension host → webview
  */
 export type BridgeToWebviewMessage =
     | { type: "status"; connected: boolean; sessionId?: string; sessionName?: string }
     | { type: "sessionChanged"; sessionId: string; sessionName: string }
-    | { type: "setDisplay"; message: IAgentMessage; seq?: number; timestamp?: number }
+    | {
+          type: "setDisplay";
+          message: IAgentMessage;
+          requestId?: string;
+          seq?: number;
+          timestamp?: number;
+      }
     | {
           type: "appendDisplay";
           message: IAgentMessage;
+          requestId?: string;
           mode: DisplayAppendMode;
           seq?: number;
           timestamp?: number;
       }
     | {
           type: "setDisplayInfo";
-          requestId: RequestId;
+          requestId?: string;
           source: string;
           actionIndex?: number;
           action?: TypeAgentAction | string[];
@@ -39,12 +61,12 @@ export type BridgeToWebviewMessage =
       }
     | {
           type: "setUserRequest";
-          requestId: RequestId;
+          requestId?: string;
           command: string;
           seq?: number;
           timestamp?: number;
       }
-    | { type: "clear"; requestId: RequestId }
+    | { type: "clear"; requestId?: string }
     | { type: "notify"; event: string; data: any; source: string; seq?: number; requestId?: string }
     | { type: "commandResult"; requestId: string; result: any }
     | { type: "commandComplete"; requestId: string; result: any }
@@ -72,7 +94,7 @@ export type BridgeToWebviewMessage =
               source?: string;
               action?: TypeAgentAction | string[];
               actionIndex?: number;
-              requestId?: RequestId;
+              requestId?: string;
               // command-result
               metrics?: any;
           }>;
@@ -474,7 +496,7 @@ export class AgentServerBridge {
     clearChatUI(): void {
         this.broadcastToWebviews({
             type: "clear",
-            requestId: "user-clear" as RequestId,
+            requestId: "user-clear",
         });
     }
 
@@ -798,7 +820,7 @@ export class AgentServerBridge {
                             type: "user-request",
                             seq: e.seq,
                             timestamp: e.timestamp,
-                            requestId: e.requestId,
+                            requestId: clientIdOf(e.requestId),
                             command: e.command,
                         };
                     case "set-display":
@@ -807,6 +829,7 @@ export class AgentServerBridge {
                             seq: e.seq,
                             timestamp: e.timestamp,
                             message: e.message,
+                            requestId: clientIdOf(e.message?.requestId),
                         };
                     case "append-display":
                         return {
@@ -815,13 +838,14 @@ export class AgentServerBridge {
                             timestamp: e.timestamp,
                             message: e.message,
                             mode: e.mode,
+                            requestId: clientIdOf(e.message?.requestId),
                         };
                     case "set-display-info":
                         return {
                             type: "set-display-info",
                             seq: e.seq,
                             timestamp: e.timestamp,
-                            requestId: e.requestId,
+                            requestId: clientIdOf(e.requestId),
                             source: e.source,
                             actionIndex: e.actionIndex,
                             action: e.action,
@@ -831,7 +855,7 @@ export class AgentServerBridge {
                             type: "command-result",
                             seq: e.seq,
                             timestamp: e.timestamp,
-                            requestId: e.requestId,
+                            requestId: clientIdOf(e.requestId),
                             metrics: e.metrics,
                         };
                     default:
@@ -1117,7 +1141,10 @@ export class AgentServerBridge {
 
             // ClientIO call functions (fire-and-forget notifications)
             clear: (requestId: RequestId) => {
-                this.broadcastToWebviews({ type: "clear", requestId });
+                this.broadcastToWebviews({
+                    type: "clear",
+                    requestId: clientIdOf(requestId),
+                });
             },
             exit: (_requestId: RequestId) => {
                 // No-op in extension context
@@ -1129,7 +1156,7 @@ export class AgentServerBridge {
             ) => {
                 this.broadcastToWebviews({
                     type: "setUserRequest",
-                    requestId,
+                    requestId: clientIdOf(requestId),
                     command,
                     seq,
                 });
@@ -1143,7 +1170,7 @@ export class AgentServerBridge {
             ) => {
                 this.broadcastToWebviews({
                     type: "setDisplayInfo",
-                    requestId,
+                    requestId: clientIdOf(requestId),
                     source,
                     actionIndex,
                     action,
@@ -1154,6 +1181,7 @@ export class AgentServerBridge {
                 this.broadcastToWebviews({
                     type: "setDisplay",
                     message,
+                    requestId: clientIdOf(message.requestId),
                     seq,
                 });
             },
@@ -1165,6 +1193,7 @@ export class AgentServerBridge {
                 this.broadcastToWebviews({
                     type: "appendDisplay",
                     message,
+                    requestId: clientIdOf(message.requestId),
                     mode,
                     seq,
                 });
@@ -1178,22 +1207,13 @@ export class AgentServerBridge {
                 source: string,
                 seq?: number,
             ) => {
-                // RequestId is an object {requestId, clientRequestId};
-                // we tag bubbles by the clientRequestId we generated.
-                let clientRequestId: string | undefined;
-                if (typeof notificationId === "string") {
-                    clientRequestId = notificationId;
-                } else if (notificationId && typeof notificationId === "object") {
-                    clientRequestId = (notificationId as any)
-                        .clientRequestId as string | undefined;
-                }
                 this.broadcastToWebviews({
                     type: "notify",
                     event,
                     data,
                     source,
                     seq,
-                    requestId: clientRequestId,
+                    requestId: clientIdOf(notificationId),
                 });
             },
             requestChoice: () => {},
