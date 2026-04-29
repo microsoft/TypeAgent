@@ -19,6 +19,29 @@ import registerDebug from "debug";
 const debug = registerDebug("typeagent:grammar:deserializer");
 
 /**
+ * Memoize index-keyed decoding with recursion safety: register the
+ * shell into `map` *before* `fill` runs so a recursive call from
+ * inside `fill` (a self-referential rule, an alternation that walks
+ * back through one of its members, etc.) resolves to the shell we
+ * just installed.  `fill` mutates the shell in place.
+ */
+function memoizeRecursive<V>(
+    map: Map<number, V>,
+    makeShell: () => V,
+    fill: (shell: V, idx: number) => void,
+): (idx: number) => V {
+    return (idx: number): V => {
+        let v = map.get(idx);
+        if (v === undefined) {
+            v = makeShell();
+            map.set(idx, v);
+            fill(v, idx);
+        }
+        return v;
+    };
+}
+
+/**
  * Validate the structural invariants the matcher's dispatch path
  * relies on (see `RulesPart.dispatch`):
  *   - every entry's `spacingMode` is `"required"` or `undefined`
@@ -54,8 +77,36 @@ function validateDispatchInvariants(
 }
 
 function grammarFromJsonInternal(json: GrammarJson): Grammar {
-    const start = json.rules[0];
-    const indexToRules: Map<number, GrammarRule[]> = new Map();
+    const start = json.ruleArrays[0];
+    // Memoize per-pool-index rule decoding so a `GrammarRule`
+    // referenced from multiple `ruleArrays` entries restores to a
+    // single in-memory object - mirrors the serializer's
+    // identity-based dedup.  The shell is mutated in place once
+    // its body is decoded so a self-referential rule (via a
+    // `RulesPart` walking back to itself) lands on the same object.
+    const ruleFor = memoizeRecursive<GrammarRule>(
+        new Map(),
+        () => ({ parts: [], value: undefined, spacingMode: undefined }),
+        (shell, idx) => {
+            const decoded = grammarRuleFromJson(json.rules[idx]);
+            shell.parts = decoded.parts;
+            shell.value = decoded.value;
+            shell.spacingMode = decoded.spacingMode;
+        },
+    );
+    // Same shape for alternation arrays: a shared empty array is
+    // pre-registered so a recursive walk back through this entry
+    // lands on the same array instance, and members are pushed
+    // into it in place.
+    const rulesFor = memoizeRecursive<GrammarRule[]>(
+        new Map(),
+        () => [],
+        (shell, idx) => {
+            for (const ruleIdx of json.ruleArrays[idx]) {
+                shell.push(ruleFor(ruleIdx));
+            }
+        },
+    );
     // Shared sentinel returned for `RulesPart`s whose serialized
     // form omits `index` (the empty-alternatives case - typically
     // a fully-dispatched part with no fallback).  One per grammar
@@ -66,17 +117,6 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
     const emptyRules: GrammarRule[] = Object.freeze(
         [] as GrammarRule[],
     ) as GrammarRule[];
-    function rulesFor(idx: number): GrammarRule[] {
-        let rules = indexToRules.get(idx);
-        if (rules === undefined) {
-            rules = [];
-            indexToRules.set(idx, rules);
-            for (const r of json.rules[idx]) {
-                rules.push(grammarRuleFromJson(r, json));
-            }
-        }
-        return rules;
-    }
     /**
      * Decode a single dispatch entry array into in-memory
      * `DispatchModeBucket[]`, validate its invariants, and emit
@@ -143,17 +183,14 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
         indexToDispatch.set(idx, decoded);
         return decoded;
     }
-    function grammarRuleFromJson(r: GrammarRuleJson, json: GrammarJson) {
+    function grammarRuleFromJson(r: GrammarRuleJson) {
         return {
-            parts: r.parts.map((p) => grammarPartFromJson(p, json)),
+            parts: r.parts.map(grammarPartFromJson),
             value: r.value,
             spacingMode: r.spacingMode,
         };
     }
-    function grammarPartFromJson(
-        p: GrammarPartJson,
-        json: GrammarJson,
-    ): GrammarPart {
+    function grammarPartFromJson(p: GrammarPartJson): GrammarPart {
         switch (p.type) {
             case "string":
             case "wildcard":
@@ -213,7 +250,7 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
     }
 
     const grammar: Grammar = {
-        alternatives: start.map((r) => grammarRuleFromJson(r, json)),
+        alternatives: start.map(ruleFor),
     };
     if (json.dispatch !== undefined) {
         grammar.dispatch = dispatchFor(
