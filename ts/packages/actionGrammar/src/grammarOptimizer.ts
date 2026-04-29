@@ -19,8 +19,21 @@ import {
 import { leadingWordBoundaryScriptPrefix } from "./spacingScripts.js";
 import { leadingNonSeparatorRun } from "./grammarMatcher.js";
 import { getDispatchEffectiveMembers } from "./dispatchHelpers.js";
+import { globalPhraseSetRegistry } from "./builtInPhraseMatchers.js";
 
 const debug = registerDebug("typeagent:grammar:opt");
+
+/**
+ * Hard cap on dispatch keys generated for a single rule when
+ * `expandDispatchKeys` is on.  A rule that exceeds this drops to
+ * fallback unchanged - bucketing it under more keys would balloon
+ * the serialized dispatch table without measurable filtering
+ * benefit.  64 comfortably accommodates a rule starting with a
+ * `phraseSet` part (typical sets have 5-30 phrases) plus a couple
+ * of optional prefix RulesParts; pathological grammars degrade
+ * gracefully to today's single-key behavior for that rule.
+ */
+const MAX_DISPATCH_KEYS_PER_RULE = 64;
 
 export type GrammarOptimizationOptions = {
     /**
@@ -100,19 +113,28 @@ export type GrammarOptimizationOptions = {
      *   - `optional` / `none` - never eligible (peek-by-separator
      *     would falsely segment unseparated input).
      *
-     * Members whose first part is not a statically-known token
-     * (wildcard / number / phraseSet / nested RulesPart, bound
-     * first-StringPart, recursive or empty members) land in the
-     * fallback `rules` subset and are tried as ordinary
-     * alternatives after the bucket hits.
+     * **Multi-key classification.**  Each rule is bucketed under
+     * the *set* of input first-tokens that could match its leading
+     * parts - not just the literal value of its single first part.
+     * The classifier walks past skippable prefixes (optional
+     * `RulesPart`s like `(can you)?`, optional wildcards) and
+     * unions in keys from `phraseSet` first tokens (`<Polite>`)
+     * and nested `RulesPart` alternatives.  A rule whose first-
+     * token set exceeds `MAX_DISPATCH_KEYS_PER_RULE` (64) drops to
+     * the fallback subset unchanged.  Rules that can match the
+     * empty prefix or whose leading is a non-optional wildcard /
+     * number / unknown phrase set also stay in fallback.
      *
-     * The pass is observably equivalent to the unoptimized form -
-     * the matcher tries the same set of alternatives in the same
-     * order on a hit, plus all fallback rules.  The NFA/DFA
-     * compile path walks the union of buckets and `rules` to
-     * recover the full effective member list (the NFA already does
-     * global first-token dispatch via `buildFirstTokenIndex`, so
-     * the dispatch index is redundant there).
+     * The matcher side is unchanged: dispatch is filter-only, each
+     * rule retains its full leading parts, and the same rule
+     * object is referenced from multiple buckets (peek selects at
+     * most one bucket per spacing-mode entry, so the rule still
+     * runs at most once per `matchGrammar` call).  This mirrors
+     * what `buildFirstTokenIndex` does on the NFA side.  The
+     * NFA/DFA compile path walks `getDispatchEffectiveMembers`
+     * (which dedups by rule identity) to recover the full
+     * effective member list - the NFA already does global first-
+     * token dispatch, so the dispatch index is redundant there.
      */
     dispatchifyAlternations?: boolean;
 
@@ -2158,11 +2180,13 @@ const EMPTY_FALLBACK_RULES: GrammarRule[] = Object.freeze(
 ) as GrammarRule[];
 
 /**
- * Classify a single rule's first part for dispatch eligibility,
- * deriving the bucket key for an `auto`/`required`-mode partition:
- *   - { kind: "token", token } - rule goes into `tokenMap[token]`.
- *   - { kind: "fallback" } - rule is not dispatch-eligible; goes
- *     to the dispatch part's `fallback` list.
+ * Classify a single rule's first parts for dispatch eligibility,
+ * deriving the *set* of bucket keys for an `auto`/`required`-mode
+ * partition.  Each contributed key uses `dispatchKeyForLiteral(_,
+ * mode)` so it aligns exactly with what `peekNextToken` returns
+ * at match time.  See `firstTokenKeys` for the walk; rules that
+ * yield zero keys (or exceed `MAX_DISPATCH_KEYS_PER_RULE`) drop
+ * to the dispatch part's fallback subset.
  *
  * Bucket-key derivation depends on the partition's spacing mode:
  *   - `required`: a separator is mandated after every token, so peek
@@ -2184,65 +2208,174 @@ const EMPTY_FALLBACK_RULES: GrammarRule[] = Object.freeze(
  * those modes are routed to `fallback` directly by
  * `tryDispatchifyRulesPart` without classification).
  */
-function classifyDispatchMember(
+
+/**
+ * Mode-aware bucket key for a single literal token.  Mirrors what
+ * `peekNextToken` returns on the input side, so per-mode buckets
+ * built from this function and the input keys agree exactly.
+ *
+ * Returns `undefined` when the literal can't produce a peek-aligned
+ * key (empty literal, or `required`-mode literal that starts with a
+ * separator character).
+ */
+function dispatchKeyForLiteral(
+    literal: string,
+    mode: CompiledSpacingMode,
+): string | undefined {
+    const lower = literal.toLowerCase();
+    if (lower.length === 0) return undefined;
+    if (mode === "required") {
+        const pref = leadingNonSeparatorRun(lower);
+        return pref.length === 0 ? undefined : pref;
+    }
+    const pref = leadingWordBoundaryScriptPrefix(lower);
+    if (pref.length > 0) return pref;
+    const cp = lower.codePointAt(0);
+    if (cp === undefined) return undefined;
+    return String.fromCodePoint(cp);
+}
+
+/**
+ * Result of walking through a `parts` prefix:
+ *   - `"consumed"` - we found a part that always consumes >=1 input
+ *     token; caller stops walking past.
+ *   - `"skippable"` - every part scanned was skippable (optional
+ *     wildcard / optional rule with all-empty alternatives / ...);
+ *     caller may keep walking past us.
+ *   - `"open"` - some leading part could match anything (non-optional
+ *     wildcard / number, unknown phrase set, key-cap exceeded);
+ *     the rule must drop to fallback.
+ */
+type FirstTokenWalkResult = "consumed" | "skippable" | "open";
+
+/**
+ * Multi-key dispatch classifier.  Returns the set of input first-
+ * tokens that could match the start of `rule`, or `undefined` to
+ * signal "drop to fallback".
+ *
+ * Each contributed key uses `dispatchKeyForLiteral(_, mode)` so it
+ * aligns exactly with what `peekNextToken` returns at match time.
+ * The walk stops at the first part that always consumes a token
+ * (literals, phrase sets, non-optional rules) - keys from later
+ * parts are unreachable since the matcher would have already
+ * consumed input by the time it reached them.
+ */
+function firstTokenKeys(
     rule: GrammarRule,
     mode: CompiledSpacingMode,
-): { kind: "token"; token: string } | { kind: "fallback" } {
-    const first = rule.parts[0];
-    if (first === undefined) {
-        return { kind: "fallback" };
+): Set<string> | undefined {
+    const out = new Set<string>();
+    // Cycle guard for nested rule references.  Tracks the
+    // `alternatives` arrays we're currently inside; encountering
+    // the same identity again indicates direct or mutual recursion
+    // and we abort to fallback rather than attempt to enumerate
+    // an infinite key set.
+    const visiting = new Set<GrammarRule[]>();
+    const r = walkPartsForKeys(rule.parts, mode, out, visiting);
+    if (r === "open") return undefined;
+    // `"skippable"` means the rule could match the empty prefix -
+    // peek can't filter such a rule, so it has to live in fallback.
+    if (r === "skippable") return undefined;
+    if (out.size === 0) return undefined;
+    if (out.size > MAX_DISPATCH_KEYS_PER_RULE) return undefined;
+    return out;
+}
+
+function walkPartsForKeys(
+    parts: GrammarPart[],
+    mode: CompiledSpacingMode,
+    out: Set<string>,
+    visiting: Set<GrammarRule[]>,
+): FirstTokenWalkResult {
+    for (const p of parts) {
+        const r = walkPartForKeys(p, mode, out, visiting);
+        if (r === "open") return "open";
+        if (out.size > MAX_DISPATCH_KEYS_PER_RULE) return "open";
+        if (r === "consumed") return "consumed";
+        // skippable: continue past this part.
     }
-    if (first.type !== "string") {
-        return { kind: "fallback" };
-    }
-    // Bound first-StringPart is fine: dispatch is filter-only and
-    // each rule retains its full leading `StringPart` (including its
-    // binding), so the matcher binds the captured tokens via the
-    // rule's own `StringPart` regex on the dispatch hit - no
-    // suffix-binding injection required.  Bucket key is still derived
-    // from the literal's first token below.
-    if (first.value.length === 0) {
-        return { kind: "fallback" };
-    }
-    const literal = first.value[0].toLowerCase();
-    if (literal.length === 0) {
-        return { kind: "fallback" };
-    }
-    if (mode === "required") {
-        // Bucket on the leading non-separator run, mirroring what
-        // `peekNextToken` returns for required / optional / none
-        // modes.  Two consequences worth being explicit about:
-        //   1. Key alignment: using the full `literal` would cause
-        //      a key mismatch when the literal embeds a separator
-        //      char (e.g. `"d?"` buckets under `"d"` since peek
-        //      returns `"d"` for input `"d? ..."`).
-        //   2. Bucket collapse: literals like `"d?"`, `"d!"`,
-        //      `"d."` all share bucket key `"d"`, so dispatch
-        //      fan-out can be smaller than the number of distinct
-        //      first-token literals.  This is correct - peek will
-        //      route all such inputs to the same bucket, and the
-        //      member rules' StringPart regexes discriminate
-        //      among them.
-        // If the literal starts with a separator, the prefix is
-        // empty and we can't dispatch this member - send it to
-        // fallback.
-        const pref = leadingNonSeparatorRun(literal);
-        if (pref.length === 0) {
-            return { kind: "fallback" };
+    return "skippable";
+}
+
+function walkPartForKeys(
+    part: GrammarPart,
+    mode: CompiledSpacingMode,
+    out: Set<string>,
+    visiting: Set<GrammarRule[]>,
+): FirstTokenWalkResult {
+    switch (part.type) {
+        case "string": {
+            if (part.value.length === 0) return "skippable";
+            const key = dispatchKeyForLiteral(part.value[0], mode);
+            if (key === undefined) return "open";
+            out.add(key);
+            return "consumed";
         }
-        return { kind: "token", token: pref };
+        case "phraseSet": {
+            const matcher = globalPhraseSetRegistry.getMatcher(
+                part.matcherName,
+            );
+            // Unknown matcher (phrase set deserialized from a
+            // grammar that referenced a name we don't have here)
+            // means we can't enumerate first tokens - bail.
+            if (matcher === undefined || matcher.phrases.length === 0) {
+                return "open";
+            }
+            for (const phrase of matcher.phrases) {
+                if (phrase.length === 0) continue;
+                const key = dispatchKeyForLiteral(phrase[0], mode);
+                if (key === undefined) return "open";
+                out.add(key);
+                if (out.size > MAX_DISPATCH_KEYS_PER_RULE) return "open";
+            }
+            // Phrases always have >=1 token, so a phraseSet always
+            // consumes - caller stops walking past.
+            return "consumed";
+        }
+        case "rules": {
+            // Cycle guard - mutual or direct recursion would
+            // otherwise loop forever expanding alternatives.
+            if (visiting.has(part.alternatives)) return "open";
+            visiting.add(part.alternatives);
+            // Walk every effective member (bucketed members live
+            // in `dispatch.tokenMap.values()` for already-dispatched
+            // parts; un-dispatched parts have everything in
+            // `alternatives`).  All alternatives must consume for
+            // us to report "consumed" overall; if any alternative
+            // is skippable (could match empty), the whole rules
+            // part may also be skippable and the caller should
+            // walk past.
+            const members = part.dispatch
+                ? getDispatchEffectiveMembers(part)
+                : part.alternatives;
+            let allConsume = true;
+            let anyOpen = false;
+            for (const m of members) {
+                const r = walkPartsForKeys(m.parts, mode, out, visiting);
+                if (r === "open") {
+                    anyOpen = true;
+                    break;
+                }
+                if (r === "skippable") allConsume = false;
+                if (out.size > MAX_DISPATCH_KEYS_PER_RULE) {
+                    anyOpen = true;
+                    break;
+                }
+            }
+            visiting.delete(part.alternatives);
+            if (anyOpen) return "open";
+            // Outer flags: optional/repeat make the part skippable
+            // regardless of inner consumption.
+            if (part.optional || part.repeat) return "skippable";
+            return allConsume ? "consumed" : "skippable";
+        }
+        case "wildcard":
+        case "number":
+            // Captures of unknown content - matches arbitrary
+            // tokens.  Skippable iff the source marked it optional;
+            // otherwise it's an open prefix and we have to bail.
+            return part.optional ? "skippable" : "open";
     }
-    // auto: bucket on the leading word-boundary-script run.  When
-    // the literal starts with a non-WB-script char (CJK, digit,
-    // punctuation), fall back to bucketing on the leading code
-    // point - matches `peekNextToken`'s first-code-point fallback
-    // for inputs whose nonSeparatorRun starts with such a char.
-    const pref = leadingWordBoundaryScriptPrefix(literal);
-    if (pref.length > 0) {
-        return { kind: "token", token: pref };
-    }
-    const cp = literal.codePointAt(0)!;
-    return { kind: "token", token: String.fromCodePoint(cp) };
 }
 
 /**
@@ -2375,8 +2508,18 @@ function computeDispatchPayload(
             fallback.push(rule);
             continue;
         }
-        const cls = classifyDispatchMember(rule, mode);
-        if (cls.kind === "fallback") {
+        // Multi-key classification: `firstTokenKeys` walks past
+        // skippable prefixes (optional rules, optional wildcards)
+        // and unions in keys from `phraseSet` first tokens and
+        // nested `RulesPart` alternatives - so a rule like
+        // `(can you)? add ...` lands under both `can` and `add`
+        // instead of falling through to fallback.  For the simple
+        // case (rule starts with a literal `StringPart`), the set
+        // contains the same single key the rule's first token
+        // would produce on its own.
+        const set = firstTokenKeys(rule, mode);
+        const keys = set === undefined ? undefined : Array.from(set);
+        if (keys === undefined || keys.length === 0) {
             fallback.push(rule);
             continue;
         }
@@ -2385,11 +2528,13 @@ function computeDispatchPayload(
             bucket = { spacingMode: mode, tokenMap: new Map() };
             perMode.push(bucket);
         }
-        const existing = bucket.tokenMap.get(cls.token);
-        if (existing !== undefined) {
-            existing.push(rule);
-        } else {
-            bucket.tokenMap.set(cls.token, [rule]);
+        for (const token of keys) {
+            const existing = bucket.tokenMap.get(token);
+            if (existing !== undefined) {
+                existing.push(rule);
+            } else {
+                bucket.tokenMap.set(token, [rule]);
+            }
         }
     }
 

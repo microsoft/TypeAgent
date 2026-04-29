@@ -41,13 +41,32 @@ export function getDispatchEffectiveMembers(p: RulesPart): GrammarRule[] {
     if (p.dispatch === undefined) return p.alternatives;
     const c = getCaches(p);
     if (c.effective !== undefined) return c.effective;
+    // Dedup by rule identity: the optimizer's multi-key dispatch
+    // (`expandDispatchKeys`) places a single rule under multiple
+    // `tokenMap` entries inside the same per-mode bucket so the
+    // input peek can hit it from any reachable first token.  Each
+    // bucket entry is a distinct array containing the rule object,
+    // and the effective-members view (used for tail validation,
+    // value-type derivation, and the matcher's pending-wildcard
+    // fallback) must list each rule exactly once - otherwise the
+    // pending-wildcard fallback path would try the same rule once
+    // per bucket and emit duplicate match results.
+    const seen = new Set<GrammarRule>();
     const members: GrammarRule[] = [];
     for (const m of p.dispatch) {
         for (const bucket of m.tokenMap.values()) {
-            for (const r of bucket) members.push(r);
+            for (const r of bucket) {
+                if (seen.has(r)) continue;
+                seen.add(r);
+                members.push(r);
+            }
         }
     }
-    for (const r of p.alternatives) members.push(r);
+    for (const r of p.alternatives) {
+        if (seen.has(r)) continue;
+        seen.add(r);
+        members.push(r);
+    }
     c.effective = members;
     return members;
 }

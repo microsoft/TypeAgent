@@ -352,14 +352,41 @@ describe("Grammar Serializer - Dispatch sharing across round-trip", () => {
             optimizations: { dispatchifyAlternations: true },
         });
         const json = grammarToJson(grammar);
-        // All three `<Common>` references share the same dispatch
-        // identity, so the pool should hold exactly one entry, and
-        // each part should reference it by index.
-        expect(json.dispatches?.length).toBe(1);
+        // Two distinct dispatch identities: one shared by the three
+        // `<Common>` reference sites (alpha/beta/gamma tokenMap),
+        // and one for `<Start>`'s body alternation - the multi-key
+        // classifier walks into each `<UseN>` reference and picks
+        // up its leading sing/play/hum literal.  The `<Common>`
+        // entry must still dedup to a single pool slot across all
+        // three references.
+        expect(json.dispatches?.length).toBe(2);
         const dispatchedParts = findAllRulesPartsInGrammar(grammar).filter(
             (p) => p.name === "Common" && p.dispatch !== undefined,
         );
         expect(dispatchedParts.length).toBe(3);
+    });
+
+    it("same dispatch shape with inlining enabled", () => {
+        // Inlining replaces each single-alternative `<UseN>` with
+        // its body, so `<Start>`'s members become `sing
+        // $(name:<Common>) | play ... | hum ...` - their first
+        // parts are now literal StringParts directly (the old
+        // single-key classifier would have bucketed them too).
+        // The multi-key walker just reaches the same buckets via
+        // a different path; either way the dispatches pool ends
+        // up with the same two entries.
+        const grammar = loadGrammarRules("t.grammar", text, {
+            optimizations: {
+                inlineSingleAlternatives: true,
+                dispatchifyAlternations: true,
+            },
+        });
+        const json = grammarToJson(grammar);
+        expect(json.dispatches?.length).toBe(2);
+        const commonParts = findAllRulesPartsInGrammar(grammar).filter(
+            (p) => p.name === "Common" && p.dispatch !== undefined,
+        );
+        expect(commonParts.length).toBe(3);
     });
 
     it("restores shared dispatch identity after deserialize", () => {
