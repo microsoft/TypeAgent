@@ -36,6 +36,13 @@ const debug = registerDebug("typeagent:grammar:opt");
  * an unenumerable matcher (unknown / empty / dispatch-key cap
  * exceeded for this matcher alone) - the entry short-circuits
  * to a fallback decision without re-walking.
+ *
+ * Cache invalidation note: cached `"open"` entries depend on
+ * the current `MAX_DISPATCH_KEYS_PER_RULE` value at the time of
+ * insertion.  The constant is compile-time only; if it ever
+ * becomes runtime-configurable, this cache must be cleared on
+ * change (or keyed by cap value) to avoid stale `"open"`
+ * verdicts.
  */
 const phraseSetKeyCache = new WeakMap<
     PhraseSetMatcher,
@@ -2419,8 +2426,36 @@ function walkPartForKeys(
             // Cycle guard - keyed on the members array we're
             // about to iterate so the check fires regardless of
             // whether the cycle threads through `alternatives` or
-            // a dispatched `tokenMap`.
-            if (visiting.has(members)) return "open";
+            // a dispatched `tokenMap`.  On a cycle hit, return
+            // "skippable" rather than "open": the outer walker
+            // continues past this part and may collect keys from
+            // sibling parts.  Any keys it collects are valid
+            // first tokens for paths that *do not* take the
+            // recursion - dispatch is filter-only and over-
+            // bucketing is safe (the rule still runs but fails to
+            // match unrelated peek tokens), while under-bucketing
+            // would miss matches.  The recursion's own first
+            // tokens are necessarily the same as the outer rule's
+            // first tokens (transitive closure), so they are
+            // already being collected at the top of this walk.
+            //
+            // Reachability: no compiler-accepted source grammar
+            // produces an AST that hits this branch today.  The
+            // compiler's epsilon-cycle detector rejects every
+            // shape that would let `firstTokenKeys` re-enter the
+            // same `alternatives` array (mutual recursion through
+            // optional refs, optional self-reference, nullable
+            // recursion, ...), and right-recursion past mandatory
+            // input short-circuits on "consumed" before the
+            // recursive reference is reached.  The guard is kept
+            // as defense-in-depth against (a) future optimizer
+            // passes that reshape the AST in ways that introduce
+            // identity-cycles from acyclic sources, and (b)
+            // untrusted JSON loading paths that bypass the source
+            // compiler's cycle detector.  See the corresponding
+            // termination test in
+            // grammarOptimizerDispatchMultiKey.spec.ts.
+            if (visiting.has(members)) return "skippable";
             visiting.add(members);
             // Walk every effective member.  All alternatives must
             // consume for us to report "consumed" overall; if any
@@ -2699,6 +2734,12 @@ function canonicalizeBucketArrays(perMode: DispatchModeBucket[]): void {
             if (existing === undefined) {
                 canonical.set(key, arr);
             } else if (existing !== arr) {
+                // Mid-iteration `set` on the same key the loop is
+                // visiting is spec-safe (Map iteration does not
+                // re-visit an updated entry) and we never insert
+                // new keys into `bucket.tokenMap` here - only
+                // overwrite the existing value with a canonical
+                // array of equal contents.
                 bucket.tokenMap.set(token, existing);
             }
         }
@@ -2940,6 +2981,14 @@ function promoteRulesArray(
  * defeat downstream identity-based dedup (`DispatchMemo`, the
  * serializer's `makeInterner`).  Sharing the result across all
  * occurrences collapses them to a single wrapper.
+ *
+ * Identity-keyed (not body-keyed) is correct because
+ * `tryPromoteTrailing` is a pure function of `rule.parts` and
+ * `rule.value` - it does not read anything outside the rule, so
+ * caching by rule identity caches by the inputs that determine
+ * the result.  If a future change makes the promotion depend on
+ * surrounding context (parent rule, dispatch siblings, etc.),
+ * this memo must be reconsidered.
  */
 type RuleMemo = Map<GrammarRule, GrammarRule>;
 

@@ -32,6 +32,17 @@ const debug = registerDebug("typeagent:grammar:deserializer");
  * shell is mutated in place via field assignment, and the
  * alternation shell is filled by pushing into the same array
  * instance.
+ *
+ * Unlike the serializer's `makeInterner` (which can sentinel its
+ * pool slot because recursive consumers only need the returned
+ * index, never the slot contents), the shell pattern here cannot
+ * sentinel: recursive callers genuinely need the shell value back
+ * - they wire it into the parent structure as an identity handle,
+ * and the in-place mutation by `fill` makes the body visible to
+ * them once decoding completes.  No runtime guard is possible
+ * here without object proxies; the contract is enforced by
+ * convention (all readers of shell contents must run after the
+ * top-level `fill` chain has returned).
  */
 function memoizeRecursive<V>(
     map: Map<number, V>,
@@ -85,6 +96,15 @@ function validateDispatchInvariants(
 }
 
 function grammarFromJsonInternal(json: GrammarJson): Grammar {
+    if (json.ruleArrays.length === 0) {
+        // Slot 0 is the top-level alternation by contract; an empty
+        // pool means the grammar has no rules at all - structurally
+        // invalid.  Surface as a clear load-time error rather than
+        // a downstream `Cannot read 'rules' of undefined`.
+        throw new Error(
+            "Invalid grammar JSON: ruleArrays is empty (no top-level alternation)",
+        );
+    }
     // Memoize per-pool-index rule decoding so a `GrammarRule`
     // referenced from multiple `ruleArrays` entries restores to a
     // single in-memory object - mirrors the serializer's
@@ -95,10 +115,11 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
         new Map(),
         () => ({ parts: [], value: undefined, spacingMode: undefined }),
         (shell, idx) => {
-            const decoded = grammarRuleFromJson(json.rules[idx]);
-            shell.parts = decoded.parts;
-            shell.value = decoded.value;
-            shell.spacingMode = decoded.spacingMode;
+            // `Object.assign` keeps the shell shape coupled to
+            // `GrammarRule` in one place: if a future field is
+            // added to `GrammarRule` it only needs to be added to
+            // `makeShell`, not to a parallel field-by-field copy.
+            Object.assign(shell, grammarRuleFromJson(json.rules[idx]));
         },
     );
     // Same shape for alternation arrays: a shared empty array is

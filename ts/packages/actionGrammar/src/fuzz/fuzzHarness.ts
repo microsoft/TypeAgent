@@ -547,7 +547,8 @@ export function runFuzz(config: FuzzConfig): FuzzResult[] {
         const inputs = [...gen.testInputs, ...extraInputs];
 
         const slowThreshold = config.slowGrammarThresholdMs;
-        const grammarStart = slowThreshold !== undefined ? Date.now() : 0;
+        const grammarStart =
+            slowThreshold !== undefined ? performance.now() : 0;
 
         for (const validation of config.validations) {
             let results: FuzzResult[];
@@ -592,7 +593,7 @@ export function runFuzz(config: FuzzConfig): FuzzResult[] {
         // exceeded the configured threshold, write a one-line
         // diagnostic to stderr (does not fail the run).
         if (slowThreshold !== undefined) {
-            const elapsed = Date.now() - grammarStart;
+            const elapsed = performance.now() - grammarStart;
             if (elapsed > slowThreshold) {
                 const matchingLen = gen.testInputs[0]?.length ?? 0;
                 const oneLineText = (
@@ -601,7 +602,7 @@ export function runFuzz(config: FuzzConfig): FuzzResult[] {
                         : gen.text
                 ).replace(/\n/g, " ");
                 console.warn(
-                    `[fuzz slow-grammar] #${g}: ${elapsed}ms ` +
+                    `[fuzz slow-grammar] #${g}: ${elapsed.toFixed(1)}ms ` +
                         `(threshold ${slowThreshold}ms), ` +
                         `matching-input length ${matchingLen}: ${oneLineText}`,
                 );

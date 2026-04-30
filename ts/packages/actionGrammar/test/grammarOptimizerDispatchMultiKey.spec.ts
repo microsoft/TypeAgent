@@ -15,8 +15,10 @@
  *   - Nested RulesPart with mixed members: a non-optional inner
  *     rule whose alternatives all consume reports "consumed" with
  *     keys from each alternative.
- *   - Cycle: a self-referential rule reaches the cycle guard and
- *     drops to fallback rather than looping.
+ *   - Cycle: an identity-cycling AST (constructed manually -
+ *     no source grammar produces one) terminates rather than
+ *     recursing forever.  See test for the defense-in-depth
+ *     rationale.
  *   - Cap exceeded: a rule that would generate more than
  *     `MAX_DISPATCH_KEYS_PER_RULE` keys drops to fallback.
  *
@@ -26,6 +28,8 @@
  */
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
+import { optimizeGrammar } from "../src/grammarOptimizer.js";
+import { Grammar, GrammarRule, RulesPart } from "../src/grammarTypes.js";
 import {
     findDispatchPart,
     getDispatchAllTokenMap,
@@ -212,5 +216,52 @@ describe("Grammar Optimizer - multi-key dispatch classifier", () => {
                 match(baseline, input),
             );
         }
+    });
+
+    it("cycle guard terminates on identity-cycling AST (defense-in-depth)", () => {
+        // The cycle guard in `firstTokenKeys` cannot be triggered
+        // by any source-level grammar today: every shape that
+        // would cause the walker to re-enter the same
+        // `RulesPart.alternatives` array (mutual recursion through
+        // optional rule references, optional self-reference,
+        // nullable-recursion, ...) is rejected by the compiler's
+        // epsilon-cycle detector at load time, and right-recursion
+        // past mandatory input short-circuits on "consumed"
+        // before the recursion is reached.
+        //
+        // The guard is kept as defense-in-depth against future
+        // optimizer passes that might reshape the AST into an
+        // identity-cycle from an acyclic source, and against
+        // untrusted JSON loading paths that bypass the source
+        // compiler.  This test pins the *termination* property:
+        // we hand-build an identity-cycling AST that no compiler
+        // would emit and assert that `optimizeGrammar` returns in
+        // bounded time without recursing forever.  The exact
+        // dispatch shape that results is an implementation detail
+        // of the guard's "skippable" choice and is not pinned here
+        // - if a future change makes the guard throw or pick a
+        // different fallback, this test should still pass as long
+        // as the call terminates.
+        const cyclingAlts: GrammarRule[] = [];
+        const recursivePart: RulesPart = {
+            type: "rules",
+            alternatives: cyclingAlts,
+            optional: true,
+        };
+        cyclingAlts.push({
+            parts: [recursivePart, { type: "string", value: ["alpha"] }],
+            value: { type: "literal", value: "a" },
+        });
+        cyclingAlts.push({
+            parts: [{ type: "string", value: ["beta"] }],
+            value: { type: "literal", value: "b" },
+        });
+        const grammar: Grammar = { alternatives: cyclingAlts };
+        // Contract under test: the call returns rather than
+        // recursing forever.  Any concrete return value is
+        // acceptable.
+        expect(() =>
+            optimizeGrammar(grammar, { dispatchifyAlternations: true }),
+        ).not.toThrow();
     });
 });

@@ -17,6 +17,17 @@ import {
 } from "./grammarTypes.js";
 
 /**
+ * Sentinel installed in a pool slot while `build` is running for it.
+ * Any read of the slot from inside `build` (a future bug where a
+ * recursive consumer reads `pool[index]` instead of just the
+ * returned index) will see this sentinel and the assertion in
+ * `assertPoolSlotReady` will throw a clear error rather than
+ * silently corrupt the serialized output.
+ */
+const BUILDING: unique symbol = Symbol("interner:building");
+type WithBuilding<V> = V | typeof BUILDING;
+
+/**
  * Build an interner that dedups by key identity into a flat pool,
  * returning each key's pool index.  Indices are handed out from a
  * monotonic counter and registered in `map` before `build` runs, so
@@ -24,13 +35,12 @@ import {
  * reserved (preventing infinite recursion on self-referential keys).
  *
  * Recursive consumers see the reserved index immediately but must
- * not read the pool slot until `build` returns - the slot is only
- * filled in once `build` produces a value.  In practice both call
- * sites (`ruleIndexFor`, `indexFor`) only ever consume the index,
- * never the pool entry, so this is naturally satisfied.
+ * not read the pool slot until `build` returns - the slot is
+ * stamped with `BUILDING` while `build` is in progress, and any
+ * accidental read can be caught via `assertPoolSlotReady`.
  */
 function makeInterner<K, V>(
-    pool: V[],
+    pool: WithBuilding<V>[],
     map: Map<K, number>,
     build: (key: K) => V,
 ): (key: K) => number {
@@ -43,13 +53,28 @@ function makeInterner<K, V>(
             // recursive call from inside `build` for the same key
             // (or for a key whose `build` walks back to this one)
             // hits the cached index instead of recursing forever.
-            // The pool slot is filled in after `build` returns;
-            // recursive consumers only read `map`, never `pool`.
+            // Stamp the slot with BUILDING so any accidental read
+            // of the pool entry while `build` is running is
+            // detectable rather than silently observing undefined.
             map.set(key, index);
+            pool[index] = BUILDING;
             pool[index] = build(key);
         }
         return index;
     };
+}
+
+/** Throws if `pool[index]` is the in-progress sentinel. */
+function assertPoolSlotReady<V>(
+    pool: WithBuilding<V>[],
+    index: number,
+    where: string,
+): void {
+    if (pool[index] === BUILDING) {
+        throw new Error(
+            `internal: pool slot ${index} read while still building (${where})`,
+        );
+    }
 }
 
 export function grammarToJson(grammar: Grammar): GrammarJson {
@@ -57,7 +82,7 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
     // `GrammarRule` object identity.  A rule referenced from N
     // alternations (typical with multi-key dispatch, where one rule
     // lands in several buckets) serializes once.
-    const rulePool: GrammarRuleJson[] = [];
+    const rulePool: WithBuilding<GrammarRuleJson>[] = [];
     const ruleIndexFor = makeInterner<GrammarRule, GrammarRuleJson>(
         rulePool,
         new Map(),
@@ -70,7 +95,7 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
     // `RulesPart`s that share the same `alternatives` array (from
     // named-rule sharing or the optimizer's per-input identity memo)
     // point at one entry here.
-    const arrayPool: GrammarRulesJson[] = [];
+    const arrayPool: WithBuilding<GrammarRulesJson>[] = [];
     const indexFor = makeInterner<GrammarRule[], GrammarRulesJson>(
         arrayPool,
         new Map(),
@@ -82,7 +107,7 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
     // round-tripped through the optimizer's per-input memo) point
     // at a single serialized entry, and the deserializer can
     // restore that in-memory identity sharing.
-    const dispatches: DispatchJson[] = [];
+    const dispatches: WithBuilding<DispatchJson>[] = [];
     const dispatchIndexFor = makeInterner<DispatchModeBucket[], DispatchJson>(
         dispatches,
         new Map(),
@@ -171,12 +196,29 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
             `internal: top-level alternation interned at index ${startIndex}, expected 0`,
         );
     }
-    const out: GrammarJson = { rules: rulePool, ruleArrays: arrayPool };
+    // After all interning is complete every slot has been filled by
+    // its `build`; assert none is still stamped with the BUILDING
+    // sentinel before downcasting.  Catches the same future-bug
+    // class that `assertPoolSlotReady` covers, applied as a
+    // post-condition over the whole pool.
+    for (let i = 0; i < rulePool.length; i++) {
+        assertPoolSlotReady(rulePool, i, `rulePool[${i}]`);
+    }
+    for (let i = 0; i < arrayPool.length; i++) {
+        assertPoolSlotReady(arrayPool, i, `arrayPool[${i}]`);
+    }
+    for (let i = 0; i < dispatches.length; i++) {
+        assertPoolSlotReady(dispatches, i, `dispatches[${i}]`);
+    }
+    const out: GrammarJson = {
+        rules: rulePool as GrammarRuleJson[],
+        ruleArrays: arrayPool as GrammarRulesJson[],
+    };
     if (grammar.dispatch !== undefined) {
         out.dispatch = dispatchIndexFor(grammar.dispatch);
     }
     if (dispatches.length > 0) {
-        out.dispatches = dispatches;
+        out.dispatches = dispatches as DispatchJson[];
     }
     return out;
 }
