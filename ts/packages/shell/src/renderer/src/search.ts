@@ -142,7 +142,12 @@ export class SearchMenu {
         }
 
         if (event.key === "Tab") {
-            this.searchMenuUI.selectCompletion();
+            // Tab on an unselected dropdown snaps to the first item
+            // (matching ArrowDown), instead of leaving the user with
+            // nothing.  A second Tab will then accept that item.
+            if (!this.searchMenuUI.selectCompletion()) {
+                this.searchMenuUI.adjustSelection(1);
+            }
             event.preventDefault();
             return true;
         }
@@ -151,9 +156,13 @@ export class SearchMenu {
         // therefore does NOT submit the request).  In inline mode, we
         // intentionally let Enter fall through to submit the request,
         // matching the existing UX where ghost text is only accepted
-        // by Tab.
+        // by Tab.  When no item is selected (e.g. an auto-opened
+        // subcommand menu the user hasn't navigated yet), Enter falls
+        // through to default handling so the user can submit/newline.
         if (event.key === "Enter" && !this.inline && this._active) {
-            this.searchMenuUI.selectCompletion();
+            if (!this.searchMenuUI.selectCompletion()) {
+                return false;
+            }
             event.preventDefault();
             return true;
         }

@@ -45,11 +45,14 @@ export class RemoteSearchMenuUI implements SearchMenuUI {
         }
         getClientAPI().searchMenuAdjustSelection(this.id, deltaY);
     }
-    selectCompletion(): void {
+    selectCompletion(): boolean {
         if (this.closed) {
-            return;
+            return false;
         }
         getClientAPI().searchMenuSelectCompletion(this.id);
+        // Remote selection state is not tracked locally; assume the
+        // remote side handled the request so callers don't fall through.
+        return true;
     }
     close(): void {
         if (this.closed) {

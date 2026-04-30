@@ -17,6 +17,11 @@ export class LocalSearchMenuUI implements SearchMenuUI {
     private items: SearchMenuItem[] = [];
     private prefix: string = "";
     private top: number = 0;
+    // True until the first items update; used so an auto-opened dropdown
+    // (e.g. subcommand menu after accepting a command) shows no default
+    // selection.  Subsequent updates (from user typing to filter) snap to
+    // the first item.
+    private firstUpdate: boolean = true;
 
     private get closed() {
         return this.searchContainer.parentElement === null;
@@ -50,14 +55,16 @@ export class LocalSearchMenuUI implements SearchMenuUI {
         this.searchContainer.remove();
     }
 
-    public selectCompletion() {
+    public selectCompletion(): boolean {
         if (this.closed) {
-            return;
+            return false;
         }
         const index = this.selected;
         if (index >= 0 && index < this.items.length) {
             this.onCompletion(this.items[index]);
+            return true;
         }
+        return false;
     }
 
     public update(data: SearchMenuUIUpdateData) {
@@ -78,7 +85,8 @@ export class LocalSearchMenuUI implements SearchMenuUI {
         if (data.items !== undefined) {
             updateDisplay = true;
             this.items = data.items;
-            this.selected = 0;
+            this.selected = this.firstUpdate ? -1 : 0;
+            this.firstUpdate = false;
             this.top = 0;
         }
 
