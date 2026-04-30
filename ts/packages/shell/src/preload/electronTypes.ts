@@ -23,6 +23,13 @@ export enum NotifyCommands {
 export type EmptyFunction = () => void;
 export type SetSettingFunction = (name: string, value: any) => void;
 
+/**
+ * UI-facing demo lifecycle states.  The internal "aborted" transient
+ * state in main/demo.ts is not propagated to the renderer; it collapses
+ * to "idle" once the loop unwinds.
+ */
+export type DemoUIState = "running" | "paused" | "idle";
+
 export type ClientActions =
     | "show-camera"
     | "open-app"
@@ -106,7 +113,7 @@ export interface Client {
     systemNotification?(message: string, id: string, timestamp: number): void;
     conversationChanged?(conversationId: string, name: string): void;
     markHistoryEntries?(): void;
-    demoStateChanged?(state: "running" | "paused" | "idle"): void;
+    demoStateChanged?(state: DemoUIState): void;
 }
 
 export interface ElectronWindowFields {

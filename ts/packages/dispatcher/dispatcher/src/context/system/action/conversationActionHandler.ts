@@ -4,6 +4,7 @@
 import { getRequestId } from "../../commandHandlerContext.js";
 import { CommandHandlerContext } from "../../commandHandlerContext.js";
 import { ConversationAction } from "../schema/conversationActionSchema.js";
+import { ManageConversationPayload } from "../manageConversationPayload.js";
 import { ActionContext, TypeAgentAction } from "@typeagent/agent-sdk";
 
 export async function executeConversationAction(
@@ -12,7 +13,7 @@ export async function executeConversationAction(
 ) {
     const agentContext = context.sessionContext.agentContext;
     const requestId = getRequestId(agentContext);
-    let payload: { subcommand: string; name?: string; newName?: string };
+    let payload: ManageConversationPayload;
 
     let resultEntity: { name: string; type: string[] } | undefined;
 

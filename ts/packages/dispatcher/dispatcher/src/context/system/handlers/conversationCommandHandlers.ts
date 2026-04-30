@@ -11,13 +11,14 @@ import {
     CommandHandlerContext,
     getRequestId,
 } from "../../commandHandlerContext.js";
+import { ManageConversationPayload } from "../manageConversationPayload.js";
 
 // Each handler dispatches the same "manage-conversation" client action
 // emitted by the natural-language conversationActionHandler — so the CLI
 // and Shell already know how to render the result.
 function dispatchManageConversation(
     context: ActionContext<CommandHandlerContext>,
-    payload: { subcommand: string; name?: string; newName?: string },
+    payload: ManageConversationPayload,
 ): void {
     const systemContext = context.sessionContext.agentContext;
     systemContext.clientIO.takeAction(
@@ -65,11 +66,14 @@ class ConversationInfoCommandHandler implements CommandHandlerNoParams {
 }
 
 class ConversationSwitchCommandHandler implements CommandHandler {
-    public readonly description = "Switch to an existing conversation";
+    public readonly description =
+        "Switch to a conversation by name (defaults to the next conversation in the list)";
     public readonly parameters = {
         args: {
             name: {
-                description: "Name of the conversation to switch to",
+                description:
+                    "Name of the conversation to switch to (omit to cycle to the next)",
+                optional: true,
             },
         },
     } as const;
@@ -77,10 +81,27 @@ class ConversationSwitchCommandHandler implements CommandHandler {
         context: ActionContext<CommandHandlerContext>,
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
-        dispatchManageConversation(context, {
-            subcommand: "switch",
-            name: params.args.name,
-        });
+        const { name } = params.args;
+        dispatchManageConversation(
+            context,
+            name ? { subcommand: "switch", name } : { subcommand: "next" },
+        );
+    }
+}
+
+class ConversationPrevCommandHandler implements CommandHandlerNoParams {
+    public readonly description =
+        "Switch to the previous conversation in the list (wraps around)";
+    public async run(context: ActionContext<CommandHandlerContext>) {
+        dispatchManageConversation(context, { subcommand: "prev" });
+    }
+}
+
+class ConversationNextCommandHandler implements CommandHandlerNoParams {
+    public readonly description =
+        "Switch to the next conversation in the list (wraps around)";
+    public async run(context: ActionContext<CommandHandlerContext>) {
+        dispatchManageConversation(context, { subcommand: "next" });
     }
 }
 
@@ -104,7 +125,7 @@ class ConversationRenameCommandHandler implements CommandHandler {
         params: ParsedCommandParams<typeof this.parameters>,
     ) {
         const { nameOrNewName, newName } = params.args;
-        const payload: { subcommand: string; name?: string; newName: string } =
+        const payload: ManageConversationPayload =
             newName !== undefined
                 ? {
                       subcommand: "rename",
@@ -144,6 +165,8 @@ export function getConversationCommandHandlers(): CommandHandlerTable {
             list: new ConversationListCommandHandler(),
             info: new ConversationInfoCommandHandler(),
             switch: new ConversationSwitchCommandHandler(),
+            prev: new ConversationPrevCommandHandler(),
+            next: new ConversationNextCommandHandler(),
             rename: new ConversationRenameCommandHandler(),
             delete: new ConversationDeleteCommandHandler(),
         },

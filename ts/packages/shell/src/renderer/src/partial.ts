@@ -16,6 +16,10 @@ import { ExpandableTextArea } from "./chat/expandableTextArea";
 const debug = registerDebug("typeagent:shell:partial");
 const debugError = registerDebug("typeagent:shell:partial:error");
 
+// The character that signals a typed command (vs free-text user input).
+// Centralized here because we may switch from "@" to "/" in the future.
+const COMMAND_PREFIX = "@";
+
 // Expose the debug factory so that Playwright tests (and developers in
 // DevTools) can call  __debug.enable('typeagent:*')  at runtime.
 (globalThis as any).__debug = registerDebug;
@@ -210,7 +214,9 @@ export class PartialCompletion {
     }
 
     private getEffectiveInline(): boolean {
-        return this.previousInput.startsWith("@") ? false : this.userInline;
+        return this.previousInput.startsWith(COMMAND_PREFIX)
+            ? false
+            : this.userInline;
     }
 
     public close() {
@@ -374,6 +380,11 @@ export class PartialCompletion {
         // alphanumeric (e.g. accepting a subcommand right after "@shell"
         // with no separator yet typed).  Otherwise the inserted text
         // would fuse with the previous token (e.g. "@shellbreak ").
+        //
+        // TODO(RTL): the prepend/append logic here assumes left-to-right
+        // text.  When we add RTL language support, "preceding" needs to
+        // be re-defined relative to logical-order rather than DOM order,
+        // and the appended/prepended whitespace may need to flip sides.
         const offset = this.getCurrentInput().length - completionPrefix.length;
         const charBefore =
             completionPrefix === "" && offset > 0

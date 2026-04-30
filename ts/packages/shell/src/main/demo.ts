@@ -93,20 +93,36 @@ function sendChatInputText(message: string, chatView: WebContentsView) {
     );
 }
 
-let demoRunning = false;
-let demoAborted = false;
 const abortListeners = new Set<() => void>();
 
-export type DemoState = "running" | "paused" | "idle";
+// "aborted" is the transient internal state set by breakDemo() while
+// the running loop unwinds; it is not emitted to the UI (the renderer
+// only sees the user-facing "running" / "paused" / "idle" trio, and
+// "aborted" collapses to "idle" once the loop exits).
+export type DemoState = "idle" | "running" | "paused" | "aborted";
 
-function sendDemoState(chatView: WebContentsView, state: DemoState) {
-    chatView.webContents.send("demo-state", state);
+let demoState: DemoState = "idle";
+
+// Helper to defeat TS's narrowing of the module-level `demoState` after the
+// runDemo() entry guard.  Without it, TS sees `demoState !== "idle"` early-
+// return and narrows demoState to `"idle"` for the rest of the function,
+// which makes subsequent comparisons against "aborted" look "unintentional"
+// even though setDemoState() mutates it asynchronously.
+function getDemoState(): DemoState {
+    return demoState;
+}
+
+function setDemoState(chatView: WebContentsView, state: DemoState): void {
+    demoState = state;
+    if (state !== "aborted") {
+        chatView.webContents.send("demo-state", state);
+    }
 }
 
 /** Request that the currently-running demo abort at the next safe point. */
 export function breakDemo(): boolean {
-    if (!demoRunning) return false;
-    demoAborted = true;
+    if (demoState === "idle") return false;
+    demoState = "aborted";
     // Snapshot + clear so re-entrant unregister calls during resolve are safe.
     const listeners = Array.from(abortListeners);
     abortListeners.clear();
@@ -120,7 +136,7 @@ export async function runDemo(
     awaitKeyboardInput: boolean,
     onStart?: () => void,
 ): Promise<boolean> {
-    if (demoRunning) {
+    if (demoState !== "idle") {
         await dialog.showMessageBox(window, {
             type: "warning",
             title: "Demo already running",
@@ -135,35 +151,31 @@ export async function runDemo(
         return false;
     }
 
-    demoRunning = true;
-    demoAborted = false;
     onStart?.();
-    sendDemoState(chatView, "running");
+    setDemoState(chatView, "running");
     try {
         const lines = data.split(/\r?\n/);
 
         for (let line of lines) {
-            if (demoAborted) break;
+            if (getDemoState() === "aborted") break;
             if (line.startsWith("@pauseForInput")) {
-                sendDemoState(chatView, "paused");
+                setDemoState(chatView, "paused");
                 await getActionCompleteEvent(true);
-                if (demoAborted) break;
-                sendDemoState(chatView, "running");
+                if (getDemoState() === "aborted") break;
+                setDemoState(chatView, "running");
             } else if (line && !line.startsWith("#")) {
                 var manualInput = awaitKeyboardInput && !line.startsWith("@");
-                if (manualInput) sendDemoState(chatView, "paused");
+                if (manualInput) setDemoState(chatView, "paused");
                 await sendChatInputText(line, chatView);
                 await getActionCompleteEvent(manualInput);
-                if (manualInput && !demoAborted)
-                    sendDemoState(chatView, "running");
+                if (manualInput && getDemoState() !== "aborted")
+                    setDemoState(chatView, "running");
             }
         }
     } finally {
-        demoRunning = false;
-        demoAborted = false;
         // Defensive: drop any abort resolvers that escaped per-wait cleanup.
         abortListeners.clear();
-        sendDemoState(chatView, "idle");
+        setDemoState(chatView, "idle");
     }
     return true;
 }

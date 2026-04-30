@@ -619,6 +619,65 @@ function registerClient(
                                     }
                                     break;
                                 }
+                                case "prev":
+                                case "next": {
+                                    const sessions =
+                                        await api.conversationList();
+                                    if (sessions.length === 0) {
+                                        chatView.addNotificationMessage(
+                                            {
+                                                type: "html",
+                                                content:
+                                                    "No conversations to switch to.",
+                                                kind: "warning",
+                                            },
+                                            "conversation",
+                                            undefined,
+                                        );
+                                        break;
+                                    }
+                                    const cur =
+                                        await api.conversationGetCurrent();
+                                    const curIdx = cur
+                                        ? sessions.findIndex(
+                                              (s) =>
+                                                  s.conversationId ===
+                                                  cur.conversationId,
+                                          )
+                                        : -1;
+                                    const delta =
+                                        payload.subcommand === "next" ? 1 : -1;
+                                    const nextIdx =
+                                        curIdx === -1
+                                            ? 0
+                                            : (curIdx +
+                                                  delta +
+                                                  sessions.length) %
+                                              sessions.length;
+                                    const target = sessions[nextIdx];
+                                    if (
+                                        target.conversationId ===
+                                        cur?.conversationId
+                                    ) {
+                                        // Only one conversation — nothing to do.
+                                        break;
+                                    }
+                                    const result = await api.conversationSwitch(
+                                        target.conversationId,
+                                    );
+                                    if (!result.success) {
+                                        chatView.addNotificationMessage(
+                                            {
+                                                type: "html",
+                                                content: `❌ ${escapeHtml(result.error ?? "Failed to switch conversation")}`,
+                                                kind: "warning",
+                                            },
+                                            "conversation",
+                                            undefined,
+                                        );
+                                    }
+                                    break;
+                                }
                                 case "rename": {
                                     if (!payload.newName) {
                                         chatView.addNotificationMessage(

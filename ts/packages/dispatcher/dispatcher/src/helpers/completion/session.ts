@@ -283,6 +283,9 @@ export class PartialCompletionSession implements CompletionController {
      * (Ctrl+Space).  Clears dismissAnchor (so a refetch with the same
      * anchor isn't suppressed) and forces a fresh update path even when
      * the input hasn't changed since the last dismiss.
+     *
+     * Shell keyboard shortcut reference:
+     *   docs/content/help/shellShortcuts.md
      */
     public show(
         input: string,

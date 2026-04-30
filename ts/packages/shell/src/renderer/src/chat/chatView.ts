@@ -6,6 +6,7 @@ import { ChatInput } from "./chatInput";
 import { ExpandableTextArea } from "./expandableTextArea";
 import { handleConversationCommand } from "./conversationCommands";
 import { iconCheckMarkCircle, iconX } from "../icon";
+import { DemoUIState } from "../../../preload/electronTypes";
 import {
     DisplayAppendMode,
     DisplayContent,
@@ -1026,7 +1027,7 @@ export class ChatView {
         this._voiceBanner.textContent = active ? "Claude Focus" : "Voice Mode";
     }
 
-    public setDemoState(state: "running" | "paused" | "idle"): void {
+    public setDemoState(state: DemoUIState): void {
         const textEntry = this.chatInput?.textarea.getTextEntry();
         if (!textEntry) return;
         if (state === "paused") {
