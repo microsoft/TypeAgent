@@ -80,10 +80,8 @@ export async function handleConversationCommand(
             case "switch": {
                 const target = parts.slice(2).join(" ");
                 if (!target) {
-                    sink.addSystemMessage(
-                        "Usage: <code>/conversation switch &lt;id|name&gt;</code>",
-                    );
-                    return true;
+                    // No name → cycle to the next conversation.
+                    return cycleConversation(1, sink);
                 }
                 // Try to resolve by name first, then by ID
                 const conversationId = await resolveConversationTarget(target);
@@ -100,6 +98,13 @@ export async function handleConversationCommand(
                 }
                 return true;
             }
+
+            case "prev":
+            case "previous":
+                return cycleConversation(-1, sink);
+
+            case "next":
+                return cycleConversation(1, sink);
 
             case "info": {
                 const current = await api.conversationGetCurrent();
@@ -168,7 +173,9 @@ function showConversationHelp(sink: ConversationMessageSink): void {
             "<b>Conversation Commands</b>",
             "<code>/conversation list</code> — List all conversations",
             "<code>/conversation new [name]</code> — Create a new conversation",
-            "<code>/conversation switch &lt;id|name&gt;</code> — Switch to a conversation",
+            "<code>/conversation switch [id|name]</code> — Switch to a conversation (no argument cycles to the next)",
+            "<code>/conversation prev</code> — Switch to the previous conversation (wraps around)",
+            "<code>/conversation next</code> — Switch to the next conversation (wraps around)",
             "<code>/conversation info</code> — Show current conversation info",
             "<code>/conversation rename &lt;id|name&gt; &lt;name&gt;</code> — Rename a conversation",
             "<code>/conversation delete &lt;id|name&gt;</code> — Delete a conversation",
@@ -176,6 +183,47 @@ function showConversationHelp(sink: ConversationMessageSink): void {
             "Tip: <code>@conversation</code> is accepted as an alias for <code>/conversation</code>.",
         ].join("<br>"),
     );
+}
+
+async function cycleConversation(
+    delta: number,
+    sink: ConversationMessageSink,
+): Promise<true> {
+    const api = getClientAPI();
+    const conversations = await api.conversationList();
+    if (conversations.length === 0) {
+        sink.addSystemMessage("No conversations to switch to.");
+        return true;
+    }
+    const current = await api.conversationGetCurrent();
+    const curIdx = current
+        ? conversations.findIndex(
+              (s) => s.conversationId === current.conversationId,
+          )
+        : -1;
+    const targetIdx =
+        curIdx === -1
+            ? 0
+            : (curIdx + delta + conversations.length) % conversations.length;
+    const target = conversations[targetIdx];
+    if (target.conversationId === current?.conversationId) {
+        // Single conversation — nothing to do.
+        sink.addSystemMessage("No other conversation to switch to.");
+        return true;
+    }
+    const result: ConversationSwitchResult = await api.conversationSwitch(
+        target.conversationId,
+    );
+    if (result.success) {
+        sink.addSystemMessage(
+            `🔄 Switched to conversation "<b>${escapeHtml(result.name ?? target.name)}</b>"`,
+        );
+    } else {
+        sink.addSystemMessage(
+            `❌ ${escapeHtml(result.error ?? "Failed to switch conversation")}`,
+        );
+    }
+    return true;
 }
 
 function formatConversationList(
