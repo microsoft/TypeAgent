@@ -402,6 +402,7 @@ export async function createSharedDispatcher(
                             clientRequestId,
                         },
                         result?.metrics,
+                        result?.tokenUsage,
                     );
                     context.displayLog.saveQueued();
                 } catch {

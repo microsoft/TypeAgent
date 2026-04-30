@@ -85,10 +85,10 @@ export type InteractionCancelledEntry = {
 };
 
 /**
- * Logged when a command completes. Carries the full RequestMetrics so
- * that consumers replaying history can re-render timing information
- * (e.g. hover tooltip on the agent bubble) just like they would for a
- * live command.
+ * Logged when a command completes. Carries the full RequestMetrics and
+ * the LLM token usage so that consumers replaying history can re-render
+ * timing/cost information (e.g. hover tooltip on the agent bubble) just
+ * like they would for a live command.
  */
 export type CommandResultEntry = {
     type: "command-result";
@@ -96,6 +96,7 @@ export type CommandResultEntry = {
     timestamp: number;
     requestId: RequestId;
     metrics?: RequestMetrics;
+    tokenUsage?: import("./dispatcher.js").CompletionUsageStats;
 };
 
 export type DisplayLogEntry =

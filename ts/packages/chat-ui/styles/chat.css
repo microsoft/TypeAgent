@@ -22,7 +22,7 @@
   overflow-y: auto;
   font-family: inherit;
   font-size: inherit;
-  padding: 25px 10px 25px 10px;
+  padding: 10px 10px 10px 10px;
 }
 
 /* =========================================================================
@@ -248,8 +248,8 @@
 .chat-message-container {
   padding-left: 10px;
   padding-right: 10px;
-  margin-bottom: 8px;
-  margin-top: 8px;
+  margin-bottom: 2px;
+  margin-top: 2px;
   width: 55%;
   transform-origin: 0 100%;
   transform: scale(0);
@@ -259,8 +259,8 @@
 .chat-message-container-agent {
   padding-left: 10px;
   padding-right: 10px;
-  margin-bottom: 8px;
-  margin-top: 8px;
+  margin-bottom: 2px;
+  margin-top: 2px;
   width: 55%;
   transform-origin: 0 100%;
   transform: scale(0);
@@ -271,8 +271,8 @@
 .chat-message-container-user {
   padding-left: 10px;
   padding-right: 10px;
-  margin-bottom: 8px;
-  margin-top: 8px;
+  margin-bottom: 2px;
+  margin-top: 2px;
   width: 55%;
   transform-origin: 0 100%;
   transform: scale(0);
@@ -311,6 +311,8 @@
   left: 30px;
   position: relative;
   background-color: #d6f3ff;
+  border-radius: 8px;
+  margin-bottom: 4px;
 }
 
 /* =========================================================================
@@ -403,22 +405,105 @@ table.table-message td {
   background-color: #c2edff;
 }
 
+.chat-message-metrics-user {
+  margin: 0px;
+  border-radius: 0px 0px 8px 8px;
+  font-size: 10px;
+  font-style: normal;
+  z-index: 50;
+  text-align: right;
+  background-color: #e2e0ec;
+}
+
+/* Two-column layout used inside the metrics tooltip:
+   left = phase marks, middle = reserved (tts), right = main totals. */
+.metrics-details {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 5px;
+  margin-bottom: 5px;
+  box-sizing: border-box;
+  /* Keep each line on its own row — never wrap a metric mid-line
+     (e.g. "completion\n35)"). Long content scrolls horizontally
+     within the column instead. */
+  white-space: nowrap;
+}
+.metrics-details > div {
+  margin-left: 5px;
+  margin-right: 5px;
+}
+.metrics-details > div:first-child {
+  text-align: left;
+}
+.metrics-details > div:last-child {
+  text-align: right;
+}
+
+/* When the agent name is clicked, the message body is replaced with a
+   pretty-printed JSON view of the action payload. */
+.chat-message-action-data {
+  font-family: var(--vscode-editor-font-family,
+    Consolas, "Courier New", monospace);
+  font-size: 12px;
+  padding: 4px 0;
+}
+.chat-message-action-data pre {
+  margin: 0;
+  padding: 8px;
+  background: rgba(127, 127, 127, 0.10);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1.4;
+}
+
+/* Hide-by-default metrics; only react to hover (and only show the
+   tooltip if there's actual metrics content). The `:has()` guard
+   keeps non-metric bubbles (system messages, history without
+   timings) from triggering an empty hover strip. */
 .chat-message-body-hide-metrics .chat-message-metrics {
   display: none;
 }
 
-.chat-message-body-hide-metrics:hover {
+.chat-message-body-hide-metrics:has(
+        .chat-message-metrics:not(:empty)
+    ):hover {
   border-radius: 8px 8px 0px 0px;
 }
 
-.chat-message-body-hide-metrics:hover .chat-message-metrics {
+.chat-message-body-hide-metrics:has(
+        .chat-message-metrics:not(:empty)
+    ):hover
+    .chat-message-metrics {
   display: block;
+  /* Absolute positioning below the bubble so the bubble itself does NOT
+     change size on hover. With the surrounding chat using
+     `flex-direction: column-reverse`, growing the bubble would shift its
+     contents (links, buttons) upward — making them hard to click while
+     hovering. Anchoring the metrics overlay to the bubble's bottom edge
+     keeps the bubble (and any link the user is aiming for) perfectly
+     still. To avoid the overlay covering the next bubble, the
+     `:has(~ *:hover)` rule below translates visually-lower bubbles
+     (= DOM-earlier siblings in column-reverse) down to make room. */
   position: absolute;
+  top: 100%;
+  left: 0;
   width: 100%;
   transform-origin: 0 0;
   transform: scaleY(0);
   animation: metrics 0.15s ease-out 0s forwards;
 }
+
+/* (No CSS push-down rule here — handled in JS via mouseenter/mouseleave
+   on each agent bubble, which translates DOM-earlier siblings down by
+   the actual measured overlay height. CSS-only `:has(~ ...:hover)`
+   proved unreliable against the column-reverse layout.) */
 
 @keyframes metrics {
   0% {
@@ -460,17 +545,6 @@ table.table-message td {
   margin-right: 35px;
 }
 
-.agent-icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 15px;
-  position: absolute;
-  left: 0px;
-  font-size: 20px;
-  font-style: normal;
-  text-align: center;
-}
-
 .user-icon {
   width: 30px;
   height: 30px;
@@ -479,12 +553,30 @@ table.table-message td {
   right: 0px;
   font-size: 20px;
   font-style: normal;
-  text-align: center;
+  /* Use flex so the glyph is perfectly centered horizontally and
+     vertically inside the circle. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
   background: plum;
   color: purple;
-  margin-top: 2px;
   font-family: sans-serif;
   font-weight: 300;
+}
+
+.agent-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 15px;
+  position: absolute;
+  left: 0px;
+  font-size: 20px;
+  font-style: normal;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 .agent-name {
@@ -517,7 +609,43 @@ table.table-message td {
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-word;
-  color: #555;
+}
+
+/* Pretty-printed JSON inside the collapsible details area. */
+.chat-message-details pre {
+  margin: 0;
+  padding: 8px;
+  background: rgba(127, 127, 127, 0.10);
+  border-radius: 6px;
+  white-space: pre;
+  overflow-x: auto;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  color: inherit;
+}
+
+/* JSON syntax highlighting tokens (set by highlightJson()).
+   `!important` because the host theme (e.g. vscode-shell's overlay)
+   applies `color: ... !important` to the parent bubble; without it
+   inheritance makes the spans render as the bubble's foreground color. */
+.chat-message-details pre.chat-json .json-key {
+  color: #9c27b0 !important;
+  font-weight: 600;
+}
+.chat-message-details pre.chat-json .json-string {
+  color: #0a8043 !important;
+}
+.chat-message-details pre.chat-json .json-number {
+  color: #1976d2 !important;
+}
+.chat-message-details pre.chat-json .json-bool {
+  color: #b85c00 !important;
+  font-weight: 600;
+}
+.chat-message-details pre.chat-json .json-null {
+  color: #888 !important;
+  font-style: italic;
 }
 
 .chat-message-details.chat-details-visible {

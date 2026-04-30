@@ -97,6 +97,7 @@ export type BridgeToWebviewMessage =
               requestId?: string;
               // command-result
               metrics?: any;
+              tokenUsage?: any;
           }>;
       };
 
@@ -857,6 +858,7 @@ export class AgentServerBridge {
                             timestamp: e.timestamp,
                             requestId: clientIdOf(e.requestId),
                             metrics: e.metrics,
+                            tokenUsage: (e as any).tokenUsage,
                         };
                     default:
                         return { type: "skip", seq: e.seq };

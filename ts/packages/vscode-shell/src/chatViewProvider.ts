@@ -64,12 +64,29 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     private _getHtmlForWebview(webview: vscode.Webview): string {
-        const scriptUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, "dist", "webview.js"),
+        const scriptPath = vscode.Uri.joinPath(
+            this._extensionUri,
+            "dist",
+            "webview.js",
         );
-        const styleUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, "media", "chat.css"),
+        const stylePath = vscode.Uri.joinPath(
+            this._extensionUri,
+            "media",
+            "chat.css",
         );
+        // Append the bundle's mtime as a query string so VS Code's
+        // webview cache doesn't serve a stale script after a deploy. The
+        // base URI is the same after a rebuild, so without this the
+        // browser re-uses the cached copy across "Reload Window".
+        let mtime = Date.now();
+        try {
+            const fs: typeof import("fs") = require("fs");
+            mtime = fs.statSync(scriptPath.fsPath).mtimeMs | 0;
+        } catch {
+            // best effort
+        }
+        const scriptUri = `${webview.asWebviewUri(scriptPath)}?v=${mtime}`;
+        const styleUri = `${webview.asWebviewUri(stylePath)}?v=${mtime}`;
         const nonce = getNonce();
 
         return /* html */ `<!DOCTYPE html>

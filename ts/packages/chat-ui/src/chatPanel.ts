@@ -72,6 +72,7 @@ export interface DynamicDisplayResult {
 // pulling the full dispatcher-types dependency into chat-ui.
 export interface PhaseTiming {
     duration?: number;
+    marks?: Record<string, { duration: number; count: number }>;
 }
 
 // Local mirror of dispatcher-types CompletionUsageStats.
@@ -115,6 +116,22 @@ export type HistoryEntry =
           requestId?: string;
           timestamp?: string;
       }
+    | {
+          kind: "display-info";
+          source: string;
+          sourceIcon?: string;
+          action?: unknown;
+          requestId?: string;
+      }
+    | {
+          kind: "command-result";
+          requestId?: string;
+          actionPhase?: PhaseTiming;
+          totalDuration?: number;
+          tokenUsage?: CompletionUsageStats;
+          parsePhase?: PhaseTiming;
+          firstMessageMs?: number;
+      }
     | { kind: "system"; text: string };
 
 function formatDuration(ms: number): string {
@@ -136,6 +153,40 @@ function escapeHtml(s: string): string {
         .replace(/'/g, "&#39;");
 }
 
+// Lightweight JSON syntax highlighter — returns HTML with span wrappers
+// around tokens. Operates on the raw JSON.stringify output (so the
+// regex can match `"`), then escapes <,>,& in each segment. Token
+// classes: json-key, json-string, json-number, json-bool, json-null.
+// Avoids pulling in highlight.js / Prism just to colorize the action
+// JSON popup.
+function highlightJson(json: string): string {
+    const escapeText = (s: string): string =>
+        s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return json.replace(
+        /("(?:\\.|[^"\\])*"\s*:)|("(?:\\.|[^"\\])*")|(\b(?:true|false)\b)|(\bnull\b)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g,
+        (
+            _m,
+            key?: string,
+            str?: string,
+            bool?: string,
+            nul?: string,
+            num?: string,
+        ): string => {
+            if (key)
+                return `<span class="json-key">${escapeText(key)}</span>`;
+            if (str)
+                return `<span class="json-string">${escapeText(str)}</span>`;
+            if (bool)
+                return `<span class="json-bool">${escapeText(bool)}</span>`;
+            if (nul)
+                return `<span class="json-null">${escapeText(nul)}</span>`;
+            if (num)
+                return `<span class="json-number">${escapeText(num)}</span>`;
+            return escapeText(_m);
+        },
+    );
+}
+
 // Generates a UUID for tagging user-message bubbles. Falls back to a
 // time + random hex blend when crypto.randomUUID is unavailable (older
 // browsers, non-secure contexts).
@@ -151,6 +202,85 @@ function generateRequestId(): string {
             .toString(16)
             .padStart(8, "0")
     );
+}
+
+/**
+ * Wire the hover-push behavior onto a chat bubble's body element.
+ *
+ * When the user hovers a bubble that has populated metrics (signaled by
+ * the `chat-message-has-metrics` class on `containerDiv`), the metrics
+ * tooltip overlay reveals via CSS — but it would otherwise cover the
+ * next bubble. To make room, we translate every DOM-earlier sibling
+ * (= visually-lower bubble in the column-reverse `.chat` layout) DOWN
+ * by the actual measured overlay height.
+ *
+ * We use the individual `translate` CSS property (not `transform`) so
+ * the translation isn't clobbered by the container's appearance
+ * `animation: message ... forwards` which locks `transform: scale(1)`.
+ * Per CSS Transforms Level 2, `translate` composes independently.
+ */
+function attachHoverPush(
+    bodyDiv: HTMLElement,
+    containerDiv: HTMLElement,
+    metricsDiv: HTMLElement,
+) {
+    bodyDiv.addEventListener("mouseenter", () => {
+        if (!containerDiv.classList.contains("chat-message-has-metrics")) {
+            return;
+        }
+        // Measure on demand — wrap heights vary per bubble.
+        metricsDiv.style.visibility = "hidden";
+        metricsDiv.style.display = "block";
+        const overlayH = metricsDiv.offsetHeight;
+        metricsDiv.style.display = "";
+        metricsDiv.style.visibility = "";
+        const offset = `${overlayH + 4}px`;
+        const hasEarlier = containerDiv.previousElementSibling !== null;
+        if (hasEarlier) {
+            // Normal case: hovered bubble is NOT the bottommost. Push
+            // visually-lower (DOM-earlier) bubbles DOWN to make room
+            // for the overlay rendered below this bubble.
+            let sibling: Element | null =
+                containerDiv.previousElementSibling;
+            while (sibling) {
+                (sibling as HTMLElement).style.translate = `0 ${offset}`;
+                (sibling as HTMLElement).style.transition =
+                    "translate 0.15s ease-out";
+                sibling = sibling.previousElementSibling;
+            }
+        } else {
+            // Bottommost bubble: there's nothing visually below it to
+            // push down, AND the overlay would be clipped by the input
+            // area. Slide the bubble itself (plus all visually-higher
+            // = DOM-later siblings) UP by the overlay height so the
+            // overlay renders above the input. We translate all of
+            // them together so the chat's vertical stacking stays
+            // intact.
+            (containerDiv as HTMLElement).style.translate = `0 -${offset}`;
+            (containerDiv as HTMLElement).style.transition =
+                "translate 0.15s ease-out";
+            let sibling: Element | null = containerDiv.nextElementSibling;
+            while (sibling) {
+                (sibling as HTMLElement).style.translate = `0 -${offset}`;
+                (sibling as HTMLElement).style.transition =
+                    "translate 0.15s ease-out";
+                sibling = sibling.nextElementSibling;
+            }
+        }
+    });
+    bodyDiv.addEventListener("mouseleave", () => {
+        (containerDiv as HTMLElement).style.translate = "";
+        let sibling: Element | null = containerDiv.previousElementSibling;
+        while (sibling) {
+            (sibling as HTMLElement).style.translate = "";
+            sibling = sibling.previousElementSibling;
+        }
+        sibling = containerDiv.nextElementSibling;
+        while (sibling) {
+            (sibling as HTMLElement).style.translate = "";
+            sibling = sibling.nextElementSibling;
+        }
+    });
 }
 
 // Inline SVG roadrunner icon used by `notifyExplained` / `updateGrammarResult`
@@ -259,6 +389,18 @@ export class ChatPanel {
     // roadrunner icon and tooltip to the correct bubble after the
     // dispatcher reports back. Cleared by clear().
     private userMessageById = new Map<string, HTMLElement>();
+
+    // Timestamp (ms since epoch) when the user sent each requestId. Used
+    // to compute the "First Message" elapsed time when the agent's first
+    // bubble for that request is created. Cleared on completeRequest().
+    private requestStartByRequestId = new Map<string, number>();
+    // Elapsed ms from request send to first agent message for each
+    // requestId (populated when the first agent bubble appears).
+    private firstMessageMsByRequestId = new Map<string, number>();
+    // Disables the requestStart/firstMessage timestamp capture during
+    // history replay (those timestamps would reflect replay speed, not
+    // the original interaction).
+    private suppressFirstMessageTracking = false;
 
     public onSend?: (
         text: string,
@@ -677,13 +819,88 @@ export class ChatPanel {
         messageDiv.appendChild(span);
 
         bodyDiv.appendChild(messageDiv);
+
+        // Empty user-side metrics strip — populated later by
+        // applyUserMetrics() when the dispatcher reports `metrics.parse`.
+        const userMetricsDiv = document.createElement("div");
+        userMetricsDiv.className = "chat-message-metrics chat-message-metrics-user";
+        bodyDiv.appendChild(userMetricsDiv);
+
         container.appendChild(bodyDiv);
+
+        attachHoverPush(bodyDiv, container, userMetricsDiv);
 
         sentinel.before(container);
         this.scrollToBottom();
 
         const id = container.dataset.requestId!;
         this.userMessageById.set(id, container);
+        if (!this.suppressFirstMessageTracking) {
+            this.requestStartByRequestId.set(id, Date.now());
+        }
+    }
+
+    /**
+     * Stamp a metrics tooltip (hover-revealed) onto the user bubble.
+     * Used to display the dispatcher's `metrics.parse` (Translation) timing
+     * on the user side of the conversation.
+     */
+    public applyUserMetrics(
+        requestId: string,
+        label: string,
+        phase?: PhaseTiming,
+        totalDuration?: number,
+    ) {
+        const container = this.userMessageById.get(requestId);
+        // Note: do NOT bail when phase has no duration — chat-only requests
+        // sometimes return a parse PhaseTiming with marks but no duration,
+        // and we still want to render those marks. We bail only if there
+        // is genuinely nothing to show.
+        const hasContent =
+            (phase?.duration !== undefined && phase.duration !== null) ||
+            (phase?.marks && Object.keys(phase.marks).length > 0) ||
+            totalDuration !== undefined;
+        // eslint-disable-next-line no-console
+        console.debug(
+            "[chat-ui] applyUserMetrics",
+            requestId,
+            "found?",
+            !!container,
+            "hasContent?",
+            hasContent,
+            "phase=",
+            phase,
+        );
+        if (!container || !hasContent) return;
+        const metricsDiv = container.querySelector(
+            ".chat-message-metrics-user",
+        ) as HTMLElement | null;
+        if (!metricsDiv) return;
+        const mainLines: string[] = [];
+        if (phase?.duration !== undefined) {
+            mainLines.push(metricsLine(`${label} Elapsed`, phase.duration));
+        }
+        if (totalDuration !== undefined) {
+            mainLines.push(metricsLine("Total Elapsed", totalDuration));
+        }
+        const markLines: string[] = [];
+        if (phase?.marks) {
+            for (const [key, value] of Object.entries(phase.marks)) {
+                const avg = value.duration / Math.max(value.count, 1);
+                const suffix =
+                    value.count !== 1 ? `(out of ${value.count})` : "";
+                markLines.push(`${key}: <b>${formatDuration(avg)}${suffix}</b>`);
+            }
+        }
+        metricsDiv.innerHTML =
+            `<div class="metrics-details">` +
+            `<div>${markLines.join("<br>")}</div>` +
+            `<div></div>` +
+            `<div>${mainLines.join("<br>")}</div>` +
+            `</div>`;
+        // Mark the container as having metrics so the hover-push handler
+        // (attached in addUserMessage) actually fires for user bubbles.
+        container.classList.add("chat-message-has-metrics");
     }
 
     /**
@@ -759,6 +976,18 @@ export class ChatPanel {
             this.currentAgentContainer = container;
             if (requestId) {
                 this.agentContainersByRequestId.set(requestId, container);
+                // Capture the elapsed time from request send to first agent
+                // bubble for this request — drives the "First Message"
+                // metric line on the agent metrics tooltip.
+                if (!this.firstMessageMsByRequestId.has(requestId)) {
+                    const start = this.requestStartByRequestId.get(requestId);
+                    if (start !== undefined) {
+                        this.firstMessageMsByRequestId.set(
+                            requestId,
+                            Date.now() - start,
+                        );
+                    }
+                }
             }
             // Apply any action metadata that arrived via setDisplayInfo
             // before the first render — the dispatcher fires it before
@@ -803,6 +1032,15 @@ export class ChatPanel {
         this.currentAgentContainer = container;
         if (requestId) {
             this.agentContainersByRequestId.set(requestId, container);
+            if (!this.firstMessageMsByRequestId.has(requestId)) {
+                const start = this.requestStartByRequestId.get(requestId);
+                if (start !== undefined) {
+                    this.firstMessageMsByRequestId.set(
+                        requestId,
+                        Date.now() - start,
+                    );
+                }
+            }
         }
         return container;
     }
@@ -868,7 +1106,12 @@ export class ChatPanel {
         // Reset live state so replay starts fresh.
         this.currentAgentContainer = undefined;
 
-        for (const entry of entries) {
+        // Suppress first-message timing tracking during replay — those
+        // timestamps would reflect the speed of replay, not the original
+        // request-to-first-response time.
+        this.suppressFirstMessageTracking = true;
+        try {
+            for (const entry of entries) {
             switch (entry.kind) {
                 case "user":
                     this.addUserMessage(entry.text, entry.requestId);
@@ -894,7 +1137,38 @@ export class ChatPanel {
                 case "system":
                     this.addSystemMessage(entry.text);
                     break;
+                case "display-info":
+                    this.setDisplayInfo(
+                        entry.source,
+                        entry.sourceIcon,
+                        entry.action,
+                        entry.requestId,
+                    );
+                    break;
+                case "command-result":
+                    if (entry.requestId) {
+                        // Pre-seed the per-request firstMessageMs so the
+                        // metrics tooltip can show "First Message" on
+                        // history-replayed bubbles (live tracking is
+                        // suppressed during replay).
+                        if (entry.firstMessageMs !== undefined) {
+                            this.firstMessageMsByRequestId.set(
+                                entry.requestId,
+                                entry.firstMessageMs,
+                            );
+                        }
+                        this.completeRequest(entry.requestId, {
+                            actionPhase: entry.actionPhase,
+                            totalDuration: entry.totalDuration,
+                            tokenUsage: entry.tokenUsage,
+                            parsePhase: entry.parsePhase,
+                        });
+                    }
+                    break;
             }
+        }
+        } finally {
+            this.suppressFirstMessageTracking = false;
         }
 
         // Mark everything just appended as history. Iteration is over the
@@ -950,6 +1224,8 @@ export class ChatPanel {
         this.currentAgentContainer = undefined;
         this.agentContainersByRequestId.clear();
         this.userMessageById.clear();
+        this.requestStartByRequestId.clear();
+        this.firstMessageMsByRequestId.clear();
         this.pendingDisplayInfo = undefined;
         if (this.statusContainer) {
             this.statusContainer.remove();
@@ -1032,6 +1308,7 @@ export class ChatPanel {
             actionPhase?: PhaseTiming;
             totalDuration?: number;
             tokenUsage?: CompletionUsageStats;
+            parsePhase?: PhaseTiming;
         },
     ) {
         if (this.statusContainer) {
@@ -1041,16 +1318,35 @@ export class ChatPanel {
         const target =
             (requestId && this.agentContainersByRequestId.get(requestId)) ||
             this.currentAgentContainer;
+        const firstMessageMs =
+            requestId !== undefined
+                ? this.firstMessageMsByRequestId.get(requestId)
+                : undefined;
         if (result && target) {
             target.updateMetrics(
                 "Action",
                 result.actionPhase,
                 result.totalDuration,
                 result.tokenUsage,
+                firstMessageMs,
+            );
+        }
+        if (result && requestId) {
+            // Always attempt to populate user-side metrics. Even when the
+            // request had no parse phase (e.g. cached translations or
+            // chat-only paths), we still show the total elapsed so the
+            // user bubble gets a metrics tooltip just like the agent's.
+            this.applyUserMetrics(
+                requestId,
+                "Translation",
+                result.parsePhase,
+                result.totalDuration,
             );
         }
         if (requestId) {
             this.agentContainersByRequestId.delete(requestId);
+            this.requestStartByRequestId.delete(requestId);
+            this.firstMessageMsByRequestId.delete(requestId);
         }
         // If we just finalized the active bubble, reset it so the next
         // request starts fresh.
@@ -1571,6 +1867,12 @@ class AgentMessageContainer {
     // rendered response and a <pre> of the action JSON.
     private actionDataHtml?: string;
     private savedMessageHtml?: string;
+    // When setActionData receives an action with schemaName/actionName,
+    // we display "schema.action" as the bubble title instead of the raw
+    // source agent name. setMessage's source-driven label-update is then
+    // suppressed so the action label doesn't get clobbered by later
+    // setDisplay calls.
+    private actionDerivedName?: string;
 
     constructor(
         beforeElement: Element,
@@ -1639,6 +1941,8 @@ class AgentMessageContainer {
 
         this.div.appendChild(bodyDiv);
 
+        attachHoverPush(bodyDiv, this.div, this.metricsDiv);
+
         // Insert into DOM (column-reverse order)
         beforeElement.before(this.div);
     }
@@ -1648,22 +1952,55 @@ class AgentMessageContainer {
         phase?: PhaseTiming,
         totalDuration?: number,
         tokenUsage?: CompletionUsageStats,
+        firstMessageMs?: number,
     ) {
-        const lines: string[] = [];
+        // Layout: .metrics-details flex row with three columns
+        //   left   — "First Message" + phase.marks (one line each)
+        //   middle — (reserved; tts metrics in the future)
+        //   right  — main metrics (Action Elapsed / Total Elapsed / Tokens)
+        // This mirrors the Electron shell's MessageContainer layout so the
+        // tooltip reads as "marks on the left, totals on the right".
+        const mainLines: string[] = [];
         if (phase?.duration !== undefined) {
-            lines.push(metricsLine(`${actionLabel} Elapsed`, phase.duration));
+            mainLines.push(metricsLine(`${actionLabel} Elapsed`, phase.duration));
         }
         if (totalDuration !== undefined) {
-            lines.push(metricsLine("Total Elapsed", totalDuration));
+            mainLines.push(metricsLine("Total Elapsed", totalDuration));
         }
         if (tokenUsage) {
-            lines.push(
+            mainLines.push(
                 `Tokens: <b>${tokenUsage.total_tokens}</b> ` +
                     `(prompt ${tokenUsage.prompt_tokens}, ` +
                     `completion ${tokenUsage.completion_tokens})`,
             );
         }
-        this.metricsDiv.innerHTML = lines.join("<br>");
+        const leftLines: string[] = [];
+        if (firstMessageMs !== undefined) {
+            leftLines.push(metricsLine("First Message", firstMessageMs));
+        }
+        if (phase?.marks) {
+            for (const [key, value] of Object.entries(phase.marks)) {
+                const avg = value.duration / Math.max(value.count, 1);
+                const suffix =
+                    value.count !== 1 ? `(out of ${value.count})` : "";
+                leftLines.push(`${key}: <b>${formatDuration(avg)}${suffix}</b>`);
+            }
+        }
+        this.metricsDiv.innerHTML =
+            `<div class="metrics-details">` +
+            `<div>${leftLines.join("<br>")}</div>` +
+            `<div></div>` +
+            `<div>${mainLines.join("<br>")}</div>` +
+            `</div>`;
+        // Flag the container so the chat-level selector that pushes
+        // visually-below bubbles down on hover can target it without
+        // relying on a nested `:has()` chain (which proved unreliable in
+        // some webview versions).
+        if (leftLines.length > 0 || mainLines.length > 0) {
+            this.div.classList.add("chat-message-has-metrics");
+        } else {
+            this.div.classList.remove("chat-message-has-metrics");
+        }
     }
 
     /**
@@ -1674,31 +2011,79 @@ class AgentMessageContainer {
     public setActionData(action: unknown) {
         if (action === undefined || action === null) return;
         let html: string;
+        let label: string | undefined;
         if (Array.isArray(action)) {
-            html = `<pre>${escapeHtml(action.join(" "))}</pre>`;
-        } else if (typeof action === "object") {
-            html = `<pre>${escapeHtml(
+            // Skip arrays-of-primitives (e.g. dispatcher's ['request']
+            // housekeeping events) and empty arrays — making the agent
+            // name clickable here would produce a no-op popup.
+            const objectEntries = action.filter(
+                (v) => typeof v === "object" && v !== null,
+            );
+            if (objectEntries.length === 0) return;
+            // Skip arrays whose objects are all empty `{}` — same
+            // rationale (some agents emit `[{}]` placeholder events).
+            if (
+                objectEntries.every(
+                    (v) => Object.keys(v as object).length === 0,
+                )
+            ) {
+                return;
+            }
+            // Derive a label from the first object that carries a
+            // schema/action name (matches Electron shell behavior).
+            for (const entry of objectEntries) {
+                const o = entry as {
+                    schemaName?: unknown;
+                    actionName?: unknown;
+                };
+                if (
+                    typeof o.schemaName === "string" &&
+                    typeof o.actionName === "string"
+                ) {
+                    label = `${o.schemaName}.${o.actionName}`;
+                    break;
+                }
+            }
+            html = `<pre class="chat-json">${highlightJson(
                 JSON.stringify(action, undefined, 2),
             )}</pre>`;
+        } else if (typeof action === "object") {
+            // Skip empty objects — the popup would show only `{}` which
+            // is misleading (looks broken to the user).
+            if (Object.keys(action as object).length === 0) return;
+            const obj = action as {
+                schemaName?: unknown;
+                actionName?: unknown;
+            };
+            if (
+                typeof obj.schemaName === "string" &&
+                typeof obj.actionName === "string"
+            ) {
+                label = `${obj.schemaName}.${obj.actionName}`;
+            }
+            const json = JSON.stringify(action, undefined, 2);
+            html = `<pre class="chat-json">${highlightJson(json)}</pre>`;
         } else {
-            html = `<pre>${escapeHtml(String(action))}</pre>`;
+            // Primitives (string/number/bool) aren't useful as a JSON
+            // popup. Don't make the bubble clickable for them.
+            return;
         }
+        // Render the JSON below the message in the collapsible details
+        // area, instead of swapping out the message body. The agent name
+        // becomes a click affordance to toggle the details panel.
+        this.detailsDiv.innerHTML = html;
         this.actionDataHtml = html;
+        if (label) {
+            this.nameSpan.textContent = label;
+            this.actionDerivedName = label;
+        }
         this.nameSpan.classList.add("clickable");
-        this.nameSpan.title = "Click to show action JSON";
+        this.nameSpan.title = "Click to show / hide action JSON";
     }
 
     private toggleActionData() {
         if (this.actionDataHtml === undefined) return;
-        if (this.savedMessageHtml === undefined) {
-            this.savedMessageHtml = this.messageDiv.innerHTML;
-            this.messageDiv.innerHTML = this.actionDataHtml;
-            this.messageDiv.classList.add("chat-message-action-data");
-        } else {
-            this.messageDiv.innerHTML = this.savedMessageHtml;
-            this.savedMessageHtml = undefined;
-            this.messageDiv.classList.remove("chat-message-action-data");
-        }
+        this.detailsDiv.classList.toggle("chat-details-visible");
     }
 
     public setMessage(
@@ -1706,7 +2091,7 @@ class AgentMessageContainer {
         source?: string,
         appendMode?: DisplayAppendMode,
     ) {
-        if (source) {
+        if (source && !this.actionDerivedName) {
             this.nameSpan.textContent = source;
         }
 
@@ -1758,7 +2143,9 @@ class AgentMessageContainer {
     }
 
     public updateSource(source: string, icon?: string) {
-        this.nameSpan.textContent = source;
+        if (!this.actionDerivedName) {
+            this.nameSpan.textContent = source;
+        }
         if (icon) {
             this.iconDiv.textContent = icon;
         }

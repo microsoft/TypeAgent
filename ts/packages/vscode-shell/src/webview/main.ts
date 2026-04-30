@@ -61,6 +61,32 @@ chatPanel.onDemoAction = (action: "continue" | "cancel") => {
     vscode.postMessage({ type: "demoCommand", action });
 };
 
+// Map dispatcher's CommandResult to chat-ui's completeRequest result shape.
+// dispatcher: { metrics: { actions: PhaseTiming[], command, parse, duration },
+//               tokenUsage, ... }
+// chat-ui:    { actionPhase?, totalDuration?, tokenUsage?, parsePhase? }
+// We pick the last action's phase (or the command phase) as actionPhase, the
+// overall duration as totalDuration, the parse phase as parsePhase (drives
+// the "Translation" tooltip on the user bubble), and pass tokenUsage through.
+function mapResult(result: any): {
+    actionPhase?: any;
+    totalDuration?: number;
+    tokenUsage?: any;
+    parsePhase?: any;
+} | undefined {
+    if (!result) return undefined;
+    const metrics = result.metrics;
+    const actions: any[] | undefined = metrics?.actions;
+    const lastAction =
+        actions && actions.length > 0 ? actions[actions.length - 1] : undefined;
+    return {
+        actionPhase: lastAction ?? metrics?.command,
+        totalDuration: metrics?.duration,
+        tokenUsage: result.tokenUsage,
+        parsePhase: metrics?.parse,
+    };
+}
+
 // Helper: pull clientRequestId out of a RequestId object/string. Most fields
 // arrive pre-normalized as plain strings from the bridge, but the
 // historyReplay payload still carries server `IAgentMessage`s whose nested
@@ -74,6 +100,33 @@ function clientIdOf(requestId: any): string | undefined {
 // Translate the bridge's history-entry shape (which mirrors the dispatcher's
 // internal recorded events) to chat-ui's HistoryEntry union.
 function toChatPanelHistory(entries: any[]): HistoryEntry[] {
+    // First pass: derive "First Message" timing per requestId — the elapsed
+    // ms from the user's request to the first agent display message. The
+    // dispatcher does not persist this directly; we reconstruct it from the
+    // recorded user-request and set/append-display timestamps.
+    const userRequestTs = new Map<string, number>();
+    const firstAgentTs = new Map<string, number>();
+    for (const e of entries) {
+        const rid: string | undefined =
+            e.requestId ?? clientIdOf(e.message?.requestId);
+        if (!rid || typeof e.timestamp !== "number") continue;
+        if (e.type === "user-request") {
+            if (!userRequestTs.has(rid)) userRequestTs.set(rid, e.timestamp);
+        } else if (e.type === "set-display" || e.type === "append-display") {
+            // Skip ephemeral status lines — they don't represent the first
+            // real agent response.
+            if (e.type === "append-display" && e.mode === "temporary") continue;
+            if (!firstAgentTs.has(rid)) firstAgentTs.set(rid, e.timestamp);
+        }
+    }
+    const firstMessageMsByRequestId = new Map<string, number>();
+    for (const [rid, start] of userRequestTs) {
+        const first = firstAgentTs.get(rid);
+        if (first !== undefined && first >= start) {
+            firstMessageMsByRequestId.set(rid, first - start);
+        }
+    }
+
     const out: HistoryEntry[] = [];
     for (const e of entries) {
         switch (e.type) {
@@ -108,9 +161,37 @@ function toChatPanelHistory(entries: any[]): HistoryEntry[] {
                     timestamp: e.timestamp,
                 });
                 break;
-            // set-display-info and command-result aren't part of chat-ui's
-            // HistoryEntry union; drop them on replay (the action label /
-            // metrics tooltips will only show for live requests).
+            case "set-display-info":
+                // Restores the action JSON popup + action-derived bubble
+                // title on replayed history items.
+                out.push({
+                    kind: "display-info",
+                    source: e.source ?? "",
+                    action: e.action,
+                    requestId: e.requestId ?? clientIdOf(e.message?.requestId),
+                });
+                break;
+            case "command-result": {
+                // Restores the metrics tooltip on replayed agent bubbles.
+                const m = e.metrics;
+                const actions: any[] | undefined = m?.actions;
+                const lastAction =
+                    actions && actions.length > 0
+                        ? actions[actions.length - 1]
+                        : undefined;
+                out.push({
+                    kind: "command-result",
+                    requestId: e.requestId,
+                    actionPhase: lastAction ?? m?.command,
+                    totalDuration: m?.duration,
+                    tokenUsage: e.tokenUsage,
+                    parsePhase: m?.parse,
+                    firstMessageMs: e.requestId
+                        ? firstMessageMsByRequestId.get(e.requestId)
+                        : undefined,
+                });
+                break;
+            }
         }
     }
     return out;
@@ -181,8 +262,10 @@ window.addEventListener("message", (event) => {
             break;
         }
         case "setDisplayInfo":
+            // chat-ui signature: (source, sourceIcon?, action?, requestId?)
             chatPanel.setDisplayInfo(
                 msg.source,
+                undefined,
                 msg.action,
                 msg.requestId,
             );
@@ -197,7 +280,7 @@ window.addEventListener("message", (event) => {
             } else if (msg.event === "grammarRule" && rid) {
                 chatPanel.updateGrammarResult(rid, msg.data);
             } else if (msg.event === "commandComplete" && rid) {
-                chatPanel.completeRequest(rid, msg.data?.result);
+                chatPanel.completeRequest(rid, mapResult(msg.data?.result));
             } else {
                 chatPanel.addSystemMessage(`[${msg.source}] ${msg.event}`);
             }
@@ -211,14 +294,14 @@ window.addEventListener("message", (event) => {
             break;
         case "commandComplete": {
             const rid = msg.requestId;
-            if (rid) chatPanel.completeRequest(rid, msg.result);
+            if (rid) chatPanel.completeRequest(rid, mapResult(msg.result));
             break;
         }
         case "peerMetrics": {
             // Forwarded from a peer tab on the same session — apply the
             // timing tooltip to our local bubble for that requestId.
             const rid = msg.requestId;
-            if (rid) chatPanel.completeRequest(rid, msg.result);
+            if (rid) chatPanel.completeRequest(rid, mapResult(msg.result));
             break;
         }
         case "switching":
