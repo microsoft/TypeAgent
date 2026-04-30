@@ -92,9 +92,15 @@ export class PartialCompletion {
         textInput.addEventListener("blur", this.onBlur);
     }
 
+    private blurTimer: ReturnType<typeof setTimeout> | undefined;
+
     public dispose(): void {
         if (this.disposed) return;
         this.disposed = true;
+        if (this.blurTimer !== undefined) {
+            clearTimeout(this.blurTimer);
+            this.blurTimer = undefined;
+        }
         this.textInput.removeEventListener("input", this.onInput);
         this.textInput.removeEventListener("keydown", this.onKeydown);
         this.textInput.removeEventListener("blur", this.onBlur);
@@ -320,8 +326,11 @@ export class PartialCompletion {
 
     private onBlur = () => {
         // Hide menu when input loses focus. Slight delay so a mousedown on
-        // a menu item still fires onCompletion before close().
-        setTimeout(() => {
+        // a menu item still fires onCompletion before close(). Track the
+        // timer handle so dispose() can cancel it.
+        if (this.blurTimer !== undefined) clearTimeout(this.blurTimer);
+        this.blurTimer = setTimeout(() => {
+            this.blurTimer = undefined;
             if (this.disposed) return;
             this.menu?.close();
             this.menu = undefined;

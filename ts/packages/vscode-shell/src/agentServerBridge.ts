@@ -113,6 +113,8 @@ import type { CompletionDirection } from "@typeagent/agent-sdk";
  */
 export type BridgeFromWebviewMessage =
     | { type: "sendCommand"; command: string; requestId?: string }
+    | { type: "cancelCommand"; requestId: string }
+    | { type: "openExternal"; href: string }
     | { type: "connect" }
     | { type: "disconnect" }
     | { type: "getStatus" }
@@ -874,6 +876,27 @@ export class AgentServerBridge {
         switch (msg.type) {
             case "sendCommand":
                 await this.sendCommand(msg.command, msg.requestId);
+                break;
+            case "cancelCommand":
+                // Forward to the dispatcher so an in-flight request can be
+                // cancelled mid-flight (e.g., user clicks the stop button on
+                // a long-running action). The dispatcher answers with a
+                // CommandResult marked wasCancelled=true on its normal path.
+                try {
+                    this.session?.dispatcher.cancelCommand(msg.requestId);
+                } catch (e) {
+                    console.warn(
+                        "[agentServerBridge] cancelCommand failed:",
+                        e,
+                    );
+                }
+                break;
+            case "openExternal":
+                // Webviews can't open arbitrary external URLs; route through
+                // the extension host so VS Code applies its trust prompt.
+                if (msg.href) {
+                    void vscode.env.openExternal(vscode.Uri.parse(msg.href));
+                }
                 break;
             case "connect":
                 await this.connect();

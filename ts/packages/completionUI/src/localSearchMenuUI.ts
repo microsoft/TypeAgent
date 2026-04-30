@@ -123,7 +123,17 @@ export class LocalSearchMenuUI implements SearchMenuUI {
      */
     public scrollList(deltaY: number) {
         if (this.closed) return;
-        if (this.items.length <= this.visibleItemsCount) return;
+        if (deltaY === 0) return;
+        if (this.items.length <= this.visibleItemsCount) {
+            // Even when the list isn't tall enough to scroll, a stale
+            // `selected` (e.g. items shrank since the last selection) could
+            // index past the end on the next render. Clamp defensively.
+            if (this.selected >= this.items.length) {
+                this.selected = Math.max(0, this.items.length - 1);
+                this.updateDisplay();
+            }
+            return;
+        }
         const max = Math.max(0, this.items.length - this.visibleItemsCount);
         const dir = deltaY > 0 ? 1 : -1;
         const newTop = Math.max(0, Math.min(max, this.top + dir));
