@@ -335,12 +335,13 @@ export function optimizeGrammar(
         // and downstream still gets a valid AST.
         const counter = { promoted: 0 };
         const memo: RulesArrayMemo = new Map();
-        const promotedRules = promoteRulesArray(rules, counter, memo);
+        const ruleMemo: RuleMemo = new Map();
+        const promotedRules = promoteRulesArray(rules, counter, memo, ruleMemo);
         const promotedDispatch =
             topLevelDispatch === undefined
                 ? topLevelDispatch
                 : mapDispatchBuckets(topLevelDispatch, (bucket) =>
-                      promoteRulesArray(bucket, counter, memo),
+                      promoteRulesArray(bucket, counter, memo, ruleMemo),
                   );
         if (
             validateTailPassOutput(
@@ -2832,13 +2833,14 @@ function promoteRulesArray(
     rules: GrammarRule[],
     counter: { promoted: number },
     memo: RulesArrayMemo,
+    ruleMemo: RuleMemo,
 ): GrammarRule[] {
     const cached = memo.get(rules);
     if (cached !== undefined) return cached;
     memo.set(rules, rules);
     let next: GrammarRule[] | undefined;
     for (let i = 0; i < rules.length; i++) {
-        const r = promoteRule(rules[i], counter, memo);
+        const r = promoteRule(rules[i], counter, memo, ruleMemo);
         if (next !== undefined) {
             next.push(r);
         } else if (r !== rules[i]) {
@@ -2851,11 +2853,28 @@ function promoteRulesArray(
     return result;
 }
 
+/**
+ * Per-pass memo over `promoteRule` keyed on input rule identity.
+ * `dispatchifyAlternations` may place the same source rule object
+ * into multiple per-token bucket arrays (one per first-token key).
+ * Without per-rule memoization, `promoteRule` would visit each
+ * occurrence independently, and `tryPromoteTrailing` -> `trySubstituteMembers`
+ * would synthesize a fresh `alternatives` / `dispatch` per visit -
+ * producing N identity-distinct but content-equal tail wrappers that
+ * defeat downstream identity-based dedup (`DispatchMemo`, the
+ * serializer's `makeInterner`).  Sharing the result across all
+ * occurrences collapses them to a single wrapper.
+ */
+type RuleMemo = Map<GrammarRule, GrammarRule>;
+
 function promoteRule(
     rule: GrammarRule,
     counter: { promoted: number },
     memo: RulesArrayMemo,
+    ruleMemo: RuleMemo,
 ): GrammarRule {
+    const cached = ruleMemo.get(rule);
+    if (cached !== undefined) return cached;
     // Recurse into nested `RulesPart`s within this rule's parts
     // first so inner trailing RulesParts are promoted before we
     // consider this rule's own trailing part.
@@ -2867,7 +2886,7 @@ function promoteRule(
             if (outParts !== undefined) outParts.push(p);
             continue;
         }
-        const recursed = promoteInsideRulesPart(p, counter, memo);
+        const recursed = promoteInsideRulesPart(p, counter, memo, ruleMemo);
         if (outParts !== undefined) {
             outParts.push(recursed);
         } else if (recursed !== p) {
@@ -2880,23 +2899,31 @@ function promoteRule(
     const promoted = tryPromoteTrailing(rule, parts);
     if (promoted !== undefined) {
         counter.promoted++;
+        ruleMemo.set(rule, promoted);
         return promoted;
     }
-    if (outParts !== undefined) return { ...rule, parts };
-    return rule;
+    const result = outParts !== undefined ? { ...rule, parts } : rule;
+    ruleMemo.set(rule, result);
+    return result;
 }
 
 function promoteInsideRulesPart(
     part: RulesPart,
     counter: { promoted: number },
     memo: RulesArrayMemo,
+    ruleMemo: RuleMemo,
 ): RulesPart {
-    const newAlts = promoteRulesArray(part.alternatives, counter, memo);
+    const newAlts = promoteRulesArray(
+        part.alternatives,
+        counter,
+        memo,
+        ruleMemo,
+    );
     const newDispatch =
         part.dispatch === undefined
             ? part.dispatch
             : mapDispatchBuckets(part.dispatch, (bucket) =>
-                  promoteRulesArray(bucket, counter, memo),
+                  promoteRulesArray(bucket, counter, memo, ruleMemo),
               );
     if (newAlts === part.alternatives && newDispatch === part.dispatch) {
         return part;
