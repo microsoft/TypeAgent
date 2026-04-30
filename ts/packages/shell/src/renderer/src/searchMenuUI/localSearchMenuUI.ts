@@ -124,8 +124,9 @@ export class LocalSearchMenuUI implements SearchMenuUI {
             this.completions.className = "completions";
 
             if (
-                this.selected < this.top ||
-                this.selected >= this.top + this.visibleItemsCount
+                this.selected >= 0 &&
+                (this.selected < this.top ||
+                    this.selected >= this.top + this.visibleItemsCount)
             ) {
                 this.top = this.selected;
             }
@@ -134,6 +135,11 @@ export class LocalSearchMenuUI implements SearchMenuUI {
                     0,
                     this.items.length - this.visibleItemsCount,
                 );
+            }
+            // Guard against `top` going negative when no item is selected
+            // (selected = -1) and items.length < visibleItemsCount.
+            if (this.top < 0) {
+                this.top = 0;
             }
             for (let i = this.top; i < this.top + this.visibleItemsCount; i++) {
                 const li = document.createElement("li");
