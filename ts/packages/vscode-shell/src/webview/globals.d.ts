@@ -14,3 +14,10 @@ declare module "chat-ui/styles" {
     const css: string;
     export default css;
 }
+
+// completion-ui exports its dropdown menu styles via a `.css` subpath
+// of the package; declare so esbuild's text loader resolves it.
+declare module "@typeagent/completion-ui/styles.css" {
+    const css: string;
+    export default css;
+}

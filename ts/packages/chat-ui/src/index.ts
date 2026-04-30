@@ -10,6 +10,14 @@ export {
 export { setContent, swapContent } from "./setContent.js";
 
 export {
+    PartialCompletion,
+    PcCompletionState,
+    PcDirection,
+    PcPostMessage,
+    PcPost,
+} from "./partialCompletion.js";
+
+export {
     ChatPanel,
     ChatPanelOptions,
     CompletionResult,

@@ -16,6 +16,11 @@ import {
     ChatSettingsView,
     defaultChatSettings,
 } from "./platformAdapter.js";
+import {
+    PartialCompletion,
+    type PcCompletionState,
+    type PcPost,
+} from "./partialCompletion.js";
 
 /**
  * Default per-agent emoji map used when a host calls add/replaceAgentMessage
@@ -358,6 +363,14 @@ export class ChatPanel {
         | undefined;
     private commandHistory: string[] = [];
     private historyIndex = -1;
+    /** Local user's display name + initial used in user-bubble headers. */
+    private userName = "You";
+    private userInitial = "U";
+    /**
+     * Optional host-driven command-completion controller. Mounted by
+     * attachCompletion(); pcState messages are forwarded via applyPcState().
+     */
+    private partialCompletion: PartialCompletion | undefined;
     private activeRequestId?: string;
     private isSwitching = false;
     private isHistoryLoading = false;
@@ -496,6 +509,12 @@ export class ChatPanel {
 
     private setupInputHandlers() {
         this.textInput.addEventListener("keydown", (e) => {
+            // Give the partial-completion (host-driven) controller first
+            // crack at the keystroke so its Tab/Enter/Esc/Arrow handling
+            // wins over chat-ui's local completions and history nav.
+            if (this.partialCompletion?.handleKeyDownPreSend(e)) {
+                return;
+            }
             if (e.key === "Tab" && this.completions.length > 0) {
                 e.preventDefault();
                 this.acceptCompletion();
@@ -718,6 +737,9 @@ export class ChatPanel {
         this.historyIndex = -1;
         this.textInput.textContent = "";
         this.sendButton.disabled = true;
+        // Tell the host-driven completion controller that the input has
+        // been consumed so the next typed char registers as forward.
+        this.partialCompletion?.reset();
 
         const attachments =
             this.pendingAttachments.length > 0
@@ -799,12 +821,12 @@ export class ChatPanel {
         // a follow-up addAgentMessage with no requestId starts a fresh one.
         this.currentAgentContainer = undefined;
 
-        const timestamp = this.createTimestamp("user", "You");
+        const timestamp = this.createTimestamp("user", this.userName);
         container.appendChild(timestamp);
 
         const iconDiv = document.createElement("div");
         iconDiv.className = "user-icon";
-        iconDiv.textContent = "U";
+        iconDiv.textContent = this.userInitial;
         container.appendChild(iconDiv);
 
         const bodyDiv = document.createElement("div");
@@ -1640,6 +1662,64 @@ export class ChatPanel {
     /** Reset the history agent container (call between separate history entries). */
     public resetHistoryAgent() {
         this.historyAgentContainer = undefined;
+    }
+
+    /**
+     * Set the local user's display name (and optional initial). Used in the
+     * user-bubble timestamp label and the round avatar to the right of the
+     * bubble. Affects bubbles created AFTER this call; existing bubbles are
+     * not retroactively updated. The initial defaults to the first
+     * non-whitespace character of `name` (uppercased).
+     */
+    public setUserInfo(name: string, initial?: string) {
+        const trimmed = (name ?? "").trim();
+        if (trimmed.length > 0) {
+            this.userName = trimmed;
+        }
+        if (initial !== undefined) {
+            const trimmedInitial = initial.trim();
+            if (trimmedInitial.length > 0) {
+                this.userInitial = trimmedInitial.charAt(0).toUpperCase();
+            }
+        } else if (trimmed.length > 0) {
+            this.userInitial = trimmed.charAt(0).toUpperCase();
+        }
+    }
+
+    /**
+     * Mount inline + dropdown command-completion driven by the host. The
+     * `post` callback receives messages (`pcUpdate` / `pcAccept` /
+     * `pcDismiss` / `pcHide` / `pcDispose`) which the host should forward
+     * to its CompletionController. The host pushes state updates back via
+     * `applyPcState(state)`.
+     *
+     * Returns the underlying PartialCompletion instance for callers that
+     * need direct access (e.g. to call `reset()` on session change).
+     * Re-attaching disposes the previous instance.
+     */
+    public attachCompletion(
+        post: PcPost,
+        opts?: { inline?: boolean },
+    ): PartialCompletion {
+        this.partialCompletion?.dispose();
+        // The textInput is wrapped in `chat-input-text-wrapper`; mount the
+        // toggle button on the wrapper so it sits flush with the input.
+        const wrapper =
+            (this.textInput.parentElement as HTMLElement | null) ??
+            this.inputArea;
+        this.partialCompletion = new PartialCompletion(
+            wrapper,
+            this.textInput,
+            this.ghostSpan,
+            post,
+            opts,
+        );
+        return this.partialCompletion;
+    }
+
+    /** Forward a host-pushed completion state update to the controller. */
+    public applyPcState(state: PcCompletionState | undefined) {
+        this.partialCompletion?.applyState(state);
     }
 
     /** Enable or disable the input. */

@@ -10,16 +10,19 @@
 
 import { ChatPanel, HistoryEntry } from "chat-ui";
 import chatPanelStyles from "chat-ui/styles";
+import completionUiStyles from "@typeagent/completion-ui/styles.css";
 import vscodeThemeStyles from "./vscode-theme.css";
 
-// Inject the chat-ui base styles first, then the VS Code theme overlay so
-// it can override the defaults via --vscode-* CSS variables.
+// Inject the chat-ui base styles first, then the completion-ui dropdown
+// styles, then the VS Code theme overlay so it can override defaults via
+// --vscode-* CSS variables.
 function injectStyles(css: string): void {
     const styleEl = document.createElement("style");
     styleEl.textContent = css;
     document.head.appendChild(styleEl);
 }
 injectStyles(chatPanelStyles as unknown as string);
+injectStyles(completionUiStyles as unknown as string);
 injectStyles(vscodeThemeStyles as unknown as string);
 
 declare function acquireVsCodeApi(): {
@@ -60,6 +63,12 @@ const chatPanel = new ChatPanel(rootEl, {
 chatPanel.onDemoAction = (action: "continue" | "cancel") => {
     vscode.postMessage({ type: "demoCommand", action });
 };
+
+// Mount inline + dropdown command-completion driven by the host
+// (CompletionController in AgentServerBridge). The chat-ui posts
+// pcUpdate / pcAccept / pcDismiss / pcHide / pcDispose; the host
+// answers with `pcState` (handled in the message switch below).
+chatPanel.attachCompletion((msg) => vscode.postMessage(msg));
 
 // Map dispatcher's CommandResult to chat-ui's completeRequest result shape.
 // dispatcher: { metrics: { actions: PhaseTiming[], command, parse, duration },
@@ -229,7 +238,7 @@ window.addEventListener("message", (event) => {
             }
             break;
         case "userInfo":
-            // chat-ui doesn't yet expose a user-name affordance; ignore.
+            chatPanel.setUserInfo(msg.name);
             break;
         case "sessionChanged":
             chatPanel.clear();
@@ -320,9 +329,7 @@ window.addEventListener("message", (event) => {
             if (!msg.loading) chatPanel.setEnabled(isConnected);
             break;
         case "pcState":
-            // Inline command-completion state from the extension host. Not
-            // wired through chat-ui yet (deferred to A9 — lift partialCompletion
-            // into chat-ui). For now this is a no-op.
+            chatPanel.applyPcState(msg.state);
             break;
         case "demoPaused":
             chatPanel.setDemoPaused(msg.paused, msg.message);

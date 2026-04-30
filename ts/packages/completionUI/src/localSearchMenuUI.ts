@@ -37,7 +37,11 @@ export class LocalSearchMenuUI implements SearchMenuUI {
         this.searchContainer.className = "autocomplete-container";
 
         this.searchContainer.onwheel = (event) => {
-            this.adjustSelection(event.deltaY);
+            // Scroll the visible window without moving the selection cursor.
+            // The previous behavior moved the selected item by one per wheel
+            // notch, which surprised users expecting list-style scrolling.
+            event.preventDefault();
+            this.scrollList(event.deltaY);
         };
 
         this.scrollBar = document.createElement("div");
@@ -108,6 +112,28 @@ export class LocalSearchMenuUI implements SearchMenuUI {
             this.selected--;
         }
 
+        this.updateDisplay();
+    }
+
+    /**
+     * Scroll the visible portion of the list without changing the selected
+     * item (unless the selection would otherwise scroll out of view, in
+     * which case it is clamped to the new visible range). Used by the
+     * mouse-wheel handler.
+     */
+    public scrollList(deltaY: number) {
+        if (this.closed) return;
+        if (this.items.length <= this.visibleItemsCount) return;
+        const max = Math.max(0, this.items.length - this.visibleItemsCount);
+        const dir = deltaY > 0 ? 1 : -1;
+        const newTop = Math.max(0, Math.min(max, this.top + dir));
+        if (newTop === this.top) return;
+        this.top = newTop;
+        if (this.selected < this.top) {
+            this.selected = this.top;
+        } else if (this.selected >= this.top + this.visibleItemsCount) {
+            this.selected = this.top + this.visibleItemsCount - 1;
+        }
         this.updateDisplay();
     }
 
