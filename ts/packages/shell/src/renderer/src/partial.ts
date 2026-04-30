@@ -375,11 +375,18 @@ export class PartialCompletion {
         const lastChar = quotedText.slice(-1);
         const appendSpace = /[A-Za-z0-9_"'\)\]]/.test(lastChar);
 
-        // Prepend a leading space when the menu's prefix is empty and the
-        // character immediately preceding the insertion point is
-        // alphanumeric (e.g. accepting a subcommand right after "@shell"
-        // with no separator yet typed).  Otherwise the inserted text
-        // would fuse with the previous token (e.g. "@shellbreak ").
+        // Prepend a leading space when the character immediately preceding
+        // the insertion point is alphanumeric (e.g. accepting a subcommand
+        // right after "@shell" or "@conversation" with no separator yet
+        // typed).  Otherwise the inserted text would fuse with the
+        // previous token (e.g. "@shellbreak " or "@conversationswitch ").
+        //
+        // Note: we check `charBefore` regardless of whether `completionPrefix`
+        // is empty.  When the user has typed a partial prefix (e.g.
+        // "@conversation s"), `charBefore` is the character before that
+        // prefix, which is normally a space or non-alphanumeric — so the
+        // check still does the right thing without prepending a stray
+        // space inside an already-spaced subcommand.
         //
         // TODO(RTL): the prepend/append logic here assumes left-to-right
         // text.  When we add RTL language support, "preceding" needs to
@@ -387,9 +394,7 @@ export class PartialCompletion {
         // and the appended/prepended whitespace may need to flip sides.
         const offset = this.getCurrentInput().length - completionPrefix.length;
         const charBefore =
-            completionPrefix === "" && offset > 0
-                ? this.getCurrentInput().charAt(offset - 1)
-                : "";
+            offset > 0 ? this.getCurrentInput().charAt(offset - 1) : "";
         const firstChar = quotedText.charAt(0);
         const prependSpace =
             charBefore !== "" &&
