@@ -164,6 +164,8 @@ export class AgentServerBridge {
     private connection: AgentServerConnection | undefined;
     /** In-flight connect promise — prevents parallel connect() races. */
     private connectInFlight: Promise<void> | undefined;
+    /** In-flight session-join promise — serializes joinSpecificSession calls. */
+    private joinInFlight: Promise<void> | undefined;
     private session: SessionDispatcher | undefined;
     private webviews: Set<vscode.Webview> = new Set();
     private statusBarItem: vscode.StatusBarItem;
@@ -195,6 +197,16 @@ export class AgentServerBridge {
     // requesting webview to keep peer tabs from competing.
     private completionController: CompletionController | undefined;
     private completionWebview: vscode.Webview | undefined;
+    /**
+     * Bumped every time a completion controller is created or disposed so
+     * stale onUpdate callbacks (from a controller that's been torn down by
+     * a webview switch) can detect they're obsolete and not post state to
+     * the wrong webview. The dispatcher's getCommandCompletion is async,
+     * so the callback may fire after `this.completionController` has been
+     * replaced — without the generation check we would post NEW state to
+     * the OLD webview's closure-captured target.
+     */
+    private completionGeneration = 0;
 
     constructor(opts?: {
         ownsStatusBar?: boolean;
@@ -689,6 +701,38 @@ export class AgentServerBridge {
         sessionId: string,
         targetName?: string,
     ): Promise<void> {
+        // Serialize concurrent calls. Two joinSpecificSession invocations
+        // overlapping (e.g., user rapid-clicks the session picker) would
+        // otherwise both pass the no-op guard below — `this.session` hasn't
+        // been updated by the first call yet — and both would call
+        // connection.joinSession, triggering the agent-server's "Channel
+        // already exists" rejection on the second.
+        if (this.joinInFlight) {
+            try {
+                await this.joinInFlight;
+            } catch {
+                // The previous join failed; we still proceed with our own.
+            }
+        }
+        if (this.session?.sessionId === sessionId) {
+            return;
+        }
+        if (!this.connection) {
+            return;
+        }
+        const p = this.joinSpecificSessionImpl(sessionId, targetName);
+        this.joinInFlight = p.finally(() => {
+            if (this.joinInFlight === p) {
+                this.joinInFlight = undefined;
+            }
+        });
+        return this.joinInFlight;
+    }
+
+    private async joinSpecificSessionImpl(
+        sessionId: string,
+        targetName?: string,
+    ): Promise<void> {
         if (!this.connection) {
             return;
         }
@@ -800,21 +844,29 @@ export class AgentServerBridge {
     private async replayHistoryInner(
         session: SessionDispatcher,
     ): Promise<void> {
+        // Start buffering live ClientIO events that arrive during the
+        // (potentially slow) getDisplayHistory call so they don't render
+        // before the replayed history block. Once the historyReplay message
+        // is queued for the webviews, we flush the buffer so live events
+        // appear after the replayed prefix as expected.
+        this.replayBuffer = [];
         let entries: Array<any>;
         try {
             entries = await session.dispatcher.getDisplayHistory();
         } catch {
+            this.flushReplayBuffer();
             return;
         }
 
         if (entries.length === 0) {
+            this.flushReplayBuffer();
             return;
         }
 
         // Send the whole history as a single message — avoids slow per-entry
         // postMessage round trips and prevents live events from being
         // interleaved mid-replay.
-        this.broadcastToWebviews({
+        const replayMsg: BridgeToWebviewMessage = {
             type: "historyReplay",
             entries: entries.map((e) => {
                 switch (e.type) {
@@ -866,7 +918,20 @@ export class AgentServerBridge {
                         return { type: "skip", seq: e.seq };
                 }
             }),
-        });
+        };
+        // historyReplay is not in REPLAY_BUFFERED_TYPES so this passes
+        // through immediately.
+        this.broadcastToWebviews(replayMsg);
+        this.flushReplayBuffer();
+    }
+
+    private flushReplayBuffer(): void {
+        const buf = this.replayBuffer;
+        this.replayBuffer = undefined;
+        if (!buf || buf.length === 0) return;
+        for (const msg of buf) {
+            this.broadcastToWebviews(msg);
+        }
     }
 
     private async handleWebviewMessage(
@@ -954,6 +1019,7 @@ export class AgentServerBridge {
         this.disposeCompletionController();
         this.completionWebview = webview;
         const session = this.session;
+        const myGeneration = ++this.completionGeneration;
         this.completionController = createCompletionController(
             {
                 getCommandCompletion: async (input, direction) => {
@@ -965,6 +1031,12 @@ export class AgentServerBridge {
             },
             {
                 onUpdate: () => {
+                    // Stale-callback guard: if the controller has been
+                    // disposed/replaced (webview switch) since this callback
+                    // was registered, do not post state — otherwise the
+                    // closure-captured `webview` would receive completion
+                    // results meant for a different panel.
+                    if (myGeneration !== this.completionGeneration) return;
                     const state =
                         this.completionController?.getCompletionState();
                     webview.postMessage({ type: "pcState", state });
@@ -984,6 +1056,9 @@ export class AgentServerBridge {
     }
 
     private disposeCompletionController(): void {
+        // Bump generation so any pending onUpdate callbacks from the dying
+        // controller treat themselves as stale.
+        this.completionGeneration++;
         this.completionController?.dispose();
         this.completionController = undefined;
         this.completionWebview = undefined;
@@ -1396,7 +1471,34 @@ export class AgentServerBridge {
         this.broadcastToWebviews({ type: "demoPaused", paused, message });
     }
 
+    /**
+     * Live ClientIO event types that should be deferred while a history
+     * replay is in progress. If the dispatcher emits one of these between
+     * the time we start fetching display history and the time we broadcast
+     * the assembled `historyReplay` message, sending it through immediately
+     * would interleave it with (or render it before) the replayed history
+     * — the webview can't tell the difference. We buffer them and flush
+     * after the replay batch is on its way.
+     */
+    private static readonly REPLAY_BUFFERED_TYPES: ReadonlySet<string> =
+        new Set([
+            "setDisplay",
+            "appendDisplay",
+            "setDisplayInfo",
+            "setUserRequest",
+            "notify",
+            "clear",
+        ]);
+    private replayBuffer: BridgeToWebviewMessage[] | undefined;
+
     private broadcastToWebviews(msg: BridgeToWebviewMessage): void {
+        if (
+            this.replayBuffer !== undefined &&
+            AgentServerBridge.REPLAY_BUFFERED_TYPES.has(msg.type)
+        ) {
+            this.replayBuffer.push(msg);
+            return;
+        }
         for (const webview of this.webviews) {
             this.postToWebview(webview, msg);
         }
