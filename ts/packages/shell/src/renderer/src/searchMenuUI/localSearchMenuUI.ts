@@ -158,11 +158,20 @@ export class LocalSearchMenuUI implements SearchMenuUI {
                 prefixSpan.className = "search-prefix";
                 prefixSpan.innerText = this.prefix;
                 li.appendChild(prefixSpan);
-                // make a span for the suffix
+                // make a span for the suffix.  Append a trailing
+                // non-breaking space when the inserted text ends in an
+                // identifier/quote char (matching the appendSpace logic
+                // in partial.ts handleSelect()) so the user can see at
+                // a glance that accepting the item will also insert a
+                // separator before whatever they type next.
                 const suffix = item.matchText.substring(this.prefix.length);
+                const lastChar = item.matchText.slice(-1);
+                const showTrailingSpace = /[A-Za-z0-9_"'\)\]]/.test(lastChar);
                 const resultSpan = document.createElement("span");
                 resultSpan.className = "search-suffix";
-                resultSpan.innerText = suffix;
+                resultSpan.innerText = showTrailingSpace
+                    ? `${suffix}\u00A0`
+                    : suffix;
                 li.appendChild(resultSpan);
                 this.completions.appendChild(li);
 
