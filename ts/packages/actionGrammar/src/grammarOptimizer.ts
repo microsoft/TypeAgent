@@ -2618,6 +2618,17 @@ function computeDispatchPayload(
         return undefined;
     }
 
+    // Canonicalize content-equal tokenMap value arrays to share
+    // identity.  Multi-key dispatch routinely produces N tokens
+    // routing to the same single-rule bucket (e.g. the ordinal
+    // hundreds branches all dispatch to one `<Ordinal_1_99>`
+    // wrapper); each token gets its own fresh `[rule]` array
+    // above, defeating the serializer's identity-keyed dedup of
+    // `ruleArrays`.  Walk all buckets and intern by member-rule
+    // identity sequence so content-equal arrays converge to one
+    // identity.
+    canonicalizeBucketArrays(perMode);
+
     return {
         // Canonicalize empty fallback to a shared frozen sentinel so
         // the serializer can dedup empty-rules slots across every
@@ -2627,6 +2638,56 @@ function computeDispatchPayload(
         alternatives: fallback.length === 0 ? EMPTY_FALLBACK_RULES : fallback,
         dispatch: perMode,
     };
+}
+
+/**
+ * Intern tokenMap value arrays by member-rule identity sequence so
+ * content-equal arrays share one `GrammarRule[]` identity.  The
+ * serializer's `ruleArrays` interner is keyed by array identity, so
+ * without this step every distinct in-memory `[rule]` array minted
+ * during dispatch construction becomes a separate JSON slot even
+ * when their member-index sequences are identical.
+ *
+ * Rule identities are mapped to monotonic integers via a per-call
+ * `Map<GrammarRule, number>`; bucket arrays are keyed by the
+ * resulting "id1|id2|..." string.  No content-equality of rules is
+ * implied: rules that are themselves content-equal but identity-
+ * distinct remain so (that's a separate optimization concern handled
+ * upstream by the per-rule promotion memo).
+ *
+ * Order matters in the key (no sort): bucket arrays are tried by
+ * the matcher in array order, so `[A, B]` and `[B, A]` are observably
+ * distinct match orders and must not collapse.  Within one
+ * `computeDispatchPayload` call the construction loop iterates
+ * `alternatives` in source order and pushes each rule into every
+ * matching token's bucket, so two buckets containing the same set of
+ * rules necessarily have them in the same relative order - the
+ * order-preserving key is unambiguous by construction.  Scope is
+ * per-call so we never compare arrays from different calls (where
+ * ordering could diverge).
+ */
+function canonicalizeBucketArrays(perMode: DispatchModeBucket[]): void {
+    const ruleIds = new Map<GrammarRule, number>();
+    const canonical = new Map<string, GrammarRule[]>();
+    const idOf = (r: GrammarRule): number => {
+        let id = ruleIds.get(r);
+        if (id === undefined) {
+            id = ruleIds.size;
+            ruleIds.set(r, id);
+        }
+        return id;
+    };
+    for (const bucket of perMode) {
+        for (const [token, arr] of bucket.tokenMap) {
+            const key = arr.map(idOf).join("|");
+            const existing = canonical.get(key);
+            if (existing === undefined) {
+                canonical.set(key, arr);
+            } else if (existing !== arr) {
+                bucket.tokenMap.set(token, existing);
+            }
+        }
+    }
 }
 
 /**
