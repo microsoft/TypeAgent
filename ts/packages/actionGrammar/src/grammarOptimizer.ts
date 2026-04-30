@@ -944,6 +944,21 @@ function tryInlineRulesPart(
  * Uses an identity memo over `GrammarRule[]` arrays so shared named
  * rules (multiple `RulesPart`s pointing at the same array) still share
  * after the pass - see `inlineSingleAlternativeRules` for rationale.
+ *
+ * **Match-order note (deliberate, observable change).**  When two or
+ * more alternatives share a leading prefix, they collapse into a
+ * single wrapper rule positioned at `min(idx)` of the group; members
+ * within the wrapper are then tried as a sub-alternation in source-
+ * order.  So a factored alternative whose source position was N gets
+ * tried adjacent to its sibling at position min(group), not at its
+ * original interleaved position.  When unfactored alternatives sat
+ * between two factored ones and any of them accept the same input,
+ * the winning rule can change.  Members within a fork *are* still
+ * tried in original source order (`items.sort` by idx), so the change
+ * is purely about the wrapper's repositioning, not about reordering
+ * inside it.  Accepted as part of the prefix-factoring optimization;
+ * the alternative would be to bail out at any fork that interleaves
+ * with non-factorable siblings, losing factoring almost everywhere.
  */
 /** Per-invocation configuration for `factorCommonPrefixes`. */
 function factorCommonPrefixes(
