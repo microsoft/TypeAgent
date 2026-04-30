@@ -22,6 +22,12 @@ import {
  * monotonic counter and registered in `map` before `build` runs, so
  * recursive calls from inside `build` resolve to the slot we just
  * reserved (preventing infinite recursion on self-referential keys).
+ *
+ * Recursive consumers see the reserved index immediately but must
+ * not read the pool slot until `build` returns - the slot is only
+ * filled in once `build` produces a value.  In practice both call
+ * sites (`ruleIndexFor`, `indexFor`) only ever consume the index,
+ * never the pool entry, so this is naturally satisfied.
  */
 function makeInterner<K, V>(
     pool: V[],
@@ -157,7 +163,14 @@ export function grammarToJson(grammar: Grammar): GrammarJson {
 
     // Intern the top-level alternation first so it lands in slot 0
     // (the deserializer's `start = json.ruleArrays[0]` contract).
-    indexFor(grammar.alternatives);
+    const startIndex = indexFor(grammar.alternatives);
+    if (startIndex !== 0) {
+        // Defensive: would only fire if a future refactor moved
+        // another `indexFor` call ahead of this one.
+        throw new Error(
+            `internal: top-level alternation interned at index ${startIndex}, expected 0`,
+        );
+    }
     const out: GrammarJson = { rules: rulePool, ruleArrays: arrayPool };
     if (grammar.dispatch !== undefined) {
         out.dispatch = dispatchIndexFor(grammar.dispatch);

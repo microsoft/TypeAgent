@@ -24,6 +24,14 @@ const debug = registerDebug("typeagent:grammar:deserializer");
  * inside `fill` (a self-referential rule, an alternation that walks
  * back through one of its members, etc.) resolves to the shell we
  * just installed.  `fill` mutates the shell in place.
+ *
+ * Recursive consumers must use the shell *identity*, not its
+ * contents - the shell may still be empty when they pick it up,
+ * and only acquires its decoded body when `fill` returns.  Both
+ * call sites here (`ruleFor`, `rulesFor`) satisfy this: the rule
+ * shell is mutated in place via field assignment, and the
+ * alternation shell is filled by pushing into the same array
+ * instance.
  */
 function memoizeRecursive<V>(
     map: Map<number, V>,
@@ -77,7 +85,6 @@ function validateDispatchInvariants(
 }
 
 function grammarFromJsonInternal(json: GrammarJson): Grammar {
-    const start = json.ruleArrays[0];
     // Memoize per-pool-index rule decoding so a `GrammarRule`
     // referenced from multiple `ruleArrays` entries restores to a
     // single in-memory object - mirrors the serializer's
@@ -250,7 +257,11 @@ function grammarFromJsonInternal(json: GrammarJson): Grammar {
     }
 
     const grammar: Grammar = {
-        alternatives: start.map(ruleFor),
+        // Register `grammar.alternatives` under index 0 so any
+        // `RulesPart` whose serialized `index === 0` (the
+        // serializer always interns `grammar.alternatives` at
+        // slot 0) restores to the same array identity.
+        alternatives: rulesFor(0),
     };
     if (json.dispatch !== undefined) {
         grammar.dispatch = dispatchFor(

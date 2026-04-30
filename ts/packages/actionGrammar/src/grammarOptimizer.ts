@@ -19,9 +19,61 @@ import {
 import { leadingWordBoundaryScriptPrefix } from "./spacingScripts.js";
 import { leadingNonSeparatorRun } from "./grammarMatcher.js";
 import { getDispatchEffectiveMembers } from "./dispatchHelpers.js";
-import { globalPhraseSetRegistry } from "./builtInPhraseMatchers.js";
+import {
+    globalPhraseSetRegistry,
+    PhraseSetMatcher,
+} from "./builtInPhraseMatchers.js";
 
 const debug = registerDebug("typeagent:grammar:opt");
+
+/**
+ * Cache of `(matcher, mode) -> first-token key set | "open"`.
+ * Phrase-set matchers are global, immutable singletons, so a
+ * `WeakMap` keyed on the matcher instance is safe across the
+ * whole process and avoids re-walking the same `phrases` array
+ * for every rule whose first part references the same set
+ * (e.g. many rules starting with `<Polite>`).  `"open"` denotes
+ * an unenumerable matcher (unknown / empty / dispatch-key cap
+ * exceeded for this matcher alone) - the entry short-circuits
+ * to a fallback decision without re-walking.
+ */
+const phraseSetKeyCache = new WeakMap<
+    PhraseSetMatcher,
+    Map<CompiledSpacingMode, Set<string> | "open">
+>();
+
+function getPhraseSetKeys(
+    matcher: PhraseSetMatcher,
+    mode: CompiledSpacingMode,
+): Set<string> | "open" {
+    let perMode = phraseSetKeyCache.get(matcher);
+    if (perMode === undefined) {
+        perMode = new Map();
+        phraseSetKeyCache.set(matcher, perMode);
+    }
+    const cached = perMode.get(mode);
+    if (cached !== undefined) return cached;
+    if (matcher.phrases.length === 0) {
+        perMode.set(mode, "open");
+        return "open";
+    }
+    const keys = new Set<string>();
+    for (const phrase of matcher.phrases) {
+        if (phrase.length === 0) continue;
+        const key = dispatchKeyForLiteral(phrase[0], mode);
+        if (key === undefined) {
+            perMode.set(mode, "open");
+            return "open";
+        }
+        keys.add(key);
+        if (keys.size > MAX_DISPATCH_KEYS_PER_RULE) {
+            perMode.set(mode, "open");
+            return "open";
+        }
+    }
+    perMode.set(mode, keys);
+    return keys;
+}
 
 /**
  * Hard cap on dispatch keys generated for a single rule when
@@ -2265,11 +2317,15 @@ function firstTokenKeys(
     mode: CompiledSpacingMode,
 ): Set<string> | undefined {
     const out = new Set<string>();
-    // Cycle guard for nested rule references.  Tracks the
-    // `alternatives` arrays we're currently inside; encountering
-    // the same identity again indicates direct or mutual recursion
-    // and we abort to fallback rather than attempt to enumerate
-    // an infinite key set.
+    // Cycle guard for nested rule references.  Keyed on the
+    // *members array we iterate* (i.e. the effective member list
+    // of each `RulesPart` we descend into).  This catches cycles
+    // regardless of whether the rule was dispatched (members live
+    // in `tokenMap` values, conceptually summarized by
+    // `getDispatchEffectiveMembers`) or undispatched (members in
+    // `alternatives`), and remains correct when two `RulesPart`
+    // wrappers share an `alternatives` array via named-rule
+    // identity sharing - both walks compute the same key set.
     const visiting = new Set<GrammarRule[]>();
     const r = walkPartsForKeys(rule.parts, mode, out, visiting);
     if (r === "open") return undefined;
@@ -2318,13 +2374,10 @@ function walkPartForKeys(
             // Unknown matcher (phrase set deserialized from a
             // grammar that referenced a name we don't have here)
             // means we can't enumerate first tokens - bail.
-            if (matcher === undefined || matcher.phrases.length === 0) {
-                return "open";
-            }
-            for (const phrase of matcher.phrases) {
-                if (phrase.length === 0) continue;
-                const key = dispatchKeyForLiteral(phrase[0], mode);
-                if (key === undefined) return "open";
+            if (matcher === undefined) return "open";
+            const keys = getPhraseSetKeys(matcher, mode);
+            if (keys === "open") return "open";
+            for (const key of keys) {
                 out.add(key);
                 if (out.size > MAX_DISPATCH_KEYS_PER_RULE) return "open";
             }
@@ -2333,21 +2386,31 @@ function walkPartForKeys(
             return "consumed";
         }
         case "rules": {
-            // Cycle guard - mutual or direct recursion would
-            // otherwise loop forever expanding alternatives.
-            if (visiting.has(part.alternatives)) return "open";
-            visiting.add(part.alternatives);
-            // Walk every effective member (bucketed members live
-            // in `dispatch.tokenMap.values()` for already-dispatched
-            // parts; un-dispatched parts have everything in
-            // `alternatives`).  All alternatives must consume for
-            // us to report "consumed" overall; if any alternative
-            // is skippable (could match empty), the whole rules
-            // part may also be skippable and the caller should
-            // walk past.
+            // Resolve the effective member list (bucketed members
+            // for already-dispatched parts; the alternation
+            // otherwise).  An empty list means the part can never
+            // match anything; treat it as skippable iff the outer
+            // flags allow, otherwise bail to fallback.  Crucially,
+            // we never report "consumed" without contributing
+            // keys, so the rule won't be wrongly treated as having
+            // a definite token prefix.
             const members = part.dispatch
                 ? getDispatchEffectiveMembers(part)
                 : part.alternatives;
+            if (members.length === 0) {
+                return part.optional || part.repeat ? "skippable" : "open";
+            }
+            // Cycle guard - keyed on the members array we're
+            // about to iterate so the check fires regardless of
+            // whether the cycle threads through `alternatives` or
+            // a dispatched `tokenMap`.
+            if (visiting.has(members)) return "open";
+            visiting.add(members);
+            // Walk every effective member.  All alternatives must
+            // consume for us to report "consumed" overall; if any
+            // alternative is skippable (could match empty), the
+            // whole rules part may also be skippable and the caller
+            // should walk past.
             let allConsume = true;
             let anyOpen = false;
             for (const m of members) {
@@ -2362,7 +2425,7 @@ function walkPartForKeys(
                     break;
                 }
             }
-            visiting.delete(part.alternatives);
+            visiting.delete(members);
             if (anyOpen) return "open";
             // Outer flags: optional/repeat make the part skippable
             // regardless of inner consumption.
@@ -2517,9 +2580,8 @@ function computeDispatchPayload(
         // case (rule starts with a literal `StringPart`), the set
         // contains the same single key the rule's first token
         // would produce on its own.
-        const set = firstTokenKeys(rule, mode);
-        const keys = set === undefined ? undefined : Array.from(set);
-        if (keys === undefined || keys.length === 0) {
+        const keys = firstTokenKeys(rule, mode);
+        if (keys === undefined || keys.size === 0) {
             fallback.push(rule);
             continue;
         }

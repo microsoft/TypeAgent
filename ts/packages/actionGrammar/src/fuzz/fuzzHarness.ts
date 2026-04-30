@@ -595,15 +595,15 @@ export function runFuzz(config: FuzzConfig): FuzzResult[] {
             const elapsed = Date.now() - grammarStart;
             if (elapsed > slowThreshold) {
                 const matchingLen = gen.testInputs[0]?.length ?? 0;
-                const truncatedText =
+                const oneLineText = (
                     gen.text.length > 200
                         ? gen.text.slice(0, 200) + "..."
-                        : gen.text;
-                const oneLineText = truncatedText.replace(/\n/g, " ");
-                process.stderr.write(
+                        : gen.text
+                ).replace(/\n/g, " ");
+                console.warn(
                     `[fuzz slow-grammar] #${g}: ${elapsed}ms ` +
                         `(threshold ${slowThreshold}ms), ` +
-                        `matching-input length ${matchingLen}: ${oneLineText}\n`,
+                        `matching-input length ${matchingLen}: ${oneLineText}`,
                 );
             }
         }
