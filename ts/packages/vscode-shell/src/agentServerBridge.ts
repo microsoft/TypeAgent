@@ -72,7 +72,19 @@ export type BridgeToWebviewMessage =
     | { type: "commandComplete"; requestId: string; result: any }
     | { type: "peerMetrics"; requestId: string; result: any }
     | { type: "pcState"; state?: CompletionState }
-    | { type: "error"; message: string }
+    | { type: "error"; message: string; requestId?: string }
+    | {
+          // Single in-place reconnect status shown in the connection
+          // ribbon. `phase: "waiting"` means a backoff timer is running
+          // and `secondsRemaining` is the live countdown. `connecting`
+          // means an attempt is in progress. `cleared` means we're back
+          // online and any reconnect UI should disappear.
+          type: "reconnectStatus";
+          phase: "waiting" | "connecting" | "cleared";
+          attempt?: number;
+          secondsRemaining?: number;
+          error?: string;
+      }
     | { type: "switching"; switching: boolean; targetName?: string }
     | { type: "userInfo"; name: string }
     | { type: "setActive"; active: boolean }
@@ -176,6 +188,13 @@ export class AgentServerBridge {
     private statusBarItem: vscode.StatusBarItem;
     private isConnected = false;
     private reconnectTimer: NodeJS.Timeout | undefined;
+    // Single in-place countdown shown in the connection ribbon while we
+    // wait between reconnect attempts. Replaces the old behavior of
+    // broadcasting a fresh error/disconnect message every retry cycle.
+    private reconnectCountdown: NodeJS.Timeout | undefined;
+    private reconnectAttempt = 0;
+    private reconnectRemainingSec: number | undefined;
+    private lastConnectError: string | undefined;
     // Suppress disconnect handler during intentional reconnects
     private isSwitching = false;
     // Track which session we've already replayed history for, so we
@@ -431,6 +450,7 @@ export class AgentServerBridge {
 
             this.isConnected = true;
             this.updateStatusBar(true);
+            this.clearReconnectState();
             this.broadcastToWebviews({
                 type: "status",
                 connected: true,
@@ -449,7 +469,11 @@ export class AgentServerBridge {
             }
         } catch (e: any) {
             const msg = e?.message ?? String(e);
-            this.broadcastToWebviews({ type: "error", message: msg });
+            // Suppress per-attempt error toasts in the chat area; the
+            // connection ribbon now shows a single in-place countdown
+            // via reconnectStatus broadcasts. Stash the message so the
+            // ribbon can surface "Disconnected (last error: ...)".
+            this.lastConnectError = msg;
             this.updateStatusBar(false);
             this.scheduleReconnect();
         }
@@ -463,6 +487,12 @@ export class AgentServerBridge {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = undefined;
         }
+        if (this.reconnectCountdown) {
+            clearInterval(this.reconnectCountdown);
+            this.reconnectCountdown = undefined;
+        }
+        this.reconnectRemainingSec = undefined;
+        this.broadcastReconnect("cleared");
         // Tear down the per-session completion controller so a future
         // connect() rebuilds it against the new dispatcher.
         this.disposeCompletionController();
@@ -1595,9 +1625,60 @@ export class AgentServerBridge {
         if (this.reconnectTimer) {
             return;
         }
+        this.reconnectAttempt++;
+        // Backoff: 4s, 6s, 8s, ... capped at 30s. Quick first retries
+        // recover fast when the server restarts; the cap keeps the
+        // long-tail polite for genuinely-down servers.
+        const backoff = Math.min(30, 2 + this.reconnectAttempt * 2);
+        this.reconnectRemainingSec = backoff;
+        this.broadcastReconnect("waiting");
+        if (this.reconnectCountdown) {
+            clearInterval(this.reconnectCountdown);
+        }
+        this.reconnectCountdown = setInterval(() => {
+            if (this.reconnectRemainingSec === undefined) return;
+            this.reconnectRemainingSec--;
+            if (this.reconnectRemainingSec > 0) {
+                this.broadcastReconnect("waiting");
+            }
+        }, 1000);
         this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = undefined;
-            this.connect();
-        }, 5000);
+            if (this.reconnectCountdown) {
+                clearInterval(this.reconnectCountdown);
+                this.reconnectCountdown = undefined;
+            }
+            this.reconnectRemainingSec = undefined;
+            this.broadcastReconnect("connecting");
+            void this.connect();
+        }, backoff * 1000);
+    }
+
+    private broadcastReconnect(
+        phase: "waiting" | "connecting" | "cleared",
+    ): void {
+        this.broadcastToWebviews({
+            type: "reconnectStatus",
+            phase,
+            attempt: this.reconnectAttempt,
+            secondsRemaining:
+                phase === "waiting" ? this.reconnectRemainingSec : undefined,
+            error: this.lastConnectError,
+        });
+    }
+
+    private clearReconnectState(): void {
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = undefined;
+        }
+        if (this.reconnectCountdown) {
+            clearInterval(this.reconnectCountdown);
+            this.reconnectCountdown = undefined;
+        }
+        this.reconnectRemainingSec = undefined;
+        this.reconnectAttempt = 0;
+        this.lastConnectError = undefined;
+        this.broadcastReconnect("cleared");
     }
 }

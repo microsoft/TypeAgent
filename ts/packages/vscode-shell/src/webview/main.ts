@@ -214,6 +214,10 @@ function toChatPanelHistory(entries: any[]): HistoryEntry[] {
 let lastConnected = false;
 let lastSessionLabel = "";
 let demoSuffix: string | undefined;
+// Reconnect ribbon overlay shown while disconnected. Replaces the old
+// per-attempt error spam in the chat area with a single in-place
+// updating string (countdown + last error).
+let reconnectText: string | undefined;
 
 function renderStatus(): void {
     if (lastConnected) {
@@ -226,7 +230,7 @@ function renderStatus(): void {
             : base;
     } else {
         statusEl.className = "status disconnected";
-        statusEl.textContent = "Disconnected";
+        statusEl.textContent = reconnectText ?? "Disconnected";
     }
 }
 
@@ -254,6 +258,23 @@ window.addEventListener("message", (event) => {
                 });
             }
             break;
+        case "reconnectStatus": {
+            // Single in-place reconnect indicator. Phases:
+            //   waiting     -> "Disconnected — retrying in Ns (attempt N)"
+            //   connecting  -> "Disconnected — connecting..."
+            //   cleared     -> hide overlay (back online or user disconnected)
+            if (msg.phase === "cleared") {
+                reconnectText = undefined;
+            } else if (msg.phase === "connecting") {
+                reconnectText = `Disconnected — connecting${msg.attempt ? ` (attempt ${msg.attempt})` : ""}…`;
+            } else {
+                const sec = msg.secondsRemaining ?? 0;
+                const errSuffix = msg.error ? ` · ${msg.error}` : "";
+                reconnectText = `Disconnected — retrying in ${sec}s (attempt ${msg.attempt ?? 1})${errSuffix}`;
+            }
+            renderStatus();
+            break;
+        }
         case "userInfo":
             chatPanel.setUserInfo(msg.name);
             break;
