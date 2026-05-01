@@ -893,6 +893,9 @@ importers:
 
   examples/workflow/engine:
     dependencies:
+      ajv:
+        specifier: ^8.17.1
+        version: 8.18.0
       workflow-model:
         specifier: workspace:*
         version: link:../model

@@ -324,4 +324,68 @@ describe("validateWorkflowSpec", () => {
         const result = validateWorkflowSpec(spec);
         expect(result.valid).toBe(true);
     });
+
+    describe("exit-path validation", () => {
+        it("rejects unconditional self-loop", () => {
+            const spec = makeMinimalSpec({
+                nodes: {
+                    start: { task: "noop", next: "start" },
+                },
+            });
+            const result = validateWorkflowSpec(spec);
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes("Unconditional cycle"),
+                ),
+            ).toBe(true);
+        });
+
+        it("rejects unconditional multi-node cycle", () => {
+            const spec = makeMinimalSpec({
+                nodes: {
+                    start: { task: "noop", next: "middle" },
+                    middle: { task: "noop", next: "start" },
+                },
+            });
+            const result = validateWorkflowSpec(spec);
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) =>
+                    e.message.includes("Unconditional cycle"),
+                ),
+            ).toBe(true);
+        });
+
+        it("accepts cycle with a decision node", () => {
+            const tasks = new Map<string, TaskDefinition>([
+                ["noop", makeTask("noop")],
+                ["decider", makeTask("decider", ["loop", "exit"])],
+            ]);
+            const spec = makeMinimalSpec({
+                nodes: {
+                    start: {
+                        task: "decider",
+                        next: { loop: "start", exit: "end" },
+                    },
+                    end: { task: "noop" },
+                },
+            });
+            const result = validateWorkflowSpec(spec, tasks);
+            expect(result.valid).toBe(true);
+        });
+
+        it("accepts linear workflow with no cycle", () => {
+            const spec = makeMinimalSpec({
+                entry: "a",
+                nodes: {
+                    a: { task: "noop", next: "b" },
+                    b: { task: "noop", next: "c" },
+                    c: { task: "noop" },
+                },
+            });
+            const result = validateWorkflowSpec(spec);
+            expect(result.valid).toBe(true);
+        });
+    });
 });

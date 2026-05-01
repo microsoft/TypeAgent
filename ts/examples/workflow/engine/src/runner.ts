@@ -2,9 +2,11 @@
 // Licensed under the MIT License.
 
 import { randomUUID } from "node:crypto";
+import AjvModule from "ajv";
 import {
     WorkflowSpec,
     WorkflowNode,
+    JSONSchema,
     TaskContext,
     TaskResult,
     SecretProvider,
@@ -13,6 +15,33 @@ import {
 } from "workflow-model";
 import { TaskRegistry } from "./taskRegistry.js";
 import { WorkflowEvent, WorkflowEventListener } from "./events.js";
+
+const AjvConstructor = (AjvModule as any).default ?? AjvModule;
+
+/**
+ * Compile a JSON Schema into a validation function. Returns a function
+ * that returns null on success or an error message on failure.
+ */
+function compileSchemaValidator(
+    schema: JSONSchema,
+): (data: unknown) => string | null {
+    try {
+        const ajv = new AjvConstructor({ strict: false, allErrors: true });
+        const validate = ajv.compile(schema as object);
+        return (data: unknown) => {
+            if (validate(data)) {
+                return null;
+            }
+            const msgs = (validate.errors ?? []).map(
+                (e: any) => `${e.instancePath || "/"}: ${e.message}`,
+            );
+            return msgs.join("; ");
+        };
+    } catch {
+        // Schema itself is invalid; skip runtime validation
+        return () => null;
+    }
+}
 
 /**
  * The resolved input for an error-handler node, constructed by the engine.
@@ -183,25 +212,53 @@ export class WorkflowEngine {
                 resolvedInput = lastOutput ?? workflowInput;
             }
 
-            // Execute task
+            // Validate resolved input against the task's input schema
             let result: TaskResult;
-            try {
-                const ctx: TaskContext = {
-                    runId,
-                    nodeId: currentNodeId,
-                    signal,
-                    secrets,
-                    log: (level, msg, data?) =>
-                        logger.log(level, `[${currentNodeId}] ${msg}`, data),
-                };
-                result = await task.execute(resolvedInput, ctx);
-            } catch (err: unknown) {
-                const message =
-                    err instanceof Error ? err.message : String(err);
-                result = {
-                    kind: "fail",
-                    error: { message },
-                };
+            const inputError = compileSchemaValidator(task.inputSchema)(
+                resolvedInput,
+            );
+            if (inputError) {
+                const message: string = `Input validation failed for task "${node.task}" at node "${currentNodeId}": ${inputError}`;
+                result = { kind: "fail", error: { message } };
+            } else {
+                // Execute task
+                try {
+                    const ctx: TaskContext = {
+                        runId,
+                        nodeId: currentNodeId,
+                        signal,
+                        secrets,
+                        log: (level, msg, data?) =>
+                            logger.log(
+                                level,
+                                `[${currentNodeId}] ${msg}`,
+                                data,
+                            ),
+                    };
+                    result = await task.execute(resolvedInput, ctx);
+                } catch (err: unknown) {
+                    const message =
+                        err instanceof Error ? err.message : String(err);
+                    result = {
+                        kind: "fail",
+                        error: { message },
+                    };
+                }
+            }
+
+            // Validate output against the task's output schema (on success)
+            if (result.kind !== "fail") {
+                const outputError = compileSchemaValidator(task.outputSchema)(
+                    result.output,
+                );
+                if (outputError) {
+                    result = {
+                        kind: "fail",
+                        error: {
+                            message: `Output validation failed for task "${node.task}" at node "${currentNodeId}": ${outputError}`,
+                        },
+                    };
+                }
             }
 
             // Handle result
@@ -289,7 +346,7 @@ export class WorkflowEngine {
                         },
                     };
                 }
-                const target = node.next[result.branch];
+                const target: string | undefined = node.next[result.branch];
                 if (!target) {
                     this.emit({
                         type: "runFailed",

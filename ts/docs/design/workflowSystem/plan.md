@@ -368,7 +368,7 @@ Each milestone ends with: passing tests, a runnable demo, and an updated section
 - [x] M1: validation, round-trip tests, unreachable node detection.
 - [x] M2: engine MVP with passthrough, string.template, log.error, threshold.branch tasks.
 - [x] M3: decisions, full inputMap resolution, onError handling, pluggable logging.
-- [ ] M3.5: runtime schema validation, loop safeguards (maxIterations, exit-path validation).
+- [x] M3.5: runtime schema validation, loop safeguards (maxIterations, exit-path validation).
 - [ ] Scaffold `examples/workflow/cli` package.
 - [ ] M4: persistence + resume.
 

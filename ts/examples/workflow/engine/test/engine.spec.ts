@@ -413,7 +413,18 @@ describe("WorkflowEngine", () => {
 
     describe("maxIterations", () => {
         it("fails when iteration limit is exceeded", async () => {
-            const registry = makeRegistry(passthroughTask);
+            // Use a decision node that always loops so it passes exit-path
+            // validation but still hits the runtime iteration limit.
+            const alwaysLoopTask: TaskDefinition = {
+                name: "always-loop",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                branchLabels: ["again", "done"],
+                async execute() {
+                    return { kind: "branch", branch: "again", output: {} };
+                },
+            };
+            const registry = makeRegistry(alwaysLoopTask);
             const engine = new WorkflowEngine(registry);
 
             const spec: WorkflowSpec = {
@@ -425,7 +436,11 @@ describe("WorkflowEngine", () => {
                 maxIterations: 5,
                 entry: "a",
                 nodes: {
-                    a: { task: "passthrough", next: "a" },
+                    a: {
+                        task: "always-loop",
+                        next: { again: "a", done: "b" },
+                    },
+                    b: { task: "always-loop" },
                 },
             };
 
@@ -674,6 +689,142 @@ describe("WorkflowEngine", () => {
             expect(logged[0].level).toBe("info");
             expect(logged[0].msg).toContain("hello from task");
             expect(logged[0].data).toEqual({ key: 1 });
+        });
+    });
+
+    describe("runtime schema validation", () => {
+        it("fails when task input does not match inputSchema", async () => {
+            // Task that requires { value: number }
+            const strictTask: TaskDefinition = {
+                name: "strict-input",
+                inputSchema: {
+                    type: "object",
+                    properties: { value: { type: "number" } },
+                    required: ["value"],
+                    additionalProperties: false,
+                },
+                outputSchema: { type: "object" },
+                async execute(input) {
+                    return { kind: "ok", output: input };
+                },
+            };
+
+            const registry = makeRegistry(strictTask);
+            const engine = new WorkflowEngine(registry);
+
+            const spec: WorkflowSpec = {
+                specVersion: 1,
+                name: "input-val-test",
+                version: "1",
+                input: { type: "object" },
+                output: { type: "object" },
+                entry: "start",
+                nodes: { start: { task: "strict-input" } },
+            };
+
+            // Pass a string instead of number
+            const result = await engine.run(spec, {
+                input: { value: "not-a-number" },
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("Input validation failed");
+        });
+
+        it("fails when task output does not match outputSchema", async () => {
+            // Task that claims to output { count: number } but returns a string
+            const badOutputTask: TaskDefinition = {
+                name: "bad-output",
+                inputSchema: { type: "object" },
+                outputSchema: {
+                    type: "object",
+                    properties: { count: { type: "number" } },
+                    required: ["count"],
+                },
+                async execute() {
+                    return { kind: "ok", output: { count: "not-a-number" } };
+                },
+            };
+
+            const registry = makeRegistry(badOutputTask);
+            const engine = new WorkflowEngine(registry);
+
+            const spec: WorkflowSpec = {
+                specVersion: 1,
+                name: "output-val-test",
+                version: "1",
+                input: { type: "object" },
+                output: { type: "object" },
+                entry: "start",
+                nodes: { start: { task: "bad-output" } },
+            };
+
+            const result = await engine.run(spec);
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("Output validation failed");
+        });
+
+        it("passes when input and output match their schemas", async () => {
+            const registry = makeRegistry(doubleTask);
+            const engine = new WorkflowEngine(registry);
+
+            const spec: WorkflowSpec = {
+                specVersion: 1,
+                name: "schema-ok",
+                version: "1",
+                input: { type: "object" },
+                output: { type: "object" },
+                entry: "start",
+                nodes: {
+                    start: {
+                        task: "double",
+                        inputMap: { value: "input.n" },
+                    },
+                },
+            };
+
+            const result = await engine.run(spec, { input: { n: 5 } });
+            expect(result.success).toBe(true);
+            expect(result.output).toEqual({ value: 10 });
+        });
+
+        it("input validation failure triggers onError", async () => {
+            const strictTask: TaskDefinition = {
+                name: "strict-input",
+                inputSchema: {
+                    type: "object",
+                    properties: { value: { type: "number" } },
+                    required: ["value"],
+                },
+                outputSchema: { type: "object" },
+                async execute(input) {
+                    return { kind: "ok", output: input };
+                },
+            };
+
+            const registry = makeRegistry(strictTask, logTask);
+            const engine = new WorkflowEngine(registry);
+
+            const spec: WorkflowSpec = {
+                specVersion: 1,
+                name: "input-val-onerror",
+                version: "1",
+                input: { type: "object" },
+                output: { type: "object" },
+                entry: "start",
+                nodes: {
+                    start: {
+                        task: "strict-input",
+                        onError: "handler",
+                    },
+                    handler: { task: "log.error" },
+                },
+            };
+
+            const result = await engine.run(spec, {
+                input: { value: "bad" },
+            });
+            // onError is a continuation, handler runs and terminates
+            expect(result.success).toBe(true);
         });
     });
 });

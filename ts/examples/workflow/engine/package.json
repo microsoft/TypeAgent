@@ -27,6 +27,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "ajv": "^8.17.1",
     "workflow-model": "workspace:*"
   },
   "devDependencies": {

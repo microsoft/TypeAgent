@@ -94,6 +94,10 @@ export function validateWorkflowSpec(
         }
     }
 
+    // Check for unconditional cycles (every cycle must contain a decision node)
+    const cycleErrors = validateExitPaths(spec.nodes);
+    errors.push(...cycleErrors);
+
     return { valid: errors.length === 0, errors };
 }
 
@@ -235,4 +239,117 @@ function findReachableNodes(
         }
     }
     return visited;
+}
+
+/**
+ * Check that every cycle in the graph contains at least one decision node
+ * (a node whose `next` is an object/decision map). Uses Tarjan's algorithm
+ * to find strongly connected components (SCCs). Any SCC with more than one
+ * node, or a single node with a self-loop, is a cycle. If every node in that
+ * cycle has a linear `next` (string), there is no conditional exit path and
+ * the cycle is rejected.
+ */
+function validateExitPaths(
+    nodes: Record<string, WorkflowNode>,
+): ValidationError[] {
+    const errors: ValidationError[] = [];
+    const sccs = findSCCs(nodes);
+
+    for (const scc of sccs) {
+        const isCycle =
+            scc.length > 1 ||
+            (scc.length === 1 && hasLinearSelfLoop(scc[0], nodes));
+
+        if (!isCycle) {
+            continue;
+        }
+
+        const hasDecision = scc.some((id) => {
+            const node = nodes[id];
+            return node.next !== undefined && typeof node.next !== "string";
+        });
+
+        if (!hasDecision) {
+            const nodeList = scc.join(", ");
+            errors.push({
+                path: `nodes`,
+                message: `Unconditional cycle detected among nodes [${nodeList}]. Every cycle must contain at least one decision node.`,
+            });
+        }
+    }
+
+    return errors;
+}
+
+/**
+ * Returns true if a node has a linear (string) `next` pointing to itself.
+ */
+function hasLinearSelfLoop(
+    nodeId: string,
+    nodes: Record<string, WorkflowNode>,
+): boolean {
+    const node = nodes[nodeId];
+    return typeof node.next === "string" && node.next === nodeId;
+}
+
+/**
+ * Tarjan's algorithm for finding strongly connected components.
+ * Returns SCCs in reverse topological order.
+ */
+function findSCCs(nodes: Record<string, WorkflowNode>): string[][] {
+    let index = 0;
+    const indices = new Map<string, number>();
+    const lowlinks = new Map<string, number>();
+    const onStack = new Set<string>();
+    const stack: string[] = [];
+    const sccs: string[][] = [];
+
+    function successors(nodeId: string): string[] {
+        const node = nodes[nodeId];
+        const targets: string[] = [];
+        if (node.next !== undefined) {
+            if (typeof node.next === "string") {
+                targets.push(node.next);
+            } else {
+                targets.push(...Object.values(node.next));
+            }
+        }
+        return targets.filter((t) => t in nodes);
+    }
+
+    function strongConnect(v: string): void {
+        indices.set(v, index);
+        lowlinks.set(v, index);
+        index++;
+        stack.push(v);
+        onStack.add(v);
+
+        for (const w of successors(v)) {
+            if (!indices.has(w)) {
+                strongConnect(w);
+                lowlinks.set(v, Math.min(lowlinks.get(v)!, lowlinks.get(w)!));
+            } else if (onStack.has(w)) {
+                lowlinks.set(v, Math.min(lowlinks.get(v)!, indices.get(w)!));
+            }
+        }
+
+        if (lowlinks.get(v) === indices.get(v)) {
+            const scc: string[] = [];
+            let w: string;
+            do {
+                w = stack.pop()!;
+                onStack.delete(w);
+                scc.push(w);
+            } while (w !== v);
+            sccs.push(scc);
+        }
+    }
+
+    for (const nodeId of Object.keys(nodes)) {
+        if (!indices.has(nodeId)) {
+            strongConnect(nodeId);
+        }
+    }
+
+    return sccs;
 }
