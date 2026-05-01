@@ -23,6 +23,12 @@ export function remoteSearchMenuUIOnCompletion(
 export class RemoteSearchMenuUI implements SearchMenuUI {
     private readonly id: number = remoteSearchMenuUINextId++;
     private closed: boolean = false;
+    // Mirror the selection state of the remote LocalSearchMenuUI so we can
+    // synchronously answer selectCompletion() and let callers fall through
+    // to default key handling when no item is selected.
+    private selected: number = -1;
+    private itemCount: number = 0;
+    private firstUpdate: boolean = true;
     constructor(
         public readonly onCompletion: (item: SearchMenuItem) => void,
         private readonly visibleItemsCount = 15,
@@ -34,6 +40,11 @@ export class RemoteSearchMenuUI implements SearchMenuUI {
         if (this.closed) {
             return;
         }
+        if (data.items !== undefined) {
+            this.itemCount = data.items.length;
+            this.selected = this.firstUpdate ? -1 : 0;
+            this.firstUpdate = false;
+        }
         getClientAPI().searchMenuUpdate(this.id, {
             ...data,
             visibleItemsCount: this.visibleItemsCount,
@@ -43,15 +54,21 @@ export class RemoteSearchMenuUI implements SearchMenuUI {
         if (this.closed) {
             return;
         }
+        if (deltaY > 0 && this.selected < this.itemCount - 1) {
+            this.selected++;
+        } else if (deltaY < 0 && this.selected > 0) {
+            this.selected--;
+        }
         getClientAPI().searchMenuAdjustSelection(this.id, deltaY);
     }
     selectCompletion(): boolean {
         if (this.closed) {
             return false;
         }
+        if (this.selected < 0 || this.selected >= this.itemCount) {
+            return false;
+        }
         getClientAPI().searchMenuSelectCompletion(this.id);
-        // Remote selection state is not tracked locally; assume the
-        // remote side handled the request so callers don't fall through.
         return true;
     }
     close(): void {
