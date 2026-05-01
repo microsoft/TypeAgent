@@ -29,6 +29,16 @@ The boundary is not fixed. Today, "typed input in, typed output out" is the full
 
 This framing matters when evaluating design alternatives. A pattern that "pushes logic into a task" isn't violating the principles - it's choosing a different boundary. The principles apply to what's on the spec side of the boundary.
 
+### The spec is an IR, not an authoring format
+
+If a syntactic convenience (pipeline mode, inferred node types, default wiring) hides data flow from the reader, it undermines the principles. Authoring sugar belongs in a DSL that compiles to the explicit spec. This is a cross-cutting consequence of multiple principles:
+
+- **P2 (traceability):** implicit wiring creates data flow the reader can't trace.
+- **P3 (structural correspondence):** inferred structure doesn't match what the reader sees.
+- **P5 (predictability):** the reader must know desugaring rules to predict behavior.
+
+This is not a new principle (it doesn't drive decisions independently), but a design consequence that P2, P3, and P5 converge on. See plan.md "Authoring strategy" for details.
+
 ### Relationship to other design docs
 
 - [plan.md](plan.md) - overall plan, IR principle, milestones. Decisions there should be consistent with these principles.
@@ -87,7 +97,7 @@ These patterns are natural to reach for, but P1 requires them to be expressed di
 - _Alternative:_ (a) If B dominates C, then B also dominates H transitively, and the reference is actually valid (no change needed). (b) If B does not dominate C, wire B's output through C's input so it's available in the error context. (c) Use a dedicated error handler per trigger node, each with its own dominator scope.
 - _Tradeoff:_ (b) adds a field to C's input that exists only for error diagnostics. (c) increases handler count. Both make the data dependency explicit.
 
-**8. Optional data at merge points.**
+**7. Optional data at merge points.**
 
 - _Intent:_ A single merge node after a branch handles "data present or absent" depending on which branch ran. The merge task internally decides what to do when some inputs are missing.
 - _Why rejected (without optional references):_ P1 requires every reference to resolve on every path. The consumer cannot ask "was this produced?" Restructuring to guarantee data on all paths (passthrough nodes, default values) changes the semantics: data is always present, just sometimes a default.
@@ -98,7 +108,7 @@ These patterns are natural to reach for, but P1 requires them to be expressed di
 
 These patterns cannot be expressed as a single reference in the IR. However, since the spec defines all nodes, the set of possible targets is always finite and known at spec time, so equivalent behavior can always be achieved through explicit enumeration.
 
-**7. Computed indirection.** A reference whose target is determined at runtime (e.g., "read from whichever node's name is stored in variable X"). P1 requires all reference targets to be statically known at validation time. A computed reference whose target depends on runtime data cannot exist in the spec.
+**8. Computed indirection.** A reference whose target is determined at runtime (e.g., "read from whichever node's name is stored in variable X"). P1 requires all reference targets to be statically known at validation time. A computed reference whose target depends on runtime data cannot exist in the spec.
 
 _Workaround:_ Use a decision node that branches to the possible targets, with each branch wiring its output to the downstream consumer. For example, a "multi-strategy" pattern (classifier picks one of N summarizers) is expressed as a decision branch where each strategy node has `next: "format"`. If all strategies produce a compatible output schema, `format`'s input is satisfied on every path. The cost is verbosity (N entries in a `next` map instead of one computed reference), not lost capability. The decision-tree workaround always works for any finite spec.
 
@@ -108,13 +118,9 @@ _Workaround:_ Use a decision node that branches to the possible targets, with ea
 
 For any piece of data consumed by any task, you can trace its origin and every transformation by reading the spec. No hidden channels. No ambient state. No side-effect communication between tasks.
 
-### Corollaries
-
-The following properties fall out of P2 without needing their own principles:
+### Corollary
 
 - **Tasks are opaque functions.** Tasks take typed input and return typed output. All inter-task coordination is declared in the spec (via input wiring, output declarations, and transition edges). Tasks do not have access to engine state (loop-scoped variables, other nodes' outputs, other task instances). This is the mechanism that satisfies P2: if tasks can't communicate through hidden channels, all data flow must go through the spec.
-
-- **The spec is an IR, not an authoring format.** If a syntactic convenience (pipeline mode, inferred node types, default wiring) hides data flow from the reader, it violates P2. Authoring sugar belongs in a DSL that compiles to the explicit spec. This is also reinforced by P3 (structure must be self-describing) and P5 (reader shouldn't need to know desugaring rules). See plan.md "Authoring strategy" for details.
 
 ### Scenarios it ENABLES
 
@@ -355,7 +361,7 @@ What P5 genuinely prevents is **surprise**: a spec where a reader who understand
 
 | #   | Principle                                                   | Status       | Remaining questions                                                                         |
 | --- | ----------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------- |
-| P1  | Data references statically provable on every path           | **Resolved** | Error handler scope: decided (a)                                                            |
+| P1  | Data references statically provable on every path           | **Resolved** | None                                                                                        |
 | P2  | All data flow traceable through the spec alone              | **Solid**    | Drives cross-iteration state/output declaration necessity but doesn't pick between variants |
 | P3  | Spec structure corresponds to computational structure       | **Solid**    | Tiebreaker role: picks loop construct over flat cycles                                      |
 | P4  | Each part understood/validated/tested without the whole     | **Solid**    | Doesn't require DAG alone, but DAG + P5 makes strong case                                   |

@@ -105,7 +105,7 @@ P1 does not have a standalone mechanism table - its mechanism implications are c
 
 ## Open design question: Optional references
 
-_Driven by: P1 (static provability), with implications for P2-P5. Arises from P1 scenarios 4, 5, and 8._
+_Driven by: P1 (static provability), with implications for P2-P5. Arises from P1 scenarios 4, 5, and 7._
 
 Optional references would let an `inputMap` entry mark a data source as optional: if the producing node didn't execute on the taken path, the field is absent from the task's input rather than a validation error. The current alternatives (passthrough nodes, duplicate paths) force graph structure that exists only to satisfy the dominator requirement.
 
@@ -135,7 +135,7 @@ The optional references question is one instance of a broader design question: *
 
 The current design is a flat `{ fieldName: "dataSourcePath" }` dictionary. The scenarios in design-principles.md reveal several limitations:
 
-- **Optional/conditional references** (P1 scenarios 4, 5, 8): no way to say "use this data if available"
+- **Optional/conditional references** (P1 scenarios 4, 5, 7): no way to say "use this data if available"
 - **Default values**: no way to provide a fallback when a reference doesn't resolve
 - **Shape remapping**: no way to transform data between producer and consumer without an intermediate task node
 - **Schema relationship**: no formal connection between `inputMap` entries and the consumer task's `inputSchema` (required vs. optional fields, type compatibility)
