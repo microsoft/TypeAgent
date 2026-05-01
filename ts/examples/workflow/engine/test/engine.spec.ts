@@ -186,6 +186,7 @@ describe("WorkflowEngine", () => {
         it("branches based on task result", async () => {
             const registry = makeRegistry(thresholdBranchTask, passthroughTask);
             const engine = new WorkflowEngine(registry);
+            const events = collectEvents(engine);
 
             const spec: WorkflowSpec = {
                 specVersion: 1,
@@ -215,11 +216,48 @@ describe("WorkflowEngine", () => {
                 input: { score: 0.9 },
             });
             expect(highResult.success).toBe(true);
+            // Verify the high branch was taken
+            const highCompleted = events
+                .filter((e) => e.type === "nodeCompleted")
+                .map((e) => (e as any).nodeId);
+            expect(highCompleted).toEqual(["decide", "good"]);
+
+            // Reset events for the next run
+            events.length = 0;
 
             const lowResult = await engine.run(spec, {
                 input: { score: 0.2 },
             });
             expect(lowResult.success).toBe(true);
+            // Verify the low branch was taken
+            const lowCompleted = events
+                .filter((e) => e.type === "nodeCompleted")
+                .map((e) => (e as any).nodeId);
+            expect(lowCompleted).toEqual(["decide", "bad"]);
+        });
+
+        it("fails when decision-map node returns ok instead of branch", async () => {
+            const registry = makeRegistry(passthroughTask);
+            const engine = new WorkflowEngine(registry);
+
+            const spec: WorkflowSpec = {
+                specVersion: 1,
+                name: "decision-ok-fail",
+                version: "1",
+                input: { type: "object" },
+                output: { type: "object" },
+                entry: "start",
+                nodes: {
+                    start: {
+                        task: "passthrough",
+                        next: { a: "start", b: "start" },
+                    },
+                },
+            };
+
+            const result = await engine.run(spec, { input: {} });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("branch");
         });
     });
 
@@ -265,9 +303,10 @@ describe("WorkflowEngine", () => {
             expect(result.error?.message).toBe("kaboom");
         });
 
-        it("routes to onError node on failure", async () => {
-            const registry = makeRegistry(failTask, logTask);
+        it("routes to onError node and continues execution", async () => {
+            const registry = makeRegistry(failTask, logTask, passthroughTask);
             const engine = new WorkflowEngine(registry);
+            const events = collectEvents(engine);
 
             const spec: WorkflowSpec = {
                 specVersion: 1,
@@ -286,8 +325,64 @@ describe("WorkflowEngine", () => {
             };
 
             const result = await engine.run(spec);
+            // Error handler is a continuation; terminal handler = success
+            expect(result.success).toBe(true);
+            // Verify the handler received the error data
+            const completed = events.filter((e) => e.type === "nodeCompleted");
+            expect(completed).toHaveLength(1);
+            expect((completed[0] as any).nodeId).toBe("handler");
+        });
+
+        it("error handler can chain to further nodes", async () => {
+            const registry = makeRegistry(failTask, logTask, passthroughTask);
+            const engine = new WorkflowEngine(registry);
+
+            const spec: WorkflowSpec = {
+                specVersion: 1,
+                name: "error-chain",
+                version: "1",
+                input: { type: "object" },
+                output: { type: "object" },
+                entry: "start",
+                nodes: {
+                    start: {
+                        task: "always-fail",
+                        onError: "handler",
+                    },
+                    handler: {
+                        task: "log.error",
+                        next: "cleanup",
+                    },
+                    cleanup: { task: "passthrough" },
+                },
+            };
+
+            const result = await engine.run(spec);
+            expect(result.success).toBe(true);
+        });
+
+        it("fails when error handler itself fails", async () => {
+            const registry = makeRegistry(failTask);
+            const engine = new WorkflowEngine(registry);
+
+            const spec: WorkflowSpec = {
+                specVersion: 1,
+                name: "error-handler-fails",
+                version: "1",
+                input: { type: "object" },
+                output: { type: "object" },
+                entry: "start",
+                nodes: {
+                    start: {
+                        task: "always-fail",
+                        onError: "handler",
+                    },
+                    handler: { task: "always-fail" },
+                },
+            };
+
+            const result = await engine.run(spec);
             expect(result.success).toBe(false);
-            expect(result.error?.nodeId).toBe("start");
         });
     });
 
@@ -313,6 +408,83 @@ describe("WorkflowEngine", () => {
             });
             expect(result.success).toBe(false);
             expect(result.error?.message).toContain("cancelled");
+        });
+    });
+
+    describe("maxIterations", () => {
+        it("fails when iteration limit is exceeded", async () => {
+            const registry = makeRegistry(passthroughTask);
+            const engine = new WorkflowEngine(registry);
+
+            const spec: WorkflowSpec = {
+                specVersion: 1,
+                name: "loop-forever",
+                version: "1",
+                input: { type: "object" },
+                output: { type: "object" },
+                maxIterations: 5,
+                entry: "a",
+                nodes: {
+                    a: { task: "passthrough", next: "a" },
+                },
+            };
+
+            const result = await engine.run(spec);
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("maxIterations");
+        });
+
+        it("emits iteration counter on node events", async () => {
+            const registry = makeRegistry(thresholdBranchTask, passthroughTask);
+            const engine = new WorkflowEngine(registry);
+            const events = collectEvents(engine);
+
+            // Loop twice through "check" then exit
+            let callCount = 0;
+            const countingTask: TaskDefinition = {
+                name: "counting",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                branchLabels: ["loop", "done"],
+                async execute() {
+                    callCount++;
+                    const branch = callCount < 3 ? "loop" : "done";
+                    return {
+                        kind: "branch",
+                        branch,
+                        output: { count: callCount },
+                    };
+                },
+            };
+            registry.register(countingTask);
+
+            const spec: WorkflowSpec = {
+                specVersion: 1,
+                name: "loop-counter",
+                version: "1",
+                input: { type: "object" },
+                output: { type: "object" },
+                entry: "check",
+                nodes: {
+                    check: {
+                        task: "counting",
+                        next: { loop: "check", done: "end" },
+                    },
+                    end: { task: "passthrough" },
+                },
+            };
+
+            const result = await engine.run(spec);
+            expect(result.success).toBe(true);
+
+            // "check" was visited 3 times
+            const checkStarted = events.filter(
+                (e) => e.type === "nodeStarted" && e.nodeId === "check",
+            );
+            expect(checkStarted).toHaveLength(3);
+            expect((checkStarted[0] as any).iteration).toBe(1);
+            expect((checkStarted[1] as any).iteration).toBe(2);
+            expect((checkStarted[2] as any).iteration).toBe(3);
         });
     });
 
@@ -352,6 +524,71 @@ describe("WorkflowEngine", () => {
                 result: "https://api.example.com?q=news&limit=10",
             });
         });
+
+        it("supports dot-notation and bracket-notation for nested/array access", async () => {
+            const registry = makeRegistry(stringTemplateTask);
+            const engine = new WorkflowEngine(registry);
+
+            const spec: WorkflowSpec = {
+                specVersion: 1,
+                name: "template-nested",
+                version: "1",
+                input: { type: "object" },
+                output: { type: "object" },
+                variables: {
+                    tpl: "Hello {user.name}, item: {items[0]}, deep: {a.b.c}",
+                },
+                entry: "build",
+                nodes: {
+                    build: {
+                        task: "string.template",
+                        inputMap: {
+                            template: "variables.tpl",
+                            user: "input.user",
+                            items: "input.items",
+                            a: "input.a",
+                        },
+                    },
+                },
+            };
+
+            const result = await engine.run(spec, {
+                input: {
+                    user: { name: "Alice" },
+                    items: ["first", "second"],
+                    a: { b: { c: "deep-val" } },
+                },
+            });
+            expect(result.success).toBe(true);
+            expect(result.output).toEqual({
+                result: "Hello Alice, item: first, deep: deep-val",
+            });
+        });
+
+        it("preserves unresolved placeholders for missing keys", async () => {
+            const registry = makeRegistry(stringTemplateTask);
+            const engine = new WorkflowEngine(registry);
+
+            const spec: WorkflowSpec = {
+                specVersion: 1,
+                name: "template-missing",
+                version: "1",
+                input: { type: "object" },
+                output: { type: "object" },
+                variables: { tpl: "key={missing}" },
+                entry: "build",
+                nodes: {
+                    build: {
+                        task: "string.template",
+                        inputMap: { template: "variables.tpl" },
+                    },
+                },
+            };
+
+            const result = await engine.run(spec);
+            expect(result.success).toBe(true);
+            expect(result.output).toEqual({ result: "key={missing}" });
+        });
     });
 
     describe("validation", () => {
@@ -372,6 +609,71 @@ describe("WorkflowEngine", () => {
             const result = await engine.run(spec);
             expect(result.success).toBe(false);
             expect(result.error?.message).toContain("validation failed");
+        });
+    });
+
+    describe("runId", () => {
+        it("generates a UUID-based run id", async () => {
+            const registry = makeRegistry(passthroughTask);
+            const engine = new WorkflowEngine(registry);
+
+            const spec: WorkflowSpec = {
+                specVersion: 1,
+                name: "id-test",
+                version: "1",
+                input: { type: "object" },
+                output: { type: "object" },
+                entry: "start",
+                nodes: { start: { task: "passthrough" } },
+            };
+
+            const result = await engine.run(spec);
+            expect(result.runId).toMatch(/^run-[0-9a-f-]{36}$/);
+        });
+    });
+
+    describe("logging", () => {
+        it("routes task log calls through the provided logger", async () => {
+            // A task that calls ctx.log
+            const loggingTask: TaskDefinition = {
+                name: "logging-task",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute(input, ctx) {
+                    ctx.log("info", "hello from task", { key: 1 });
+                    return { kind: "ok", output: input };
+                },
+            };
+
+            const registry = makeRegistry(loggingTask);
+            const engine = new WorkflowEngine(registry);
+            const logged: Array<{
+                level: string;
+                msg: string;
+                data?: unknown;
+            }> = [];
+
+            const spec: WorkflowSpec = {
+                specVersion: 1,
+                name: "log-test",
+                version: "1",
+                input: { type: "object" },
+                output: { type: "object" },
+                entry: "start",
+                nodes: { start: { task: "logging-task" } },
+            };
+
+            const result = await engine.run(spec, {
+                logger: {
+                    log: (level, msg, data?) =>
+                        logged.push({ level, msg, data }),
+                },
+            });
+            expect(result.success).toBe(true);
+            expect(logged).toHaveLength(1);
+            expect(logged[0].level).toBe("info");
+            expect(logged[0].msg).toContain("hello from task");
+            expect(logged[0].data).toEqual({ key: 1 });
         });
     });
 });

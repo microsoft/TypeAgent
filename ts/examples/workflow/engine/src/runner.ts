@@ -1,12 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import { randomUUID } from "node:crypto";
 import {
     WorkflowSpec,
     WorkflowNode,
     TaskContext,
     TaskResult,
     SecretProvider,
+    WorkflowLogger,
     validateWorkflowSpec,
 } from "workflow-model";
 import { TaskRegistry } from "./taskRegistry.js";
@@ -31,6 +33,9 @@ export interface RunOptions {
 
     /** AbortSignal for cooperative cancellation. */
     signal?: AbortSignal;
+
+    /** Pluggable logger. Defaults to no-op if not provided. */
+    logger?: WorkflowLogger;
 }
 
 export interface RunResult {
@@ -97,10 +102,16 @@ export class WorkflowEngine {
         const secrets: SecretProvider = options?.secrets ?? {
             get: async () => undefined,
         };
+        const logger: WorkflowLogger = options?.logger ?? {
+            log: () => {},
+        };
         const workflowInput = options?.input ?? {};
+        const maxIterations = spec.maxIterations ?? 1000;
 
         // Data context: stores outputs from all executed nodes
         const nodeOutputs = new Map<string, unknown>();
+        // Per-node visit counter for loop-aware observability
+        const nodeVisits = new Map<string, number>();
 
         this.emit({
             type: "runStarted",
@@ -111,8 +122,26 @@ export class WorkflowEngine {
 
         let currentNodeId: string | undefined = spec.entry;
         let lastOutput: unknown = undefined;
+        let iterationCount = 0;
 
         while (currentNodeId) {
+            iterationCount++;
+            if (iterationCount > maxIterations) {
+                const msg = `Run exceeded maxIterations limit (${maxIterations}).`;
+                this.emit({
+                    type: "runFailed",
+                    runId,
+                    nodeId: currentNodeId,
+                    error: { message: msg },
+                    timestamp: Date.now(),
+                });
+                return {
+                    runId,
+                    success: false,
+                    error: { message: msg, nodeId: currentNodeId },
+                };
+            }
+
             if (signal.aborted) {
                 this.emit({
                     type: "runCancelled",
@@ -128,12 +157,15 @@ export class WorkflowEngine {
 
             const node: WorkflowNode = spec.nodes[currentNodeId];
             const task = this.registry.get(node.task)!;
+            const visitCount = (nodeVisits.get(currentNodeId) ?? 0) + 1;
+            nodeVisits.set(currentNodeId, visitCount);
 
             this.emit({
                 type: "nodeStarted",
                 runId,
                 nodeId: currentNodeId,
                 taskName: node.task,
+                iteration: visitCount,
                 timestamp: Date.now(),
             });
 
@@ -159,9 +191,8 @@ export class WorkflowEngine {
                     nodeId: currentNodeId,
                     signal,
                     secrets,
-                    log: (_level, _msg, _data?) => {
-                        // TODO: wire to debug package
-                    },
+                    log: (level, msg, data?) =>
+                        logger.log(level, `[${currentNodeId}] ${msg}`, data),
                 };
                 result = await task.execute(resolvedInput, ctx);
             } catch (err: unknown) {
@@ -185,43 +216,18 @@ export class WorkflowEngine {
                 });
 
                 if (node.onError) {
-                    // Route to error handler
+                    // Redirect execution to the error handler node.
+                    // Set the error data as lastOutput so the error node
+                    // receives it via pipeline mode (or its own inputMap).
                     const errorInput: ErrorInput = {
                         message: result.error.message,
                         data: result.error.data,
                         nodeId: currentNodeId,
                         taskName: node.task,
                     };
-                    const errorNode = spec.nodes[node.onError];
-                    const errorTask = this.registry.get(errorNode.task)!;
-                    try {
-                        const errorCtx: TaskContext = {
-                            runId,
-                            nodeId: node.onError,
-                            signal,
-                            secrets,
-                            log: () => {},
-                        };
-                        await errorTask.execute(errorInput, errorCtx);
-                    } catch {
-                        // Error handler itself failed; ignore
-                    }
-                    // After error handler, the run ends
-                    this.emit({
-                        type: "runFailed",
-                        runId,
-                        nodeId: currentNodeId,
-                        error: result.error,
-                        timestamp: Date.now(),
-                    });
-                    return {
-                        runId,
-                        success: false,
-                        error: {
-                            message: result.error.message,
-                            nodeId: currentNodeId,
-                        },
-                    };
+                    lastOutput = errorInput;
+                    currentNodeId = node.onError;
+                    continue;
                 }
 
                 this.emit({
@@ -241,8 +247,8 @@ export class WorkflowEngine {
                 };
             }
 
-            // Success or branch
-            const output = result.kind === "ok" ? result.output : result.output;
+            // Success or branch (both carry output, but branch output is optional)
+            const output = result.output;
             nodeOutputs.set(currentNodeId, output);
             lastOutput = output;
 
@@ -252,6 +258,7 @@ export class WorkflowEngine {
                 nodeId: currentNodeId,
                 taskName: node.task,
                 output,
+                iteration: visitCount,
                 timestamp: Date.now(),
             });
 
@@ -379,8 +386,6 @@ function traverseObject(
     return current;
 }
 
-let runCounter = 0;
 function generateRunId(): string {
-    runCounter++;
-    return `run-${Date.now()}-${runCounter}`;
+    return `run-${randomUUID()}`;
 }

@@ -21,7 +21,8 @@ export const passthroughTask: TaskDefinition = {
  * Output: { result: string }
  *
  * Replaces `{key}` placeholders in the template with the corresponding
- * input values.
+ * input values. Keys may use dot notation (`{a.b}`) or bracket notation
+ * (`{items[0]}`) to reach nested fields and array elements.
  */
 export const stringTemplateTask: TaskDefinition<
     Record<string, unknown>,
@@ -44,10 +45,13 @@ export const stringTemplateTask: TaskDefinition<
     },
     async execute(input) {
         const template = input.template as string;
-        const result = template.replace(/\{(\w+)\}/g, (_match, key) => {
-            const val = input[key];
-            return val !== undefined ? String(val) : `{${key}}`;
-        });
+        const result = template.replace(
+            /\{([^}]+)\}/g,
+            (_match, keyPath: string) => {
+                const val = resolveTemplatePath(input, keyPath);
+                return val !== undefined ? String(val) : `{${keyPath}}`;
+            },
+        );
         return { kind: "ok", output: { result } };
     },
 };
@@ -97,3 +101,34 @@ export const thresholdBranchTask: TaskDefinition<
         return { kind: "branch", branch, output: { value: input.value } };
     },
 };
+
+/**
+ * Parse a template key path like `a.b`, `items[0]`, or `a[0].b` into
+ * segments and traverse the object. Supports dot notation and bracket
+ * notation for both object keys and array indices.
+ */
+function resolveTemplatePath(
+    obj: Record<string, unknown>,
+    path: string,
+): unknown {
+    // Split on `.` and `[`, keeping bracket contents.
+    // "a.b[0].c" -> ["a", "b", "0", "c"]
+    const segments = path.split(/[.[\]]+/).filter((s) => s.length > 0);
+    let current: unknown = obj;
+    for (const seg of segments) {
+        if (current == null || typeof current !== "object") {
+            return undefined;
+        }
+        // Array index or object key
+        if (Array.isArray(current)) {
+            const idx = Number(seg);
+            if (Number.isNaN(idx)) {
+                return undefined;
+            }
+            current = current[idx];
+        } else {
+            current = (current as Record<string, unknown>)[seg];
+        }
+    }
+    return current;
+}

@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import Ajv from "ajv";
+import AjvModule from "ajv";
 import { WorkflowSpec, WorkflowNode } from "./workflowSpec.js";
 import { TaskDefinition } from "./taskDefinition.js";
 
@@ -57,8 +57,8 @@ export function validateWorkflowSpec(
     }
 
     // Validate JSON Schemas for workflow input/output
-    const AjvConstructor = (Ajv as any).default ?? Ajv;
-    const ajv = new AjvConstructor({ strict: false });
+    const Ajv = AjvModule.default ?? AjvModule;
+    const ajv = new Ajv({ strict: false });
     try {
         ajv.compile(spec.input as object);
     } catch {
@@ -81,6 +81,17 @@ export function validateWorkflowSpec(
     for (const [nodeId, node] of Object.entries(spec.nodes)) {
         const prefix = `nodes.${nodeId}`;
         validateNode(prefix, nodeId, node, nodeIds, tasks, errors);
+    }
+
+    // Check for unreachable nodes
+    const reachable = findReachableNodes(spec.entry, spec.nodes);
+    for (const nodeId of nodeIds) {
+        if (!reachable.has(nodeId)) {
+            errors.push({
+                path: `nodes.${nodeId}`,
+                message: `Node "${nodeId}" is not reachable from the entry node.`,
+            });
+        }
     }
 
     return { valid: errors.length === 0, errors };
@@ -192,4 +203,36 @@ function validateNode(
             message: `Error handler node "${node.onError}" does not exist.`,
         });
     }
+}
+
+/**
+ * BFS to find all nodes reachable from a given entry via `next` and `onError` edges.
+ */
+function findReachableNodes(
+    entry: string,
+    nodes: Record<string, WorkflowNode>,
+): Set<string> {
+    const visited = new Set<string>();
+    const queue: string[] = [entry];
+    while (queue.length > 0) {
+        const id = queue.shift()!;
+        if (visited.has(id) || !(id in nodes)) {
+            continue;
+        }
+        visited.add(id);
+        const node = nodes[id];
+        if (node.next !== undefined) {
+            if (typeof node.next === "string") {
+                queue.push(node.next);
+            } else {
+                for (const target of Object.values(node.next)) {
+                    queue.push(target);
+                }
+            }
+        }
+        if (node.onError !== undefined) {
+            queue.push(node.onError);
+        }
+    }
+    return visited;
 }

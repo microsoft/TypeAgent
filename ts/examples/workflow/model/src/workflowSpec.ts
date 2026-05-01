@@ -74,6 +74,12 @@ export interface WorkflowSpec {
     /** Named constants. Referenced in inputMap paths as `variables.<name>`. */
     variables?: Record<string, unknown>;
 
+    /**
+     * Maximum total node executions per run. Prevents runaway loops.
+     * Default: 1000.
+     */
+    maxIterations?: number;
+
     /** Id of the first node to execute. Must be a key in `nodes`. */
     entry: string;
 

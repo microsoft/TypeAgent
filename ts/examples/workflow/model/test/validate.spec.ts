@@ -299,4 +299,29 @@ describe("validateWorkflowSpec", () => {
         const result = validateWorkflowSpec(parsed);
         expect(result.valid).toBe(true);
     });
+
+    it("rejects unreachable nodes", () => {
+        const spec = makeMinimalSpec({
+            nodes: {
+                start: { task: "noop" },
+                orphan: { task: "noop" },
+            },
+        });
+        const result = validateWorkflowSpec(spec);
+        expect(result.valid).toBe(false);
+        expect(
+            result.errors.some((e) => e.message.includes("not reachable")),
+        ).toBe(true);
+    });
+
+    it("accepts error-handler nodes as reachable via onError", () => {
+        const spec = makeMinimalSpec({
+            nodes: {
+                start: { task: "noop", onError: "handler" },
+                handler: { task: "noop" },
+            },
+        });
+        const result = validateWorkflowSpec(spec);
+        expect(result.valid).toBe(true);
+    });
 });

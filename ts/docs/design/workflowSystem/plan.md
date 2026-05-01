@@ -170,7 +170,7 @@ Notes on the example:
 - **Decision mechanism (decided):** Decisions are always task-driven. The task returns `kind: "branch"` with a `branch` string; the engine looks up `next[branch]`. Tasks declare their possible branch labels in `branchLabels`; engine validates spec coverage at load time. No spec-level condition expressions.
 - **Versioning (deferred):** Tasks referenced by plain name (e.g. `"http.get"`), no version specifier in v1.
 - **Loops / fan-out / parallel:** NOT in v1 spec; reserve syntax but reject at validate time.
-- **Error handling:** each node may declare `onError: <nodeId>`. The error node receives engine-constructed input: `{ message: string, data?: unknown, nodeId: string, taskName: string }`. If no `onError` is declared, the run fails. If `execute()` throws an exception, the engine catches it and treats it as `kind: "fail"` (same downstream behavior as an explicit fail result).
+- **Error handling:** each node may declare `onError: <nodeId>`. The error node receives engine-constructed input: `{ message: string, data?: unknown, nodeId: string, taskName: string }`. If no `onError` is declared, the run fails. If `execute()` throws an exception, the engine catches it and treats it as `kind: "fail"` (same downstream behavior as an explicit fail result). The error handler is a **continuation**: it executes normally and follows its own `next` transitions. If the error handler itself fails, the run fails (no recursive error handling).
 
 ## 6. Task Plugin API (sketch)
 
@@ -194,7 +194,13 @@ interface TaskContext {
   signal: AbortSignal;
   secrets: SecretProvider; // workflow-scoped shared secrets
   log(level: string, msg: string, data?: unknown): void;
-  emit(event: WorkflowEvent): void; // WorkflowEvent types defined in engine package
+}
+
+// Pluggable structured logger, injected via RunOptions.
+// Engine provides a no-op default. Callers can supply a
+// console, file, or debug-package-backed implementation.
+interface WorkflowLogger {
+  log(level: string, msg: string, data?: unknown): void;
 }
 
 // Injected by the caller when starting a run; engine does not dictate the backend.
@@ -211,12 +217,63 @@ Open: how do tasks declare required capabilities (network, fs, llm)? Probably ma
 
 - Single-threaded async runner; one "current node" at a time.
 - For each step: resolve `inputMap` (dictionary lookup + dot-path traversal), validate input against task's `inputSchema`, call `execute`, validate output against `outputSchema`, persist run state, pick next node.
+- **Runtime schema validation** of task inputs and outputs against their declared JSON Schemas is planned for M3.5 (between M3 and M4). Until then, schemas are validated structurally at load time but not enforced per-step at runtime.
 - If `inputMap` is omitted, pipe predecessor's output directly as input (pipeline mode). Load-time validation ensures schema compatibility.
 - If `execute()` throws an exception, engine catches it and wraps it as `kind: "fail"` with the thrown message. Same downstream behavior as an explicit fail result.
 - Decision tasks return `kind: "branch"`; engine looks up `next[branch]`; unknown branch -> fail.
 - At load time, engine validates that every `branchLabel` declared by the task has a corresponding key in `next`, and every key in `next` is a declared `branchLabel`.
+- **Unreachable node detection:** the validator checks that every node in the graph is reachable from the entry node (via `next` and `onError` edges). Unreachable nodes are reported as validation errors.
 - Cancellation via `AbortSignal` propagated to in-flight task.
 - Determinism: `inputMap` re-evaluated from stored history, so a resumed run produces consistent inputs.
+- **Pluggable logging:** a `WorkflowLogger` interface is injected via `RunOptions`. The engine prefixes log messages with the current node id and delegates to the provided logger. Tasks call `ctx.log(level, msg, data?)`. Default is no-op.
+
+### Loops and Iteration
+
+The workflow graph permits cycles (a node's `next` can point to an earlier node). This enables retry and iterative refinement patterns. To prevent runaway loops:
+
+- **`maxIterations`** (optional, on `WorkflowSpec`): maximum total node executions per run. Default: 1000. The engine increments a counter on each node execution and fails the run if the limit is exceeded.
+- **Exit path requirement:** the validator checks that every cycle in the graph contains at least one decision node (a node with `next` as an object/decision map). This ensures there is always a conditional path out of the loop. Unconditional cycles (all nodes in the cycle have `next` as a string) are rejected at validation time.
+- **Per-node visit limits (future):** `maxIterations` is a global counter. A per-node `maxVisits` field would allow independent limits on different loops. Deferred until real use cases clarify the need.
+
+These safeguards are slotted for M3.5.
+
+#### Node output scoping in loops
+
+The engine keeps the latest output per node in a `nodeOutputs` map. When a node re-executes in a loop, its output overwrites the previous value. `inputMap` paths like `nodes.<id>.output.*` always resolve to the **most recent** execution of that node. Per-iteration history is not retained in memory; outputs are emitted via events for observability but discarded once overwritten.
+
+This simplifies memory management and resume semantics: persisting and restoring the current `nodeOutputs` map is sufficient to resume a run. No per-iteration history replay is needed.
+
+#### Loop and onError interaction
+
+If a node inside a loop fails and has `onError`, execution redirects to the error handler node. The error handler is a normal continuation: it receives the error data as input, executes, and follows its own `next` transitions. This means an error handler can route back into the loop (retry-on-error pattern). If the error handler itself fails, the run terminates. See the error handling section below for full semantics.
+
+#### Convergent loops
+
+Two branches of a decision can both loop back to the same node (diamond-shaped cycles). The exit-path validation must handle overlapping cycles correctly by analyzing each strongly connected component independently, not just simple back-edges.
+
+#### Loop-aware observability
+
+The event stream emits `nodeStarted`/`nodeCompleted` for every iteration. Events include an `iteration` counter so consumers can distinguish loop iterations of the same node. See Section 9.
+
+### Error Handling
+
+Each node may declare `onError: <nodeId>`. When a node fails (returns `kind: "fail"` or throws):
+
+- If `onError` is declared: execution redirects to the error handler node. The engine constructs error input (`{ message, data?, nodeId, taskName }`) and sets it as `lastOutput`. The error node executes normally (its own `inputMap` or pipeline mode), and follows its own `next` transitions. The error was caught; the workflow continues.
+- If `onError` is not declared: the run fails immediately.
+- If the error handler itself fails: the run fails (no recursive error handling).
+
+### Parallel Nodes (future)
+
+A `parallel` construct would allow spawning multiple tasks concurrently from a single node, with a join/barrier before continuing. Design considerations:
+
+- Spec shape: a `parallel` field on a node listing sub-node ids or inline task refs.
+- Join semantics: wait-all, wait-any, or wait-N. Error propagation policy (fail-fast vs. collect).
+- Data merge: how parallel outputs combine into a single downstream input.
+- Cancellation: aborting sibling tasks when one fails (fail-fast mode).
+- `maxIterations` accounting: each parallel task execution counts toward the global limit.
+
+Slotted for M5+ after the core engine stabilizes. The current single-threaded runner is deliberately simple; parallelism requires careful design of the data context and event ordering.
 
 ## 8. Persistence & Resume (v1 minimal)
 
@@ -228,6 +285,7 @@ Open: how do tasks declare required capabilities (network, fs, llm)? Probably ma
 
 - Engine emits a typed event stream:
   `runStarted`, `nodeStarted`, `nodeCompleted`, `nodeFailed`, `runCompleted`, `runFailed`, `runCancelled`.
+- `nodeStarted` and `nodeCompleted` events include an `iteration` counter (1-based) tracking how many times that node has been visited in the current run. This allows monitoring tools to distinguish loop iterations.
 - Subscribers: file logger, CLI pretty-printer, (later) viewer.
 - Use the `debug` package (`typeagent:workflow:*`) consistent with the rest of the repo.
 
@@ -248,23 +306,23 @@ Open: how do tasks declare required capabilities (network, fs, llm)? Probably ma
 
 ## 12. Milestones
 
-| #   | Milestone             | Contents                                                                                                                                                                                                                |
-| --- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M0  | Scaffolding           | Plan (this doc), package layout, types stubs, CI green.                                                                                                                                                                 |
-| M1  | Spec + validation     | `model` package: types, JSON Schema, parse + validate, round-trip tests.                                                                                                                                                |
-| M2  | Engine MVP            | Linear runs (no branches), in-memory registry, 2-3 trivial built-in tasks (e.g. `passthrough`, `string.template`), event emission. `inputMap` resolves `input.*` and `variables.*` paths only (no cross-node refs yet). |
-| M3  | Decisions + data flow | Decision nodes (`branchLabels` validation), full `inputMap` path resolution including `nodes.<id>.output.*` refs, error-edge (`onError`) handling.                                                                      |
-| M4  | Persistence + resume  | Run state on disk, resume, CLI `runs` commands.                                                                                                                                                                         |
-| M5  | Built-in task library | http, transform/jq-like, llm-call (via aiclient), sub-workflow.                                                                                                                                                         |
-| M6  | Monitor (headless)    | Stable event schema + a tail/inspect CLI; ready for a viewer.                                                                                                                                                           |
-| M7+ | Viewer / editor       | Out-of-scope for this plan; separate doc.                                                                                                                                                                               |
+| #    | Milestone             | Contents                                                                                                                                                                                                                |
+| ---- | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | --- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- | --- | --- | ------------------ | ------------------------------------------------------------- |
+| M0   | Scaffolding           | Plan (this doc), package layout, types stubs, CI green.                                                                                                                                                                 |
+| M1   | Spec + validation     | `model` package: types, JSON Schema, parse + validate, round-trip tests.                                                                                                                                                |
+| M2   | Engine MVP            | Linear runs (no branches), in-memory registry, 2-3 trivial built-in tasks (e.g. `passthrough`, `string.template`), event emission. `inputMap` resolves `input.*` and `variables.*` paths only (no cross-node refs yet). |
+| M3   | Decisions + data flow | Decision nodes (`branchLabels` validation), full `inputMap` path resolution including `nodes.<id>.output.*` refs, error-edge (`onError`) handling.                                                                      |
+| M3.5 | Hardening             | Runtime schema validation of task inputs/outputs per step. Loop safeguards: `maxIterations` limit, exit-path validation (every cycle must contain a decision node). Unreachable node detection (done).                  |
+| M4   | Persistence + resume  | Run state on disk, resume, CLI `runs` commands.                                                                                                                                                                         |
+| M5   | Built-in task library | http, transform/jq-like, llm-call (via aiclient), sub-workflow.                                                                                                                                                         |     | M5+ | Parallel execution | Parallel node construct: spawn concurrent tasks, join semantics, cancellation propagation. Requires data context and event ordering redesign. |     | M6  | Monitor (headless) | Stable event schema + a tail/inspect CLI; ready for a viewer. |
+| M7+  | Viewer / editor       | Out-of-scope for this plan; separate doc.                                                                                                                                                                               |
 
 Each milestone ends with: passing tests, a runnable demo, and an updated section in this doc.
 
 ## 13. Resolved Decisions
 
 | #   | Question                    | Decision                                                                                                                                     |
-| --- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| --- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | --- | --- | ------------ | --------------------------------------------------------------------------------------------------------------------------------- | --- | --- | ----- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | Q1  | Schema source of truth      | JSON Schema at runtime; TS authoring optional via build-time generation.                                                                     |
 | Q2  | Expression/binding language | **Superseded by Q11.** Replaced by `inputMap` (flat path dictionary). No expressions in the IR.                                              |
 | Q3  | Concurrency model           | Deferred to v2.                                                                                                                              |
@@ -277,20 +335,24 @@ Each milestone ends with: passing tests, a runnable demo, and an updated section
 | Q10 | Node transition syntax      | Unified `next` field: string (linear) or object (decision map). Omit for terminal nodes.                                                     |
 | Q11 | IR design principle         | P2 "Bytecode": flat `inputMap`, no expressions, simple graph walker engine. Reassess if transform node overhead becomes measurable.          |
 | Q12 | Branch label ownership      | Tasks declare `branchLabels`; engine validates spec coverage at load time. Unknown branch at runtime -> fail.                                |
-| Q13 | Intercept/analysis hooks    | Deferred. Design avoids decisions that would make hooks hard to add later.                                                                   |
+| Q13 | Intercept/analysis hooks    | Deferred. Design avoids decisions that would make hooks hard to add later.                                                                   | \n  | Q14 | Task logging | `WorkflowLogger` interface on `RunOptions`. Engine prefixes with node id and delegates. Default is no-op. Tasks call `ctx.log()`. | \n  | Q15 | Loops | Allowed. Bounded by `maxIterations` (spec-level, default 1000). Every cycle must contain a decision node (validated at load time). |
 
 ## 14. Remaining Open Questions
 
 1. Task capability declarations (network, fs, llm) - manifest field? Engine policy enforcement?
-2. Concurrency model in v2 - parallel branches, fan-out, join semantics.
+2. ~~Concurrency model in v2 - parallel branches, fan-out, join semantics.~~ Addressed: parallel nodes slotted for M5+. Detailed design (join semantics, data merge, cancellation) TBD.
 3. Task packaging and delivery mechanism (npm packages? local directories? manifests?).
 4. How do workflows compose? Can a workflow be a task in another workflow (sub-workflows)?
 5. Authoring DSL design (post-M3) - syntax, tooling, error reporting.
 6. ~~Pipeline mode semantics~~ Resolved: optional `inputMap`; predecessor output pipes through; load-time schema compatibility check.
+7. Loop iteration tracking per cycle vs. global counter. Global counter (M3.5) is simpler but coarser; per-node `maxVisits` would allow independent limits on different loops.
+8. Parallel node join semantics: wait-all vs. wait-any vs. wait-N. Error propagation policy (fail-fast vs. collect-all).
+9. Parallel node data merge: how do outputs from concurrent tasks combine into a single downstream input?
 
 ## 15. Risks
 
-- Scope creep into a general workflow platform. Mitigation: hold the line on v1 scope; defer parallel / loops.
+- Scope creep into a general workflow platform. Mitigation: hold the line on v1 scope; parallel slotted for M5+ with separate design.
+- Loops enabled but bounded by `maxIterations` and exit-path validation. Risk: authors hit false-positive validation errors on complex graphs. Mitigation: start strict, relax validation if real use cases demand it.
 - Overlap with existing dispatcher / cache / activity mechanisms. Mitigation: explicitly map relationships before M2.
 - Expression language becomes a tar pit. Mitigation: P2 has no expression language. If transform node overhead triggers a reassessment, migration to P3 is straightforward.
 
@@ -300,10 +362,15 @@ Each milestone ends with: passing tests, a runnable demo, and an updated section
 - [x] Lock IR design principle (P2 Bytecode).
 - [x] Review and refine this plan.
 - [x] Resolve blocking items (missing variable, pipeline mode, onError, version, exception handling).
-- [ ] Lock M1 scope (spec shape + validation surface).
-- [ ] Delete `examples/workflowEditor/` stubs.
-- [ ] Scaffold `examples/workflow/{model,engine,cli}` packages.
-- [ ] Write M1 type definitions in `examples/workflow/model/src/`.
+- [x] Lock M1 scope (spec shape + validation surface).
+- [x] Scaffold `examples/workflow/{model,engine}` packages.
+- [x] Write M1 type definitions in `examples/workflow/model/src/`.
+- [x] M1: validation, round-trip tests, unreachable node detection.
+- [x] M2: engine MVP with passthrough, string.template, log.error, threshold.branch tasks.
+- [x] M3: decisions, full inputMap resolution, onError handling, pluggable logging.
+- [ ] M3.5: runtime schema validation, loop safeguards (maxIterations, exit-path validation).
+- [ ] Scaffold `examples/workflow/cli` package.
+- [ ] M4: persistence + resume.
 
 ## 17. Speculative: IR as a compilation target (post-v1)
 

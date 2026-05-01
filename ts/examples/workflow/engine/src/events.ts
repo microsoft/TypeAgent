@@ -16,6 +16,8 @@ export type WorkflowEvent =
           runId: string;
           nodeId: string;
           taskName: string;
+          /** 1-based visit count for this node in the current run. */
+          iteration: number;
           timestamp: number;
       }
     | {
@@ -24,6 +26,8 @@ export type WorkflowEvent =
           nodeId: string;
           taskName: string;
           output: unknown;
+          /** 1-based visit count for this node in the current run. */
+          iteration: number;
           timestamp: number;
       }
     | {

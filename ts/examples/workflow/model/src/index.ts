@@ -13,6 +13,7 @@ export {
     SecretProvider,
     TaskContext,
     TaskDefinition,
+    WorkflowLogger,
 } from "./taskDefinition.js";
 
 export {

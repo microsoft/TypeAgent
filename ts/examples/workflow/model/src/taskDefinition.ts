@@ -20,6 +20,14 @@ export interface SecretProvider {
 }
 
 /**
+ * Pluggable structured logger. Injected by the caller; the engine
+ * provides a default no-op implementation.
+ */
+export interface WorkflowLogger {
+    log(level: string, msg: string, data?: unknown): void;
+}
+
+/**
  * Context passed to a task's `execute` function.
  */
 export interface TaskContext {
