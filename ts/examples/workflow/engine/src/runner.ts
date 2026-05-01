@@ -19,28 +19,25 @@ import { WorkflowEvent, WorkflowEventListener } from "./events.js";
 const AjvConstructor = (AjvModule as any).default ?? AjvModule;
 
 /**
- * Compile a JSON Schema into a validation function. Returns a function
- * that returns null on success or an error message on failure.
+ * Compile a JSON Schema into a validation function using the provided Ajv
+ * instance. Returns a function that returns null on success or an error
+ * message on failure. Task schemas are validated at registration time, so
+ * compilation errors here indicate an internal error.
  */
-function compileSchemaValidator(
+function compileValidator(
+    ajv: any,
     schema: JSONSchema,
 ): (data: unknown) => string | null {
-    try {
-        const ajv = new AjvConstructor({ strict: false, allErrors: true });
-        const validate = ajv.compile(schema as object);
-        return (data: unknown) => {
-            if (validate(data)) {
-                return null;
-            }
-            const msgs = (validate.errors ?? []).map(
-                (e: any) => `${e.instancePath || "/"}: ${e.message}`,
-            );
-            return msgs.join("; ");
-        };
-    } catch {
-        // Schema itself is invalid; skip runtime validation
-        return () => null;
-    }
+    const validate = ajv.compile(schema as object);
+    return (data: unknown) => {
+        if (validate(data)) {
+            return null;
+        }
+        const msgs = (validate.errors ?? []).map(
+            (e: any) => `${e.instancePath || "/"}: ${e.message}`,
+        );
+        return msgs.join("; ");
+    };
 }
 
 /**
@@ -137,6 +134,40 @@ export class WorkflowEngine {
         const workflowInput = options?.input ?? {};
         const maxIterations = spec.maxIterations ?? 1000;
 
+        // Build validator cache (schemas validated at registration time)
+        const ajv = new AjvConstructor({ strict: false, allErrors: true });
+        const taskValidators = new Map<
+            string,
+            {
+                input: (data: unknown) => string | null;
+                output: (data: unknown) => string | null;
+            }
+        >();
+        for (const node of Object.values(spec.nodes)) {
+            if (!taskValidators.has(node.task)) {
+                const task = this.registry.get(node.task)!;
+                taskValidators.set(node.task, {
+                    input: compileValidator(ajv, task.inputSchema),
+                    output: compileValidator(ajv, task.outputSchema),
+                });
+            }
+        }
+
+        // Validate workflow input against spec's input schema
+        const workflowInputError = compileValidator(
+            ajv,
+            spec.input,
+        )(workflowInput);
+        if (workflowInputError) {
+            return {
+                runId,
+                success: false,
+                error: {
+                    message: `Workflow input validation failed: ${workflowInputError}`,
+                },
+            };
+        }
+
         // Data context: stores outputs from all executed nodes
         const nodeOutputs = new Map<string, unknown>();
         // Per-node visit counter for loop-aware observability
@@ -186,76 +217,67 @@ export class WorkflowEngine {
 
             const node: WorkflowNode = spec.nodes[currentNodeId];
             const task = this.registry.get(node.task)!;
-            const visitCount = (nodeVisits.get(currentNodeId) ?? 0) + 1;
-            nodeVisits.set(currentNodeId, visitCount);
+            const nodeId: string = currentNodeId;
+            const visitCount = (nodeVisits.get(nodeId) ?? 0) + 1;
+            nodeVisits.set(nodeId, visitCount);
 
             this.emit({
                 type: "nodeStarted",
                 runId,
-                nodeId: currentNodeId,
+                nodeId,
                 taskName: node.task,
                 iteration: visitCount,
                 timestamp: Date.now(),
             });
 
-            // Resolve input
-            let resolvedInput: unknown;
-            if (node.inputMap) {
-                resolvedInput = resolveInputMap(
-                    node.inputMap,
-                    workflowInput,
-                    spec.variables ?? {},
-                    nodeOutputs,
-                );
-            } else {
-                // Pipeline mode: use predecessor's output
-                resolvedInput = lastOutput ?? workflowInput;
-            }
-
-            // Validate resolved input against the task's input schema
+            const validators = taskValidators.get(node.task)!;
             let result: TaskResult;
-            const inputError = compileSchemaValidator(task.inputSchema)(
-                resolvedInput,
-            );
-            if (inputError) {
-                const message: string = `Input validation failed for task "${node.task}" at node "${currentNodeId}": ${inputError}`;
-                result = { kind: "fail", error: { message } };
-            } else {
-                // Execute task
-                try {
+            try {
+                // Resolve input
+                let resolvedInput: unknown;
+                if (node.inputMap) {
+                    resolvedInput = resolveInputMap(
+                        node.inputMap,
+                        workflowInput,
+                        spec.variables ?? {},
+                        nodeOutputs,
+                    );
+                } else {
+                    // Pipeline mode: use predecessor's output
+                    resolvedInput = lastOutput ?? workflowInput;
+                }
+
+                // Validate resolved input against the task's input schema
+                const inputError = validators.input(resolvedInput);
+                if (inputError) {
+                    const message = `Input validation failed for task "${node.task}" at node "${nodeId}": ${inputError}`;
+                    result = { kind: "fail", error: { message } };
+                } else {
+                    // Execute task
                     const ctx: TaskContext = {
                         runId,
-                        nodeId: currentNodeId,
+                        nodeId,
                         signal,
                         secrets,
                         log: (level, msg, data?) =>
-                            logger.log(
-                                level,
-                                `[${currentNodeId}] ${msg}`,
-                                data,
-                            ),
+                            logger.log(level, `[${nodeId}] ${msg}`, data),
                     };
                     result = await task.execute(resolvedInput, ctx);
-                } catch (err: unknown) {
-                    const message =
-                        err instanceof Error ? err.message : String(err);
-                    result = {
-                        kind: "fail",
-                        error: { message },
-                    };
                 }
+            } catch (err: unknown) {
+                const message =
+                    err instanceof Error ? err.message : String(err);
+                result = { kind: "fail", error: { message } };
             }
 
             // Validate output against the task's output schema (on success)
             if (result.kind !== "fail") {
-                const outputError = compileSchemaValidator(task.outputSchema)(
-                    result.output,
-                );
+                const outputError = validators.output(result.output);
                 if (outputError) {
                     result = {
                         kind: "fail",
                         error: {
-                            message: `Output validation failed for task "${node.task}" at node "${currentNodeId}": ${outputError}`,
+                            message: `Output validation failed for task "${node.task}" at node "${nodeId}": ${outputError}`,
                         },
                     };
                 }
@@ -266,7 +288,7 @@ export class WorkflowEngine {
                 this.emit({
                     type: "nodeFailed",
                     runId,
-                    nodeId: currentNodeId,
+                    nodeId,
                     taskName: node.task,
                     error: result.error,
                     timestamp: Date.now(),
@@ -279,7 +301,7 @@ export class WorkflowEngine {
                     const errorInput: ErrorInput = {
                         message: result.error.message,
                         data: result.error.data,
-                        nodeId: currentNodeId,
+                        nodeId,
                         taskName: node.task,
                     };
                     lastOutput = errorInput;
@@ -290,7 +312,7 @@ export class WorkflowEngine {
                 this.emit({
                     type: "runFailed",
                     runId,
-                    nodeId: currentNodeId,
+                    nodeId,
                     error: result.error,
                     timestamp: Date.now(),
                 });
@@ -299,20 +321,20 @@ export class WorkflowEngine {
                     success: false,
                     error: {
                         message: result.error.message,
-                        nodeId: currentNodeId,
+                        nodeId,
                     },
                 };
             }
 
             // Success or branch (both carry output, but branch output is optional)
-            const output = result.output;
-            nodeOutputs.set(currentNodeId, output);
+            const output = result.output ?? {};
+            nodeOutputs.set(nodeId, output);
             lastOutput = output;
 
             this.emit({
                 type: "nodeCompleted",
                 runId,
-                nodeId: currentNodeId,
+                nodeId,
                 taskName: node.task,
                 output,
                 iteration: visitCount,
@@ -331,7 +353,7 @@ export class WorkflowEngine {
                     this.emit({
                         type: "runFailed",
                         runId,
-                        nodeId: currentNodeId,
+                        nodeId,
                         error: {
                             message: `Node has a decision map but task returned kind "${result.kind}" instead of "branch".`,
                         },
@@ -341,8 +363,8 @@ export class WorkflowEngine {
                         runId,
                         success: false,
                         error: {
-                            message: `Expected branch result from "${node.task}" at node "${currentNodeId}".`,
-                            nodeId: currentNodeId,
+                            message: `Expected branch result from "${node.task}" at node "${nodeId}".`,
+                            nodeId,
                         },
                     };
                 }
@@ -351,7 +373,7 @@ export class WorkflowEngine {
                     this.emit({
                         type: "runFailed",
                         runId,
-                        nodeId: currentNodeId,
+                        nodeId,
                         error: {
                             message: `Unknown branch label "${result.branch}" from task "${node.task}".`,
                         },
@@ -361,8 +383,8 @@ export class WorkflowEngine {
                         runId,
                         success: false,
                         error: {
-                            message: `Unknown branch "${result.branch}" at node "${currentNodeId}".`,
-                            nodeId: currentNodeId,
+                            message: `Unknown branch "${result.branch}" at node "${nodeId}".`,
+                            nodeId,
                         },
                     };
                 }
@@ -419,6 +441,11 @@ function resolvePath(
     if (parts[0] === "nodes") {
         // nodes.<nodeId>.output.<field...>
         const nodeId = parts[1];
+        if (!nodeOutputs.has(nodeId)) {
+            throw new Error(
+                `Internal error: path "${path}" references node "${nodeId}" which has not produced output.`,
+            );
+        }
         const output = nodeOutputs.get(nodeId);
         // Skip "output" at parts[2]
         return traverseObject(
@@ -426,7 +453,9 @@ function resolvePath(
             parts.slice(3),
         );
     }
-    return undefined;
+    throw new Error(
+        `Internal error: unrecognized path prefix "${parts[0]}" in "${path}".`,
+    );
 }
 
 function traverseObject(

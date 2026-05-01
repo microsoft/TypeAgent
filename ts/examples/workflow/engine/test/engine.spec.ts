@@ -409,6 +409,40 @@ describe("WorkflowEngine", () => {
             expect(result.success).toBe(false);
             expect(result.error?.message).toContain("cancelled");
         });
+
+        it("stops mid-execution when abort fires between nodes", async () => {
+            const controller = new AbortController();
+            const abortAfterFirst: TaskDefinition = {
+                name: "abort-trigger",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute(input) {
+                    controller.abort();
+                    return { kind: "ok", output: input };
+                },
+            };
+            const registry = makeRegistry(abortAfterFirst, passthroughTask);
+            const engine = new WorkflowEngine(registry);
+
+            const spec: WorkflowSpec = {
+                specVersion: 1,
+                name: "mid-abort-test",
+                version: "1",
+                input: { type: "object" },
+                output: { type: "object" },
+                entry: "first",
+                nodes: {
+                    first: { task: "abort-trigger", next: "second" },
+                    second: { task: "passthrough" },
+                },
+            };
+
+            const result = await engine.run(spec, {
+                signal: controller.signal,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("cancelled");
+        });
     });
 
     describe("maxIterations", () => {
@@ -624,6 +658,31 @@ describe("WorkflowEngine", () => {
             const result = await engine.run(spec);
             expect(result.success).toBe(false);
             expect(result.error?.message).toContain("validation failed");
+        });
+
+        it("rejects input that does not match spec's input schema", async () => {
+            const registry = makeRegistry(passthroughTask);
+            const engine = new WorkflowEngine(registry);
+
+            const spec: WorkflowSpec = {
+                specVersion: 1,
+                name: "input-schema-test",
+                version: "1",
+                input: {
+                    type: "object",
+                    properties: { name: { type: "string" } },
+                    required: ["name"],
+                },
+                output: { type: "object" },
+                entry: "start",
+                nodes: { start: { task: "passthrough" } },
+            };
+
+            const result = await engine.run(spec, { input: {} });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain(
+                "Workflow input validation failed",
+            );
         });
     });
 

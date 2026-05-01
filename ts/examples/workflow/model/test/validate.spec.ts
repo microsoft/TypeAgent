@@ -124,6 +124,7 @@ describe("validateWorkflowSpec", () => {
 
     it("accepts valid inputMap paths", () => {
         const spec = makeMinimalSpec({
+            variables: { maxItems: 10 },
             nodes: {
                 start: {
                     task: "noop",
@@ -132,6 +133,49 @@ describe("validateWorkflowSpec", () => {
                         b: "variables.maxItems",
                         c: "nodes.start.output.result",
                     },
+                },
+            },
+        });
+        const result = validateWorkflowSpec(spec);
+        expect(result.valid).toBe(true);
+    });
+
+    it("rejects inputMap paths referencing non-existent variables", () => {
+        const spec = makeMinimalSpec({
+            nodes: {
+                start: {
+                    task: "noop",
+                    inputMap: { field: "variables.missing" },
+                },
+            },
+        });
+        const result = validateWorkflowSpec(spec);
+        expect(result.valid).toBe(false);
+        expect(result.errors[0].message).toContain("missing");
+    });
+
+    it("rejects inputMap paths with invalid nested variable segments", () => {
+        const spec = makeMinimalSpec({
+            variables: { config: { host: "localhost" } },
+            nodes: {
+                start: {
+                    task: "noop",
+                    inputMap: { field: "variables.config.port" },
+                },
+            },
+        });
+        const result = validateWorkflowSpec(spec);
+        expect(result.valid).toBe(false);
+        expect(result.errors[0].message).toContain("variables.config.port");
+    });
+
+    it("accepts valid nested variable paths", () => {
+        const spec = makeMinimalSpec({
+            variables: { config: { host: "localhost", port: 8080 } },
+            nodes: {
+                start: {
+                    task: "noop",
+                    inputMap: { field: "variables.config.host" },
                 },
             },
         });
@@ -163,13 +207,15 @@ describe("validateWorkflowSpec", () => {
         it("validates decision node branch labels match task", () => {
             const tasks = new Map<string, TaskDefinition>([
                 ["branch-task", makeTask("branch-task", ["yes", "no"])],
+                ["noop", makeTask("noop")],
             ]);
             const spec = makeMinimalSpec({
                 nodes: {
                     start: {
                         task: "branch-task",
-                        next: { yes: "start", no: "start" },
+                        next: { yes: "end", no: "end" },
                     },
+                    end: { task: "noop" },
                 },
             });
             const result = validateWorkflowSpec(spec, tasks);
@@ -390,6 +436,35 @@ describe("validateWorkflowSpec", () => {
                 },
             });
             const result = validateWorkflowSpec(spec, tasks);
+            expect(result.valid).toBe(true);
+        });
+
+        it("detects cycles formed via onError edges", () => {
+            const spec = makeMinimalSpec({
+                nodes: {
+                    start: { task: "noop", onError: "handler" },
+                    handler: { task: "noop", next: "start" },
+                },
+            });
+            const result = validateWorkflowSpec(spec);
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("no exit")),
+            ).toBe(true);
+        });
+
+        it("accepts cycle with onError exit", () => {
+            const spec = makeMinimalSpec({
+                nodes: {
+                    start: {
+                        task: "noop",
+                        next: "start",
+                        onError: "handler",
+                    },
+                    handler: { task: "noop" },
+                },
+            });
+            const result = validateWorkflowSpec(spec);
             expect(result.valid).toBe(true);
         });
 

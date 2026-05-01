@@ -36,7 +36,7 @@ export interface ValidationResult {
  */
 export function validateWorkflowSpec(
     spec: WorkflowSpec,
-    tasks?: Map<string, TaskDefinition>,
+    tasks?: ReadonlyMap<string, TaskDefinition>,
 ): ValidationResult {
     const errors: ValidationError[] = [];
 
@@ -80,7 +80,15 @@ export function validateWorkflowSpec(
 
     for (const [nodeId, node] of Object.entries(spec.nodes)) {
         const prefix = `nodes.${nodeId}`;
-        validateNode(prefix, nodeId, node, nodeIds, tasks, errors);
+        validateNode(
+            prefix,
+            nodeId,
+            node,
+            nodeIds,
+            tasks,
+            spec.variables,
+            errors,
+        );
     }
 
     // Check for unreachable nodes
@@ -106,7 +114,8 @@ function validateNode(
     nodeId: string,
     node: WorkflowNode,
     nodeIds: Set<string>,
-    tasks: Map<string, TaskDefinition> | undefined,
+    tasks: ReadonlyMap<string, TaskDefinition> | undefined,
+    variables: Record<string, unknown> | undefined,
     errors: ValidationError[],
 ): void {
     const task = tasks?.get(node.task);
@@ -143,6 +152,27 @@ function validateNode(
                         path: fieldPath,
                         message: `Path "${path}" references non-existent node "${parts[1]}".`,
                     });
+                }
+            }
+            // Validate variable references (full path traversal)
+            if (path.startsWith("variables.")) {
+                const segments = path.split(".").slice(1);
+                let current: unknown = variables;
+                for (let i = 0; i < segments.length; i++) {
+                    if (
+                        current == null ||
+                        typeof current !== "object" ||
+                        !(segments[i] in (current as Record<string, unknown>))
+                    ) {
+                        const resolved =
+                            "variables." + segments.slice(0, i + 1).join(".");
+                        errors.push({
+                            path: fieldPath,
+                            message: `Path "${path}" is invalid: "${resolved}" does not exist.`,
+                        });
+                        break;
+                    }
+                    current = (current as Record<string, unknown>)[segments[i]];
                 }
             }
         }
@@ -256,8 +286,7 @@ function validateExitPaths(
 
     for (const scc of sccs) {
         const isCycle =
-            scc.length > 1 ||
-            (scc.length === 1 && hasLinearSelfLoop(scc[0], nodes));
+            scc.length > 1 || (scc.length === 1 && hasSelfEdge(scc[0], nodes));
 
         if (!isCycle) {
             continue;
@@ -266,13 +295,18 @@ function validateExitPaths(
         const sccSet = new Set(scc);
         const hasExit = scc.some((id) => {
             const node = nodes[id];
-            if (node.next === undefined) {
-                return false;
+            if (node.next !== undefined) {
+                if (typeof node.next === "string") {
+                    if (!sccSet.has(node.next)) return true;
+                } else {
+                    if (Object.values(node.next).some((t) => !sccSet.has(t)))
+                        return true;
+                }
             }
-            if (typeof node.next === "string") {
-                return !sccSet.has(node.next);
+            if (node.onError !== undefined && !sccSet.has(node.onError)) {
+                return true;
             }
-            return Object.values(node.next).some((t) => !sccSet.has(t));
+            return false;
         });
 
         if (!hasExit) {
@@ -288,14 +322,22 @@ function validateExitPaths(
 }
 
 /**
- * Returns true if a node has a linear (string) `next` pointing to itself.
+ * Returns true if a node has any edge (next or onError) pointing to itself.
  */
-function hasLinearSelfLoop(
+function hasSelfEdge(
     nodeId: string,
     nodes: Record<string, WorkflowNode>,
 ): boolean {
     const node = nodes[nodeId];
-    return typeof node.next === "string" && node.next === nodeId;
+    if (node.next !== undefined) {
+        if (typeof node.next === "string") {
+            if (node.next === nodeId) return true;
+        } else {
+            if (Object.values(node.next).some((t) => t === nodeId)) return true;
+        }
+    }
+    if (node.onError === nodeId) return true;
+    return false;
 }
 
 /**
@@ -319,6 +361,9 @@ function findSCCs(nodes: Record<string, WorkflowNode>): string[][] {
             } else {
                 targets.push(...Object.values(node.next));
             }
+        }
+        if (node.onError !== undefined) {
+            targets.push(node.onError);
         }
         return targets.filter((t) => t in nodes);
     }
