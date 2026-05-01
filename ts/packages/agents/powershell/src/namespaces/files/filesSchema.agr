@@ -25,7 +25,7 @@ import { PowerShellFilesActions } from "./filesActionsSchema.mts";
       -> { actionName: "listFiles", parameters: { path } }
   | (what|what's) (is)? in $(path:wildcard)
       -> { actionName: "listFiles", parameters: { path } }
-  | (list|show) (my)? $(path:wildcard) (files)?
+  | (list|show) (my)? $(path:wildcard) files
       -> { actionName: "listFiles", parameters: { path } };
 
 <ReadFile> =

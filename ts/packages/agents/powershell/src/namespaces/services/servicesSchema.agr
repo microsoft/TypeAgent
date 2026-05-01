@@ -23,27 +23,27 @@ import { PowerShellServicesActions } from "./servicesActionsSchema.mts";
       -> { actionName: "listServices", parameters: { status: "running" } };
 
 <ServiceStatus> =
-    (is|check if) (service)? $(name:wildcard) (running|started|stopped)?
+    (is|check if) (service)? $(name:wildcard) (running|started|stopped)
       -> { actionName: "serviceStatus", parameters: { name } }
-  | (status of|check) (service)? $(name:wildcard) (service)?
+  | (status of|check) (service)? $(name:wildcard) service
       -> { actionName: "serviceStatus", parameters: { name } }
   | (get|show) (service)? $(name:wildcard) status
       -> { actionName: "serviceStatus", parameters: { name } };
 
 <StartService> =
-    start (service)? $(name:wildcard) (service)?
+    start (service)? $(name:wildcard) service
       -> { actionName: "startService", parameters: { name } }
-  | (enable|turn on) (service)? $(name:wildcard) (service)?
+  | (enable|turn on) (service)? $(name:wildcard) service
       -> { actionName: "startService", parameters: { name } };
 
 <StopService> =
-    stop (service)? $(name:wildcard) (service)?
+    stop (service)? $(name:wildcard) service
       -> { actionName: "stopService", parameters: { name } }
-  | (disable|turn off) (service)? $(name:wildcard) (service)?
+  | (disable|turn off) (service)? $(name:wildcard) service
       -> { actionName: "stopService", parameters: { name } };
 
 <RestartService> =
-    restart (service)? $(name:wildcard) (service)?
+    restart (service)? $(name:wildcard) service
       -> { actionName: "restartService", parameters: { name } }
-  | (bounce|cycle) (service)? $(name:wildcard) (service)?
+  | (bounce|cycle) (service)? $(name:wildcard) service
       -> { actionName: "restartService", parameters: { name } };
