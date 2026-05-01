@@ -11,6 +11,8 @@ A good principle should:
 - **Not prescribe mechanism**: it says what property the design must have, not how to achieve it.
 - **Not overlap**: each principle covers a distinct concern.
 
+The spec schema should use the fewest concepts necessary to satisfy P1-P5. Each new node type, field, or construct must earn its place by enabling something the existing concepts cannot express without violating a principle. This is not a numbered principle (it governs the spec schema, not individual spec designs), but a discipline applied when evaluating schema extensions.
+
 ## Principles govern the boundary, not the interior
 
 A task is a black box: typed input in, typed output out. The workflow author chooses where to draw the task boundary. In the extreme, the entire workflow could be a single task - trivially satisfying all five principles (no references, no data flow, no structure to validate).
