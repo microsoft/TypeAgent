@@ -102,14 +102,6 @@ These patterns cannot be expressed as a single reference in the IR. However, sin
 
 _Workaround:_ Use a decision node that branches to the possible targets, with each branch wiring its output to the downstream consumer. For example, a "multi-strategy" pattern (classifier picks one of N summarizers) is expressed as a decision branch where each strategy node has `next: "format"`. If all strategies produce a compatible output schema, `format`'s input is satisfied on every path. The cost is verbosity (N entries in a `next` map instead of one computed reference), not lost capability. The decision-tree workaround always works for any finite spec.
 
-### Design decisions driven by P1
-
-See [design-decisions.md](design-decisions.md) for:
-
-- **Resolved: Error handler dominator scope** - decision (a), error handlers share normal dominator scope.
-- **Open: Optional references** - principle-by-principle analysis of letting data references be optional.
-- **Open: Data wiring expressiveness** - broader question of whether the data wiring mechanism is expressive enough.
-
 ---
 
 ## P2: All data flow is traceable through the spec alone
@@ -174,10 +166,6 @@ _Why this is genuinely ruled out:_ Unlike P1's "patterns ruled out" (where worka
 - Whether writes should be schema-validated (needs P1: static provability, but for types not just references).
 - The specific mechanism for declaring mutations - multiple approaches satisfy traceability. Needs P3 (structural correspondence) and P5 (predictability) to break the tie.
 
-### Design decisions driven by P2
-
-See [design-decisions.md](design-decisions.md) for P2 mechanism implications (cross-iteration state, output declaration mechanisms, pipeline mode, cross-scope references).
-
 ---
 
 ## P3: Spec structure corresponds to computational structure
@@ -238,10 +226,6 @@ The one thing P3 genuinely prevents is **structural ambiguity**: a spec where th
 - Whether loop bodies should be DAGs or general graphs (both are structurally explicit; needs P4 to decide).
 - The specific fields on the loop construct (needs P2 for data flow, P5 for predictability).
 - Whether the spec should encode _why_ a loop exits. Branch labels are structural; intent/purpose is documentation, not computation.
-
-### Design decisions driven by P3
-
-See [design-decisions.md](design-decisions.md) for P3 mechanism implications (flat cycles vs. loop constructs, required node type discriminant, decision node constructs).
 
 ### Relationship to other principles
 
@@ -304,10 +288,6 @@ What P4 genuinely prevents is **hidden coupling**: a spec where changing or test
 - Whether variables should be schema-validated (locality says "declared boundary"; validation is about correctness, covered by P1).
 - The specific boundary mechanism (input/output declarations vs. parameter passing vs. something else).
 
-### Design decisions driven by P4
-
-See [design-decisions.md](design-decisions.md) for P4 mechanism implications (explicit loop boundaries, cross-scope references, mutable state scoping, DAG bodies).
-
 ---
 
 ## P5: A reader of the spec can predict engine behavior without knowing engine conventions
@@ -368,10 +348,6 @@ What P5 genuinely prevents is **surprise**: a spec where a reader who understand
 - Whether loop bodies should be DAGs (both back-edges and `@iterate` can be made predictable with documentation; the preference for `@iterate` is stronger under P5 but not absolute).
 - Data flow mechanism choices (e.g., how mutations are declared) - multiple approaches are predictable to a reader.
 - Schema validation details - a reader doesn't need to know validation happens to predict behavior.
-
-### Design decisions driven by P5
-
-See [design-decisions.md](design-decisions.md) for P5 mechanism implications (pipeline mode, required node type discriminant, required explicit data wiring, body node terminal behavior, `@iterate` vs. back-edges).
 
 ---
 
