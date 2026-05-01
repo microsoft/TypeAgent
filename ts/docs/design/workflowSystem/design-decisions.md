@@ -27,6 +27,22 @@ The existing [plan.md](plan.md) decisions are mostly consistent with the princip
 
 ---
 
+## Resolved: IR shape (flat inputMap, no expressions, simple graph walker)
+
+_Driven by: P1 + P2 + P3 + P5_
+
+[plan.md](plan.md) states an IR principle (P2 "Bytecode"): flat `inputMap`, no expressions, simple graph walker. Each component is a consequence of the design principles, not an independent constraint:
+
+| IR property             | Derived from                                         | Reasoning                                                                                                                                                                                            |
+| ----------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Flat `inputMap`**     | P2 (traceability) + P1 (static provability)          | Every reference is a simple path (`nodes.X.output.foo`). Traceable by reading the spec (P2). Statically analyzable for dominator and type checks (P1).                                               |
+| **No expressions**      | P2 + P5 + P1                                         | Expressions create computation in the wiring layer that is harder to trace (P2), requires knowing an expression language to predict (P5), and complicates static type/resolution checking (P1).      |
+| **Simple graph walker** | P3 (structural correspondence) + P5 (predictability) | Structure is self-describing (`kind` discriminants, LoopNode, sentinels), so the walker doesn't need to infer patterns (P3). Execution follows declared structure with no interpretation rules (P5). |
+
+The IR principle is a design decision, not a foundational principle. If the principles changed, the IR shape would change with them.
+
+---
+
 ## Resolved: Error handler dominator scope
 
 _Driven by: P1 (static provability)_

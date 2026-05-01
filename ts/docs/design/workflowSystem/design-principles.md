@@ -11,7 +11,7 @@ A good principle should:
 - **Not prescribe mechanism**: it says what property the design must have, not how to achieve it.
 - **Not overlap**: each principle covers a distinct concern.
 
-Note: [plan.md](plan.md) establishes an IR principle (P2 "Bytecode": flat `inputMap`, no expressions, simple graph walker). That principle covers the IR shape. The principles here cover data flow, structure, composability, and predictability.
+Note: [plan.md](plan.md) states an IR principle (P2 "Bytecode": flat `inputMap`, no expressions, simple graph walker). That IR shape is not an independent principle; it is a consequence of P1-P5 applied to the IR layer. See [design-decisions.md](design-decisions.md) "IR shape" for the derivation.
 
 ### Principles govern the boundary, not the interior
 
