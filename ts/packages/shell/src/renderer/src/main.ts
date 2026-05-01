@@ -496,13 +496,18 @@ function registerClient(
                                         );
                                         break;
                                     }
-                                    const created =
-                                        await api.conversationCreate(
-                                            payload.name,
-                                        );
+                                    const newName = payload.name;
+                                    const created = await chatView.withBusy(
+                                        "Creating conversation…",
+                                        () => api.conversationCreate(newName),
+                                    );
                                     const switchResult =
-                                        await api.conversationSwitch(
-                                            created.conversationId,
+                                        await chatView.withBusy(
+                                            "Switching conversation…",
+                                            () =>
+                                                api.conversationSwitch(
+                                                    created.conversationId,
+                                                ),
                                         );
                                     const msg = switchResult.success
                                         ? `✅ Created and switched to conversation "<b>${escapeHtml(created.name)}</b>"`
@@ -603,8 +608,12 @@ function registerClient(
                                         );
                                         break;
                                     }
-                                    const result = await api.conversationSwitch(
-                                        match.conversationId,
+                                    const result = await chatView.withBusy(
+                                        "Switching conversation…",
+                                        () =>
+                                            api.conversationSwitch(
+                                                match.conversationId,
+                                            ),
                                     );
                                     if (!result.success) {
                                         chatView.addNotificationMessage(
@@ -662,8 +671,12 @@ function registerClient(
                                         // Only one conversation — nothing to do.
                                         break;
                                     }
-                                    const result = await api.conversationSwitch(
-                                        target.conversationId,
+                                    const result = await chatView.withBusy(
+                                        "Switching conversation…",
+                                        () =>
+                                            api.conversationSwitch(
+                                                target.conversationId,
+                                            ),
                                     );
                                     if (!result.success) {
                                         chatView.addNotificationMessage(

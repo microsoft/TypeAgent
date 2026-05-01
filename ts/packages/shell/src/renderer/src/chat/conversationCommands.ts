@@ -18,6 +18,12 @@ import { getClientAPI } from "../main";
 export type ConversationMessageSink = {
     addSystemMessage(content: string): void;
     clear(): void;
+    /**
+     * Run `work` while showing a busy indicator (e.g. disabled input box
+     * with a status placeholder).  Restored on completion, including on
+     * throw.  Implementations may choose to no-op.
+     */
+    withBusy<T>(message: string, work: () => Promise<T>): Promise<T>;
 };
 
 /**
@@ -70,7 +76,10 @@ export async function handleConversationCommand(
             case "new":
             case "create": {
                 const name = parts.slice(2).join(" ") || "New Conversation";
-                const conversation = await api.conversationCreate(name);
+                const conversation = await sink.withBusy(
+                    "Creating conversation…",
+                    () => api.conversationCreate(name),
+                );
                 sink.addSystemMessage(
                     `✅ Created conversation "<b>${escapeHtml(conversation.name)}</b>" (${conversation.conversationId})`,
                 );
@@ -85,8 +94,10 @@ export async function handleConversationCommand(
                 }
                 // Try to resolve by name first, then by ID
                 const conversationId = await resolveConversationTarget(target);
-                const result: ConversationSwitchResult =
-                    await api.conversationSwitch(conversationId);
+                const result: ConversationSwitchResult = await sink.withBusy(
+                    "Switching conversation…",
+                    () => api.conversationSwitch(conversationId),
+                );
                 if (result.success) {
                     sink.addSystemMessage(
                         `🔄 Switched to conversation "<b>${escapeHtml(result.name ?? conversationId)}</b>"`,
@@ -211,8 +222,9 @@ async function cycleConversation(
         sink.addSystemMessage("No other conversation to switch to.");
         return true;
     }
-    const result: ConversationSwitchResult = await api.conversationSwitch(
-        target.conversationId,
+    const result: ConversationSwitchResult = await sink.withBusy(
+        "Switching conversation…",
+        () => api.conversationSwitch(target.conversationId),
     );
     if (result.success) {
         sink.addSystemMessage(

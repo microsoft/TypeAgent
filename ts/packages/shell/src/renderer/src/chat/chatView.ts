@@ -510,6 +510,8 @@ export class ChatView {
                 clear: () => {
                     this.clear();
                 },
+                withBusy: <T>(message: string, work: () => Promise<T>) =>
+                    this.withBusy(message, work),
             });
             if (handled) {
                 return;
@@ -1037,6 +1039,42 @@ export class ChatView {
             textEntry.dataset.placeholder = "Demo running… Esc to break";
         } else {
             delete textEntry.dataset.placeholder;
+        }
+    }
+
+    /**
+     * Show a transient busy state on the input box: set the placeholder to
+     * `message` and disable typing.  Pass `undefined` to clear the busy
+     * state and restore normal interaction.  Used while long-ish IPC
+     * operations (e.g. switching conversation + replaying history) are in
+     * flight so the user doesn't think the UI is unresponsive.
+     */
+    public setBusy(message: string | undefined): void {
+        const textarea = this.chatInput?.textarea;
+        const textEntry = textarea?.getTextEntry();
+        if (!textarea || !textEntry) return;
+        if (message) {
+            textEntry.dataset.placeholder = message;
+            textarea.enable(false);
+        } else {
+            delete textEntry.dataset.placeholder;
+            textarea.enable(true);
+        }
+    }
+
+    /**
+     * Run `work` while the input is in a busy state showing `message`.
+     * Always restores the previous state, even if `work` throws.
+     */
+    public async withBusy<T>(
+        message: string,
+        work: () => Promise<T>,
+    ): Promise<T> {
+        this.setBusy(message);
+        try {
+            return await work();
+        } finally {
+            this.setBusy(undefined);
         }
     }
 
