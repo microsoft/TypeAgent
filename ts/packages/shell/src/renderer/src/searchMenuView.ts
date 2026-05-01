@@ -46,6 +46,11 @@ ipcRenderer.on("search-menu-adjust-selection", (_, deltaY) => {
     searchMenuUI?.adjustSelection(deltaY);
 });
 
+ipcRenderer.on("search-menu-scroll", (_, deltaY) => {
+    debug(`search-menu-scroll: ${deltaY}`);
+    searchMenuUI?.scrollBy(deltaY);
+});
+
 ipcRenderer.on("search-menu-select-completion", () => {
     debug("search-menu-select-completion");
     searchMenuUI?.selectCompletion();

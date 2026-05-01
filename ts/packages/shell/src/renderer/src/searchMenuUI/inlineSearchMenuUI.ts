@@ -63,6 +63,11 @@ export class InlineSearchMenuUI implements SearchMenuUI {
         this.renderGhost();
     }
 
+    public scrollBy(_deltaY: number) {
+        // Inline mode shows ghost text only — there is no visible window
+        // of items to scroll.
+    }
+
     private removeGhost() {
         if (this.wrapperSpan && this.wrapperSpan.parentNode) {
             this.wrapperSpan.parentNode.removeChild(this.wrapperSpan);

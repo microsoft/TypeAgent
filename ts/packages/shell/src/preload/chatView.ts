@@ -166,6 +166,9 @@ const api: ClientAPI = {
     searchMenuAdjustSelection: (id: number, deltaY: number) => {
         ipcRenderer.send("search-menu-adjust-selection", id, deltaY);
     },
+    searchMenuScroll: (id: number, deltaY: number) => {
+        ipcRenderer.send("search-menu-scroll", id, deltaY);
+    },
     searchMenuSelectCompletion: (id: number) => {
         ipcRenderer.send("search-menu-select-completion", id);
     },

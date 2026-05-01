@@ -76,6 +76,7 @@ export interface ClientAPI {
         },
     ): void;
     searchMenuAdjustSelection(id: number, deltaY: number): void;
+    searchMenuScroll(id: number, deltaY: number): void;
     searchMenuSelectCompletion(id: number): void;
     searchMenuClose(id: number): void;
     continuousSpeechProcessing(text: string): Promise<string | undefined>;

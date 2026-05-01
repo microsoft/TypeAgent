@@ -113,6 +113,7 @@ export function initializeSearchMenuUI() {
     }
 
     setupProxy("search-menu-adjust-selection");
+    setupProxy("search-menu-scroll");
     setupProxy("search-menu-select-completion");
     setupProxy("search-menu-close", (shellWindow, id, searchMenuView) => {
         searchMenuUIs.delete(id);

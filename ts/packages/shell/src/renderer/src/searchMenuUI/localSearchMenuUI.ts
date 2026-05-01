@@ -36,7 +36,7 @@ export class LocalSearchMenuUI implements SearchMenuUI {
         this.searchContainer.className = "autocomplete-container";
 
         this.searchContainer.onwheel = (event) => {
-            this.adjustSelection(event.deltaY);
+            this.scrollBy(event.deltaY);
         };
 
         this.scrollBar = document.createElement("div");
@@ -113,6 +113,27 @@ export class LocalSearchMenuUI implements SearchMenuUI {
         this.updateDisplay();
     }
 
+    public scrollBy(deltaY: number) {
+        if (this.closed || this.items.length === 0) {
+            return;
+        }
+        const maxTop = Math.max(0, this.items.length - this.visibleItemsCount);
+        const step = deltaY > 0 ? 1 : -1;
+        const newTop = Math.max(0, Math.min(maxTop, this.top + step));
+        if (newTop === this.top) {
+            return;
+        }
+        this.top = newTop;
+        this.scrolling = true;
+        try {
+            this.updateDisplay();
+        } finally {
+            this.scrolling = false;
+        }
+    }
+
+    private scrolling: boolean = false;
+
     private updateDisplay() {
         if (this.completions) {
             this.searchContainer.removeChild(this.completions);
@@ -124,6 +145,7 @@ export class LocalSearchMenuUI implements SearchMenuUI {
             this.completions.className = "completions";
 
             if (
+                !this.scrolling &&
                 this.selected >= 0 &&
                 (this.selected < this.top ||
                     this.selected >= this.top + this.visibleItemsCount)

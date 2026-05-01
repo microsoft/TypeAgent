@@ -668,7 +668,21 @@ function registerClient(
                                         target.conversationId ===
                                         cur?.conversationId
                                     ) {
-                                        // Only one conversation — nothing to do.
+                                        // Only one conversation — surface a
+                                        // warning so users in self-hosted
+                                        // mode (which has a single default
+                                        // conversation) don't think the
+                                        // command silently failed.
+                                        chatView.addNotificationMessage(
+                                            {
+                                                type: "html",
+                                                content:
+                                                    "Only one conversation is available — nothing to switch to. Connect to the Agent Server to use multiple conversations.",
+                                                kind: "warning",
+                                            },
+                                            "conversation",
+                                            undefined,
+                                        );
                                         break;
                                     }
                                     const result = await chatView.withBusy(

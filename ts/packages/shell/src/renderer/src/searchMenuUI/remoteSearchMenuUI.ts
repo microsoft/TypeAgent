@@ -61,6 +61,12 @@ export class RemoteSearchMenuUI implements SearchMenuUI {
         }
         getClientAPI().searchMenuAdjustSelection(this.id, deltaY);
     }
+    scrollBy(deltaY: number): void {
+        if (this.closed) {
+            return;
+        }
+        getClientAPI().searchMenuScroll(this.id, deltaY);
+    }
     selectCompletion(): boolean {
         if (this.closed) {
             return false;

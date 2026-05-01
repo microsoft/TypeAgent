@@ -518,9 +518,10 @@ export class ShellWindow {
      * the demo itself runs in the background.
      */
     public runDemo(interactive: boolean = false): boolean {
-        if (isDemoActive()) {
+        if (isDemoActive() || this.demoStarting) {
             return false;
         }
+        this.demoStarting = true;
         let started = false;
         runDemo(this.mainWindow, this.chatView, interactive, () => {
             started = true;
@@ -530,10 +531,12 @@ export class ShellWindow {
                 console.error("runDemo failed:", error);
             })
             .finally(() => {
+                this.demoStarting = false;
                 if (started) this.setDemoMode(false);
             });
         return true;
     }
+    private demoStarting: boolean = false;
 
     public breakDemo(): boolean {
         return breakDemo();

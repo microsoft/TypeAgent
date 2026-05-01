@@ -38,6 +38,12 @@ export async function executeConversationAction(
         case "switchConversation":
             payload = { subcommand: "switch", name: action.parameters.name };
             break;
+        case "nextConversation":
+            payload = { subcommand: "next" };
+            break;
+        case "prevConversation":
+            payload = { subcommand: "prev" };
+            break;
         case "renameConversation": {
             const renameName = action.parameters.name;
             payload = renameName

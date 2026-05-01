@@ -123,7 +123,7 @@ export class SearchMenu {
     // ── UI event handling ─────────────────────────────────────────────────────
 
     public handleMouseWheel(deltaY: number) {
-        this.searchMenuUI?.adjustSelection(deltaY);
+        this.searchMenuUI?.scrollBy(deltaY);
     }
 
     public handleSpecialKeys(event: KeyboardEvent) {
