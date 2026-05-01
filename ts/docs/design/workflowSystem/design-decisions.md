@@ -154,6 +154,26 @@ P3 detects the symptom (passthrough nodes aren't computational). P1 is the root 
 
 ---
 
+## Open design question: Node identity
+
+_Driven by: forward compatibility with checkpoint/resume and spec evolution (see [principle-gaps.md](principle-gaps.md))_
+
+Nodes are identified by their string key in the `nodes` map. This name currently serves as both the human-readable label and the machine identity.
+
+**Question:** Are node names stable identifiers?
+
+If the engine uses node names as checkpoint keys, metric labels, or log correlation IDs, renaming a node in a future spec version breaks the correspondence. Adding a separate stable `id` field later is technically additive, but migrating existing engine state from name-based keys to id-based keys is messy.
+
+**Options:**
+
+- **(a) Names are IDs for v1.** Simple. Record the decision so the engine team knows names may gain a separate `id` field later. Checkpoint migration becomes a known cost when versioning is added.
+- **(b) Add an optional `id` field now.** Defaults to the node name if absent. Engine uses `id` for persistence. No migration cost later, but adds a field that has no user-facing purpose in v1.
+- **(c) Defer entirely.** Don't record a decision. Risk: engine builds on name-as-identity without awareness of the future cost.
+
+**Recommendation:** (a) for v1, with this decision recorded. The engine should treat node names as identifiers but be aware this convention may change.
+
+---
+
 ## The body cycle question
 
 _Driven by: all five principles (P1-P5)_

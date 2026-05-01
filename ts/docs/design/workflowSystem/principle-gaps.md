@@ -2,13 +2,34 @@
 
 Status: Exploring
 
-This document examines whether the five design principles (P1-P5) produce good outcomes in areas adjacent to spec design. Each area lists concrete scenarios where a spec satisfying all five principles still produces a bad outcome.
+This document examines whether the five design principles (P1-P5) produce good outcomes in areas adjacent to spec design. For each area, the question is: does a spec satisfying P1-P5 produce a bad outcome here, and if so, is it a spec design concern or does it belong to a different design?
 
 See [design-principles.md](design-principles.md) for the principles themselves.
 
 ---
 
-## Runtime Performance
+## What P1-P5 govern and what they don't
+
+P1-P5 govern how nodes relate to each other through the spec: data flow, structural correspondence, composability, predictability. They do not govern:
+
+- **Engine execution policy** - how the engine runs a valid spec (batching, validation strictness, scheduling). This is engine configuration, completely outside the spec.
+- **Task boundary metadata** - optional declarations about what a task does beyond "typed input in, typed output out" (side-effect annotations, progress reporting, idempotency markers). These are additive fields on task declarations that don't affect how nodes connect.
+
+Both categories are additive: the spec schema should be open for extension, but no spec design principle is needed. If task boundary metadata grows complex enough, it may warrant its own design doc ("task contract extensions"), but that's a mechanism design with different concerns than P1-P5.
+
+### Items that are not spec design concerns
+
+| Area                          | Category                             | Resolution                                                                                                                                                                                                                                                      |
+| ----------------------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Decomposition overhead        | Engine execution policy              | The principles say decomposition must be sound, not "decompose more." Engine flags to skip validation or batch trivial nodes are execution policy.                                                                                                              |
+| Intermediate state visibility | Task boundary metadata               | Tasks can emit progress/events that the engine captures for observability, but this data isn't routed through workflow data flow. Same category as observability data (design-principles.md scenario 18). Optional capability declaration on the task boundary. |
+| Replay/checkpoint             | Task boundary metadata + engine      | Side-effect and idempotency declarations are optional task metadata. Checkpoint persistence is engine-level. P2+P3 provide the typed, serializable structure that makes both feasible. The spec schema just needs to allow adding these fields later.           |
+| Loop iteration identity       | Engine mechanism                     | Engine already tracks iteration count for maxIterations. Exposing it to the spec is a mechanism addition consistent with P2.                                                                                                                                    |
+| Error diagnostic constraints  | Spec mechanism (optional references) | Resolved by the optional references mechanism already tracked in [design-decisions.md](design-decisions.md). Not a principle gap.                                                                                                                               |
+
+---
+
+## Spec design concerns
 
 ### Parallel iteration is invisible
 
@@ -22,71 +43,17 @@ The engine must analyze loopVar usage to determine if iterations can run in para
 - If structural: the author declares intent ("this is a map"). The engine trusts the declaration and validates it (no cross-iteration state in a MapNode). Consistent with P3 (structure reveals pattern) and P5 (no inference needed).
 - Counterargument: inference from loopVars is simple and deterministic. A reader can also do it. Is this actually surprising (P5) or just unstated?
 
-### Deferred data consumption
+**Deferred from v1.** If added later, P1-P5 are sufficient to drive the design:
 
-P1 requires dominator-based ordering: if B references A's output, A must complete before B starts. But what if B could start independent work immediately and only needs A's output later?
+| Principle | Applies to MapNode? | How                                                              |
+| --------- | ------------------- | ---------------------------------------------------------------- |
+| P1        | Yes                 | Each iteration's data references validated the same as loop body |
+| P2        | Yes                 | No cross-iteration state = no hidden data flow                   |
+| P3        | **Driver**          | MapNode vs. LoopNode is the structural distinction P3 demands    |
+| P4        | Yes                 | Each iteration independently testable                            |
+| P5        | Yes                 | Reader sees "MapNode" and knows iterations are independent       |
 
-Example: B does 5 minutes of independent computation, then merges with A's result at the end. The principles force B to wait for A before starting.
-
-**Question:** Is this a spec-level concern or an engine optimization?
-
-- Engine-level: the engine could analyze B's task to determine which inputs are needed immediately vs. deferred. But task internals are opaque (boundary framing).
-- Spec-level: B could be decomposed into B1 (independent work) and B2 (merge with A). This satisfies the principles and enables parallelism. But it forces decomposition for performance reasons, not structural ones.
-- Assessment: probably engine-level. The principles don't prevent efficient execution; they just don't actively enable this specific optimization. The decomposition workaround is always available.
-
-### Decomposition overhead
-
-The principles reward decomposition (more nodes = more engine visibility). Nothing prevents an author from creating hundreds of trivial nodes. Each node crossing means scheduling overhead, data marshaling, schema validation.
-
-**Question:** Is this a principle concern?
-
-- Probably not. The principles don't say "decompose more." They say the decomposition must be sound. The choice of granularity is the author's. Performance consequences of over-decomposition are engine-level (can the engine batch trivial nodes?) and authoring-level (DSL patterns that prevent excessive decomposition).
-
----
-
-## Debugging and Observability
-
-### No intermediate state visibility
-
-A task is a black box (by design). If a task runs for 10 minutes, the spec provides no way to observe progress. You get "nodeStarted" and "nodeCompleted" but nothing between. For long-running LLM tasks, this is a real debugging gap.
-
-The principles explicitly exclude task internals, so there's no pressure to support progress reporting.
-
-**Question:** Should the boundary contract include progress/streaming capabilities?
-
-- This connects to the boundary expansion discussion in design-principles.md ("the boundary is not fixed"). A progress declaration would extend what tasks expose without changing the principles.
-- Not a principle gap - it's a boundary expansion opportunity.
-
-### No replay/checkpoint semantics
-
-P2+P3 give the engine enough structural and data-flow information to potentially support replay from a checkpoint. But nothing in the principles requires the spec to preserve enough information for deterministic replay.
-
-If a task has side effects (database writes), replaying from a checkpoint could produce different results. The principles don't address idempotency, so a structurally perfect spec could be impossible to safely resume.
-
-**Question:** Is this a spec concern or a runtime concern?
-
-- Idempotency is a task-level property (can this task be safely re-executed?). The boundary expansion path (side-effect annotations, idempotency markers) would surface this.
-- Checkpoint semantics depend on what the engine persists between nodes. The spec structure (P3) enables this, but the mechanism is engine-level.
-- Assessment: boundary expansion, not a principle gap.
-
-### Loop iteration identity
-
-The spec has cross-iteration state (loopVars) but no concept of iteration index. When debugging "the loop failed on the 7th iteration," the spec has no structural way to identify which iteration.
-
-**Question:** Is this a spec concern?
-
-- The engine tracks iteration count for maxIterations enforcement. Exposing it to the spec (as a built-in variable or context property) is a mechanism choice.
-- Not a principle gap - it's a mechanism addition that's consistent with P2 (the iteration index becomes a declared data origin).
-
-### Error diagnostic data is constrained
-
-P1 restricts error handler references to dominator scope. Scenario 6's resolution (wire diagnostic data through C's input) adds fields that exist only for debugging, not computation. The principles treat diagnostic data the same as computational data.
-
-**Question:** Should error handlers have a richer data scope?
-
-- Relaxing P1 for error handlers (allowing references to non-dominator siblings) would mean error handlers can access data that may not exist at runtime. The handler would need to handle absence - similar to optional references.
-- This connects to the optional references design question. If optional references exist, error handlers could use them to access sibling data that may or may not have been produced.
-- Assessment: resolved by optional references mechanism, not a principle gap.
+P3 is what would drive the decision to add MapNode rather than inferring parallelizability. No new principle needed.
 
 ---
 
@@ -138,22 +105,71 @@ P4 says parts can be validated and tested independently. But it doesn't say part
 
 ## Summary
 
-| Area                          | Gap?         | Resolution path                                                                                        |
-| ----------------------------- | ------------ | ------------------------------------------------------------------------------------------------------ |
-| Parallel iteration visibility | **Possible** | Structural distinction (MapNode vs. LoopNode) or validate that inference from loopVars satisfies P3+P5 |
-| Deferred data consumption     | No           | Engine optimization or author decomposition                                                            |
-| Decomposition overhead        | No           | Author responsibility, engine optimization                                                             |
-| Intermediate state visibility | No           | Boundary expansion (progress declarations)                                                             |
-| Replay/checkpoint             | No           | Boundary expansion (idempotency markers)                                                               |
-| Loop iteration identity       | No           | Mechanism addition, consistent with existing principles                                                |
-| Error diagnostic constraints  | No           | Resolved by optional references mechanism                                                              |
-| Incremental migration         | **Deferred** | Becomes relevant with sub-workflow composition                                                         |
-| Safe-change analysis          | No           | Principles enable analysis; decision framework is operational                                          |
-| Spec identity across versions | No           | Migration tooling, not spec design                                                                     |
-| Composability for deployment  | **Deferred** | Sub-workflow composition extends P4                                                                    |
+| Area                          | Spec design concern?        | Status       | Resolution                                                                   |
+| ----------------------------- | --------------------------- | ------------ | ---------------------------------------------------------------------------- |
+| Parallel iteration visibility | Yes                         | **Deferred** | P3 drives MapNode distinction. P1-P5 sufficient when added.                  |
+| Decomposition overhead        | No (engine policy)          | Resolved     | Author chooses granularity. Engine optimizes execution.                      |
+| Intermediate state visibility | No (task metadata)          | Resolved     | Optional task capability declaration. Not workflow data flow.                |
+| Replay/checkpoint             | No (task metadata + engine) | Resolved     | Side-effect/idempotency declarations are additive. Engine persists state.    |
+| Loop iteration identity       | No (engine mechanism)       | Resolved     | Engine exposes iteration count. Consistent with P2.                          |
+| Error diagnostic constraints  | Yes (mechanism)             | Resolved     | Optional references mechanism in [design-decisions.md](design-decisions.md). |
+| Incremental migration         | Yes                         | **Deferred** | Becomes relevant with sub-workflow composition.                              |
+| Safe-change analysis          | No (operational)            | Resolved     | Principles enable structural diff. Runtime survival is operational.          |
+| Spec identity across versions | No (tooling)                | Resolved     | Migration mapping is external tooling.                                       |
+| Composability for deployment  | Yes                         | **Deferred** | Sub-workflow composition extends P4.                                         |
 
-### Open questions for further exploration
+### Open questions
 
-1. **Parallel iteration:** Should the spec structurally distinguish map from reduce? Or is absence-of-loopVars sufficient? Does inference violate P3/P5, or is it simple enough to be unsurprising?
+1. **Parallel iteration:** Deferred from v1. When added, P3 drives the MapNode decision. Validate that P1-P5 are sufficient (no new principle needed).
 2. **Sub-workflow evolution:** When sub-workflows are added, does P4's boundary contract need strengthening for versioning? Or does the existing input/output boundary suffice?
-3. **Boundary expansion priorities:** Side-effect annotations, idempotency markers, progress declarations - which boundary expansions are most valuable, and do any of them need to be principles rather than mechanism additions?
+3. **Task contract extensions:** Side-effect annotations, idempotency markers, progress declarations are all additive task boundary metadata. If these grow complex, they may warrant a separate design doc with its own concerns distinct from P1-P5.
+
+---
+
+## v1 scope: deployment and evolution deferred
+
+Deployment and evolution are deferred from v1. This section records the rationale and verifies that v1 design decisions don't block future solutions.
+
+### User scenarios and v1 impact
+
+| Scenario                  | Description                                                                     | v1 impact  | Rationale                                                                                                                                                                                    |
+| ------------------------- | ------------------------------------------------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Schema change during dev  | Developer changes a task's output schema, fixes downstream consumers, redeploys | None       | Atomic updates are natural during development                                                                                                                                                |
+| Long-running interruption | Infrastructure restart mid-execution of a multi-hour workflow                   | Low-Medium | Engine can implement checkpoint/resume independently. P2+P3 provide enough structure (data traceability, node identity). Painful for multi-hour workflows but solvable without spec changes. |
+| Bug fix to live workflow  | Fix a task bug while instances are running on the old spec                      | Low        | v1 is single-user/development. No concurrent versions.                                                                                                                                       |
+| Composition evolution     | Sub-workflow B's interface changes, caller A needs updating                     | None       | Sub-workflows aren't v1                                                                                                                                                                      |
+| Loop state durability     | 50-iteration loop fails on iteration 47, all accumulated loopVar state lost     | Medium     | Core use case pain. But engine can persist loopVars without spec support - all state is JSON Schema-typed and serializable.                                                                  |
+
+### Forward compatibility check
+
+The question: will v1 design decisions block adding deployment/evolution support later?
+
+| v1 decision area                     | Additive later? | Risk   | Notes                                                                                                                                                                                                                                                                                                       |
+| ------------------------------------ | --------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Spec version field                   | Yes             | None   | Adding a `version` field later is trivially additive                                                                                                                                                                                                                                                        |
+| Checkpoint/resume                    | Yes             | None   | Engine can persist node outputs and loopVars without spec changes. Everything is typed and serializable.                                                                                                                                                                                                    |
+| Side-effect/idempotency declarations | Yes             | None   | Optional fields on task declarations. No existing spec would break.                                                                                                                                                                                                                                         |
+| MapNode                              | Yes             | None   | New node type. Existing LoopNodes remain valid.                                                                                                                                                                                                                                                             |
+| Scope boundary mechanism             | **Verify**      | Low    | Loop boundaries must generalize to sub-workflows. Current design (declared inputs + declared outputs + loop-specific extensions) is clean: sub-workflows would be "inputs + outputs" without loopVars/sentinels/maxIterations. Core isolation model (body can't reference outer nodes) applies identically. |
+| Node identity                        | **Decide now**  | Medium | See [design-decisions.md open question: node identity](design-decisions.md).                                                                                                                                                                                                                                |
+
+### Node identity risk
+
+Nodes are identified by name (string key in the `nodes` map). If the engine builds on "node name = stable identity" for checkpoint keys, metrics, or log correlation, renaming a node in a future spec version breaks the correspondence. The engine's checkpoint would say "node `fetchData` completed" but the updated spec renamed it to `getData`.
+
+Adding a separate stable `id` field later is technically additive, but if the engine already persists checkpoints keyed by node name, migrating to `id`-based keys is messy.
+
+**v1 decision needed:** Are node names stable identifiers? Even a brief recorded decision ("names are IDs for v1, we'll add stable IDs when we add versioning") prevents accidental assumptions from hardening into unmigrateable conventions. See [design-decisions.md](design-decisions.md).
+
+### Drives vs. permits
+
+The principles' relationship to deployment/evolution is "permits, not drives":
+
+| Capability              | Drives? | Permits?     | Why                                                                    |
+| ----------------------- | ------- | ------------ | ---------------------------------------------------------------------- |
+| Checkpoint/resume       | No      | Yes          | P2+P3 provide the structure that enables it, but don't require it      |
+| Spec versioning         | No      | Yes          | Nothing prevents adding it; nothing pushes toward it                   |
+| Durability of loopVars  | No      | Yes          | P2 guarantees traceability, not durability                             |
+| Sub-workflow versioning | No      | Yes (future) | P4's boundary contract is the foundation, but doesn't address versions |
+
+A design team following only P1-P5 would produce a correct, traceable, structured, composable, predictable spec - that is also impossible to checkpoint, resume, or evolve. For v1, this is acceptable because: (a) v1 workflows are short-lived and single-user, (b) the engine can add persistence independently, and (c) the v1 design decisions are verified to not block future solutions.

@@ -47,14 +47,18 @@ These areas are not principles (they don't independently drive choices between t
 
 - **Runtime performance.** P2's explicit data dependencies enable parallelization analysis (scenario 13). P3's structural correspondence gives the engine loop/branch awareness for optimization. A spec design should not prevent the engine from identifying parallelizable work or applying structural optimizations.
 - **Authoring ergonomics.** The IR/DSL split (see "The spec is an IR") deliberately separates this concern: the spec is explicit, DSLs provide sugar. The principles constrain what DSLs can target but don't govern DSL design itself.
-- **Debugging and observability.** P3's structural correspondence enables tools to map execution state back to spec nodes. P5's predictability ensures debugger behavior matches reader expectations. A spec design satisfying P3+P5 should be inherently debuggable.
-- **Deployment and evolution.** Spec versioning, backward compatibility, migration when schemas change. No current principle addresses what happens when a spec changes over time. This is the area with the least coverage: a design could satisfy P1-P5 and still make it impossible to migrate deployed workflows to a new spec version. If this becomes a problem, it may indicate a missing principle.
+- **Debugging and observability.** P3's structural correspondence enables tools to map execution state back to spec nodes. P5's predictability ensures debugger behavior matches reader expectations. The principles _permit_ good debuggability but don't _drive_ it: adding breakpoints, step-over, or data-flow highlighting requires engine work that nothing in P1-P5 demands. The spec structure makes these features feasible, not inevitable.
+
+## Out of scope for v1
+
+- **Deployment and evolution.** Spec versioning, checkpoint/resume, backward compatibility, migration when schemas change. The principles permit but don't drive solutions here. Deferred because v1 workflows are short-lived and single-user. See [principle-gaps.md](principle-gaps.md) for the forward compatibility check confirming v1 decisions don't block future support.
 
 ## Relationship to other design docs
 
 - [plan.md](plan.md) - overall plan, IR principle, milestones. Decisions there should be consistent with these principles.
 - [loops-dataflow-controlflow.md](loops-dataflow-controlflow.md) - loop/data-flow/control-flow design. Driven by these principles.
 - [design-decisions.md](design-decisions.md) - design decisions driven by these principles. Mechanism tables, resolved questions, open questions, and cross-cutting design analyses.
+- [principle-gaps.md](principle-gaps.md) - analysis of areas the principles permit but don't drive (deployment/evolution, debugging, performance). Includes v1 scope decisions and forward compatibility checks.
 
 ## Principles
 
