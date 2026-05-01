@@ -4,7 +4,6 @@
 import { IdGenerator } from "../main";
 import { ChatInput } from "./chatInput";
 import { ExpandableTextArea } from "./expandableTextArea";
-import { handleConversationCommand } from "./conversationCommands";
 import { iconCheckMarkCircle, iconX } from "../icon";
 import { DemoUIState } from "../../../preload/electronTypes";
 import {
@@ -494,28 +493,17 @@ export class ChatView {
             requestText = request.content;
         }
 
-        // Intercept /conversation (UI slash command only, NOT @conversation).
-        // @conversation is dispatched to the in-process/remote dispatcher which
-        // handles it correctly in both local and remote modes.
-        const t = requestText.trim();
-        if (t.startsWith("/conversation") || t.startsWith("@conversation")) {
-            const handled = await handleConversationCommand(requestText, {
-                addSystemMessage: (content: string) => {
-                    this.addNotificationMessage(
-                        { type: "html", content, kind: "info" },
-                        "conversation",
-                        undefined,
-                    );
-                },
-                clear: () => {
-                    this.clear();
-                },
-                withBusy: <T>(message: string, work: () => Promise<T>) =>
-                    this.withBusy(message, work),
-            });
-            if (handled) {
-                return;
-            }
+        // Normalize the legacy `/conversation` slash alias to the
+        // canonical `@conversation` agent command.  All conversation
+        // command logic lives in the dispatcher (see
+        // packages/dispatcher/.../conversationCommandHandlers.ts) and
+        // results are surfaced via the `manage-conversation` client
+        // action handler in main.ts — keeping that as the single
+        // source of truth.
+        const trimmed = requestText.trimStart();
+        if (trimmed.startsWith("/conversation")) {
+            requestText =
+                "@conversation" + trimmed.slice("/conversation".length);
         }
 
         const localId = this.idGenerator.genId();

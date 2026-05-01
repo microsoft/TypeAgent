@@ -41,7 +41,7 @@ import {
 import { swapContent } from "./setContent";
 import { remoteSearchMenuUIOnCompletion } from "./searchMenuUI/remoteSearchMenuUI";
 import { ChatInput } from "./chat/chatInput";
-import { escapeHtml } from "./chat/conversationCommands";
+import { escapeHtml } from "./htmlUtil";
 
 export function isElectron(): boolean {
     return globalThis.api !== undefined;
