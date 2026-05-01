@@ -71,14 +71,14 @@ These patterns are natural to reach for, but P1 requires them to be expressed di
 - _Intent:_ Use cached data downstream, where the cache node is behind a branch that usually (but not always) executes.
 - _Why rejected:_ A reference to `cache`'s output in a node reachable via a path that skips `cache` violates the "every path" requirement. The validator cannot distinguish "usually taken" from "sometimes skipped."
 - _Alternative:_ (a) Restructure so `cache` dominates the consumer (move it before the branch). (b) Pass the value explicitly through both branches via declared data wiring. (c) Mark the reference as optional: the consumer receives the cached value when `cache` runs and handles its absence otherwise.
-- _Tradeoff:_ (a) may run `cache` when unnecessary. (b) adds wiring verbosity. (c) moves the conditional logic inside the task, which is a legitimate boundary choice: the task is the right place to decide what to do when cache data is absent. All three make the data flow explicit. See "Open design question: Optional references" below.
+- _Tradeoff:_ (a) may run `cache` when unnecessary. (b) adds wiring verbosity. (c) moves the conditional logic inside the task, which is a legitimate boundary choice: the task is the right place to decide what to do when cache data is absent. All three make the data flow explicit.
 
 **5. Optional enrichment.**
 
 - _Intent:_ Optionally call an enrichment step, then reference its output in a downstream node regardless of whether enrichment ran.
 - _Why rejected:_ The downstream node's reference to `enrich`'s output is invalid on the path that skips enrichment.
 - _Alternative:_ (a) Always run the enrichment node, with a passthrough/identity task for the "skip" case (produces a default output). (b) Use separate downstream paths after the branch, each wiring data from its own predecessor. (c) Mark the enrichment reference as optional: the downstream task receives enriched data when available and handles the unenriched case itself.
-- _Tradeoff:_ (a) adds a passthrough node that exists solely to satisfy the dominator requirement - graph structure that doesn't correspond to computational intent (tension with P3). (b) duplicates downstream nodes. (c) puts the conditional handling inside the consuming task, which is arguably where it belongs: the task knows what to do with or without enrichment. See "Open design question: Optional references" below.
+- _Tradeoff:_ (a) adds a passthrough node that exists solely to satisfy the dominator requirement - graph structure that doesn't correspond to computational intent (tension with P3). (b) duplicates downstream nodes. (c) puts the conditional handling inside the consuming task, which is arguably where it belongs: the task knows what to do with or without enrichment.
 
 **6. Error handler referencing sibling outputs.**
 
@@ -92,7 +92,7 @@ These patterns are natural to reach for, but P1 requires them to be expressed di
 - _Intent:_ A single merge node after a branch handles "data present or absent" depending on which branch ran. The merge task internally decides what to do when some inputs are missing.
 - _Why rejected (without optional references):_ P1 requires every reference to resolve on every path. The consumer cannot ask "was this produced?" Restructuring to guarantee data on all paths (passthrough nodes, default values) changes the semantics: data is always present, just sometimes a default.
 - _Alternative:_ (a) Passthrough/default nodes on every branch path so data is always present. (b) Separate downstream paths per branch, no merge node. (c) Mark branch-specific references as optional: the merge task receives what's available and handles absence internally.
-- _Tradeoff:_ (a) changes semantics (data is always present). (b) duplicates downstream logic. (c) is the natural boundary: the merge task's job is to combine data from multiple sources, some of which may not be available. This is the strongest motivation for optional references. See "Open design question: Optional references" below.
+- _Tradeoff:_ (a) changes semantics (data is always present). (b) duplicates downstream logic. (c) is the natural boundary: the merge task's job is to combine data from multiple sources, some of which may not be available. This is the strongest motivation for optional references.
 
 ### Patterns ruled out
 
