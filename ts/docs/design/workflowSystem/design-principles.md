@@ -11,7 +11,7 @@ A good principle should:
 - **Not prescribe mechanism**: it says what property the design must have, not how to achieve it.
 - **Not overlap**: each principle covers a distinct concern.
 
-### Principles govern the boundary, not the interior
+## Principles govern the boundary, not the interior
 
 A task is a black box: typed input in, typed output out. The workflow author chooses where to draw the task boundary. In the extreme, the entire workflow could be a single task - trivially satisfying all five principles (no references, no data flow, no structure to validate).
 
@@ -29,7 +29,9 @@ The boundary is not fixed. Today, "typed input in, typed output out" is the full
 
 This framing matters when evaluating design alternatives. A pattern that "pushes logic into a task" isn't violating the principles - it's choosing a different boundary. The principles apply to what's on the spec side of the boundary.
 
-### The spec is an IR, not an authoring format
+**Task internals are opaque.** Each principle has an "Outside the boundary" section noting cases that fall inside the task. The common thread: what happens inside a task (control flow, state, data resolution, error handling) is invisible to the principles. The spec sees typed input in, typed output out. If the author wants the engine to reason about something, they expose it in the spec. This applies uniformly across all five principles and is not repeated in full under each one.
+
+## The spec is an IR, not an authoring format
 
 If a syntactic convenience (pipeline mode, inferred node types, default wiring) hides data flow from the reader, it undermines the principles. Authoring sugar belongs in a DSL that compiles to the explicit spec. This is a cross-cutting consequence of multiple principles:
 
@@ -39,7 +41,16 @@ If a syntactic convenience (pipeline mode, inferred node types, default wiring) 
 
 This is not a new principle (it doesn't drive decisions independently), but a design consequence that P2, P3, and P5 converge on. See plan.md "Authoring strategy" for details.
 
-### Relationship to other design docs
+## Design quality areas
+
+These areas are not principles (they don't independently drive choices between two spec designs), but the principles should produce good outcomes in each. A design satisfying P1-P5 that fails in one of these areas would indicate a gap in the principles.
+
+- **Runtime performance.** P2's explicit data dependencies enable parallelization analysis (scenario 13). P3's structural correspondence gives the engine loop/branch awareness for optimization. A spec design should not prevent the engine from identifying parallelizable work or applying structural optimizations.
+- **Authoring ergonomics.** The IR/DSL split (see "The spec is an IR") deliberately separates this concern: the spec is explicit, DSLs provide sugar. The principles constrain what DSLs can target but don't govern DSL design itself.
+- **Debugging and observability.** P3's structural correspondence enables tools to map execution state back to spec nodes. P5's predictability ensures debugger behavior matches reader expectations. A spec design satisfying P3+P5 should be inherently debuggable.
+- **Deployment and evolution.** Spec versioning, backward compatibility, migration when schemas change. No current principle addresses what happens when a spec changes over time. This is the area with the least coverage: a design could satisfy P1-P5 and still make it impossible to migrate deployed workflows to a new spec version. If this becomes a problem, it may indicate a missing principle.
+
+## Relationship to other design docs
 
 - [plan.md](plan.md) - overall plan, IR principle, milestones. Decisions there should be consistent with these principles.
 - [loops-dataflow-controlflow.md](loops-dataflow-controlflow.md) - loop/data-flow/control-flow design. Driven by these principles.
@@ -62,7 +73,7 @@ This is not a new principle (it doesn't drive decisions independently), but a de
 If node Y declares a dependency on a value produced by node X, two things must be provable before the workflow runs:
 
 1. **Existence**: X has executed before Y, no matter which branches were taken. Not "X is reachable before Y" (there exists a path), but "X dominates Y" (every path goes through X first).
-2. **Compatibility**: the value produced by X is compatible with what Y expects in that input. The data flowing through the reference must make sense at the destination.
+2. **Compatibility**: the value produced by X is compatible with what Y expects in that input. The data flowing through the reference must make sense at the destination. The specific definition of "compatible" (exact match, structural subtyping, schema intersection, etc.) is a mechanism choice resolved in [design-decisions.md](design-decisions.md), not prescribed by this principle.
 
 ### Scenarios it ENABLES
 
@@ -80,10 +91,10 @@ These patterns are natural to reach for, but P1 requires them to be expressed di
 
 - _Intent:_ Use cached data downstream, where the cache node is behind a branch that usually (but not always) executes.
 - _Why rejected:_ A reference to `cache`'s output in a node reachable via a path that skips `cache` violates the "every path" requirement. The validator cannot distinguish "usually taken" from "sometimes skipped."
-- _Alternative:_ (a) Restructure so `cache` dominates the consumer (move it before the branch). (b) Pass the value explicitly through both branches via declared data wiring. (c) Mark the reference as optional: the consumer receives the cached value when `cache` runs and handles its absence otherwise.
+- _Alternative:_ (a) Restructure so `cache` dominates the consumer (move it before the branch). (b) Pass the value explicitly through both branches via declared data wiring. (c) Mark the reference as optional: the consumer receives the cached value when `cache` runs and handles its absence otherwise. (The specific mechanism for optional references - nullable inputs, special reference syntax, schema annotations, etc. - is a design choice; see [design-decisions.md](design-decisions.md). What matters for P1 is that the reference's optionality is declared in the spec so the validator can distinguish it from a required reference that would fail.)
 - _Tradeoff:_ (a) may run `cache` when unnecessary. (b) adds wiring verbosity. (c) moves the conditional logic inside the task, which is a legitimate boundary choice: the task is the right place to decide what to do when cache data is absent. All three make the data flow explicit.
 
-**5. Optional enrichment.**
+**5. Optional enrichment.** (Same pattern as scenario 4; the difference is that enrichment is entirely skipped rather than conditionally cached.)
 
 - _Intent:_ Optionally call an enrichment step, then reference its output in a downstream node regardless of whether enrichment ran.
 - _Why rejected:_ The downstream node's reference to `enrich`'s output is invalid on the path that skips enrichment.
@@ -116,7 +127,13 @@ These patterns cannot be expressed as a single reference in the IR. However, sin
 
 **8. Computed indirection.** A reference whose target is determined at runtime (e.g., "read from whichever node's name is stored in variable X"). P1 requires all reference targets to be statically known at validation time. A computed reference whose target depends on runtime data cannot exist in the spec.
 
-_Workaround:_ Use a decision node that branches to the possible targets, with each branch wiring its output to the downstream consumer. For example, a "multi-strategy" pattern (classifier picks one of N summarizers) is expressed as a decision branch where each strategy node has `next: "format"`. If all strategies produce a compatible output schema, `format`'s input is satisfied on every path. The cost is verbosity (N entries in a `next` map instead of one computed reference), not lost capability. The decision-tree workaround always works for any finite spec.
+_Workaround:_ Use a decision node that branches to the possible targets, with each branch wiring its output to the downstream consumer. For example, a "multi-strategy" pattern (classifier picks one of N summarizers) is expressed as a decision branch where each strategy node has `next: "format"`. If all strategies produce a compatible output schema, `format`'s input is satisfied on every path. The cost is verbosity (N entries in a `next` map instead of one computed reference), not lost capability. The decision-tree workaround always works when the set of possible targets is statically known and finite. If the target set is itself dynamic (e.g., a user-defined plugin registry), the workaround requires spec regeneration.
+
+### What this principle does NOT resolve alone
+
+- The specific definition of "compatible" for type checking (structural subtyping, exact match, etc.) - P1 requires compatibility be provable, not which type system proves it.
+- Whether optional references should exist and what form they take - P1 motivates them (scenarios 4, 5, 7), but the mechanism is a design choice.
+- How dominator analysis interacts with error edges - P1 requires dominance on every path, but the error-edge model affects which paths exist.
 
 ---
 
@@ -219,9 +236,9 @@ Testable: look at the spec structure, then look at the execution trace. Do they 
 
 ### Outside the boundary
 
-P3 governs spec-level structure. What happens inside tasks is opaque and outside the principle's scope.
+P3 governs spec-level structure. Task internals are opaque (see "Principles govern the boundary").
 
-**28. Task-internal control flow.** A task that internally loops, branches, calls sub-functions, or does complex control flow. This is invisible to P3. The spec sees a single task node with input and output. The internal complexity is the task author's concern. The boundary framing applies: if the author wants the engine to observe the internal structure (events, intermediate state, error handling), they decompose the task into multiple nodes. Otherwise, the task is a black box.
+**28. Task-internal control flow.** A task that internally loops, branches, or does complex control flow. The spec sees a single task node. If the author wants the engine to observe the internal structure, they decompose the task into multiple nodes.
 
 ### Patterns ruled out
 
@@ -280,9 +297,9 @@ You should be able to reason about a part of the workflow without understanding 
 
 ### Outside the boundary
 
-P4 governs spec-level decomposition. What happens inside tasks is opaque and outside the principle's scope.
+P4 governs spec-level decomposition. Task internals are opaque (see "Principles govern the boundary").
 
-**36. Task-internal complexity.** A task that internally has complex logic, multiple sub-steps, or its own error handling. P4 doesn't require decomposing it into multiple nodes. The author chooses the boundary: if the task is working correctly, its internal complexity is its own concern. P4 only applies to the parts the author has chosen to expose in the spec. This is the same boundary framing as P3: decomposing further gives the engine more visibility, but the choice is the author's.
+**36. Task-internal complexity.** A task with complex internal logic, multiple sub-steps, or its own error handling. P4 doesn't require decomposing it. The author chooses the boundary: decomposing further gives the engine more visibility, but the choice is the author's.
 
 ### Patterns ruled out
 
@@ -332,7 +349,7 @@ Someone reading the spec should be able to predict what the engine will do, with
 
 ### Outside the boundary
 
-P5 governs what a reader can predict from the spec. Some behaviors are universally predictable without being explicit in the spec.
+P5 governs what a reader can predict from the spec. Task internals are opaque (see "Principles govern the boundary"). Some behaviors are universally predictable without being explicit:
 
 **43. Universally unsurprising defaults.** Missing error handler means failure propagates. Missing transition in the top-level scope means terminal. Missing output declaration on a loop means no output. These are universally understood conventions that don't require engine-specific knowledge. P5 does not require making them explicit, because no reader would be surprised.
 
@@ -363,23 +380,17 @@ What P5 genuinely prevents is **surprise**: a spec where a reader who understand
 
 ## Summary
 
-| #   | Principle                                                   | Status       | Remaining questions                                                                         |
-| --- | ----------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------- |
-| P1  | Data references statically provable on every path           | **Resolved** | None                                                                                        |
-| P2  | All data flow traceable through the spec alone              | **Solid**    | Drives cross-iteration state/output declaration necessity but doesn't pick between variants |
-| P3  | Spec structure corresponds to computational structure       | **Solid**    | Tiebreaker role: picks loop construct over flat cycles                                      |
-| P4  | Each part understood/validated/tested without the whole     | **Solid**    | Doesn't require DAG alone, but DAG + P5 makes strong case                                   |
-| P5  | Reader predicts engine behavior without knowing conventions | **Solid**    | Predictability doesn't require explicitness for unsurprising conventions                    |
-
 ### Principle independence check
 
 | Pair    | Overlap?                                                                                                                                                                                  | Resolution                                                                  |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | P1 + P2 | P1 is about reference validity (will it resolve?). P2 is about traceability (can you follow the chain?). A reference could be valid but untraceable (if the data flow channel is hidden). | Independent.                                                                |
-| P2 + P5 | P2 covers data flow traceability. P5 covers behavioral predictability (both control flow and data wiring). P2 asks "can I trace the origin?"; P5 asks "would a reader be surprised?"          | Independent: traceability vs. surprise.                                     |
+| P2 + P5 | P2 covers data flow traceability. P5 covers behavioral predictability (both control flow and data wiring). P2 asks "can I trace the origin?"; P5 asks "would a reader be surprised?"      | Independent: traceability vs. surprise.                                     |
 | P3 + P4 | P3 says structure mirrors computation. P4 says parts are independently understandable. Both push toward a loop construct.                                                                 | Complementary, not redundant. P3 is about the whole; P4 is about the parts. |
 | P3 + P5 | P3 says structure is self-describing. P5 says behavior is predictable. A self-describing structure could have surprising behavior (unlikely but possible).                                | Independent.                                                                |
 | P1 + P5 | P1 guarantees references resolve. P5 guarantees the reader can predict behavior. P1 is a formal property; P5 is a human-factors property.                                                 | Independent.                                                                |
+
+The pairwise check above covers independence between two principles. In practice, design decisions often involve three or more principles simultaneously (e.g., a loop with optional cross-iteration references touches P1+P2+P3+P4). When multiple principles constrain a design, apply the same resolution process described below: enumerate candidates, assess each against all relevant principles, prefer designs that satisfy all of them, and document what was sacrificed when none does.
 
 ### Principle conflicts and resolution
 
@@ -399,11 +410,11 @@ The independence check above shows the principles cover distinct concerns, but i
 - **P3 is often the tiebreaker, not the loser.** P3's "Relationship to other principles" section describes it as a tiebreaker when other principles are already satisfied. This is accurate, but it does not mean P3 always yields. A design that badly violates structural correspondence (e.g., requiring graph analysis to understand basic workflow shape) may be worse than one that adds moderate verbosity to satisfy P4 or P5.
 - **Convergence is common.** Many scenarios show principles reinforcing each other rather than conflicting. P3 and P5 converge on loop constructs (scenario 25). P2 and P4 converge on boundary declarations. When principles converge, the design choice is clear. The interesting cases are the exceptions.
 
-**Known tensions in this document:**
+**Known tensions in this document** (illustrative, not exhaustive - these demonstrate the resolution process above):
 
-| Scenario | Principles in tension | Candidates | Resolution |
-| -------- | --------------------- | ---------- | ---------- |
-| P1 #5 | P1 vs. P3 | (a) Passthrough node: satisfies P1, adds structure without computation (P3 cost). (b) Separate paths: satisfies both, duplicates downstream nodes. (c) Optional references: satisfies both, moves conditional logic into the task. | Prefer (c): resolves the tension. The consuming task handles absence, no structural overhead, no duplication. (a) is acceptable when optional references are not available. |
-| P1 #7 | P1 vs. P3 | (a) Passthrough/default nodes: satisfies P1, changes semantics. (b) Separate paths: no merge node. (c) Optional references: merge task handles absence. | Prefer (c): the merge task's job is combining data from sources that may not all be present. (a) is acceptable when the "always present with default" semantics are what you want. |
-| P3 #25 | (none) | Loop construct satisfies P3, adds verbosity that P5 independently requires. | Convergence, not conflict. Both principles want the same thing. |
-| P4 #33 | P4 vs. P3 | Boundary declarations add boilerplate (P3 cost) to achieve composability (P4 benefit). No alternative achieves composability without the boundary declarations. | The boilerplate is the composability. No design resolves the tension, so the question is whether composability justifies the structural overhead. In this case it does: the boundary declarations serve as documentation of external dependencies, which partially satisfies P3 (the structure communicates something real). DSL sugar can reduce the authoring cost. |
+| Scenario | Principles in tension | Candidates                                                                                                                                                                                                                         | Resolution                                                                                                                                                                                                                                                                                                                                                            |
+| -------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1 #5    | P1 vs. P3             | (a) Passthrough node: satisfies P1, adds structure without computation (P3 cost). (b) Separate paths: satisfies both, duplicates downstream nodes. (c) Optional references: satisfies both, moves conditional logic into the task. | Prefer (c): resolves the tension. The consuming task handles absence, no structural overhead, no duplication. (a) is acceptable when optional references are not available.                                                                                                                                                                                           |
+| P1 #7    | P1 vs. P3             | (a) Passthrough/default nodes: satisfies P1, changes semantics. (b) Separate paths: no merge node. (c) Optional references: merge task handles absence.                                                                            | Prefer (c): the merge task's job is combining data from sources that may not all be present. (a) is acceptable when the "always present with default" semantics are what you want.                                                                                                                                                                                    |
+| P3 #25   | (none)                | Loop construct satisfies P3, adds verbosity that P5 independently requires.                                                                                                                                                        | Convergence, not conflict. Both principles want the same thing.                                                                                                                                                                                                                                                                                                       |
+| P4 #33   | P4 vs. P3             | Boundary declarations add boilerplate (P3 cost) to achieve composability (P4 benefit). No alternative achieves composability without the boundary declarations.                                                                    | The boilerplate is the composability. No design resolves the tension, so the question is whether composability justifies the structural overhead. In this case it does: the boundary declarations serve as documentation of external dependencies, which partially satisfies P3 (the structure communicates something real). DSL sugar can reduce the authoring cost. |
