@@ -48,6 +48,16 @@
       "pattern": "show (me)? (the)? files (in|of)? $(path:wildcard)?",
       "isAlias": false,
       "examples": ["show me the files in documents", "show files"]
+    },
+    {
+      "pattern": "list (my)? $(path:wildcard)",
+      "isAlias": false,
+      "examples": ["list my downloads", "list my pictures", "list my documents"]
+    },
+    {
+      "pattern": "what('s| is) in (my)? $(path:wildcard)",
+      "isAlias": false,
+      "examples": ["what's in my downloads", "what is in documents"]
     }
   ],
   "sandbox": {
