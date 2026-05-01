@@ -109,6 +109,7 @@ export interface Client {
     titleUpdated(title: string): void;
 
     searchMenuCompletion(id: number, item: SearchMenuItem): void;
+    searchMenuSelectionChanged?(id: number, selected: number): void;
     continuousSpeechProcessed(userExpressions: UserExpression[]): void;
     tabRestoreStatus(count: number): void;
     systemNotification?(message: string, id: string, timestamp: number): void;

@@ -20,6 +20,20 @@ export function remoteSearchMenuUIOnCompletion(
     }
 }
 
+// Called by the renderer's Client API when the remote LocalSearchMenuUI
+// reports a selection change initiated inside the remote view (e.g. mouse
+// hover).  Keeps the host's mirrored selection index in sync so synchronous
+// callers like selectCompletion() see the right value.
+export function remoteSearchMenuUIOnSelectionChanged(
+    id: number,
+    selected: number,
+) {
+    const menu = remoteSearchMenuUIs.get(id);
+    if (menu) {
+        menu.onSelectionChanged(selected);
+    }
+}
+
 export class RemoteSearchMenuUI implements SearchMenuUI {
     private readonly id: number = remoteSearchMenuUINextId++;
     private closed: boolean = false;
@@ -76,6 +90,13 @@ export class RemoteSearchMenuUI implements SearchMenuUI {
         }
         getClientAPI().searchMenuSelectCompletion(this.id);
         return true;
+    }
+    /** @internal Called by host when remote view reports a selection change. */
+    onSelectionChanged(selected: number): void {
+        if (this.closed) {
+            return;
+        }
+        this.selected = selected;
     }
     close(): void {
         if (this.closed) {

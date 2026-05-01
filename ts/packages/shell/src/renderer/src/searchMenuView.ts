@@ -16,9 +16,15 @@ let searchMenuUI: LocalSearchMenuUI | undefined;
 ipcRenderer.on("search-menu-update", (_event, data) => {
     debug(`search-menu-update: ${JSON.stringify(data)}`);
     if (searchMenuUI === undefined) {
-        searchMenuUI = new LocalSearchMenuUI((item) => {
-            ipcRenderer.send("search-menu-completion", item);
-        }, data.visibleItemsCount);
+        searchMenuUI = new LocalSearchMenuUI(
+            (item) => {
+                ipcRenderer.send("search-menu-completion", item);
+            },
+            data.visibleItemsCount,
+            (selected) => {
+                ipcRenderer.send("search-menu-selection-changed", selected);
+            },
+        );
 
         // REVIEW: Assume that search menu is the only thing on the page.
         const elm = document.body.children[0] as HTMLElement;
@@ -42,7 +48,7 @@ ipcRenderer.on("search-menu-close", () => {
 });
 
 ipcRenderer.on("search-menu-adjust-selection", (_, deltaY) => {
-    debug(`search-menu-adjust-selection: ${deltaY}}`);
+    debug(`search-menu-adjust-selection: ${deltaY}`);
     searchMenuUI?.adjustSelection(deltaY);
 });
 

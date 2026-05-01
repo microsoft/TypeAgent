@@ -1036,6 +1036,10 @@ export class ChatView {
      * state and restore normal interaction.  Used while long-ish IPC
      * operations (e.g. switching conversation + replaying history) are in
      * flight so the user doesn't think the UI is unresponsive.
+     *
+     * NOTE: This low-level API does not snapshot prior state.  Prefer
+     * {@link withBusy} for scoped use cases (it preserves any non-busy
+     * placeholder set by, e.g., demo mode).
      */
     public setBusy(message: string | undefined): void {
         const textarea = this.chatInput?.textarea;
@@ -1052,17 +1056,39 @@ export class ChatView {
 
     /**
      * Run `work` while the input is in a busy state showing `message`.
-     * Always restores the previous state, even if `work` throws.
+     * Snapshots the prior placeholder + enabled state on entry and
+     * restores them on exit (even if `work` throws), so demo-mode or
+     * other ambient placeholders are preserved across busy windows.
+     * Supports nesting via LIFO snapshot stack.
      */
     public async withBusy<T>(
         message: string,
         work: () => Promise<T>,
     ): Promise<T> {
+        const textarea = this.chatInput?.textarea;
+        const textEntry = textarea?.getTextEntry();
+        const snapshot =
+            textarea && textEntry
+                ? {
+                      placeholder: textEntry.dataset.placeholder,
+                      // contentEditable is the string "true"/"false"/"inherit".
+                      enabled: textEntry.contentEditable !== "false",
+                  }
+                : undefined;
         this.setBusy(message);
         try {
             return await work();
         } finally {
-            this.setBusy(undefined);
+            if (textarea && textEntry && snapshot) {
+                if (snapshot.placeholder !== undefined) {
+                    textEntry.dataset.placeholder = snapshot.placeholder;
+                } else {
+                    delete textEntry.dataset.placeholder;
+                }
+                textarea.enable(snapshot.enabled);
+            } else {
+                this.setBusy(undefined);
+            }
         }
     }
 

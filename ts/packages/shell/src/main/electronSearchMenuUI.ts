@@ -140,6 +140,24 @@ export function initializeSearchMenuUI() {
         );
     });
 
+    ipcMain.on("search-menu-selection-changed", async (event, selected) => {
+        const shellWindow = getShellWindowForIpcEvent(event);
+        if (shellWindow === undefined) {
+            debugError("Invalid sender for search-menu-selection-changed");
+            return;
+        }
+        const id = searchMenuIds.get(event.sender);
+        if (id === undefined) {
+            debugError("Invalid sender for search-menu-selection-changed");
+            return;
+        }
+        shellWindow.chatView.webContents.send(
+            "search-menu-selection-changed",
+            id,
+            selected,
+        );
+    });
+
     ipcMain.on("search-menu-size", async (event, size) => {
         const shellWindow = getShellWindowForIpcEvent(event);
         if (shellWindow === undefined) {

@@ -39,7 +39,10 @@ import {
     RequestId,
 } from "agent-dispatcher";
 import { swapContent } from "./setContent";
-import { remoteSearchMenuUIOnCompletion } from "./searchMenuUI/remoteSearchMenuUI";
+import {
+    remoteSearchMenuUIOnCompletion,
+    remoteSearchMenuUIOnSelectionChanged,
+} from "./searchMenuUI/remoteSearchMenuUI";
 import { ChatInput } from "./chat/chatInput";
 import { escapeHtml } from "./htmlUtil";
 
@@ -481,25 +484,25 @@ function registerClient(
                         (async () => {
                             switch (payload.subcommand) {
                                 case "new": {
-                                    if (!payload.name) {
-                                        // TODO: prompt the user for a name inline instead of warning,
-                                        // so that NL "create a new conversation" works end-to-end.
-                                        chatView.addNotificationMessage(
-                                            {
-                                                type: "html",
-                                                content:
-                                                    "A name is required to create a new conversation.",
-                                                kind: "warning",
-                                            },
-                                            "conversation",
-                                            undefined,
-                                        );
-                                        break;
+                                    let newName = payload.name;
+                                    if (!newName) {
+                                        // Generate a default name so that NL
+                                        // requests like "create a new
+                                        // conversation" succeed end-to-end
+                                        // without forcing the user to provide
+                                        // one. Format: "Conversation YYYY-MM-DD HH:MM".
+                                        const d = new Date();
+                                        const pad = (n: number) =>
+                                            n.toString().padStart(2, "0");
+                                        newName = `Conversation ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
                                     }
-                                    const newName = payload.name;
+                                    const conversationName = newName;
                                     const created = await chatView.withBusy(
                                         "Creating conversation…",
-                                        () => api.conversationCreate(newName),
+                                        () =>
+                                            api.conversationCreate(
+                                                conversationName,
+                                            ),
                                     );
                                     const switchResult =
                                         await chatView.withBusy(
@@ -625,6 +628,16 @@ function registerClient(
                                             "conversation",
                                             undefined,
                                         );
+                                    } else {
+                                        chatView.addNotificationMessage(
+                                            {
+                                                type: "html",
+                                                content: `✅ Switched to conversation "<b>${escapeHtml(match.name)}</b>"`,
+                                                kind: "info",
+                                            },
+                                            "conversation",
+                                            undefined,
+                                        );
                                     }
                                     break;
                                 }
@@ -698,6 +711,16 @@ function registerClient(
                                                 type: "html",
                                                 content: `❌ ${escapeHtml(result.error ?? "Failed to switch conversation")}`,
                                                 kind: "warning",
+                                            },
+                                            "conversation",
+                                            undefined,
+                                        );
+                                    } else {
+                                        chatView.addNotificationMessage(
+                                            {
+                                                type: "html",
+                                                content: `✅ Switched to conversation "<b>${escapeHtml(target.name)}</b>"`,
+                                                kind: "info",
                                             },
                                             "conversation",
                                             undefined,
@@ -903,6 +926,9 @@ function registerClient(
         },
         searchMenuCompletion(id: number, item: SearchMenuItem) {
             remoteSearchMenuUIOnCompletion(id, item);
+        },
+        searchMenuSelectionChanged(id: number, selected: number) {
+            remoteSearchMenuUIOnSelectionChanged(id, selected);
         },
         titleUpdated(title: string): void {
             document.title = title;

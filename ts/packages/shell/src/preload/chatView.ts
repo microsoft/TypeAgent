@@ -77,6 +77,13 @@ function registerClient(client: Client) {
         client.searchMenuCompletion(id, item);
     });
 
+    ipcRenderer.on(
+        "search-menu-selection-changed",
+        (_event, id: number, selected: number) => {
+            client.searchMenuSelectionChanged?.(id, selected);
+        },
+    );
+
     ipcRenderer.on("dispatcher-initialized", () => {
         // Resolve the dispatcher promise when the dispatcher is initialized)
         // set up dispatch RPC client

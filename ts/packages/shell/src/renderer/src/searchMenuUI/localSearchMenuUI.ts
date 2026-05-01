@@ -30,6 +30,11 @@ export class LocalSearchMenuUI implements SearchMenuUI {
     constructor(
         private readonly onCompletion: (item: SearchMenuItem) => void,
         private readonly visibleItemsCount = 15,
+        // Optional notifier invoked whenever `selected` changes due to
+        // local interactions (mouse hover) that the host did not initiate.
+        // Allows a remote host to keep its mirrored selection index in sync
+        // so synchronous APIs like selectCompletion() return correctly.
+        private readonly onSelectionChange?: (selected: number) => void,
     ) {
         this.onCompletion = onCompletion;
         this.searchContainer = document.createElement("div");
@@ -117,8 +122,14 @@ export class LocalSearchMenuUI implements SearchMenuUI {
         if (this.closed || this.items.length === 0) {
             return;
         }
+        // Some input devices fire wheel events with deltaY === 0 (e.g.
+        // pure horizontal scroll on trackpads).  Treat those as no-ops
+        // rather than scrolling up by one.
+        const step = Math.sign(deltaY);
+        if (step === 0) {
+            return;
+        }
         const maxTop = Math.max(0, this.items.length - this.visibleItemsCount);
-        const step = deltaY > 0 ? 1 : -1;
         const newTop = Math.max(0, Math.min(maxTop, this.top + step));
         if (newTop === this.top) {
             return;
@@ -205,6 +216,7 @@ export class LocalSearchMenuUI implements SearchMenuUI {
                     if (this.selected != i) {
                         this.selected = i;
                         this.updateDisplay();
+                        this.onSelectionChange?.(this.selected);
                     }
                 };
 
