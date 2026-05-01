@@ -416,3 +416,10 @@ document.addEventListener("focusout", () => {
     if (!document.hasFocus()) reportFocus(false);
 });
 if (document.hasFocus()) reportFocus(true);
+
+// Tear down the panel's window-level listeners (demo key handler,
+// completion controller) when the webview is being unloaded by VS
+// Code. Window-scoped in a webview is per-iframe so the OS will
+// reclaim the listeners regardless, but explicit dispose keeps the
+// invariant clean for hosts that retain the panel across reloads.
+window.addEventListener("pagehide", () => chatPanel.dispose());

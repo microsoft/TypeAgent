@@ -38,6 +38,11 @@ const sharedPendingCalls: Map<
         context?: ActionContext<CodeActionContext> | undefined;
     }
 > = new Map();
+// Global call-id counter. The pending-calls map is module-scoped (one
+// websocket server is shared across all sessions), so the id space must
+// also be global — per-session counters would collide on 0,1,2,... and
+// route a response to the wrong session's pending call.
+let nextSharedCallId = 0;
 
 export function instantiate(): AppAgent {
     return {
@@ -50,7 +55,6 @@ export function instantiate(): AppAgent {
 type CodeActionContext = {
     enabled: Set<string>;
     webSocketServer?: CodeAgentWebSocketServer | undefined;
-    nextCallId: number;
     pendingCall: Map<
         number,
         {
@@ -64,7 +68,6 @@ async function initializeCodeContext(): Promise<CodeActionContext> {
     return {
         enabled: new Set(),
         webSocketServer: undefined,
-        nextCallId: 0,
         pendingCall: new Map(),
     };
 }
@@ -118,10 +121,7 @@ async function updateCodeContext(
         agentContext.enabled.delete(schemaName);
         if (agentContext.enabled.size === 0) {
             agentContext.webSocketServer = undefined;
-            sharedWebSocketRefCount = Math.max(
-                0,
-                sharedWebSocketRefCount - 1,
-            );
+            sharedWebSocketRefCount = Math.max(0, sharedWebSocketRefCount - 1);
             if (sharedWebSocketRefCount === 0 && sharedWebSocketServer) {
                 sharedWebSocketServer.close();
                 sharedWebSocketServer = undefined;
@@ -209,7 +209,7 @@ async function sendPingToCodaExtension(
     const server = agentContext.webSocketServer;
     if (!server || !server.isConnected()) return false;
 
-    const callId = agentContext.nextCallId++;
+    const callId = nextSharedCallId++;
     return new Promise((resolve) => {
         const timeout = setTimeout(() => {
             agentContext.pendingCall.delete(callId);
@@ -251,7 +251,7 @@ export async function getActiveFileFromVSCode(
         return undefined;
     }
 
-    const callId = agentContext.nextCallId++;
+    const callId = nextSharedCallId++;
 
     return new Promise<ActiveFile | undefined>((resolve) => {
         // Hard timeout so we never hang
@@ -333,7 +333,7 @@ async function executeCodeAction(
                 );
             }
 
-            const callId = agentContext.nextCallId++;
+            const callId = nextSharedCallId++;
             return new Promise<undefined>((resolve) => {
                 const timeoutMs = 5000;
                 const timeoutHandle = setTimeout(() => {

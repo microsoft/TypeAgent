@@ -344,20 +344,30 @@ async function runDemoScript(): Promise<void> {
                         // can still hit Ctrl+Right at the next @pauseForInput
                         // and recover the rest of the demo.
                         const DEMO_LINE_TIMEOUT_MS = 60_000;
-                        await Promise.race([
-                            bridge.runCommand(line),
-                            new Promise<void>((_, reject) =>
-                                setTimeout(
-                                    () =>
-                                        reject(
-                                            new Error(
-                                                `Demo line timed out after ${DEMO_LINE_TIMEOUT_MS / 1000}s: ${line.slice(0, 80)}`,
+                        let timeoutHandle: NodeJS.Timeout | undefined;
+                        try {
+                            await Promise.race([
+                                bridge.runCommand(line),
+                                new Promise<void>((_, reject) => {
+                                    timeoutHandle = setTimeout(
+                                        () =>
+                                            reject(
+                                                new Error(
+                                                    `Demo line timed out after ${DEMO_LINE_TIMEOUT_MS / 1000}s: ${line.slice(0, 80)}`,
+                                                ),
                                             ),
-                                        ),
-                                    DEMO_LINE_TIMEOUT_MS,
-                                ),
-                            ),
-                        ]);
+                                        DEMO_LINE_TIMEOUT_MS,
+                                    );
+                                }),
+                            ]);
+                        } finally {
+                            // Always clear the timeout when the race
+                            // resolves (winning side or runCommand
+                            // throwing) so the timer doesn't tick down
+                            // pointlessly. Over a long demo this would
+                            // otherwise leak one timer per executed line.
+                            if (timeoutHandle) clearTimeout(timeoutHandle);
+                        }
                     } catch {
                         // runCommand surfaces errors through the webview;
                         // keep going so the demo isn't derailed by one bad line.

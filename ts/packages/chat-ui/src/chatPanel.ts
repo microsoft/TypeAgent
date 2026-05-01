@@ -1442,7 +1442,8 @@ export class ChatPanel {
             // landed before any agent output), spin up a minimal one so
             // the status is still visible.
             const cancelTarget =
-                target ?? this.createAgentContainer("shell", "");
+                target ??
+                this.createAgentContainer("shell", this.iconForSource("shell"));
             cancelTarget.setMessage(
                 {
                     type: "text",
@@ -1806,6 +1807,26 @@ export class ChatPanel {
      * need direct access (e.g. to call `reset()` on session change).
      * Re-attaching disposes the previous instance.
      */
+    /**
+     * Tear down the panel's lifetime-bound listeners. Call this when the
+     * host (e.g. a VS Code webview) is being disposed so the window-level
+     * demo key handler doesn't survive the panel and fire stale callbacks
+     * (or leak memory across panel reincarnations).
+     *
+     * Idempotent. Safe to call even if attachCompletion / setDemoPaused
+     * were never invoked.
+     */
+    public dispose(): void {
+        if (this.demoKeyHandler) {
+            window.removeEventListener("keydown", this.demoKeyHandler, true);
+            this.demoKeyHandler = undefined;
+        }
+        this.isDemoPaused = false;
+        this.isDemoRunning = false;
+        this.partialCompletion?.dispose();
+        this.partialCompletion = undefined;
+    }
+
     public attachCompletion(
         post: PcPost,
         opts?: { inline?: boolean },
