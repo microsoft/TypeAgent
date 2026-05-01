@@ -41,13 +41,13 @@ If a syntactic convenience (pipeline mode, inferred node types, default wiring) 
 
 This is not a new principle (it doesn't drive decisions independently), but a design consequence that P2, P3, and P5 converge on. See plan.md "Authoring strategy" for details.
 
-## Design quality areas
+## Adjacent concerns
 
-These areas are not principles (they don't independently drive choices between two spec designs), but the principles should produce good outcomes in each. A design satisfying P1-P5 that fails in one of these areas would indicate a gap in the principles.
+P1-P5 govern spec design. These neighboring areas are not governed by the principles but benefit from the spec properties they produce. See [principle-gaps.md](principle-gaps.md) for the full analysis confirming no principle gaps in these areas.
 
-- **Runtime performance.** P2's explicit data dependencies enable parallelization analysis (scenario 13). P3's structural correspondence gives the engine loop/branch awareness for optimization. A spec design should not prevent the engine from identifying parallelizable work or applying structural optimizations.
+- **Runtime performance.** P2's explicit data dependencies enable parallelization analysis (scenario 13). P3's structural correspondence gives the engine loop/branch awareness for optimization.
 - **Authoring ergonomics.** The IR/DSL split (see "The spec is an IR") deliberately separates this concern: the spec is explicit, DSLs provide sugar. The principles constrain what DSLs can target but don't govern DSL design itself.
-- **Debugging and observability.** P3's structural correspondence enables tools to map execution state back to spec nodes. P5's predictability ensures debugger behavior matches reader expectations. The principles _permit_ good debuggability but don't _drive_ it: adding breakpoints, step-over, or data-flow highlighting requires engine work that nothing in P1-P5 demands. The spec structure makes these features feasible, not inevitable.
+- **Debugging and observability.** P3 enables tools to map execution state back to spec nodes. P5 ensures debugger behavior matches reader expectations. The spec structure makes these features feasible; building them is engine work.
 
 ## Out of scope for v1
 
