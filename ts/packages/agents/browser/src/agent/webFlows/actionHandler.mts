@@ -80,24 +80,6 @@ export async function ensureSampleFlowsRegistered(
                 };
                 await store.save(merged);
                 upgraded++;
-            } else if (
-                JSON.stringify(existing.grammarPatterns) !==
-                JSON.stringify(sample.grammarPatterns)
-            ) {
-                // Bundled sample's grammar patterns have changed since the
-                // user's copy was seeded. Refresh so updates propagate
-                // without requiring manual cache deletion. Preserve any
-                // user-customized scope.
-                const merged: WebFlowDefinition = {
-                    ...sample,
-                    scope:
-                        existing.scope.type === "site"
-                            ? existing.scope
-                            : sample.scope,
-                };
-                await store.save(merged);
-                upgraded++;
-                debug(`Refreshed stale sample flow: ${sample.name}`);
             }
         }
 
