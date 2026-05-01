@@ -304,3 +304,39 @@ Each milestone ends with: passing tests, a runnable demo, and an updated section
 - [ ] Delete `examples/workflowEditor/` stubs.
 - [ ] Scaffold `examples/workflow/{model,engine,cli}` packages.
 - [ ] Write M1 type definitions in `examples/workflow/model/src/`.
+
+## 17. Speculative: IR as a compilation target (post-v1)
+
+> **Status: speculative.** These are not requirements. They may or may not become goals.
+> They are recorded here so that if a v1 design decision would conflict with
+> them, it can be flagged during decision-making.
+
+Two potential directions for the workflow IR:
+
+1. **Compilers from existing workflow formats to the IR.**
+   Other workflow systems (e.g. GitHub Actions YAML, Temporal DSL, Airflow DAGs,
+   BPMN XML) could be compiled into our IR and executed by the engine. This
+   would prove capability coverage (does our IR express everything these formats
+   can?) and provide an adoption path (run existing workflows without rewriting).
+
+2. **Transpilers from our authoring DSL to other formats.**
+   Once the authoring DSL exists, a transpiler could emit other workflow formats
+   (e.g. GitHub Actions YAML, Argo Workflows) from the same source. This
+   expands the ecosystem in the other direction: authors write once and deploy
+   to multiple runtimes.
+
+### Design implications to watch for
+
+- The IR must be **semantically rich enough** to represent constructs from
+  common workflow systems. If we encounter a widely-used pattern that the IR
+  cannot express, that is a signal to revisit the IR, not a reason to add
+  sugar to the authoring layer.
+- The IR should remain **format-agnostic** in its semantics. Avoid baking in
+  assumptions tied to a single serialization format (e.g., JSON-specific
+  escape conventions in data paths).
+- **Task abstraction boundaries** must be clean enough that a compiler can map
+  foreign task types to our `TaskDefinition` interface. The current design
+  (schematized input/output, opaque execute) supports this well.
+- **Spec versioning (`specVersion`)** becomes more important if third-party
+  compilers target the IR. Backward compatibility and migration tooling
+  would need to be taken seriously.
