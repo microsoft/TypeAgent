@@ -40,9 +40,15 @@ import { DesktopActions } from "./actionsSchema.ts";
                  | spotify
                  | m365 copilot;
 
-// Program is either a known program or any wildcard text
-<Program> = <KnownProgram>
-            | $(name:wildcard) -> name;
+// Program is matched only against the KnownProgram list to avoid
+// greedily swallowing arbitrary phrases.  Trailing wildcards on
+// <LaunchProgram>/etc. (e.g. "start a new conversation called
+// scratch") would otherwise short-circuit LLM routing and dispatch
+// to the desktop agent with the entire trailing phrase as the
+// program name (matching it against installed programs by fuzzy
+// search and launching the closest hit).  Unknown program names
+// now fall through to the LLM-based router, which can disambiguate.
+<Program> = <KnownProgram>;
 
 // ===== Program Launch/Close =====
 <LaunchProgram> = launch $(program:<Program>) -> { actionName: "LaunchProgram", parameters: { name: program } }
