@@ -273,6 +273,10 @@ export class PowerShellStore {
         return actionName in this.index.flows;
     }
 
+    getFlowEntry(actionName: string): PowerShellFlowIndexEntry | undefined {
+        return this.index.flows[actionName];
+    }
+
     isSampleDeleted(actionName: string): boolean {
         return this.index.deletedSamples.includes(actionName);
     }
