@@ -119,6 +119,11 @@ function setDemoState(chatView: WebContentsView, state: DemoState): void {
     }
 }
 
+/** True if a demo is currently running, paused, or aborting. */
+export function isDemoActive(): boolean {
+    return demoState !== "idle";
+}
+
 /** Request that the currently-running demo abort at the next safe point. */
 export function breakDemo(): boolean {
     if (demoState === "idle") return false;

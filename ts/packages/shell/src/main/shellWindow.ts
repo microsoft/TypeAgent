@@ -12,7 +12,7 @@ import {
 } from "electron";
 import path from "node:path";
 import type { WebSocketMessageV2 } from "websocket-utils";
-import { runDemo, breakDemo } from "./demo.js";
+import { runDemo, breakDemo, isDemoActive } from "./demo.js";
 import {
     ShellUserSettings,
     ShellWindowState,
@@ -511,7 +511,16 @@ export class ShellWindow {
         this.chatView.webContents.send("mark-history");
     }
 
-    public runDemo(interactive: boolean = false): void {
+    /**
+     * Start a demo.  Returns true if a demo was started, false if one
+     * was already in progress (caller should surface this to the user).
+     * The returned promise resolves immediately after the start guard;
+     * the demo itself runs in the background.
+     */
+    public runDemo(interactive: boolean = false): boolean {
+        if (isDemoActive()) {
+            return false;
+        }
         let started = false;
         runDemo(this.mainWindow, this.chatView, interactive, () => {
             started = true;
@@ -523,6 +532,7 @@ export class ShellWindow {
             .finally(() => {
                 if (started) this.setDemoMode(false);
             });
+        return true;
     }
 
     public breakDemo(): boolean {
