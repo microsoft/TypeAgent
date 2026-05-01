@@ -242,12 +242,11 @@ function findReachableNodes(
 }
 
 /**
- * Check that every cycle in the graph contains at least one decision node
- * (a node whose `next` is an object/decision map). Uses Tarjan's algorithm
- * to find strongly connected components (SCCs). Any SCC with more than one
- * node, or a single node with a self-loop, is a cycle. If every node in that
- * cycle has a linear `next` (string), there is no conditional exit path and
- * the cycle is rejected.
+ * Check that every cycle in the graph has a reachable exit. Uses Tarjan's
+ * algorithm to find strongly connected components (SCCs). Any SCC with more
+ * than one node, or a single node with a self-loop, is a cycle. A cycle is
+ * valid only if at least one node in the SCC has a `next` successor that
+ * points outside the SCC (i.e. there is a reachable exit path).
  */
 function validateExitPaths(
     nodes: Record<string, WorkflowNode>,
@@ -264,16 +263,23 @@ function validateExitPaths(
             continue;
         }
 
-        const hasDecision = scc.some((id) => {
+        const sccSet = new Set(scc);
+        const hasExit = scc.some((id) => {
             const node = nodes[id];
-            return node.next !== undefined && typeof node.next !== "string";
+            if (node.next === undefined) {
+                return false;
+            }
+            if (typeof node.next === "string") {
+                return !sccSet.has(node.next);
+            }
+            return Object.values(node.next).some((t) => !sccSet.has(t));
         });
 
-        if (!hasDecision) {
+        if (!hasExit) {
             const nodeList = scc.join(", ");
             errors.push({
                 path: `nodes`,
-                message: `Unconditional cycle detected among nodes [${nodeList}]. Every cycle must contain at least one decision node.`,
+                message: `Cycle with no exit detected among nodes [${nodeList}]. At least one branch must lead outside the cycle.`,
             });
         }
     }

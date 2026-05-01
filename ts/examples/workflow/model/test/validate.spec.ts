@@ -335,9 +335,7 @@ describe("validateWorkflowSpec", () => {
             const result = validateWorkflowSpec(spec);
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) =>
-                    e.message.includes("Unconditional cycle"),
-                ),
+                result.errors.some((e) => e.message.includes("no exit")),
             ).toBe(true);
         });
 
@@ -351,9 +349,29 @@ describe("validateWorkflowSpec", () => {
             const result = validateWorkflowSpec(spec);
             expect(result.valid).toBe(false);
             expect(
-                result.errors.some((e) =>
-                    e.message.includes("Unconditional cycle"),
-                ),
+                result.errors.some((e) => e.message.includes("no exit")),
+            ).toBe(true);
+        });
+
+        it("rejects decision cycle where all branches stay in the cycle", () => {
+            const tasks = new Map<string, TaskDefinition>([
+                ["noop", makeTask("noop")],
+                ["decider", makeTask("decider", ["left", "right"])],
+            ]);
+            const spec = makeMinimalSpec({
+                nodes: {
+                    start: {
+                        task: "decider",
+                        next: { left: "a", right: "b" },
+                    },
+                    a: { task: "noop", next: "start" },
+                    b: { task: "noop", next: "start" },
+                },
+            });
+            const result = validateWorkflowSpec(spec, tasks);
+            expect(result.valid).toBe(false);
+            expect(
+                result.errors.some((e) => e.message.includes("no exit")),
             ).toBe(true);
         });
 
