@@ -66,7 +66,8 @@ async function seedSampleFlows(store: PowerShellStore): Promise<number> {
 
         if (store.hasFlow(recipe.actionName)) {
             // Refresh seed-sourced flows when their grammar patterns drift
-            // from the bundled sample (preserve user/LLM-authored flows).
+            // from the bundled sample so updates propagate without manual
+            // cache deletion. User/LLM-authored flows are preserved.
             const entry = store.getFlowEntry(recipe.actionName);
             if (entry?.source !== "seed") continue;
             const existing = await store.getFlow(recipe.actionName);

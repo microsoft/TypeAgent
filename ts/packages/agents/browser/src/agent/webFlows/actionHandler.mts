@@ -84,10 +84,10 @@ export async function ensureSampleFlowsRegistered(
                 JSON.stringify(existing.grammarPatterns) !==
                 JSON.stringify(sample.grammarPatterns)
             ) {
-                // Grammar patterns in the bundled sample have changed (e.g.
-                // tightened to remove greedy wildcards). Refresh the user's
-                // seeded copy so routing fixes take effect without manual
-                // cache deletion. Preserve any user-customized scope.
+                // Bundled sample's grammar patterns have changed since the
+                // user's copy was seeded. Refresh so updates propagate
+                // without requiring manual cache deletion. Preserve any
+                // user-customized scope.
                 const merged: WebFlowDefinition = {
                     ...sample,
                     scope:
