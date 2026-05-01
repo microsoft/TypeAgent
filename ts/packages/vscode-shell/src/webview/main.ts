@@ -82,6 +82,7 @@ function mapResult(result: any): {
     totalDuration?: number;
     tokenUsage?: any;
     parsePhase?: any;
+    cancelled?: boolean;
 } | undefined {
     if (!result) return undefined;
     const metrics = result.metrics;
@@ -93,6 +94,7 @@ function mapResult(result: any): {
         totalDuration: metrics?.duration,
         tokenUsage: result.tokenUsage,
         parsePhase: metrics?.parse,
+        cancelled: result.cancelled === true,
     };
 }
 
@@ -206,22 +208,37 @@ function toChatPanelHistory(entries: any[]): HistoryEntry[] {
     return out;
 }
 
+// Last-known connection label parts so demoPaused can re-render the
+// status ribbon with a "[Demo paused]" suffix without re-issuing a
+// status broadcast from the host.
+let lastConnected = false;
+let lastSessionLabel = "";
+let demoSuffix: string | undefined;
+
+function renderStatus(): void {
+    if (lastConnected) {
+        statusEl.className = "status connected";
+        const base = lastSessionLabel
+            ? `Connected · ${lastSessionLabel}`
+            : "Connected to TypeAgent";
+        statusEl.textContent = demoSuffix
+            ? `${base} · ${demoSuffix}`
+            : base;
+    } else {
+        statusEl.className = "status disconnected";
+        statusEl.textContent = "Disconnected";
+    }
+}
+
 function setStatus(
     connected: boolean,
     sessionId?: string,
     sessionName?: string,
 ): void {
     isConnected = connected;
-    if (connected) {
-        statusEl.className = "status connected";
-        const label = sessionName || sessionId?.substring(0, 8) || "";
-        statusEl.textContent = label
-            ? `Connected · ${label}`
-            : "Connected to TypeAgent";
-    } else {
-        statusEl.className = "status disconnected";
-        statusEl.textContent = "Disconnected";
-    }
+    lastConnected = connected;
+    lastSessionLabel = sessionName || sessionId?.substring(0, 8) || "";
+    renderStatus();
     chatPanel.setEnabled(connected);
 }
 
@@ -304,6 +321,10 @@ window.addEventListener("message", (event) => {
         case "commandComplete": {
             const rid = msg.requestId;
             if (rid) chatPanel.completeRequest(rid, mapResult(msg.result));
+            // Restore the send button (was swapped for the stop button
+            // by send()/setProcessing). Done unconditionally so a
+            // missing/garbled requestId still gets the input back.
+            chatPanel.setIdle();
             break;
         }
         case "peerMetrics": {
@@ -331,8 +352,26 @@ window.addEventListener("message", (event) => {
         case "pcState":
             chatPanel.applyPcState(msg.state);
             break;
-        case "demoPaused":
+        case "demoState":
+            // Reflect demo state in the connection ribbon. The chat-ui
+            // chatPanel still installs its capture-phase keyhandler
+            // when paused (Esc cancels, Ctrl+→ continues) and a
+            // dedicated input-ghost hint shows the controls.
+            if (!msg.running) {
+                demoSuffix = undefined;
+            } else if (msg.paused) {
+                demoSuffix = `[Demo Mode (Paused)${msg.message ? ` — ${msg.message}` : ""}]`;
+            } else {
+                demoSuffix = `[Demo Mode (Running)]`;
+            }
+            renderStatus();
             chatPanel.setDemoPaused(msg.paused, msg.message);
+            chatPanel.setDemoRunning(msg.running);
+            chatPanel.setInputHint(
+                msg.paused
+                    ? "Ctrl+→ continue · Esc cancel"
+                    : undefined,
+            );
             break;
         case "demoTypeAndSend":
             // Animate typing into the chat input then submit, so demo

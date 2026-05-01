@@ -76,7 +76,12 @@ export type BridgeToWebviewMessage =
     | { type: "switching"; switching: boolean; targetName?: string }
     | { type: "userInfo"; name: string }
     | { type: "setActive"; active: boolean }
-    | { type: "demoPaused"; paused: boolean; message?: string }
+    | {
+          type: "demoState";
+          running: boolean;
+          paused: boolean;
+          message?: string;
+      }
     | { type: "demoTypeAndSend"; command: string; requestId: string }
     | { type: "historyLoading"; loading: boolean }
     | {
@@ -947,8 +952,17 @@ export class AgentServerBridge {
                 // cancelled mid-flight (e.g., user clicks the stop button on
                 // a long-running action). The dispatcher answers with a
                 // CommandResult marked wasCancelled=true on its normal path.
+                //
+                // The webview only knows the clientRequestId it generated;
+                // the dispatcher tracks AbortControllers by its OWN
+                // server-side requestId. Translate via the map populated
+                // from setUserRequest. Fall back to the raw id only as a
+                // last resort (e.g., cancel arrived before setUserRequest).
                 try {
-                    this.session?.dispatcher.cancelCommand(msg.requestId);
+                    const mapped =
+                        this.clientToServerRequestId.get(msg.requestId);
+                    const serverId = mapped ?? msg.requestId;
+                    this.session?.dispatcher.cancelCommand(serverId);
                 } catch (e) {
                     console.warn(
                         "[agentServerBridge] cancelCommand failed:",
@@ -1142,6 +1156,14 @@ export class AgentServerBridge {
 
     private demoCompletionResolvers = new Map<string, () => void>();
 
+    // Map webview-generated clientRequestId -> dispatcher's server-side
+    // requestId. The dispatcher's cancelCommand() looks up its in-flight
+    // AbortController by the SERVER id, so the webview's stop button
+    // (which only knows the client id) needs this translation. We
+    // populate it from setUserRequest, which fires on every accepted
+    // command with both ids on the RequestId object.
+    private clientToServerRequestId = new Map<string, string>();
+
     private async sendCommand(
         command: string,
         requestId?: string,
@@ -1151,6 +1173,26 @@ export class AgentServerBridge {
         // promote it to a persistent named session so it survives panel
         // close and the server's startup sweep of cli-ephemeral-* sessions.
         await this.promoteEphemeralIfNeeded();
+
+        // Bail out gracefully if the session was disposed (e.g. the user
+        // switched conversations or the server dropped) between the
+        // user pressing send and us getting here. Without this guard
+        // the next line throws "Cannot read properties of undefined
+        // (reading 'dispatcher')" and the webview's stop button stays
+        // stuck on screen.
+        if (!this.session) {
+            this.broadcastToWebviews({
+                type: "commandComplete",
+                requestId: requestId ?? "",
+                result: null,
+            });
+            this.broadcastToWebviews({
+                type: "error",
+                message: "No active session — reconnect or pick a conversation.",
+                requestId: requestId ?? "",
+            });
+            return;
+        }
 
         try {
             const result = await this.session.dispatcher.processCommand(
@@ -1184,6 +1226,9 @@ export class AgentServerBridge {
                     this.demoCompletionResolvers.delete(requestId);
                     resolve();
                 }
+                // Also drop the client→server requestId mapping; the
+                // dispatcher has freed its AbortController by now.
+                this.clientToServerRequestId.delete(requestId);
             }
         }
     }
@@ -1254,9 +1299,22 @@ export class AgentServerBridge {
                 command: string,
                 seq?: number,
             ) => {
+                // Record client→server requestId translation so the stop
+                // button (which posts the client id) can be turned into
+                // the dispatcher's server id for cancelCommand().
+                const clientId = clientIdOf(requestId);
+                if (
+                    typeof clientId === "string" &&
+                    typeof requestId?.requestId === "string"
+                ) {
+                    this.clientToServerRequestId.set(
+                        clientId,
+                        requestId.requestId,
+                    );
+                }
                 this.broadcastToWebviews({
                     type: "setUserRequest",
-                    requestId: clientIdOf(requestId),
+                    requestId: clientId,
                     command,
                     seq,
                 });
@@ -1467,8 +1525,17 @@ export class AgentServerBridge {
         await this.joinSpecificSession(match.sessionId, match.name);
     }
 
-    public notifyDemoPaused(paused: boolean, message?: string): void {
-        this.broadcastToWebviews({ type: "demoPaused", paused, message });
+    public notifyDemoState(
+        running: boolean,
+        paused: boolean,
+        message?: string,
+    ): void {
+        this.broadcastToWebviews({
+            type: "demoState",
+            running,
+            paused,
+            message,
+        });
     }
 
     /**

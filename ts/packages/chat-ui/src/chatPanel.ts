@@ -375,6 +375,8 @@ export class ChatPanel {
     private isSwitching = false;
     private isHistoryLoading = false;
     private isDemoPaused = false;
+    private isDemoRunning = false;
+    private inputHint?: string;
     private demoKeyHandler?: (e: KeyboardEvent) => void;
     private avatarMap: Record<string, string> = { ...DEFAULT_AVATAR_MAP };
 
@@ -496,6 +498,25 @@ export class ChatPanel {
         textWrapper.className = "chat-input-text-wrapper";
         textWrapper.appendChild(this.textInput);
         textWrapper.appendChild(this.ghostSpan);
+        // The contentEditable .user-textarea has display:inline and
+        // min-width:1px, so when empty its native click target is a
+        // 1px stripe at the top-left of the wrapper. Clicking
+        // elsewhere in the wrapper would land on the flex container
+        // and never focus the input — leaving no caret. Forward those
+        // clicks to focus the input and place the caret at the end.
+        textWrapper.addEventListener("mousedown", (event) => {
+            const target = event.target as Node | null;
+            if (target === this.textInput) return;
+            if (target && this.textInput.contains(target)) return;
+            event.preventDefault();
+            this.textInput.focus();
+            const range = document.createRange();
+            range.selectNodeContents(this.textInput);
+            range.collapse(false);
+            const sel = window.getSelection();
+            sel?.removeAllRanges();
+            sel?.addRange(range);
+        });
 
         this.inputArea.appendChild(textWrapper);
         this.inputArea.appendChild(this.sendButton);
@@ -557,6 +578,7 @@ export class ChatPanel {
         this.textInput.addEventListener("input", () => {
             this.sendButton.disabled = !this.textInput.textContent?.trim();
             this.scheduleCompletionFetch();
+            this.applyInputHint();
         });
 
         this.sendButton.addEventListener("click", () => this.send());
@@ -750,6 +772,11 @@ export class ChatPanel {
 
         const id = requestId ?? generateRequestId();
         this.addUserMessage(text, id);
+        // Toggle input controls into "processing" state — swaps the
+        // send button for the stop button so the user can cancel an
+        // in-flight command. setIdle() is invoked by the host on
+        // commandComplete.
+        this.setProcessing(id);
         this.onSend?.(text, attachments, id);
     }
 
@@ -776,16 +803,66 @@ export class ChatPanel {
         }
         this.textInput.focus();
         this.textInput.textContent = "";
-        for (let i = 0; i < text.length; i++) {
-            this.textInput.textContent =
-                (this.textInput.textContent ?? "") + text[i];
-            // 25-40ms per char (random within range), matches Electron shell.
-            const delay = 25 + Math.floor(Math.random() * 15);
-            await new Promise((r) => setTimeout(r, delay));
+        // Block manual input while we animate so a keystroke (e.g. Esc to
+        // cancel a demo) doesn't clobber the in-flight typed text. The
+        // demo orchestrator owns the input during this window.
+        const wasEditable = this.textInput.contentEditable;
+        this.textInput.contentEditable = "false";
+        try {
+            for (let i = 0; i < text.length; i++) {
+                this.textInput.textContent =
+                    (this.textInput.textContent ?? "") + text[i];
+                // 25-40ms per char (random within range), matches Electron shell.
+                const delay = 25 + Math.floor(Math.random() * 15);
+                await new Promise((r) => setTimeout(r, delay));
+            }
+        } finally {
+            this.textInput.contentEditable = wasEditable;
         }
         // Defer to send() so all bookkeeping (command history, attachments,
         // user-bubble creation, sendButton/ghost reset) stays in one place.
         this.send(requestId);
+    }
+
+    /**
+     * Toggle "demo running" mode. While running, the input ghost-hint
+     * shown via `setInputHint` is preserved across input events so the
+     * Ctrl+→/Esc reminder stays visible at the pause point.
+     */
+    public setDemoRunning(running: boolean): void {
+        this.isDemoRunning = running;
+        this.refreshDemoKeyHandler();
+        if (!running) {
+            this.setInputHint(undefined);
+        }
+    }
+
+    /**
+     * Show a host-supplied hint string in the input box's ghost span
+     * when the textbox is empty. Used to display "Ctrl+→ continue ·
+     * Esc cancel" while the demo is paused. Pass `undefined` to clear.
+     */
+    public setInputHint(hint: string | undefined): void {
+        this.inputHint = hint;
+        this.applyInputHint();
+    }
+
+    private applyInputHint(): void {
+        // The hint shares the ghost span with completion previews. Show
+        // it only when the input is empty AND no completion suggestion
+        // is currently rendered (completion text takes precedence).
+        const hasText = (this.textInput.textContent ?? "").length > 0;
+        const hasCompletionGhost =
+            this.completions.length > 0 ||
+            (this.partialCompletion !== undefined &&
+                this.ghostSpan.textContent !== this.inputHint &&
+                (this.ghostSpan.textContent ?? "").length > 0);
+        if (this.inputHint && !hasText && !hasCompletionGhost) {
+            this.ghostSpan.textContent = this.inputHint;
+        } else if (this.ghostSpan.textContent === this.inputHint) {
+            // Clear stale hint without disturbing a completion preview.
+            this.ghostSpan.textContent = "";
+        }
     }
 
     /** Set the active request ID and show the stop button. */
@@ -970,13 +1047,16 @@ export class ChatPanel {
         // status emitter's source and doesn't linger after the real
         // response arrives.
         if (appendMode === "temporary") {
-            if (this.statusContainer) {
-                this.statusContainer.remove();
+            // Reuse the existing status container if present — recreating
+            // it on every status update causes visible flicker when an
+            // agent (e.g. reasoning) streams many sub-step messages
+            // ("Tool: foo", "Tool: bar", ...) in rapid succession.
+            if (!this.statusContainer) {
+                this.statusContainer = this.createAgentContainer(
+                    source ?? "",
+                    sourceIcon ?? "",
+                );
             }
-            this.statusContainer = this.createAgentContainer(
-                source ?? "",
-                sourceIcon ?? "",
-            );
             this.statusContainer.setMessage(content, source, undefined);
             this.scrollToBottom();
             return;
@@ -1240,9 +1320,19 @@ export class ChatPanel {
 
     /** Clear all messages. */
     public clear() {
-        while (this.messageDiv.children.length > 1) {
-            this.messageDiv.removeChild(this.messageDiv.lastChild!);
+        // Wipe everything then re-create the sticky scroll-anchor
+        // sentinel that the constructor installs as messageDiv's first
+        // child. addUserMessage / replaceAgentMessage / showSeparator /
+        // historyReplay all depend on `messageDiv.firstElementChild`
+        // being that sentinel and call `sentinel.before(...)`; without
+        // it they throw and the next command surfaces as a dispatcher
+        // error in the UI.
+        while (this.messageDiv.firstChild) {
+            this.messageDiv.removeChild(this.messageDiv.firstChild);
         }
+        const sentinel = document.createElement("div");
+        sentinel.className = "chat-sentinel";
+        this.messageDiv.appendChild(sentinel);
         this.currentAgentContainer = undefined;
         this.agentContainersByRequestId.clear();
         this.userMessageById.clear();
@@ -1331,6 +1421,7 @@ export class ChatPanel {
             totalDuration?: number;
             tokenUsage?: CompletionUsageStats;
             parsePhase?: PhaseTiming;
+            cancelled?: boolean;
         },
     ) {
         if (this.statusContainer) {
@@ -1344,6 +1435,25 @@ export class ChatPanel {
             requestId !== undefined
                 ? this.firstMessageMsByRequestId.get(requestId)
                 : undefined;
+        if (result?.cancelled) {
+            // Mirror the Electron shell's "⚠ Cancelled" status line so the
+            // user has visible confirmation that Stop / Esc cancelled the
+            // in-flight command. If no agent bubble was created yet (cancel
+            // landed before any agent output), spin up a minimal one so
+            // the status is still visible.
+            const cancelTarget =
+                target ??
+                this.createAgentContainer("shell", "");
+            cancelTarget.setMessage(
+                {
+                    type: "text",
+                    content: "⚠ Cancelled",
+                    kind: "status",
+                },
+                "shell",
+                "block",
+            );
+        }
         if (result && target) {
             target.updateMetrics(
                 "Action",
@@ -1795,56 +1905,50 @@ export class ChatPanel {
      * Toggle "demo paused" mode. While paused, the panel installs a
      * window-level capture-phase keydown listener that swallows
      * Ctrl/Meta+→ (continue) and Esc (cancel) before the focused input
-     * field sees them, and forwards the action via `onDemoAction`. An
-     * optional `message` is shown as a floating banner.
+     * field sees them, and forwards the action via `onDemoAction`.
+     *
+     * The host is responsible for any user-facing "Demo paused" indicator
+     * (e.g., status ribbon suffix) — chat-ui no longer renders its own
+     * banner so the host can integrate the state into its existing UI
+     * without an extra component getting in the way.
      */
-    public setDemoPaused(paused: boolean, message?: string): void {
+    public setDemoPaused(paused: boolean, _message?: string): void {
         this.isDemoPaused = paused;
-        if (paused) {
-            if (!this.demoKeyHandler) {
-                this.demoKeyHandler = (e: KeyboardEvent) => {
-                    if (!this.isDemoPaused) return;
-                    if (e.key === "ArrowRight" && (e.ctrlKey || e.metaKey)) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        this.onDemoAction?.("continue");
-                    } else if (e.key === "Escape") {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        this.onDemoAction?.("cancel");
-                    }
-                };
-                window.addEventListener("keydown", this.demoKeyHandler, true);
-            }
-            this.showDemoBanner(message);
-        } else {
-            if (this.demoKeyHandler) {
-                window.removeEventListener(
-                    "keydown",
-                    this.demoKeyHandler,
-                    true,
-                );
-                this.demoKeyHandler = undefined;
-            }
-            this.hideDemoBanner();
-        }
+        this.refreshDemoKeyHandler();
     }
 
-    private demoBanner?: HTMLDivElement;
-    private showDemoBanner(message?: string): void {
-        if (!this.demoBanner) {
-            this.demoBanner = document.createElement("div");
-            this.demoBanner.className = "chat-demo-banner";
-            this.rootElement.appendChild(this.demoBanner);
-        }
-        const tail = message ? ` — ${message}` : "";
-        this.demoBanner.textContent =
-            `Demo paused${tail} (Ctrl+→ continue, Esc cancel)`;
-    }
-    private hideDemoBanner(): void {
-        if (this.demoBanner) {
-            this.demoBanner.remove();
-            this.demoBanner = undefined;
+    private refreshDemoKeyHandler(): void {
+        const wantHandler = this.isDemoPaused || this.isDemoRunning;
+        if (wantHandler && !this.demoKeyHandler) {
+            this.demoKeyHandler = (e: KeyboardEvent) => {
+                if (!this.isDemoPaused && !this.isDemoRunning) return;
+                if (
+                    e.key === "ArrowRight" &&
+                    (e.ctrlKey || e.metaKey) &&
+                    this.isDemoPaused
+                ) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.onDemoAction?.("continue");
+                } else if (e.key === "Escape") {
+                    // Esc cancels the demo whether it's currently
+                    // paused at @pauseForInput or actively running a
+                    // line. The host's requestDemoCancel() sets a
+                    // sticky flag so the loop sees it on the next
+                    // iteration even mid-line.
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.onDemoAction?.("cancel");
+                }
+            };
+            window.addEventListener("keydown", this.demoKeyHandler, true);
+        } else if (!wantHandler && this.demoKeyHandler) {
+            window.removeEventListener(
+                "keydown",
+                this.demoKeyHandler,
+                true,
+            );
+            this.demoKeyHandler = undefined;
         }
     }
 
@@ -2048,10 +2152,12 @@ class AgentMessageContainer {
             mainLines.push(metricsLine("Total Elapsed", totalDuration));
         }
         if (tokenUsage) {
+            // Compact form: "Tokens: 14356 (14257+99)" — the long
+            // "(prompt N, completion M)" form overflowed the metrics
+            // tooltip in narrow webview sidebars.
             mainLines.push(
                 `Tokens: <b>${tokenUsage.total_tokens}</b> ` +
-                    `(prompt ${tokenUsage.prompt_tokens}, ` +
-                    `completion ${tokenUsage.completion_tokens})`,
+                    `(${tokenUsage.prompt_tokens}+${tokenUsage.completion_tokens})`,
             );
         }
         const leftLines: string[] = [];

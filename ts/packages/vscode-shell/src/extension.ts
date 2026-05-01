@@ -187,23 +187,33 @@ export function activate(context: vscode.ExtensionContext): void {
             demoResolve?.("continue"),
         ),
         vscode.commands.registerCommand("vscode-shell.demoCancel", () =>
-            demoResolve?.("cancel"),
+            requestDemoCancel(),
         ),
     );
 }
 
 // Demo runner state. demoResolve is set while a script is paused on
 // @pauseForInput; calling it advances or cancels the pause.
+// demoCancelRequested is a sticky flag so cancellation works even
+// outside an @pauseForInput pause (e.g., user hits Esc / cancel
+// during a long line execution).
 let demoResolve: ((action: "continue" | "cancel") => void) | undefined;
 let demoStatusItem: vscode.StatusBarItem | undefined;
+let demoRunning = false;
+let demoCancelRequested = false;
 
-function setDemoPaused(paused: boolean, message?: string): void {
+function setDemoState(
+    running: boolean,
+    paused: boolean,
+    message?: string,
+): void {
+    demoRunning = running;
     vscode.commands.executeCommand(
         "setContext",
         "vscode-shell.demoPaused",
         paused,
     );
-    activeChat?.bridge.notifyDemoPaused(paused, message);
+    activeChat?.bridge.notifyDemoState(running, paused, message);
     if (paused) {
         if (!demoStatusItem) {
             demoStatusItem = vscode.window.createStatusBarItem(
@@ -223,6 +233,19 @@ function setDemoPaused(paused: boolean, message?: string): void {
     }
 }
 
+// Back-compat alias used by other modules.
+function setDemoPaused(paused: boolean, message?: string): void {
+    setDemoState(demoRunning, paused, message);
+}
+
+function requestDemoCancel(): void {
+    demoCancelRequested = true;
+    // If we're currently waiting at an @pauseForInput, resolve it as
+    // cancel so the loop wakes up and breaks. Otherwise the loop's
+    // top-of-iteration check will handle it on the next line.
+    demoResolve?.("cancel");
+}
+
 /**
  * Open a .txt demo script and replay it through the active chat,
  * mirroring the Electron shell's @shell run command. Lines starting
@@ -237,7 +260,7 @@ async function runDemoScript(): Promise<void> {
         );
         return;
     }
-    if (demoResolve) {
+    if (demoRunning) {
         vscode.window.showWarningMessage(
             "TypeAgent: a demo script is already running.",
         );
@@ -268,6 +291,8 @@ async function runDemoScript(): Promise<void> {
     const lines = content.split(/\r?\n/);
     const fileName = fileUri.path.split(/[\\/]/).pop() ?? "demo";
     let cancelled = false;
+    demoCancelRequested = false;
+    setDemoState(true, false);
 
     try {
         await vscode.window.withProgress(
@@ -278,10 +303,13 @@ async function runDemoScript(): Promise<void> {
             },
             async (progress, token) => {
                 token.onCancellationRequested(() => {
-                    cancelled = true;
-                    demoResolve?.("cancel");
+                    requestDemoCancel();
                 });
-                for (let i = 0; i < lines.length && !cancelled; i++) {
+                for (let i = 0; i < lines.length; i++) {
+                    if (demoCancelRequested) {
+                        cancelled = true;
+                        break;
+                    }
                     const raw = lines[i];
                     const line = raw.trim();
                     if (line.length === 0) continue;
@@ -299,7 +327,8 @@ async function runDemoScript(): Promise<void> {
                         } catch {
                             // Best-effort; don't break the demo if focus fails.
                         }
-                        setDemoPaused(
+                        setDemoState(
+                            true,
                             true,
                             `line ${i + 1}/${lines.length}`,
                         );
@@ -309,8 +338,8 @@ async function runDemoScript(): Promise<void> {
                             demoResolve = resolve;
                         });
                         demoResolve = undefined;
-                        setDemoPaused(false);
-                        if (action === "cancel") {
+                        setDemoState(true, false);
+                        if (action === "cancel" || demoCancelRequested) {
                             cancelled = true;
                             break;
                         }
@@ -345,11 +374,13 @@ async function runDemoScript(): Promise<void> {
                         // keep going so the demo isn't derailed by one bad line.
                     }
                 }
+                void cancelled;
             },
         );
     } finally {
         demoResolve = undefined;
-        setDemoPaused(false);
+        demoCancelRequested = false;
+        setDemoState(false, false);
     }
 }
 

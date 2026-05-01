@@ -76,6 +76,15 @@
   content: attr(data-placeholder);
   color: #aaa;
   pointer-events: none;
+  /* Inherit the same metrics as typed text so the contentEditable line box
+     (and therefore the blinking caret) sits on the same baseline as the
+     placeholder. Without this, the placeholder uses the default inline
+     line-height while the typed-text run uses 30px, and the caret floats
+     above the placeholder text. */
+  line-height: inherit;
+  font-size: inherit;
+  font-family: inherit;
+  vertical-align: baseline;
 }
 
 .chat-input-button {
@@ -87,6 +96,9 @@
   padding: 0px;
   margin: 6px 3.5px;
   cursor: pointer;
+  /* Match VS Code theme so glyph buttons (e.g. stop ■) render in the
+     same colour as the surrounding text instead of the browser default. */
+  color: var(--vscode-foreground, #e8e8f0);
 }
 
 .chat-input-button:disabled svg {
@@ -94,8 +106,9 @@
 }
 
 .chat-stop-button {
-  color: #e74c3c;
-  font-size: 16px;
+  /* Match shell: no special color override, just rely on .chat-input-button
+     defaults. Increase the glyph size so the ■ fills the 24x24 button. */
+  font-size: 18px;
   line-height: 24px;
 }
 
@@ -424,14 +437,15 @@ table.table-message td {
   margin-top: 5px;
   margin-bottom: 5px;
   box-sizing: border-box;
-  /* Keep each line on its own row — never wrap a metric mid-line
-     (e.g. "completion\n35)"). Long content scrolls horizontally
-     within the column instead. */
-  white-space: nowrap;
+  /* Allow long lines (e.g. token totals) to wrap inside their column
+     rather than overflow the tooltip in narrow webview sidebars. */
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 .metrics-details > div {
   margin-left: 5px;
   margin-right: 5px;
+  min-width: 0;
 }
 .metrics-details > div:first-child {
   text-align: left;
@@ -879,21 +893,4 @@ span.ansi-bright-white-fg {
 .chat-input-switching .user-textarea,
 .chat-input-history-loading .user-textarea {
   opacity: 0.6;
-}
-/* =========================================================================
-   Demo paused banner
-   ========================================================================= */
-.chat-demo-banner {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  padding: 4px 12px;
-  background: rgba(255, 196, 0, 0.18);
-  border-bottom: 1px solid rgba(255, 196, 0, 0.45);
-  color: #c08400;
-  font-size: 12px;
-  text-align: center;
-  z-index: 10;
-  pointer-events: none;
 }

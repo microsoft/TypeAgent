@@ -58,6 +58,9 @@ export class PartialCompletion {
     private inline: boolean;
     private previousInput: string = "";
     private disposed = false;
+    // Index of the currently-previewed item when inline ghost text is
+    // active. Up/Down cycle through items[] just like the dropdown menu.
+    private inlineIndex = 0;
 
     constructor(
         private readonly inputContainer: HTMLElement,
@@ -122,7 +125,10 @@ export class PartialCompletion {
 
     /** Receive a state update from the host. */
     public applyState(state: PcCompletionState | undefined): void {
+        // Reset inline cycle index whenever a new completion list arrives
+        // (different prefix → first item is the most relevant suggestion).
         this.state = state;
+        this.inlineIndex = 0;
         this.renderInline();
         this.renderMenu();
     }
@@ -132,6 +138,21 @@ export class PartialCompletion {
      * Returns true if the key was handled.
      */
     public handleKeyDownPreSend(event: KeyboardEvent): boolean {
+        // Ctrl+Space (or Cmd+Space on macOS) re-summons the completion
+        // engine after the user dismissed it with Esc, mirroring the
+        // VS Code IntelliSense convention. Handle this BEFORE the
+        // "state must be present" early return below — that's the
+        // whole point of this binding.
+        if (
+            event.key === " " &&
+            (event.ctrlKey || event.metaKey) &&
+            !event.altKey &&
+            !event.shiftKey
+        ) {
+            event.preventDefault();
+            this.requestUpdate();
+            return true;
+        }
         if (!this.state || this.state.items.length === 0) {
             return false;
         }
@@ -141,10 +162,24 @@ export class PartialCompletion {
             return true;
         }
         if (event.key === "ArrowDown") {
-            // Only intercept arrows in dropdown mode; in inline mode let
-            // them move the caret normally.
             if (!this.effectiveInline() && this.menu) {
                 this.menu.adjustSelection(1);
+                event.preventDefault();
+                return true;
+            }
+            // Inline ghost mode: cycle through completion candidates so
+            // the user can preview/accept any one of them with Tab,
+            // matching the Electron shell's behaviour. Always consume
+            // the arrow when an inline ghost is showing — even if there
+            // is only one candidate — so the keystroke doesn't fall
+            // through to chat-ui's history navigation and clobber the
+            // user's typed input.
+            if (this.effectiveInline()) {
+                if (this.state.items.length > 1) {
+                    this.inlineIndex =
+                        (this.inlineIndex + 1) % this.state.items.length;
+                    this.renderInline();
+                }
                 event.preventDefault();
                 return true;
             }
@@ -153,6 +188,16 @@ export class PartialCompletion {
         if (event.key === "ArrowUp") {
             if (!this.effectiveInline() && this.menu) {
                 this.menu.adjustSelection(-1);
+                event.preventDefault();
+                return true;
+            }
+            if (this.effectiveInline()) {
+                if (this.state.items.length > 1) {
+                    this.inlineIndex =
+                        (this.inlineIndex - 1 + this.state.items.length) %
+                        this.state.items.length;
+                    this.renderInline();
+                }
                 event.preventDefault();
                 return true;
             }
@@ -187,7 +232,13 @@ export class PartialCompletion {
             return;
         }
         if (this.state.items.length > 0) {
-            this.applySelection(this.state.items[0]);
+            // In inline mode, accept whichever candidate is currently
+            // previewed (Up/Down lets the user cycle).
+            const idx = Math.min(
+                Math.max(this.inlineIndex, 0),
+                this.state.items.length - 1,
+            );
+            this.applySelection(this.state.items[idx]);
         }
     }
 
@@ -202,8 +253,26 @@ export class PartialCompletion {
                 : item.selectedText;
         const before = value.slice(0, caret - state.prefix.length);
         const after = value.slice(caret);
-        const newValue = before + replaceText + after;
-        const newCaret = before.length + replaceText.length;
+        // Mirror the ghost preview: if we're starting a fresh token
+        // (no prefix consumed) but the existing text doesn't end in
+        // whitespace, insert a leading space so accept matches preview.
+        const needsLeadingSpace =
+            state.prefix.length === 0 &&
+            before.length > 0 &&
+            !/\s$/.test(before) &&
+            replaceText.length > 0 &&
+            !/^\s/.test(replaceText);
+        const leadIn = needsLeadingSpace ? " " : "";
+        // Append a trailing space so the user can immediately start
+        // typing the next token (or have the next-token completion
+        // surface cleanly). Skip when the text already ends with
+        // whitespace.
+        const withSpace = /\s$/.test(replaceText)
+            ? replaceText
+            : replaceText + " ";
+        const insertion = leadIn + withSpace;
+        const newValue = before + insertion + after;
+        const newCaret = before.length + insertion.length;
         this.setValueAndCaret(newValue, newCaret);
         this.previousInput = "";
         this.post({ type: "pcAccept" });
@@ -362,9 +431,33 @@ export class PartialCompletion {
             this.toggle?.hide();
             return;
         }
-        const item = this.state.items[0];
+        const idx = Math.min(
+            Math.max(this.inlineIndex, 0),
+            this.state.items.length - 1,
+        );
+        const item = this.state.items[idx];
         const suffix = item.matchText.substring(this.state.prefix.length);
-        this.ghostSpan.textContent = suffix;
+        // If the ghost is starting a fresh token (no prefix consumed)
+        // and its suffix doesn't already lead with whitespace, prepend
+        // a space so the preview is visually separated from the typed
+        // text. We deliberately do NOT skip this when `value` ends in
+        // whitespace, because contentEditable collapses trailing
+        // whitespace at display time — without an explicit leading
+        // space on the ghost the user sees "task" + ghost adjacent
+        // even though the underlying value already has a trailing
+        // space (this hits on every Tab past the first).
+        const value = this.currentValue();
+        const needsLeadingSpace =
+            this.state.prefix.length === 0 &&
+            value.length > 0 &&
+            suffix.length > 0 &&
+            !/^\s/.test(suffix);
+        // Show the same trailing space that acceptInlineOrSelected
+        // appends on Tab so the ghost preview matches the post-accept
+        // text exactly (no visually adjacent words).
+        const withTrailing = /\s$/.test(suffix) ? suffix : suffix + " ";
+        this.ghostSpan.textContent =
+            (needsLeadingSpace ? " " : "") + withTrailing;
         this.toggle?.show();
     }
 
