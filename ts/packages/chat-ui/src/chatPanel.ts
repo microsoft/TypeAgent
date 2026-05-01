@@ -177,14 +177,12 @@ function highlightJson(json: string): string {
             nul?: string,
             num?: string,
         ): string => {
-            if (key)
-                return `<span class="json-key">${escapeText(key)}</span>`;
+            if (key) return `<span class="json-key">${escapeText(key)}</span>`;
             if (str)
                 return `<span class="json-string">${escapeText(str)}</span>`;
             if (bool)
                 return `<span class="json-bool">${escapeText(bool)}</span>`;
-            if (nul)
-                return `<span class="json-null">${escapeText(nul)}</span>`;
+            if (nul) return `<span class="json-null">${escapeText(nul)}</span>`;
             if (num)
                 return `<span class="json-number">${escapeText(num)}</span>`;
             return escapeText(_m);
@@ -245,8 +243,7 @@ function attachHoverPush(
             // Normal case: hovered bubble is NOT the bottommost. Push
             // visually-lower (DOM-earlier) bubbles DOWN to make room
             // for the overlay rendered below this bubble.
-            let sibling: Element | null =
-                containerDiv.previousElementSibling;
+            let sibling: Element | null = containerDiv.previousElementSibling;
             while (sibling) {
                 (sibling as HTMLElement).style.translate = `0 ${offset}`;
                 (sibling as HTMLElement).style.transition =
@@ -922,7 +919,8 @@ export class ChatPanel {
         // Empty user-side metrics strip — populated later by
         // applyUserMetrics() when the dispatcher reports `metrics.parse`.
         const userMetricsDiv = document.createElement("div");
-        userMetricsDiv.className = "chat-message-metrics chat-message-metrics-user";
+        userMetricsDiv.className =
+            "chat-message-metrics chat-message-metrics-user";
         bodyDiv.appendChild(userMetricsDiv);
 
         container.appendChild(bodyDiv);
@@ -988,7 +986,9 @@ export class ChatPanel {
                 const avg = value.duration / Math.max(value.count, 1);
                 const suffix =
                     value.count !== 1 ? `(out of ${value.count})` : "";
-                markLines.push(`${key}: <b>${formatDuration(avg)}${suffix}</b>`);
+                markLines.push(
+                    `${key}: <b>${formatDuration(avg)}${suffix}</b>`,
+                );
             }
         }
         metricsDiv.innerHTML =
@@ -1214,61 +1214,61 @@ export class ChatPanel {
         this.suppressFirstMessageTracking = true;
         try {
             for (const entry of entries) {
-            switch (entry.kind) {
-                case "user":
-                    this.addUserMessage(entry.text, entry.requestId);
-                    break;
-                case "agent-replace":
-                    this.replaceAgentMessage(
-                        entry.content,
-                        entry.source,
-                        entry.sourceIcon,
-                        entry.requestId,
-                    );
-                    break;
-                case "agent-append":
-                    if (entry.mode === "temporary") break;
-                    this.addAgentMessage(
-                        entry.content,
-                        entry.source,
-                        entry.sourceIcon,
-                        entry.mode,
-                        entry.requestId,
-                    );
-                    break;
-                case "system":
-                    this.addSystemMessage(entry.text);
-                    break;
-                case "display-info":
-                    this.setDisplayInfo(
-                        entry.source,
-                        entry.sourceIcon,
-                        entry.action,
-                        entry.requestId,
-                    );
-                    break;
-                case "command-result":
-                    if (entry.requestId) {
-                        // Pre-seed the per-request firstMessageMs so the
-                        // metrics tooltip can show "First Message" on
-                        // history-replayed bubbles (live tracking is
-                        // suppressed during replay).
-                        if (entry.firstMessageMs !== undefined) {
-                            this.firstMessageMsByRequestId.set(
-                                entry.requestId,
-                                entry.firstMessageMs,
-                            );
+                switch (entry.kind) {
+                    case "user":
+                        this.addUserMessage(entry.text, entry.requestId);
+                        break;
+                    case "agent-replace":
+                        this.replaceAgentMessage(
+                            entry.content,
+                            entry.source,
+                            entry.sourceIcon,
+                            entry.requestId,
+                        );
+                        break;
+                    case "agent-append":
+                        if (entry.mode === "temporary") break;
+                        this.addAgentMessage(
+                            entry.content,
+                            entry.source,
+                            entry.sourceIcon,
+                            entry.mode,
+                            entry.requestId,
+                        );
+                        break;
+                    case "system":
+                        this.addSystemMessage(entry.text);
+                        break;
+                    case "display-info":
+                        this.setDisplayInfo(
+                            entry.source,
+                            entry.sourceIcon,
+                            entry.action,
+                            entry.requestId,
+                        );
+                        break;
+                    case "command-result":
+                        if (entry.requestId) {
+                            // Pre-seed the per-request firstMessageMs so the
+                            // metrics tooltip can show "First Message" on
+                            // history-replayed bubbles (live tracking is
+                            // suppressed during replay).
+                            if (entry.firstMessageMs !== undefined) {
+                                this.firstMessageMsByRequestId.set(
+                                    entry.requestId,
+                                    entry.firstMessageMs,
+                                );
+                            }
+                            this.completeRequest(entry.requestId, {
+                                actionPhase: entry.actionPhase,
+                                totalDuration: entry.totalDuration,
+                                tokenUsage: entry.tokenUsage,
+                                parsePhase: entry.parsePhase,
+                            });
                         }
-                        this.completeRequest(entry.requestId, {
-                            actionPhase: entry.actionPhase,
-                            totalDuration: entry.totalDuration,
-                            tokenUsage: entry.tokenUsage,
-                            parsePhase: entry.parsePhase,
-                        });
-                    }
-                    break;
+                        break;
+                }
             }
-        }
         } finally {
             this.suppressFirstMessageTracking = false;
         }
@@ -1442,8 +1442,7 @@ export class ChatPanel {
             // landed before any agent output), spin up a minimal one so
             // the status is still visible.
             const cancelTarget =
-                target ??
-                this.createAgentContainer("shell", "");
+                target ?? this.createAgentContainer("shell", "");
             cancelTarget.setMessage(
                 {
                     type: "text",
@@ -1884,10 +1883,7 @@ export class ChatPanel {
         this.isHistoryLoading = loading;
         if (loading) {
             this.setEnabledInternal(false);
-            this.textInput.setAttribute(
-                "data-placeholder",
-                "Loading history…",
-            );
+            this.textInput.setAttribute("data-placeholder", "Loading history…");
             this.inputArea.classList.add("chat-input-history-loading");
         } else {
             this.inputArea.classList.remove("chat-input-history-loading");
@@ -1943,11 +1939,7 @@ export class ChatPanel {
             };
             window.addEventListener("keydown", this.demoKeyHandler, true);
         } else if (!wantHandler && this.demoKeyHandler) {
-            window.removeEventListener(
-                "keydown",
-                this.demoKeyHandler,
-                true,
-            );
+            window.removeEventListener("keydown", this.demoKeyHandler, true);
             this.demoKeyHandler = undefined;
         }
     }
@@ -2120,7 +2112,8 @@ class AgentMessageContainer {
         // Starts empty so the hover area collapses to zero height until
         // updateMetrics() populates it.
         this.metricsDiv = document.createElement("div");
-        this.metricsDiv.className = "chat-message-metrics chat-message-metrics-agent";
+        this.metricsDiv.className =
+            "chat-message-metrics chat-message-metrics-agent";
         bodyDiv.appendChild(this.metricsDiv);
 
         this.div.appendChild(bodyDiv);
@@ -2146,7 +2139,9 @@ class AgentMessageContainer {
         // tooltip reads as "marks on the left, totals on the right".
         const mainLines: string[] = [];
         if (phase?.duration !== undefined) {
-            mainLines.push(metricsLine(`${actionLabel} Elapsed`, phase.duration));
+            mainLines.push(
+                metricsLine(`${actionLabel} Elapsed`, phase.duration),
+            );
         }
         if (totalDuration !== undefined) {
             mainLines.push(metricsLine("Total Elapsed", totalDuration));
@@ -2169,7 +2164,9 @@ class AgentMessageContainer {
                 const avg = value.duration / Math.max(value.count, 1);
                 const suffix =
                     value.count !== 1 ? `(out of ${value.count})` : "";
-                leftLines.push(`${key}: <b>${formatDuration(avg)}${suffix}</b>`);
+                leftLines.push(
+                    `${key}: <b>${formatDuration(avg)}${suffix}</b>`,
+                );
             }
         }
         this.metricsDiv.innerHTML =

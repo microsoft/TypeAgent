@@ -103,45 +103,41 @@ export function activate(context: vscode.ExtensionContext): void {
         }),
     );
     context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "vscode-shell.newChatPanel",
-            () => openNewChatPanel(context, provider),
+        vscode.commands.registerCommand("vscode-shell.newChatPanel", () =>
+            openNewChatPanel(context, provider),
         ),
     );
 
     // Serializer: restore previously-open chat panels on window reopen.
     context.subscriptions.push(
-        vscode.window.registerWebviewPanelSerializer(
-            "vscode-shell.chatPanel",
-            {
-                async deserializeWebviewPanel(
-                    panel: vscode.WebviewPanel,
-                    state: any,
-                ): Promise<void> {
-                    panelCounter += 1;
-                    const n = panelCounter;
-                    const sessionId =
-                        state && typeof state === "object"
-                            ? (state.sessionId as string | undefined)
-                            : undefined;
-                    const sessionName =
-                        state && typeof state === "object"
-                            ? (state.sessionName as string | undefined)
-                            : undefined;
-                    const friendly = sessionName ?? `Chat ${n}`;
-                    panel.title = `TypeAgent ${friendly}`;
-                    attachChatPanel(context, provider, panel, {
-                        displayName: friendly,
-                        // Always provide a fresh ephemeral name so that if the
-                        // saved session is gone (e.g. it was an ephemeral that
-                        // got swept on server start), we create a new ephemeral
-                        // for this tab instead of joining the default session.
-                        ephemeralSessionName: `cli-ephemeral-vscode-${n}-${Date.now()}`,
-                        restoreSessionId: sessionId,
-                    });
-                },
+        vscode.window.registerWebviewPanelSerializer("vscode-shell.chatPanel", {
+            async deserializeWebviewPanel(
+                panel: vscode.WebviewPanel,
+                state: any,
+            ): Promise<void> {
+                panelCounter += 1;
+                const n = panelCounter;
+                const sessionId =
+                    state && typeof state === "object"
+                        ? (state.sessionId as string | undefined)
+                        : undefined;
+                const sessionName =
+                    state && typeof state === "object"
+                        ? (state.sessionName as string | undefined)
+                        : undefined;
+                const friendly = sessionName ?? `Chat ${n}`;
+                panel.title = `TypeAgent ${friendly}`;
+                attachChatPanel(context, provider, panel, {
+                    displayName: friendly,
+                    // Always provide a fresh ephemeral name so that if the
+                    // saved session is gone (e.g. it was an ephemeral that
+                    // got swept on server start), we create a new ephemeral
+                    // for this tab instead of joining the default session.
+                    ephemeralSessionName: `cli-ephemeral-vscode-${n}-${Date.now()}`,
+                    restoreSessionId: sessionId,
+                });
             },
-        ),
+        }),
     );
 
     // Command: focus the sidebar chat
@@ -151,34 +147,27 @@ export function activate(context: vscode.ExtensionContext): void {
             if (activeChat?.panel) {
                 activeChat.panel.reveal();
             } else {
-                vscode.commands.executeCommand(
-                    "vscode-shell.chatView.focus",
-                );
+                vscode.commands.executeCommand("vscode-shell.chatView.focus");
             }
         }),
     );
 
     // Conversation management commands — operate on the ACTIVE chat
     context.subscriptions.push(
-        vscode.commands.registerCommand(
-            "vscode-shell.switchSession",
-            () => activeChat?.bridge.switchSession(),
+        vscode.commands.registerCommand("vscode-shell.switchSession", () =>
+            activeChat?.bridge.switchSession(),
         ),
-        vscode.commands.registerCommand(
-            "vscode-shell.newSession",
-            () => activeChat?.bridge.newSession(),
+        vscode.commands.registerCommand("vscode-shell.newSession", () =>
+            activeChat?.bridge.newSession(),
         ),
-        vscode.commands.registerCommand(
-            "vscode-shell.renameSession",
-            () => activeChat?.bridge.renameCurrentSession(),
+        vscode.commands.registerCommand("vscode-shell.renameSession", () =>
+            activeChat?.bridge.renameCurrentSession(),
         ),
-        vscode.commands.registerCommand(
-            "vscode-shell.deleteSession",
-            () => activeChat?.bridge.deleteSession(),
+        vscode.commands.registerCommand("vscode-shell.deleteSession", () =>
+            activeChat?.bridge.deleteSession(),
         ),
-        vscode.commands.registerCommand(
-            "vscode-shell.clearChat",
-            () => activeChat?.bridge.clearChatUI(),
+        vscode.commands.registerCommand("vscode-shell.clearChat", () =>
+            activeChat?.bridge.clearChatUI(),
         ),
         vscode.commands.registerCommand("vscode-shell.runDemo", () =>
             runDemoScript(),
@@ -332,11 +321,11 @@ async function runDemoScript(): Promise<void> {
                             true,
                             `line ${i + 1}/${lines.length}`,
                         );
-                        const action = await new Promise<
-                            "continue" | "cancel"
-                        >((resolve) => {
-                            demoResolve = resolve;
-                        });
+                        const action = await new Promise<"continue" | "cancel">(
+                            (resolve) => {
+                                demoResolve = resolve;
+                            },
+                        );
                         demoResolve = undefined;
                         setDemoState(true, false);
                         if (action === "cancel" || demoCancelRequested) {

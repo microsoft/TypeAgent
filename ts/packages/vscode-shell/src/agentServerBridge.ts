@@ -34,7 +34,12 @@ function clientIdOf(rid: RequestId | string | undefined): string | undefined {
  * Messages from extension host → webview
  */
 export type BridgeToWebviewMessage =
-    | { type: "status"; connected: boolean; sessionId?: string; sessionName?: string }
+    | {
+          type: "status";
+          connected: boolean;
+          sessionId?: string;
+          sessionName?: string;
+      }
     | { type: "sessionChanged"; sessionId: string; sessionName: string }
     | {
           type: "setDisplay";
@@ -67,7 +72,14 @@ export type BridgeToWebviewMessage =
           timestamp?: number;
       }
     | { type: "clear"; requestId?: string }
-    | { type: "notify"; event: string; data: any; source: string; seq?: number; requestId?: string }
+    | {
+          type: "notify";
+          event: string;
+          data: any;
+          source: string;
+          seq?: number;
+          requestId?: string;
+      }
     | { type: "commandResult"; requestId: string; result: any }
     | { type: "commandComplete"; requestId: string; result: any }
     | { type: "peerMetrics"; requestId: string; result: any }
@@ -288,12 +300,20 @@ export class AgentServerBridge {
     /** Subscribe to connection / session-name changes. */
     onStatusChange(cb: () => void): vscode.Disposable {
         this.onStatusChanged = cb;
-        return { dispose: () => { this.onStatusChanged = undefined; } };
+        return {
+            dispose: () => {
+                this.onStatusChanged = undefined;
+            },
+        };
     }
 
     onWebviewFocus(cb: (focused: boolean) => void): vscode.Disposable {
         this.onWebviewFocusChanged = cb;
-        return { dispose: () => { this.onWebviewFocusChanged = undefined; } };
+        return {
+            dispose: () => {
+                this.onWebviewFocusChanged = undefined;
+            },
+        };
     }
 
     /**
@@ -360,7 +380,6 @@ export class AgentServerBridge {
     }
 
     private async connectImpl(): Promise<void> {
-
         const config = vscode.workspace.getConfiguration("typeagent");
         const serverUrl = config.get<string>(
             "serverUrl",
@@ -407,7 +426,11 @@ export class AgentServerBridge {
                 // ephemeral / default behavior so we still have a chat.
                 try {
                     const sessions = await connection.listSessions();
-                    if (sessions.some((s) => s.sessionId === this.restoreSessionId)) {
+                    if (
+                        sessions.some(
+                            (s) => s.sessionId === this.restoreSessionId,
+                        )
+                    ) {
                         joinOpts.sessionId = this.restoreSessionId;
                     } else {
                         this.restoreSessionId = undefined;
@@ -438,15 +461,9 @@ export class AgentServerBridge {
                 joinOpts.sessionId = this.ephemeralSessionId;
             }
 
-            this.session = await connection.joinSession(
-                clientIO,
-                joinOpts,
-            );
+            this.session = await connection.joinSession(clientIO, joinOpts);
 
-            AgentServerBridge.registerForSession(
-                this.session.sessionId,
-                this,
-            );
+            AgentServerBridge.registerForSession(this.session.sessionId, this);
 
             this.isConnected = true;
             this.updateStatusBar(true);
@@ -519,8 +536,7 @@ export class AgentServerBridge {
         const conn = this.connection;
         if (toDelete && conn) {
             // Fire-and-forget — don't block dispose
-            conn
-                .deleteSession(toDelete)
+            conn.deleteSession(toDelete)
                 .catch(() => {})
                 .finally(() => {
                     this.disconnect();
@@ -989,8 +1005,9 @@ export class AgentServerBridge {
                 // from setUserRequest. Fall back to the raw id only as a
                 // last resort (e.g., cancel arrived before setUserRequest).
                 try {
-                    const mapped =
-                        this.clientToServerRequestId.get(msg.requestId);
+                    const mapped = this.clientToServerRequestId.get(
+                        msg.requestId,
+                    );
                     const serverId = mapped ?? msg.requestId;
                     this.session?.dispatcher.cancelCommand(serverId);
                 } catch (e) {
@@ -1052,10 +1069,7 @@ export class AgentServerBridge {
         webview: vscode.Webview,
     ): CompletionController | undefined {
         if (!this.session) return undefined;
-        if (
-            this.completionController &&
-            this.completionWebview === webview
-        ) {
+        if (this.completionController && this.completionWebview === webview) {
             return this.completionController;
         }
         // If an existing controller is bound to a different webview, tear it
@@ -1118,10 +1132,7 @@ export class AgentServerBridge {
         if (!this.ephemeralSessionId) return;
         if (this.session.sessionId !== this.ephemeralSessionId) return;
 
-        const stamp = new Date()
-            .toISOString()
-            .replace("T", " ")
-            .slice(0, 16);
+        const stamp = new Date().toISOString().replace("T", " ").slice(0, 16);
         const base = `${this.displayName} ${stamp}`;
         let name = base;
         try {
@@ -1131,10 +1142,7 @@ export class AgentServerBridge {
             while (taken.has(name)) {
                 name = `${base} (${n++})`;
             }
-            await this.connection.renameSession(
-                this.session.sessionId,
-                name,
-            );
+            await this.connection.renameSession(this.session.sessionId, name);
             this.nameOverride = name;
             this.ephemeralSessionId = undefined;
             this.broadcastToWebviews({
@@ -1198,7 +1206,6 @@ export class AgentServerBridge {
         command: string,
         requestId?: string,
     ): Promise<void> {
-
         // Once the user actually engages with an ephemeral panel session,
         // promote it to a persistent named session so it survives panel
         // close and the server's startup sweep of cli-ephemeral-* sessions.
@@ -1218,7 +1225,8 @@ export class AgentServerBridge {
             });
             this.broadcastToWebviews({
                 type: "error",
-                message: "No active session — reconnect or pick a conversation.",
+                message:
+                    "No active session — reconnect or pick a conversation.",
                 requestId: requestId ?? "",
             });
             return;
@@ -1614,7 +1622,8 @@ export class AgentServerBridge {
             this.statusBarItem.text = "$(plug) TypeAgent: Connected";
             this.statusBarItem.backgroundColor = undefined;
         } else {
-            this.statusBarItem.text = "$(debug-disconnect) TypeAgent: Disconnected";
+            this.statusBarItem.text =
+                "$(debug-disconnect) TypeAgent: Disconnected";
             this.statusBarItem.backgroundColor = new vscode.ThemeColor(
                 "statusBarItem.warningBackground",
             );

@@ -77,13 +77,15 @@ chatPanel.attachCompletion((msg) => vscode.postMessage(msg));
 // We pick the last action's phase (or the command phase) as actionPhase, the
 // overall duration as totalDuration, the parse phase as parsePhase (drives
 // the "Translation" tooltip on the user bubble), and pass tokenUsage through.
-function mapResult(result: any): {
-    actionPhase?: any;
-    totalDuration?: number;
-    tokenUsage?: any;
-    parsePhase?: any;
-    cancelled?: boolean;
-} | undefined {
+function mapResult(result: any):
+    | {
+          actionPhase?: any;
+          totalDuration?: number;
+          tokenUsage?: any;
+          parsePhase?: any;
+          cancelled?: boolean;
+      }
+    | undefined {
     if (!result) return undefined;
     const metrics = result.metrics;
     const actions: any[] | undefined = metrics?.actions;
@@ -225,9 +227,7 @@ function renderStatus(): void {
         const base = lastSessionLabel
             ? `Connected · ${lastSessionLabel}`
             : "Connected to TypeAgent";
-        statusEl.textContent = demoSuffix
-            ? `${base} · ${demoSuffix}`
-            : base;
+        statusEl.textContent = demoSuffix ? `${base} · ${demoSuffix}` : base;
     } else {
         statusEl.className = "status disconnected";
         statusEl.textContent = reconnectText ?? "Disconnected";
@@ -389,9 +389,7 @@ window.addEventListener("message", (event) => {
             chatPanel.setDemoPaused(msg.paused, msg.message);
             chatPanel.setDemoRunning(msg.running);
             chatPanel.setInputHint(
-                msg.paused
-                    ? "Ctrl+→ continue · Esc cancel"
-                    : undefined,
+                msg.paused ? "Ctrl+→ continue · Esc cancel" : undefined,
             );
             break;
         case "demoTypeAndSend":

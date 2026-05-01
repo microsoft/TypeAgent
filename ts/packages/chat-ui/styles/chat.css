@@ -457,15 +457,19 @@ table.table-message td {
 /* When the agent name is clicked, the message body is replaced with a
    pretty-printed JSON view of the action payload. */
 .chat-message-action-data {
-  font-family: var(--vscode-editor-font-family,
-    Consolas, "Courier New", monospace);
+  font-family: var(
+    --vscode-editor-font-family,
+    Consolas,
+    "Courier New",
+    monospace
+  );
   font-size: 12px;
   padding: 4px 0;
 }
 .chat-message-action-data pre {
   margin: 0;
   padding: 8px;
-  background: rgba(127, 127, 127, 0.10);
+  background: rgba(127, 127, 127, 0.1);
   border-radius: 6px;
   white-space: pre-wrap;
   word-break: break-word;
@@ -485,16 +489,12 @@ table.table-message td {
   display: none;
 }
 
-.chat-message-body-hide-metrics:has(
-        .chat-message-metrics:not(:empty)
-    ):hover {
+.chat-message-body-hide-metrics:has(.chat-message-metrics:not(:empty)):hover {
   border-radius: 8px 8px 0px 0px;
 }
 
-.chat-message-body-hide-metrics:has(
-        .chat-message-metrics:not(:empty)
-    ):hover
-    .chat-message-metrics {
+.chat-message-body-hide-metrics:has(.chat-message-metrics:not(:empty)):hover
+  .chat-message-metrics {
   display: block;
   /* Absolute positioning below the bubble so the bubble itself does NOT
      change size on hover. With the surrounding chat using
@@ -629,7 +629,7 @@ table.table-message td {
 .chat-message-details pre {
   margin: 0;
   padding: 8px;
-  background: rgba(127, 127, 127, 0.10);
+  background: rgba(127, 127, 127, 0.1);
   border-radius: 6px;
   white-space: pre;
   overflow-x: auto;
