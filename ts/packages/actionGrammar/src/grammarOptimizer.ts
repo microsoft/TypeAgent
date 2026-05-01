@@ -19,8 +19,80 @@ import {
 import { leadingWordBoundaryScriptPrefix } from "./spacingScripts.js";
 import { leadingNonSeparatorRun } from "./grammarMatcher.js";
 import { getDispatchEffectiveMembers } from "./dispatchHelpers.js";
+import {
+    globalPhraseSetRegistry,
+    PhraseSetMatcher,
+} from "./builtInPhraseMatchers.js";
 
 const debug = registerDebug("typeagent:grammar:opt");
+
+/**
+ * Cache of `(matcher, mode) -> first-token key set | "open"`.
+ * Phrase-set matchers are global, immutable singletons, so a
+ * `WeakMap` keyed on the matcher instance is safe across the
+ * whole process and avoids re-walking the same `phrases` array
+ * for every rule whose first part references the same set
+ * (e.g. many rules starting with `<Polite>`).  `"open"` denotes
+ * an unenumerable matcher (unknown / empty / dispatch-key cap
+ * exceeded for this matcher alone) - the entry short-circuits
+ * to a fallback decision without re-walking.
+ *
+ * Cache invalidation note: cached `"open"` entries depend on
+ * the current `MAX_DISPATCH_KEYS_PER_RULE` value at the time of
+ * insertion.  The constant is compile-time only; if it ever
+ * becomes runtime-configurable, this cache must be cleared on
+ * change (or keyed by cap value) to avoid stale `"open"`
+ * verdicts.
+ */
+const phraseSetKeyCache = new WeakMap<
+    PhraseSetMatcher,
+    Map<CompiledSpacingMode, Set<string> | "open">
+>();
+
+function getPhraseSetKeys(
+    matcher: PhraseSetMatcher,
+    mode: CompiledSpacingMode,
+): Set<string> | "open" {
+    let perMode = phraseSetKeyCache.get(matcher);
+    if (perMode === undefined) {
+        perMode = new Map();
+        phraseSetKeyCache.set(matcher, perMode);
+    }
+    const cached = perMode.get(mode);
+    if (cached !== undefined) return cached;
+    if (matcher.phrases.length === 0) {
+        perMode.set(mode, "open");
+        return "open";
+    }
+    const keys = new Set<string>();
+    for (const phrase of matcher.phrases) {
+        if (phrase.length === 0) continue;
+        const key = dispatchKeyForLiteral(phrase[0], mode);
+        if (key === undefined) {
+            perMode.set(mode, "open");
+            return "open";
+        }
+        keys.add(key);
+        if (keys.size > MAX_DISPATCH_KEYS_PER_RULE) {
+            perMode.set(mode, "open");
+            return "open";
+        }
+    }
+    perMode.set(mode, keys);
+    return keys;
+}
+
+/**
+ * Hard cap on dispatch keys generated for a single rule when
+ * `expandDispatchKeys` is on.  A rule that exceeds this drops to
+ * fallback unchanged - bucketing it under more keys would balloon
+ * the serialized dispatch table without measurable filtering
+ * benefit.  64 comfortably accommodates a rule starting with a
+ * `phraseSet` part (typical sets have 5-30 phrases) plus a couple
+ * of optional prefix RulesParts; pathological grammars degrade
+ * gracefully to today's single-key behavior for that rule.
+ */
+const MAX_DISPATCH_KEYS_PER_RULE = 64;
 
 export type GrammarOptimizationOptions = {
     /**
@@ -100,19 +172,28 @@ export type GrammarOptimizationOptions = {
      *   - `optional` / `none` - never eligible (peek-by-separator
      *     would falsely segment unseparated input).
      *
-     * Members whose first part is not a statically-known token
-     * (wildcard / number / phraseSet / nested RulesPart, bound
-     * first-StringPart, recursive or empty members) land in the
-     * fallback `rules` subset and are tried as ordinary
-     * alternatives after the bucket hits.
+     * **Multi-key classification.**  Each rule is bucketed under
+     * the *set* of input first-tokens that could match its leading
+     * parts - not just the literal value of its single first part.
+     * The classifier walks past skippable prefixes (optional
+     * `RulesPart`s like `(can you)?`, optional wildcards) and
+     * unions in keys from `phraseSet` first tokens (`<Polite>`)
+     * and nested `RulesPart` alternatives.  A rule whose first-
+     * token set exceeds `MAX_DISPATCH_KEYS_PER_RULE` (64) drops to
+     * the fallback subset unchanged.  Rules that can match the
+     * empty prefix or whose leading is a non-optional wildcard /
+     * number / unknown phrase set also stay in fallback.
      *
-     * The pass is observably equivalent to the unoptimized form -
-     * the matcher tries the same set of alternatives in the same
-     * order on a hit, plus all fallback rules.  The NFA/DFA
-     * compile path walks the union of buckets and `rules` to
-     * recover the full effective member list (the NFA already does
-     * global first-token dispatch via `buildFirstTokenIndex`, so
-     * the dispatch index is redundant there).
+     * The matcher side is unchanged: dispatch is filter-only, each
+     * rule retains its full leading parts, and the same rule
+     * object is referenced from multiple buckets (peek selects at
+     * most one bucket per spacing-mode entry, so the rule still
+     * runs at most once per `matchGrammar` call).  This mirrors
+     * what `buildFirstTokenIndex` does on the NFA side.  The
+     * NFA/DFA compile path walks `getDispatchEffectiveMembers`
+     * (which dedups by rule identity) to recover the full
+     * effective member list - the NFA already does global first-
+     * token dispatch, so the dispatch index is redundant there.
      */
     dispatchifyAlternations?: boolean;
 
@@ -261,12 +342,13 @@ export function optimizeGrammar(
         // and downstream still gets a valid AST.
         const counter = { promoted: 0 };
         const memo: RulesArrayMemo = new Map();
-        const promotedRules = promoteRulesArray(rules, counter, memo);
+        const ruleMemo: RuleMemo = new Map();
+        const promotedRules = promoteRulesArray(rules, counter, memo, ruleMemo);
         const promotedDispatch =
             topLevelDispatch === undefined
                 ? topLevelDispatch
                 : mapDispatchBuckets(topLevelDispatch, (bucket) =>
-                      promoteRulesArray(bucket, counter, memo),
+                      promoteRulesArray(bucket, counter, memo, ruleMemo),
                   );
         if (
             validateTailPassOutput(
@@ -869,6 +951,21 @@ function tryInlineRulesPart(
  * Uses an identity memo over `GrammarRule[]` arrays so shared named
  * rules (multiple `RulesPart`s pointing at the same array) still share
  * after the pass - see `inlineSingleAlternativeRules` for rationale.
+ *
+ * **Match-order note (deliberate, observable change).**  When two or
+ * more alternatives share a leading prefix, they collapse into a
+ * single wrapper rule positioned at `min(idx)` of the group; members
+ * within the wrapper are then tried as a sub-alternation in source-
+ * order.  So a factored alternative whose source position was N gets
+ * tried adjacent to its sibling at position min(group), not at its
+ * original interleaved position.  When unfactored alternatives sat
+ * between two factored ones and any of them accept the same input,
+ * the winning rule can change.  Members within a fork *are* still
+ * tried in original source order (`items.sort` by idx), so the change
+ * is purely about the wrapper's repositioning, not about reordering
+ * inside it.  Accepted as part of the prefix-factoring optimization;
+ * the alternative would be to bail out at any fork that interleaves
+ * with non-factorable siblings, losing factoring almost everywhere.
  */
 /** Per-invocation configuration for `factorCommonPrefixes`. */
 function factorCommonPrefixes(
@@ -2158,11 +2255,13 @@ const EMPTY_FALLBACK_RULES: GrammarRule[] = Object.freeze(
 ) as GrammarRule[];
 
 /**
- * Classify a single rule's first part for dispatch eligibility,
- * deriving the bucket key for an `auto`/`required`-mode partition:
- *   - { kind: "token", token } - rule goes into `tokenMap[token]`.
- *   - { kind: "fallback" } - rule is not dispatch-eligible; goes
- *     to the dispatch part's `fallback` list.
+ * Classify a single rule's first parts for dispatch eligibility,
+ * deriving the *set* of bucket keys for an `auto`/`required`-mode
+ * partition.  Each contributed key uses `dispatchKeyForLiteral(_,
+ * mode)` so it aligns exactly with what `peekNextToken` returns
+ * at match time.  See `firstTokenKeys` for the walk; rules that
+ * yield zero keys (or exceed `MAX_DISPATCH_KEYS_PER_RULE`) drop
+ * to the dispatch part's fallback subset.
  *
  * Bucket-key derivation depends on the partition's spacing mode:
  *   - `required`: a separator is mandated after every token, so peek
@@ -2184,65 +2283,213 @@ const EMPTY_FALLBACK_RULES: GrammarRule[] = Object.freeze(
  * those modes are routed to `fallback` directly by
  * `tryDispatchifyRulesPart` without classification).
  */
-function classifyDispatchMember(
+
+/**
+ * Mode-aware bucket key for a single literal token.  Mirrors what
+ * `peekNextToken` returns on the input side, so per-mode buckets
+ * built from this function and the input keys agree exactly.
+ *
+ * Returns `undefined` when the literal can't produce a peek-aligned
+ * key (empty literal, or `required`-mode literal that starts with a
+ * separator character).
+ */
+function dispatchKeyForLiteral(
+    literal: string,
+    mode: CompiledSpacingMode,
+): string | undefined {
+    const lower = literal.toLowerCase();
+    if (lower.length === 0) return undefined;
+    if (mode === "required") {
+        const pref = leadingNonSeparatorRun(lower);
+        return pref.length === 0 ? undefined : pref;
+    }
+    const pref = leadingWordBoundaryScriptPrefix(lower);
+    if (pref.length > 0) return pref;
+    const cp = lower.codePointAt(0);
+    if (cp === undefined) return undefined;
+    return String.fromCodePoint(cp);
+}
+
+/**
+ * Result of walking through a `parts` prefix:
+ *   - `"consumed"` - we found a part that always consumes >=1 input
+ *     token; caller stops walking past.
+ *   - `"skippable"` - every part scanned was skippable (optional
+ *     wildcard / optional rule with all-empty alternatives / ...);
+ *     caller may keep walking past us.
+ *   - `"open"` - some leading part could match anything (non-optional
+ *     wildcard / number, unknown phrase set, key-cap exceeded);
+ *     the rule must drop to fallback.
+ */
+type FirstTokenWalkResult = "consumed" | "skippable" | "open";
+
+/**
+ * Multi-key dispatch classifier.  Returns the set of input first-
+ * tokens that could match the start of `rule`, or `undefined` to
+ * signal "drop to fallback".
+ *
+ * Each contributed key uses `dispatchKeyForLiteral(_, mode)` so it
+ * aligns exactly with what `peekNextToken` returns at match time.
+ * The walk stops at the first part that always consumes a token
+ * (literals, phrase sets, non-optional rules) - keys from later
+ * parts are unreachable since the matcher would have already
+ * consumed input by the time it reached them.
+ */
+function firstTokenKeys(
     rule: GrammarRule,
     mode: CompiledSpacingMode,
-): { kind: "token"; token: string } | { kind: "fallback" } {
-    const first = rule.parts[0];
-    if (first === undefined) {
-        return { kind: "fallback" };
+): Set<string> | undefined {
+    const out = new Set<string>();
+    // Cycle guard for nested rule references.  Keyed on the
+    // *members array we iterate* (i.e. the effective member list
+    // of each `RulesPart` we descend into).  This catches cycles
+    // regardless of whether the rule was dispatched (members live
+    // in `tokenMap` values, conceptually summarized by
+    // `getDispatchEffectiveMembers`) or undispatched (members in
+    // `alternatives`), and remains correct when two `RulesPart`
+    // wrappers share an `alternatives` array via named-rule
+    // identity sharing - both walks compute the same key set.
+    const visiting = new Set<GrammarRule[]>();
+    const r = walkPartsForKeys(rule.parts, mode, out, visiting);
+    if (r === "open") return undefined;
+    // `"skippable"` means the rule could match the empty prefix -
+    // peek can't filter such a rule, so it has to live in fallback.
+    if (r === "skippable") return undefined;
+    if (out.size === 0) return undefined;
+    if (out.size > MAX_DISPATCH_KEYS_PER_RULE) return undefined;
+    return out;
+}
+
+function walkPartsForKeys(
+    parts: GrammarPart[],
+    mode: CompiledSpacingMode,
+    out: Set<string>,
+    visiting: Set<GrammarRule[]>,
+): FirstTokenWalkResult {
+    for (const p of parts) {
+        const r = walkPartForKeys(p, mode, out, visiting);
+        if (r === "open") return "open";
+        if (out.size > MAX_DISPATCH_KEYS_PER_RULE) return "open";
+        if (r === "consumed") return "consumed";
+        // skippable: continue past this part.
     }
-    if (first.type !== "string") {
-        return { kind: "fallback" };
-    }
-    // Bound first-StringPart is fine: dispatch is filter-only and
-    // each rule retains its full leading `StringPart` (including its
-    // binding), so the matcher binds the captured tokens via the
-    // rule's own `StringPart` regex on the dispatch hit - no
-    // suffix-binding injection required.  Bucket key is still derived
-    // from the literal's first token below.
-    if (first.value.length === 0) {
-        return { kind: "fallback" };
-    }
-    const literal = first.value[0].toLowerCase();
-    if (literal.length === 0) {
-        return { kind: "fallback" };
-    }
-    if (mode === "required") {
-        // Bucket on the leading non-separator run, mirroring what
-        // `peekNextToken` returns for required / optional / none
-        // modes.  Two consequences worth being explicit about:
-        //   1. Key alignment: using the full `literal` would cause
-        //      a key mismatch when the literal embeds a separator
-        //      char (e.g. `"d?"` buckets under `"d"` since peek
-        //      returns `"d"` for input `"d? ..."`).
-        //   2. Bucket collapse: literals like `"d?"`, `"d!"`,
-        //      `"d."` all share bucket key `"d"`, so dispatch
-        //      fan-out can be smaller than the number of distinct
-        //      first-token literals.  This is correct - peek will
-        //      route all such inputs to the same bucket, and the
-        //      member rules' StringPart regexes discriminate
-        //      among them.
-        // If the literal starts with a separator, the prefix is
-        // empty and we can't dispatch this member - send it to
-        // fallback.
-        const pref = leadingNonSeparatorRun(literal);
-        if (pref.length === 0) {
-            return { kind: "fallback" };
+    return "skippable";
+}
+
+function walkPartForKeys(
+    part: GrammarPart,
+    mode: CompiledSpacingMode,
+    out: Set<string>,
+    visiting: Set<GrammarRule[]>,
+): FirstTokenWalkResult {
+    switch (part.type) {
+        case "string": {
+            if (part.value.length === 0) return "skippable";
+            const key = dispatchKeyForLiteral(part.value[0], mode);
+            if (key === undefined) return "open";
+            out.add(key);
+            return "consumed";
         }
-        return { kind: "token", token: pref };
+        case "phraseSet": {
+            const matcher = globalPhraseSetRegistry.getMatcher(
+                part.matcherName,
+            );
+            // Unknown matcher (phrase set deserialized from a
+            // grammar that referenced a name we don't have here)
+            // means we can't enumerate first tokens - bail.
+            if (matcher === undefined) return "open";
+            const keys = getPhraseSetKeys(matcher, mode);
+            if (keys === "open") return "open";
+            for (const key of keys) {
+                out.add(key);
+                if (out.size > MAX_DISPATCH_KEYS_PER_RULE) return "open";
+            }
+            // Phrases always have >=1 token, so a phraseSet always
+            // consumes - caller stops walking past.
+            return "consumed";
+        }
+        case "rules": {
+            // Resolve the effective member list (bucketed members
+            // for already-dispatched parts; the alternation
+            // otherwise).  An empty list means the part can never
+            // match anything; treat it as skippable iff the outer
+            // flags allow, otherwise bail to fallback.  Crucially,
+            // we never report "consumed" without contributing
+            // keys, so the rule won't be wrongly treated as having
+            // a definite token prefix.
+            const members = part.dispatch
+                ? getDispatchEffectiveMembers(part)
+                : part.alternatives;
+            if (members.length === 0) {
+                return part.optional || part.repeat ? "skippable" : "open";
+            }
+            // Cycle guard - keyed on the members array we're
+            // about to iterate so the check fires regardless of
+            // whether the cycle threads through `alternatives` or
+            // a dispatched `tokenMap`.  On a cycle hit, return
+            // "skippable" rather than "open": the outer walker
+            // continues past this part and may collect keys from
+            // sibling parts.  Any keys it collects are valid
+            // first tokens for paths that *do not* take the
+            // recursion - dispatch is filter-only and over-
+            // bucketing is safe (the rule still runs but fails to
+            // match unrelated peek tokens), while under-bucketing
+            // would miss matches.  The recursion's own first
+            // tokens are necessarily the same as the outer rule's
+            // first tokens (transitive closure), so they are
+            // already being collected at the top of this walk.
+            //
+            // Reachability: no compiler-accepted source grammar
+            // produces an AST that hits this branch today.  The
+            // compiler's epsilon-cycle detector rejects every
+            // shape that would let `firstTokenKeys` re-enter the
+            // same `alternatives` array (mutual recursion through
+            // optional refs, optional self-reference, nullable
+            // recursion, ...), and right-recursion past mandatory
+            // input short-circuits on "consumed" before the
+            // recursive reference is reached.  The guard is kept
+            // as defense-in-depth against (a) future optimizer
+            // passes that reshape the AST in ways that introduce
+            // identity-cycles from acyclic sources, and (b)
+            // untrusted JSON loading paths that bypass the source
+            // compiler's cycle detector.  See the corresponding
+            // termination test in
+            // grammarOptimizerDispatchMultiKey.spec.ts.
+            if (visiting.has(members)) return "skippable";
+            visiting.add(members);
+            // Walk every effective member.  All alternatives must
+            // consume for us to report "consumed" overall; if any
+            // alternative is skippable (could match empty), the
+            // whole rules part may also be skippable and the caller
+            // should walk past.
+            let allConsume = true;
+            let anyOpen = false;
+            for (const m of members) {
+                const r = walkPartsForKeys(m.parts, mode, out, visiting);
+                if (r === "open") {
+                    anyOpen = true;
+                    break;
+                }
+                if (r === "skippable") allConsume = false;
+                if (out.size > MAX_DISPATCH_KEYS_PER_RULE) {
+                    anyOpen = true;
+                    break;
+                }
+            }
+            visiting.delete(members);
+            if (anyOpen) return "open";
+            // Outer flags: optional/repeat make the part skippable
+            // regardless of inner consumption.
+            if (part.optional || part.repeat) return "skippable";
+            return allConsume ? "consumed" : "skippable";
+        }
+        case "wildcard":
+        case "number":
+            // Captures of unknown content - matches arbitrary
+            // tokens.  Skippable iff the source marked it optional;
+            // otherwise it's an open prefix and we have to bail.
+            return part.optional ? "skippable" : "open";
     }
-    // auto: bucket on the leading word-boundary-script run.  When
-    // the literal starts with a non-WB-script char (CJK, digit,
-    // punctuation), fall back to bucketing on the leading code
-    // point - matches `peekNextToken`'s first-code-point fallback
-    // for inputs whose nonSeparatorRun starts with such a char.
-    const pref = leadingWordBoundaryScriptPrefix(literal);
-    if (pref.length > 0) {
-        return { kind: "token", token: pref };
-    }
-    const cp = literal.codePointAt(0)!;
-    return { kind: "token", token: String.fromCodePoint(cp) };
 }
 
 /**
@@ -2375,8 +2622,17 @@ function computeDispatchPayload(
             fallback.push(rule);
             continue;
         }
-        const cls = classifyDispatchMember(rule, mode);
-        if (cls.kind === "fallback") {
+        // Multi-key classification: `firstTokenKeys` walks past
+        // skippable prefixes (optional rules, optional wildcards)
+        // and unions in keys from `phraseSet` first tokens and
+        // nested `RulesPart` alternatives - so a rule like
+        // `(can you)? add ...` lands under both `can` and `add`
+        // instead of falling through to fallback.  For the simple
+        // case (rule starts with a literal `StringPart`), the set
+        // contains the same single key the rule's first token
+        // would produce on its own.
+        const keys = firstTokenKeys(rule, mode);
+        if (keys === undefined || keys.size === 0) {
             fallback.push(rule);
             continue;
         }
@@ -2385,11 +2641,13 @@ function computeDispatchPayload(
             bucket = { spacingMode: mode, tokenMap: new Map() };
             perMode.push(bucket);
         }
-        const existing = bucket.tokenMap.get(cls.token);
-        if (existing !== undefined) {
-            existing.push(rule);
-        } else {
-            bucket.tokenMap.set(cls.token, [rule]);
+        for (const token of keys) {
+            const existing = bucket.tokenMap.get(token);
+            if (existing !== undefined) {
+                existing.push(rule);
+            } else {
+                bucket.tokenMap.set(token, [rule]);
+            }
         }
     }
 
@@ -2410,6 +2668,17 @@ function computeDispatchPayload(
         return undefined;
     }
 
+    // Canonicalize content-equal tokenMap value arrays to share
+    // identity.  Multi-key dispatch routinely produces N tokens
+    // routing to the same single-rule bucket (e.g. the ordinal
+    // hundreds branches all dispatch to one `<Ordinal_1_99>`
+    // wrapper); each token gets its own fresh `[rule]` array
+    // above, defeating the serializer's identity-keyed dedup of
+    // `ruleArrays`.  Walk all buckets and intern by member-rule
+    // identity sequence so content-equal arrays converge to one
+    // identity.
+    canonicalizeBucketArrays(perMode);
+
     return {
         // Canonicalize empty fallback to a shared frozen sentinel so
         // the serializer can dedup empty-rules slots across every
@@ -2419,6 +2688,62 @@ function computeDispatchPayload(
         alternatives: fallback.length === 0 ? EMPTY_FALLBACK_RULES : fallback,
         dispatch: perMode,
     };
+}
+
+/**
+ * Intern tokenMap value arrays by member-rule identity sequence so
+ * content-equal arrays share one `GrammarRule[]` identity.  The
+ * serializer's `ruleArrays` interner is keyed by array identity, so
+ * without this step every distinct in-memory `[rule]` array minted
+ * during dispatch construction becomes a separate JSON slot even
+ * when their member-index sequences are identical.
+ *
+ * Rule identities are mapped to monotonic integers via a per-call
+ * `Map<GrammarRule, number>`; bucket arrays are keyed by the
+ * resulting "id1|id2|..." string.  No content-equality of rules is
+ * implied: rules that are themselves content-equal but identity-
+ * distinct remain so (that's a separate optimization concern handled
+ * upstream by the per-rule promotion memo).
+ *
+ * Order matters in the key (no sort): bucket arrays are tried by
+ * the matcher in array order, so `[A, B]` and `[B, A]` are observably
+ * distinct match orders and must not collapse.  Within one
+ * `computeDispatchPayload` call the construction loop iterates
+ * `alternatives` in source order and pushes each rule into every
+ * matching token's bucket, so two buckets containing the same set of
+ * rules necessarily have them in the same relative order - the
+ * order-preserving key is unambiguous by construction.  Scope is
+ * per-call so we never compare arrays from different calls (where
+ * ordering could diverge).
+ */
+function canonicalizeBucketArrays(perMode: DispatchModeBucket[]): void {
+    const ruleIds = new Map<GrammarRule, number>();
+    const canonical = new Map<string, GrammarRule[]>();
+    const idOf = (r: GrammarRule): number => {
+        let id = ruleIds.get(r);
+        if (id === undefined) {
+            id = ruleIds.size;
+            ruleIds.set(r, id);
+        }
+        return id;
+    };
+    for (const bucket of perMode) {
+        for (const [token, arr] of bucket.tokenMap) {
+            const key = arr.map(idOf).join("|");
+            const existing = canonical.get(key);
+            if (existing === undefined) {
+                canonical.set(key, arr);
+            } else if (existing !== arr) {
+                // Mid-iteration `set` on the same key the loop is
+                // visiting is spec-safe (Map iteration does not
+                // re-visit an updated entry) and we never insert
+                // new keys into `bucket.tokenMap` here - only
+                // overwrite the existing value with a canonical
+                // array of equal contents.
+                bucket.tokenMap.set(token, existing);
+            }
+        }
+    }
 }
 
 /**
@@ -2625,13 +2950,14 @@ function promoteRulesArray(
     rules: GrammarRule[],
     counter: { promoted: number },
     memo: RulesArrayMemo,
+    ruleMemo: RuleMemo,
 ): GrammarRule[] {
     const cached = memo.get(rules);
     if (cached !== undefined) return cached;
     memo.set(rules, rules);
     let next: GrammarRule[] | undefined;
     for (let i = 0; i < rules.length; i++) {
-        const r = promoteRule(rules[i], counter, memo);
+        const r = promoteRule(rules[i], counter, memo, ruleMemo);
         if (next !== undefined) {
             next.push(r);
         } else if (r !== rules[i]) {
@@ -2644,11 +2970,36 @@ function promoteRulesArray(
     return result;
 }
 
+/**
+ * Per-pass memo over `promoteRule` keyed on input rule identity.
+ * `dispatchifyAlternations` may place the same source rule object
+ * into multiple per-token bucket arrays (one per first-token key).
+ * Without per-rule memoization, `promoteRule` would visit each
+ * occurrence independently, and `tryPromoteTrailing` -> `trySubstituteMembers`
+ * would synthesize a fresh `alternatives` / `dispatch` per visit -
+ * producing N identity-distinct but content-equal tail wrappers that
+ * defeat downstream identity-based dedup (`DispatchMemo`, the
+ * serializer's `makeInterner`).  Sharing the result across all
+ * occurrences collapses them to a single wrapper.
+ *
+ * Identity-keyed (not body-keyed) is correct because
+ * `tryPromoteTrailing` is a pure function of `rule.parts` and
+ * `rule.value` - it does not read anything outside the rule, so
+ * caching by rule identity caches by the inputs that determine
+ * the result.  If a future change makes the promotion depend on
+ * surrounding context (parent rule, dispatch siblings, etc.),
+ * this memo must be reconsidered.
+ */
+type RuleMemo = Map<GrammarRule, GrammarRule>;
+
 function promoteRule(
     rule: GrammarRule,
     counter: { promoted: number },
     memo: RulesArrayMemo,
+    ruleMemo: RuleMemo,
 ): GrammarRule {
+    const cached = ruleMemo.get(rule);
+    if (cached !== undefined) return cached;
     // Recurse into nested `RulesPart`s within this rule's parts
     // first so inner trailing RulesParts are promoted before we
     // consider this rule's own trailing part.
@@ -2660,7 +3011,7 @@ function promoteRule(
             if (outParts !== undefined) outParts.push(p);
             continue;
         }
-        const recursed = promoteInsideRulesPart(p, counter, memo);
+        const recursed = promoteInsideRulesPart(p, counter, memo, ruleMemo);
         if (outParts !== undefined) {
             outParts.push(recursed);
         } else if (recursed !== p) {
@@ -2673,23 +3024,31 @@ function promoteRule(
     const promoted = tryPromoteTrailing(rule, parts);
     if (promoted !== undefined) {
         counter.promoted++;
+        ruleMemo.set(rule, promoted);
         return promoted;
     }
-    if (outParts !== undefined) return { ...rule, parts };
-    return rule;
+    const result = outParts !== undefined ? { ...rule, parts } : rule;
+    ruleMemo.set(rule, result);
+    return result;
 }
 
 function promoteInsideRulesPart(
     part: RulesPart,
     counter: { promoted: number },
     memo: RulesArrayMemo,
+    ruleMemo: RuleMemo,
 ): RulesPart {
-    const newAlts = promoteRulesArray(part.alternatives, counter, memo);
+    const newAlts = promoteRulesArray(
+        part.alternatives,
+        counter,
+        memo,
+        ruleMemo,
+    );
     const newDispatch =
         part.dispatch === undefined
             ? part.dispatch
             : mapDispatchBuckets(part.dispatch, (bucket) =>
-                  promoteRulesArray(bucket, counter, memo),
+                  promoteRulesArray(bucket, counter, memo, ruleMemo),
               );
     if (newAlts === part.alternatives && newDispatch === part.dispatch) {
         return part;

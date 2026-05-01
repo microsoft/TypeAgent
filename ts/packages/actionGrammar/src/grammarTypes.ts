@@ -463,11 +463,11 @@ export type RulePartJson = {
     type: "rules";
     name?: string | undefined;
     /**
-     * Index into the shared `GrammarRulesJson` table.  In a
-     * non-dispatched part this is the full alternation; in a
-     * dispatched part it is the *fallback subset* (members not
-     * assigned to any bucket).  Suffix arrays dedup with named-rule
-     * arrays via the existing identity-sharing mechanism.
+     * Index into `GrammarJson.ruleArrays`.  In a non-dispatched part
+     * this is the full alternation; in a dispatched part it is the
+     * *fallback subset* (members not assigned to any bucket).  Suffix
+     * arrays dedup with named-rule arrays via the existing
+     * identity-sharing mechanism.
      *
      * Omitted entirely when the alternatives array is empty (the
      * common case for a dispatched part with no fallback): the
@@ -484,8 +484,7 @@ export type RulePartJson = {
      * named rule whose body was dispatched) point at a single
      * serialized entry, and the deserializer can restore that
      * identity sharing.  Each `tokenMap` entry's index is a
-     * `GrammarRulesJson` index in the same shared `GrammarJson`
-     * table that the outer `index` references.
+     * `GrammarJson.ruleArrays` index, just like the outer `index`.
      */
     dispatch?: number;
     variable?: string | undefined;
@@ -514,24 +513,39 @@ export type GrammarRuleJson = {
     value?: CompiledValueNode | undefined;
     spacingMode?: CompiledSpacingMode | undefined; // undefined = auto (default)
 };
-export type GrammarRulesJson = GrammarRuleJson[];
+/**
+ * One entry in `GrammarJson.ruleArrays`: a list of indices into
+ * `GrammarJson.rules` describing an alternation (or a dispatch
+ * bucket's members).  Indirecting through a flat rule pool lets
+ * a single `GrammarRule` referenced from N alternations (e.g. a
+ * dispatch bucket plus the fallback, or two buckets that share a
+ * member because of multi-key classification) serialize once.
+ */
+export type GrammarRulesJson = number[];
 
 /**
  * Serialized form of a single in-memory `DispatchModeBucket[]`
  * (the value carried by `RulesPart.dispatch` / `Grammar.dispatch`).
- * Each entry's `tokenMap` is `[lowercased-token, rulesArrayIndex][]`
+ * Each entry's `tokenMap` is `[lowercased-token, ruleArrayIndex][]`
  * - Maps don't survive JSON round-trip directly, and the indices
- * point into the shared `GrammarJson.rules` table.
+ * point into the shared `GrammarJson.ruleArrays` table.
  */
 export type DispatchJson = Array<{
     spacingMode?: CompiledSpacingMode | undefined;
-    /** [lowercased-token, rulesArrayIndex][] */
+    /** [lowercased-token, ruleArrayIndex][] */
     tokenMap: Array<[string, number]>;
 }>;
 
 /**
- * Serialized grammar shape.  Slot 0 of `rules` is the top-level
- * alternation (or, when `dispatch` is set, the fallback subset).
+ * Serialized grammar shape.  Two pools:
+ *   - `rules` is a flat pool of unique `GrammarRuleJson`s, deduped
+ *     by `GrammarRule` object identity at serialize time.
+ *   - `ruleArrays` is a pool of alternations: each entry is an array
+ *     of indices into `rules`.  Slot 0 of `ruleArrays` is the
+ *     top-level alternation (or, when `dispatch` is set, the
+ *     fallback subset).  `RulePartJson.index` and dispatch
+ *     `tokenMap` indices both point here.
+ *
  * `dispatches` is a shared pool of dispatch tables; both
  * `RulePartJson.dispatch` and the top-level `dispatch` field below
  * are indices into this pool, so a `DispatchModeBucket[]` shared
@@ -540,7 +554,8 @@ export type DispatchJson = Array<{
  * Absent when no dispatch tables exist anywhere in the grammar.
  */
 export type GrammarJson = {
-    rules: GrammarRulesJson[];
+    rules: GrammarRuleJson[];
+    ruleArrays: GrammarRulesJson[];
     dispatches?: DispatchJson[];
     /** Index into `dispatches` for the top-level dispatch table. */
     dispatch?: number;

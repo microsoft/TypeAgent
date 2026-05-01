@@ -1195,7 +1195,8 @@ class AgentMessageContainer {
         // Starts empty so the hover area collapses to zero height until
         // updateMetrics() populates it.
         this.metricsDiv = document.createElement("div");
-        this.metricsDiv.className = "chat-message-metrics chat-message-metrics-agent";
+        this.metricsDiv.className =
+            "chat-message-metrics chat-message-metrics-agent";
         bodyDiv.appendChild(this.metricsDiv);
 
         this.div.appendChild(bodyDiv);

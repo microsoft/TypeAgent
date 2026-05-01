@@ -87,18 +87,22 @@ describe("Grammar Optimizer - Shared rule identity preservation", () => {
             });
             const baseJson = grammarToJson(baseline);
             const optJson = grammarToJson(optimized);
-            // The body of <Common> should appear in exactly one
-            // GrammarRulesJson entry on both sides.
+            // The 3-rule alternation that is the body of <Common>
+            // should appear in exactly one `ruleArrays` entry on
+            // both sides; each member rule resolves through the flat
+            // `rules` pool.
             const countCommonEntries = (json: typeof baseJson) =>
-                json.rules.filter(
+                json.ruleArrays.filter(
                     (entry) =>
                         Array.isArray(entry) &&
                         entry.length === 3 &&
-                        entry.every(
-                            (rule: any) =>
-                                rule.parts?.length === 1 &&
-                                rule.parts[0].type === "string",
-                        ),
+                        entry.every((idx: number) => {
+                            const rule = json.rules[idx];
+                            return (
+                                rule?.parts?.length === 1 &&
+                                rule.parts[0].type === "string"
+                            );
+                        }),
                 ).length;
             expect(countCommonEntries(baseJson)).toBe(1);
             expect(countCommonEntries(optJson)).toBe(1);
@@ -164,15 +168,22 @@ describe("Grammar Optimizer - Shared single-alternative rule is not inlined", ()
             optimizations: { inlineSingleAlternatives: true },
         });
         const json = grammarToJson(optimized);
-        // Exactly one GrammarRulesJson entry should hold the "the song"
-        // body (the shared <Inner>).
-        const entries = json.rules.filter(
+        // Exactly one `ruleArrays` entry should hold the "the song"
+        // body (the shared <Inner>): a single-element index list whose
+        // sole rule (looked up in `json.rules`) is a single string
+        // part with value "the song".
+        const entries = json.ruleArrays.filter(
             (entry) =>
                 Array.isArray(entry) &&
                 entry.length === 1 &&
-                entry[0].parts?.length === 1 &&
-                entry[0].parts[0].type === "string" &&
-                (entry[0].parts[0] as any).value.join(" ") === "the song",
+                (() => {
+                    const rule = json.rules[entry[0]];
+                    return (
+                        rule?.parts?.length === 1 &&
+                        rule.parts[0].type === "string" &&
+                        (rule.parts[0] as any).value.join(" ") === "the song"
+                    );
+                })(),
         );
         expect(entries.length).toBe(1);
     });
@@ -352,14 +363,41 @@ describe("Grammar Serializer - Dispatch sharing across round-trip", () => {
             optimizations: { dispatchifyAlternations: true },
         });
         const json = grammarToJson(grammar);
-        // All three `<Common>` references share the same dispatch
-        // identity, so the pool should hold exactly one entry, and
-        // each part should reference it by index.
-        expect(json.dispatches?.length).toBe(1);
+        // Two distinct dispatch identities: one shared by the three
+        // `<Common>` reference sites (alpha/beta/gamma tokenMap),
+        // and one for `<Start>`'s body alternation - the multi-key
+        // classifier walks into each `<UseN>` reference and picks
+        // up its leading sing/play/hum literal.  The `<Common>`
+        // entry must still dedup to a single pool slot across all
+        // three references.
+        expect(json.dispatches?.length).toBe(2);
         const dispatchedParts = findAllRulesPartsInGrammar(grammar).filter(
             (p) => p.name === "Common" && p.dispatch !== undefined,
         );
         expect(dispatchedParts.length).toBe(3);
+    });
+
+    it("same dispatch shape with inlining enabled", () => {
+        // Inlining replaces each single-alternative `<UseN>` with
+        // its body, so `<Start>`'s members become `sing
+        // $(name:<Common>) | play ... | hum ...` - their first
+        // parts are now literal StringParts directly (the old
+        // single-key classifier would have bucketed them too).
+        // The multi-key walker just reaches the same buckets via
+        // a different path; either way the dispatches pool ends
+        // up with the same two entries.
+        const grammar = loadGrammarRules("t.grammar", text, {
+            optimizations: {
+                inlineSingleAlternatives: true,
+                dispatchifyAlternations: true,
+            },
+        });
+        const json = grammarToJson(grammar);
+        expect(json.dispatches?.length).toBe(2);
+        const commonParts = findAllRulesPartsInGrammar(grammar).filter(
+            (p) => p.name === "Common" && p.dispatch !== undefined,
+        );
+        expect(commonParts.length).toBe(3);
     });
 
     it("restores shared dispatch identity after deserialize", () => {
