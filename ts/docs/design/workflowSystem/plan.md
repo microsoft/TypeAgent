@@ -224,7 +224,7 @@ Open: how do tasks declare required capabilities (network, fs, llm)? Probably ma
 - At load time, engine validates that every `branchLabel` declared by the task has a corresponding key in `next`, and every key in `next` is a declared `branchLabel`.
 - **Unreachable node detection:** the validator checks that every node in the graph is reachable from the entry node (via `next` and `onError` edges). Unreachable nodes are reported as validation errors.
 - Cancellation via `AbortSignal` propagated to in-flight task.
-- Determinism: `inputMap` re-evaluated from stored history, so a resumed run produces consistent inputs.
+- Determinism: given the same inputs and task implementations, execution produces the same trace. `inputMap` re-evaluated from stored history, so a resumed run produces consistent inputs. Note: if parallel task execution is added (M5+), determinism means the engine must define a canonical ordering for parallel results. Task non-determinism (LLM calls, network) is outside the engine's control.
 - **Pluggable logging:** a `WorkflowLogger` interface is injected via `RunOptions`. The engine prefixes log messages with the current node id and delegates to the provided logger. Tasks call `ctx.log(level, msg, data?)`. Default is no-op.
 
 ### Loops and Iteration
@@ -339,7 +339,7 @@ Each milestone ends with: passing tests, a runnable demo, and an updated section
 
 ## 14. Remaining Open Questions
 
-1. Task capability declarations (network, fs, llm) - manifest field? Engine policy enforcement?
+1. Task capability and side-effect declarations. Tasks may declare capabilities they require (network, fs, llm) and side effects they produce (writes to external state, non-idempotent operations). Capability declarations enable engine policy enforcement (e.g., "this workflow may not use network tasks"). Side-effect declarations strengthen the design principles: P2 (data flow traceability) covers spec-visible data flow, but tasks with undeclared side effects create hidden channels. If tasks declare their side effects, static analysis can detect potential conflicts (e.g., two tasks writing to the same external resource) and provide stronger guarantees about workflow behavior. Design: manifest field on `TaskDefinition`? Separate capability schema? TBD.
 2. ~~Concurrency model in v2 - parallel branches, fan-out, join semantics.~~ Addressed: parallel nodes slotted for M5+. Detailed design (join semantics, data merge, cancellation) TBD.
 3. Task packaging and delivery mechanism (npm packages? local directories? manifests?).
 4. How do workflows compose? Can a workflow be a task in another workflow (sub-workflows)?

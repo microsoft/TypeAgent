@@ -2,7 +2,7 @@
 
 Status: Draft v0.1 (iterating)
 
-This document refines the workflow spec design (see [plan.md](plan.md)) for loops, data flow, and control flow. The current prototype allows flat-graph cycles but lacks static guarantees around data flow. This design replaces that approach with explicit loop constructs, scoped variables, and dominator-based validation.
+This document refines the workflow spec design (see [plan.md](plan.md)) for loops, data flow, and control flow, driven by the principles in [design-principles.md](design-principles.md). The current prototype allows flat-graph cycles but lacks static guarantees around data flow. This design replaces that approach with explicit loop constructs, scoped variables, and dominator-based validation.
 
 ## 1. Problem Statement
 
