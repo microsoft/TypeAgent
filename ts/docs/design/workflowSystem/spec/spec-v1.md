@@ -1356,7 +1356,13 @@ Full analysis: [decisions/0001-bound-outputs.md](decisions/0001-bound-outputs.md
   drift check runs as usual. Deferred: attractive as a v1.1 or DSL-layer
   feature once authors have data on how often they narrow vs. mirror,
   but starting at the chosen variant keeps the IR canonical form
-  schema-complete and leaves the door open.
+  schema-complete and leaves the door open. **Trigger to revisit:** if
+  IR size becomes a pain point (most nodes restating their task's
+  schemas verbatim and no DSL absorbing the cost), Alt C is the
+  pressure-relief valve - it reuses the chosen drift check unchanged
+  and only adds the omission-as-sugar feature on top. See
+  [decisions/0003-task-schema-source.md](decisions/0003-task-schema-source.md)
+  "Triggers to revisit Option 3".
 - Author convenience (DSL layer): repeated schemas are the IR's "verbose
   by design" tax (§1.1). A DSL or codegen step is expected to populate
   `inputSchema`/`outputSchema` from a typed task signature, so authors do
@@ -1414,3 +1420,9 @@ one for the sake of having a complete v1.
 
 After your review of these, the design can be tightened (or the alternatives
 folded back in) without disturbing the rest of the document.
+
+For decisions whose v1 position is closed but carries an explicit
+reopening condition (e.g., "revisit Option 3 if IR size becomes a pain
+point"), see [revisit-triggers.md](revisit-triggers.md). Some entries
+appear in both this section and that index - here as an immediate
+reviewer question, there as a longer-term trigger.

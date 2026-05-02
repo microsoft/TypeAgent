@@ -346,6 +346,30 @@ Update the spec to:
 
 Leave Option 3 explicitly open as a v1.x or DSL-layer feature.
 
+### Triggers to revisit Option 3
+
+Option 3 (loader-expanded schema omission) should be reopened if any of
+the following turn up in practice:
+
+- **IR size.** Spec documents become uncomfortably large because most
+  task nodes restate their registered task's schemas verbatim. The
+  duplication is real, just deferred to the DSL/codegen layer; if no DSL
+  materializes or the IR itself is being read/edited at scale, omission
+  sugar becomes the right pressure-relief valve.
+- **Authoring data.** Once usage data exists, if the overwhelming
+  majority of task nodes mirror the registry exactly and only a small
+  minority narrow, the omission form would be the canonical case and
+  the explicit form the specialization marker - the inverse of today's
+  default.
+- **Registry stability guarantees.** If the task registry gains a
+  versioning/pinning story strong enough that loader expansion is
+  reproducible across environments, the "spec self-contained" cost of
+  Option 3 shrinks.
+
+When revisited, the chosen Option 1' drift check is reused unchanged;
+Option 3 is purely the addition of the omission-as-sugar feature on top
+of it.
+
 ## Cross-references
 
 - spec-v1.md §3.5 (task node), §3.8 (handler node) - where

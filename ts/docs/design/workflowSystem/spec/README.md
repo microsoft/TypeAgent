@@ -6,6 +6,7 @@ semantics that any conforming engine must implement.
 ## Files
 
 - **[spec-v1.md](spec-v1.md)** - the authoritative v1 spec. Single source of truth.
+- **[revisit-triggers.md](revisit-triggers.md)** - index of v1 decisions with explicit reopening conditions.
 - **[decisions/](decisions/)** - numbered per-decision records.
 - **[post-v1/](post-v1/)** - sketches of features deferred past v1.
 
