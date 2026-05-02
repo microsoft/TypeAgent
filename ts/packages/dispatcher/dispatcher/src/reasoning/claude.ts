@@ -328,11 +328,27 @@ function getClaudeOptions(
                 if (
                     validationResult.message.startsWith("Unknown action name:")
                 ) {
+                    // Cross-schema hint: search other active schemas for
+                    // the action name so the model can route correctly
+                    // on the next call without an extra discover_actions
+                    // round trip.
+                    const matches: string[] = [];
+                    for (const otherName of validatorSchemas) {
+                        if (otherName === args.schemaName) continue;
+                        const otherValidator = getValidator(otherName);
+                        if (!otherValidator) continue;
+                        const probe = otherValidator.validate(actionJson);
+                        if (probe.success) matches.push(otherName);
+                    }
+                    const hint =
+                        matches.length > 0
+                            ? `The action "${actionJson.actionName}" appears to belong to schema(s): ${matches.join(", ")}. Retry execute_action with the correct schemaName.\n`
+                            : `Available actions for schema '${args.schemaName}':\n${validator.getSchemaText()}`;
                     return {
                         content: [
                             {
                                 type: "text",
-                                text: `${validationResult.message}\nAvailable actions for schema '${args.schemaName}':\n${validator.getSchemaText()}`,
+                                text: `${validationResult.message}\n${hint}`,
                             },
                         ],
                         isError: true,

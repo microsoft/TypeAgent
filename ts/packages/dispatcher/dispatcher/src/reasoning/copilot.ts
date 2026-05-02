@@ -379,7 +379,34 @@ function getCopilotSessionConfig(
 
             const validationResult = validator.validate(actionJson);
             if (!validationResult.success) {
-                throw new Error(validationResult.message);
+                // Cross-schema hint: if the (unknown) actionName is
+                // defined in some OTHER active schema, point the model
+                // at it so the next tool call routes correctly. This
+                // catches the common reasoning slip where an action
+                // name (e.g. "newFile") is paired with the wrong
+                // schemaName (e.g. "github-cli").
+                let crossSchemaHint = "";
+                if (
+                    validationResult.message.startsWith("Unknown action name:")
+                ) {
+                    const matches: string[] = [];
+                    for (const [otherName, otherValidator] of validators) {
+                        if (otherName === schemaName) continue;
+                        const probe = otherValidator.validate(actionJson);
+                        if (probe.success) matches.push(otherName);
+                    }
+                    if (matches.length > 0) {
+                        crossSchemaHint =
+                            `\nThe action "${actionJson.actionName}" appears to belong to ` +
+                            `schema(s): ${matches.join(", ")}. ` +
+                            `Retry execute_action with the correct schemaName.`;
+                    } else {
+                        crossSchemaHint =
+                            `\nAvailable actions for schema '${schemaName}':\n` +
+                            validator.getSchemaText();
+                    }
+                }
+                throw new Error(validationResult.message + crossSchemaHint);
             }
 
             // Capture action execution results (same as Claude)
