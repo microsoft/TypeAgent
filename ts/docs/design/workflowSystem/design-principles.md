@@ -64,13 +64,13 @@ P1-P5 govern spec design. These neighboring areas are not governed by the princi
 
 ## Principles
 
-| #   | Principle                                                                                                                      | One-line test                                                                     |
-| --- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- |
-| P1  | Every data reference must be statically provable to resolve to a compatible value at runtime, on every possible execution path | "Does X dominate Y, and are the types compatible?"                                |
-| P2  | All data flow is traceable through the spec alone                                                                              | "For any task input, can I trace it back to its origin by reading the spec?"      |
-| P3  | Spec structure corresponds to computational structure                                                                          | "Does the spec reveal the pattern, or must you analyze the graph to discover it?" |
-| P4  | Each part of the workflow can be understood, validated, and tested without the whole                                           | "Can I validate/test this part without setting up the rest?"                      |
-| P5  | A reader of the spec can predict engine behavior without knowing engine conventions                                            | "Would a reader be surprised by the behavior?"                                    |
+| #   | Principle                                                                                                                                          | One-line test                                                                                                         |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| P1  | Every data reference must be statically provable to resolve to a compatible value at runtime, on every possible execution path                     | "Does X dominate Y, and are the types compatible?"                                                                    |
+| P2  | All data flow is traceable through the spec alone                                                                                                  | "For any task input, can I trace it back to its origin by reading the spec?"                                          |
+| P3  | Spec structure corresponds to computational structure, in both control flow and data publication                                                   | "Does the spec reveal the pattern (both what runs and what is shared), or must you analyze the graph to discover it?" |
+| P4  | Each part of the workflow can be understood, validated, and tested without the whole, given only its declared boundary contract (control and data) | "Can I validate/test this part using only what its boundary declares?"                                                |
+| P5  | A reader of the spec can predict engine behavior - both what runs when and which values stay live - without knowing engine conventions             | "Would a reader be surprised by the behavior, including by what the engine keeps alive?"                              |
 
 ---
 
@@ -203,7 +203,12 @@ _Why this is genuinely ruled out:_ Unlike P1's "patterns ruled out" (where worka
 
 The spec's hierarchical structure should mirror the computational patterns. A loop should be represented as a loop construct, not as a pattern you have to recognize in a flat graph. A scope boundary in execution should be a scope boundary in the spec.
 
-Testable: look at the spec structure, then look at the execution trace. Do they correspond? If you have to "discover" a loop by analyzing a flat graph, the structure doesn't correspond to the computation.
+The correspondence applies to **both axes** of structure:
+
+- **Control-flow correspondence.** Loops are loops, branches are branches, sequences are sequences. The reader sees the pattern in the structure, not by analyzing topology.
+- **Data-publication correspondence.** A value that the spec exposes between nodes corresponds to a publication the author intended. Values that are internal to a producing step are not part of the spec's inter-node namespace. The reader can see, structurally, which values are shared and which are step-local; this is not inferred from downstream usage.
+
+Testable: look at the spec structure, then look at the execution trace and the set of cross-node data uses. Do they correspond? If you have to "discover" a loop by analyzing a flat graph, or discover a value's role by scanning every potential consumer, the structure doesn't correspond to the computation.
 
 ### Scenarios it ENABLES
 
@@ -240,6 +245,13 @@ Testable: look at the spec structure, then look at the execution trace. Do they 
 - _Alternative:_ Wrap the retry-able section in a loop construct where the body includes the error-prone task and its handler, with the exit condition being success or max retries exceeded.
 - _Tradeoff:_ More structure to set up. But the retry loop is now visible as a loop, bounded by a declared iteration limit, and testable as a loop body (P4). The error handler inside the loop body handles the failure case; the loop structure handles the retry.
 
+**27a. Implicit publication of every node's output.**
+
+- _Intent:_ Treat every node's output as automatically part of the spec's namespace, addressable from any dominated descendant. No declaration required.
+- _Why P3 requires a different expression:_ A spec where every step computes intermediate values used only by itself looks structurally identical to one where every intermediate is part of the inter-node contract. The reader cannot tell, from the spec structure, which values are shared and which are step-local. The data-publication side of structural correspondence is lost: publication becomes a topological accident (any node placed before a potential consumer is implicitly published) rather than an intentional structural choice.
+- _Alternative:_ The spec distinguishes values that participate in its inter-node namespace from values that do not. Step-internal values do not appear as referenceable names; published values do.
+- _Tradeoff:_ An extra structural declaration when sharing is intended. In return, the spec structure communicates "this step contributes these values to the surrounding scope; this step contributes none," mirroring the same distinction real programs make between locals and visible outputs.
+
 ### Outside the boundary
 
 P3 governs spec-level structure. Task internals are opaque (see "Principles govern the boundary").
@@ -267,6 +279,13 @@ P3 is the principle most likely to be a **tiebreaker**. When two designs satisfy
 ## P4: Each part of the workflow can be understood, validated, and tested without the whole
 
 You should be able to reason about a part of the workflow without understanding the entire workflow. Validation errors should be localizable. Tests should be writable for subsets.
+
+A part's **boundary contract** has two sides:
+
+- **Control side.** What can reach the part, what the part can reach. Cross-scope control references are not allowed; everything is mediated by declared transitions.
+- **Data side.** What names the part contributes to the enclosing scope's namespace, and what names from the surroundings the part may read. Both directions are declared at the part's boundary, including within a single scope: a node's contribution to its scope's data namespace is part of its boundary, not a side effect of being placed in the scope.
+
+A part can be understood, validated, and tested when both sides of its contract are declared at its edge. Inserting, removing, or rearranging parts within a scope changes the scope's contract only when those changes touch a declared boundary.
 
 ### Scenarios it ENABLES
 
@@ -301,6 +320,13 @@ You should be able to reason about a part of the workflow without understanding 
 - _Alternative:_ Use per-scope error handlers, each with its own dominator scope and input wiring. If handler logic is shared, factor it into a reusable task type that each per-scope handler invokes.
 - _Tradeoff:_ More handler nodes (or a shared task type with per-scope handler wrappers). But each handler is testable in its own scope's context. The reusable task type captures the shared logic without coupling scopes.
 
+**35a. Refactor that silently expands a scope's contract.**
+
+- _Intent:_ Add an intermediate node inside a scope to factor a computation, in a model where every node placed in a scope is implicitly part of the scope's namespace.
+- _Why P4 requires a different expression:_ The intermediate node's mere presence expands the set of names other nodes in the scope can in principle reference. A future change that renames or removes the intermediate then becomes a contract change rather than a local edit, because some other node may have started referencing the implicitly-published name. The part's contribution to the scope's namespace is not declared at the part's boundary; it is a side effect of being placed in the scope.
+- _Alternative:_ Each node declares what it contributes to the enclosing scope's namespace. Inserting a node that declares no contribution leaves the scope's contract unchanged. Removing or renaming such a node is a local edit by construction.
+- _Tradeoff:_ A declaration is required when sharing is wanted, instead of being free. In return, a node's external surface is exactly what the node declares, and locality is preserved across edits.
+
 ### Outside the boundary
 
 P4 governs spec-level decomposition. Task internals are opaque (see "Principles govern the boundary").
@@ -326,6 +352,13 @@ This is not a workaround or alternative expression. The cross-scope reference is
 ## P5: A reader of the spec can predict engine behavior without knowing engine conventions
 
 Someone reading the spec should be able to predict what the engine will do, without needing to know engine defaults, conventions, or inference rules. The test isn't "is there implicit behavior?" but "would a reader be surprised?"
+
+"Engine behavior" has two axes the reader should be able to predict from the spec alone:
+
+- **What runs when.** Control-flow shape, transitions, error routing, sentinels, exhaustiveness.
+- **What stays live.** Which values the engine must keep available after a node completes, and for how long. A reader should be able to look at a node and predict, locally, whether its output may be released when the node finishes or must be retained for later consumers.
+
+Both axes apply the same surprise test: would a reader who understands the general concepts (graphs, tasks, loops, branches, value lifetimes) but doesn't know this engine's conventions mispredict the behavior?
 
 ### Scenarios it ENABLES
 
@@ -353,6 +386,13 @@ Someone reading the spec should be able to predict what the engine will do, with
 - _Alternative:_ Require an explicit node type discriminant. The node type is visible without knowing inference rules.
 - _Tradeoff:_ One extra field per node. But the spec is self-describing: you see the type, not a set of fields you must interpret. The DSL can infer type from syntax (e.g., `loop { ... }` compiles to a loop node type).
 
+**42a. Implicit value lifetime.**
+
+- _Intent:_ Let every node's output be implicitly available to every dominated descendant. Engine decides when to release.
+- _Why P5 requires a different expression:_ A reader looking at a node cannot predict whether its output will be retained after the node completes; the answer depends on whether some later node, possibly far away in the spec, eventually references it. The reader has to perform a downstream usage analysis to predict liveness, and a conservative engine may simply retain every value to scope end. The lifetime axis is not predictable from local reading.
+- _Alternative:_ The spec distinguishes outputs that participate in its inter-node namespace from outputs that do not. The reader sees, locally at the producing node, whether the output is retained for consumers or releasable on completion. Engine liveness becomes a local reading, not a global analysis.
+- _Tradeoff:_ An extra declaration per shared output. But both reader and engine can predict liveness without traversing the rest of the spec.
+
 ### Outside the boundary
 
 P5 governs what a reader can predict from the spec. Task internals are opaque (see "Principles govern the boundary"). Some behaviors are universally predictable without being explicit:
@@ -367,14 +407,15 @@ What P5 genuinely prevents is **surprise**: a spec where a reader who understand
 
 ### Where predictability does NOT require explicitness
 
-| Case                                            | Predictable without engine knowledge?           | Explicit required?                      |
-| ----------------------------------------------- | ----------------------------------------------- | --------------------------------------- |
-| Missing `onError` -> run fails                  | Yes - failure propagation is universal          | No                                      |
-| Missing `next` in top-level -> terminal         | Yes - "no next step" means done                 | No                                      |
-| `maxIterations` default of 1000                 | Debatable - but safety limits are standard      | No (but documenting it is important)    |
-| Missing output declaration on loop -> no output | Yes - "nothing declared" means nothing produced | No                                      |
-| Missing `next` in loop body -> ???              | No - could mean exit, re-enter, or error        | **Yes - must be explicit**              |
-| Pipeline mode -> predecessor output             | No - which predecessor?                         | **Yes - must use explicit data wiring** |
+| Case                                                 | Predictable without engine knowledge?             | Explicit required?                      |
+| ---------------------------------------------------- | ------------------------------------------------- | --------------------------------------- |
+| Missing `onError` -> run fails                       | Yes - failure propagation is universal            | No                                      |
+| Missing `next` in top-level -> terminal              | Yes - "no next step" means done                   | No                                      |
+| `maxIterations` default of 1000                      | Debatable - but safety limits are standard        | No (but documenting it is important)    |
+| Missing output declaration on loop -> no output      | Yes - "nothing declared" means nothing produced   | No                                      |
+| Missing `next` in loop body -> ???                   | No - could mean exit, re-enter, or error          | **Yes - must be explicit**              |
+| Pipeline mode -> predecessor output                  | No - which predecessor?                           | **Yes - must use explicit data wiring** |
+| Lifetime of a node's output -> released or retained? | No - depends on what other nodes may reference it | **Yes - publication must be declared**  |
 
 ### What this principle does NOT resolve alone
 

@@ -57,6 +57,38 @@ P3 is what would drive the decision to add MapNode rather than inferring paralle
 
 ---
 
+### Intra-scope name visibility (data hiding within a scope)
+
+**Status:** Resolved. The decision (hide-by-default `bind` switch) was originally reached by analysis and folded into the spec at §3.2.1 / §3.3 / §8.15. The gap that allowed it to be analysis-driven rather than principle-driven has since been closed by sharpening P3, P4, and P5 to be bi-axial (see [design-principles.md](design-principles.md)). Recorded here as the case study that motivated the sharpening.
+
+**The original gap.** Should a node's output be addressable by other nodes by default, or only when the author explicitly publishes it? Walking the principles **as originally written** against this question:
+
+| Principle (original)               | Drove a default? | Notes                                                                                                                                           |
+| ---------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1 (static provability)            | No               | Both expose-by-default and hide-by-default are statically checkable. The validator just gets one less name to look up under hide-by-default.    |
+| P2 (data flow traceable)           | No               | Both designs trace. Implicit naming is even more trivially traceable; hide-by-default doesn't help here.                                        |
+| P3 (structure mirrors computation) | Weakly           | P3's scenarios were framed around control-flow shapes (loop, branch). The data-side analog ("publication is structural") was latent.            |
+| P4 (parts without the whole)       | Weakly           | P4 was framed around _cross-scope_ boundaries. The intra-scope analog ("a node declares its contribution to the scope's namespace") was latent. |
+| P5 (predict engine behavior)       | Weakly           | P5's scenarios were control-flow surprises. The data-lifetime analog ("reader can predict which values stay live") was latent.                  |
+
+All five permitted both designs. None drove the choice. Hide-by-default was reached by analysis ([cfg-ddg-analysis.md](cfg-ddg-analysis.md), [bound-outputs.md](bound-outputs.md)) and only afterwards mapped back to weak readings of P3/P4/P5.
+
+**Why this was a principle gap, not just an unstated decision.** The principles, as originally written, were **control-flow-biased**: P3, P4, and P5 each had rich scenario sets for control flow and scope boundaries, but their data-side analogs were latent. The same pattern (a refactor that silently expands a node's contract; a value whose liveness the reader cannot predict; a scope whose namespace grows by accident) would not have surfaced from a P1-P5 walkthrough.
+
+**Sharpening applied.** P3, P4, and P5 have been updated to state both axes explicitly:
+
+- **P3** now states correspondence on both control-flow shape and data publication (scenario 27a covers implicit publication of every node's output).
+- **P4** now states the boundary contract has both a control side and a data side, including intra-scope namespace contribution (scenario 35a covers refactors that silently expand a scope's contract).
+- **P5** now states predictability covers both "what runs when" and "what stays live" (scenario 42a covers implicit value lifetime).
+
+With the sharpening in place, the bound-outputs decision is now driven by the principles directly: P3 (publication is structural), P4 (intra-scope contribution is part of the boundary), P5 (lifetime is locally predictable) all converge on hide-by-default.
+
+**Resolution chosen.** Hide-by-default with explicit `bind` to share, plus SSA-style phi merge for shared bind names on mutually exclusive paths. See spec §8.15 for the design block and [bound-outputs.md](bound-outputs.md) for the K1-K12 analysis.
+
+**Lesson.** When a decision converges from "weak readings" of multiple principles, that's a signal the principles are missing an axis. The fix is to sharpen the principles, not to add a new one.
+
+---
+
 ## Deployment and Evolution
 
 ### No incremental migration
@@ -105,24 +137,26 @@ P4 says parts can be validated and tested independently. But it doesn't say part
 
 ## Summary
 
-| Area                          | Spec design concern?        | Status       | Resolution                                                                   |
-| ----------------------------- | --------------------------- | ------------ | ---------------------------------------------------------------------------- |
-| Parallel iteration visibility | Yes                         | **Deferred** | P3 drives MapNode distinction. P1-P5 sufficient when added.                  |
-| Decomposition overhead        | No (engine policy)          | Resolved     | Author chooses granularity. Engine optimizes execution.                      |
-| Intermediate state visibility | No (task metadata)          | Resolved     | Optional task capability declaration. Not workflow data flow.                |
-| Replay/checkpoint             | No (task metadata + engine) | Resolved     | Side-effect/idempotency declarations are additive. Engine persists state.    |
-| Loop iteration identity       | No (engine mechanism)       | Resolved     | Engine exposes iteration count. Consistent with P2.                          |
-| Error diagnostic constraints  | Yes (mechanism)             | Resolved     | Optional references mechanism in [design-decisions.md](design-decisions.md). |
-| Incremental migration         | Yes                         | **Deferred** | Becomes relevant with sub-workflow composition.                              |
-| Safe-change analysis          | No (operational)            | Resolved     | Principles enable structural diff. Runtime survival is operational.          |
-| Spec identity across versions | No (tooling)                | Resolved     | Migration mapping is external tooling.                                       |
-| Composability for deployment  | Yes                         | **Deferred** | Sub-workflow composition extends P4.                                         |
+| Area                          | Spec design concern?        | Status       | Resolution                                                                                                                                                               |
+| ----------------------------- | --------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Parallel iteration visibility | Yes                         | **Deferred** | P3 drives MapNode distinction. P1-P5 sufficient when added.                                                                                                              |
+| Intra-scope name visibility   | Yes                         | **Resolved** | Hide-by-default `bind` switch (spec §8.15). Originally analysis-driven; principles P3/P4/P5 sharpened to be bi-axial so future data-flow decisions are principle-driven. |
+| Decomposition overhead        | No (engine policy)          | Resolved     | Author chooses granularity. Engine optimizes execution.                                                                                                                  |
+| Intermediate state visibility | No (task metadata)          | Resolved     | Optional task capability declaration. Not workflow data flow.                                                                                                            |
+| Replay/checkpoint             | No (task metadata + engine) | Resolved     | Side-effect/idempotency declarations are additive. Engine persists state.                                                                                                |
+| Loop iteration identity       | No (engine mechanism)       | Resolved     | Engine exposes iteration count. Consistent with P2.                                                                                                                      |
+| Error diagnostic constraints  | Yes (mechanism)             | Resolved     | Optional references mechanism in [design-decisions.md](design-decisions.md).                                                                                             |
+| Incremental migration         | Yes                         | **Deferred** | Becomes relevant with sub-workflow composition.                                                                                                                          |
+| Safe-change analysis          | No (operational)            | Resolved     | Principles enable structural diff. Runtime survival is operational.                                                                                                      |
+| Spec identity across versions | No (tooling)                | Resolved     | Migration mapping is external tooling.                                                                                                                                   |
+| Composability for deployment  | Yes                         | **Deferred** | Sub-workflow composition extends P4.                                                                                                                                     |
 
 ### Open questions
 
 1. **Parallel iteration:** Deferred from v1. When added, P3 drives the MapNode decision. Validate that P1-P5 are sufficient (no new principle needed).
 2. **Sub-workflow evolution:** When sub-workflows are added, does P4's boundary contract need strengthening for versioning? Or does the existing input/output boundary suffice?
 3. **Task contract extensions:** Side-effect annotations, idempotency markers, progress declarations are all additive task boundary metadata. If these grow complex, they may warrant a separate design doc with its own concerns distinct from P1-P5.
+4. **Data-flow direction in the principles.** **Closed.** P3, P4, and P5 were originally control-flow-biased. They have been sharpened to state both axes explicitly (control-flow and data-flow / publication / lifetime). The bound-outputs decision is the case study; see "Intra-scope name visibility" above. Future data-flow decisions should now be principle-driven. If a future decision in this family again converges only from "weak readings" of multiple principles, that signals another axis to sharpen.
 
 ---
 
