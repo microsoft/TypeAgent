@@ -1,6 +1,6 @@
 # Bound outputs (decision 0001): hide-by-default node values
 
-Status: **Adopted (v1).** Folded into [../spec-v1.md](../spec-v1.md)
+Status: **Adopted (v1).** Folded into [../ir-v1.md](../ir-v1.md)
 (§3.2, §3.3, §3.4, §3.8, §4.1, §5.7, §8.15). This doc retains the analysis,
 the decision rationale for each open question, and the relationship to
 future extensions.
@@ -161,7 +161,7 @@ needs to be specified.
 ### K7. v1 vs post-v1 timing
 
 If v1 ships with the current "every node id is a name" model and we
-add bound outputs later, every existing spec breaks. Options:
+add bound outputs later, every existing IR breaks. Options:
 
 - Ship v1 with `bind` required from the start (cheap now, since v1
   isn't shipped). Clean.
@@ -253,7 +253,7 @@ The two are complementary:
 - Block scope solves **regional grouping** (one handler over a region,
   joins where each arm is itself a region with its own concerns).
 
-A future spec with both has a uniform story: nodes hide by default,
+A future IR with both has a uniform story: nodes hide by default,
 binders may share a name across mutually exclusive paths, blocks group
 regions when grouping is needed. They don't conflict.
 
@@ -270,4 +270,4 @@ regions when grouping is needed. They don't conflict.
 
 ## 6. Decisions settled (v1 fold-in)
 
-| # | Question | Decision | Spec doc location |\n| --- | ------------------------------------- | ------------------------------------------------------ | ------------------------------- |\n| 1 | Namespace name | `$from: \"scope\"` (renamed from `node`) | \u00a73.2 namespace table, \u00a73.4 |\n| 2 | Bind grammar (K3) | (c) defaults to node id, overridable with explicit string | \u00a73.3 |\n| 3 | Handler access to trigger state (K5) | `$from: \"trigger\"` namespace, only inside handlers | \u00a73.4, \u00a73.8 |\n| 4 | Multiple binders per name (K12) | Allowed if no two co-occur on a path (SSA-style phi) | \u00a73.3, \u00a74.1 passes 5 \u0026 6 |\n| 5 | Workflow / loop output contract (K6) | `outputBinding` and loop `outputs` must reference bound producers | \u00a74.1 pass 11 |\n| 6 | Conformance bar implications (S8) | Engines SHOULD free unbound outputs immediately | \u00a75.7 |\n\nStill open as future tooling work, not blocking v1:\n\n- Validator warning for nodes with no `bind` and no declared effects\n (\"possibly unused node\"). Becomes precise once effect declarations\n land post-v1.\n\n## 7. Outcome\n\nAdopted for v1. The change is small at the IR level (one optional\nfield, one renamed `$from` value, one new `$from: \"trigger\"`\nnamespace) and pays off across multiple design axes: hiding,\nrefactoring, name pressure, reader experience, DSL compilation, engine\nliveness, diamond merges, and principle alignment.
+| # | Question | Decision | IR doc location |\n| --- | ------------------------------------- | ------------------------------------------------------ | ------------------------------- |\n| 1 | Namespace name | `$from: \"scope\"` (renamed from `node`) | \u00a73.2 namespace table, \u00a73.4 |\n| 2 | Bind grammar (K3) | (c) defaults to node id, overridable with explicit string | \u00a73.3 |\n| 3 | Handler access to trigger state (K5) | `$from: \"trigger\"` namespace, only inside handlers | \u00a73.4, \u00a73.8 |\n| 4 | Multiple binders per name (K12) | Allowed if no two co-occur on a path (SSA-style phi) | \u00a73.3, \u00a74.1 passes 5 \u0026 6 |\n| 5 | Workflow / loop output contract (K6) | `outputBinding` and loop `outputs` must reference bound producers | \u00a74.1 pass 11 |\n| 6 | Conformance bar implications (S8) | Engines SHOULD free unbound outputs immediately | \u00a75.7 |\n\nStill open as future tooling work, not blocking v1:\n\n- Validator warning for nodes with no `bind` and no declared effects\n (\"possibly unused node\"). Becomes precise once effect declarations\n land post-v1.\n\n## 7. Outcome\n\nAdopted for v1. The change is small at the IR level (one optional\nfield, one renamed `$from` value, one new `$from: \"trigger\"`\nnamespace) and pays off across multiple design axes: hiding,\nrefactoring, name pressure, reader experience, DSL compilation, engine\nliveness, diamond merges, and principle alignment.

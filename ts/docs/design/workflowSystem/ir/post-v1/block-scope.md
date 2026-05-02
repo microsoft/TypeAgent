@@ -1,6 +1,6 @@
 # Post-v1: explicit `block` scope
 
-Status: **Post-v1 sketch.** Listed in [../spec-v1.md](../spec-v1.md) §2.2.
+Status: **Post-v1 sketch.** Listed in [../ir-v1.md](../ir-v1.md) §2.2.
 
 ## 1. Motivation
 
@@ -35,7 +35,7 @@ refactor (block + document boundary = sub-workflow).
 
 ## 2. Why it slots in cleanly
 
-The spec already treats "scope" as an abstract concept with a small
+The IR already treats "scope" as an abstract concept with a small
 contract. A new scope kind only specifies the cells in this table:
 
 | Scope contract piece      | Workflow root   | Loop body            | Sub-workflow (post-v1)   | Block (this doc)     |

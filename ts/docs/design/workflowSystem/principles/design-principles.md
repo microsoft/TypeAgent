@@ -1,8 +1,8 @@
-# Workflow Spec Design Principles
+# Workflow IR Design Principles
 
 Status: Draft (iterating)
 
-This document establishes design principles for the workflow spec and engine. These principles apply to the entire spec design: data flow, control flow, node types, validation, loops, error handling, and any future extensions. Each principle states a property the design must have, without prescribing a specific mechanism. Concrete scenarios illustrate what each principle enables and excludes.
+This document establishes design principles for the workflow IR and engine. These principles apply to the entire IR design: data flow, control flow, node types, validation, loops, error handling, and any future extensions. Each principle states a property the design must have, without prescribing a specific mechanism. Concrete scenarios illustrate what each principle enables and excludes.
 
 A good principle should:
 
@@ -11,31 +11,31 @@ A good principle should:
 - **Not prescribe mechanism**: it says what property the design must have, not how to achieve it.
 - **Not overlap**: each principle covers a distinct concern.
 
-The spec schema should use the fewest concepts necessary to satisfy P1-P5. Each new node type, field, or construct must earn its place by enabling something the existing concepts cannot express without violating a principle. This is not a numbered principle (it governs the spec schema, not individual spec designs), but a discipline applied when evaluating schema extensions.
+The IR schema should use the fewest concepts necessary to satisfy P1-P5. Each new node type, field, or construct must earn its place by enabling something the existing concepts cannot express without violating a principle. This is not a numbered principle (it governs the IR schema, not individual IR designs), but a discipline applied when evaluating schema extensions.
 
 ## Principles govern the boundary, not the interior
 
 A task is a black box: typed input in, typed output out. The workflow author chooses where to draw the task boundary. In the extreme, the entire workflow could be a single task - trivially satisfying all five principles (no references, no data flow, no structure to validate).
 
-| Exposed in spec                    | Engine provides                                |
-| ---------------------------------- | ---------------------------------------------- |
-| Declared data dependency           | P1: validated existence + type compatibility   |
-| Data path from source to consumer  | P2: traceability, lineage, impact analysis     |
-| Loop/branch/sequence structure     | P3: observability, event stream per node       |
-| Separate nodes with schemas        | P4: independent validation and testing         |
-| Explicit transitions + error edges | P5: predictable behavior from reading the spec |
+| Exposed in IR                      | Engine provides                              |
+| ---------------------------------- | -------------------------------------------- |
+| Declared data dependency           | P1: validated existence + type compatibility |
+| Data path from source to consumer  | P2: traceability, lineage, impact analysis   |
+| Loop/branch/sequence structure     | P3: observability, event stream per node     |
+| Separate nodes with schemas        | P4: independent validation and testing       |
+| Explicit transitions + error edges | P5: predictable behavior from reading the IR |
 
 The principles become interesting as the author decomposes work into separate nodes. They guarantee the decomposition is sound. But they don't say "decompose as much as possible." The question for the workflow author is: where do I want the engine's capabilities?
 
-The boundary is not fixed. Today, "typed input in, typed output out" is the full contract. In the future, additional behavioral declarations on tasks (e.g., side-effect annotations, capability requirements, idempotency markers) would extend the boundary: more information crosses from the task into the spec, enabling richer engine analysis without changing the task implementation. The design should remain open to expanding what tasks declare about themselves. See plan.md open question #1 (capability and side-effect declarations).
+The boundary is not fixed. Today, "typed input in, typed output out" is the full contract. In the future, additional behavioral declarations on tasks (e.g., side-effect annotations, capability requirements, idempotency markers) would extend the boundary: more information crosses from the task into the IR, enabling richer engine analysis without changing the task implementation. The design should remain open to expanding what tasks declare about themselves. See plan.md open question #1 (capability and side-effect declarations).
 
-This framing matters when evaluating design alternatives. A pattern that "pushes logic into a task" isn't violating the principles - it's choosing a different boundary. The principles apply to what's on the spec side of the boundary.
+This framing matters when evaluating design alternatives. A pattern that "pushes logic into a task" isn't violating the principles - it's choosing a different boundary. The principles apply to what's on the IR side of the boundary.
 
-**Task internals are opaque.** Each principle has an "Outside the boundary" section noting cases that fall inside the task. The common thread: what happens inside a task (control flow, state, data resolution, error handling) is invisible to the principles. The spec sees typed input in, typed output out. If the author wants the engine to reason about something, they expose it in the spec. This applies uniformly across all five principles and is not repeated in full under each one.
+**Task internals are opaque.** Each principle has an "Outside the boundary" section noting cases that fall inside the task. The common thread: what happens inside a task (control flow, state, data resolution, error handling) is invisible to the principles. The IR sees typed input in, typed output out. If the author wants the engine to reason about something, they expose it in the IR. This applies uniformly across all five principles and is not repeated in full under each one.
 
-## The spec is an IR, not an authoring format
+## The IR is not an authoring format
 
-If a syntactic convenience (pipeline mode, inferred node types, default wiring) hides data flow from the reader, it undermines the principles. Authoring sugar belongs in a DSL that compiles to the explicit spec. This is a cross-cutting consequence of multiple principles:
+The IR is an intermediate representation: a target for tools and a substrate for analysis, not a surface tuned for human authoring. If a syntactic convenience (pipeline mode, inferred node types, default wiring) hides data flow from the reader, it undermines the principles. Authoring sugar belongs in a DSL that compiles to the explicit IR. This is a cross-cutting consequence of multiple principles:
 
 - **P2 (traceability):** implicit wiring creates data flow the reader can't trace.
 - **P3 (structural correspondence):** inferred structure doesn't match what the reader sees.
@@ -45,57 +45,57 @@ This is not a new principle (it doesn't drive decisions independently), but a de
 
 ## Adjacent concerns
 
-P1-P5 govern spec design. These neighboring areas are not governed by the principles but benefit from the spec properties they produce. See [principle-gaps.md](principle-gaps.md) for the full analysis confirming no principle gaps in these areas.
+P1-P5 govern IR design. These neighboring areas are not governed by the principles but benefit from the IR properties they produce. See [principle-gaps.md](principle-gaps.md) for the full analysis confirming no principle gaps in these areas.
 
 - **Runtime performance.** P2's explicit data dependencies enable parallelization analysis (scenario 13). P3's structural correspondence gives the engine loop/branch awareness for optimization.
-- **Authoring ergonomics.** The IR/DSL split (see "The spec is an IR") deliberately separates this concern: the spec is explicit, DSLs provide sugar. The principles constrain what DSLs can target but don't govern DSL design itself.
-- **Debugging and observability.** P3 enables tools to map execution state back to spec nodes. P5 ensures debugger behavior matches reader expectations. The spec structure makes these features feasible; building them is engine work.
+- **Authoring ergonomics.** The IR/DSL split (see "The IR is not an authoring format") deliberately separates this concern: the IR is explicit, DSLs provide sugar. The principles constrain what DSLs can target but don't govern DSL design itself.
+- **Debugging and observability.** P3 enables tools to map execution state back to IR nodes. P5 ensures debugger behavior matches reader expectations. The IR structure makes these features feasible; building them is engine work.
 
 ## Out of scope for v1
 
-- **Deployment and evolution.** Spec versioning, checkpoint/resume, backward compatibility, migration when schemas change. The principles permit but don't drive solutions here. Deferred because v1 workflows are short-lived and single-user. See [principle-gaps.md](principle-gaps.md) for the forward compatibility check confirming v1 decisions don't block future support.
+- **Deployment and evolution.** IR versioning, checkpoint/resume, backward compatibility, migration when schemas change. The principles permit but don't drive solutions here. Deferred because v1 workflows are short-lived and single-user. See [principle-gaps.md](principle-gaps.md) for the forward compatibility check confirming v1 decisions don't block future support.
 
 ## Relationship to other design docs
 
-- [../spec/spec-v1.md](../spec/spec-v1.md) - the v1 IR spec, derived from these principles.
+- [../ir/ir-v1.md](../ir/ir-v1.md) - the v1 IR, derived from these principles.
 - [principle-gaps.md](principle-gaps.md) - analysis of areas the principles permit but don't drive (deployment/evolution, debugging, performance). Includes v1 scope decisions and forward compatibility checks.
-- [../spec/decisions/](../spec/decisions/) - per-decision records driven by these principles.
+- [../ir/decisions/](../ir/decisions/) - per-decision records driven by these principles.
 - [../archive/](../archive/) - earlier design exploration (plan.md, loops-dataflow-controlflow.md, design-decisions.md), preserved for context.
 
 ## Principles
 
-| #   | Principle                                                                                                                                                                                                                      | One-line test                                                                                                                      |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| P1  | Every type-mediated boundary the spec describes is statically provable: intra-spec references resolve compatibly on every path, and external-contract seams are checked against the entity's contract whenever it is available | "For every typed crossing the spec describes - reference or external seam - can the validator prove compatibility before runtime?" |
-| P2  | All data flow is traceable through the spec alone                                                                                                                                                                              | "For any task input, can I trace it back to its origin by reading the spec?"                                                       |
-| P3  | Spec structure corresponds to computational structure, in both control flow and data publication                                                                                                                               | "Does the spec reveal the pattern (both what runs and what is shared), or must you analyze the graph to discover it?"              |
-| P4  | Each part of the workflow can be understood, validated, and tested without the whole, given only its declared boundary contract (control and data)                                                                             | "Can I validate/test this part using only what its boundary declares?"                                                             |
-| P5  | A reader of the spec can predict engine behavior - both what runs when and which values stay live - without knowing engine conventions                                                                                         | "Would a reader be surprised by the behavior, including by what the engine keeps alive?"                                           |
+| #   | Principle                                                                                                                                                                                                                  | One-line test                                                                                                                    |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| P1  | Every type-mediated boundary the IR describes is statically provable: intra-IR references resolve compatibly on every path, and external-contract seams are checked against the entity's contract whenever it is available | "For every typed crossing the IR describes - reference or external seam - can the validator prove compatibility before runtime?" |
+| P2  | All data flow is traceable through the IR alone                                                                                                                                                                            | "For any task input, can I trace it back to its origin by reading the IR?"                                                       |
+| P3  | IR structure corresponds to computational structure, in both control flow and data publication                                                                                                                             | "Does the IR reveal the pattern (both what runs and what is shared), or must you analyze the graph to discover it?"              |
+| P4  | Each part of the workflow can be understood, validated, and tested without the whole, given only its declared boundary contract (control and data)                                                                         | "Can I validate/test this part using only what its boundary declares?"                                                           |
+| P5  | A reader of the IR can predict engine behavior - both what runs when and which values stay live - without knowing engine conventions                                                                                       | "Would a reader be surprised by the behavior, including by what the engine keeps alive?"                                         |
 
 ---
 
-## P1: Every type-mediated boundary the spec describes is statically provable
+## P1: Every type-mediated boundary the IR describes is statically provable
 
-If the spec describes a typed boundary that values cross at runtime, the validator must be able to prove, before the workflow runs, that the values which can cross will do so safely. P1 applies to **every** such boundary the spec names, on **two axes**:
+If the IR describes a typed boundary that values cross at runtime, the validator must be able to prove, before the workflow runs, that the values which can cross will do so safely. P1 applies to **every** such boundary the IR names, on **two axes**:
 
-- **Intra-spec axis (data references).** For every reference from a consumer node to a producer node, two things must be provable:
+- **Intra-IR axis (data references).** For every reference from a consumer node to a producer node, two things must be provable:
   1. **Existence**: the producer has executed before the consumer, no matter which branches were taken. Not "the producer is reachable before the consumer" (there exists a path), but "the producer dominates the consumer" (every path goes through the producer first).
   2. **Compatibility**: the value the producer publishes is compatible with what the consumer expects in that input. The data flowing through the reference must make sense at the destination.
-- **External-contract axis (boundary seams).** Wherever the spec describes the contract of an entity outside itself - a registered task implementation, the workflow's own caller, an external system declared in spec metadata - the spec's description must be statically checked against that entity's declared contract whenever the entity's contract is available at validation time. The check uses the same compatibility relation as the intra-spec axis, applied in the appropriate direction (the spec's input description is a subtype of what the entity accepts; the entity's output is a subtype of the spec's description). When the entity's contract is not available at validation time, the check is deferred to the runtime boundary; in that case P1 is partially satisfied and the gap is documented.
+- **External-contract axis (boundary seams).** Wherever the IR describes the contract of an entity outside itself - a registered task implementation, the workflow's own caller, an external system declared in IR metadata - the IR's description must be statically checked against that entity's declared contract whenever the entity's contract is available at validation time. The check uses the same compatibility relation as the intra-IR axis, applied in the appropriate direction (the IR's input description is a subtype of what the entity accepts; the entity's output is a subtype of the IR's description). When the entity's contract is not available at validation time, the check is deferred to the runtime boundary; in that case P1 is partially satisfied and the gap is documented.
 
-The specific definition of "compatible" (exact match, structural subtyping, schema intersection, etc.) is a mechanism choice resolved in the [spec](../spec/spec-v1.md), not prescribed by this principle.
+The specific definition of "compatible" (exact match, structural subtyping, schema intersection, etc.) is a mechanism choice resolved in the [IR](../ir/ir-v1.md), not prescribed by this principle.
 
-The two axes share one motivation: every place a value crosses a typed boundary is a place a runtime failure could happen, and every such place that the spec describes can be checked before runtime. P1 says: check it.
+The two axes share one motivation: every place a value crosses a typed boundary is a place a runtime failure could happen, and every such place that the IR describes can be checked before runtime. P1 says: check it.
 
 ### Scenarios it ENABLES
 
-**1. Confident LLM authoring.** An LLM generates a workflow spec. If it passes validation, every data reference will resolve at runtime. This eliminates the class of bugs where a reference resolves during testing but fails in production because a different branch was taken.
+**1. Confident LLM authoring.** An LLM generates a workflow IR. If it passes validation, every data reference will resolve at runtime. This eliminates the class of bugs where a reference resolves during testing but fails in production because a different branch was taken.
 
 **2. Error handler with safe references.** An error handler for `fetch` can reference the output of `buildUrl` (to log the URL that failed), because `buildUrl` dominates `fetch`, which dominates the error handler's activation point. The validator confirms this.
 
 **3. Diamond merge with explicit data flow.** After a branch `{left: A, right: B}` merging at `merge`, `merge` cannot reference the output of A or B because neither dominates `merge` (only one executes). This forces the author to handle both cases - either pass data through declared cross-iteration state, or route to separate downstream paths.
 
-**3a. Spec/task contract drift caught before runtime.** A spec node describes a task's input and output schema. The task implementation declares its own contract. P1's external-contract axis requires the validator to compare the two when the task registry is available, in both directions: the spec's `inputSchema` is a subtype of what the task accepts, and the task's output is a subtype of the spec's `outputSchema`. A spec that disagrees with its task implementation is rejected at validation time, not discovered when a value happens to expose the mismatch at runtime.
+**3a. IR/task contract drift caught before runtime.** An IR node describes a task's input and output schema. The task implementation declares its own contract. P1's external-contract axis requires the validator to compare the two when the task registry is available, in both directions: the IR's `inputSchema` is a subtype of what the task accepts, and the task's output is a subtype of the IR's `outputSchema`. An IR that disagrees with its task implementation is rejected at validation time, not discovered when a value happens to expose the mismatch at runtime.
 
 ### Patterns requiring alternative expression
 
@@ -105,7 +105,7 @@ These patterns are natural to reach for, but P1 requires them to be expressed di
 
 - _Intent:_ Use cached data downstream, where the cache node is behind a branch that usually (but not always) executes.
 - _Why rejected:_ A reference to `cache`'s output in a node reachable via a path that skips `cache` violates the "every path" requirement. The validator cannot distinguish "usually taken" from "sometimes skipped."
-- _Alternative:_ (a) Restructure so `cache` dominates the consumer (move it before the branch). (b) Pass the value explicitly through both branches via declared data wiring. (c) Mark the reference as optional: the consumer receives the cached value when `cache` runs and handles its absence otherwise. (The specific mechanism for optional references - nullable inputs, special reference syntax, schema annotations, etc. - is a design choice; see the [spec](../spec/spec-v1.md). What matters for P1 is that the reference's optionality is declared in the spec so the validator can distinguish it from a required reference that would fail.)
+- _Alternative:_ (a) Restructure so `cache` dominates the consumer (move it before the branch). (b) Pass the value explicitly through both branches via declared data wiring. (c) Mark the reference as optional: the consumer receives the cached value when `cache` runs and handles its absence otherwise. (The specific mechanism for optional references - nullable inputs, special reference syntax, schema annotations, etc. - is a design choice; see the [IR](../ir/ir-v1.md). What matters for P1 is that the reference's optionality is declared in the IR so the validator can distinguish it from a required reference that would fail.)
 - _Tradeoff:_ (a) may run `cache` when unnecessary. (b) adds wiring verbosity. (c) moves the conditional logic inside the task, which is a legitimate boundary choice: the task is the right place to decide what to do when cache data is absent. All three make the data flow explicit.
 
 **5. Optional enrichment.** (Same pattern as scenario 4; the difference is that enrichment is entirely skipped rather than conditionally cached.)
@@ -124,9 +124,9 @@ These patterns are natural to reach for, but P1 requires them to be expressed di
 
 ### Outside the boundary
 
-P1 governs spec-level data references. What happens inside tasks is outside the principle's scope.
+P1 governs IR-level data references. What happens inside tasks is outside the principle's scope.
 
-**Task-internal data resolution.** A task that internally resolves data from a cache, database, or computed lookup. P1 does not require these internal references to be statically provable. The spec sees a single task with typed input and output; how the task resolves data internally is the task author's concern. The boundary framing applies: if the author wants the engine to validate a data dependency, they expose it in the spec as a declared reference.
+**Task-internal data resolution.** A task that internally resolves data from a cache, database, or computed lookup. P1 does not require these internal references to be statically provable. The IR sees a single task with typed input and output; how the task resolves data internally is the task author's concern. The boundary framing applies: if the author wants the engine to validate a data dependency, they expose it in the IR as a declared reference.
 
 **7. Optional data at merge points.**
 
@@ -137,68 +137,68 @@ P1 governs spec-level data references. What happens inside tasks is outside the 
 
 ### Patterns ruled out
 
-These patterns cannot be expressed as a single reference in the IR. However, since the spec defines all nodes, the set of possible targets is always finite and known at spec time, so equivalent behavior can always be achieved through explicit enumeration.
+These patterns cannot be expressed as a single reference in the IR. However, since the IR defines all nodes, the set of possible targets is always finite and known at IR time, so equivalent behavior can always be achieved through explicit enumeration.
 
-**8. Computed indirection.** A reference whose target is determined at runtime (e.g., "read from whichever node's name is stored in variable X"). P1 requires all reference targets to be statically known at validation time. A computed reference whose target depends on runtime data cannot exist in the spec.
+**8. Computed indirection.** A reference whose target is determined at runtime (e.g., "read from whichever node's name is stored in variable X"). P1 requires all reference targets to be statically known at validation time. A computed reference whose target depends on runtime data cannot exist in the IR.
 
-_Workaround:_ Use a decision node that branches to the possible targets, with each branch wiring its output to the downstream consumer. For example, a "multi-strategy" pattern (classifier picks one of N summarizers) is expressed as a decision branch where each strategy node has `next: "format"`. If all strategies produce a compatible output schema, `format`'s input is satisfied on every path. The cost is verbosity (N entries in a `next` map instead of one computed reference), not lost capability. The decision-tree workaround always works when the set of possible targets is statically known and finite. If the target set is itself dynamic (e.g., a user-defined plugin registry), the workaround requires spec regeneration.
+_Workaround:_ Use a decision node that branches to the possible targets, with each branch wiring its output to the downstream consumer. For example, a "multi-strategy" pattern (classifier picks one of N summarizers) is expressed as a decision branch where each strategy node has `next: "format"`. If all strategies produce a compatible output schema, `format`'s input is satisfied on every path. The cost is verbosity (N entries in a `next` map instead of one computed reference), not lost capability. The decision-tree workaround always works when the set of possible targets is statically known and finite. If the target set is itself dynamic (e.g., a user-defined plugin registry), the workaround requires IR regeneration.
 
 ### What this principle does NOT resolve alone
 
 - The specific definition of "compatible" for type checking (structural subtyping, exact match, etc.) - P1 requires compatibility be provable, not which type system proves it.
 - Whether optional references should exist and what form they take - P1 motivates them (scenarios 4, 5, 7), but the mechanism is a design choice.
 - How dominator analysis interacts with error edges - P1 requires dominance on every path, but the error-edge model affects which paths exist.
-- Which entities count as external contracts the spec describes - P1 says "every type-mediated boundary the spec describes", but the set of such boundaries grows as the spec adds capability declarations, sub-workflow calls, etc. Each addition requires deciding what its checked contract is.
+- Which entities count as external contracts the IR describes - P1 says "every type-mediated boundary the IR describes", but the set of such boundaries grows as the IR adds capability declarations, sub-workflow calls, etc. Each addition requires deciding what its checked contract is.
 
 ---
 
-## P2: All data flow is traceable through the spec alone
+## P2: All data flow is traceable through the IR alone
 
-For any piece of data consumed by any task, you can trace its origin and every transformation by reading the spec. No hidden channels. No ambient state. No side-effect communication between tasks.
+For any piece of data consumed by any task, you can trace its origin and every transformation by reading the IR. No hidden channels. No ambient state. No side-effect communication between tasks.
 
 ### Scenarios it ENABLES
 
 **9. Data boundary analysis.** "What data enters this loop from outside? What leaves?" Answerable by reading the boundary declarations. Useful for security review, compliance, understanding blast radius of changes.
 
-**10. Data lineage / provenance.** "This final article came from loop-scoped variable `draft`, which was written by the `write` task, which consumed `feedback` and `topic`." Full chain visible in the spec, no runtime tracing needed.
+**10. Data lineage / provenance.** "This final article came from loop-scoped variable `draft`, which was written by the `write` task, which consumed `feedback` and `topic`." Full chain visible in the IR, no runtime tracing needed.
 
-**11. Impact analysis.** "If I change the `evaluate` task's output schema, what downstream consumers are affected?" Follow the data chains through the spec. Static analysis tool can answer this.
+**11. Impact analysis.** "If I change the `evaluate` task's output schema, what downstream consumers are affected?" Follow the data chains through the IR. Static analysis tool can answer this.
 
-**12. Sensitive data tracking.** "Does the user's email address flow into the external API call?" Trace the flow of `email` through declared data references. If every hop is declared in the spec, this is a static analysis problem, not a runtime monitoring problem.
+**12. Sensitive data tracking.** "Does the user's email address flow into the external API call?" Trace the flow of `email` through declared data references. If every hop is declared in the IR, this is a static analysis problem, not a runtime monitoring problem.
 
-**13. Parallelization analysis.** "Can these two nodes run concurrently?" If their data dependencies don't conflict (traceable from the spec), yes. The spec has enough information to determine this without running the workflow.
+**13. Parallelization analysis.** "Can these two nodes run concurrently?" If their data dependencies don't conflict (traceable from the IR), yes. The IR has enough information to determine this without running the workflow.
 
 ### Patterns requiring alternative expression
 
 **14. External configuration.**
 
 - _Intent:_ A task needs an API key, environment variable, or external config value.
-- _Why the direct approach violates P2:_ A reference to an environment variable in the data wiring would mean the engine resolves data from outside the spec. The reader can't trace the value's origin from the spec alone.
-- _Alternative:_ (a) Declare the value as a constant in the spec: fully traceable. (b) The task requests secrets through a declared provider interface, injected by the caller. (c) The task manages its own credentials internally (outside the boundary).
-- _Tradeoff:_ (a) puts config in the spec (visible but may not belong there for secrets). (b) is traceable at the interface level ("this task uses secrets") but not at the value level (you can't trace the actual key). (c) is fully opaque. The boundary framing applies: secrets accessed inside the task are the task's business, not the spec's.
+- _Why the direct approach violates P2:_ A reference to an environment variable in the data wiring would mean the engine resolves data from outside the IR. The reader can't trace the value's origin from the IR alone.
+- _Alternative:_ (a) Declare the value as a constant in the IR: fully traceable. (b) The task requests secrets through a declared provider interface, injected by the caller. (c) The task manages its own credentials internally (outside the boundary).
+- _Tradeoff:_ (a) puts config in the IR (visible but may not belong there for secrets). (b) is traceable at the interface level ("this task uses secrets") but not at the value level (you can't trace the actual key). (c) is fully opaque. The boundary framing applies: secrets accessed inside the task are the task's business, not the IR's.
 
 **15. Cross-iteration state.**
 
 - _Intent:_ A loop body node wants to read the output of a previous iteration's execution (e.g., "what did the `evaluate` task produce last time?").
-- _Why the direct approach violates P2:_ If node outputs silently overwrite on re-execution and downstream nodes read the "latest" value, the intent to pass data across iterations is invisible in the spec. You can't tell from the spec that data flows across iterations.
-- _Alternative:_ Declare cross-iteration state explicitly as loop-scoped variables. Body nodes write to them via declared output bindings, and read from them via declared input bindings. Every cross-iteration data flow is declared in the spec.
+- _Why the direct approach violates P2:_ If node outputs silently overwrite on re-execution and downstream nodes read the "latest" value, the intent to pass data across iterations is invisible in the IR. You can't tell from the IR that data flows across iterations.
+- _Alternative:_ Declare cross-iteration state explicitly as loop-scoped variables. Body nodes write to them via declared output bindings, and read from them via declared input bindings. Every cross-iteration data flow is declared in the IR.
 - _Tradeoff:_ More verbose than implicit overwrite. But the overwrite model is exactly the kind of hidden channel P2 exists to prevent. The verbosity is the traceability.
 
 ### Outside the boundary
 
-These patterns involve data flow that P2 does not govern because it occurs inside tasks (beyond the spec boundary). P2 guarantees that the spec-visible data flow is complete. What tasks do internally is opaque by design.
+These patterns involve data flow that P2 does not govern because it occurs inside tasks (beyond the IR boundary). P2 guarantees that the IR-visible data flow is complete. What tasks do internally is opaque by design.
 
-**16. Tasks communicating via shared external state.** Two tasks that coordinate by writing/reading a database, file system, or external service without the spec declaring this dependency. The engine can't detect or prevent this. The spec-visible data flow is still complete and traceable; the side channel is invisible to analysis. Future mitigation: task side-effect declarations (see plan.md open question #1) would surface these channels, expanding the boundary.
+**16. Tasks communicating via shared external state.** Two tasks that coordinate by writing/reading a database, file system, or external service without the IR declaring this dependency. The engine can't detect or prevent this. The IR-visible data flow is still complete and traceable; the side channel is invisible to analysis. Future mitigation: task side-effect declarations (see plan.md open question #1) would surface these channels, expanding the boundary.
 
-**17. Task-internal state across invocations.** A task that caches results, maintains counters, or remembers prior inputs across calls. From the spec's perspective, each invocation is independent (input in, output out). The hidden state may affect outputs but is invisible to the spec. Same mitigation path as above: side-effect/statefulness declarations would make this visible.
+**17. Task-internal state across invocations.** A task that caches results, maintains counters, or remembers prior inputs across calls. From the IR's perspective, each invocation is independent (input in, output out). The hidden state may affect outputs but is invisible to the IR. Same mitigation path as above: side-effect/statefulness declarations would make this visible.
 
-**18. Observability data.** Tasks emit logs via `ctx.log()`, and the engine emits events (`nodeStarted`, `nodeCompleted`). This is data flow the spec doesn't trace. Acceptable: observability is about monitoring, not computational data flow. The principle covers data that affects workflow outcomes, not diagnostic side channels.
+**18. Observability data.** Tasks emit logs via `ctx.log()`, and the engine emits events (`nodeStarted`, `nodeCompleted`). This is data flow the IR doesn't trace. Acceptable: observability is about monitoring, not computational data flow. The principle covers data that affects workflow outcomes, not diagnostic side channels.
 
 ### Patterns ruled out
 
-**19. Undeclared data origins.** Every data reference must resolve to a declared origin: workflow input, declared constants, another node's output, or loop-scoped state. There is no escape hatch for "get this value from somewhere the spec doesn't know about." If data enters the workflow, it enters through a declared channel.
+**19. Undeclared data origins.** Every data reference must resolve to a declared origin: workflow input, declared constants, another node's output, or loop-scoped state. There is no escape hatch for "get this value from somewhere the IR doesn't know about." If data enters the workflow, it enters through a declared channel.
 
-_Why this is genuinely ruled out:_ Unlike P1's "patterns ruled out" (where workarounds always exist for finite specs), P2's exclusion is absolute. If the engine resolves data from an undeclared source, it breaks traceability by definition. The set of valid data origins is fixed by the spec schema.
+_Why this is genuinely ruled out:_ Unlike P1's "patterns ruled out" (where workarounds always exist for finite IRs), P2's exclusion is absolute. If the engine resolves data from an undeclared source, it breaks traceability by definition. The set of valid data origins is fixed by the IR schema.
 
 ### What this principle does NOT resolve alone
 
@@ -208,35 +208,35 @@ _Why this is genuinely ruled out:_ Unlike P1's "patterns ruled out" (where worka
 
 ---
 
-## P3: Spec structure corresponds to computational structure
+## P3: IR structure corresponds to computational structure
 
-The spec's hierarchical structure should mirror the computational patterns. A loop should be represented as a loop construct, not as a pattern you have to recognize in a flat graph. A scope boundary in execution should be a scope boundary in the spec.
+The IR's hierarchical structure should mirror the computational patterns. A loop should be represented as a loop construct, not as a pattern you have to recognize in a flat graph. A scope boundary in execution should be a scope boundary in the IR.
 
 The correspondence applies to **both axes** of structure:
 
 - **Control-flow correspondence.** Loops are loops, branches are branches, sequences are sequences. The reader sees the pattern in the structure, not by analyzing topology.
-- **Data-publication correspondence.** A value that the spec exposes between nodes corresponds to a publication the author intended. Values that are internal to a producing step are not part of the spec's inter-node namespace. The reader can see, structurally, which values are shared and which are step-local; this is not inferred from downstream usage.
+- **Data-publication correspondence.** A value that the IR exposes between nodes corresponds to a publication the author intended. Values that are internal to a producing step are not part of the IR's inter-node namespace. The reader can see, structurally, which values are shared and which are step-local; this is not inferred from downstream usage.
 
-Testable: look at the spec structure, then look at the execution trace and the set of cross-node data uses. Do they correspond? If you have to "discover" a loop by analyzing a flat graph, or discover a value's role by scanning every potential consumer, the structure doesn't correspond to the computation.
+Testable: look at the IR structure, then look at the execution trace and the set of cross-node data uses. Do they correspond? If you have to "discover" a loop by analyzing a flat graph, or discover a value's role by scanning every potential consumer, the structure doesn't correspond to the computation.
 
 ### Scenarios it ENABLES
 
-**20. Loop is visible in the spec.** A loop construct wrapping body nodes immediately communicates "iterative refinement." The flat-graph equivalent (a cycle in the node graph) communicates "there are edges." You'd have to run SCC detection to discover the loop.
+**20. Loop is visible in the IR.** A loop construct wrapping body nodes immediately communicates "iterative refinement." The flat-graph equivalent (a cycle in the node graph) communicates "there are edges." You'd have to run SCC detection to discover the loop.
 
-**21. Visualization without inference.** A tool rendering the workflow can map spec structure directly to visual structure: loop = collapsed box, branch = diamond, linear = arrow. With flat graphs, the tool must infer structure from topology (SCC detection, branch/merge analysis).
+**21. Visualization without inference.** A tool rendering the workflow can map IR structure directly to visual structure: loop = collapsed box, branch = diamond, linear = arrow. With flat graphs, the tool must infer structure from topology (SCC detection, branch/merge analysis).
 
 **22. LLM generation guardrails.** The loop construct is a template: "fill in cross-iteration state, entry point, body nodes, exit condition." This constrains generation and reduces errors. With flat graphs, the LLM must correctly construct a cycle with a decision exit, without structural guidance from the IR format.
 
-**23. Refactoring safety.** Extracting a loop body into a sub-workflow, or inlining a sub-workflow, is a structural operation that maps directly to spec structure. With flat graphs, extracting a "loop" means identifying an SCC, cutting edges, creating boundary nodes - a graph surgery that's hard to automate correctly.
+**23. Refactoring safety.** Extracting a loop body into a sub-workflow, or inlining a sub-workflow, is a structural operation that maps directly to IR structure. With flat graphs, extracting a "loop" means identifying an SCC, cutting edges, creating boundary nodes - a graph surgery that's hard to automate correctly.
 
-**24. Sub-workflow composition (future).** When sub-workflows are added, a sub-workflow call should be structurally visible as a different kind of node (not a regular task that happens to invoke another workflow internally). The reader sees "this is a sub-workflow" from the spec structure, not by knowing which tasks are wrappers.
+**24. Sub-workflow composition (future).** When sub-workflows are added, a sub-workflow call should be structurally visible as a different kind of node (not a regular task that happens to invoke another workflow internally). The reader sees "this is a sub-workflow" from the IR structure, not by knowing which tasks are wrappers.
 
 ### Patterns requiring alternative expression
 
 **25. Minimal retry loops.**
 
 - _Intent:_ Express a simple retry pattern (try, check, retry) with minimal syntax - just 3 nodes pointing at each other in a cycle.
-- _Why P3 requires a different expression:_ A flat cycle hides the "this is a loop" pattern. You have to analyze the graph to discover it. P3 says the computational pattern should be visible in the spec structure.
+- _Why P3 requires a different expression:_ A flat cycle hides the "this is a loop" pattern. You have to analyze the graph to discover it. P3 says the computational pattern should be visible in the IR structure.
 - _Alternative:_ Use a loop construct with body nodes, cross-iteration state declarations, and entry/exit sentinels.
 - _Tradeoff:_ More verbose for simple cases. But the structure communicates intent (retry loop), enables visualization tools, and constrains LLM generation. The DSL can provide authoring sugar for common patterns (e.g., `retry(3) { ... }` compiling to a loop construct).
 
@@ -256,32 +256,32 @@ Testable: look at the spec structure, then look at the execution trace and the s
 
 **27a. Implicit publication of every node's output.**
 
-- _Intent:_ Treat every node's output as automatically part of the spec's namespace, addressable from any dominated descendant. No declaration required.
-- _Why P3 requires a different expression:_ A spec where every step computes intermediate values used only by itself looks structurally identical to one where every intermediate is part of the inter-node contract. The reader cannot tell, from the spec structure, which values are shared and which are step-local. The data-publication side of structural correspondence is lost: publication becomes a topological accident (any node placed before a potential consumer is implicitly published) rather than an intentional structural choice.
-- _Alternative:_ The spec distinguishes values that participate in its inter-node namespace from values that do not. Step-internal values do not appear as referenceable names; published values do.
-- _Tradeoff:_ An extra structural declaration when sharing is intended. In return, the spec structure communicates "this step contributes these values to the surrounding scope; this step contributes none," mirroring the same distinction real programs make between locals and visible outputs.
+- _Intent:_ Treat every node's output as automatically part of the IR's namespace, addressable from any dominated descendant. No declaration required.
+- _Why P3 requires a different expression:_ An IR where every step computes intermediate values used only by itself looks structurally identical to one where every intermediate is part of the inter-node contract. The reader cannot tell, from the IR structure, which values are shared and which are step-local. The data-publication side of structural correspondence is lost: publication becomes a topological accident (any node placed before a potential consumer is implicitly published) rather than an intentional structural choice.
+- _Alternative:_ The IR distinguishes values that participate in its inter-node namespace from values that do not. Step-internal values do not appear as referenceable names; published values do.
+- _Tradeoff:_ An extra structural declaration when sharing is intended. In return, the IR structure communicates "this step contributes these values to the surrounding scope; this step contributes none," mirroring the same distinction real programs make between locals and visible outputs.
 
 ### Outside the boundary
 
-P3 governs spec-level structure. Task internals are opaque (see "Principles govern the boundary").
+P3 governs IR-level structure. Task internals are opaque (see "Principles govern the boundary").
 
-**28. Task-internal control flow.** A task that internally loops, branches, or does complex control flow. The spec sees a single task node. If the author wants the engine to observe the internal structure, they decompose the task into multiple nodes.
+**28. Task-internal control flow.** A task that internally loops, branches, or does complex control flow. The IR sees a single task node. If the author wants the engine to observe the internal structure, they decompose the task into multiple nodes.
 
 ### Patterns ruled out
 
 P3 does not rule out any computational capability. Every computation expressible with flat cycles is also expressible with a loop construct + DAG body. The principle constrains the _form of expression_, not the _range of computation_.
 
-The one thing P3 genuinely prevents is **structural ambiguity**: a spec where the reader cannot tell whether a pattern is a loop, a branch, or a linear sequence without analyzing the graph. With node type discriminants and explicit constructs, every node's role is self-describing.
+The one thing P3 genuinely prevents is **structural ambiguity**: an IR where the reader cannot tell whether a pattern is a loop, a branch, or a linear sequence without analyzing the graph. With node type discriminants and explicit constructs, every node's role is self-describing.
 
 ### What this principle does NOT resolve alone
 
 - Whether loop bodies should be DAGs or general graphs (both are structurally explicit; needs P4 to decide).
 - The specific fields on the loop construct (needs P2 for data flow, P5 for predictability).
-- Whether the spec should encode _why_ a loop exits. Branch labels are structural; intent/purpose is documentation, not computation.
+- Whether the IR should encode _why_ a loop exits. Branch labels are structural; intent/purpose is documentation, not computation.
 
 ### Relationship to other principles
 
-P3 is the principle most likely to be a **tiebreaker**. When two designs satisfy P1 (reference validity), P2 (traceability), P4 (composability), and P5 (predictability), P3 picks the one whose spec structure better mirrors the computation. For example, flat-graph-with-annotations could satisfy P1/P2/P4/P5, but a loop construct satisfies P3 better.
+P3 is the principle most likely to be a **tiebreaker**. When two designs satisfy P1 (reference validity), P2 (traceability), P4 (composability), and P5 (predictability), P3 picks the one whose IR structure better mirrors the computation. For example, flat-graph-with-annotations could satisfy P1/P2/P4/P5, but a loop construct satisfies P3 better.
 
 ---
 
@@ -319,7 +319,7 @@ A part can be understood, validated, and tested when both sides of its contract 
 
 - _Intent:_ Two loops share a global counter by both reading/writing the same mutable variable. Simpler than passing state through each loop's boundary.
 - _Why P4 requires a different expression:_ Each loop's behavior depends on the other's mutations. You can't test one loop without knowing what the other does to the shared state. The loops are coupled through a hidden channel.
-- _Alternative:_ Scope state to each loop. If they need to share a counter, pass it through declared channels: loop A outputs the counter, loop B receives it via declared input wiring. The sequential dependency is visible in the spec.
+- _Alternative:_ Scope state to each loop. If they need to share a counter, pass it through declared channels: loop A outputs the counter, loop B receives it via declared input wiring. The sequential dependency is visible in the IR.
 - _Tradeoff:_ More wiring between loops. But the dependency is explicit: "loop B depends on loop A's counter." Testable independently by mocking the counter input.
 
 **35. Shared error handlers across scopes.**
@@ -338,7 +338,7 @@ A part can be understood, validated, and tested when both sides of its contract 
 
 ### Outside the boundary
 
-P4 governs spec-level decomposition. Task internals are opaque (see "Principles govern the boundary").
+P4 governs IR-level decomposition. Task internals are opaque (see "Principles govern the boundary").
 
 **36. Task-internal complexity.** A task with complex internal logic, multiple sub-steps, or its own error handling. P4 doesn't require decomposing it. The author chooses the boundary: decomposing further gives the engine more visibility, but the choice is the author's.
 
@@ -358,11 +358,11 @@ This is not a workaround or alternative expression. The cross-scope reference is
 
 ---
 
-## P5: A reader of the spec can predict engine behavior without knowing engine conventions
+## P5: A reader of the IR can predict engine behavior without knowing engine conventions
 
-Someone reading the spec should be able to predict what the engine will do, without needing to know engine defaults, conventions, or inference rules. The test isn't "is there implicit behavior?" but "would a reader be surprised?"
+Someone reading the IR should be able to predict what the engine will do, without needing to know engine defaults, conventions, or inference rules. The test isn't "is there implicit behavior?" but "would a reader be surprised?"
 
-"Engine behavior" has two axes the reader should be able to predict from the spec alone:
+"Engine behavior" has two axes the reader should be able to predict from the IR alone:
 
 - **What runs when.** Control-flow shape, transitions, error routing, sentinels, exhaustiveness.
 - **What stays live.** Which values the engine must keep available after a node completes, and for how long. A reader should be able to look at a node and predict, locally, whether its output may be released when the node finishes or must be retained for later consumers.
@@ -386,25 +386,25 @@ Both axes apply the same surprise test: would a reader who understands the gener
 - _Intent:_ A body node without `next` implicitly re-enters the loop at `entry`. Less syntax for simple loop bodies.
 - _Why P5 requires a different expression:_ "Missing `next` in a loop body means implicit re-entry at the loop entry" requires knowing the engine's convention. A reader seeing no `next` could reasonably expect exit, error, or re-entry. The behavior is ambiguous without engine knowledge.
 - _Alternative:_ Use explicit `next: "@iterate"` to re-enter, `next: "@exit"` to exit. Every body path terminates at a declared sentinel or another body node.
-- _Tradeoff:_ More syntax per body node. But the reader never has to guess: the spec says what happens. The DSL can default missing `next` in loop bodies to `@iterate` (a reasonable authoring convention), compiling to the explicit form.
+- _Tradeoff:_ More syntax per body node. But the reader never has to guess: the IR says what happens. The DSL can default missing `next` in loop bodies to `@iterate` (a reasonable authoring convention), compiling to the explicit form.
 
 **42. Inferred node types.**
 
 - _Intent:_ Infer node type from field presence. If the node has loop-scoped variables, it's a loop. If it has branches, it's a switch. Less redundancy.
 - _Why P5 requires a different expression:_ The reader must know the inference rules: "field X means type Y." Different engines could have different inference rules. The type is not self-describing.
 - _Alternative:_ Require an explicit node type discriminant. The node type is visible without knowing inference rules.
-- _Tradeoff:_ One extra field per node. But the spec is self-describing: you see the type, not a set of fields you must interpret. The DSL can infer type from syntax (e.g., `loop { ... }` compiles to a loop node type).
+- _Tradeoff:_ One extra field per node. But the IR is self-describing: you see the type, not a set of fields you must interpret. The DSL can infer type from syntax (e.g., `loop { ... }` compiles to a loop node type).
 
 **42a. Implicit value lifetime.**
 
 - _Intent:_ Let every node's output be implicitly available to every dominated descendant. Engine decides when to release.
-- _Why P5 requires a different expression:_ A reader looking at a node cannot predict whether its output will be retained after the node completes; the answer depends on whether some later node, possibly far away in the spec, eventually references it. The reader has to perform a downstream usage analysis to predict liveness, and a conservative engine may simply retain every value to scope end. The lifetime axis is not predictable from local reading.
-- _Alternative:_ The spec distinguishes outputs that participate in its inter-node namespace from outputs that do not. The reader sees, locally at the producing node, whether the output is retained for consumers or releasable on completion. Engine liveness becomes a local reading, not a global analysis.
-- _Tradeoff:_ An extra declaration per shared output. But both reader and engine can predict liveness without traversing the rest of the spec.
+- _Why P5 requires a different expression:_ A reader looking at a node cannot predict whether its output will be retained after the node completes; the answer depends on whether some later node, possibly far away in the IR, eventually references it. The reader has to perform a downstream usage analysis to predict liveness, and a conservative engine may simply retain every value to scope end. The lifetime axis is not predictable from local reading.
+- _Alternative:_ The IR distinguishes outputs that participate in its inter-node namespace from outputs that do not. The reader sees, locally at the producing node, whether the output is retained for consumers or releasable on completion. Engine liveness becomes a local reading, not a global analysis.
+- _Tradeoff:_ An extra declaration per shared output. But both reader and engine can predict liveness without traversing the rest of the IR.
 
 ### Outside the boundary
 
-P5 governs what a reader can predict from the spec. Task internals are opaque (see "Principles govern the boundary"). Some behaviors are universally predictable without being explicit:
+P5 governs what a reader can predict from the IR. Task internals are opaque (see "Principles govern the boundary"). Some behaviors are universally predictable without being explicit:
 
 **43. Universally unsurprising defaults.** Missing error handler means failure propagates. Missing transition in the top-level scope means terminal. Missing output declaration on a loop means no output. These are universally understood conventions that don't require engine-specific knowledge. P5 does not require making them explicit, because no reader would be surprised.
 
@@ -412,7 +412,7 @@ P5 governs what a reader can predict from the spec. Task internals are opaque (s
 
 P5 does not rule out any computational capability. Every computation expressible with implicit conventions is also expressible with explicit declarations. The principle constrains _how behavior is communicated_, not _what behavior is possible_.
 
-What P5 genuinely prevents is **surprise**: a spec where a reader who understands the general concepts (graphs, tasks, loops, branches) but doesn't know this specific engine's conventions would mispredict the behavior. With explicit sentinels, required node type discriminants, and required data wiring, the spec says what it does.
+What P5 genuinely prevents is **surprise**: an IR where a reader who understands the general concepts (graphs, tasks, loops, branches) but doesn't know this specific engine's conventions would mispredict the behavior. With explicit sentinels, required node type discriminants, and required data wiring, the IR says what it does.
 
 ### Where predictability does NOT require explicitness
 

@@ -2,7 +2,7 @@
 
 Status: Exploring
 
-This document examines whether the five design principles (P1-P5) produce good outcomes in areas adjacent to spec design. For each area, the question is: does a spec satisfying P1-P5 produce a bad outcome here, and if so, is it a spec design concern or does it belong to a different design?
+This document examines whether the five design principles (P1-P5) produce good outcomes in areas adjacent to IR design. For each area, the question is: does an IR satisfying P1-P5 produce a bad outcome here, and if so, is it an IR design concern or does it belong to a different design?
 
 See [design-principles.md](design-principles.md) for the principles themselves.
 
@@ -10,36 +10,36 @@ See [design-principles.md](design-principles.md) for the principles themselves.
 
 ## What P1-P5 govern and what they don't
 
-P1-P5 govern how nodes relate to each other through the spec: data flow, structural correspondence, composability, predictability. They do not govern:
+P1-P5 govern how nodes relate to each other through the IR: data flow, structural correspondence, composability, predictability. They do not govern:
 
-- **Engine execution policy** - how the engine runs a valid spec (batching, validation strictness, scheduling). This is engine configuration, completely outside the spec.
+- **Engine execution policy** - how the engine runs a valid IR (batching, validation strictness, scheduling). This is engine configuration, completely outside the IR.
 - **Task boundary metadata** - optional declarations about what a task does beyond "typed input in, typed output out" (side-effect annotations, progress reporting, idempotency markers). These are additive fields on task declarations that don't affect how nodes connect.
 
-Both categories are additive: the spec schema should be open for extension, but no spec design principle is needed. If task boundary metadata grows complex enough, it may warrant its own design doc ("task contract extensions"), but that's a mechanism design with different concerns than P1-P5.
+Both categories are additive: the IR schema should be open for extension, but no IR design principle is needed. If task boundary metadata grows complex enough, it may warrant its own design doc ("task contract extensions"), but that's a mechanism design with different concerns than P1-P5.
 
-### Items that are not spec design concerns
+### Items that are not IR design concerns
 
 | Area                          | Category                             | Resolution                                                                                                                                                                                                                                                      |
 | ----------------------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Decomposition overhead        | Engine execution policy              | The principles say decomposition must be sound, not "decompose more." Engine flags to skip validation or batch trivial nodes are execution policy.                                                                                                              |
 | Intermediate state visibility | Task boundary metadata               | Tasks can emit progress/events that the engine captures for observability, but this data isn't routed through workflow data flow. Same category as observability data (design-principles.md scenario 18). Optional capability declaration on the task boundary. |
-| Replay/checkpoint             | Task boundary metadata + engine      | Side-effect and idempotency declarations are optional task metadata. Checkpoint persistence is engine-level. P2+P3 provide the typed, serializable structure that makes both feasible. The spec schema just needs to allow adding these fields later.           |
-| Loop iteration identity       | Engine mechanism                     | Engine already tracks iteration count for maxIterations. Exposing it to the spec is a mechanism addition consistent with P2.                                                                                                                                    |
-| Error diagnostic constraints  | Spec mechanism (optional references) | Resolved by the optional references mechanism (see [spec §3.4](../spec/spec-v1.md)). Not a principle gap.                                                                                                                                                       |
+| Replay/checkpoint             | Task boundary metadata + engine      | Side-effect and idempotency declarations are optional task metadata. Checkpoint persistence is engine-level. P2+P3 provide the typed, serializable structure that makes both feasible. The IR schema just needs to allow adding these fields later.           |
+| Loop iteration identity       | Engine mechanism                     | Engine already tracks iteration count for maxIterations. Exposing it to the IR is a mechanism addition consistent with P2.                                                                                                                                    |
+| Error diagnostic constraints  | IR mechanism (optional references) | Resolved by the optional references mechanism (see [IR §3.4](../ir/ir-v1.md)). Not a principle gap.                                                                                                                                                       |
 
 ---
 
-## Spec design concerns
+## IR design concerns
 
 ### Parallel iteration is invisible
 
 P3 requires loops to be explicit loop constructs. But a loop with independent iterations (map/forEach over a list) looks structurally identical to a loop with cross-iteration dependencies (iterative refinement). Both are LoopNodes.
 
-The engine must analyze loopVar usage to determine if iterations can run in parallel. The spec structure doesn't distinguish "parallel-safe" from "sequential" - which arguably violates the spirit of P3 (the computational pattern isn't visible in the structure). A "map" pattern is fundamentally different from a "reduce" pattern, but the spec doesn't reveal which one it is.
+The engine must analyze loopVar usage to determine if iterations can run in parallel. The IR structure doesn't distinguish "parallel-safe" from "sequential" - which arguably violates the spirit of P3 (the computational pattern isn't visible in the structure). A "map" pattern is fundamentally different from a "reduce" pattern, but the IR doesn't reveal which one it is.
 
 **Question:** Should this be a structural distinction (e.g., a MapNode vs. LoopNode), or is it sufficient for the engine to infer parallelizability from the absence of cross-iteration state?
 
-- If inferred: the engine analyzes loopVars. No cross-iteration state = parallel-safe. This is analyzable from the spec, but requires inference rather than declaration. Tension with P3 and P5.
+- If inferred: the engine analyzes loopVars. No cross-iteration state = parallel-safe. This is analyzable from the IR, but requires inference rather than declaration. Tension with P3 and P5.
 - If structural: the author declares intent ("this is a map"). The engine trusts the declaration and validates it (no cross-iteration state in a MapNode). Consistent with P3 (structure reveals pattern) and P5 (no inference needed).
 - Counterargument: inference from loopVars is simple and deterministic. A reader can also do it. Is this actually surprising (P5) or just unstated?
 
@@ -59,7 +59,7 @@ P3 is what would drive the decision to add MapNode rather than inferring paralle
 
 ### Intra-scope name visibility (data hiding within a scope)
 
-**Status:** Resolved. The decision (hide-by-default `bind` switch) was originally reached by analysis and folded into the spec at §3.2.1 / §3.3 / §8.15. The gap that allowed it to be analysis-driven rather than principle-driven has since been closed by sharpening P3, P4, and P5 to be bi-axial (see [design-principles.md](design-principles.md)). Recorded here as the case study that motivated the sharpening.
+**Status:** Resolved. The decision (hide-by-default `bind` switch) was originally reached by analysis and folded into the IR at §3.2.1 / §3.3 / §8.15. The gap that allowed it to be analysis-driven rather than principle-driven has since been closed by sharpening P3, P4, and P5 to be bi-axial (see [design-principles.md](design-principles.md)). Recorded here as the case study that motivated the sharpening.
 
 **The original gap.** Should a node's output be addressable by other nodes by default, or only when the author explicitly publishes it? Walking the principles **as originally written** against this question:
 
@@ -71,7 +71,7 @@ P3 is what would drive the decision to add MapNode rather than inferring paralle
 | P4 (parts without the whole)       | Weakly           | P4 was framed around _cross-scope_ boundaries. The intra-scope analog ("a node declares its contribution to the scope's namespace") was latent. |
 | P5 (predict engine behavior)       | Weakly           | P5's scenarios were control-flow surprises. The data-lifetime analog ("reader can predict which values stay live") was latent.                  |
 
-All five permitted both designs. None drove the choice. Hide-by-default was reached by analysis ([cfg-ddg-separation](../spec/decisions/0002-cfg-ddg-separation.md), [bound-outputs](../spec/decisions/0001-bound-outputs.md)) and only afterwards mapped back to weak readings of P3/P4/P5.
+All five permitted both designs. None drove the choice. Hide-by-default was reached by analysis ([cfg-ddg-separation](../ir/decisions/0002-cfg-ddg-separation.md), [bound-outputs](../ir/decisions/0001-bound-outputs.md)) and only afterwards mapped back to weak readings of P3/P4/P5.
 
 **Why this was a principle gap, not just an unstated decision.** The principles, as originally written, were **control-flow-biased**: P3, P4, and P5 each had rich scenario sets for control flow and scope boundaries, but their data-side analogs were latent. The same pattern (a refactor that silently expands a node's contract; a value whose liveness the reader cannot predict; a scope whose namespace grows by accident) would not have surfaced from a P1-P5 walkthrough.
 
@@ -83,40 +83,40 @@ All five permitted both designs. None drove the choice. Hide-by-default was reac
 
 With the sharpening in place, the bound-outputs decision is now driven by the principles directly: P3 (publication is structural), P4 (intra-scope contribution is part of the boundary), P5 (lifetime is locally predictable) all converge on hide-by-default.
 
-**Resolution chosen.** Hide-by-default with explicit `bind` to share, plus SSA-style phi merge for shared bind names on mutually exclusive paths. See spec §8.15 for the design block and [bound-outputs](../spec/decisions/0001-bound-outputs.md) for the K1-K12 analysis.
+**Resolution chosen.** Hide-by-default with explicit `bind` to share, plus SSA-style phi merge for shared bind names on mutually exclusive paths. See IR §8.15 for the design block and [bound-outputs](../ir/decisions/0001-bound-outputs.md) for the K1-K12 analysis.
 
 **Lesson.** When a decision converges from "weak readings" of multiple principles, that's a signal the principles are missing an axis. The fix is to sharpen the principles, not to add a new one.
 
 ---
 
-### Spec/task contract drift (P1's external-contract axis)
+### IR/task contract drift (P1's external-contract axis)
 
-**Status:** Resolved. The decision (registry-gated static drift check between each task node's schemas and the registered task's contract) was reached during the [task-schema-source decision](../spec/decisions/0003-task-schema-source.md) and folded into the spec at §4.1 pass 3, §5.2, and §8.16. The gap that allowed bare Option 1 (spec-authoritative, no static drift check) to sail through the original cleanroom design has since been closed by sharpening P1 to be bi-axial (see [design-principles.md](design-principles.md)). Recorded here as the second case study of the same shape as bound-outputs.
+**Status:** Resolved. The decision (registry-gated static drift check between each task node's schemas and the registered task's contract) was reached during the [task-schema-source decision](../ir/decisions/0003-task-schema-source.md) and folded into the IR at §4.1 pass 3, §5.2, and §8.16. The gap that allowed bare Option 1 (IR-authoritative, no static drift check) to sail through the original cleanroom design has since been closed by sharpening P1 to be bi-axial (see [design-principles.md](design-principles.md)). Recorded here as the second case study of the same shape as bound-outputs.
 
 **The original gap.** A task node carries `inputSchema` / `outputSchema` and names a registered task implementation that has its own contract. Should the validator compare the two, and if so when? Walking the principles **as originally written** against this question:
 
 | Principle (original)                | Drove a check? | Notes                                                                                                                                                                                                                            |
 | ----------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P1 (statically provable references) | No             | P1 was framed around _node-to-node_ references (producer dominates consumer; producer's type is compatible with consumer's). The spec/task seam is not a node-to-node reference, so a literal reading of P1 left it un-governed. |
-| P2 (data flow traceable)            | No             | Both schemas already lived in the spec; tracing was unaffected by whether the seam was checked.                                                                                                                                  |
+| P1 (statically provable references) | No             | P1 was framed around _node-to-node_ references (producer dominates consumer; producer's type is compatible with consumer's). The IR/task seam is not a node-to-node reference, so a literal reading of P1 left it un-governed. |
+| P2 (data flow traceable)            | No             | Both schemas already lived in the IR; tracing was unaffected by whether the seam was checked.                                                                                                                                  |
 | P3 (structure mirrors computation)  | No             | Drift detection has no structural analog.                                                                                                                                                                                        |
 | P4 (parts without the whole)        | Weakly         | A task node is a "part"; if its contract is wrong, the part is wrong. But P4 was about _validation in isolation_ - the check itself was implicit.                                                                                |
 | P5 (predict engine behavior)        | No             | A reader of a task node sees the schema; whether the engine separately compares it to the implementation does not change what the reader predicts the engine will do.                                                            |
 
-P1's spirit ("prove what can be proven before runtime") absolutely covered the seam, but P1's letter, framed entirely around intra-spec references, did not. The cleanroom design adopted bare Option 1 (no static drift check) without anyone noticing that a checkable boundary was being deferred to runtime.
+P1's spirit ("prove what can be proven before runtime") absolutely covered the seam, but P1's letter, framed entirely around intra-IR references, did not. The cleanroom design adopted bare Option 1 (no static drift check) without anyone noticing that a checkable boundary was being deferred to runtime.
 
-**Why this was a principle gap, not just an unstated decision.** The original P1 was **intra-spec-biased**: every scenario was a node-to-node reference. The spec describes other type-mediated boundaries (its own caller's contract, the task implementation's contract, future capability declarations), but the principle did not extend to them. The same pattern (a typed boundary the spec describes that the validator could check but does not) would not have surfaced from a P1-P5 walkthrough as long as the boundary was not a node-to-node reference.
+**Why this was a principle gap, not just an unstated decision.** The original P1 was **intra-IR-biased**: every scenario was a node-to-node reference. The IR describes other type-mediated boundaries (its own caller's contract, the task implementation's contract, future capability declarations), but the principle did not extend to them. The same pattern (a typed boundary the IR describes that the validator could check but does not) would not have surfaced from a P1-P5 walkthrough as long as the boundary was not a node-to-node reference.
 
 **Sharpening applied.** P1 has been restated to be bi-axial:
 
-- **Intra-spec axis (data references):** the existing dominator + compatibility model, unchanged.
-- **External-contract axis (boundary seams):** wherever the spec describes the contract of an external entity (registered task, workflow caller, future external systems), the validator must compare the spec's description against the entity's contract whenever the contract is available, using the same compatibility relation in the appropriate direction. When unavailable, the check defers to the runtime boundary and the gap is documented.
+- **Intra-IR axis (data references):** the existing dominator + compatibility model, unchanged.
+- **External-contract axis (boundary seams):** wherever the IR describes the contract of an external entity (registered task, workflow caller, future external systems), the validator must compare the IR's description against the entity's contract whenever the contract is available, using the same compatibility relation in the appropriate direction. When unavailable, the check defers to the runtime boundary and the gap is documented.
 
-With the sharpening in place, the spec/task drift check is now driven by P1 directly, not by a one-off engineering judgement.
+With the sharpening in place, the IR/task drift check is now driven by P1 directly, not by a one-off engineering judgement.
 
-**Resolution chosen.** The registered task's contract is the authoritative envelope; each task node's `inputSchema`/`outputSchema` is either a verbatim restatement of that contract or a narrowing of it, and never a contradiction. The validator enforces the rule via the §4.2 subtype relation in both directions (spec input ⊆ task input; task output ⊆ spec output), gated on registry availability. See [decisions/0003-task-schema-source.md](../spec/decisions/0003-task-schema-source.md) for the K1-K4 option analysis (Option 1 vs. 1' vs. 2 vs. 3) and the principle scorecard.
+**Resolution chosen.** The registered task's contract is the authoritative envelope; each task node's `inputSchema`/`outputSchema` is either a verbatim restatement of that contract or a narrowing of it, and never a contradiction. The validator enforces the rule via the §4.2 subtype relation in both directions (IR input ⊆ task input; task output ⊆ IR output), gated on registry availability. See [decisions/0003-task-schema-source.md](../ir/decisions/0003-task-schema-source.md) for the K1-K4 option analysis (Option 1 vs. 1' vs. 2 vs. 3) and the principle scorecard.
 
-**Lesson (reinforces the bound-outputs lesson).** Two principle sharpenings now follow the same pattern: a decision converges by analysis without a clean principle drive, and the diagnosis is that a principle's scope was framed too narrowly (control-flow-biased in the bound-outputs case; intra-spec-biased here). The pattern is worth watching for in future decisions: when a principle "almost" applies, that's the signal to re-examine its scope rather than to file the decision under engineering judgement.
+**Lesson (reinforces the bound-outputs lesson).** Two principle sharpenings now follow the same pattern: a decision converges by analysis without a clean principle drive, and the diagnosis is that a principle's scope was framed too narrowly (control-flow-biased in the bound-outputs case; intra-IR-biased here). The pattern is worth watching for in future decisions: when a principle "almost" applies, that's the signal to re-examine its scope rather than to file the decision under engineering judgement.
 
 ---
 
@@ -126,11 +126,11 @@ With the sharpening in place, the spec/task drift check is now driven by P1 dire
 
 If a task's output schema changes, P1 catches the incompatibility at validation time. But the only resolution is to update all downstream consumers simultaneously. There's no mechanism for expressing schema evolution, adapter nodes, or version negotiation.
 
-You deploy the whole spec atomically or not at all.
+You deploy the whole IR atomically or not at all.
 
-**Question:** Is incremental migration a spec concern?
+**Question:** Is incremental migration an IR concern?
 
-- For single-spec workflows: probably not. The spec is the unit of deployment. Atomic updates are standard.
+- For single-IR workflows: probably not. The IR is the unit of deployment. Atomic updates are standard.
 - For sub-workflow composition (future): becomes critical. If workflow A calls sub-workflow B, and B's interface changes, A needs to handle the version mismatch. The sub-workflow boundary is exactly where versioning matters.
 - Assessment: deferred until sub-workflow composition. May need a principle or design constraint at that point.
 
@@ -138,21 +138,21 @@ You deploy the whole spec atomically or not at all.
 
 Adding a node, changing a branch, modifying a schema: is this change backward-compatible with running instances? The principles say nothing about what changes are safe. P2's impact analysis tells you what's affected, but not whether the change breaks in-flight executions.
 
-**Question:** Is this a spec concern or an operational concern?
+**Question:** Is this an IR concern or an operational concern?
 
-- Structural diff (what changed between v1 and v2) is analyzable from the spec. P2 and P3 provide the structure for this.
+- Structural diff (what changed between v1 and v2) is analyzable from the IR. P2 and P3 provide the structure for this.
 - Whether a running instance can survive the change depends on runtime state (which node is it currently executing?). This is operational.
 - Assessment: the principles enable the analysis. The decision framework is operational.
 
-### No spec identity across versions
+### No IR identity across versions
 
 If you restructure a workflow (rename nodes, split a task into two), there's no concept of correspondence between v1 and v2. For runtime migration (pause on v1, resume on v2), you'd need a mapping between old and new nodes.
 
-**Question:** Is this a spec concern?
+**Question:** Is this an IR concern?
 
-- Migration mapping is inherently external to either spec version. It's a separate artifact.
+- Migration mapping is inherently external to either IR version. It's a separate artifact.
 - The principles ensure each version is internally consistent. Cross-version consistency is a different problem.
-- Assessment: not a principle gap. Migration tooling, not spec design.
+- Assessment: not a principle gap. Migration tooling, not IR design.
 
 ### P4 composability is validation-only
 
@@ -160,7 +160,7 @@ P4 says parts can be validated and tested independently. But it doesn't say part
 
 **Question:** Should composability extend to deployment?
 
-- This is the sub-workflow question. Sub-workflows would give deployment boundaries. Within a single workflow, the spec is atomic.
+- This is the sub-workflow question. Sub-workflows would give deployment boundaries. Within a single workflow, the IR is atomic.
 - P4's boundary declarations (inputs, outputs) are the foundation for deployment boundaries. If sub-workflows are added, P4 already provides the interface contract.
 - Assessment: P4 is positioned correctly. Sub-workflow composition extends it to deployment.
 
@@ -168,18 +168,18 @@ P4 says parts can be validated and tested independently. But it doesn't say part
 
 ## Summary
 
-| Area                          | Spec design concern?        | Status       | Resolution                                                                                                                                                               |
+| Area                          | IR design concern?        | Status       | Resolution                                                                                                                                                               |
 | ----------------------------- | --------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Parallel iteration visibility | Yes                         | **Deferred** | P3 drives MapNode distinction. P1-P5 sufficient when added.                                                                                                              |
-| Intra-scope name visibility   | Yes                         | **Resolved** | Hide-by-default `bind` switch (spec §8.15). Originally analysis-driven; principles P3/P4/P5 sharpened to be bi-axial so future data-flow decisions are principle-driven. |
+| Intra-scope name visibility   | Yes                         | **Resolved** | Hide-by-default `bind` switch (IR §8.15). Originally analysis-driven; principles P3/P4/P5 sharpened to be bi-axial so future data-flow decisions are principle-driven. |
 | Decomposition overhead        | No (engine policy)          | Resolved     | Author chooses granularity. Engine optimizes execution.                                                                                                                  |
 | Intermediate state visibility | No (task metadata)          | Resolved     | Optional task capability declaration. Not workflow data flow.                                                                                                            |
 | Replay/checkpoint             | No (task metadata + engine) | Resolved     | Side-effect/idempotency declarations are additive. Engine persists state.                                                                                                |
 | Loop iteration identity       | No (engine mechanism)       | Resolved     | Engine exposes iteration count. Consistent with P2.                                                                                                                      |
-| Error diagnostic constraints  | Yes (mechanism)             | Resolved     | Optional references mechanism in the [spec](../spec/spec-v1.md) (\u00a73.4).                                                                                             |
+| Error diagnostic constraints  | Yes (mechanism)             | Resolved     | Optional references mechanism in the [IR](../ir/ir-v1.md) (\u00a73.4).                                                                                             |
 | Incremental migration         | Yes                         | **Deferred** | Becomes relevant with sub-workflow composition.                                                                                                                          |
 | Safe-change analysis          | No (operational)            | Resolved     | Principles enable structural diff. Runtime survival is operational.                                                                                                      |
-| Spec identity across versions | No (tooling)                | Resolved     | Migration mapping is external tooling.                                                                                                                                   |
+| IR identity across versions | No (tooling)                | Resolved     | Migration mapping is external tooling.                                                                                                                                   |
 | Composability for deployment  | Yes                         | **Deferred** | Sub-workflow composition extends P4.                                                                                                                                     |
 
 ### Open questions
@@ -188,7 +188,7 @@ P4 says parts can be validated and tested independently. But it doesn't say part
 2. **Sub-workflow evolution:** When sub-workflows are added, does P4's boundary contract need strengthening for versioning? Or does the existing input/output boundary suffice?
 3. **Task contract extensions:** Side-effect annotations, idempotency markers, progress declarations are all additive task boundary metadata. If these grow complex, they may warrant a separate design doc with its own concerns distinct from P1-P5.
 4. **Data-flow direction in the principles.** **Closed.** P3, P4, and P5 were originally control-flow-biased. They have been sharpened to state both axes explicitly (control-flow and data-flow / publication / lifetime). The bound-outputs decision is the case study; see "Intra-scope name visibility" above. Future data-flow decisions should now be principle-driven. If a future decision in this family again converges only from "weak readings" of multiple principles, that signals another axis to sharpen.
-5. **Boundary direction in P1.** **Closed.** P1 was originally framed entirely around node-to-node references inside the spec. It has been sharpened to be bi-axial (intra-spec references + external-contract seams). The spec/task drift decision is the case study; see "Spec/task contract drift" above. Future seams the spec adds (sub-workflow calls, capability declarations, external-system descriptors) inherit P1's external-contract axis automatically.
+5. **Boundary direction in P1.** **Closed.** P1 was originally framed entirely around node-to-node references inside the IR. It has been sharpened to be bi-axial (intra-IR references + external-contract seams). The IR/task drift decision is the case study; see "IR/task contract drift" above. Future seams the IR adds (sub-workflow calls, capability declarations, external-system descriptors) inherit P1's external-contract axis automatically.
 
 ---
 
@@ -201,10 +201,10 @@ Deployment and evolution are deferred from v1. This section records the rational
 | Scenario                  | Description                                                                     | v1 impact  | Rationale                                                                                                                                                                                    |
 | ------------------------- | ------------------------------------------------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Schema change during dev  | Developer changes a task's output schema, fixes downstream consumers, redeploys | None       | Atomic updates are natural during development                                                                                                                                                |
-| Long-running interruption | Infrastructure restart mid-execution of a multi-hour workflow                   | Low-Medium | Engine can implement checkpoint/resume independently. P2+P3 provide enough structure (data traceability, node identity). Painful for multi-hour workflows but solvable without spec changes. |
-| Bug fix to live workflow  | Fix a task bug while instances are running on the old spec                      | Low        | v1 is single-user/development. No concurrent versions.                                                                                                                                       |
+| Long-running interruption | Infrastructure restart mid-execution of a multi-hour workflow                   | Low-Medium | Engine can implement checkpoint/resume independently. P2+P3 provide enough structure (data traceability, node identity). Painful for multi-hour workflows but solvable without IR changes. |
+| Bug fix to live workflow  | Fix a task bug while instances are running on the old IR                      | Low        | v1 is single-user/development. No concurrent versions.                                                                                                                                       |
 | Composition evolution     | Sub-workflow B's interface changes, caller A needs updating                     | None       | Sub-workflows aren't v1                                                                                                                                                                      |
-| Loop state durability     | 50-iteration loop fails on iteration 47, all accumulated loopVar state lost     | Medium     | Core use case pain. But engine can persist loopVars without spec support - all state is JSON Schema-typed and serializable.                                                                  |
+| Loop state durability     | 50-iteration loop fails on iteration 47, all accumulated loopVar state lost     | Medium     | Core use case pain. But engine can persist loopVars without IR support - all state is JSON Schema-typed and serializable.                                                                  |
 
 ### Forward compatibility check
 
@@ -212,16 +212,16 @@ The question: will v1 design decisions block adding deployment/evolution support
 
 | v1 decision area                     | Additive later? | Risk   | Notes                                                                                                                                                                                                                                                                                                       |
 | ------------------------------------ | --------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Spec version field                   | Yes             | None   | Adding a `version` field later is trivially additive                                                                                                                                                                                                                                                        |
-| Checkpoint/resume                    | Yes             | None   | Engine can persist node outputs and loopVars without spec changes. Everything is typed and serializable.                                                                                                                                                                                                    |
-| Side-effect/idempotency declarations | Yes             | None   | Optional fields on task declarations. No existing spec would break.                                                                                                                                                                                                                                         |
+| IR version field                   | Yes             | None   | Adding a `version` field later is trivially additive                                                                                                                                                                                                                                                        |
+| Checkpoint/resume                    | Yes             | None   | Engine can persist node outputs and loopVars without IR changes. Everything is typed and serializable.                                                                                                                                                                                                    |
+| Side-effect/idempotency declarations | Yes             | None   | Optional fields on task declarations. No existing IR would break.                                                                                                                                                                                                                                         |
 | MapNode                              | Yes             | None   | New node type. Existing LoopNodes remain valid.                                                                                                                                                                                                                                                             |
 | Scope boundary mechanism             | **Verify**      | Low    | Loop boundaries must generalize to sub-workflows. Current design (declared inputs + declared outputs + loop-specific extensions) is clean: sub-workflows would be "inputs + outputs" without loopVars/sentinels/maxIterations. Core isolation model (body can't reference outer nodes) applies identically. |
 | Node identity                        | **Decide now**  | Medium | See open question in [archive/design-decisions.md](../archive/design-decisions.md) (node identity).                                                                                                                                                                                                         |
 
 ### Node identity risk
 
-Nodes are identified by name (string key in the `nodes` map). If the engine builds on "node name = stable identity" for checkpoint keys, metrics, or log correlation, renaming a node in a future spec version breaks the correspondence. The engine's checkpoint would say "node `fetchData` completed" but the updated spec renamed it to `getData`.
+Nodes are identified by name (string key in the `nodes` map). If the engine builds on "node name = stable identity" for checkpoint keys, metrics, or log correlation, renaming a node in a future IR version breaks the correspondence. The engine's checkpoint would say "node `fetchData` completed" but the updated IR renamed it to `getData`.
 
 Adding a separate stable `id` field later is technically additive, but if the engine already persists checkpoints keyed by node name, migrating to `id`-based keys is messy.
 
@@ -234,8 +234,8 @@ The principles' relationship to deployment/evolution is "permits, not drives":
 | Capability              | Drives? | Permits?     | Why                                                                    |
 | ----------------------- | ------- | ------------ | ---------------------------------------------------------------------- |
 | Checkpoint/resume       | No      | Yes          | P2+P3 provide the structure that enables it, but don't require it      |
-| Spec versioning         | No      | Yes          | Nothing prevents adding it; nothing pushes toward it                   |
+| IR versioning         | No      | Yes          | Nothing prevents adding it; nothing pushes toward it                   |
 | Durability of loopVars  | No      | Yes          | P2 guarantees traceability, not durability                             |
 | Sub-workflow versioning | No      | Yes (future) | P4's boundary contract is the foundation, but doesn't address versions |
 
-A design team following only P1-P5 would produce a correct, traceable, structured, composable, predictable spec - that is also impossible to checkpoint, resume, or evolve. For v1, this is acceptable because: (a) v1 workflows are short-lived and single-user, (b) the engine can add persistence independently, and (c) the v1 design decisions are verified to not block future solutions.
+A design team following only P1-P5 would produce a correct, traceable, structured, composable, predictable IR - that is also impossible to checkpoint, resume, or evolve. For v1, this is acceptable because: (a) v1 workflows are short-lived and single-user, (b) the engine can add persistence independently, and (c) the v1 design decisions are verified to not block future solutions.

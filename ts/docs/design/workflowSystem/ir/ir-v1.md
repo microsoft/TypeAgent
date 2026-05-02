@@ -1,14 +1,20 @@
-# Workflow Spec - v1
+# Workflow IR - v1
 
 Status: Adopted (v1). Authoritative.
 
-This document is a clean-room design of the workflow spec, derived **only** from
+**Terminology.** Throughout this document, the **workflow IR** (or just
+"the IR") is the JSON workflow artifact that the engine consumes. Earlier
+drafts use "spec" for the same thing; the rename separates the artifact
+from this design document, which is _about_ the IR but is not itself an
+IR. See §1.4 for the audience consequences.
+
+This document is a clean-room design of the workflow IR, derived **only** from
 [design-principles.md](../principles/design-principles.md). It deliberately ignores any
 pre-existing decisions, schemas, or implementations in the repo so that the
 design follows the principles end-to-end without inheriting prior assumptions.
 
 The design is presented top-down: first the meta-design style, then v1 scope,
-then the spec schema, validation, execution semantics, and worked examples.
+then the IR schema, validation, execution semantics, and worked examples.
 Open design choices and the alternatives considered are recorded at the end for
 review.
 
@@ -22,13 +28,14 @@ every concrete decision below.
 
 ### 1.1 Explicit IR, no sugar
 
-The spec is an **intermediate representation**, not an authoring format. Every
-node type, every edge, every reference is written out. Authoring sugar (DSLs,
-templates, generated specs) is out of scope and lives at a different layer.
+The IR is exactly that - an **intermediate representation**, not an
+authoring format. Every node type, every edge, every reference is written
+out. Authoring sugar (DSLs, templates, generated IRs) is out of scope and
+lives at a different layer.
 
 - Drives: P2 (no hidden flow), P3 (no inferred structure), P5 (no surprise
   defaults).
-- Consequence: the spec will look verbose. That is intentional.
+- Consequence: the IR will look verbose. That is intentional.
 
 ### 1.2 Structural minimalism
 
@@ -50,8 +57,40 @@ scope refers to anything outside it except through that scope's declared
 inputs.
 
 - Drives: P4 (parts understood without the whole).
-- Concrete consequence: loop bodies are sub-specs with the same shape as the
+- Concrete consequence: loop bodies are sub-IRs with the same shape as the
   top-level workflow. The validator and executor treat them uniformly.
+
+### 1.4 Intended audience for the IR
+
+Decisions throughout this document (verbosity, explicitness, schema
+redundancy, the conformance bar in §5.7) are calibrated for the
+populations that interact with the **IR artifact**, not for whoever
+happens to read this design document. Keeping those two audiences
+straight is why the artifact is called "the IR" everywhere below.
+
+The IR has four interaction populations:
+
+| Population                          | Reads or writes the IR? | What they need from the IR                                                                                                               |
+| ----------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Engine, validator, runtime          | Reads (every IR)        | Every field present, every edge stated, no inference required. Drives the explicitness in §3-§5 and the MUST list in §5.7.               |
+| Debugger, reviewer, auditor (human) | Reads (specific IRs)    | Locality, navigability, error coordinates that map back to IR positions. Drives §4.3 (localizable errors) and §5.6 (observability).      |
+| Visualizer, linter, static analyzer | Reads (programmatic)    | Self-describing structure, named types, predictable schema. Drives the `kind` discriminant (P5), `types`/`$ref` sharing (§3.1.1).        |
+| DSL or codegen tool                 | **Writes** the IR       | Coverage of the lowering targets it needs (§3 schema, §3.9 grammar) and stability of the surface it lowers into (§10, revisit-triggers). |
+
+Hand-authoring an IR by writing JSON directly is **not** a primary use
+case. It is acknowledged as an edge case (small fixes, demos, no DSL
+handy), and §1.1's "verbose by design" tax is paid because the DSL or
+codegen layer is expected to absorb the authoring cost. If a DSL never
+materializes and hand-authoring becomes the dominant write path, several
+trade-offs in this document - schema repetition (§8.16), object-form
+references (§8.2), JSON over YAML (§8.14) - become candidates for
+revisiting (see [revisit-triggers.md](revisit-triggers.md)).
+
+This design document itself targets a narrower audience: engine
+implementers building one of the reader populations above, design
+reviewers checking the IR against the principles, and DSL or codegen
+authors deciding what to lower to. They are not the audience for the IR;
+they are the audience for the design that produced it.
 
 ---
 
@@ -78,12 +117,12 @@ inputs.
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Sub-workflow calls                     | P3 scenario 24 explicitly marks this "future". Adds a node kind; defer until v1 stabilizes.                                                                                                                                                                                                       |
 | Side-effect / capability declarations  | Called out as "expanding the boundary" in the principles; useful but additive. v1 keeps tasks fully opaque. **Planned closure of the v1 control-flow ambiguity** noted in §3.2.2: once tasks declare effects, the validator can warn on `next` edges that carry neither data nor effect-ordering. |
-| Parallelism / concurrency annotations  | P2 scenario 13 says the spec carries enough info to derive parallelism. v1 leaves the engine free; no spec surface.                                                                                                                                                                               |
-| Spec versioning, checkpointing, resume | Explicitly out of scope per design-principles.md ("Out of scope for v1" section).                                                                                                                                                                                                                 |
+| Parallelism / concurrency annotations  | P2 scenario 13 says the IR carries enough info to derive parallelism. v1 leaves the engine free; no IR surface.                                                                                                                                                                                   |
+| IR versioning, checkpointing, resume   | Explicitly out of scope per design-principles.md ("Out of scope for v1" section).                                                                                                                                                                                                                 |
 | Authoring sugar / DSL                  | Per the IR principle. Belongs in a separate layer.                                                                                                                                                                                                                                                |
 | Schema migration / evolution           | Same rationale as versioning.                                                                                                                                                                                                                                                                     |
 | Computed / dynamic reference targets   | P1 scenario 8: ruled out by design; expressed via branch + decision tree.                                                                                                                                                                                                                         |
-| External-state side channels           | P2 scenarios 16-17: deliberately invisible to the spec in v1.                                                                                                                                                                                                                                     |
+| External-state side channels           | P2 scenarios 16-17: deliberately invisible to the IR in v1.                                                                                                                                                                                                                                       |
 | Cross-loop shared mutable state        | P4 scenario 34: forced into explicit boundary wiring; no global state.                                                                                                                                                                                                                            |
 | Reusable handler nodes across scopes   | P4 scenario 35: each scope owns its handlers in v1.                                                                                                                                                                                                                                               |
 | Explicit `block` scope                 | A run-once scope kind (sibling of loop body) that can carry a single `onError` over a region of nodes. Closes the "multi-statement try" gap cheaply by reusing the existing scope contract. Sketch in [post-v1/block-scope.md](post-v1/block-scope.md).                                           |
@@ -92,9 +131,9 @@ inputs.
 
 ---
 
-## 3. Spec schema
+## 3. IR schema
 
-The spec is a JSON document. Every example in this document uses JSON-as-spec.
+The IR is a JSON document. Every example in this document is JSON.
 
 ### 3.1 Top-level workflow
 
@@ -102,7 +141,7 @@ The spec is a JSON document. Every example in this document uses JSON-as-spec.
 {
   "kind": "workflow",
   "name": "string identifier",
-  "version": "1",                 // spec schema version, not workflow version
+  "version": "1",                 // IR schema version, not workflow version
   "input":  { /* JSON Schema for workflow input */ },
   "output": { /* JSON Schema for workflow output */ },
   "types": {
@@ -127,7 +166,7 @@ Required fields: `kind`, `name`, `version`, `input`, `output`, `nodes`,
 
 #### 3.1.1 Shared schemas (`types`)
 
-Any JSON Schema field in the spec (`input`, `output`, `inputSchema`,
+Any JSON Schema field in the IR (`input`, `output`, `inputSchema`,
 `outputSchema`, `selectorSchema`, `state[*].schema`, `constants[*].schema`,
 and nested positions inside any of these) may be replaced by a reference to a
 named entry in the workflow's `types` block:
@@ -168,7 +207,7 @@ changes (P4 local reasoning).
 
 #### 3.2.1 Scoping rules
 
-This subsection consolidates the scoping model used throughout the spec. It
+This subsection consolidates the scoping model used throughout the IR. It
 introduces no new mechanism; it states the rules that the rest of the design
 already follows.
 
@@ -237,7 +276,7 @@ re-litigated when nested loops land.
 
 #### 3.2.2 Two graphs, one validator
 
-Every spec encodes **two distinct graphs over the same node set**:
+Every IR encodes **two distinct graphs over the same node set**:
 
 1. The **control-flow graph (CFG).** Edges come from `next` (task, handler,
    loop), branch `cases` and `default`, `onError`, and the loop sentinels
@@ -272,7 +311,7 @@ In v1, a `next` edge with no underlying data dependency may be either:
 - a **deliberate side-effect ordering** (the author wants A's side effects
   to happen before B), or
 - an **accidental over-sequencing** (a leftover edge from a prior version of
-  the spec).
+  the IR).
 
 The validator cannot distinguish these cases, because tasks in v1 are fully
 opaque: they declare no side effects. Every `next` edge therefore has to be
@@ -348,7 +387,7 @@ reference form (minimalism):
 - `$from: "input"` - read from the enclosing scope's declared input.
 - `$from: "constant"` - read a declared constant in the enclosing workflow.
   (Constants are workflow-global; readable from any scope. They are values
-  declared in the spec, so this does not violate P4.)
+  declared in the IR, so this does not violate P4.)
 - `$from: "scope"` - read a scope variable (a value bound by some node via
   `bind`). The named bound value must exist in the enclosing scope.
   Validated by dominance + type compatibility (P1).
@@ -583,31 +622,31 @@ bind switch. This is the entire v1 surface.
 
 ## 4. Validation
 
-Validation is **static**: it runs against a spec without any task being
-invoked. A spec that passes validation is guaranteed to satisfy P1 (every
+Validation is **static**: it runs against an IR without any task being
+invoked. An IR that passes validation is guaranteed to satisfy P1 (every
 reference will resolve) for any execution path.
 
 ### 4.1 Validation passes (in order)
 
 1. **Schema syntax pass.** The document conforms to the JSON schema of the
-   spec (correct fields, correct types of fields).
+   IR (correct fields, correct types of fields).
 2. **Type resolution pass.** Every `$ref` in a JSON Schema position has the
    form `"#/types/<typeName>"` and resolves to a defined entry in `types`.
    The graph of refs between `types` entries is acyclic. After this pass,
    subsequent passes may treat any schema position as either an inline schema
    or an opaque reference to a named type.
-3. **Spec/task drift pass (registry-gated).** When the task registry is
+3. **IR/task drift pass (registry-gated).** When the task registry is
    available, every `task` and `handler` node's `inputSchema` is checked
    to be a subtype of the registered task's declared input schema, and
    the registered task's declared output schema is checked to be a
    subtype of the node's `outputSchema` (the §4.2 subtype relation).
    The task's declared contract is the authoritative envelope; the
-   spec's schemas are either a verbatim restatement (the common case)
-   or a narrowing of that envelope (specialization). A spec that
+   IR's schemas are either a verbatim restatement (the common case)
+   or a narrowing of that envelope (specialization). An IR that
    contradicts its task is rejected. This is the static equivalent of
    the runtime check in §5.2, applied symmetrically to both sides of
-   the spec/task seam. When the registry is unavailable (offline
-   tooling, archival validation), this pass is skipped and the spec
+   the IR/task seam. When the registry is unavailable (offline
+   tooling, archival validation), this pass is skipped and the IR
    still validates standalone. See §8.16.
 4. **Name resolution pass.** Within each scope: every reference's target name
    exists; sentinels are only used inside loop bodies; `onError` targets a
@@ -721,7 +760,7 @@ The execution model is described abstractly. The engine is free to optimize
 The engine calls the registered task implementation with the resolved
 `inputs`. The implementation returns a value validated against `outputSchema`.
 A schema-violating return is a task failure. This runtime check is the
-defense-in-depth layer for cases where the static spec/task drift check
+defense-in-depth layer for cases where the static IR/task drift check
 (§4.1 pass 3) was skipped because the registry was unavailable at
 validation time.
 
@@ -765,7 +804,7 @@ rest of the run.
 
 ### 5.6 Observability
 
-Per P3, the engine emits an event stream that mirrors the spec structure:
+Per P3, the engine emits an event stream that mirrors the IR structure:
 
 - `nodeStarted(scopePath, nodeId, iteration?)`
 - `nodeCompleted(scopePath, nodeId, iteration?, output)`
@@ -774,18 +813,18 @@ Per P3, the engine emits an event stream that mirrors the spec structure:
 - `loopExited(scopePath, loopNodeId, iteration, outputs)`
 
 Iterations are addressable; the consumer of these events can map every event
-back to a spec coordinate (P3 scenario 21).
+back to an IR coordinate (P3 scenario 21).
 
 ### 5.7 Conformance bar (MUST / SHOULD / MAY)
 
-The spec is declarative; many quality-of-implementation choices (parallelism,
+The IR is declarative; many quality-of-implementation choices (parallelism,
 memory liveness, retry granularity) are left to the engine. To make
 portability predictable, v1 distinguishes a conformance bar from
 recommended optimizations.
 
 **A conforming v1 engine MUST:**
 
-1. Run the validation passes in section 4.1 and reject any spec that fails
+1. Run the validation passes in section 4.1 and reject any IR that fails
    them.
 2. Execute the CFG, dispatching each node when its `inputs` are
    resolvable per the dominator rules in section 3.2.
@@ -804,7 +843,7 @@ recommended optimizations.
   referenced by any other node, so its output value may be released the
   moment the node completes (after `outputSchema` validation, after
   `stateWrites` evaluation, and after observability emission). This is a
-  static property of the spec; no analysis required.
+  static property of the IR; no analysis required.
 - **Free bound outputs after their last reader.** For nodes with `bind`,
   the DDG is fully static; a one-pass liveness analysis at validation time
   identifies, for each bound output, the set of dominated descendants that
@@ -812,7 +851,7 @@ recommended optimizations.
   selection), the bound value may be released.
 - **Parallelize independent nodes.** Two nodes with no DDG path between
   them and no `next` chain ordering them may execute concurrently.
-  The spec carries enough information to derive this safely
+  The IR carries enough information to derive this safely
   (P2 scenario 13).
 - **Retry without restarting the workflow.** When a handler resumes
   via `next`, the engine should not recompute upstream nodes whose
@@ -824,7 +863,7 @@ recommended optimizations.
 - Inline successive single-task nodes into a fused execution unit.
 - Anything else not constrained by MUST or SHOULD.
 
-The MUST list is the portability bar - any spec that runs on one
+The MUST list is the portability bar - any IR that runs on one
 conforming engine runs on all of them. The SHOULD list is the quality
 bar - engines that skip these will produce correct results but with
 poor memory or latency profiles on realistic workflows.
@@ -1141,13 +1180,13 @@ be bound (assume `bind: true` on each) for `merge` to reference them.
 
 ## 7. How the design satisfies each principle
 
-| Principle | Design feature(s) that satisfy it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| P1        | **Intra-spec axis:** single reference form with named source; static dominator pass over an acyclic intra-scope CFG; structural type compatibility pass; `optional` flag for declared partial deps; finite `cases`+`default`; SSA-style phi soundness on shared bound names. **External-contract axis:** registry-gated spec/task drift pass (§4.1 pass 3) checks each task node's `inputSchema`/`outputSchema` against the registered task's contract using the §4.2 subtype relation; runtime output validation (§5.2) is the defense-in-depth layer when the registry is absent at validation time. |
-| P2        | Only six declared `$from` sources (input, constant, scope, state, error, trigger); no ambient/global state; cross-iteration data is a declared `state` variable with declared writes; outputs flow via `outputBinding`; bound outputs make the data-flow contract explicit per node                                                                                                                                                                                                                                                                                                                    |
-| P3        | Distinct node `kind`s for `task`/`branch`/`loop`/`handler`; loop bodies are a structural sub-scope, not a flat cycle; iteration is `@iterate`, not a back-edge; pure cycles are rejected; `bind` mirrors "some steps publish, some don't" from real programs                                                                                                                                                                                                                                                                                                                                           |
-| P4        | Body scope closure (no cross-scope name reach); declared loop `inputs`/`outputs`/`state`; per-scope handlers; localizable validation errors with scope paths; hide-by-default `bind` keeps internal computations out of the scope's contract                                                                                                                                                                                                                                                                                                                                                           |
-| P5        | Required `kind` discriminant; required explicit `next` in loop bodies; explicit sentinels; required `default` in branches; one reference form (no shorthand/inference); declared `maxIterations`; explicit `bind` makes value lifetime statically predictable                                                                                                                                                                                                                                                                                                                                          |
+| Principle | Design feature(s) that satisfy it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1        | **Intra-IR axis:** single reference form with named source; static dominator pass over an acyclic intra-scope CFG; structural type compatibility pass; `optional` flag for declared partial deps; finite `cases`+`default`; SSA-style phi soundness on shared bound names. **External-contract axis:** registry-gated IR/task drift pass (§4.1 pass 3) checks each task node's `inputSchema`/`outputSchema` against the registered task's contract using the §4.2 subtype relation; runtime output validation (§5.2) is the defense-in-depth layer when the registry is absent at validation time. |
+| P2        | Only six declared `$from` sources (input, constant, scope, state, error, trigger); no ambient/global state; cross-iteration data is a declared `state` variable with declared writes; outputs flow via `outputBinding`; bound outputs make the data-flow contract explicit per node                                                                                                                                                                                                                                                                                                                |
+| P3        | Distinct node `kind`s for `task`/`branch`/`loop`/`handler`; loop bodies are a structural sub-scope, not a flat cycle; iteration is `@iterate`, not a back-edge; pure cycles are rejected; `bind` mirrors "some steps publish, some don't" from real programs                                                                                                                                                                                                                                                                                                                                       |
+| P4        | Body scope closure (no cross-scope name reach); declared loop `inputs`/`outputs`/`state`; per-scope handlers; localizable validation errors with scope paths; hide-by-default `bind` keeps internal computations out of the scope's contract                                                                                                                                                                                                                                                                                                                                                       |
+| P5        | Required `kind` discriminant; required explicit `next` in loop bodies; explicit sentinels; required `default` in branches; one reference form (no shorthand/inference); declared `maxIterations`; explicit `bind` makes value lifetime statically predictable                                                                                                                                                                                                                                                                                                                                      |
 
 ---
 
@@ -1162,18 +1201,19 @@ is listed first with its rationale, followed by alternatives.
 - Alt A: nominal/exact match (named types). Rejected: forces upstream task
   authors to know every downstream consumer's exact shape.
 - Alt B: TypeScript types as the surface. Rejected for v1 to avoid coupling
-  the spec to a specific language toolchain; JSON Schema is language-neutral.
+  the IR to a specific language toolchain; JSON Schema is language-neutral.
 - Alt C: Schema **intersection** (consumer requires any superset). Equivalent
   to structural subtyping for object types; structural subtyping is the more
   general framing.
 
 Notes (post-v1):
 
-1. The spec is an IR. A DSL is expected to sit on top, where authors can
-   write types in TypeScript that compile to JSON Schema (the "Option D"
-   pattern in the original analysis). The engine itself never needs to know
-   about TypeScript - the compiled JSON Schema is what flows into the IR.
-2. If JSON Schema verbosity becomes a real problem (spec size, author
+1. The IR is a compile target. A DSL is expected to sit on top, where
+   authors can write types in TypeScript that compile to JSON Schema (the
+   "Option D" pattern in the original analysis). The engine itself never
+   needs to know about TypeScript - the compiled JSON Schema is what flows
+   into the IR.
+2. If JSON Schema verbosity becomes a real problem (IR size, author
    friction at scale), a compact custom type IR (the "Option C" pattern)
    could be introduced as an alternative encoding that lowers to JSON Schema
    for runtime validation. Additive only; not part of v1.
@@ -1236,7 +1276,7 @@ own design review against P5.
 - Alt A: shared handler nodes. Deferred (P4 scenario 35 / out of v1 scope).
 - Alt B: handlers as fields on the failing task (no separate node). Rejected:
   loses the ability to give the handler its own `next` and to participate in
-  the spec graph (visualization, observability events).
+  the IR graph (visualization, observability events).
 
 ### 8.8 Loop body: closed sub-scope, DAG only
 
@@ -1282,7 +1322,7 @@ own design review against P5.
   do structural subtyping where identity would suffice, and spreads the
   single source of truth across many sites (P4 friction when shapes change).
 - Alt B: full JSON Schema `$ref` including remote URIs. Rejected: brings in
-  network/identity issues and breaks the "spec is one self-contained
+  network/identity issues and breaks the "IR is one self-contained
   document" property.
 - Alt C: fold `types` into `constants` (a constant with `schema` only and no
   `value` would act as a type). Rejected: the two are conceptually distinct
@@ -1292,13 +1332,13 @@ own design review against P5.
 - Alt D: a separate type-definition language. Rejected by 8.1 (stay on JSON
   Schema).
 
-### 8.14 Naming the spec format: JSON
+### 8.14 Naming the IR encoding format: JSON
 
 - **Chosen:** JSON. Predictable, language-neutral, easy to validate.
 - Alt A: YAML. More readable but adds parser ambiguity (anchors, types). Can
   be supported as an authoring convenience without changing the IR.
 - Alt B: A custom textual IR. Rejected: more tooling to build, no benefit
-  under "spec is an IR" framing.
+  given the compile-target framing in §1.1.
 
 ### 8.15 Bound outputs (hide-by-default node values)
 
@@ -1332,25 +1372,25 @@ Full analysis: [decisions/0001-bound-outputs.md](decisions/0001-bound-outputs.md
   contract (the common case) or a **narrowing** of it (the
   specialization case), and never a contradiction. Concretely, the
   validator checks - whenever the registry is available - that the
-  spec's `inputSchema` is a subtype of the task's declared input (the
-  spec promises at most what the task accepts) and that the task's
-  declared output is a subtype of the spec's `outputSchema` (the task
-  promises at least what the spec consumes), using the §4.2 subtype
+  IR's `inputSchema` is a subtype of the task's declared input (the
+  IR promises at most what the task accepts) and that the task's
+  declared output is a subtype of the IR's `outputSchema` (the task
+  promises at least what the IR consumes), using the §4.2 subtype
   relation. The schemas live on the node so the IR remains
   self-contained (P2/P4) and so specialization is expressible; the task
-  remains the source of truth for what the spec is allowed to say. The
+  remains the source of truth for what the IR is allowed to say. The
   runtime output check (§5.2) remains as defense in depth for the
   registry-absent case.
-- Alt A: spec authoritative, no static drift check (the original
-  Option 1). Rejected: leaves the spec/task seam to runtime - a
-  too-strict spec `inputSchema`, a too-loose spec `outputSchema`, or any
+- Alt A: IR authoritative, no static drift check (the original
+  Option 1). Rejected: leaves the IR/task seam to runtime - a
+  too-strict IR `inputSchema`, a too-loose IR `outputSchema`, or any
   input-side disagreement is invisible until a workflow runs and a value
   happens to expose it. The chosen variant closes this seam at no IR
   cost.
 - Alt B: registry is the source of truth (the node omits its schemas;
-  validator and runtime look them up). Rejected: spec is no longer
+  validator and runtime look them up). Rejected: IR is no longer
   self-contained, no specialization at the call site, schema evolution
-  in the implementation silently changes spec semantics.
+  in the implementation silently changes IR semantics.
 - Alt C: hybrid sugar. Schemas are optional on the node; if absent, the
   loader fills them in from the registry before validation, then the
   drift check runs as usual. Deferred: attractive as a v1.1 or DSL-layer
@@ -1389,7 +1429,7 @@ Full analysis: [decisions/0003-task-schema-source.md](decisions/0003-task-schema
 - [x] Optional references are first-class with schema implications (P1
       scenarios 4-7).
 - [x] Validation errors are localizable (P4 scenario 30).
-- [x] Observability surface mirrors spec structure (P3 scenario 21).
+- [x] Observability surface mirrors IR structure (P3 scenario 21).
 - [x] Every v1 concept appears in at least one principle scenario; no
       concept introduced "just in case" (minimization discipline).
 
@@ -1412,10 +1452,10 @@ one for the sake of having a complete v1.
 7. **Handler reuse** (8.7 / 3.8): keep "exactly one trigger" in v1, or admit
    shared handlers with documented intersection semantics.
 8. **Shared schemas** (8.13): named `types` with `$ref` vs. inline-only.
-9. **Spec language** (8.14): JSON vs. YAML vs. a typed IR.
-10. **Task schema source of truth** (8.16): spec, registry, or hybrid; and
-    whether the validator statically checks spec-vs-task drift. Currently
-    spec-authoritative with a registry-gated drift check; revisit hybrid
+9. **IR encoding format** (8.14): JSON vs. YAML vs. a typed IR.
+10. **Task schema source of truth** (8.16): IR, registry, or hybrid; and
+    whether the validator statically checks IR-vs-task drift. Currently
+    IR-authoritative with a registry-gated drift check; revisit hybrid
     sugar (omitted schemas filled in by the loader) once a DSL exists.
 
 After your review of these, the design can be tightened (or the alternatives

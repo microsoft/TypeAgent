@@ -3,7 +3,7 @@
 > **Status: ARCHIVED.** This was the first structured design for loops,
 > data flow, and control flow. It used the pre-cleanroom vocabulary
 > (`inputMap`, `outputMap`, `loopVars`). Superseded by
-> [../spec/spec-v1.md](../spec/spec-v1.md) (§3.2-§3.4 references,
+> [../ir/ir-v1.md](../ir/ir-v1.md) (§3.2-§3.4 references,
 > §3.7 loops). Preserved for context.
 
 Status: Draft v0.1 (iterating)

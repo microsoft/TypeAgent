@@ -1,14 +1,14 @@
 # CFG / DDG separation (decision 0002)
 
-Status: **Adopted (v1).** Folded into [../spec-v1.md](../spec-v1.md) (§3.2.2).
+Status: **Adopted (v1).** Folded into [../ir-v1.md](../ir-v1.md) (§3.2.2).
 Working analysis preserved below as the design record for the two-graph model.
 
-This document captures the in-flight analysis of how the workflow spec
+This document captures the in-flight analysis of how the workflow IR
 encodes data dependencies and control flow, the alternative graph models
 considered, and how each model scores against the broader workflow vision.
 It is a working document, not a finished design proposal. Decisions
 recorded here either flow back into
-[../spec-v1.md](../spec-v1.md) or get parked as
+[../ir-v1.md](../ir-v1.md) or get parked as
 explicit follow-ups.
 
 The discussion built up incrementally; this file preserves that order so
@@ -16,7 +16,7 @@ later decisions can be re-derived from earlier observations.
 
 ---
 
-## 1. What is a "data dependency" in the spec?
+## 1. What is a "data dependency" in the IR?
 
 A **data dependency** is a statement of the form:
 
@@ -26,16 +26,16 @@ A **data dependency** is a statement of the form:
 The consumer cannot run until the producer has produced. The validator must
 prove this _statically_ (P1: existence + compatibility).
 
-In the v1 spec, every data dependency is encoded by exactly one mechanism:
+In the v1 IR, every data dependency is encoded by exactly one mechanism:
 a **reference object** (`{ "$from": ..., "name": ..., "path": ... }`)
 sitting in a consumer slot. So the question "what data dependencies does
-the spec encode?" reduces to: **where can a reference object appear, and
+the IR encode?" reduces to: **where can a reference object appear, and
 what are its consumer/producer semantics at each site?**
 
 ### 1.1 The catalogue of reference-object positions
 
 Walking the schema yields nine consumer-site classes. Every data
-dependency in any spec is an instance of one of these.
+dependency in any IR is an instance of one of these.
 
 | #   | Consumer site                                 | Resolved in scope                    | Legal `$from` values                     | Producer site                                                                     | Type-checked against               | Resolution timing                        |
 | --- | --------------------------------------------- | ------------------------------------ | ---------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------- | ---------------------------------------- |
@@ -55,9 +55,9 @@ namespace was renamed from `node` when bound outputs landed; see
 that reads an input field of the failing node, sidestepping the need for the
 trigger to bind upstream values for the handler's benefit.)
 
-### 1.2 What the spec does NOT encode as data dependencies
+### 1.2 What the IR does NOT encode as data dependencies
 
-Equally important: things that travel along edges or appear in the spec
+Equally important: things that travel along edges or appear in the IR
 but are **not** data dependencies.
 
 - **Control-flow `next` edges** (sequence nodes; carry no value).
@@ -80,7 +80,7 @@ reference, resolved in outer scope) plus, inside the body, one or more
 `$from: "input"` reads (resolved in body scope) that consume the loop's
 named input. Same for `state[v].initial` (outer ref, resolved outer) +
 body `$from: "state", name: "v"` reads (resolved in body). Boundary
-closure (\u00a71.3 of the spec) is exactly this: data crosses scope only
+closure (\u00a71.3 of the IR) is exactly this: data crosses scope only
 at declared boundaries, and crossing always takes two reference sites.
 
 **(b) The dependency graph is directed and acyclic, per scope.** Within
@@ -122,14 +122,14 @@ the others. If the body has multiple `@exit` targets (several branches
 that go to `@exit`), then "dominates `@exit`" really means "dominates
 _every_ path that reaches an `@exit`" - the standard post-dominator
 notion in reverse. Worth being explicit in \u00a73.7 and validation pass 5
-of the spec doc. Currently the design says "body scope at `@exit`"
+of the IR doc. Currently the design says "body scope at `@exit`"
 without nailing down "what if there are several?".
 
 ---
 
 ## 2. Two graphs, one validator
 
-The catalogue in \u00a71 makes a structural fact unavoidable: the spec
+The catalogue in \u00a71 makes a structural fact unavoidable: the IR
 encodes **two distinct graphs over the same node set**.
 
 1. **Control-flow graph (CFG).** Edges from `next` (task, handler,
@@ -162,7 +162,7 @@ this:
 2. `a`'s output isn't required anywhere.
 3. The control flow is a valid sequence.
 
-The spec is **strictly more informative on the data side than on the
+The IR is **strictly more informative on the data side than on the
 control side**: data side states the irreducible dependencies; control
 side adds a sequencing on top that may or may not be tighter than the
 data alone would require.
@@ -368,7 +368,7 @@ Author writes only data dependencies. Engine schedules.
 
 #### Gains
 
-- Smallest possible spec for pure data pipelines.
+- Smallest possible IR for pure data pipelines.
 - Maximum freedom for the engine; trivially parallelizable.
 - No CFG-vs-DDG invariant.
 - Refactoring = single edit.
@@ -392,7 +392,7 @@ Author writes only data dependencies. Engine schedules.
   kind anyway, with internal CFG vs DDG separation - so "one graph"
   holds only at the top level.
 - **P5 regression.** "What runs after X?" requires scanning the whole
-  spec for nodes referencing X.
+  IR for nodes referencing X.
 - **Topological-sort tiebreaker.** Engine must commit to a rule;
   becomes engine convention.
 
@@ -444,7 +444,7 @@ Engine and validator gain:
 - The v1 gap closes. Useless `next` edges become detectable.
 - Real parallelism.
 - Security/audit story.
-- **No spec-shape change for v1.** Purely additive.
+- **No IR-shape change for v1.** Purely additive.
 
 #### What's hard
 
@@ -708,7 +708,7 @@ C2, C5, F2, F4, G2, G5) all unlock once effect declarations exist.
 None require revisiting v1 - they're additive.
 
 Alt 1/Alt 2 give many of these wins _now_ but at the cost of reshaping
-the spec model. The question: **do we get enough value in v1 from those
+the IR model. The question: **do we get enough value in v1 from those
 early wins to justify the redesign, knowing the same wins arrive
 post-v1 anyway?**
 
@@ -768,7 +768,7 @@ actually need:
 - Every C/D/E/F/G case that gives a strong **+** today, the
   alternatives give a **-** or **0** on.
 - The cases where the alternatives shine (clean concurrency without
-  effects, smaller specs for pure pipelines) are not where TypeAgent
+  effects, smaller IRs for pure pipelines) are not where TypeAgent
   workflow value comes from.
 - The one v1 weakness of the two-graph model (A9) is closed by a
   planned additive change (Alt 3 / effects), not a redesign.
@@ -795,7 +795,7 @@ roadmap is what makes it durably correct.
    to a task and a corresponding validation pass doesn't require
    reshaping anything.
 
-### 6.2 Decisions already folded back into the spec doc
+### 6.2 Decisions already folded back into the IR doc
 
 - \u00a73.2.1 Scoping rules (consolidates the four-namespace model).
 - \u00a73.2.2 Two graphs, one validator (names CFG/DDG separation, the
@@ -803,7 +803,7 @@ roadmap is what makes it durably correct.
 - \u00a72.2 row update: side-effect declarations explicitly identified
   as the planned closure of the \u00a73.2.2 gap.
 
-### 6.3 Decisions still owed back to the spec doc
+### 6.3 Decisions still owed back to the IR doc
 
 - Clarify in \u00a73.7 / validation pass 5 the post-dominator
   treatment of `loop.outputs[k]` when the body has multiple `@exit`
