@@ -11,10 +11,11 @@ semantics that any conforming engine must implement.
 
 ## Decision records
 
-| #    | Topic                           | Status     | Doc                                                                          |
-| ---- | ------------------------------- | ---------- | ---------------------------------------------------------------------------- |
-| 0001 | Bound outputs (hide-by-default) | Adopted v1 | [decisions/0001-bound-outputs.md](decisions/0001-bound-outputs.md)           |
-| 0002 | CFG/DDG separation              | Adopted v1 | [decisions/0002-cfg-ddg-separation.md](decisions/0002-cfg-ddg-separation.md) |
+| #    | Topic                           | Status          | Doc                                                                          |
+| ---- | ------------------------------- | --------------- | ---------------------------------------------------------------------------- |
+| 0001 | Bound outputs (hide-by-default) | Adopted v1      | [decisions/0001-bound-outputs.md](decisions/0001-bound-outputs.md)           |
+| 0002 | CFG/DDG separation              | Adopted v1      | [decisions/0002-cfg-ddg-separation.md](decisions/0002-cfg-ddg-separation.md) |
+| 0003 | Task schema source of truth     | Open (v1: spec) | [decisions/0003-task-schema-source.md](decisions/0003-task-schema-source.md) |
 
 When adding a new decision, allocate the next sequential number. Use
 [decisions/0001-bound-outputs.md](decisions/0001-bound-outputs.md) as the

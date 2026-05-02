@@ -216,7 +216,7 @@ through one of the loop's two declared boundary mechanisms:
 
 Body nodes cannot reference outer-scope `scope` variables, outer-scope
 `input` fields, or another loop's `state`. This is the **scope closure**
-property (P4) and is enforced by validation pass 4.
+property (P4) and is enforced by validation pass 5.
 
 **Sentinels and pseudo-sources.** `@iterate` and `@exit` are reserved
 tokens, not names, scoped to where they are legal (only inside a loop body
@@ -320,7 +320,7 @@ a consumer's reference `{ "$from": "scope", "name": X }` resolves to
 whichever binder ran on the actual path, exactly like a phi node at a
 control-flow join. The validator checks both the no-co-occurrence rule and
 that every binder's output type is compatible with each consumer's expected
-type (see validation passes 5 and 6). This is v1's first-class diamond-
+type (see validation passes 6 and 7). This is v1's first-class diamond-
 merge mechanism.
 
 Not every node kind produces a value worth binding:
@@ -596,7 +596,20 @@ reference will resolve) for any execution path.
    The graph of refs between `types` entries is acyclic. After this pass,
    subsequent passes may treat any schema position as either an inline schema
    or an opaque reference to a named type.
-3. **Name resolution pass.** Within each scope: every reference's target name
+3. **Spec/task drift pass (registry-gated).** When the task registry is
+   available, every `task` and `handler` node's `inputSchema` is checked
+   to be a subtype of the registered task's declared input schema, and
+   the registered task's declared output schema is checked to be a
+   subtype of the node's `outputSchema` (the §4.2 subtype relation).
+   The task's declared contract is the authoritative envelope; the
+   spec's schemas are either a verbatim restatement (the common case)
+   or a narrowing of that envelope (specialization). A spec that
+   contradicts its task is rejected. This is the static equivalent of
+   the runtime check in §5.2, applied symmetrically to both sides of
+   the spec/task seam. When the registry is unavailable (offline
+   tooling, archival validation), this pass is skipped and the spec
+   still validates standalone. See §8.16.
+4. **Name resolution pass.** Within each scope: every reference's target name
    exists; sentinels are only used inside loop bodies; `onError` targets a
    `handler` in the same scope; `entry` names an existing node. `bind: true`
    resolves to the node id. `branch` nodes do not declare `bind`.
@@ -604,11 +617,11 @@ reference will resolve) for any execution path.
    name in scope. References with `$from: "error"` or `$from: "trigger"`
    appear only inside a `handler` node's `inputs`, and `$from: "trigger"`
    names an input field present in the triggering node's `inputs`.
-4. **Scope closure pass (P4).** Body nodes do not reference outer-scope scope
+5. **Scope closure pass (P4).** Body nodes do not reference outer-scope scope
    variables. The only outer data visible in a body is via `$from: "input"`
    (loop boundary inputs), `$from: "state"` (loop state), and
    `$from: "constant"` (workflow constants).
-5. **Dominator pass (P1).** For every reference of the form
+6. **Dominator pass (P1).** For every reference of the form
    `$from: "scope", name: X` inside a node Y (or its handler), and for the
    set of binders B(X) = { nodes in scope with `bind: X` }:
    (a) **Phi soundness:** no two binders in B(X) lie on the same path from
@@ -622,7 +635,7 @@ reference will resolve) for any execution path.
    Inside a handler, dominator semantics use `dominators(T) ∪ {T}` for the
    trigger T; references using `$from: "trigger"` always resolve and do not
    require T to bind.
-6. **Type compatibility pass (P1).** For every reference, the producer's
+7. **Type compatibility pass (P1).** For every reference, the producer's
    declared type is a structural subtype of the field type at the consumer's
    `inputSchema`. When multiple binders contribute to the same name (phi
    merge), every binder's `outputSchema` must be a structural subtype of the
@@ -632,21 +645,21 @@ reference will resolve) for any execution path.
    `selectorSchema`. Fast path: if all producer and consumer positions are
    the same `"#/types/<typeName>"` reference, compatibility holds by
    identity without structural walking.
-7. **Exhaustiveness pass.** Every branch has either an exhaustive `cases`
+8. **Exhaustiveness pass.** Every branch has either an exhaustive `cases`
    over an enum-typed selector or a `default`. v1 requires `default`
    regardless.
-8. **Termination pass.** Every node in the top-level scope can reach a
+9. **Termination pass.** Every node in the top-level scope can reach a
    terminal (`next: null` task/handler, or a branch all of whose targets
    transitively terminate). Every body node can reach `@exit` or `@iterate`.
    Pure cycles without `@iterate`/`@exit` are rejected (P3 scenario 26).
-9. **Acyclicity within scope (P3 + P4).** The intra-scope control-flow graph
-   is acyclic. Iteration is expressed only via `@iterate` inside a loop body.
-   This makes the dominator computation a standard DAG analysis and prevents
-   "accidental loops" (P3 scenario 26).
-10. **State soundness pass.** Every loop state variable has at least one
+10. **Acyclicity within scope (P3 + P4).** The intra-scope control-flow graph
+    is acyclic. Iteration is expressed only via `@iterate` inside a loop body.
+    This makes the dominator computation a standard DAG analysis and prevents
+    "accidental loops" (P3 scenario 26).
+11. **State soundness pass.** Every loop state variable has at least one
     write path (else it is constant and should be a constant) and every read
     is type-compatible with its schema.
-11. **Output binding pass.** `outputBinding` (workflow root) and each loop's
+12. **Output binding pass.** `outputBinding` (workflow root) and each loop's
     `outputs` field references must resolve to bound producers (the writer
     of a state value bound by `bind` is fine; for `outputBinding`, the
     target node must have `bind` set).
@@ -707,7 +720,10 @@ The execution model is described abstractly. The engine is free to optimize
 
 The engine calls the registered task implementation with the resolved
 `inputs`. The implementation returns a value validated against `outputSchema`.
-A schema-violating return is a task failure.
+A schema-violating return is a task failure. This runtime check is the
+defense-in-depth layer for cases where the static spec/task drift check
+(§4.1 pass 3) was skipped because the registry was unavailable at
+validation time.
 
 ### 5.3 Branch execution
 
@@ -1125,13 +1141,13 @@ be bound (assume `bind: true` on each) for `merge` to reference them.
 
 ## 7. How the design satisfies each principle
 
-| Principle | Design feature(s) that satisfy it                                                                                                                                                                                                                                                   |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P1        | Single reference form with named source; static dominator pass over an acyclic intra-scope CFG; structural type compatibility pass; `optional` flag for declared partial deps; finite `cases`+`default`; SSA-style phi soundness on shared bound names                              |
-| P2        | Only six declared `$from` sources (input, constant, scope, state, error, trigger); no ambient/global state; cross-iteration data is a declared `state` variable with declared writes; outputs flow via `outputBinding`; bound outputs make the data-flow contract explicit per node |
-| P3        | Distinct node `kind`s for `task`/`branch`/`loop`/`handler`; loop bodies are a structural sub-scope, not a flat cycle; iteration is `@iterate`, not a back-edge; pure cycles are rejected; `bind` mirrors "some steps publish, some don't" from real programs                        |
-| P4        | Body scope closure (no cross-scope name reach); declared loop `inputs`/`outputs`/`state`; per-scope handlers; localizable validation errors with scope paths; hide-by-default `bind` keeps internal computations out of the scope's contract                                        |
-| P5        | Required `kind` discriminant; required explicit `next` in loop bodies; explicit sentinels; required `default` in branches; one reference form (no shorthand/inference); declared `maxIterations`; explicit `bind` makes value lifetime statically predictable                       |
+| Principle | Design feature(s) that satisfy it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| P1        | **Intra-spec axis:** single reference form with named source; static dominator pass over an acyclic intra-scope CFG; structural type compatibility pass; `optional` flag for declared partial deps; finite `cases`+`default`; SSA-style phi soundness on shared bound names. **External-contract axis:** registry-gated spec/task drift pass (§4.1 pass 3) checks each task node's `inputSchema`/`outputSchema` against the registered task's contract using the §4.2 subtype relation; runtime output validation (§5.2) is the defense-in-depth layer when the registry is absent at validation time. |
+| P2        | Only six declared `$from` sources (input, constant, scope, state, error, trigger); no ambient/global state; cross-iteration data is a declared `state` variable with declared writes; outputs flow via `outputBinding`; bound outputs make the data-flow contract explicit per node                                                                                                                                                                                                                                                                                                                    |
+| P3        | Distinct node `kind`s for `task`/`branch`/`loop`/`handler`; loop bodies are a structural sub-scope, not a flat cycle; iteration is `@iterate`, not a back-edge; pure cycles are rejected; `bind` mirrors "some steps publish, some don't" from real programs                                                                                                                                                                                                                                                                                                                                           |
+| P4        | Body scope closure (no cross-scope name reach); declared loop `inputs`/`outputs`/`state`; per-scope handlers; localizable validation errors with scope paths; hide-by-default `bind` keeps internal computations out of the scope's contract                                                                                                                                                                                                                                                                                                                                                           |
+| P5        | Required `kind` discriminant; required explicit `next` in loop bodies; explicit sentinels; required `default` in branches; one reference form (no shorthand/inference); declared `maxIterations`; explicit `bind` makes value lifetime statically predictable                                                                                                                                                                                                                                                                                                                                          |
 
 ---
 
@@ -1308,6 +1324,46 @@ own design review against P5.
 
 Full analysis: [decisions/0001-bound-outputs.md](decisions/0001-bound-outputs.md).
 
+### 8.16 Task schema source of truth
+
+- **Chosen (v1):** the registered task's declared contract is the
+  authoritative envelope; each `task` and `handler` node's
+  `inputSchema`/`outputSchema` is either a verbatim restatement of that
+  contract (the common case) or a **narrowing** of it (the
+  specialization case), and never a contradiction. Concretely, the
+  validator checks - whenever the registry is available - that the
+  spec's `inputSchema` is a subtype of the task's declared input (the
+  spec promises at most what the task accepts) and that the task's
+  declared output is a subtype of the spec's `outputSchema` (the task
+  promises at least what the spec consumes), using the §4.2 subtype
+  relation. The schemas live on the node so the IR remains
+  self-contained (P2/P4) and so specialization is expressible; the task
+  remains the source of truth for what the spec is allowed to say. The
+  runtime output check (§5.2) remains as defense in depth for the
+  registry-absent case.
+- Alt A: spec authoritative, no static drift check (the original
+  Option 1). Rejected: leaves the spec/task seam to runtime - a
+  too-strict spec `inputSchema`, a too-loose spec `outputSchema`, or any
+  input-side disagreement is invisible until a workflow runs and a value
+  happens to expose it. The chosen variant closes this seam at no IR
+  cost.
+- Alt B: registry is the source of truth (the node omits its schemas;
+  validator and runtime look them up). Rejected: spec is no longer
+  self-contained, no specialization at the call site, schema evolution
+  in the implementation silently changes spec semantics.
+- Alt C: hybrid sugar. Schemas are optional on the node; if absent, the
+  loader fills them in from the registry before validation, then the
+  drift check runs as usual. Deferred: attractive as a v1.1 or DSL-layer
+  feature once authors have data on how often they narrow vs. mirror,
+  but starting at the chosen variant keeps the IR canonical form
+  schema-complete and leaves the door open.
+- Author convenience (DSL layer): repeated schemas are the IR's "verbose
+  by design" tax (§1.1). A DSL or codegen step is expected to populate
+  `inputSchema`/`outputSchema` from a typed task signature, so authors do
+  not write them by hand at scale. The IR remains the canonical form.
+
+Full analysis: [decisions/0003-task-schema-source.md](decisions/0003-task-schema-source.md).
+
 ---
 
 ## 9. Review checklist (consistency self-check)
@@ -1321,8 +1377,8 @@ Full analysis: [decisions/0001-bound-outputs.md](decisions/0001-bound-outputs.md
 - [x] No implicit "missing field" behavior except those P5 calls universally
       unsurprising (`onError` absent => propagate; top-level `next: null` =>
       terminal).
-- [x] Loops cannot exist as topology accidents (P3, validation pass 8).
-- [x] Branches are exhaustive (P5, validation pass 6).
+- [x] Loops cannot exist as topology accidents (P3, validation pass 9).
+- [x] Branches are exhaustive (P5, validation pass 8).
 - [x] Cross-iteration data flow is declared (P2 scenario 15).
 - [x] Optional references are first-class with schema implications (P1
       scenarios 4-7).
@@ -1351,6 +1407,10 @@ one for the sake of having a complete v1.
    shared handlers with documented intersection semantics.
 8. **Shared schemas** (8.13): named `types` with `$ref` vs. inline-only.
 9. **Spec language** (8.14): JSON vs. YAML vs. a typed IR.
+10. **Task schema source of truth** (8.16): spec, registry, or hybrid; and
+    whether the validator statically checks spec-vs-task drift. Currently
+    spec-authoritative with a registry-gated drift check; revisit hybrid
+    sugar (omitted schemas filled in by the loader) once a DSL exists.
 
 After your review of these, the design can be tightened (or the alternatives
 folded back in) without disturbing the rest of the document.

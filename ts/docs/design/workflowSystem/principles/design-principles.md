@@ -64,22 +64,28 @@ P1-P5 govern spec design. These neighboring areas are not governed by the princi
 
 ## Principles
 
-| #   | Principle                                                                                                                                          | One-line test                                                                                                         |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| P1  | Every data reference must be statically provable to resolve to a compatible value at runtime, on every possible execution path                     | "Does X dominate Y, and are the types compatible?"                                                                    |
-| P2  | All data flow is traceable through the spec alone                                                                                                  | "For any task input, can I trace it back to its origin by reading the spec?"                                          |
-| P3  | Spec structure corresponds to computational structure, in both control flow and data publication                                                   | "Does the spec reveal the pattern (both what runs and what is shared), or must you analyze the graph to discover it?" |
-| P4  | Each part of the workflow can be understood, validated, and tested without the whole, given only its declared boundary contract (control and data) | "Can I validate/test this part using only what its boundary declares?"                                                |
-| P5  | A reader of the spec can predict engine behavior - both what runs when and which values stay live - without knowing engine conventions             | "Would a reader be surprised by the behavior, including by what the engine keeps alive?"                              |
+| #   | Principle                                                                                                                                                                                                                      | One-line test                                                                                                                      |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| P1  | Every type-mediated boundary the spec describes is statically provable: intra-spec references resolve compatibly on every path, and external-contract seams are checked against the entity's contract whenever it is available | "For every typed crossing the spec describes - reference or external seam - can the validator prove compatibility before runtime?" |
+| P2  | All data flow is traceable through the spec alone                                                                                                                                                                              | "For any task input, can I trace it back to its origin by reading the spec?"                                                       |
+| P3  | Spec structure corresponds to computational structure, in both control flow and data publication                                                                                                                               | "Does the spec reveal the pattern (both what runs and what is shared), or must you analyze the graph to discover it?"              |
+| P4  | Each part of the workflow can be understood, validated, and tested without the whole, given only its declared boundary contract (control and data)                                                                             | "Can I validate/test this part using only what its boundary declares?"                                                             |
+| P5  | A reader of the spec can predict engine behavior - both what runs when and which values stay live - without knowing engine conventions                                                                                         | "Would a reader be surprised by the behavior, including by what the engine keeps alive?"                                           |
 
 ---
 
-## P1: Every data reference must be statically provable to resolve to a compatible value at runtime, on every possible execution path
+## P1: Every type-mediated boundary the spec describes is statically provable
 
-If node Y declares a dependency on a value produced by node X, two things must be provable before the workflow runs:
+If the spec describes a typed boundary that values cross at runtime, the validator must be able to prove, before the workflow runs, that the values which can cross will do so safely. P1 applies to **every** such boundary the spec names, on **two axes**:
 
-1. **Existence**: X has executed before Y, no matter which branches were taken. Not "X is reachable before Y" (there exists a path), but "X dominates Y" (every path goes through X first).
-2. **Compatibility**: the value produced by X is compatible with what Y expects in that input. The data flowing through the reference must make sense at the destination. The specific definition of "compatible" (exact match, structural subtyping, schema intersection, etc.) is a mechanism choice resolved in the [spec](../spec/spec-v1.md), not prescribed by this principle.
+- **Intra-spec axis (data references).** For every reference from a consumer node to a producer node, two things must be provable:
+  1. **Existence**: the producer has executed before the consumer, no matter which branches were taken. Not "the producer is reachable before the consumer" (there exists a path), but "the producer dominates the consumer" (every path goes through the producer first).
+  2. **Compatibility**: the value the producer publishes is compatible with what the consumer expects in that input. The data flowing through the reference must make sense at the destination.
+- **External-contract axis (boundary seams).** Wherever the spec describes the contract of an entity outside itself - a registered task implementation, the workflow's own caller, an external system declared in spec metadata - the spec's description must be statically checked against that entity's declared contract whenever the entity's contract is available at validation time. The check uses the same compatibility relation as the intra-spec axis, applied in the appropriate direction (the spec's input description is a subtype of what the entity accepts; the entity's output is a subtype of the spec's description). When the entity's contract is not available at validation time, the check is deferred to the runtime boundary; in that case P1 is partially satisfied and the gap is documented.
+
+The specific definition of "compatible" (exact match, structural subtyping, schema intersection, etc.) is a mechanism choice resolved in the [spec](../spec/spec-v1.md), not prescribed by this principle.
+
+The two axes share one motivation: every place a value crosses a typed boundary is a place a runtime failure could happen, and every such place that the spec describes can be checked before runtime. P1 says: check it.
 
 ### Scenarios it ENABLES
 
@@ -88,6 +94,8 @@ If node Y declares a dependency on a value produced by node X, two things must b
 **2. Error handler with safe references.** An error handler for `fetch` can reference the output of `buildUrl` (to log the URL that failed), because `buildUrl` dominates `fetch`, which dominates the error handler's activation point. The validator confirms this.
 
 **3. Diamond merge with explicit data flow.** After a branch `{left: A, right: B}` merging at `merge`, `merge` cannot reference the output of A or B because neither dominates `merge` (only one executes). This forces the author to handle both cases - either pass data through declared cross-iteration state, or route to separate downstream paths.
+
+**3a. Spec/task contract drift caught before runtime.** A spec node describes a task's input and output schema. The task implementation declares its own contract. P1's external-contract axis requires the validator to compare the two when the task registry is available, in both directions: the spec's `inputSchema` is a subtype of what the task accepts, and the task's output is a subtype of the spec's `outputSchema`. A spec that disagrees with its task implementation is rejected at validation time, not discovered when a value happens to expose the mismatch at runtime.
 
 ### Patterns requiring alternative expression
 
@@ -140,6 +148,7 @@ _Workaround:_ Use a decision node that branches to the possible targets, with ea
 - The specific definition of "compatible" for type checking (structural subtyping, exact match, etc.) - P1 requires compatibility be provable, not which type system proves it.
 - Whether optional references should exist and what form they take - P1 motivates them (scenarios 4, 5, 7), but the mechanism is a design choice.
 - How dominator analysis interacts with error edges - P1 requires dominance on every path, but the error-edge model affects which paths exist.
+- Which entities count as external contracts the spec describes - P1 says "every type-mediated boundary the spec describes", but the set of such boundaries grows as the spec adds capability declarations, sub-workflow calls, etc. Each addition requires deciding what its checked contract is.
 
 ---
 

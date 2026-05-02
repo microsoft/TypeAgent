@@ -89,6 +89,37 @@ With the sharpening in place, the bound-outputs decision is now driven by the pr
 
 ---
 
+### Spec/task contract drift (P1's external-contract axis)
+
+**Status:** Resolved. The decision (registry-gated static drift check between each task node's schemas and the registered task's contract) was reached during the [task-schema-source decision](../spec/decisions/0003-task-schema-source.md) and folded into the spec at §4.1 pass 3, §5.2, and §8.16. The gap that allowed bare Option 1 (spec-authoritative, no static drift check) to sail through the original cleanroom design has since been closed by sharpening P1 to be bi-axial (see [design-principles.md](design-principles.md)). Recorded here as the second case study of the same shape as bound-outputs.
+
+**The original gap.** A task node carries `inputSchema` / `outputSchema` and names a registered task implementation that has its own contract. Should the validator compare the two, and if so when? Walking the principles **as originally written** against this question:
+
+| Principle (original)                | Drove a check? | Notes                                                                                                                                                                                                                            |
+| ----------------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1 (statically provable references) | No             | P1 was framed around _node-to-node_ references (producer dominates consumer; producer's type is compatible with consumer's). The spec/task seam is not a node-to-node reference, so a literal reading of P1 left it un-governed. |
+| P2 (data flow traceable)            | No             | Both schemas already lived in the spec; tracing was unaffected by whether the seam was checked.                                                                                                                                  |
+| P3 (structure mirrors computation)  | No             | Drift detection has no structural analog.                                                                                                                                                                                        |
+| P4 (parts without the whole)        | Weakly         | A task node is a "part"; if its contract is wrong, the part is wrong. But P4 was about _validation in isolation_ - the check itself was implicit.                                                                                |
+| P5 (predict engine behavior)        | No             | A reader of a task node sees the schema; whether the engine separately compares it to the implementation does not change what the reader predicts the engine will do.                                                            |
+
+P1's spirit ("prove what can be proven before runtime") absolutely covered the seam, but P1's letter, framed entirely around intra-spec references, did not. The cleanroom design adopted bare Option 1 (no static drift check) without anyone noticing that a checkable boundary was being deferred to runtime.
+
+**Why this was a principle gap, not just an unstated decision.** The original P1 was **intra-spec-biased**: every scenario was a node-to-node reference. The spec describes other type-mediated boundaries (its own caller's contract, the task implementation's contract, future capability declarations), but the principle did not extend to them. The same pattern (a typed boundary the spec describes that the validator could check but does not) would not have surfaced from a P1-P5 walkthrough as long as the boundary was not a node-to-node reference.
+
+**Sharpening applied.** P1 has been restated to be bi-axial:
+
+- **Intra-spec axis (data references):** the existing dominator + compatibility model, unchanged.
+- **External-contract axis (boundary seams):** wherever the spec describes the contract of an external entity (registered task, workflow caller, future external systems), the validator must compare the spec's description against the entity's contract whenever the contract is available, using the same compatibility relation in the appropriate direction. When unavailable, the check defers to the runtime boundary and the gap is documented.
+
+With the sharpening in place, the spec/task drift check is now driven by P1 directly, not by a one-off engineering judgement.
+
+**Resolution chosen.** The registered task's contract is the authoritative envelope; each task node's `inputSchema`/`outputSchema` is either a verbatim restatement of that contract or a narrowing of it, and never a contradiction. The validator enforces the rule via the §4.2 subtype relation in both directions (spec input ⊆ task input; task output ⊆ spec output), gated on registry availability. See [decisions/0003-task-schema-source.md](../spec/decisions/0003-task-schema-source.md) for the K1-K4 option analysis (Option 1 vs. 1' vs. 2 vs. 3) and the principle scorecard.
+
+**Lesson (reinforces the bound-outputs lesson).** Two principle sharpenings now follow the same pattern: a decision converges by analysis without a clean principle drive, and the diagnosis is that a principle's scope was framed too narrowly (control-flow-biased in the bound-outputs case; intra-spec-biased here). The pattern is worth watching for in future decisions: when a principle "almost" applies, that's the signal to re-examine its scope rather than to file the decision under engineering judgement.
+
+---
+
 ## Deployment and Evolution
 
 ### No incremental migration
@@ -157,6 +188,7 @@ P4 says parts can be validated and tested independently. But it doesn't say part
 2. **Sub-workflow evolution:** When sub-workflows are added, does P4's boundary contract need strengthening for versioning? Or does the existing input/output boundary suffice?
 3. **Task contract extensions:** Side-effect annotations, idempotency markers, progress declarations are all additive task boundary metadata. If these grow complex, they may warrant a separate design doc with its own concerns distinct from P1-P5.
 4. **Data-flow direction in the principles.** **Closed.** P3, P4, and P5 were originally control-flow-biased. They have been sharpened to state both axes explicitly (control-flow and data-flow / publication / lifetime). The bound-outputs decision is the case study; see "Intra-scope name visibility" above. Future data-flow decisions should now be principle-driven. If a future decision in this family again converges only from "weak readings" of multiple principles, that signals another axis to sharpen.
+5. **Boundary direction in P1.** **Closed.** P1 was originally framed entirely around node-to-node references inside the spec. It has been sharpened to be bi-axial (intra-spec references + external-contract seams). The spec/task drift decision is the case study; see "Spec/task contract drift" above. Future seams the spec adds (sub-workflow calls, capability declarations, external-system descriptors) inherit P1's external-contract axis automatically.
 
 ---
 
