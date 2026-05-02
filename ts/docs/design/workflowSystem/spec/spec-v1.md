@@ -1,9 +1,9 @@
-# Workflow Spec - Clean-Room Design (v1)
+# Workflow Spec - v1
 
-Status: Draft for review
+Status: Adopted (v1). Authoritative.
 
 This document is a clean-room design of the workflow spec, derived **only** from
-[design-principles.md](design-principles.md). It deliberately ignores any
+[design-principles.md](../principles/design-principles.md). It deliberately ignores any
 pre-existing decisions, schemas, or implementations in the repo so that the
 design follows the principles end-to-end without inheriting prior assumptions.
 
@@ -86,7 +86,7 @@ inputs.
 | External-state side channels           | P2 scenarios 16-17: deliberately invisible to the spec in v1.                                                                                                                                                                                                                                     |
 | Cross-loop shared mutable state        | P4 scenario 34: forced into explicit boundary wiring; no global state.                                                                                                                                                                                                                            |
 | Reusable handler nodes across scopes   | P4 scenario 35: each scope owns its handlers in v1.                                                                                                                                                                                                                                               |
-| Explicit `block` scope                 | A run-once scope kind (sibling of loop body) that can carry a single `onError` over a region of nodes. Closes the "multi-statement try" gap cheaply by reusing the existing scope contract. Sketch in [post-v1-block-scope.md](post-v1-block-scope.md).                                           |
+| Explicit `block` scope                 | A run-once scope kind (sibling of loop body) that can carry a single `onError` over a region of nodes. Closes the "multi-statement try" gap cheaply by reusing the existing scope contract. Sketch in [post-v1/block-scope.md](post-v1/block-scope.md).                                           |
 | Streaming / partial outputs from tasks | Tasks are "input in, output out" per the principles' boundary statement.                                                                                                                                                                                                                          |
 | User-interaction / suspend-resume      | Not mentioned in principles; out of v1.                                                                                                                                                                                                                                                           |
 
@@ -204,7 +204,7 @@ Nodes that do not bind execute normally; their outputs simply have no name
 in the scope and cannot be referenced. This is the central data-visibility
 rule of v1: **bind to share, omit to hide.**
 
-Rationale and analysis: see [bound-outputs.md](bound-outputs.md).
+Rationale and analysis: see [decisions/0001-bound-outputs.md](decisions/0001-bound-outputs.md).
 
 **Cross-scope visibility.** The only name a body scope can read from outside
 itself is a workflow-root `constant`. All other outer data must enter the body
@@ -1306,7 +1306,7 @@ own design review against P5.
   for the handler's benefit. Keeps each node's bind contract focused on its
   own consumers.
 
-Full analysis: [bound-outputs.md](bound-outputs.md).
+Full analysis: [decisions/0001-bound-outputs.md](decisions/0001-bound-outputs.md).
 
 ---
 

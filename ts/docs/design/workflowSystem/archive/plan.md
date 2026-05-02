@@ -1,5 +1,11 @@
 # Workflow Execution Engine - Plan
 
+> **Status: ARCHIVED.** This plan predates the v1 spec. The IR sketch in
+> §5 has been superseded by [../spec/spec-v1.md](../spec/spec-v1.md). The
+> engineering content (§1 Goals, §2 Non-Goals, §4 Architecture, §6 Task
+> Plugin API) is still partially live and will be distilled into
+> `engineering/` and a future `tasks/` component. Preserved for context.
+
 Status: Draft v0.5 (blocking issues resolved, ready for M1)
 
 ## 1. Goals

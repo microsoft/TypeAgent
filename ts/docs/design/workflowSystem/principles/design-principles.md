@@ -57,10 +57,10 @@ P1-P5 govern spec design. These neighboring areas are not governed by the princi
 
 ## Relationship to other design docs
 
-- [plan.md](plan.md) - overall plan, IR principle, milestones. Decisions there should be consistent with these principles.
-- [loops-dataflow-controlflow.md](loops-dataflow-controlflow.md) - loop/data-flow/control-flow design. Driven by these principles.
-- [design-decisions.md](design-decisions.md) - design decisions driven by these principles. Mechanism tables, resolved questions, open questions, and cross-cutting design analyses.
+- [../spec/spec-v1.md](../spec/spec-v1.md) - the v1 IR spec, derived from these principles.
 - [principle-gaps.md](principle-gaps.md) - analysis of areas the principles permit but don't drive (deployment/evolution, debugging, performance). Includes v1 scope decisions and forward compatibility checks.
+- [../spec/decisions/](../spec/decisions/) - per-decision records driven by these principles.
+- [../archive/](../archive/) - earlier design exploration (plan.md, loops-dataflow-controlflow.md, design-decisions.md), preserved for context.
 
 ## Principles
 
@@ -79,7 +79,7 @@ P1-P5 govern spec design. These neighboring areas are not governed by the princi
 If node Y declares a dependency on a value produced by node X, two things must be provable before the workflow runs:
 
 1. **Existence**: X has executed before Y, no matter which branches were taken. Not "X is reachable before Y" (there exists a path), but "X dominates Y" (every path goes through X first).
-2. **Compatibility**: the value produced by X is compatible with what Y expects in that input. The data flowing through the reference must make sense at the destination. The specific definition of "compatible" (exact match, structural subtyping, schema intersection, etc.) is a mechanism choice resolved in [design-decisions.md](design-decisions.md), not prescribed by this principle.
+2. **Compatibility**: the value produced by X is compatible with what Y expects in that input. The data flowing through the reference must make sense at the destination. The specific definition of "compatible" (exact match, structural subtyping, schema intersection, etc.) is a mechanism choice resolved in the [spec](../spec/spec-v1.md), not prescribed by this principle.
 
 ### Scenarios it ENABLES
 
@@ -97,7 +97,7 @@ These patterns are natural to reach for, but P1 requires them to be expressed di
 
 - _Intent:_ Use cached data downstream, where the cache node is behind a branch that usually (but not always) executes.
 - _Why rejected:_ A reference to `cache`'s output in a node reachable via a path that skips `cache` violates the "every path" requirement. The validator cannot distinguish "usually taken" from "sometimes skipped."
-- _Alternative:_ (a) Restructure so `cache` dominates the consumer (move it before the branch). (b) Pass the value explicitly through both branches via declared data wiring. (c) Mark the reference as optional: the consumer receives the cached value when `cache` runs and handles its absence otherwise. (The specific mechanism for optional references - nullable inputs, special reference syntax, schema annotations, etc. - is a design choice; see [design-decisions.md](design-decisions.md). What matters for P1 is that the reference's optionality is declared in the spec so the validator can distinguish it from a required reference that would fail.)
+- _Alternative:_ (a) Restructure so `cache` dominates the consumer (move it before the branch). (b) Pass the value explicitly through both branches via declared data wiring. (c) Mark the reference as optional: the consumer receives the cached value when `cache` runs and handles its absence otherwise. (The specific mechanism for optional references - nullable inputs, special reference syntax, schema annotations, etc. - is a design choice; see the [spec](../spec/spec-v1.md). What matters for P1 is that the reference's optionality is declared in the spec so the validator can distinguish it from a required reference that would fail.)
 - _Tradeoff:_ (a) may run `cache` when unnecessary. (b) adds wiring verbosity. (c) moves the conditional logic inside the task, which is a legitimate boundary choice: the task is the right place to decide what to do when cache data is absent. All three make the data flow explicit.
 
 **5. Optional enrichment.** (Same pattern as scenario 4; the difference is that enrichment is entirely skipped rather than conditionally cached.)

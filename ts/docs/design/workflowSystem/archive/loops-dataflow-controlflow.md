@@ -1,5 +1,11 @@
 # Workflow Engine Design: Loops, Data Flow, and Control Flow
 
+> **Status: ARCHIVED.** This was the first structured design for loops,
+> data flow, and control flow. It used the pre-cleanroom vocabulary
+> (`inputMap`, `outputMap`, `loopVars`). Superseded by
+> [../spec/spec-v1.md](../spec/spec-v1.md) (§3.2-§3.4 references,
+> §3.7 loops). Preserved for context.
+
 Status: Draft v0.1 (iterating)
 
 This document refines the workflow spec design (see [plan.md](plan.md)) for loops, data flow, and control flow, driven by the principles in [design-principles.md](design-principles.md). The current prototype allows flat-graph cycles but lacks static guarantees around data flow. This design replaces that approach with explicit loop constructs, scoped variables, and dominator-based validation.

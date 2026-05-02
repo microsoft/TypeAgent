@@ -25,7 +25,7 @@ Both categories are additive: the spec schema should be open for extension, but 
 | Intermediate state visibility | Task boundary metadata               | Tasks can emit progress/events that the engine captures for observability, but this data isn't routed through workflow data flow. Same category as observability data (design-principles.md scenario 18). Optional capability declaration on the task boundary. |
 | Replay/checkpoint             | Task boundary metadata + engine      | Side-effect and idempotency declarations are optional task metadata. Checkpoint persistence is engine-level. P2+P3 provide the typed, serializable structure that makes both feasible. The spec schema just needs to allow adding these fields later.           |
 | Loop iteration identity       | Engine mechanism                     | Engine already tracks iteration count for maxIterations. Exposing it to the spec is a mechanism addition consistent with P2.                                                                                                                                    |
-| Error diagnostic constraints  | Spec mechanism (optional references) | Resolved by the optional references mechanism already tracked in [design-decisions.md](design-decisions.md). Not a principle gap.                                                                                                                               |
+| Error diagnostic constraints  | Spec mechanism (optional references) | Resolved by the optional references mechanism (see [spec §3.4](../spec/spec-v1.md)). Not a principle gap.                                                                                                                                                       |
 
 ---
 
@@ -71,7 +71,7 @@ P3 is what would drive the decision to add MapNode rather than inferring paralle
 | P4 (parts without the whole)       | Weakly           | P4 was framed around _cross-scope_ boundaries. The intra-scope analog ("a node declares its contribution to the scope's namespace") was latent. |
 | P5 (predict engine behavior)       | Weakly           | P5's scenarios were control-flow surprises. The data-lifetime analog ("reader can predict which values stay live") was latent.                  |
 
-All five permitted both designs. None drove the choice. Hide-by-default was reached by analysis ([cfg-ddg-analysis.md](cfg-ddg-analysis.md), [bound-outputs.md](bound-outputs.md)) and only afterwards mapped back to weak readings of P3/P4/P5.
+All five permitted both designs. None drove the choice. Hide-by-default was reached by analysis ([cfg-ddg-separation](../spec/decisions/0002-cfg-ddg-separation.md), [bound-outputs](../spec/decisions/0001-bound-outputs.md)) and only afterwards mapped back to weak readings of P3/P4/P5.
 
 **Why this was a principle gap, not just an unstated decision.** The principles, as originally written, were **control-flow-biased**: P3, P4, and P5 each had rich scenario sets for control flow and scope boundaries, but their data-side analogs were latent. The same pattern (a refactor that silently expands a node's contract; a value whose liveness the reader cannot predict; a scope whose namespace grows by accident) would not have surfaced from a P1-P5 walkthrough.
 
@@ -83,7 +83,7 @@ All five permitted both designs. None drove the choice. Hide-by-default was reac
 
 With the sharpening in place, the bound-outputs decision is now driven by the principles directly: P3 (publication is structural), P4 (intra-scope contribution is part of the boundary), P5 (lifetime is locally predictable) all converge on hide-by-default.
 
-**Resolution chosen.** Hide-by-default with explicit `bind` to share, plus SSA-style phi merge for shared bind names on mutually exclusive paths. See spec §8.15 for the design block and [bound-outputs.md](bound-outputs.md) for the K1-K12 analysis.
+**Resolution chosen.** Hide-by-default with explicit `bind` to share, plus SSA-style phi merge for shared bind names on mutually exclusive paths. See spec §8.15 for the design block and [bound-outputs](../spec/decisions/0001-bound-outputs.md) for the K1-K12 analysis.
 
 **Lesson.** When a decision converges from "weak readings" of multiple principles, that's a signal the principles are missing an axis. The fix is to sharpen the principles, not to add a new one.
 
@@ -145,7 +145,7 @@ P4 says parts can be validated and tested independently. But it doesn't say part
 | Intermediate state visibility | No (task metadata)          | Resolved     | Optional task capability declaration. Not workflow data flow.                                                                                                            |
 | Replay/checkpoint             | No (task metadata + engine) | Resolved     | Side-effect/idempotency declarations are additive. Engine persists state.                                                                                                |
 | Loop iteration identity       | No (engine mechanism)       | Resolved     | Engine exposes iteration count. Consistent with P2.                                                                                                                      |
-| Error diagnostic constraints  | Yes (mechanism)             | Resolved     | Optional references mechanism in [design-decisions.md](design-decisions.md).                                                                                             |
+| Error diagnostic constraints  | Yes (mechanism)             | Resolved     | Optional references mechanism in the [spec](../spec/spec-v1.md) (\u00a73.4).                                                                                             |
 | Incremental migration         | Yes                         | **Deferred** | Becomes relevant with sub-workflow composition.                                                                                                                          |
 | Safe-change analysis          | No (operational)            | Resolved     | Principles enable structural diff. Runtime survival is operational.                                                                                                      |
 | Spec identity across versions | No (tooling)                | Resolved     | Migration mapping is external tooling.                                                                                                                                   |
@@ -185,7 +185,7 @@ The question: will v1 design decisions block adding deployment/evolution support
 | Side-effect/idempotency declarations | Yes             | None   | Optional fields on task declarations. No existing spec would break.                                                                                                                                                                                                                                         |
 | MapNode                              | Yes             | None   | New node type. Existing LoopNodes remain valid.                                                                                                                                                                                                                                                             |
 | Scope boundary mechanism             | **Verify**      | Low    | Loop boundaries must generalize to sub-workflows. Current design (declared inputs + declared outputs + loop-specific extensions) is clean: sub-workflows would be "inputs + outputs" without loopVars/sentinels/maxIterations. Core isolation model (body can't reference outer nodes) applies identically. |
-| Node identity                        | **Decide now**  | Medium | See [design-decisions.md open question: node identity](design-decisions.md).                                                                                                                                                                                                                                |
+| Node identity                        | **Decide now**  | Medium | See open question in [archive/design-decisions.md](../archive/design-decisions.md) (node identity).                                                                                                                                                                                                         |
 
 ### Node identity risk
 
@@ -193,7 +193,7 @@ Nodes are identified by name (string key in the `nodes` map). If the engine buil
 
 Adding a separate stable `id` field later is technically additive, but if the engine already persists checkpoints keyed by node name, migrating to `id`-based keys is messy.
 
-**v1 decision needed:** Are node names stable identifiers? Even a brief recorded decision ("names are IDs for v1, we'll add stable IDs when we add versioning") prevents accidental assumptions from hardening into unmigrateable conventions. See [design-decisions.md](design-decisions.md).
+**v1 decision needed:** Are node names stable identifiers? Even a brief recorded decision ("names are IDs for v1, we'll add stable IDs when we add versioning") prevents accidental assumptions from hardening into unmigrateable conventions. See [archive/design-decisions.md](../archive/design-decisions.md).
 
 ### Drives vs. permits
 

@@ -1,6 +1,6 @@
 # Post-v1: explicit `block` scope
 
-Status: design sketch, post-v1. Listed in `spec-design-cleanroom.md` §2.2.
+Status: **Post-v1 sketch.** Listed in [../spec-v1.md](../spec-v1.md) §2.2.
 
 ## 1. Motivation
 
@@ -28,7 +28,7 @@ distinct gaps in v1:
 
 Per-node hiding is **already handled in v1** by bound outputs (hide-by-
 default `bind`); blocks are not needed for that case. See
-[bound-outputs.md](bound-outputs.md).
+[../decisions/0001-bound-outputs.md](../decisions/0001-bound-outputs.md).
 
 Secondary value: mechanical "promote this region to a sub-workflow"
 refactor (block + document boundary = sub-workflow).

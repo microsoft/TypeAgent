@@ -1,5 +1,12 @@
 # Workflow Spec Design Decisions
 
+> **Status: ARCHIVED.** Most decisions here have been superseded by
+> [../spec/spec-v1.md](../spec/spec-v1.md) §8 (design choices). Two
+> sections remain live: the "Optional references" analysis (the
+> mechanism is now in spec §3.4) and the "Node identity" open question
+> (still pending; see [../principles/principle-gaps.md](../principles/principle-gaps.md)).
+> Preserved for context.
+
 Status: Draft (iterating)
 
 This document records design decisions driven by the [design principles](design-principles.md). Each decision references the principle(s) that motivate it. The principles define _what properties the design must have_; this document records _how specific mechanism questions are resolved_ under those principles.

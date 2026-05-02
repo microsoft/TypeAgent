@@ -1,13 +1,14 @@
-# CFG vs DDG: graph-model analysis
+# CFG / DDG separation (decision 0002)
 
-Status: Draft, iterating
+Status: **Adopted (v1).** Folded into [../spec-v1.md](../spec-v1.md) (§3.2.2).
+Working analysis preserved below as the design record for the two-graph model.
 
 This document captures the in-flight analysis of how the workflow spec
 encodes data dependencies and control flow, the alternative graph models
 considered, and how each model scores against the broader workflow vision.
 It is a working document, not a finished design proposal. Decisions
 recorded here either flow back into
-[spec-design-cleanroom.md](spec-design-cleanroom.md) or get parked as
+[../spec-v1.md](../spec-v1.md) or get parked as
 explicit follow-ups.
 
 The discussion built up incrementally; this file preserves that order so
@@ -50,7 +51,7 @@ dependency in any spec is an instance of one of these.
 
 (\*"state" is only legal when the enclosing scope is a body scope. The `scope`
 namespace was renamed from `node` when bound outputs landed; see
-[bound-outputs.md](bound-outputs.md). `trigger` is a handler-only pseudo-source
+[0001-bound-outputs.md](0001-bound-outputs.md). `trigger` is a handler-only pseudo-source
 that reads an input field of the failing node, sidestepping the need for the
 trigger to bind upstream values for the handler's benefit.)
 

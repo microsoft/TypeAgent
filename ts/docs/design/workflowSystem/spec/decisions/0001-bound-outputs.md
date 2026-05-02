@@ -1,11 +1,11 @@
-# Bound outputs: hide-by-default node values
+# Bound outputs (decision 0001): hide-by-default node values
 
-Status: **adopted for v1.** Folded into the spec doc as of this revision
-(see §3.2, §3.3, §3.4, §3.8, §4.1, §5.7, §8.15 of
-`spec-design-cleanroom.md`). This doc retains the analysis, the
-decision rationale for each open question, and the relationship to
+Status: **Adopted (v1).** Folded into [../spec-v1.md](../spec-v1.md)
+(§3.2, §3.3, §3.4, §3.8, §4.1, §5.7, §8.15). This doc retains the analysis,
+the decision rationale for each open question, and the relationship to
 future extensions.
-Related: `cfg-ddg-analysis.md` (C2, C3, C4, C5), `post-v1-block-scope.md`
+Related: [0002-cfg-ddg-separation.md](0002-cfg-ddg-separation.md) (C2, C3, C4, C5),
+[../post-v1/block-scope.md](../post-v1/block-scope.md)
 (blocks remain post-v1 for the multi-statement try and the regional
 grouping cases that bound outputs alone don't address).
 
