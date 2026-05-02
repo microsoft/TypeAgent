@@ -7,6 +7,7 @@ semantics that any conforming engine must implement.
 
 - **[ir-v1.md](ir-v1.md)** - the authoritative v1 IR. Single source of truth.
 - **[revisit-triggers.md](revisit-triggers.md)** - index of v1 decisions with explicit reopening conditions.
+- **[dsl-assumptions.md](dsl-assumptions.md)** - DSL-shaped assumptions baked into v1 that a future DSL design must confirm or refute.
 - **[decisions/](decisions/)** - numbered per-decision records.
 - **[post-v1/](post-v1/)** - sketches of features deferred past v1.
 

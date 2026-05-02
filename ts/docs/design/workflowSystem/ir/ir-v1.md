@@ -6,7 +6,7 @@ Status: Adopted (v1). Authoritative.
 "the IR") is the JSON workflow artifact that the engine consumes. Earlier
 drafts use "spec" for the same thing; the rename separates the artifact
 from this design document, which is _about_ the IR but is not itself an
-IR. See §1.4 for the audience consequences.
+IR. See §1.1 for the audience consequences.
 
 This document is a clean-room design of the workflow IR, derived **only** from
 [design-principles.md](../principles/design-principles.md). It deliberately ignores any
@@ -22,22 +22,164 @@ review.
 
 ## 1. Meta-design pattern
 
-The design is shaped by three style choices that fall out of the principles
-themselves. They are listed up front so reviewers can see the lens used to make
-every concrete decision below.
+The design is shaped by one **lens** (§1.1) and three **style choices**
+(§1.2-1.4) that fall out of applying that lens to the principles. The
+lens names the audience the IR serves and the trade-off the design
+resolves; the three style choices are what the lens picks when it
+collides with specific principles. They are listed up front so reviewers
+can see the basis on which every concrete decision below was made. New
+design questions should walk this section in order: locate the relevant
+audience tension in §1.1, then check which of §1.2-1.4 the principle in
+play already converts that tension into.
 
-### 1.1 Explicit IR, no sugar
+### 1.1 Audience and the sufficiency-vs-convenience balance
+
+The first job of the IR is to carry **sufficient information for the
+engine to execute the workflow correctly and with acceptable
+performance**. "Sufficient" means: every dispatch decision, every type
+check, every value the engine needs to release or keep alive, every
+recovery path, is determinable from the IR alone, without inference
+from outside context. "Acceptable performance" means: the engine can
+make those determinations cheaply (no global re-walks, no expensive
+analyses at dispatch time), and analysis tools can do the same.
+
+Sufficiency and analysis cost are the hard constraints. Writer
+convenience is a soft one: writers are tool-mediated (a DSL, a codegen
+pass, an LLM prompt), so omissions a writer would prefer can almost
+always be reintroduced as sugar at the layer above the IR. When a
+decision forces a trade-off between "easier to write" and "engine has
+what it needs (cheaply)", v1 picks the engine and pays the writer cost
+in tooling. The "verbose by design" tax in §1.2 is the most visible
+consequence; the tensions in §1.1.3 collect the rest.
+
+Two secondary reader populations sit alongside the engine: humans
+reviewing or debugging a workflow, and third-party analysis tools. For
+v1, the engine's sufficiency requirement is the dominant force; the
+human and tool requirements are mostly satisfied as side effects of
+satisfying the engine (explicit references give humans navigability;
+declared schemas give analyzers a contract). Where they pull in
+different directions, §1.1.3 calls it out.
+
+Decisions throughout this document (verbosity, explicitness, schema
+redundancy, the conformance bar in §5.7, the choice of JSON in §8.14)
+are calibrated for the populations that interact with the **IR
+artifact**, not for whoever happens to read this design document.
+Keeping those two audiences straight is why the artifact is called "the
+IR" everywhere below; the audience for this document is treated
+separately in §1.1.4.
+
+#### 1.1.1 Reader populations
+
+| Population                          | Coverage           | What they MUST be able to do                                                                                                                    | Forces                                                                                                                               |
+| ----------------------------------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Engine, validator, runtime          | Reads every IR     | Determine every dispatch, type check, value lifetime, and recovery edge from the IR alone, cheaply enough to do at validation or dispatch time. | Explicitness in §3-§5; static dominator and liveness (§4.1, §5.7 SHOULD); total `default` (§8.3); the conformance MUST list in §5.7. |
+| Debugger, reviewer, auditor (human) | Reads specific IRs | Locate a node, follow its references, map a runtime error coordinate back to a source position, diff a change without re-reading the whole IR.  | Stable IDs, locality (§4.3 localizable errors), observability hooks (§5.6).                                                          |
+| Visualizer, linter, static analyzer | Reads programmatic | Walk the IR without knowing the engine's internal model; resolve names; identify node kinds and reference targets without parsing context.      | `kind` discriminant (P5), `types`/`$ref` sharing (§3.1.1), self-describing structure.                                                |
+
+The three populations are bundled in the human row because v1 ships one
+mechanism set (locality + IDs + error coordinates) that serves all
+three. They diverge later - a debugger needs runtime-state-to-IR
+mapping that a reviewer does not, an auditor needs provenance that a
+debugger does not - and may split into separate rows if those needs
+acquire dedicated mechanisms.
+
+#### 1.1.2 Writer populations
+
+| Population                      | What they emit                          | What they need from the IR surface                                                                                                                                                          | Status                          |
+| ------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| DSL or codegen tool             | Whole IRs from a higher-level surface   | Coverage of the lowering targets it needs (§3 schema, §3.9 grammar) and stability of the surface it lowers into (§10, revisit-triggers).                                                    | Primary writer                  |
+| LLM via DSL (with retry/repair) | DSL fragments that codegen lowers to IR | A DSL grammar small enough to teach in a prompt, terse enough to fit token budgets, and wrong-by-construction wherever possible. The IR's properties matter only via the lowering contract. | Primary writer (when DSL ships) |
+| LLM direct to IR                | IRs or fragments from a prompt          | Locally validatable nodes (so a bad emission can be rejected and retried), schema-complete with no implicit context, no whitespace or ordering significance.                                | Fallback / bootstrap            |
+| Hand author                     | Edits, demos, fragments                 | The same as LLM-direct, plus tolerance for verbosity it cannot avoid.                                                                                                                       | Edge case                       |
+
+The LLM row is split because the two configurations have different IR
+requirements. **LLM via DSL** is the steady-state primary write path
+once a DSL exists: the LLM emits a small grammar it can be reliably
+prompted on, codegen owns the verbose-by-design tax (§1.2) once instead
+of at every emission, and many wrong programs become unrepresentable in
+the DSL grammar instead of caught later by IR validation. **LLM direct
+to IR** is the bootstrap path (used before any DSL exists) and the
+escape hatch (used when the DSL does not cover something). It stays
+viable only because the IR is locally validatable with no implicit
+context - those properties cannot be dropped just because a DSL appears,
+or the escape hatch closes.
+
+Hand-authoring an IR by writing JSON directly is **not** a primary use
+case. It is acknowledged as an edge case (small fixes, demos, no DSL
+handy), and §1.2's "verbose by design" tax is paid on the assumption
+that the DSL, codegen, or LLM layer absorbs the authoring cost.
+
+The DSL configuration adds back one cost the IR-direct path avoids: a
+source map between DSL position and IR position, so runtime errors
+(which arrive in IR coordinates) can be reported against the DSL the
+LLM or human actually wrote. That cost lands on the DSL toolchain, not
+on the IR.
+
+The DSL configuration also substitutes a different writer force on the
+IR: **codegen as a mechanical writer**. Codegen wants one way to
+express each construct (no IR-level sugar to choose between),
+splice-safe scopes (so DSL fragments compose without renaming or path
+rewriting), and ideally no IR shapes that have no DSL analogue (so
+coverage stays meaningful). Those pulls are mostly aligned with §1.2
+(no sugar) and §1.4 (boundary closure), so they reinforce existing
+style choices rather than create new ones. Codegen coverage staying
+well below 100 % of IR shapes for an extended period is itself a
+revisit signal - see [revisit-triggers.md](revisit-triggers.md) row 7.
+
+If a DSL never materializes and hand-authoring or LLM-direct-to-IR
+becomes the dominant write path, several v1 trade-offs become
+candidates for revisiting - see
+[revisit-triggers.md](revisit-triggers.md) rows 1, 5, 6.
+
+#### 1.1.3 Tensions and resolutions
+
+The audience model resolves real tensions. The pattern is consistent:
+when reader and writer pull in different directions, v1 picks the
+reader and expects writer tooling to absorb the difference. The
+following are the largest:
+
+| Tension                                | Writer pull                                                      | Engine sufficiency / cost                                                                                       | v1 resolution                                                                                                                            | Where                |
+| -------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| Schema redundancy on task nodes        | Omit, inherit                                                    | Static drift check needs both sides at validation time; runtime dispatch needs schemas without registry lookup. | Required, drift-checked                                                                                                                  | §8.16, decision 0003 |
+| Reference encoding (string vs. object) | String shorthand                                                 | Engine needs source kind, name, and path without a parser; analyzers need uniform structural access.            | Object form                                                                                                                              | §8.2                 |
+| IR encoding format                     | YAML for terseness                                               | Engine needs a strict, ambiguity-free parse; LLM emitters need no whitespace traps.                             | JSON                                                                                                                                     | §8.14                |
+| Branch model                           | Predicate `if/else`                                              | Engine needs total dispatch with no expression evaluator on the hot path.                                       | Discriminant switch with required `default`                                                                                              | §8.3                 |
+| Bound outputs                          | Implicit publication                                             | Engine needs a static liveness signal to free unreferenced values immediately (§5.7 SHOULD).                    | Hide-by-default `bind` switch                                                                                                            | §8.15, decision 0001 |
+| Verbosity tax in the LLM era           | Tokens at every emission, large rule surface to teach the prompt | Engine needs the verbose, explicit, locally validatable form regardless of who writes it.                       | Build a DSL when LLM is the writer; codegen pays the tax once. IR remains emittable so the fallback / escape hatch in §1.1.2 stays open. | §1.1.2 LLM rows      |
+
+Each row is "writer asked for X, engine needed something specific to do
+its job correctly or cheaply, writer pays the cost via tooling." The §8
+entries above carry the per-decision analysis. §1.2-1.4 are the same
+pattern crystallized into reusable style choices: when a future decision
+matches the shape of one of those three, the resolution is already
+named and need not be re-derived.
+
+#### 1.1.4 Audience for this design document
+
+The design document targets a narrower audience than the IR: engine
+implementers building one of the reader populations above, design
+reviewers checking the IR against the principles, and DSL, codegen, or
+LLM-prompt authors deciding what to lower to. They are not the
+audience for the IR; they are the audience for the design that produced
+it. When this document says "the reader" without qualification, it
+means a reader of the IR, not a reader of this document.
+
+### 1.2 Explicit IR, no sugar
 
 The IR is exactly that - an **intermediate representation**, not an
 authoring format. Every node type, every edge, every reference is written
 out. Authoring sugar (DSLs, templates, generated IRs) is out of scope and
 lives at a different layer.
 
+- Lens application: §1.1 + P2/P3/P5. The engine cannot dispatch, validate,
+  or release values from inferred structure - it needs every reference,
+  edge, and kind stated. Writer convenience that hides any of these is
+  pushed to the layer above the IR.
 - Drives: P2 (no hidden flow), P3 (no inferred structure), P5 (no surprise
   defaults).
 - Consequence: the IR will look verbose. That is intentional.
 
-### 1.2 Structural minimalism
+### 1.3 Structural minimalism
 
 The schema introduces the **fewest concepts** that satisfy P1-P5. New node
 types, fields, and constructs only appear when there is a scenario in
@@ -45,52 +187,29 @@ design-principles.md that none of the existing concepts can express without
 violating a principle. This is the discipline noted at the top of
 design-principles.md (the unnumbered minimization rule).
 
+- Lens application: this one is principle-driven first - the minimization
+  rule on top of P1-P5 already demands it. §1.1 reinforces rather than
+  generates: fewer concepts mean less for the engine and analyzers to
+  implement, and writer convenience is neutral-to-favorable, so there is
+  no audience tension to overrule.
 - Concrete consequence: v1 has exactly four node kinds (`task`, `branch`,
   `loop`, `handler`) and one reference form. Every additional concept proposed
   during the design review will be measured against this rule.
 
-### 1.3 Boundary closure
+### 1.4 Boundary closure
 
 Each scope (the workflow itself, each loop body) is **closed**: it declares its
 inputs, its outputs, and the set of names visible inside. No name inside a
 scope refers to anything outside it except through that scope's declared
 inputs.
 
+- Lens application: §1.1 + P4. The engine needs each scope analyzable in
+  isolation so that dominator, liveness, and type-compatibility costs stay
+  scope-local instead of growing with whole-IR size. Reviewers get local
+  reasoning as the same side effect.
 - Drives: P4 (parts understood without the whole).
 - Concrete consequence: loop bodies are sub-IRs with the same shape as the
   top-level workflow. The validator and executor treat them uniformly.
-
-### 1.4 Intended audience for the IR
-
-Decisions throughout this document (verbosity, explicitness, schema
-redundancy, the conformance bar in §5.7) are calibrated for the
-populations that interact with the **IR artifact**, not for whoever
-happens to read this design document. Keeping those two audiences
-straight is why the artifact is called "the IR" everywhere below.
-
-The IR has four interaction populations:
-
-| Population                          | Reads or writes the IR? | What they need from the IR                                                                                                               |
-| ----------------------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Engine, validator, runtime          | Reads (every IR)        | Every field present, every edge stated, no inference required. Drives the explicitness in §3-§5 and the MUST list in §5.7.               |
-| Debugger, reviewer, auditor (human) | Reads (specific IRs)    | Locality, navigability, error coordinates that map back to IR positions. Drives §4.3 (localizable errors) and §5.6 (observability).      |
-| Visualizer, linter, static analyzer | Reads (programmatic)    | Self-describing structure, named types, predictable schema. Drives the `kind` discriminant (P5), `types`/`$ref` sharing (§3.1.1).        |
-| DSL or codegen tool                 | **Writes** the IR       | Coverage of the lowering targets it needs (§3 schema, §3.9 grammar) and stability of the surface it lowers into (§10, revisit-triggers). |
-
-Hand-authoring an IR by writing JSON directly is **not** a primary use
-case. It is acknowledged as an edge case (small fixes, demos, no DSL
-handy), and §1.1's "verbose by design" tax is paid because the DSL or
-codegen layer is expected to absorb the authoring cost. If a DSL never
-materializes and hand-authoring becomes the dominant write path, several
-trade-offs in this document - schema repetition (§8.16), object-form
-references (§8.2), JSON over YAML (§8.14) - become candidates for
-revisiting (see [revisit-triggers.md](revisit-triggers.md)).
-
-This design document itself targets a narrower audience: engine
-implementers building one of the reader populations above, design
-reviewers checking the IR against the principles, and DSL or codegen
-authors deciding what to lower to. They are not the audience for the IR;
-they are the audience for the design that produced it.
 
 ---
 
@@ -1338,7 +1457,7 @@ own design review against P5.
 - Alt A: YAML. More readable but adds parser ambiguity (anchors, types). Can
   be supported as an authoring convenience without changing the IR.
 - Alt B: A custom textual IR. Rejected: more tooling to build, no benefit
-  given the compile-target framing in §1.1.
+  given the compile-target framing in §1.2.
 
 ### 8.15 Bound outputs (hide-by-default node values)
 
@@ -1404,7 +1523,7 @@ Full analysis: [decisions/0001-bound-outputs.md](decisions/0001-bound-outputs.md
   [decisions/0003-task-schema-source.md](decisions/0003-task-schema-source.md)
   "Triggers to revisit Option 3".
 - Author convenience (DSL layer): repeated schemas are the IR's "verbose
-  by design" tax (§1.1). A DSL or codegen step is expected to populate
+  by design" tax (§1.2). A DSL or codegen step is expected to populate
   `inputSchema`/`outputSchema` from a typed task signature, so authors do
   not write them by hand at scale. The IR remains the canonical form.
 
