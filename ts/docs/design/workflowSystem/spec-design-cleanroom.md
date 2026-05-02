@@ -1,0 +1,1031 @@
+# Workflow Spec - Clean-Room Design (v1)
+
+Status: Draft for review
+
+This document is a clean-room design of the workflow spec, derived **only** from
+[design-principles.md](design-principles.md). It deliberately ignores any
+pre-existing decisions, schemas, or implementations in the repo so that the
+design follows the principles end-to-end without inheriting prior assumptions.
+
+The design is presented top-down: first the meta-design style, then v1 scope,
+then the spec schema, validation, execution semantics, and worked examples.
+Open design choices and the alternatives considered are recorded at the end for
+review.
+
+---
+
+## 1. Meta-design pattern
+
+The design is shaped by three style choices that fall out of the principles
+themselves. They are listed up front so reviewers can see the lens used to make
+every concrete decision below.
+
+### 1.1 Explicit IR, no sugar
+
+The spec is an **intermediate representation**, not an authoring format. Every
+node type, every edge, every reference is written out. Authoring sugar (DSLs,
+templates, generated specs) is out of scope and lives at a different layer.
+
+- Drives: P2 (no hidden flow), P3 (no inferred structure), P5 (no surprise
+  defaults).
+- Consequence: the spec will look verbose. That is intentional.
+
+### 1.2 Structural minimalism
+
+The schema introduces the **fewest concepts** that satisfy P1-P5. New node
+types, fields, and constructs only appear when there is a scenario in
+design-principles.md that none of the existing concepts can express without
+violating a principle. This is the discipline noted at the top of
+design-principles.md (the unnumbered minimization rule).
+
+- Concrete consequence: v1 has exactly four node kinds (`task`, `branch`,
+  `loop`, `handler`) and one reference form. Every additional concept proposed
+  during the design review will be measured against this rule.
+
+### 1.3 Boundary closure
+
+Each scope (the workflow itself, each loop body) is **closed**: it declares its
+inputs, its outputs, and the set of names visible inside. No name inside a
+scope refers to anything outside it except through that scope's declared
+inputs.
+
+- Drives: P4 (parts understood without the whole).
+- Concrete consequence: loop bodies are sub-specs with the same shape as the
+  top-level workflow. The validator and executor treat them uniformly.
+
+---
+
+## 2. v1 scope
+
+### 2.1 In scope for v1
+
+| Area                  | v1 covers                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------ |
+| Node kinds            | `task`, `branch`, `loop`, `handler` (error)                                                |
+| Data references       | Static refs to: workflow inputs, declared constants, node outputs, loop state              |
+| Reference modality    | Required and optional references                                                           |
+| Type compatibility    | Structural subtyping over JSON Schema-described types                                      |
+| Control flow          | Explicit `next` per node; sentinel `@iterate` and `@exit` inside loop bodies               |
+| Branching             | Discriminant-based switch with exhaustive cases and required `default`                     |
+| Loops                 | Single-entry loop construct with declared state, declared boundary I/O, max-iteration cap  |
+| Error handling        | Per-node `onError` edge to a `handler` node; uncaught errors propagate and fail the run    |
+| Validation            | Static: dominator, type compatibility, scope closure, exhaustiveness, sentinel correctness |
+| Observability surface | `nodeStarted` / `nodeCompleted` / `nodeFailed` events per node, including loop iterations  |
+
+### 2.2 Out of scope for v1 (post-v1)
+
+| Area                                   | Why deferred                                                                                                        |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Sub-workflow calls                     | P3 scenario 24 explicitly marks this "future". Adds a node kind; defer until v1 stabilizes.                         |
+| Side-effect / capability declarations  | Called out as "expanding the boundary" in the principles; useful but additive. v1 keeps tasks fully opaque.         |
+| Parallelism / concurrency annotations  | P2 scenario 13 says the spec carries enough info to derive parallelism. v1 leaves the engine free; no spec surface. |
+| Spec versioning, checkpointing, resume | Explicitly out of scope per design-principles.md ("Out of scope for v1" section).                                   |
+| Authoring sugar / DSL                  | Per the IR principle. Belongs in a separate layer.                                                                  |
+| Schema migration / evolution           | Same rationale as versioning.                                                                                       |
+| Computed / dynamic reference targets   | P1 scenario 8: ruled out by design; expressed via branch + decision tree.                                           |
+| External-state side channels           | P2 scenarios 16-17: deliberately invisible to the spec in v1.                                                       |
+| Cross-loop shared mutable state        | P4 scenario 34: forced into explicit boundary wiring; no global state.                                              |
+| Reusable handler nodes across scopes   | P4 scenario 35: each scope owns its handlers in v1.                                                                 |
+| Streaming / partial outputs from tasks | Tasks are "input in, output out" per the principles' boundary statement.                                            |
+| User-interaction / suspend-resume      | Not mentioned in principles; out of v1.                                                                             |
+
+---
+
+## 3. Spec schema
+
+The spec is a JSON document. Every example in this document uses JSON-as-spec.
+
+### 3.1 Top-level workflow
+
+```jsonc
+{
+  "kind": "workflow",
+  "name": "string identifier",
+  "version": "1",                 // spec schema version, not workflow version
+  "input":  { /* JSON Schema for workflow input */ },
+  "output": { /* JSON Schema for workflow output */ },
+  "types": {
+    "<typeName>": { /* JSON Schema; referenced as { "$ref": "#/types/<typeName>" } */ }
+  },
+  "constants": {
+    "<constantName>": {
+      "schema": { /* JSON Schema */ },
+      "value":  /* concrete value, must validate against schema */
+    }
+  },
+  "nodes": {
+    "<nodeId>": { /* node object, see 3.3 */ }
+  },
+  "entry": "<nodeId>",            // single entry node
+  "outputBinding": { /* reference object that yields workflow output */ }
+}
+```
+
+Required fields: `kind`, `name`, `version`, `input`, `output`, `nodes`,
+`entry`, `outputBinding`. `types` and `constants` are optional.
+
+#### 3.1.1 Shared schemas (`types`)
+
+Any JSON Schema field in the spec (`input`, `output`, `inputSchema`,
+`outputSchema`, `selectorSchema`, `state[*].schema`, `constants[*].schema`,
+and nested positions inside any of these) may be replaced by a reference to a
+named entry in the workflow's `types` block:
+
+```jsonc
+"outputSchema": { "$ref": "#/types/FetchedDoc" }
+```
+
+Rules:
+
+- The only legal `$ref` form in v1 is `"#/types/<typeName>"`. Remote URIs,
+  pointer escapes outside `#/types/`, and recursive type definitions are
+  rejected by the validator.
+- `types` entries may themselves use `$ref` to other `types` entries, as long
+  as the resulting graph is acyclic.
+- `types` is purely an authoring/validation affordance. It does not introduce
+  a new data-reference form (the `$from` family is unchanged) and it has no
+  runtime effect beyond schema validation.
+
+Motivation: many shapes (a task's `outputSchema` and downstream consumers'
+`inputSchema`, or a branch's `selectorSchema` and the producing task's enum
+field) are currently authored by hand in two or more places. Naming them once
+lets the validator treat ref-equal positions as compatible by identity (a
+fast path for pass 4.2) and gives authors a single edit site when a shape
+changes (P4 local reasoning).
+
+### 3.2 Names and scopes
+
+- `nodes` is a map; the key is the node's id within its scope.
+- A scope is the top-level workflow or the body of a `loop` node.
+- Node ids are unique within their scope. Different scopes may reuse ids; refs
+  always resolve within the scope of the referencing node (P4 boundary
+  closure).
+
+### 3.3 Common node fields
+
+Every node carries a discriminant `kind` (P5: self-describing).
+
+```jsonc
+{
+  "kind": "task" | "branch" | "loop" | "handler",
+  "inputs":  { /* per-kind: see below */ },
+  "next":    /* per-kind: see below */,
+  "onError": "<nodeId>" | null    // optional; null/absent = propagate
+}
+```
+
+`inputs` is always a map of named fields whose values are **reference objects**
+(section 3.4). The shape of `inputs` is part of the node's typed input
+schema (section 3.5). `onError`, when present, must point to a `handler` node
+in the same scope.
+
+### 3.4 Reference objects
+
+References are the only way data crosses node boundaries. There is exactly one
+reference form (minimalism):
+
+```jsonc
+{
+  "$from": "input" | "constant" | "node" | "state",
+  "name":  "<name>",            // input field, constant name, node id, or state var
+  "path":  ["a", "b", 0, "c"],  // optional JSON-pointer-style path into the value
+  "optional": true              // optional; default false
+}
+```
+
+- `$from: "input"` - read from the enclosing scope's declared input.
+- `$from: "constant"` - read a declared constant in the enclosing workflow.
+  (Constants are workflow-global; readable from any scope. They are values
+  declared in the spec, so this does not violate P4.)
+- `$from: "node"` - read another node's output. The named node must be in the
+  same scope. Validated by dominance + type compatibility (P1).
+- `$from: "state"` - read a loop-scoped state variable. Only legal inside a
+  loop body.
+
+`optional: true` declares the reference may not be satisfied on every path
+(P1 scenarios 4, 5, 7). When unsatisfied, the consumer receives JSON `null`.
+The consumer's input schema must permit `null` in that position; the validator
+checks this.
+
+There is no string-shorthand form for references in v1. Every reference is the
+object above. (Minimalism + P5: one form, no parsing rules to learn.)
+
+### 3.5 Task node
+
+```jsonc
+{
+  "kind": "task",
+  "task": "<task type identifier>",   // names a registered task implementation
+  "inputSchema":  { /* JSON Schema */ },
+  "outputSchema": { /* JSON Schema */ },
+  "inputs": {
+    "<fieldName>": { /* reference object */ }
+  },
+  "next": "<nodeId>" | null,          // null => terminal (top-level only)
+  "onError": "<nodeId>" | null
+}
+```
+
+- The shape of `inputs` (the set of fields and their types) must satisfy
+  `inputSchema`.
+- The task's output is described by `outputSchema`. Other nodes' references
+  to this task's output are checked against `outputSchema`.
+- `next: null` is legal **only** in the top-level scope. In a loop body, every
+  task must have `next` set to another body node, `@iterate`, or `@exit`
+  (P5 scenario 39).
+
+### 3.6 Branch node
+
+```jsonc
+{
+  "kind": "branch",
+  "selector": { /* reference object yielding a discriminant value */ },
+  "selectorSchema": { /* JSON Schema with "enum" or string-typed discriminant */ },
+  "cases": {
+    "<caseValue>": "<nodeId>"
+  },
+  "default": "<nodeId>",
+  "onError": "<nodeId>" | null
+}
+```
+
+- `selectorSchema` declares the legal set of discriminant values. The
+  validator requires `cases` to be exhaustive over the declared enum **or**
+  for `default` to be present. v1 requires both: `default` is mandatory
+  (P5: no implicit fall-through).
+- A branch has no `inputs` other than `selector`, and no `outputs`. It is pure
+  control flow. Data needed downstream of the branch must already be available
+  via dominator references from before the branch (or threaded through tasks
+  in each case path - P1 scenarios 3, 6).
+- `cases` and `default` target node ids in the same scope. In a loop body,
+  the targets may also be `@iterate` or `@exit`.
+
+The choice to model a branch as a **discriminant switch** (rather than a
+predicate `if/else`) is deliberate: a discriminant is a value computed by an
+upstream task, which keeps decision logic inside a task (P3 boundary) and
+keeps the branch node a pure structural construct.
+
+### 3.7 Loop node
+
+```jsonc
+{
+  "kind": "loop",
+  "inputs": {
+    "<boundaryInputName>": { /* reference from outer scope */ }
+  },
+  "inputSchema":  { /* JSON Schema for the boundary inputs */ },
+  "state": {
+    "<stateVarName>": {
+      "schema": { /* JSON Schema */ },
+      "initial": { /* reference object resolved at loop entry, in outer scope */ }
+    }
+  },
+  "body": {
+    "kind": "scope",
+    "nodes": { "<bodyNodeId>": { /* node object */ } },
+    "entry": "<bodyNodeId>"
+  },
+  "outputs": {
+    "<outputFieldName>": { /* reference object resolved in body scope at @exit */ }
+  },
+  "outputSchema": { /* JSON Schema */ },
+  "maxIterations": 1000,
+  "next": "<nodeId>" | null,
+  "onError": "<nodeId>" | null
+}
+```
+
+Key points:
+
+- `body` is a **closed sub-scope** with the same shape as the top-level
+  workflow's `nodes` + `entry` (P4). Body nodes cannot reference outer-scope
+  nodes directly; they reach outer data only through `state` (initialized from
+  outer refs) and the loop's declared `inputs` (which body nodes read via
+  `$from: "input"`).
+- `state` declares cross-iteration variables (P2 scenario 15). Each state
+  variable has a schema and an initial value (resolved once at loop entry from
+  the outer scope).
+- A body node writes to state by declaring `stateWrites` (section 3.7.1).
+  There is no implicit "node output overwrites state" rule. Every cross-
+  iteration write is declared.
+- `outputs` is resolved when the body reaches `@exit`. Each field is a
+  reference resolved in the body scope (typically against `state`, since
+  per-iteration node outputs do not survive across iterations).
+- `maxIterations` is required and bounded; if exceeded, the loop fails with
+  a well-known error type (consumable by `onError`).
+
+#### 3.7.1 State writes
+
+Writes are explicit and attached to the body node that produces the value:
+
+```jsonc
+{
+  "kind": "task",
+  /* ... */
+  "stateWrites": {
+    "<stateVarName>": {
+      /* reference object resolved in body scope */
+    },
+  },
+}
+```
+
+State writes are committed when the writing node completes successfully. If a
+node's `next` is `@iterate`, the next iteration sees the new values. State
+reads (`$from: "state"`) inside an iteration always see the value as of loop
+entry for that iteration, not partial mid-iteration writes. This makes
+iteration semantics deterministic and predictable (P5).
+
+#### 3.7.2 Sentinels
+
+`@iterate` and `@exit` are reserved values legal only as `next` (or branch
+case targets) **inside a loop body**. They are explicit because P5 scenario
+37 says implicit re-entry is surprising.
+
+- `@iterate` - increment the iteration counter and re-enter at `body.entry`,
+  using the post-write state.
+- `@exit` - leave the loop; resolve `outputs` against the final state and
+  body-scope values, then continue at the loop's outer `next`.
+
+There are no other sentinels in v1.
+
+### 3.8 Handler node
+
+```jsonc
+{
+  "kind": "handler",
+  "inputSchema":  { /* JSON Schema */ },
+  "outputSchema": { /* JSON Schema */ },
+  "task": "<task type identifier>",
+  "inputs": {
+    "<fieldName>": { /* reference object */ },
+    "error":      { "$from": "error" }   // see below
+  },
+  "next": "<nodeId>" | null
+}
+```
+
+A `handler` is structurally a task with one extra capability: it can read the
+triggering error via the special reference `{ "$from": "error" }`. Its
+**dominator scope** is the activation point: every node `T` that has
+`onError: H` contributes to H's dominator set as the intersection of dominators
+of all such `T`s (P1 scenario 2). Concretely: if H is reached only via `T`'s
+error edge, then everything that dominates `T` (including `T`'s own
+predecessors) is referenceable from H.
+
+In v1 a handler is referenced by exactly **one** triggering node (the
+"shared handler" pattern is P4 scenario 35 / out of scope). This keeps the
+dominator analysis trivial and the handler testable in isolation.
+
+A handler's `next` follows the same rules as a task's `next` (terminal in
+top-level, must lead somewhere in a loop body). A handler can also have
+`next: "@iterate"` inside a loop body to implement bounded retry (P3
+scenario 27 - the explicit retry-loop alternative).
+
+### 3.9 The full node grammar
+
+```
+Node     := TaskNode | BranchNode | LoopNode | HandlerNode
+Scope    := { nodes: Map<Id, Node>, entry: Id }
+Workflow := { name, version, input, output, constants?, ...Scope, outputBinding }
+```
+
+Four node kinds, one scope shape, one reference form, two sentinels. This is
+the entire v1 surface.
+
+---
+
+## 4. Validation
+
+Validation is **static**: it runs against a spec without any task being
+invoked. A spec that passes validation is guaranteed to satisfy P1 (every
+reference will resolve) for any execution path.
+
+### 4.1 Validation passes (in order)
+
+1. **Schema syntax pass.** The document conforms to the JSON schema of the
+   spec (correct fields, correct types of fields).
+2. **Type resolution pass.** Every `$ref` in a JSON Schema position has the
+   form `"#/types/<typeName>"` and resolves to a defined entry in `types`.
+   The graph of refs between `types` entries is acyclic. After this pass,
+   subsequent passes may treat any schema position as either an inline schema
+   or an opaque reference to a named type.
+3. **Name resolution pass.** Within each scope: every reference's target name
+   exists; sentinels are only used inside loop bodies; `onError` targets a
+   `handler` in the same scope; `entry` names an existing node.
+4. **Scope closure pass (P4).** Body nodes do not reference outer-scope node
+   ids. The only outer data visible in a body is via `$from: "input"` (loop
+   boundary inputs), `$from: "state"` (loop state), and `$from: "constant"`
+   (workflow constants).
+5. **Dominator pass (P1).** For every reference of the form
+   `$from: "node", name: X` inside a node Y (or its handler), X dominates Y on
+   the intra-scope control-flow graph. For optional references, dominance is
+   not required, but the consumer's schema must accept `null` at that field.
+6. **Type compatibility pass (P1).** For every reference, the producer's
+   declared type is a structural subtype of the field type at the consumer's
+   `inputSchema`. `outputBinding`'s reference type is checked against the
+   workflow's `output` schema. Branch `selectorSchema` checks against the
+   reference type; `cases` keys must be valid values in `selectorSchema`.
+   Fast path: if both producer and consumer positions are the same
+   `"#/types/<typeName>"` reference, compatibility holds by identity without
+   structural walking.
+7. **Exhaustiveness pass.** Every branch has either an exhaustive `cases`
+   over an enum-typed selector or a `default`. v1 requires `default`
+   regardless.
+8. **Termination pass.** Every node in the top-level scope can reach a
+   terminal (`next: null` task/handler, or a branch all of whose targets
+   transitively terminate). Every body node can reach `@exit` or `@iterate`.
+   Pure cycles without `@iterate`/`@exit` are rejected (P3 scenario 26).
+9. **Acyclicity within scope (P3 + P4).** The intra-scope control-flow graph
+   is acyclic. Iteration is expressed only via `@iterate` inside a loop body.
+   This makes the dominator computation a standard DAG analysis and prevents
+   "accidental loops" (P3 scenario 26).
+10. **State soundness pass.** Every loop state variable has at least one
+    write path (else it is constant and should be a constant) and every read
+    is type-compatible with its schema.
+
+### 4.2 Compatibility (the type relation)
+
+A producer type `P` is **compatible** with a consumer field type `C` iff `P`
+is a structural subtype of `C`:
+
+- Primitive: same primitive type, with consumer's enum/format constraints
+  being a superset of the producer's.
+- Object: every required property of `C` is present in `P` with a compatible
+  type; extra properties in `P` are ignored.
+- Array: producer's element type is compatible with consumer's element type;
+  length constraints on `C` are a superset of `P`'s.
+- Union: `P` is compatible with `C` iff every variant of `P` is compatible
+  with some variant of `C`.
+- `null` is only compatible with a consumer that explicitly allows `null`.
+
+Structural subtyping was chosen (vs nominal exact match) because it lets
+handlers and downstream tasks accept "at least these fields" without forcing
+upstream tasks to know every consumer's exact shape.
+
+### 4.3 Error model for the validator
+
+Validation produces a list of errors, each carrying:
+
+- A scope path (e.g., `top.nodes.writeLoop.body.nodes.evaluate`).
+- A field path within the node.
+- A machine-readable error code.
+- A human-readable message.
+
+This makes errors localizable (P4 scenario 30).
+
+---
+
+## 5. Execution semantics
+
+The execution model is described abstractly. The engine is free to optimize
+(parallelism, batching) as long as it preserves these semantics.
+
+### 5.1 Top-level execution
+
+1. The engine receives the workflow's typed input (validated against `input`).
+2. It begins at `entry`.
+3. For each visited node N:
+   a. Resolve `inputs` from references (in N's scope).
+   b. Execute N (kind-specific, see below).
+   c. If N succeeds: if N is a loop with `next: null` and we are top-level,
+   finish; else proceed to the node named by `next` (or by branch `cases`).
+   d. If N fails: if `onError` is set, route to that handler with the error
+   bound to `$from: "error"`; otherwise propagate failure to the enclosing
+   scope. A loop body propagating failure fails the loop node itself.
+4. When a top-level terminal is reached, resolve `outputBinding` and return
+   its value as the workflow output.
+
+### 5.2 Task execution
+
+The engine calls the registered task implementation with the resolved
+`inputs`. The implementation returns a value validated against `outputSchema`.
+A schema-violating return is a task failure.
+
+### 5.3 Branch execution
+
+The engine resolves `selector`, looks up `cases[value]`, and proceeds to that
+node. If no case matches, proceeds to `default`. Branches do not produce
+output, and other nodes never reference a branch as a data source.
+
+### 5.4 Loop execution
+
+1. Resolve loop `inputs` from outer scope; validate against `inputSchema`.
+2. Initialize each `state` variable from its `initial` reference (resolved in
+   outer scope), validating against the variable's schema.
+3. Set iteration counter `i = 0`.
+4. Begin iteration:
+   - If `i >= maxIterations`, fail with `LoopMaxIterationsExceeded`.
+   - Execute body starting at `body.entry`. Inside the body:
+     - `$from: "state"` reads see the values committed at the start of this
+       iteration.
+     - `stateWrites` are buffered; they commit when the writing node
+       successfully completes.
+     - The body terminates when a body node's `next` is `@iterate` or
+       `@exit`.
+   - On `@iterate`: increment `i`; restart at `body.entry` with the latest
+     committed state.
+   - On `@exit`: resolve `outputs` against the final body scope (state +
+     last-iteration node values), validate against `outputSchema`, and
+     proceed to the loop node's outer `next`.
+5. Failure inside the body that is not caught by a body-scope handler
+   propagates to the loop node, which then routes to its own `onError` (if
+   any) or fails its outer scope.
+
+### 5.5 Handler execution
+
+A handler is executed when the triggering node (`T` such that `T.onError = H`)
+fails. The handler's input `error` is the failure value (a structured error
+object). All other handler `inputs` resolve against H's scope using the
+dominator semantics described in 3.8. The handler's `next` then drives the
+rest of the run.
+
+### 5.6 Observability
+
+Per P3, the engine emits an event stream that mirrors the spec structure:
+
+- `nodeStarted(scopePath, nodeId, iteration?)`
+- `nodeCompleted(scopePath, nodeId, iteration?, output)`
+- `nodeFailed(scopePath, nodeId, iteration?, error)`
+- `loopIterationStarted(scopePath, loopNodeId, iteration)`
+- `loopExited(scopePath, loopNodeId, iteration, outputs)`
+
+Iterations are addressable; the consumer of these events can map every event
+back to a spec coordinate (P3 scenario 21).
+
+---
+
+## 6. Worked examples
+
+### 6.1 Linear two-step workflow
+
+```jsonc
+{
+  "kind": "workflow",
+  "name": "fetchAndSummarize",
+  "version": "1",
+  "types": {
+    "Url": {
+      "type": "object",
+      "properties": { "url": { "type": "string" } },
+      "required": ["url"],
+    },
+    "Body": {
+      "type": "object",
+      "properties": { "body": { "type": "string" } },
+      "required": ["body"],
+    },
+    "Summary": {
+      "type": "object",
+      "properties": { "summary": { "type": "string" } },
+      "required": ["summary"],
+    },
+  },
+  "input": { "$ref": "#/types/Url" },
+  "output": { "$ref": "#/types/Summary" },
+  "entry": "fetch",
+  "nodes": {
+    "fetch": {
+      "kind": "task",
+      "task": "http.get",
+      "inputSchema": { "$ref": "#/types/Url" },
+      "outputSchema": { "$ref": "#/types/Body" },
+      "inputs": { "url": { "$from": "input", "name": "url" } },
+      "next": "summarize",
+    },
+    "summarize": {
+      "kind": "task",
+      "task": "llm.summarize",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "text": { "type": "string" } },
+        "required": ["text"],
+      },
+      "outputSchema": { "$ref": "#/types/Summary" },
+      "inputs": {
+        "text": { "$from": "node", "name": "fetch", "path": ["body"] },
+      },
+      "next": null,
+    },
+  },
+  "outputBinding": { "$from": "node", "name": "summarize" },
+}
+```
+
+Note how `Url` is shared between the workflow `input` and the `fetch` task's
+`inputSchema`, and `Summary` is shared between the workflow `output`, the
+`summarize` task's `outputSchema`, and (transitively, via `outputBinding`)
+the workflow result. The compatibility pass collapses each ref-equal pair to
+an identity check.
+
+### 6.2 Branch with handler
+
+```jsonc
+{
+  "kind": "workflow",
+  "name": "classifyAndRoute",
+  "version": "1",
+  "types": {
+    "Doc": {
+      "type": "object",
+      "properties": { "doc": { "type": "string" } },
+      "required": ["doc"],
+    },
+    "Result": {
+      "type": "object",
+      "properties": { "result": { "type": "string" } },
+      "required": ["result"],
+    },
+    "ClassifyLabel": { "type": "string", "enum": ["news", "code", "other"] },
+    "Classified": {
+      "type": "object",
+      "properties": { "label": { "$ref": "#/types/ClassifyLabel" } },
+      "required": ["label"],
+    },
+  },
+  "input": { "$ref": "#/types/Doc" },
+  "output": { "$ref": "#/types/Result" },
+  "entry": "classify",
+  "nodes": {
+    "classify": {
+      "kind": "task",
+      "task": "llm.classify",
+      "inputSchema": { "$ref": "#/types/Doc" },
+      "outputSchema": { "$ref": "#/types/Classified" },
+      "inputs": { "doc": { "$from": "input", "name": "doc" } },
+      "next": "route",
+      "onError": "classifyError",
+    },
+    "route": {
+      "kind": "branch",
+      "selector": { "$from": "node", "name": "classify", "path": ["label"] },
+      "selectorSchema": { "$ref": "#/types/ClassifyLabel" },
+      "cases": { "news": "summarizeNews", "code": "explainCode" },
+      "default": "fallback",
+    },
+    "summarizeNews": {
+      /* task ... outputSchema: { "$ref": "#/types/Result" } ... next: "format" */
+    },
+    "explainCode": {
+      /* task ... outputSchema: { "$ref": "#/types/Result" } ... next: "format" */
+    },
+    "fallback": {
+      /* task ... outputSchema: { "$ref": "#/types/Result" } ... next: "format" */
+    },
+    "format": {
+      /* task ... outputSchema: { "$ref": "#/types/Result" } ... next: null */
+    },
+    "classifyError": {
+      "kind": "handler",
+      "task": "errors.report",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "error": {}, "doc": { "type": "string" } },
+      },
+      "outputSchema": { "$ref": "#/types/Result" },
+      "inputs": {
+        "error": { "$from": "error" },
+        "doc": { "$from": "input", "name": "doc" },
+      },
+      "next": null,
+    },
+  },
+  "outputBinding": { "$from": "node", "name": "format" },
+}
+```
+
+`ClassifyLabel` is the canonical enum: it appears once in `types`, is reused
+by `classify.outputSchema` (nested) and by `route.selectorSchema`, and the
+exhaustiveness pass reads its `enum` from there. `Result` is shared by every
+path that reaches `format`, so the diamond merge (P1 scenario 3) is checked
+by identity rather than by structural walking.
+
+`format` is referenceable from `summarizeNews`/`explainCode`/`fallback`
+because each path makes one of them dominate `format`. The author must arrange
+that all three produce a compatible output that `format` can consume - this is
+P1 scenario 3 (diamond merge).
+
+### 6.3 Loop with state and bounded retry
+
+The loop node below is shown in isolation. `$ref`s point at types that would
+be declared in the enclosing workflow's `types` block, e.g.:
+
+```jsonc
+"types": {
+  "Topic":   { "type": "object", "properties": { "topic":   { "type": "string" } }, "required": ["topic"] },
+  "Article": { "type": "object", "properties": { "article": { "type": "string" } }, "required": ["article"] },
+  "Verdict": { "type": "string", "enum": ["accept", "revise"] },
+  "Evaluation": {
+    "type": "object",
+    "properties": {
+      "verdict":  { "$ref": "#/types/Verdict" },
+      "feedback": { "type": "string" },
+    },
+    "required": ["verdict", "feedback"],
+  },
+}
+```
+
+```jsonc
+{
+  "kind": "loop",
+  "inputs": { "topic": { "$from": "input", "name": "topic" } },
+  "inputSchema": { "$ref": "#/types/Topic" },
+  "state": {
+    "draft": {
+      "schema": { "type": "string" },
+      "initial": { "$from": "constant", "name": "emptyString" },
+    },
+    "feedback": {
+      "schema": { "type": "string" },
+      "initial": { "$from": "constant", "name": "emptyString" },
+    },
+  },
+  "body": {
+    "entry": "write",
+    "nodes": {
+      "write": {
+        "kind": "task",
+        "task": "llm.draft",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "topic": { "type": "string" },
+            "previous": { "type": "string" },
+            "feedback": { "type": "string" },
+          },
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": { "text": { "type": "string" } },
+          "required": ["text"],
+        },
+        "inputs": {
+          "topic": { "$from": "input", "name": "topic" },
+          "previous": { "$from": "state", "name": "draft" },
+          "feedback": { "$from": "state", "name": "feedback" },
+        },
+        "stateWrites": {
+          "draft": { "$from": "node", "name": "write", "path": ["text"] },
+        },
+        "next": "evaluate",
+      },
+      "evaluate": {
+        "kind": "task",
+        "task": "llm.evaluate",
+        "inputSchema": {
+          "type": "object",
+          "properties": { "text": { "type": "string" } },
+          "required": ["text"],
+        },
+        "outputSchema": { "$ref": "#/types/Evaluation" },
+        "inputs": { "text": { "$from": "state", "name": "draft" } },
+        "stateWrites": {
+          "feedback": {
+            "$from": "node",
+            "name": "evaluate",
+            "path": ["feedback"],
+          },
+        },
+        "next": "decide",
+      },
+      "decide": {
+        "kind": "branch",
+        "selector": {
+          "$from": "node",
+          "name": "evaluate",
+          "path": ["verdict"],
+        },
+        "selectorSchema": { "$ref": "#/types/Verdict" },
+        "cases": { "accept": "@exit", "revise": "@iterate" },
+        "default": "@exit",
+      },
+    },
+  },
+  "outputs": { "article": { "$from": "state", "name": "draft" } },
+  "outputSchema": { "$ref": "#/types/Article" },
+  "maxIterations": 5,
+  "next": null,
+}
+```
+
+This demonstrates: loop construct (P3), declared cross-iteration state (P2),
+explicit `@iterate`/`@exit` (P5), boundary-closed body (P4), bounded
+iteration (P5 universally-unsurprising default with explicit cap).
+
+### 6.4 Optional reference at a merge
+
+```jsonc
+"merge": {
+  "kind": "task",
+  "task": "merge.combine",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "primary":   { "type": "string" },
+      "enriched":  { "type": ["string", "null"] }
+    },
+    "required": ["primary"]
+  },
+  "outputSchema": { /* ... */ },
+  "inputs": {
+    "primary":  { "$from": "node", "name": "fetch" },
+    "enriched": { "$from": "node", "name": "enrich", "optional": true }
+  },
+  "next": null
+}
+```
+
+Here `enrich` is behind a branch and does not dominate `merge`. The optional
+reference makes the partial dependency explicit (P1 scenario 7), the
+consumer's schema admits `null`, and the merge task itself decides what to do
+when enrichment is absent (boundary choice).
+
+---
+
+## 7. How the design satisfies each principle
+
+| Principle | Design feature(s) that satisfy it                                                                                                                                                                       |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1        | Single reference form with named source; static dominator pass over an acyclic intra-scope CFG; structural type compatibility pass; `optional` flag for declared partial deps; finite `cases`+`default` |
+| P2        | Only four declared `$from` sources (input, constant, node, state); no ambient/global state; cross-iteration data is a declared `state` variable with declared writes; outputs flow via `outputBinding`  |
+| P3        | Distinct node `kind`s for `task`/`branch`/`loop`/`handler`; loop bodies are a structural sub-scope, not a flat cycle; iteration is `@iterate`, not a back-edge; pure cycles are rejected                |
+| P4        | Body scope closure (no cross-scope name reach); declared loop `inputs`/`outputs`/`state`; per-scope handlers; localizable validation errors with scope paths                                            |
+| P5        | Required `kind` discriminant; required explicit `next` in loop bodies; explicit sentinels; required `default` in branches; one reference form (no shorthand/inference); declared `maxIterations`        |
+
+---
+
+## 8. Design choices considered (open for review)
+
+For each area where multiple designs satisfy the principles, the chosen option
+is listed first with its rationale, followed by alternatives.
+
+### 8.1 Type system: structural subtyping over JSON Schema
+
+- **Chosen:** structural subtyping; producer must be a subtype of consumer.
+- Alt A: nominal/exact match (named types). Rejected: forces upstream task
+  authors to know every downstream consumer's exact shape.
+- Alt B: TypeScript types as the surface. Rejected for v1 to avoid coupling
+  the spec to a specific language toolchain; JSON Schema is language-neutral.
+- Alt C: Schema **intersection** (consumer requires any superset). Equivalent
+  to structural subtyping for object types; structural subtyping is the more
+  general framing.
+
+### 8.2 Reference syntax: object form, no shorthand
+
+- **Chosen:** one explicit object form `{ "$from": ..., "name": ..., "path": ... }`.
+- Alt A: string form `"node:fetch.body"`. Rejected: needs a parser, hides
+  source kind, harder to extend with `optional`.
+- Alt B: JSONPath/JMESPath. Rejected: too expressive (computed indirection
+  conflicts with P1 scenario 8).
+
+### 8.3 Branching: discriminant switch with required `default`
+
+- **Chosen:** switch on a discriminant value with `cases` map and required
+  `default`.
+- Alt A: predicate-based `if/else` with an embedded expression language.
+  Rejected: introduces an expression language (more concepts, P5 surprise
+  surface) and pushes decision logic out of tasks.
+- Alt B: exhaustive switch with no `default`. Rejected for v1: simpler to
+  always require `default`; can be relaxed later when enum exhaustiveness is
+  trusted.
+
+### 8.4 Loop sentinels: `@iterate` and `@exit`
+
+- **Chosen:** explicit string sentinels in `next` / branch case targets.
+- Alt A: distinct node kinds (`iterateNode`, `exitNode`). Rejected:
+  unnecessary node kinds; the sentinel is purely a transition target.
+- Alt B: boolean flags on the body node (e.g., `terminal: true`). Rejected:
+  P5 - reader has to learn that `terminal: true` means "exit the loop".
+- Alt C: implicit re-entry when `next` is omitted. Rejected by P5 scenario 37.
+
+### 8.5 State writes: declared on the writing node
+
+- **Chosen:** each body node declares its `stateWrites` map.
+- Alt A: state writes declared centrally on the loop. Rejected: separates the
+  write from the value-producing node, harder to read locally (P4).
+- Alt B: implicit "node output of name X overwrites state X". Rejected by P2
+  scenario 15.
+
+### 8.6 State commit timing: at successful node completion, visible next iteration
+
+- **Chosen:** writes commit on success; reads in iteration `i` see state as of
+  iteration-`i` start.
+- Alt A: writes visible immediately within the same iteration. Rejected:
+  reads now depend on the order of writes; harder to reason about locally
+  (P4, P5).
+
+### 8.7 Handler model: per-trigger node, structurally a task
+
+- **Chosen:** handler is a task-like node attached to exactly one trigger via
+  `onError`.
+- Alt A: shared handler nodes. Deferred (P4 scenario 35 / out of v1 scope).
+- Alt B: handlers as fields on the failing task (no separate node). Rejected:
+  loses the ability to give the handler its own `next` and to participate in
+  the spec graph (visualization, observability events).
+
+### 8.8 Loop body: closed sub-scope, DAG only
+
+- **Chosen:** body is a sub-scope with the same shape as the workflow,
+  acyclic, iteration only via `@iterate`.
+- Alt A: body is a flat region of the parent graph. Rejected by P4 (no
+  composability) and P3 (loop pattern hidden in topology).
+- Alt B: body may contain its own cycles. Rejected by P3 scenario 26 - any
+  cycle should be its own loop construct.
+
+### 8.9 Constants: workflow-global, declared values
+
+- **Chosen:** `constants` block at the workflow root, readable from every
+  scope.
+- Alt A: per-scope constants. Rejected for v1 minimalism; not motivated by
+  any principle scenario.
+- Alt B: no constants; require literal values inline. Rejected: makes
+  state initial values awkward (every loop needs an inline literal).
+
+### 8.10 Workflow output: explicit `outputBinding`
+
+- **Chosen:** the workflow's output is a single reference resolved at
+  termination.
+- Alt A: implicit "the last node's output". Rejected by P5: which node is
+  "last" when there are multiple terminals?
+- Alt B: a designated `output` node kind. Rejected: extra kind for what is
+  effectively one reference.
+
+### 8.11 Error edge dominator semantics
+
+- **Chosen:** in v1, a handler is reachable from exactly one triggering node,
+  so its dominator set is `dominators(T) ∪ {T}` and any node in that set is
+  referenceable (P1 scenario 2 directly).
+- Alt A: shared handlers with intersection-of-dominators semantics. Sound but
+  more complex; deferred with shared-handler support.
+
+### 8.13 Shared schemas: named `types` with restricted `$ref`
+
+- **Chosen:** an optional `types` block at the workflow root; any JSON Schema
+  position may use `{ "$ref": "#/types/<typeName>" }`. No other `$ref` form
+  is allowed.
+- Alt A: inline every schema (no sharing). Rejected: forces the validator to
+  do structural subtyping where identity would suffice, and spreads the
+  single source of truth across many sites (P4 friction when shapes change).
+- Alt B: full JSON Schema `$ref` including remote URIs. Rejected: brings in
+  network/identity issues and breaks the "spec is one self-contained
+  document" property.
+- Alt C: fold `types` into `constants` (a constant with `schema` only and no
+  `value` would act as a type). Rejected: the two are conceptually distinct
+  (constants are read at runtime via `$from: "constant"`; types are resolved
+  at validation time via `$ref`) and conflating them costs more in reader
+  confusion than the extra field saves.
+- Alt D: a separate type-definition language. Rejected by 8.1 (stay on JSON
+  Schema).
+
+### 8.14 Naming the spec format: JSON
+
+- **Chosen:** JSON. Predictable, language-neutral, easy to validate.
+- Alt A: YAML. More readable but adds parser ambiguity (anchors, types). Can
+  be supported as an authoring convenience without changing the IR.
+- Alt B: A custom textual IR. Rejected: more tooling to build, no benefit
+  under "spec is an IR" framing.
+
+---
+
+## 9. Review checklist (consistency self-check)
+
+- [x] Every node kind has explicit `kind` (P5).
+- [x] Every reference uses one form, with explicit source (P2, P5).
+- [x] No node can name a node outside its scope (P4).
+- [x] No implicit "missing field" behavior except those P5 calls universally
+      unsurprising (`onError` absent => propagate; top-level `next: null` =>
+      terminal).
+- [x] Loops cannot exist as topology accidents (P3, validation pass 8).
+- [x] Branches are exhaustive (P5, validation pass 6).
+- [x] Cross-iteration data flow is declared (P2 scenario 15).
+- [x] Optional references are first-class with schema implications (P1
+      scenarios 4-7).
+- [x] Validation errors are localizable (P4 scenario 30).
+- [x] Observability surface mirrors spec structure (P3 scenario 21).
+- [x] Every v1 concept appears in at least one principle scenario; no
+      concept introduced "just in case" (minimization discipline).
+
+---
+
+## 10. Areas explicitly flagged for reviewer adjustment
+
+These are the spots most likely to need your input. They are the points where
+the principles permit more than one reasonable choice and the design picked
+one for the sake of having a complete v1.
+
+1. **Branch model** (8.3): switch-on-discriminant vs. predicate `if/else`.
+2. **Type system surface** (8.1): JSON Schema vs. TypeScript types.
+3. **Constants scoping** (8.9): global vs. per-scope.
+4. **Default branch requirement** (8.3): always required vs. allowed when
+   `cases` is exhaustive over an enum.
+5. **Reference form** (8.2): single object form vs. allowing a string
+   shorthand for the common case.
+6. **State commit timing** (8.6): inter-iteration only vs. intra-iteration.
+7. **Handler reuse** (8.7 / 3.8): keep "exactly one trigger" in v1, or admit
+   shared handlers with documented intersection semantics.
+8. **Shared schemas** (8.13): named `types` with `$ref` vs. inline-only.
+9. **Spec language** (8.14): JSON vs. YAML vs. a typed IR.
+
+After your review of these, the design can be tightened (or the alternatives
+folded back in) without disturbing the rest of the document.
