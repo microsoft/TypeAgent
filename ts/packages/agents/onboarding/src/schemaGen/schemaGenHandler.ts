@@ -272,17 +272,34 @@ function buildSchemaPrompt(
 }
 
 function extractTypeScript(llmResponse: string): string {
-    // Try to parse as JSON first (when using json_object response format)
+    let body = llmResponse.trim();
+
+    // Strip an outer markdown fence (any language tag) before attempting JSON
+    // parse. Without this, a response like ```json\n{ "schema": "..." }\n```
+    // fails JSON.parse on the literal backticks.
+    const outerFence = body.match(/^```[a-zA-Z]*\s*\n?([\s\S]*?)\n?```\s*$/);
+    if (outerFence) body = outerFence[1].trim();
+
+    // Try JSON parse — works when the LLM honored "respond in JSON format".
     try {
-        const parsed = JSON.parse(llmResponse);
-        if (parsed.schema) return parsed.schema.trim();
+        const parsed = JSON.parse(body);
+        if (parsed && typeof parsed.schema === "string") {
+            return parsed.schema.trim();
+        }
     } catch {
-        // Not JSON, fall through to other extraction methods
+        // Fall through to template-literal salvage.
     }
-    // Strip markdown code fences if present
-    const fenceMatch = llmResponse.match(
-        /```(?:typescript|ts)?\n([\s\S]*?)```/,
-    );
-    if (fenceMatch) return fenceMatch[1].trim();
-    return llmResponse.trim();
+
+    // Some models emit a JS-shaped object literal where the schema value uses
+    // a backtick template literal instead of a JSON-quoted string. That is
+    // valid JS but invalid JSON, so JSON.parse rejects it. Pull the content
+    // between the first pair of backticks following the "schema" key.
+    const tmplMatch = body.match(/["']?schema["']?\s*:\s*`([\s\S]*?)`\s*[,}]/);
+    if (tmplMatch) return tmplMatch[1].trim();
+
+    // Inner ts/typescript fence (no JSON wrapper at all).
+    const tsFence = body.match(/```(?:typescript|ts)\s*\n([\s\S]*?)```/);
+    if (tsFence) return tsFence[1].trim();
+
+    return body;
 }

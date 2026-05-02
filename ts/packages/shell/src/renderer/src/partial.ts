@@ -16,6 +16,10 @@ import { ExpandableTextArea } from "./chat/expandableTextArea";
 const debug = registerDebug("typeagent:shell:partial");
 const debugError = registerDebug("typeagent:shell:partial:error");
 
+// The character that signals a typed command (vs free-text user input).
+// Centralized here because we may switch from "@" to "/" in the future.
+const COMMAND_PREFIX = "@";
+
 // Expose the debug factory so that Playwright tests (and developers in
 // DevTools) can call  __debug.enable('typeagent:*')  at runtime.
 (globalThis as any).__debug = registerDebug;
@@ -66,6 +70,10 @@ export class PartialCompletion {
     private lastGeneration: number = -1;
     private lastPrefix: string = "";
 
+    // User's preferred mode for free-text input.  `@`-prefixed input
+    // always uses the dropdown menu regardless of this preference.
+    private userInline: boolean;
+
     private readonly cleanupEventListeners: () => void;
     constructor(
         private readonly container: HTMLDivElement,
@@ -74,6 +82,7 @@ export class PartialCompletion {
         inline: boolean = true,
         onToggleMode?: () => void,
     ) {
+        this.userInline = inline;
         // Create controller first.
         this.controller = createCompletionController(dispatcher);
 
@@ -96,7 +105,15 @@ export class PartialCompletion {
                 `onUpdate: ${state ? `prefix='${state.prefix}' items=${state.items.length}` : "hidden"}`,
             );
             if (state) {
+                // Pick effective mode based on the actual input being
+                // completed.  Done here (rather than eagerly in update())
+                // so the UI is only switched when we have something to
+                // show, avoiding a flash of empty state.
+                const effectiveInline = this.getEffectiveInline();
+                const modeChanged = this.searchMenu.switchMode(effectiveInline);
+
                 if (
+                    modeChanged ||
                     state.generation !== this.lastGeneration ||
                     state.prefix !== this.lastPrefix
                 ) {
@@ -184,12 +201,22 @@ export class PartialCompletion {
     }
 
     public switchMode(newInline: boolean) {
-        this.searchMenu.switchMode(newInline);
+        // Toggle reflects the user's free-text preference; for `@`-prefixed
+        // input we always stay in dropdown mode.
+        this.userInline = newInline;
+        const liveInline = this.getEffectiveInline();
+        this.searchMenu.switchMode(liveInline);
         // Always full render after mode switch (new UI instance).
         const state = this.controller.getCompletionState();
         if (state) {
             this.searchMenu.render(state.prefix, state.items);
         }
+    }
+
+    private getEffectiveInline(): boolean {
+        return this.previousInput.startsWith(COMMAND_PREFIX)
+            ? false
+            : this.userInline;
     }
 
     public close() {
@@ -334,12 +361,47 @@ export class PartialCompletion {
             return;
         }
 
-        const replaceText =
+        const quotedText =
             item.needQuotes !== false && /\s/.test(item.selectedText)
                 ? `"${item.selectedText.replaceAll('"', '\\"')}"`
                 : item.selectedText;
 
+        // Append a trailing space so the controller advances to the next
+        // completion level (e.g. "@list" → "@list " → subcommands) and
+        // the user can immediately type the next token.  Skip when the
+        // inserted text ends with a non-alphanumeric prefix character
+        // (e.g. the "@" Command Prefix item) where a space would break
+        // the command syntax.
+        const lastChar = quotedText.slice(-1);
+        const appendSpace = /[A-Za-z0-9_"'\)\]]/.test(lastChar);
+
+        // Prepend a leading space when the character immediately preceding
+        // the insertion point is alphanumeric (e.g. accepting a subcommand
+        // right after "@shell" or "@conversation" with no separator yet
+        // typed).  Otherwise the inserted text would fuse with the
+        // previous token (e.g. "@shellbreak " or "@conversationswitch ").
+        //
+        // Note: we check `charBefore` regardless of whether `completionPrefix`
+        // is empty.  When the user has typed a partial prefix (e.g.
+        // "@conversation s"), `charBefore` is the character before that
+        // prefix, which is normally a space or non-alphanumeric — so the
+        // check still does the right thing without prepending a stray
+        // space inside an already-spaced subcommand.
+        //
+        // TODO(RTL): the prepend/append logic here assumes left-to-right
+        // text.  When we add RTL language support, "preceding" needs to
+        // be re-defined relative to logical-order rather than DOM order,
+        // and the appended/prepended whitespace may need to flip sides.
         const offset = this.getCurrentInput().length - completionPrefix.length;
+        const charBefore =
+            offset > 0 ? this.getCurrentInput().charAt(offset - 1) : "";
+        const firstChar = quotedText.charAt(0);
+        const prependSpace =
+            charBefore !== "" &&
+            /[A-Za-z0-9_]/.test(charBefore) &&
+            /[A-Za-z0-9_"']/.test(firstChar);
+        const replaceText =
+            (prependSpace ? " " : "") + quotedText + (appendSpace ? " " : "");
         const leafNode = getLeafNode(this.input.getTextEntry(), offset);
         if (leafNode === undefined) {
             debugError(
@@ -388,15 +450,53 @@ export class PartialCompletion {
         // Reset completion state so the next update requests fresh completions.
         this.controller.accept();
 
-        debug(`Partial completion replaced: ${replaceText}`);
+        debug(
+            `Partial completion replaced: '${replaceText}' textContent='${this.input.getTextEntry().textContent}' currentInput='${this.getCurrentInputForCompletion()}'`,
+        );
 
         // Clear previousInput so auto-detection picks "forward" for the
         // post-selection update (the new input won't be a prefix of "").
         this.previousInput = "";
-        this.update(false);
+        // Defer the refresh fetch to the next animation frame so that
+        // the browser has time to apply layout for the inserted text
+        // (Chromium can return zero ClientRects for a caret immediately
+        // after a trailing space until layout settles, which causes
+        // SearchMenu.render() to bail with "invalid rects" and hide).
+        // Use show() (not update()) so the controller bypasses its
+        // dedup guard even if a synchronous selectionchange handler
+        // already advanced lastInput to the new value while we were
+        // mutating the DOM above.
+        requestAnimationFrame(() => {
+            if (this.closed) return;
+            const newInput = this.getCurrentInputForCompletion();
+            debug(
+                `Partial completion post-accept rAF: input='${newInput}' previousInput='${this.previousInput}'`,
+            );
+            this.previousInput = newInput;
+            this.controller.show(newInput, "forward");
+        });
     }
 
     public handleSpecialKeys(event: KeyboardEvent) {
+        // Ctrl+Space: explicitly reactivate the menu (works even when
+        // the menu is currently hidden, e.g. after Escape).
+        if (
+            event.key === " " &&
+            event.ctrlKey &&
+            !event.altKey &&
+            !event.metaKey
+        ) {
+            const input = this.getCurrentInputForCompletion();
+            const direction: CompletionDirection =
+                input.length < this.previousInput.length &&
+                this.previousInput.startsWith(input)
+                    ? "backward"
+                    : "forward";
+            this.previousInput = input;
+            this.controller.show(input, direction);
+            event.preventDefault();
+            return true;
+        }
         if (!this.searchMenu.isActive()) {
             return false;
         }

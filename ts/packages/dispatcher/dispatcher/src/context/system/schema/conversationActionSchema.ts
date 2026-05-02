@@ -6,6 +6,8 @@ export type ConversationAction =
     | ListConversationAction
     | ShowConversationInfoAction
     | SwitchConversationAction
+    | NextConversationAction
+    | PrevConversationAction
     | RenameConversationAction
     | DeleteConversationAction;
 
@@ -22,10 +24,11 @@ export type NewConversationAction = {
     };
 };
 
-// List all conversations.
-// Use this when the user wants to see, show, or list their conversations.
-// Examples: "list our conversations", "show all conversations", "what conversations do I have",
-// "show me my conversations".
+// List all conversations in this TypeAgent shell session.
+// Use this when the user wants to see, show, or list their TypeAgent conversations
+// (NOT files, songs, or any other kind of list).
+// Examples: "list our conversations", "list my conversations", "show all conversations",
+// "what conversations do I have", "show me my conversations", "show conversation list".
 export type ListConversationAction = {
     actionName: "listConversation";
 };
@@ -38,7 +41,9 @@ export type ShowConversationInfoAction = {
 };
 
 // Switch to an existing conversation by name.
-// Use this when the user wants to switch to, go to, open, or change to an EXISTING conversation.
+// Use this when the user wants to switch to, go to, open, or change to an EXISTING conversation
+// identified by name.  For "next"/"previous" without a specific name, use NextConversationAction
+// or PrevConversationAction instead.
 // Examples: "switch to conversation test", "go to my work conversation",
 // "switch to test", "open conversation named work", "change to the test conversation".
 // IMPORTANT: use this only when switching to an already-existing conversation, not creating a new one.
@@ -48,6 +53,24 @@ export type SwitchConversationAction = {
         // The name of the conversation to switch to
         name: string;
     };
+};
+
+// Switch to the NEXT TypeAgent conversation in the list (cycles around).
+// Use this when the user wants to advance to the next TypeAgent shell conversation
+// (NOT the next song, next track, next page, or any other kind of "next").
+// Examples: "switch to next conversation", "next conversation", "go to the next conversation",
+// "cycle to the next conversation".
+export type NextConversationAction = {
+    actionName: "nextConversation";
+};
+
+// Switch to the PREVIOUS TypeAgent conversation in the list (cycles around).
+// Use this when the user wants to go to the previous TypeAgent shell conversation
+// (NOT the previous song, previous track, or any other kind of "previous").
+// Examples: "switch to previous conversation", "previous conversation",
+// "go to the previous conversation", "cycle to the previous conversation".
+export type PrevConversationAction = {
+    actionName: "prevConversation";
 };
 
 // Rename a conversation.

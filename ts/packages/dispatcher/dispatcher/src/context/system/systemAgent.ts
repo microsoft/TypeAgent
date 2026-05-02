@@ -39,6 +39,7 @@ import { getConfigCommandHandlers } from "./handlers/configCommandHandlers.js";
 import { getConstructionCommandHandlers } from "./handlers/constructionCommandHandlers.js";
 import { DebugCommandHandler } from "./handlers/debugCommandHandlers.js";
 import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js";
+import { getConversationCommandHandlers } from "./handlers/conversationCommandHandlers.js";
 import { getHistoryCommandHandlers } from "./handlers/historyCommandHandler.js";
 import { TraceCommandHandler } from "./handlers/traceCommandHandler.js";
 import { getRandomCommandHandlers } from "./handlers/randomCommandHandler.js";
@@ -63,6 +64,7 @@ export const systemHandlers: CommandHandlerTable = {
     commands: {
         action: new ActionCommandHandler(),
         session: getSessionCommandHandlers(),
+        conversation: getConversationCommandHandlers(),
         history: getHistoryCommandHandlers(),
         memory: getMemoryCommandHandlers(),
         const: getConstructionCommandHandlers(),
@@ -151,14 +153,17 @@ export const systemManifest: AppAgentManifest = {
         conversation: {
             schema: {
                 description:
-                    "System agent that manages conversations. " +
+                    "System agent that manages TypeAgent shell conversations. " +
                     "Use this agent when the user wants to: " +
                     "CREATE a new conversation (e.g. 'create a new conversation', 'start a new conversation called test', 'new conversation named work', 'open a new conversation test'), " +
-                    "LIST conversations (e.g. 'list our conversations', 'show all conversations', 'what conversations do I have'), " +
-                    "SWITCH to an existing conversation (e.g. 'switch to conversation test', 'go to my work conversation', 'switch to test'), " +
+                    "LIST conversations (e.g. 'list our conversations', 'list my conversations', 'show all conversations', 'what conversations do I have'), " +
+                    "SWITCH to an existing conversation by name (e.g. 'switch to conversation test', 'go to my work conversation', 'switch to test'), " +
+                    "advance to the NEXT conversation (e.g. 'switch to next conversation', 'next conversation', 'go to the next conversation'), " +
+                    "go to the PREVIOUS conversation (e.g. 'switch to previous conversation', 'previous conversation'), " +
                     "DELETE a conversation (e.g. 'delete conversation test', 'remove the work conversation'), " +
                     "RENAME the current conversation, " +
-                    "or SHOW info about the current conversation.",
+                    "or SHOW info about the current conversation. " +
+                    "Use this for TypeAgent shell conversations only — NOT for media playlists, songs, files, or browser tabs.",
                 schemaFile:
                     "./src/context/system/schema/conversationActionSchema.ts",
                 schemaType: "ConversationAction",

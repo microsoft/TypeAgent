@@ -86,6 +86,16 @@ export const DEFAULT_OPTIMIZER_VARIANTS: readonly OptimizerVariant[] = [
         name: "dispatchOnly",
         options: { dispatchifyAlternations: true },
     },
+    {
+        // Isolates `promoteTailRulesParts`.  The pass is independent
+        // of factor / dispatch (it walks rules looking for trailing
+        // `RulesPart`s already in the AST and promotes them to tail
+        // calls), so running it alone is meaningful and surfaces a
+        // promote-only regression that the bundled `recommended`
+        // variant might mask.
+        name: "promoteTailOnly",
+        options: { promoteTailRulesParts: true },
+    },
 ];
 
 export type FuzzConfig = {
@@ -119,6 +129,17 @@ export type FuzzConfig = {
      * weights.  Defaults to `false` for backwards compatibility.
      */
     requireAnyOptimizerActivity?: boolean;
+    /**
+     * Smoke-alarm threshold in milliseconds.  When set and a single
+     * generated grammar's full validation phase (all variants, all
+     * inputs) exceeds this wall-clock budget, `runFuzz` writes a
+     * one-line warning to stderr including the grammar index, elapsed
+     * time, generated input length, and a truncated grammar text.
+     * Does not abort the run - existence of a slow grammar is a
+     * diagnostic signal, not a failure.  When `undefined` no timing
+     * is performed.  Defaults to `undefined`.
+     */
+    slowGrammarThresholdMs?: number;
 };
 
 export const DEFAULT_CONFIG: FuzzConfig = {
@@ -525,6 +546,10 @@ export function runFuzz(config: FuzzConfig): FuzzResult[] {
         );
         const inputs = [...gen.testInputs, ...extraInputs];
 
+        const slowThreshold = config.slowGrammarThresholdMs;
+        const grammarStart =
+            slowThreshold !== undefined ? performance.now() : 0;
+
         for (const validation of config.validations) {
             let results: FuzzResult[];
 
@@ -562,6 +587,26 @@ export function runFuzz(config: FuzzConfig): FuzzResult[] {
             }
 
             allResults.push(...results);
+        }
+
+        // Smoke-alarm: if this grammar's full validation phase
+        // exceeded the configured threshold, write a one-line
+        // diagnostic to stderr (does not fail the run).
+        if (slowThreshold !== undefined) {
+            const elapsed = performance.now() - grammarStart;
+            if (elapsed > slowThreshold) {
+                const matchingLen = gen.testInputs[0]?.length ?? 0;
+                const oneLineText = (
+                    gen.text.length > 200
+                        ? gen.text.slice(0, 200) + "..."
+                        : gen.text
+                ).replace(/\n/g, " ");
+                console.warn(
+                    `[fuzz slow-grammar] #${g}: ${elapsed.toFixed(1)}ms ` +
+                        `(threshold ${slowThreshold}ms), ` +
+                        `matching-input length ${matchingLen}: ${oneLineText}`,
+                );
+            }
         }
     }
 

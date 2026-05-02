@@ -278,6 +278,26 @@ export class PartialCompletionSession implements CompletionController {
         this.setCompletionState(undefined);
     }
 
+    /**
+     * Explicitly reactivate the completion menu after a dismiss
+     * (Ctrl+Space).  Clears dismissAnchor (so a refetch with the same
+     * anchor isn't suppressed) and forces a fresh update path even when
+     * the input hasn't changed since the last dismiss.
+     *
+     * Shell keyboard shortcut reference:
+     *   docs/content/help/shellShortcuts.md
+     */
+    public show(
+        input: string,
+        direction: CompletionDirection = "forward",
+    ): void {
+        this.dismissAnchor = undefined;
+        // Bypass update()'s dedup guard, which would no-op when input
+        // matches lastInput and there's no pending state.
+        this.lastInput = "";
+        this.update(input, direction);
+    }
+
     /** Accept the current completion (Tab/Enter). Resets session to idle. */
     public accept(): void {
         this.anchor = undefined;

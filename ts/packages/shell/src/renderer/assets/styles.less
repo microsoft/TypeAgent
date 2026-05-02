@@ -1316,6 +1316,13 @@ input[type="file"] {
   color: #c87137;
 }
 
+.user-textarea:empty[data-placeholder]::before {
+  content: attr(data-placeholder);
+  color: rgba(128, 128, 128, 0.6);
+  font-style: italic;
+  pointer-events: none;
+}
+
 // ─── Voice Mode Layout ────────────────────────────────────────────────────────
 
 .voice-mode {

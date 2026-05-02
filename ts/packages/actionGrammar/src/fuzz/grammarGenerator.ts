@@ -771,7 +771,14 @@ type RuleState = {
     firstAltMatch: string[];
     /** Variable names bound by wildcard/number captures in this rule. */
     boundVars: string[];
-    /** True if any alternative produces a value via `->`. */
+    /**
+     * True iff *every* alternative attaches an explicit value
+     * expression.  The compiler's `nestedRuleRef` check requires
+     * every alternate of a captured rule to produce a value, so
+     * the generator only treats this rule as a value-producing
+     * `nestedRuleRef` target when the predicate holds for all alts
+     * (not just any alt).
+     */
     hasValue: boolean;
 };
 
@@ -1312,6 +1319,14 @@ export function buildRandomGrammar(
         // `ruleRefReuse` knob can replay an earlier target.
         const usedRuleRefs: number[] = [];
 
+        // Count alternatives that successfully attach an explicit
+        // value expression.  A rule "produces a value" (and is thus
+        // safe to capture via `nestedRuleRef`) only when every
+        // alternative has its own value, so we mark `state.hasValue`
+        // at the end based on this count rather than on the first
+        // attached alt.
+        let altsWithValue = 0;
+
         for (let a = 0; a < altCount; a++) {
             const partCount = intInRange(rng, 1, maxParts);
             const partTexts: string[] = [];
@@ -1509,7 +1524,7 @@ export function buildRandomGrammar(
             ) {
                 const expr = buildValueExpr(rng, altBoundVars);
                 valueText = ` -> ${expr.text}`;
-                state.hasValue = true;
+                altsWithValue++;
                 if (expr.usesExpressions) {
                     usesValueExpressions = true;
                 }
@@ -1552,6 +1567,13 @@ export function buildRandomGrammar(
                 state.boundVars = altBoundVars;
             }
         }
+
+        // Only mark the rule as value-producing when every alternative
+        // attached an explicit value expression.  Otherwise a
+        // `nestedRuleRef` capture targeting this rule would hit the
+        // compiler's "referenced rule does not produce a value" check
+        // for the value-less alternates.
+        state.hasValue = altCount > 0 && altsWithValue === altCount;
 
         ruleStates[i] = state;
     }

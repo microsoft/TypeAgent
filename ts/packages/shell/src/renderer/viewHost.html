@@ -104,6 +104,7 @@
         <!-- Chat-Only Mode: App Title -->
         <div class="app-title" id="app-title">
           <span>TypeAgent</span>
+          <span class="demo-mode-label" id="demo-mode-label">Demo Mode</span>
         </div>
 
         <!-- Browser Mode: Tab Bar -->
@@ -406,6 +407,10 @@
       }
 
       // IPC handlers
+      ipcRenderer.on("demo-mode-changed", (_, active) => {
+        document.body.classList.toggle("demo-mode", !!active);
+      });
+
       ipcRenderer.on("set-layout", (_, layout) => {
         verticalLayout = layout.verticalLayout;
         const titleBarHeight = titleBar.offsetHeight;

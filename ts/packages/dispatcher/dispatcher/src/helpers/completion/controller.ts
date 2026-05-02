@@ -28,6 +28,7 @@ export type CompletionControllerOptions = {
  *   - update()  — called on each keystroke
  *   - accept()  — called on Tab/Enter
  *   - dismiss() — called on Escape
+ *   - show()    — explicitly reactivate after a dismiss (Ctrl+Space)
  *   - hide()    — called when cursor leaves valid position
  *   - getCompletionState() — returns current completions for rendering
  *   - setOnUpdate() — set/replace the onUpdate callback
@@ -41,6 +42,7 @@ export interface CompletionController {
     update(input: string, direction?: CompletionDirection): void;
     accept(): void;
     dismiss(input: string, direction?: CompletionDirection): void;
+    show(input: string, direction?: CompletionDirection): void;
     hide(): void;
     getCompletionState(): CompletionState | undefined;
     setOnUpdate(onUpdate: () => void): void;

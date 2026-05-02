@@ -751,11 +751,16 @@ export async function getCommandCompletion(
             completions.push({
                 name: "Subcommands",
                 completions: Object.keys(table.commands),
-                separatorMode:
-                    result.parsedAppAgentName !== undefined ||
-                    result.commands.length > 0
-                        ? "space"
-                        : "optionalSpace",
+                // Always optionalSpace: subcommand names are alphanumeric,
+                // and the user expects them to be visible immediately after
+                // the agent name (whether or not a separator was typed),
+                // matching the descriptor-branch behavior in
+                // completeDescriptor().  Using "space" here would force the
+                // session to defer rendering until a separator was
+                // *consumed*, which never happens at the new anchor — so
+                // the menu would silently stay hidden after accepting an
+                // agent name like "@shell".
+                separatorMode: "optionalSpace",
             });
         } else {
             // Both table and descriptor are undefined — the agent

@@ -6,33 +6,11 @@ import { loadGrammarRules } from "../src/grammarLoader.js";
 import { matchGrammar } from "../src/grammarMatcher.js";
 import { validateTailRulesParts } from "../src/grammarOptimizer.js";
 import { grammarToJson } from "../src/grammarSerializer.js";
-import {
-    Grammar,
-    GrammarPart,
-    GrammarRule,
-    RulesPart,
-} from "../src/grammarTypes.js";
+import { Grammar, GrammarRule, RulesPart } from "../src/grammarTypes.js";
+import { findAllRulesParts } from "./testUtils.js";
 
 function match(grammar: ReturnType<typeof loadGrammarRules>, request: string) {
     return matchGrammar(grammar, request).map((m) => m.match);
-}
-
-function findAllRulesParts(rules: GrammarRule[]): RulesPart[] {
-    const out: RulesPart[] = [];
-    const visited = new WeakSet<GrammarRule[]>();
-    const visit = (parts: GrammarPart[]) => {
-        for (const p of parts) {
-            if (p.type === "rules") {
-                out.push(p);
-                if (!visited.has(p.alternatives)) {
-                    visited.add(p.alternatives);
-                    for (const r of p.alternatives) visit(r.parts);
-                }
-            }
-        }
-    };
-    for (const r of rules) visit(r.parts);
-    return out;
 }
 
 const PLAYER_SCHEMA = `<Start> = <Play>;
@@ -348,19 +326,17 @@ describe("validateTailRulesParts", () => {
         });
         const json = grammarToJson(optimized);
         // Mutate the JSON to break the >=2 invariant.
-        for (const ruleSet of json.rules) {
-            for (const rule of ruleSet) {
-                for (const p of rule.parts) {
-                    if (p.type === "rules" && p.tailCall) {
-                        // Force the referenced rules array to have
-                        // length 1 by replacing the index target with
-                        // a single-rule array.  `tailCall` parts
-                        // always carry an index (a tail call into
-                        // an empty rule array would never be emitted
-                        // by the compiler), so the assertion is safe.
-                        const idx = p.index!;
-                        json.rules[idx] = [json.rules[idx][0]];
-                    }
+        for (const rule of json.rules) {
+            for (const p of rule.parts) {
+                if (p.type === "rules" && p.tailCall) {
+                    // Force the referenced ruleArrays entry to have
+                    // length 1 by replacing the index target with a
+                    // single-element list.  `tailCall` parts always
+                    // carry an index (a tail call into an empty rule
+                    // array would never be emitted by the compiler),
+                    // so the assertion is safe.
+                    const idx = p.index!;
+                    json.ruleArrays[idx] = [json.ruleArrays[idx][0]];
                 }
             }
         }
@@ -557,38 +533,41 @@ describe("leadingSpacingMode propagation through tail-call entries", () => {
     it("single-part tail-call wrapper propagates ancestor leadingSpacingMode", () => {
         const json: any = {
             rules: [
-                // Start rules
-                [
-                    {
-                        parts: [
-                            { type: "string", value: ["do"] },
-                            { type: "rules", index: 1, variable: "x" },
-                            { type: "string", value: ["end"] },
-                        ],
-                        value: { type: "variable", name: "x" },
-                        spacingMode: "required",
-                    },
-                ],
-                // Wrapper: single-part, just the tailCall RulesPart
-                [
-                    {
-                        parts: [{ type: "rules", index: 2, tailCall: true }],
-                        spacingMode: "none",
-                    },
-                ],
-                // Tail members
-                [
-                    {
-                        parts: [{ type: "string", value: ["bar"] }],
-                        value: { type: "literal", value: "b" },
-                        spacingMode: "none",
-                    },
-                    {
-                        parts: [{ type: "string", value: ["baz"] }],
-                        value: { type: "literal", value: "z" },
-                        spacingMode: "none",
-                    },
-                ],
+                // 0: Start
+                {
+                    parts: [
+                        { type: "string", value: ["do"] },
+                        { type: "rules", index: 1, variable: "x" },
+                        { type: "string", value: ["end"] },
+                    ],
+                    value: { type: "variable", name: "x" },
+                    spacingMode: "required",
+                },
+                // 1: Wrapper - single-part, just the tailCall RulesPart
+                {
+                    parts: [{ type: "rules", index: 2, tailCall: true }],
+                    spacingMode: "none",
+                },
+                // 2: Tail member "bar"
+                {
+                    parts: [{ type: "string", value: ["bar"] }],
+                    value: { type: "literal", value: "b" },
+                    spacingMode: "none",
+                },
+                // 3: Tail member "baz"
+                {
+                    parts: [{ type: "string", value: ["baz"] }],
+                    value: { type: "literal", value: "z" },
+                    spacingMode: "none",
+                },
+            ],
+            ruleArrays: [
+                // 0: top-level alternation -> Start
+                [0],
+                // 1: Start's $(x:<Wrapper>) target
+                [1],
+                // 2: Wrapper's tailCall target
+                [2, 3],
             ],
         };
         const grammar = grammarFromJson(json);
