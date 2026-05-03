@@ -34,6 +34,13 @@ play already converts that tension into.
 
 ### 1.1 Audience and the sufficiency-vs-convenience balance
 
+**Note on terminology.** Throughout §1.1, "writers" and "readers" name
+the mechanical systems that produce or consume the IR (codegen,
+engine, validator, analyzers), not human authors. Humans review and
+debug the IR but do not author it; authoring is the DSL's job. The
+audience for this design document itself is treated separately in
+§1.1.4.
+
 The first job of the IR is to carry **sufficient information for the
 engine to execute the workflow correctly and with acceptable
 performance**. "Sufficient" means: every dispatch decision, every type
@@ -333,9 +340,11 @@ Rules:
 
 Motivation: many shapes (a task's `outputSchema` and downstream consumers'
 `inputSchema`, or a branch's `selectorSchema` and the producing task's enum
-field) are currently authored by hand in two or more places. Naming them once
-lets the validator treat ref-equal positions as compatible by identity (a
-fast path for pass 4.2) and gives authors a single edit site when a shape
+field) appear in two or more places. Naming them once lets the
+validator treat ref-equal positions as compatible by identity (a fast
+path for pass 4.2 - this is the §1.1 "acceptable performance"
+requirement), lets codegen emit the canonical shape once instead of
+repeating it, and gives reviewers a single site to read when a shape
 changes (P4 local reasoning).
 
 ### 3.2 Names and scopes
@@ -963,9 +972,12 @@ back to an IR coordinate (P3 scenario 21).
 ### 5.7 Conformance bar (MUST / SHOULD / MAY)
 
 The IR is declarative; many quality-of-implementation choices (parallelism,
-memory liveness, retry granularity) are left to the engine. To make
-portability predictable, v1 distinguishes a conformance bar from
-recommended optimizations.
+memory liveness, retry granularity) are left to the engine. The conformance
+bar serves two audiences: it ensures any IR running on one v1 engine runs
+on all v1 engines, and it keeps the bar narrow enough that a future engine
+or downstream consumer can implement just the MUST list and remain
+interoperable (§1.1 door-keeping). v1 distinguishes the conformance bar
+from recommended optimizations on that basis.
 
 **A conforming v1 engine MUST:**
 
@@ -1479,7 +1491,11 @@ own design review against P5.
 
 ### 8.14 Naming the IR encoding format: JSON
 
-- **Chosen:** JSON. Predictable, language-neutral, easy to validate.
+- **Chosen:** JSON. Predictable, language-neutral, easy to validate; also
+  keeps the IR usable as a portable artifact for any future downstream
+  consumer (different engine, native compiler, transpiler, distribution
+  artifact - §1.1 door-keeping) without locking it into a single parsing
+  ecosystem.
 - Alt A: YAML. More readable but adds parser ambiguity (anchors, types). Can
   be supported as an authoring convenience without changing the IR.
 - Alt B: A custom textual IR. Rejected: more tooling to build, no benefit
@@ -1549,9 +1565,10 @@ Full analysis: [decisions/0001-bound-outputs.md](decisions/0001-bound-outputs.md
   [decisions/0003-task-schema-source.md](decisions/0003-task-schema-source.md)
   "Triggers to revisit Option 3".
 - Author convenience (DSL layer): repeated schemas are the IR's "verbose
-  by design" tax (§1.2). A DSL or codegen step is expected to populate
-  `inputSchema`/`outputSchema` from a typed task signature, so authors do
-  not write them by hand at scale. The IR remains the canonical form.
+  by design" tax (§1.2). Codegen absorbs the tax by populating
+  `inputSchema`/`outputSchema` from a typed task signature in a single
+  pass; the IR remains the canonical form, not a hand-authoring
+  surface.
 
 Full analysis: [decisions/0003-task-schema-source.md](decisions/0003-task-schema-source.md).
 
@@ -1580,34 +1597,37 @@ Full analysis: [decisions/0003-task-schema-source.md](decisions/0003-task-schema
 
 ---
 
-## 10. Areas explicitly flagged for reviewer adjustment
+## 10. Areas flagged for reviewer adjustment
 
-These are the spots most likely to need your input. They are the points where
-the principles permit more than one reasonable choice and the design picked
-one for the sake of having a complete v1.
+The audience lens (§1.1) closed most items previously flagged here:
+when the lens is applied, codegen has no preference and the engine,
+validator, and analyzers strictly prefer the chosen option, so a
+reviewer has no live trade-off to weigh in v1. The closures are
+listed below for traceability; full per-decision rationale lives in §8.
 
-1. **Branch model** (8.3): switch-on-discriminant vs. predicate `if/else`.
-2. **Type system surface** (8.1): JSON Schema vs. TypeScript types.
-3. **Constants scoping** (8.9): global vs. per-scope.
-4. **Default branch requirement** (8.3): always required vs. allowed when
-   `cases` is exhaustive over an enum.
-5. **Reference form** (8.2): single object form vs. allowing a string
-   shorthand for the common case.
-6. **State commit timing** (8.6): inter-iteration only vs. intra-iteration.
-7. **Handler reuse** (8.7 / 3.8): keep "exactly one trigger" in v1, or admit
-   shared handlers with documented intersection semantics.
-8. **Shared schemas** (8.13): named `types` with `$ref` vs. inline-only.
-9. **IR encoding format** (8.14): JSON vs. YAML vs. a typed IR.
-10. **Task schema source of truth** (8.16): IR, registry, or hybrid; and
-    whether the validator statically checks IR-vs-task drift. Currently
-    IR-authoritative with a registry-gated drift check; revisit hybrid
-    sugar (omitted schemas filled in by the loader) once a DSL exists.
+| Topic                               | Status under the lens                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Branch model (§8.3)                 | Closed: discriminant + total `default` is engine-cheap and codegen-neutral.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Type system surface (§8.1)          | Closed: JSON Schema is language-neutral and serves codegen, engine, and door-kept downstream consumers; TypeScript surfaces belong in the DSL.                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| Default branch requirement (§8.3)   | Closed: engine wants total dispatch with no exhaustiveness analysis on the hot path; codegen can synthesize a `default`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Reference form (§8.2)               | Closed: object form is parser-free for engine and analyzers; codegen has no preference between forms.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| State commit timing (§8.6)          | Closed by P4/P5 (lens-neutral): inter-iteration commit makes per-iteration reads independent of write order.                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Handler reuse (§8.7, §3.8)          | Closed for v1: one-trigger handlers keep dominator analysis trivial. Most "same handler over several nodes" scenarios are addressed post-v1 by **block scope** (a single handler over a region of nodes within one scope; sketch in [post-v1/block-scope.md](post-v1/block-scope.md)). Cross-scope shared handlers (same handler reachable from triggers in different scopes) remain a separate question with its own trigger in [revisit-triggers.md](revisit-triggers.md) row 4. Codegen can also duplicate a logical handler into per-trigger copies if neither mechanism is available. |
+| Shared schemas (§8.13)              | Closed: validator identity-checks (§1.1 acceptable performance), codegen single emission, and reviewer locality (P4) all favor named `types`.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| IR encoding (§8.14)                 | Closed: JSON serves engine parsing, the LLM-direct fallback, and the door-kept distribution role (§1.1).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Task schema source of truth (§8.16) | Closed for v1: IR self-containment serves both engine sufficiency and door-keeping; hybrid sugar (loader-filled omissions) belongs in the DSL. Reopening trigger in [revisit-triggers.md](revisit-triggers.md) row 6.                                                                                                                                                                                                                                                                                                                                                                      |
 
-After your review of these, the design can be tightened (or the alternatives
-folded back in) without disturbing the rest of the document.
+One item remains genuinely open under the lens:
+
+1. **Constants scoping (§8.9)**: workflow-global vs. per-scope. Lens-neutral
+   (codegen and engine handle either at equal cost). v1 picked global on
+   §1.3 minimalism grounds, but a P4 argument for per-scope (less in the
+   global namespace, smaller scope contracts) is reasonable. Reviewers
+   evaluating this should compare the §1.3 minimization rule against the
+   P4 locality benefit.
 
 For decisions whose v1 position is closed but carries an explicit
 reopening condition (e.g., "revisit Option 3 if IR size becomes a pain
 point"), see [revisit-triggers.md](revisit-triggers.md). Some entries
-appear in both this section and that index - here as an immediate
-reviewer question, there as a longer-term trigger.
+appear in both this section and that index - here as the v1 closure
+under the lens, there as a longer-term trigger.
