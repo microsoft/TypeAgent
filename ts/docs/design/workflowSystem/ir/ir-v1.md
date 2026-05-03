@@ -43,14 +43,17 @@ from outside context. "Acceptable performance" means: the engine can
 make those determinations cheaply (no global re-walks, no expensive
 analyses at dispatch time), and analysis tools can do the same.
 
-Sufficiency and analysis cost are the hard constraints. Writer
-convenience is a soft one: writers are tool-mediated (a DSL, a codegen
-pass, an LLM prompt), so omissions a writer would prefer can almost
-always be reintroduced as sugar at the layer above the IR. When a
-decision forces a trade-off between "easier to write" and "engine has
-what it needs (cheaply)", v1 picks the engine and pays the writer cost
-in tooling. The "verbose by design" tax in §1.2 is the most visible
-consequence; the tensions in §1.1.3 collect the rest.
+Sufficiency and analysis cost are the hard constraints. There is no
+unmediated writer in the steady state: the IR's writers are mechanical
+(codegen lowering from a DSL) or out of scope for v1 authoring (an LLM
+or human writing the DSL itself). Convenience pressures from those
+out-of-scope authors land on the DSL surface, not on the IR. When a
+decision forces a trade-off between "easier for codegen to emit /
+easier for a human to read" and "engine has what it needs (cheaply)",
+v1 picks the engine. The "verbose by design" tax in §1.2 is the most
+visible consequence; it is paid in codegen output size and in human
+review burden, not in LLM token cost. The tensions in §1.1.3 collect
+the rest.
 
 Two secondary reader populations sit alongside the engine: humans
 reviewing or debugging a workflow, and third-party analysis tools. For
@@ -59,6 +62,20 @@ human and tool requirements are mostly satisfied as side effects of
 satisfying the engine (explicit references give humans navigability;
 declared schemas give analyzers a contract). Where they pull in
 different directions, §1.1.3 calls it out.
+
+v1 commits to the **compile-target role**: the IR is what codegen
+emits and one engine consumes, and the IR is permitted to co-evolve
+with both. The IR may also become the source for **other downstream
+consumers** later: a different workflow engine, a native-code
+compiler, a transpiler to a different workflow format, a portable
+distribution artifact, or something we have not thought of yet. v1
+does not commit to any of these specific futures, but several v1
+decisions (JSON encoding, top-level `version` field, inline schemas,
+self-containment, the §5.7 conformance bar) are made the way they are
+to keep those doors open at low cost. When future v1 decisions arise,
+"does this help codegen and the engine?" is the active question;
+"does this needlessly close off a plausible second consumer?" is the
+veto question.
 
 Decisions throughout this document (verbosity, explicitness, schema
 redundancy, the conformance bar in §5.7, the choice of JSON in §8.14)
@@ -85,16 +102,18 @@ acquire dedicated mechanisms.
 
 #### 1.1.2 Writer populations
 
-| Population                      | What they emit                          | What they need from the IR surface                                                                                                                                                          | Status                          |
-| ------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| DSL or codegen tool             | Whole IRs from a higher-level surface   | Coverage of the lowering targets it needs (§3 schema, §3.9 grammar) and stability of the surface it lowers into (§10, revisit-triggers).                                                    | Primary writer                  |
-| LLM via DSL (with retry/repair) | DSL fragments that codegen lowers to IR | A DSL grammar small enough to teach in a prompt, terse enough to fit token budgets, and wrong-by-construction wherever possible. The IR's properties matter only via the lowering contract. | Primary writer (when DSL ships) |
-| LLM direct to IR                | IRs or fragments from a prompt          | Locally validatable nodes (so a bad emission can be rejected and retried), schema-complete with no implicit context, no whitespace or ordering significance.                                | Fallback / bootstrap            |
-| Hand author                     | Edits, demos, fragments                 | The same as LLM-direct, plus tolerance for verbosity it cannot avoid.                                                                                                                       | Edge case                       |
+| Population                      | What they emit                          | What they need from the IR surface                                                                                                                                                                                                                                                                                      | Status                                                                 |
+| ------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| DSL or codegen tool             | Whole IRs from a higher-level surface   | Coverage of the lowering targets it needs (§3 schema, §3.9 grammar) and stability of the surface it lowers into (§10, revisit-triggers).                                                                                                                                                                                | Primary writer                                                         |
+| LLM via DSL (with retry/repair) | DSL fragments that codegen lowers to IR | Lowering-contract clarity at any given IR snapshot. Direct IR requirements are mediated by codegen (see the DSL row above); during v1 co-evolution each IR snapshot needs to be cleanly lowerable so the DSL grammar can be re-derived as the IR moves. Long-term IR stability is a v2 concern (§10, revisit-triggers). | Not an IR writer (writes DSL); IR is produced by the codegen row above |
+| LLM direct to IR                | IRs or fragments from a prompt          | Locally validatable nodes (so a bad emission can be rejected and retried), schema-complete with no implicit context, no whitespace or ordering significance.                                                                                                                                                            | Fallback / bootstrap                                                   |
+| Hand author                     | Edits, demos, fragments                 | The same as LLM-direct, plus tolerance for verbosity it cannot avoid.                                                                                                                                                                                                                                                   | Edge case                                                              |
 
 The LLM row is split because the two configurations have different IR
-requirements. **LLM via DSL** is the steady-state primary write path
-once a DSL exists: the LLM emits a small grammar it can be reliably
+requirements. **LLM via DSL** is the steady-state primary path for
+producing IR once a DSL exists, but the LLM in this configuration does
+not write IR at all: it writes DSL, and codegen produces the IR (the
+DSL row above). The LLM emits a small grammar it can be reliably
 prompted on, codegen owns the verbose-by-design tax (§1.2) once instead
 of at every emission, and many wrong programs become unrepresentable in
 the DSL grammar instead of caught later by IR validation. **LLM direct
@@ -138,14 +157,14 @@ when reader and writer pull in different directions, v1 picks the
 reader and expects writer tooling to absorb the difference. The
 following are the largest:
 
-| Tension                                | Writer pull                                                      | Engine sufficiency / cost                                                                                       | v1 resolution                                                                                                                            | Where                |
-| -------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
-| Schema redundancy on task nodes        | Omit, inherit                                                    | Static drift check needs both sides at validation time; runtime dispatch needs schemas without registry lookup. | Required, drift-checked                                                                                                                  | §8.16, decision 0003 |
-| Reference encoding (string vs. object) | String shorthand                                                 | Engine needs source kind, name, and path without a parser; analyzers need uniform structural access.            | Object form                                                                                                                              | §8.2                 |
-| IR encoding format                     | YAML for terseness                                               | Engine needs a strict, ambiguity-free parse; LLM emitters need no whitespace traps.                             | JSON                                                                                                                                     | §8.14                |
-| Branch model                           | Predicate `if/else`                                              | Engine needs total dispatch with no expression evaluator on the hot path.                                       | Discriminant switch with required `default`                                                                                              | §8.3                 |
-| Bound outputs                          | Implicit publication                                             | Engine needs a static liveness signal to free unreferenced values immediately (§5.7 SHOULD).                    | Hide-by-default `bind` switch                                                                                                            | §8.15, decision 0001 |
-| Verbosity tax in the LLM era           | Tokens at every emission, large rule surface to teach the prompt | Engine needs the verbose, explicit, locally validatable form regardless of who writes it.                       | Build a DSL when LLM is the writer; codegen pays the tax once. IR remains emittable so the fallback / escape hatch in §1.1.2 stays open. | §1.1.2 LLM rows      |
+| Tension                                | Writer pull                                                        | Engine sufficiency / cost                                                                                       | v1 resolution                                                                                                                                                                   | Where                |
+| -------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| Schema redundancy on task nodes        | Omit, inherit                                                      | Static drift check needs both sides at validation time; runtime dispatch needs schemas without registry lookup. | Required, drift-checked                                                                                                                                                         | §8.16, decision 0003 |
+| Reference encoding (string vs. object) | String shorthand                                                   | Engine needs source kind, name, and path without a parser; analyzers need uniform structural access.            | Object form                                                                                                                                                                     | §8.2                 |
+| IR encoding format                     | YAML for terseness                                                 | Engine needs a strict, ambiguity-free parse; LLM emitters need no whitespace traps.                             | JSON                                                                                                                                                                            | §8.14                |
+| Branch model                           | Predicate `if/else`                                                | Engine needs total dispatch with no expression evaluator on the hot path.                                       | Discriminant switch with required `default`                                                                                                                                     | §8.3                 |
+| Bound outputs                          | Implicit publication                                               | Engine needs a static liveness signal to free unreferenced values immediately (§5.7 SHOULD).                    | Hide-by-default `bind` switch                                                                                                                                                   | §8.15, decision 0001 |
+| Verbosity tax in the LLM era           | Codegen output size; human review/diff burden when reading IR cold | Engine needs the verbose, explicit, locally validatable form regardless of who writes it.                       | Build a DSL when authors are LLM or human; codegen pays the tax once per change rather than per emission. IR remains emittable so the LLM-direct fallback in §1.1.2 stays open. | §1.1.2 LLM rows      |
 
 Each row is "writer asked for X, engine needed something specific to do
 its job correctly or cheaply, writer pays the cost via tooling." The §8
@@ -166,18 +185,25 @@ means a reader of the IR, not a reader of this document.
 
 ### 1.2 Explicit IR, no sugar
 
-The IR is exactly that - an **intermediate representation**, not an
-authoring format. Every node type, every edge, every reference is written
-out. Authoring sugar (DSLs, templates, generated IRs) is out of scope and
+The IR is the contract between two mechanical layers: codegen on the
+producing side and the engine (plus validator, analyzers, debugger) on
+the consuming side. Both layers benefit from one way to say each
+thing; neither benefits from sugar. Humans read the IR for review and
+debugging but do not author it - the DSL absorbs that role. So every
+node kind, every edge, every reference is written out. Authoring
+sugar (DSLs, templates, generated IRs) is out of scope for the IR and
 lives at a different layer.
 
-- Lens application: §1.1 + P2/P3/P5. The engine cannot dispatch, validate,
-  or release values from inferred structure - it needs every reference,
-  edge, and kind stated. Writer convenience that hides any of these is
-  pushed to the layer above the IR.
-- Drives: P2 (no hidden flow), P3 (no inferred structure), P5 (no surprise
-  defaults).
-- Consequence: the IR will look verbose. That is intentional.
+- Lens application: §1.1 + P2/P3/P5. The engine cannot dispatch,
+  validate, or release values from inferred structure - it needs every
+  reference, edge, and kind stated. Codegen, as the only mechanical
+  writer, also has no use for sugar; multiple equivalent encodings
+  would just force codegen to choose and force readers to handle both.
+- Drives: P2 (no hidden flow), P3 (no inferred structure), P5 (no
+  surprise defaults).
+- Consequence: the IR will look verbose. That is intentional, and the
+  verbosity is paid by codegen output and human review, not by an LLM
+  emission loop.
 
 ### 1.3 Structural minimalism
 
