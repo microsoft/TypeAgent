@@ -23,6 +23,7 @@ import {
     AgentServerInvokeFunctions,
     AgentServerChannelName,
     DispatcherConnectOptions,
+    UserIdentity,
     getDispatcherChannelName,
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
@@ -34,10 +35,111 @@ import {
     removeServerPid,
 } from "@typeagent/agent-server-client";
 import registerDebug from "debug";
+import os from "node:os";
+import { DefaultAzureCredential } from "@azure/identity";
+
 const envPath = new URL("../../../../.env", import.meta.url);
 dotenv.config({ path: envPath });
 
 const debugStartup = registerDebug("agent-server:startup");
+
+// User identity resolution. Precedence:
+//   1. TYPEAGENT_USER_NAME env var (dev override / CI)
+//   2. Claims from the Azure AD token DefaultAzureCredential acquires for
+//      the Cognitive Services scope — this is the same credential the
+//      agent-server uses to talk to Azure OpenAI, so if the server can talk
+//      to the model at all, the token's `name`/`upn` claims give us the
+//      real user. Works without any extra setup (no git config, no Office
+//      SSO).
+//   3. OS username as a last resort.
+//
+// The Azure step is async and involves a network call, so we resolve it
+// after startup and overwrite the cached identity when it arrives. The
+// first few RPC calls may see the OS-username fallback; subsequent calls
+// see the real display name.
+function parseJwtClaims(token: string): Record<string, unknown> | undefined {
+    const [, payload] = token.split(".");
+    if (!payload) return undefined;
+    const b64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    try {
+        return JSON.parse(Buffer.from(padded, "base64").toString("utf-8"));
+    } catch {
+        return undefined;
+    }
+}
+
+function identityFromClaims(
+    claims: Record<string, unknown>,
+    fallbackUsername: string,
+): UserIdentity | undefined {
+    // Azure AD `name` is typically "First Last" or "Last, First". Prefer
+    // just the first name so the chat header stays compact. Split on
+    // whitespace or comma and take the first non-empty part.
+    const fullName =
+        typeof claims.name === "string" && claims.name.trim()
+            ? claims.name.trim()
+            : undefined;
+    if (!fullName) return undefined;
+    // "Last, First" → prefer "First" after the comma; otherwise first token.
+    const firstName = fullName.includes(",")
+        ? (fullName.split(",")[1]?.trim().split(/\s+/)[0] ?? fullName)
+        : (fullName.split(/\s+/)[0] ?? fullName);
+    const upn =
+        (typeof claims.upn === "string" && claims.upn) ||
+        (typeof claims.preferred_username === "string" &&
+            claims.preferred_username) ||
+        (typeof claims.unique_name === "string" && claims.unique_name) ||
+        undefined;
+    const initial = (firstName[0] ?? "U").toUpperCase();
+    return {
+        username: upn || fallbackUsername,
+        displayName: firstName,
+        initial,
+    };
+}
+
+async function resolveIdentityFromAzureToken(
+    fallbackUsername: string,
+): Promise<UserIdentity | undefined> {
+    try {
+        const token = await new DefaultAzureCredential().getToken(
+            "https://cognitiveservices.azure.com/.default",
+        );
+        if (!token?.token) return undefined;
+        const claims = parseJwtClaims(token.token);
+        if (!claims) return undefined;
+        return identityFromClaims(claims, fallbackUsername);
+    } catch {
+        return undefined;
+    }
+}
+
+function initialIdentity(): UserIdentity {
+    const username = os.userInfo().username || "user";
+    const envName = process.env.TYPEAGENT_USER_NAME?.trim();
+    const displayName = envName || username;
+    const initial = (displayName[0] ?? "U").toUpperCase();
+    return { username, displayName, initial };
+}
+
+let userIdentity: UserIdentity = initialIdentity();
+
+// Kick off the token-based resolution asynchronously. Env override wins
+// if set, so skip the network call in that case.
+if (!process.env.TYPEAGENT_USER_NAME?.trim()) {
+    const fallbackUsername = userIdentity.username;
+    resolveIdentityFromAzureToken(fallbackUsername)
+        .then((resolved) => {
+            if (resolved) {
+                userIdentity = resolved;
+                debugStartup(
+                    `resolved user identity from Azure token: ${resolved.displayName}`,
+                );
+            }
+        })
+        .catch(() => {});
+}
 
 async function main() {
     debugStartup(`pid=${process.pid} resolving instance dir + traceId`);
@@ -289,6 +391,7 @@ async function main() {
                     );
                 },
                 shutdown: shutdownServer,
+                getUserIdentity: async () => userIdentity,
             };
 
             // Clean up all conversations on WebSocket disconnect

@@ -348,6 +348,9 @@ export function resolveEntityPlaceholders(
                 );
             }
             if (mode === "fallback-to-name") {
+                debugEntities(
+                    `Entity path miss in "${value}" (failed at "${key}${walk.at}") — falling back to entity.name="${entity.name}"`,
+                );
                 return entity.name;
             }
             // "passthrough": leave the original placeholder untouched, which

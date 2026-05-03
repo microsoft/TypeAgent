@@ -53,7 +53,19 @@ if (!fs.existsSync(testCasesFile)) {
 const testCases = JSON.parse(fs.readFileSync(testCasesFile, "utf-8"));
 console.log(`Loaded ${testCases.length} test cases for "${integrationName}"`);
 
-const agentDir = path.resolve(AGENTS_DIR, integrationName);
+// Prefer the path recorded by scaffoldAgent (supports custom outputDir),
+// fall back to the default <repoRoot>/packages/agents/<name> layout.
+const scaffoldedToFile = path.join(
+    WORKSPACE_DIR,
+    "scaffolder",
+    "scaffolded-to.txt",
+);
+let agentDir = path.resolve(AGENTS_DIR, integrationName);
+if (fs.existsSync(scaffoldedToFile)) {
+    const trimmed = fs.readFileSync(scaffoldedToFile, "utf-8").trim();
+    if (trimmed.length > 0) agentDir = trimmed;
+}
+console.log(`Agent directory: ${agentDir}`);
 const packageName = `${integrationName}-agent`;
 const configs = { [integrationName]: { name: packageName, path: agentDir } };
 const provider = createNpmAppAgentProvider(configs, import.meta.url);

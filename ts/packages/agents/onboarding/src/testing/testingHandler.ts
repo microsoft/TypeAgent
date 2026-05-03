@@ -541,9 +541,28 @@ const AGENTS_DIR = path.resolve(
     "../../../../../../packages/agents",
 );
 
-function getTestAgentProvider(integrationName: string) {
+// Resolve the scaffolded agent directory. Prefers the path recorded in
+// the workspace's `scaffolder/scaffolded-to.txt` (set by scaffoldAgent —
+// supports custom outputDir, e.g. external repos like SecretAgents) and
+// falls back to the default `<repoRoot>/packages/agents/<name>` layout.
+async function resolveScaffoldedAgentDir(
+    integrationName: string,
+): Promise<string> {
+    const scaffoldedTo = await readArtifact(
+        integrationName,
+        "scaffolder",
+        "scaffolded-to.txt",
+    );
+    if (scaffoldedTo) {
+        const trimmed = scaffoldedTo.trim();
+        if (trimmed.length > 0) return trimmed;
+    }
+    return path.resolve(AGENTS_DIR, integrationName);
+}
+
+async function getTestAgentProvider(integrationName: string) {
     const packageName = `${integrationName}-agent`;
-    const agentDir = path.resolve(AGENTS_DIR, integrationName);
+    const agentDir = await resolveScaffoldedAgentDir(integrationName);
     const configs: Record<string, { name: string; path: string }> = {
         [integrationName]: { name: packageName, path: agentDir },
     };
@@ -554,7 +573,7 @@ function getTestAgentProvider(integrationName: string) {
 
 async function createTestDispatcher(integrationName: string) {
     const instanceDir = getInstanceDir();
-    const appAgentProviders = [getTestAgentProvider(integrationName)];
+    const appAgentProviders = [await getTestAgentProvider(integrationName)];
     const buffer: string[] = [];
     const clientIO = createCapturingClientIO(buffer);
 

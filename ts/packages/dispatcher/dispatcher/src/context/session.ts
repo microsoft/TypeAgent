@@ -249,13 +249,16 @@ const defaultSessionConfig: SessionConfig = {
             resolve: true,
             filter: true,
             clarify: false, // TODO: enable when it is ready.
-            // Default "throw": path navigation is ON, and unresolvable paths
-            // fail fast with a descriptive error. This matches the project
-            // pattern of making the reasoning loop — not silent fallbacks —
-            // handle LLM mistakes. Set to "off" to restore pre-feature
-            // behavior, "fallback-to-name" to recover via entity.name on
-            // miss, or "passthrough" to leave the literal placeholder.
-            pathNavigation: "throw",
+            // Default "fallback-to-name": path navigation is ON, and an
+            // unresolvable path silently substitutes entity.name (with a
+            // debug-log line via the typeagent:dispatcher:actions:entities
+            // namespace). This lets the action dispatch with a slightly-
+            // wrong-but-not-fatal value so the existing reasoning fallback
+            // can recover, instead of aborting the whole conversation at
+            // translation time. Set to "throw" to restore the strict mode
+            // that fails fast on a path miss, "off" to disable path navigation
+            // entirely, or "passthrough" to leave the literal placeholder.
+            pathNavigation: "fallback-to-name",
         },
     },
     execution: {

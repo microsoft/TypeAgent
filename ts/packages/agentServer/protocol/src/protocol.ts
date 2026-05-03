@@ -27,6 +27,18 @@ export type JoinConversationResult = {
     pendingInteractions?: PendingInteractionRequest[];
 };
 
+/**
+ * Identity of the OS user the agent-server process is running as.
+ * Used by clients that can't do Office SSO (e.g. the Excel add-in) so
+ * they can show the user's initial instead of a generic "U" avatar.
+ * This is a convenience signal, not a security claim.
+ */
+export type UserIdentity = {
+    username: string; // OS username, e.g. "robgruen"
+    displayName: string; // Git user.name if set, else username
+    initial: string; // Single uppercase character for avatars
+};
+
 export type AgentServerInvokeFunctions = {
     joinConversation: (
         options?: DispatcherConnectOptions,
@@ -40,6 +52,17 @@ export type AgentServerInvokeFunctions = {
     ) => Promise<void>;
     deleteConversation: (conversationId: string) => Promise<void>;
     shutdown: () => Promise<void>;
+    getUserIdentity: () => Promise<UserIdentity>;
+};
+
+/**
+ * Fallback UserIdentity for clients that fail to reach the server. Keeps
+ * the UI from having to guard for undefined everywhere.
+ */
+export const DefaultUserIdentity: UserIdentity = {
+    username: "user",
+    displayName: "user",
+    initial: "U",
 };
 
 export const AgentServerChannelName = "agent-server";
