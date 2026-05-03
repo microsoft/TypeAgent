@@ -39,9 +39,12 @@ import {
     RequestId,
 } from "agent-dispatcher";
 import { swapContent } from "./setContent";
-import { remoteSearchMenuUIOnCompletion } from "./searchMenuUI/remoteSearchMenuUI";
+import {
+    remoteSearchMenuUIOnCompletion,
+    remoteSearchMenuUIOnSelectionChanged,
+} from "./searchMenuUI/remoteSearchMenuUI";
 import { ChatInput } from "./chat/chatInput";
-import { escapeHtml } from "./chat/conversationCommands";
+import { escapeHtml } from "./htmlUtil";
 
 export function isElectron(): boolean {
     return globalThis.api !== undefined;
@@ -481,28 +484,33 @@ function registerClient(
                         (async () => {
                             switch (payload.subcommand) {
                                 case "new": {
-                                    if (!payload.name) {
-                                        // TODO: prompt the user for a name inline instead of warning,
-                                        // so that NL "create a new conversation" works end-to-end.
-                                        chatView.addNotificationMessage(
-                                            {
-                                                type: "html",
-                                                content:
-                                                    "A name is required to create a new conversation.",
-                                                kind: "warning",
-                                            },
-                                            "conversation",
-                                            undefined,
-                                        );
-                                        break;
+                                    let newName = payload.name;
+                                    if (!newName) {
+                                        // Generate a default name so that NL
+                                        // requests like "create a new
+                                        // conversation" succeed end-to-end
+                                        // without forcing the user to provide
+                                        // one. Format: "Conversation YYYY-MM-DD HH:MM".
+                                        const d = new Date();
+                                        const pad = (n: number) =>
+                                            n.toString().padStart(2, "0");
+                                        newName = `Conversation ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
                                     }
-                                    const created =
-                                        await api.conversationCreate(
-                                            payload.name,
-                                        );
+                                    const conversationName = newName;
+                                    const created = await chatView.withBusy(
+                                        "Creating conversation…",
+                                        () =>
+                                            api.conversationCreate(
+                                                conversationName,
+                                            ),
+                                    );
                                     const switchResult =
-                                        await api.conversationSwitch(
-                                            created.conversationId,
+                                        await chatView.withBusy(
+                                            "Switching conversation…",
+                                            () =>
+                                                api.conversationSwitch(
+                                                    created.conversationId,
+                                                ),
                                         );
                                     const msg = switchResult.success
                                         ? `✅ Created and switched to conversation "<b>${escapeHtml(created.name)}</b>"`
@@ -603,8 +611,12 @@ function registerClient(
                                         );
                                         break;
                                     }
-                                    const result = await api.conversationSwitch(
-                                        match.conversationId,
+                                    const result = await chatView.withBusy(
+                                        "Switching conversation…",
+                                        () =>
+                                            api.conversationSwitch(
+                                                match.conversationId,
+                                            ),
                                     );
                                     if (!result.success) {
                                         chatView.addNotificationMessage(
@@ -612,6 +624,103 @@ function registerClient(
                                                 type: "html",
                                                 content: `❌ ${escapeHtml(result.error ?? "Failed to switch conversation")}`,
                                                 kind: "warning",
+                                            },
+                                            "conversation",
+                                            undefined,
+                                        );
+                                    } else {
+                                        chatView.addNotificationMessage(
+                                            {
+                                                type: "html",
+                                                content: `✅ Switched to conversation "<b>${escapeHtml(match.name)}</b>"`,
+                                                kind: "info",
+                                            },
+                                            "conversation",
+                                            undefined,
+                                        );
+                                    }
+                                    break;
+                                }
+                                case "prev":
+                                case "next": {
+                                    const sessions =
+                                        await api.conversationList();
+                                    if (sessions.length === 0) {
+                                        chatView.addNotificationMessage(
+                                            {
+                                                type: "html",
+                                                content:
+                                                    "No conversations to switch to.",
+                                                kind: "warning",
+                                            },
+                                            "conversation",
+                                            undefined,
+                                        );
+                                        break;
+                                    }
+                                    const cur =
+                                        await api.conversationGetCurrent();
+                                    const curIdx = cur
+                                        ? sessions.findIndex(
+                                              (s) =>
+                                                  s.conversationId ===
+                                                  cur.conversationId,
+                                          )
+                                        : -1;
+                                    const delta =
+                                        payload.subcommand === "next" ? 1 : -1;
+                                    const nextIdx =
+                                        curIdx === -1
+                                            ? 0
+                                            : (curIdx +
+                                                  delta +
+                                                  sessions.length) %
+                                              sessions.length;
+                                    const target = sessions[nextIdx];
+                                    if (
+                                        target.conversationId ===
+                                        cur?.conversationId
+                                    ) {
+                                        // Only one conversation — surface a
+                                        // warning so users in self-hosted
+                                        // mode (which has a single default
+                                        // conversation) don't think the
+                                        // command silently failed.
+                                        chatView.addNotificationMessage(
+                                            {
+                                                type: "html",
+                                                content:
+                                                    "Only one conversation is available — nothing to switch to. Connect to the Agent Server to use multiple conversations.",
+                                                kind: "warning",
+                                            },
+                                            "conversation",
+                                            undefined,
+                                        );
+                                        break;
+                                    }
+                                    const result = await chatView.withBusy(
+                                        "Switching conversation…",
+                                        () =>
+                                            api.conversationSwitch(
+                                                target.conversationId,
+                                            ),
+                                    );
+                                    if (!result.success) {
+                                        chatView.addNotificationMessage(
+                                            {
+                                                type: "html",
+                                                content: `❌ ${escapeHtml(result.error ?? "Failed to switch conversation")}`,
+                                                kind: "warning",
+                                            },
+                                            "conversation",
+                                            undefined,
+                                        );
+                                    } else {
+                                        chatView.addNotificationMessage(
+                                            {
+                                                type: "html",
+                                                content: `✅ Switched to conversation "<b>${escapeHtml(target.name)}</b>"`,
+                                                kind: "info",
                                             },
                                             "conversation",
                                             undefined,
@@ -818,6 +927,9 @@ function registerClient(
         searchMenuCompletion(id: number, item: SearchMenuItem) {
             remoteSearchMenuUIOnCompletion(id, item);
         },
+        searchMenuSelectionChanged(id: number, selected: number) {
+            remoteSearchMenuUIOnSelectionChanged(id, selected);
+        },
         titleUpdated(title: string): void {
             document.title = title;
         },
@@ -874,6 +986,9 @@ function registerClient(
             for (const child of chatView.getScrollContainer().children) {
                 child.classList.add("history");
             }
+        },
+        demoStateChanged(state: "running" | "paused" | "idle"): void {
+            chatView.setDemoState(state);
         },
     };
 

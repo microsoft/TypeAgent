@@ -23,7 +23,7 @@
  * Run with: `pnpm run bench:synthetic` (from this package directory).
  */
 
-import { runBenchmark } from "./benchUtil.js";
+import { runScenarios, Scenario } from "./benchUtil.js";
 
 // ─── Synthetic grammar builders ────────────────────────────────────────────
 
@@ -148,149 +148,258 @@ function buildBucketedKeywordDispatch(
     return `<Start> = <Choice>;\n<Choice> = ${alts.join("\n         | ")};`;
 }
 
+/**
+ * Trailing-RulesPart pattern (pure forwarding): a parent rule with a
+ * fixed leading literal followed by a multi-alternative subrule whose
+ * value is forwarded as-is.  Without `promoteTailRulesParts`, the
+ * matcher pushes a frame to enter `<Song>`, runs the alternation, then
+ * pops back into the parent to apply the implicit-default rule.  With
+ * the promote pass, the trailing `<Song>` becomes a tail call - the
+ * parent frame is skipped and the chosen member's value flows up
+ * directly.
+ *
+ *   <Start> = play $(s:<Song>);
+ *   <Song>  = "track0" -> 0 | "track1" -> 1 | …;
+ *
+ * `<Song>` members carry explicit values so the parent's implicit
+ * default has a binding to forward; the parent itself has no value
+ * expression, which is exactly what the pure-forwarding branch of
+ * `promoteTailRulesParts` looks for.
+ */
+function buildTrailingForward(width: number): string {
+    const alts: string[] = [];
+    for (let i = 0; i < width; i++) {
+        alts.push(`track${i} -> ${i}`);
+    }
+    return [
+        `<Start> = play $(s:<Song>);`,
+        `<Song> = ${alts.join("\n       | ")};`,
+    ].join("\n");
+}
+
+/**
+ * Trailing-RulesPart pattern (value substitution): same shape as
+ * `buildTrailingForward` but the parent captures the subrule into a
+ * variable and folds it into a value expression.  Promote rewrites
+ * each member's value to embed the substitution and drops the
+ * wrapper variable + parent value, again skipping the parent frame.
+ *
+ *   <Start> = play $(s:<Song>) -> { kind: "play", song: s };
+ *   <Song>  = "track1" -> 1 | "track2" -> 2 | …;
+ */
+function buildTrailingSubstitute(width: number): string {
+    const alts: string[] = [];
+    for (let i = 0; i < width; i++) {
+        alts.push(`track${i} -> ${i}`);
+    }
+    return [
+        `<Start> = play $(s:<Song>) -> { kind: "play", song: s };`,
+        `<Song> = ${alts.join("\n       | ")};`,
+    ].join("\n");
+}
+
 function main(): void {
-    runBenchmark(
-        `pass-through chain (depth=8)`,
-        "synthetic.grammar",
-        buildPassthroughChain(8),
-        ["target word here", "miss", "target word", "no match here"],
-    );
-
-    runBenchmark(
-        `wide common prefix (width=20)`,
-        "synthetic.grammar",
-        buildWideCommonPrefix(20),
-        [
-            "perform the action with item valuea0",
-            "perform the action with item valuet0",
-            "perform the action with item nothere",
-            "perform the action with",
-            "noise input that does not match",
-        ],
-    );
-
-    runBenchmark(
-        `wide common prefix (width=50)`,
-        "synthetic.grammar",
-        buildWideCommonPrefix(50),
-        [
-            "perform the action with item valuea0",
-            "perform the action with item valuex0",
-            "perform the action with item valuew1",
-            "perform the action with item nothere",
-            "noise input",
-        ],
-    );
-
-    runBenchmark(
-        `combined (depth=4 wrappers, width=20 prefix)`,
-        "synthetic.grammar",
-        buildCombined(20),
-        [
-            "perform the action with item valuea0",
-            "perform the action with item valuek0",
-            "perform the action with item nothere",
-            "noise",
-        ],
-    );
-
-    runBenchmark(
-        `cross-scope-ref fork (width=10)`,
-        "synthetic.grammar",
-        buildCrossScopeRefFork(10),
-        [
-            "act on widget by 0 alice",
-            "act on widget by 5 bob",
-            "act on widget by 9 carol",
-            "act on widget by 3 dave",
-            "act on widget by 11 eve",
-            "no match here",
-        ],
-    );
-
-    runBenchmark(
-        `cross-scope-ref fork (width=30)`,
-        "synthetic.grammar",
-        buildCrossScopeRefFork(30),
-        [
-            "act on widget by 0 alice",
-            "act on widget by 15 bob",
-            "act on widget by 29 carol",
-            "act on widget by 7 dave",
-            "act on widget by 99 eve",
-            "noise",
-        ],
-    );
-
-    // ─── Dispatch-targeted benchmarks ──────────────────────────────────
-    // Wide alternation with distinct leading keywords - the canonical
-    // case `dispatchifyAlternations` is designed to accelerate.
-    runBenchmark(
-        `wide keyword dispatch (width=20)`,
-        "synthetic.grammar",
-        buildWideKeywordDispatch(20),
-        [
-            "verb0 the thing",
-            "verb10 the thing",
-            "verb19 the thing",
-            "verb99 the thing", // miss: not a known verb
-            "noise input that does not match",
-        ],
-    );
-
-    runBenchmark(
-        `wide keyword dispatch (width=50)`,
-        "synthetic.grammar",
-        buildWideKeywordDispatch(50),
-        [
-            "verb0 the thing",
-            "verb25 the thing",
-            "verb49 the thing",
-            "verb99 the thing",
-            "noise",
-        ],
-    );
-
-    runBenchmark(
-        `wide keyword dispatch (width=100)`,
-        "synthetic.grammar",
-        buildWideKeywordDispatch(100),
-        [
-            "verb0 the thing",
-            "verb50 the thing",
-            "verb99 the thing",
-            "verb500 the thing",
-            "noise",
-        ],
-    );
-
-    // Bucketed dispatch: several distinct first tokens, multiple
-    // alternatives per bucket - exercises dispatch + factoring together.
-    runBenchmark(
-        `bucketed keyword dispatch (buckets=5, size=10)`,
-        "synthetic.grammar",
-        buildBucketedKeywordDispatch(5, 10),
-        [
-            "verb0 item0 now",
-            "verb2 item5 now",
-            "verb4 item9 now",
-            "verb9 item0 now", // miss
-            "noise",
-        ],
-    );
-
-    runBenchmark(
-        `bucketed keyword dispatch (buckets=20, size=5)`,
-        "synthetic.grammar",
-        buildBucketedKeywordDispatch(20, 5),
-        [
-            "verb0 item0 now",
-            "verb10 item2 now",
-            "verb19 item4 now",
-            "verb99 item0 now", // miss
-            "noise",
-        ],
-    );
+    const scenarios: Scenario[] = [
+        {
+            label: "pass-through chain (depth=8)",
+            grammarName: "synthetic.grammar",
+            grammarText: buildPassthroughChain(8),
+            requests: [
+                "target word here",
+                "miss",
+                "target word",
+                "no match here",
+            ],
+        },
+        {
+            label: "wide common prefix (width=20)",
+            grammarName: "synthetic.grammar",
+            grammarText: buildWideCommonPrefix(20),
+            requests: [
+                "perform the action with item valuea0",
+                "perform the action with item valuet0",
+                "perform the action with item nothere",
+                "perform the action with",
+                "noise input that does not match",
+            ],
+        },
+        {
+            label: "wide common prefix (width=50)",
+            grammarName: "synthetic.grammar",
+            grammarText: buildWideCommonPrefix(50),
+            requests: [
+                "perform the action with item valuea0",
+                "perform the action with item valuex0",
+                "perform the action with item valuew1",
+                "perform the action with item nothere",
+                "noise input",
+            ],
+        },
+        {
+            label: "combined (depth=4 wrappers, width=20 prefix)",
+            grammarName: "synthetic.grammar",
+            grammarText: buildCombined(20),
+            requests: [
+                "perform the action with item valuea0",
+                "perform the action with item valuek0",
+                "perform the action with item nothere",
+                "noise",
+            ],
+        },
+        {
+            label: "cross-scope-ref fork (width=10)",
+            grammarName: "synthetic.grammar",
+            grammarText: buildCrossScopeRefFork(10),
+            requests: [
+                "act on widget by 0 alice",
+                "act on widget by 5 bob",
+                "act on widget by 9 carol",
+                "act on widget by 3 dave",
+                "act on widget by 11 eve",
+                "no match here",
+            ],
+        },
+        {
+            label: "cross-scope-ref fork (width=30)",
+            grammarName: "synthetic.grammar",
+            grammarText: buildCrossScopeRefFork(30),
+            requests: [
+                "act on widget by 0 alice",
+                "act on widget by 15 bob",
+                "act on widget by 29 carol",
+                "act on widget by 7 dave",
+                "act on widget by 99 eve",
+                "noise",
+            ],
+        },
+        // ─── Dispatch-targeted benchmarks ──────────────────────────
+        // Wide alternation with distinct leading keywords - the
+        // canonical case `dispatchifyAlternations` is designed to
+        // accelerate.
+        {
+            label: "wide keyword dispatch (width=20)",
+            grammarName: "synthetic.grammar",
+            grammarText: buildWideKeywordDispatch(20),
+            requests: [
+                "verb0 the thing",
+                "verb10 the thing",
+                "verb19 the thing",
+                "verb99 the thing", // miss: not a known verb
+                "noise input that does not match",
+            ],
+        },
+        {
+            label: "wide keyword dispatch (width=50)",
+            grammarName: "synthetic.grammar",
+            grammarText: buildWideKeywordDispatch(50),
+            requests: [
+                "verb0 the thing",
+                "verb25 the thing",
+                "verb49 the thing",
+                "verb99 the thing",
+                "noise",
+            ],
+        },
+        {
+            label: "wide keyword dispatch (width=100)",
+            grammarName: "synthetic.grammar",
+            grammarText: buildWideKeywordDispatch(100),
+            requests: [
+                "verb0 the thing",
+                "verb50 the thing",
+                "verb99 the thing",
+                "verb500 the thing",
+                "noise",
+            ],
+        },
+        // Bucketed dispatch: several distinct first tokens, multiple
+        // alternatives per bucket - exercises dispatch + factoring
+        // together.
+        {
+            label: "bucketed keyword dispatch (buckets=5, size=10)",
+            grammarName: "synthetic.grammar",
+            grammarText: buildBucketedKeywordDispatch(5, 10),
+            requests: [
+                "verb0 item0 now",
+                "verb2 item5 now",
+                "verb4 item9 now",
+                "verb9 item0 now", // miss
+                "noise",
+            ],
+        },
+        {
+            label: "bucketed keyword dispatch (buckets=20, size=5)",
+            grammarName: "synthetic.grammar",
+            grammarText: buildBucketedKeywordDispatch(20, 5),
+            requests: [
+                "verb0 item0 now",
+                "verb10 item2 now",
+                "verb19 item4 now",
+                "verb99 item0 now", // miss
+                "noise",
+            ],
+        },
+        // ─── Trailing-RulesPart benchmarks (promoteTailRulesParts) ─
+        // Pure-forwarding tail: parent has no value, trailing
+        // subrule's value flows up via the implicit-default rule.
+        // Promote turns the trailing RulesPart into a tail call
+        // (skips parent frame push, drops the wrapper-binding
+        // variable).
+        {
+            label: "trailing forward (width=20)",
+            grammarName: "synthetic.grammar",
+            grammarText: buildTrailingForward(20),
+            requests: [
+                "play track0",
+                "play track10",
+                "play track19",
+                "play trackZ", // miss
+                "noise",
+            ],
+        },
+        {
+            label: "trailing forward (width=50)",
+            grammarName: "synthetic.grammar",
+            grammarText: buildTrailingForward(50),
+            requests: [
+                "play track0",
+                "play track25",
+                "play track49",
+                "play track99",
+                "noise",
+            ],
+        },
+        // Value-substitution tail: parent's value expression
+        // references the subrule's bound variable.  Promote
+        // materializes each member's effective value, substitutes
+        // it into parent.value, and writes the result as the
+        // member's new value.
+        {
+            label: "trailing substitute (width=20)",
+            grammarName: "synthetic.grammar",
+            grammarText: buildTrailingSubstitute(20),
+            requests: [
+                "play track0",
+                "play track10",
+                "play track19",
+                "play trackZ", // miss
+                "noise",
+            ],
+        },
+        {
+            label: "trailing substitute (width=50)",
+            grammarName: "synthetic.grammar",
+            grammarText: buildTrailingSubstitute(50),
+            requests: [
+                "play track0",
+                "play track25",
+                "play track49",
+                "play track99",
+                "noise",
+            ],
+        },
+    ];
+    runScenarios(scenarios);
 }
 
 main();

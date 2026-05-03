@@ -12,7 +12,7 @@ import {
 } from "electron";
 import path from "node:path";
 import type { WebSocketMessageV2 } from "websocket-utils";
-import { runDemo } from "./demo.js";
+import { runDemo, breakDemo, isDemoActive } from "./demo.js";
 import {
     ShellUserSettings,
     ShellWindowState,
@@ -511,8 +511,71 @@ export class ShellWindow {
         this.chatView.webContents.send("mark-history");
     }
 
-    public runDemo(interactive: boolean = false) {
-        runDemo(this.mainWindow, this.chatView, interactive);
+    /**
+     * Start a demo.  Returns true if a demo was started, false if one
+     * was already in progress (caller should surface this to the user).
+     * The returned promise resolves immediately after the start guard;
+     * the demo itself runs in the background.
+     */
+    public runDemo(interactive: boolean = false): boolean {
+        if (isDemoActive() || this.demoStarting) {
+            return false;
+        }
+        this.demoStarting = true;
+        let started = false;
+        runDemo(this.mainWindow, this.chatView, interactive, () => {
+            started = true;
+            this.setDemoMode(true);
+        })
+            .catch((error) => {
+                console.error("runDemo failed:", error);
+            })
+            .finally(() => {
+                this.demoStarting = false;
+                if (started) this.setDemoMode(false);
+            });
+        return true;
+    }
+    private demoStarting: boolean = false;
+
+    public breakDemo(): boolean {
+        return breakDemo();
+    }
+
+    private demoMode = false;
+    private demoEscHandler:
+        | ((event: Electron.Event, input: Electron.Input) => void)
+        | undefined;
+    private setDemoMode(active: boolean) {
+        if (this.demoMode === active) return;
+        this.demoMode = active;
+        this.mainWindow.webContents.send("demo-mode-changed", active);
+        if (active) {
+            this.demoEscHandler = (event, input) => {
+                if (input.type === "keyDown" && input.key === "Escape") {
+                    event.preventDefault();
+                    breakDemo();
+                }
+            };
+            this.chatView.webContents.on(
+                "before-input-event",
+                this.demoEscHandler,
+            );
+            this.mainWindow.webContents.on(
+                "before-input-event",
+                this.demoEscHandler,
+            );
+        } else if (this.demoEscHandler) {
+            this.chatView.webContents.off(
+                "before-input-event",
+                this.demoEscHandler,
+            );
+            this.mainWindow.webContents.off(
+                "before-input-event",
+                this.demoEscHandler,
+            );
+            this.demoEscHandler = undefined;
+        }
     }
 
     // ================================================================

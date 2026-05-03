@@ -4,8 +4,8 @@
 import { IdGenerator } from "../main";
 import { ChatInput } from "./chatInput";
 import { ExpandableTextArea } from "./expandableTextArea";
-import { handleConversationCommand } from "./conversationCommands";
 import { iconCheckMarkCircle, iconX } from "../icon";
+import { DemoUIState } from "../../../preload/electronTypes";
 import {
     DisplayAppendMode,
     DisplayContent,
@@ -493,26 +493,17 @@ export class ChatView {
             requestText = request.content;
         }
 
-        // Intercept /conversation (UI slash command only, NOT @conversation).
-        // @conversation is dispatched to the in-process/remote dispatcher which
-        // handles it correctly in both local and remote modes.
-        const t = requestText.trim();
-        if (t.startsWith("/conversation") || t.startsWith("@conversation")) {
-            const handled = await handleConversationCommand(requestText, {
-                addSystemMessage: (content: string) => {
-                    this.addNotificationMessage(
-                        { type: "html", content, kind: "info" },
-                        "conversation",
-                        undefined,
-                    );
-                },
-                clear: () => {
-                    this.clear();
-                },
-            });
-            if (handled) {
-                return;
-            }
+        // Normalize the legacy `/conversation` slash alias to the
+        // canonical `@conversation` agent command.  All conversation
+        // command logic lives in the dispatcher (see
+        // packages/dispatcher/.../conversationCommandHandlers.ts) and
+        // results are surfaced via the `manage-conversation` client
+        // action handler in main.ts — keeping that as the single
+        // source of truth.
+        const trimmed = requestText.trimStart();
+        if (trimmed.startsWith("/conversation")) {
+            requestText =
+                "@conversation" + trimmed.slice("/conversation".length);
         }
 
         const localId = this.idGenerator.genId();
@@ -1024,6 +1015,81 @@ export class ChatView {
     public setClaudeFocus(active: boolean): void {
         this._voiceBanner.classList.toggle("claude-focus", active);
         this._voiceBanner.textContent = active ? "Claude Focus" : "Voice Mode";
+    }
+
+    public setDemoState(state: DemoUIState): void {
+        const textEntry = this.chatInput?.textarea.getTextEntry();
+        if (!textEntry) return;
+        if (state === "paused") {
+            textEntry.dataset.placeholder =
+                "Ctrl+Right to continue • Esc to break demo";
+        } else if (state === "running") {
+            textEntry.dataset.placeholder = "Demo running… Esc to break";
+        } else {
+            delete textEntry.dataset.placeholder;
+        }
+    }
+
+    /**
+     * Show a transient busy state on the input box: set the placeholder to
+     * `message` and disable typing.  Pass `undefined` to clear the busy
+     * state and restore normal interaction.  Used while long-ish IPC
+     * operations (e.g. switching conversation + replaying history) are in
+     * flight so the user doesn't think the UI is unresponsive.
+     *
+     * NOTE: This low-level API does not snapshot prior state.  Prefer
+     * {@link withBusy} for scoped use cases (it preserves any non-busy
+     * placeholder set by, e.g., demo mode).
+     */
+    public setBusy(message: string | undefined): void {
+        const textarea = this.chatInput?.textarea;
+        const textEntry = textarea?.getTextEntry();
+        if (!textarea || !textEntry) return;
+        if (message) {
+            textEntry.dataset.placeholder = message;
+            textarea.enable(false);
+        } else {
+            delete textEntry.dataset.placeholder;
+            textarea.enable(true);
+        }
+    }
+
+    /**
+     * Run `work` while the input is in a busy state showing `message`.
+     * Snapshots the prior placeholder + enabled state on entry and
+     * restores them on exit (even if `work` throws), so demo-mode or
+     * other ambient placeholders are preserved across busy windows.
+     * Supports nesting via LIFO snapshot stack.
+     */
+    public async withBusy<T>(
+        message: string,
+        work: () => Promise<T>,
+    ): Promise<T> {
+        const textarea = this.chatInput?.textarea;
+        const textEntry = textarea?.getTextEntry();
+        const snapshot =
+            textarea && textEntry
+                ? {
+                      placeholder: textEntry.dataset.placeholder,
+                      // contentEditable is the string "true"/"false"/"inherit".
+                      enabled: textEntry.contentEditable !== "false",
+                  }
+                : undefined;
+        this.setBusy(message);
+        try {
+            return await work();
+        } finally {
+            if (textarea && textEntry && snapshot) {
+                if (snapshot.placeholder !== undefined) {
+                    textEntry.dataset.placeholder = snapshot.placeholder;
+                } else {
+                    delete textEntry.dataset.placeholder;
+                }
+                textarea.enable(snapshot.enabled);
+            } else {
+                this.setBusy(undefined);
+            }
+        }
     }
 
     getMessageElm() {

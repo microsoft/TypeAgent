@@ -399,6 +399,39 @@ Usage: `@const wildcard on`
 ## @const wildcard off - Turn off wildcard matching  
 Usage: `@const wildcard off`  
 
+## @conversation new - Create a new conversation, optionally with a name
+Usage: `@conversation new [<name>]`
+### Arguments:
+  - &lt;name&gt; - (optional) Name for the new conversation (type: string)
+
+## @conversation list - List all conversations
+Usage: `@conversation list`
+
+## @conversation info - Show info about the current conversation
+Usage: `@conversation info`
+
+## @conversation switch - Switch to a conversation by name (defaults to the next conversation in the list)
+Usage: `@conversation switch [<name>]`
+### Arguments:
+  - &lt;name&gt; - (optional) Name of the conversation to switch to. Omit to cycle to the next conversation. (type: string)
+
+## @conversation prev - Switch to the previous conversation in the list (wraps around)
+Usage: `@conversation prev`
+
+## @conversation next - Switch to the next conversation in the list (wraps around)
+Usage: `@conversation next`
+
+## @conversation rename - Rename a conversation
+Usage: `@conversation rename <nameOrNewName> [<newName>]`
+### Arguments:
+  - &lt;nameOrNewName&gt; - With one argument, the new name for the current conversation; with two, the existing name of the conversation to rename. (type: string)
+  - &lt;newName&gt; - (optional) The new name when renaming a non-current conversation. (type: string)
+
+## @conversation delete - Delete a conversation by name
+Usage: `@conversation delete <name>`
+### Arguments:
+  - &lt;name&gt; - Name of the conversation to delete (type: string)
+
 ## @debug - Start node inspector  
 Usage: `@debug`    
 
@@ -616,9 +649,15 @@ Usage: `@shell set <name> <value>`
   - &lt;name&gt; - Name of the setting to set (type: string)  
   - &lt;value&gt; - The new value for the setting (type: string)
 
+## @shell run - Run Demo
+Usage: `@shell run`
+
 ## @shell run interactive - Run Demo Interactive  
 Usage: `@shell run interactive`  
   
+## @shell break - Abort the currently running demo
+Usage: `@shell break`
+
 ## @shell topmost - Always keep the shell window on top of other windows  
 Usage: `@shell topmost`  
   

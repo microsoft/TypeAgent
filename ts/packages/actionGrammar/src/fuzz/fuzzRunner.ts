@@ -51,6 +51,13 @@ import type { GeneratedGrammar, GeneratorConfig } from "./grammarGenerator.js";
 // ── Flag parsing ──────────────────────────────────────────────────────────────
 
 function printUsage(): void {
+    // Derive the optimizer-variant list from the canonical
+    // DEFAULT_OPTIMIZER_VARIANTS table so adding/removing a variant
+    // automatically updates the help text (no drift between code
+    // and docs).
+    const variantNames = DEFAULT_OPTIMIZER_VARIANTS.map((v) => v.name).join(
+        ", ",
+    );
     const lines = [
         "",
         "Grammar fuzz-testing CLI",
@@ -99,9 +106,8 @@ function printUsage(): void {
         "                       `shapes.tailFriendlyAltProb` knobs.",
         "                       Defaults to the first two of `words`.",
         "  --optimizer-variants <csv>",
-        "                       Subset of {recommended, inlineOnly, factorOnly,",
-        "                       dispatchOnly} to test under the optimizer",
-        "                       validation.  Defaults to all four.",
+        `                       Subset of {${variantNames}} to test under`,
+        "                       the optimizer validation.  Defaults to all variants.",
         "  --require-optimizer-activity",
         "                       Fail the run if no grammar produced",
         "                       observable optimizer activity.  Useful to",

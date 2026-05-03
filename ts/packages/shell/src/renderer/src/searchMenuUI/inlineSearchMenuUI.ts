@@ -24,11 +24,13 @@ export class InlineSearchMenuUI implements SearchMenuUI {
         this.selected = -1;
     }
 
-    public selectCompletion() {
+    public selectCompletion(): boolean {
         if (this.selected >= 0 && this.selected < this.items.length) {
             this.removeGhost();
             this.onCompletion(this.items[this.selected]);
+            return true;
         }
+        return false;
     }
 
     public update(data: SearchMenuUIUpdateData) {
@@ -59,6 +61,11 @@ export class InlineSearchMenuUI implements SearchMenuUI {
             this.selected--;
         }
         this.renderGhost();
+    }
+
+    public scrollBy(_deltaY: number) {
+        // Inline mode shows ghost text only — there is no visible window
+        // of items to scroll.
     }
 
     private removeGhost() {

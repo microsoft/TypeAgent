@@ -134,6 +134,12 @@ export class ExpandableTextArea {
     }
 
     public send(sendButton?: HTMLButtonElement) {
+        // Strip any inline ghost-text completion before sending so that the
+        // un-accepted suggestion isn't included in the user's message.
+        const completionArea = this.textEntry.querySelector(
+            ".inline-completion-area",
+        );
+        completionArea?.remove();
         const html = this.getTextEntry().innerHTML;
         if (html.length > 0) {
             if (this.entryHandlers !== undefined) {

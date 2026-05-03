@@ -67,6 +67,10 @@ export const webapi: ClientAPI = {
         // not supported on mobile
         throw new Error("Not implemented");
     },
+    searchMenuScroll: () => {
+        // not supported on mobile
+        throw new Error("Not implemented");
+    },
     searchMenuSelectCompletion: () => {
         // not supported on mobile
         throw new Error("Not implemented");

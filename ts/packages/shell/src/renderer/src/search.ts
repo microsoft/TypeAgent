@@ -45,9 +45,9 @@ export class SearchMenu {
               : new LocalSearchMenuUI(this.onCompletion);
     }
 
-    public switchMode(newInline: boolean): void {
+    public switchMode(newInline: boolean): boolean {
         if (this.inline === newInline) {
-            return;
+            return false;
         }
         if (this.searchMenuUI) {
             this.searchMenuUI.close();
@@ -55,6 +55,7 @@ export class SearchMenu {
         }
         this.inline = newInline;
         this.toggle?.setDirection(newInline ? "expand" : "collapse");
+        return true;
     }
 
     // ── Rendering ───────────────────────────────────────────────────────────────
@@ -122,7 +123,7 @@ export class SearchMenu {
     // ── UI event handling ─────────────────────────────────────────────────────
 
     public handleMouseWheel(deltaY: number) {
-        this.searchMenuUI?.adjustSelection(deltaY);
+        this.searchMenuUI?.scrollBy(deltaY);
     }
 
     public handleSpecialKeys(event: KeyboardEvent) {
@@ -140,8 +141,28 @@ export class SearchMenu {
             return true;
         }
 
-        if (event.key === "Enter" || event.key === "Tab") {
-            this.searchMenuUI.selectCompletion();
+        if (event.key === "Tab") {
+            // Tab on an unselected dropdown snaps to the first item
+            // (matching ArrowDown), instead of leaving the user with
+            // nothing.  A second Tab will then accept that item.
+            if (!this.searchMenuUI.selectCompletion()) {
+                this.searchMenuUI.adjustSelection(1);
+            }
+            event.preventDefault();
+            return true;
+        }
+
+        // In dropdown mode, Enter accepts the highlighted item (and
+        // therefore does NOT submit the request).  In inline mode, we
+        // intentionally let Enter fall through to submit the request,
+        // matching the existing UX where ghost text is only accepted
+        // by Tab.  When no item is selected (e.g. an auto-opened
+        // subcommand menu the user hasn't navigated yet), Enter falls
+        // through to default handling so the user can submit/newline.
+        if (event.key === "Enter" && !this.inline && this._active) {
+            if (!this.searchMenuUI.selectCompletion()) {
+                return false;
+            }
             event.preventDefault();
             return true;
         }

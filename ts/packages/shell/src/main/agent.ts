@@ -243,14 +243,43 @@ class ShellSetSettingCommandHandler implements CommandHandler {
 class ShellRunDemoCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Run Demo";
     public async run(context: ActionContext<ShellContext>) {
-        context.sessionContext.agentContext.shellWindow.runDemo();
+        const started =
+            context.sessionContext.agentContext.shellWindow.runDemo();
+        if (!started) {
+            displayWarn(
+                "A demo is already running.  Press Esc to abort it, " +
+                    "or wait for it to finish before starting another.",
+                context,
+            );
+        }
     }
 }
 
 class ShellRunDemoInteractiveCommandHandler implements CommandHandlerNoParams {
     public readonly description = "Run Demo Interactive";
     public async run(context: ActionContext<ShellContext>) {
-        context.sessionContext.agentContext.shellWindow.runDemo(true);
+        const started =
+            context.sessionContext.agentContext.shellWindow.runDemo(true);
+        if (!started) {
+            displayWarn(
+                "A demo is already running.  Press Esc to abort it, " +
+                    "or wait for it to finish before starting another.",
+                context,
+            );
+        }
+    }
+}
+
+class ShellBreakDemoCommandHandler implements CommandHandlerNoParams {
+    public readonly description = "Abort the currently running demo";
+    public async run(context: ActionContext<ShellContext>) {
+        const stopped =
+            context.sessionContext.agentContext.shellWindow.breakDemo();
+        if (stopped) {
+            displaySuccess("Demo aborted.", context);
+        } else {
+            displayWarn("No demo is currently running.", context);
+        }
     }
 }
 
@@ -332,6 +361,7 @@ const handlers: CommandHandlerTable = {
                 interactive: new ShellRunDemoInteractiveCommandHandler(),
             },
         },
+        break: new ShellBreakDemoCommandHandler(),
         topmost: new ShellSetTopMostCommandHandler(),
         localWhisper: getLocalWhisperCommandHandlers(),
         theme: getThemeCommandHandlers(),

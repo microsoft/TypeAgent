@@ -377,6 +377,29 @@ body.horizontal-layout.has-sidebar .app-title {
   align-items: center;
 }
 
+.demo-mode-label {
+  display: none;
+  margin-left: 8px;
+  font-size: 0.8em;
+  font-weight: 600;
+  color: #6cb6ff;
+  letter-spacing: 0.05em;
+  vertical-align: baseline;
+  -webkit-app-region: no-drag;
+}
+
+.demo-mode-label::before {
+  content: "[";
+}
+
+.demo-mode-label::after {
+  content: "]";
+}
+
+body.demo-mode .demo-mode-label {
+  display: inline;
+}
+
 .window-control {
   width: 46px;
   height: var(--title-bar-height);

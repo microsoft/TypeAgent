@@ -17,6 +17,11 @@ export class LocalSearchMenuUI implements SearchMenuUI {
     private items: SearchMenuItem[] = [];
     private prefix: string = "";
     private top: number = 0;
+    // True until the first items update; used so an auto-opened dropdown
+    // (e.g. subcommand menu after accepting a command) shows no default
+    // selection.  Subsequent updates (from user typing to filter) snap to
+    // the first item.
+    private firstUpdate: boolean = true;
 
     private get closed() {
         return this.searchContainer.parentElement === null;
@@ -25,13 +30,18 @@ export class LocalSearchMenuUI implements SearchMenuUI {
     constructor(
         private readonly onCompletion: (item: SearchMenuItem) => void,
         private readonly visibleItemsCount = 15,
+        // Optional notifier invoked whenever `selected` changes due to
+        // local interactions (mouse hover) that the host did not initiate.
+        // Allows a remote host to keep its mirrored selection index in sync
+        // so synchronous APIs like selectCompletion() return correctly.
+        private readonly onSelectionChange?: (selected: number) => void,
     ) {
         this.onCompletion = onCompletion;
         this.searchContainer = document.createElement("div");
         this.searchContainer.className = "autocomplete-container";
 
         this.searchContainer.onwheel = (event) => {
-            this.adjustSelection(event.deltaY);
+            this.scrollBy(event.deltaY);
         };
 
         this.scrollBar = document.createElement("div");
@@ -50,14 +60,16 @@ export class LocalSearchMenuUI implements SearchMenuUI {
         this.searchContainer.remove();
     }
 
-    public selectCompletion() {
+    public selectCompletion(): boolean {
         if (this.closed) {
-            return;
+            return false;
         }
         const index = this.selected;
         if (index >= 0 && index < this.items.length) {
             this.onCompletion(this.items[index]);
+            return true;
         }
+        return false;
     }
 
     public update(data: SearchMenuUIUpdateData) {
@@ -78,7 +90,8 @@ export class LocalSearchMenuUI implements SearchMenuUI {
         if (data.items !== undefined) {
             updateDisplay = true;
             this.items = data.items;
-            this.selected = 0;
+            this.selected = this.firstUpdate ? -1 : 0;
+            this.firstUpdate = false;
             this.top = 0;
         }
 
@@ -105,6 +118,33 @@ export class LocalSearchMenuUI implements SearchMenuUI {
         this.updateDisplay();
     }
 
+    public scrollBy(deltaY: number) {
+        if (this.closed || this.items.length === 0) {
+            return;
+        }
+        // Some input devices fire wheel events with deltaY === 0 (e.g.
+        // pure horizontal scroll on trackpads).  Treat those as no-ops
+        // rather than scrolling up by one.
+        const step = Math.sign(deltaY);
+        if (step === 0) {
+            return;
+        }
+        const maxTop = Math.max(0, this.items.length - this.visibleItemsCount);
+        const newTop = Math.max(0, Math.min(maxTop, this.top + step));
+        if (newTop === this.top) {
+            return;
+        }
+        this.top = newTop;
+        this.scrolling = true;
+        try {
+            this.updateDisplay();
+        } finally {
+            this.scrolling = false;
+        }
+    }
+
+    private scrolling: boolean = false;
+
     private updateDisplay() {
         if (this.completions) {
             this.searchContainer.removeChild(this.completions);
@@ -116,8 +156,10 @@ export class LocalSearchMenuUI implements SearchMenuUI {
             this.completions.className = "completions";
 
             if (
-                this.selected < this.top ||
-                this.selected >= this.top + this.visibleItemsCount
+                !this.scrolling &&
+                this.selected >= 0 &&
+                (this.selected < this.top ||
+                    this.selected >= this.top + this.visibleItemsCount)
             ) {
                 this.top = this.selected;
             }
@@ -126,6 +168,11 @@ export class LocalSearchMenuUI implements SearchMenuUI {
                     0,
                     this.items.length - this.visibleItemsCount,
                 );
+            }
+            // Guard against `top` going negative when no item is selected
+            // (selected = -1) and items.length < visibleItemsCount.
+            if (this.top < 0) {
+                this.top = 0;
             }
             for (let i = this.top; i < this.top + this.visibleItemsCount; i++) {
                 const li = document.createElement("li");
@@ -144,11 +191,20 @@ export class LocalSearchMenuUI implements SearchMenuUI {
                 prefixSpan.className = "search-prefix";
                 prefixSpan.innerText = this.prefix;
                 li.appendChild(prefixSpan);
-                // make a span for the suffix
+                // make a span for the suffix.  Append a trailing
+                // non-breaking space when the inserted text ends in an
+                // identifier/quote char (matching the appendSpace logic
+                // in partial.ts handleSelect()) so the user can see at
+                // a glance that accepting the item will also insert a
+                // separator before whatever they type next.
                 const suffix = item.matchText.substring(this.prefix.length);
+                const lastChar = item.matchText.slice(-1);
+                const showTrailingSpace = /[A-Za-z0-9_"'\)\]]/.test(lastChar);
                 const resultSpan = document.createElement("span");
                 resultSpan.className = "search-suffix";
-                resultSpan.innerText = suffix;
+                resultSpan.innerText = showTrailingSpace
+                    ? `${suffix}\u00A0`
+                    : suffix;
                 li.appendChild(resultSpan);
                 this.completions.appendChild(li);
 
@@ -160,6 +216,7 @@ export class LocalSearchMenuUI implements SearchMenuUI {
                     if (this.selected != i) {
                         this.selected = i;
                         this.updateDisplay();
+                        this.onSelectionChange?.(this.selected);
                     }
                 };
 

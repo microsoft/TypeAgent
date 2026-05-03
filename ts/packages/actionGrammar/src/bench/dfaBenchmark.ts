@@ -272,6 +272,56 @@ function printTimingTable(rows: TimingResult[]): void {
     }
 }
 
+/**
+ * Compare the three "produces an AST / typed match value" variants:
+ *   - AST opt  (matchGrammar with all recommended optimizations)
+ *   - NFA+idx  (NFA threading with first-token index dispatch)
+ *   - DFA AST  (DFA traversal + bottom-up value evaluation)
+ *
+ * For each row, the median of the three is taken as the baseline (1.00x)
+ * and the other two are shown as `time (Nx)` where N = median / current.
+ * Speedups above the green threshold in `colorSpeedup` are colored green;
+ * speedups below the red threshold are colored red.
+ */
+function printASTComparisonTable(rows: TimingResult[]): void {
+    if (!rows.length) return;
+
+    console.log(`\n╔══ AST-PRODUCING VARIANTS (median = 1.00x baseline) ════╗`);
+    const header = [
+        "Grammar",
+        "Request",
+        "Match?",
+        "AST opt μs/call",
+        "NFA+idx μs/call",
+        "DFA AST μs/call",
+    ];
+
+    const fmt = (us: number, speedup: number, isBase: boolean): string => {
+        const usStr = us.toFixed(2);
+        if (isBase) return `${usStr} (1.00x)`;
+        return `${usStr} (${colorSpeedup(speedup)})`;
+    };
+
+    const data = rows.map((r) => {
+        const values = [
+            r.matchOptMsPerCall,
+            r.nfaIndexMsPerCall,
+            r.dfaASTMsPerCall,
+        ];
+        const sorted = [...values].sort((a, b) => a - b);
+        const median = sorted[1];
+        return [
+            r.grammar,
+            r.request.length > 30 ? r.request.slice(0, 27) + "..." : r.request,
+            r.matched ? "✓" : "✗",
+            fmt(values[0], median / values[0], values[0] === median),
+            fmt(values[1], median / values[1], values[1] === median),
+            fmt(values[2], median / values[2], values[2] === median),
+        ];
+    });
+    printAligned(header, data);
+}
+
 function printCrossGrammarSummary(rows: SpaceResult[]): void {
     if (!rows.length) return;
     console.log("\n╔══ CROSS-GRAMMAR SUMMARY ═══════════════════════════════╗");
@@ -611,6 +661,7 @@ function main(): void {
     printSpaceTable(spaceResults);
     printCompileTable(compileResults);
     printTimingTable(timingResults);
+    printASTComparisonTable(timingResults);
     printCrossGrammarSummary(spaceResults);
 }
 

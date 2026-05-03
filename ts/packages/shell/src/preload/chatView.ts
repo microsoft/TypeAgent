@@ -53,6 +53,9 @@ function registerClient(client: Client) {
         await client.showInputText(message);
         ipcRenderer.send("send-input-text-complete");
     });
+    ipcRenderer.on("demo-state", (_, state) => {
+        client.demoStateChanged?.(state);
+    });
     ipcRenderer.on("show-dialog", (_, key) => {
         client.showDialog(key);
     });
@@ -73,6 +76,13 @@ function registerClient(client: Client) {
     ipcRenderer.on("search-menu-completion", (_event, id: number, item) => {
         client.searchMenuCompletion(id, item);
     });
+
+    ipcRenderer.on(
+        "search-menu-selection-changed",
+        (_event, id: number, selected: number) => {
+            client.searchMenuSelectionChanged?.(id, selected);
+        },
+    );
 
     ipcRenderer.on("dispatcher-initialized", () => {
         // Resolve the dispatcher promise when the dispatcher is initialized)
@@ -162,6 +172,9 @@ const api: ClientAPI = {
     },
     searchMenuAdjustSelection: (id: number, deltaY: number) => {
         ipcRenderer.send("search-menu-adjust-selection", id, deltaY);
+    },
+    searchMenuScroll: (id: number, deltaY: number) => {
+        ipcRenderer.send("search-menu-scroll", id, deltaY);
     },
     searchMenuSelectCompletion: (id: number) => {
         ipcRenderer.send("search-menu-select-completion", id);

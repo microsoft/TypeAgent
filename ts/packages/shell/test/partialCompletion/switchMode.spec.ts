@@ -105,15 +105,16 @@ class TestableSearchMenu {
 
     // ── switchMode (mirrors production SearchMenu.switchMode) ─────────────
 
-    public switchMode(newInline: boolean): void {
+    public switchMode(newInline: boolean): boolean {
         if (this.inline === newInline) {
-            return;
+            return false;
         }
         if (this.searchMenuUI) {
             this.searchMenuUI.close();
             this.searchMenuUI = undefined;
         }
         this.inline = newInline;
+        return true;
     }
 }
 

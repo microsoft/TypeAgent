@@ -1,38 +1,68 @@
-# Execution Flows — Architecture & Design
+# Workflows — Architecture & Design
 
-> **Scope:** This document is the architecture reference for TypeAgent's three
-> execution flow systems — PowerShell, WebFlow, and TaskFlow — covering
-> definition formats, execution sandboxes, storage, the dynamic schema/grammar
-> API, and self-repair. For the grammar language and matching algorithms that
-> route user input to flow actions, see `actionGrammar.md`. For how matched
-> completions propagate through the shell, see `completion.md`.
+> **Scope:** This document is the architecture reference for TypeAgent's
+> user-defined workflow system — PowerShell scripts, WebFlows, and TaskFlows
+> — covering definition formats, execution sandboxes, storage, the dynamic
+> schema/grammar API, and self-repair. For the grammar language and matching
+> algorithms that route user input to workflow actions, see `actionGrammar.md`.
+> For how matched completions propagate through the shell, see `completion.md`.
 
 ## Overview
 
-TypeAgent routes natural language to agent actions via grammar matching or
-LLM translation. One-shot actions (play a song, send an email) work well,
-but multi-step operations that should be remembered and reused — listing
-files, searching a website, building a cross-agent workflow — incur repeated
-LLM reasoning on every invocation.
+TypeAgent's action system is developer-authored: developers write actions,
+schemas, and grammar rules; natural-language requests dispatch reliably
+against that fixed surface. It works, but **every new capability requires
+a developer**.
 
-Execution flows solve this by capturing multi-step operations into
-parameterized, reusable definitions that register themselves as first-class
-grammar-matchable actions. Once captured, a flow executes deterministically
-without LLM involvement, reducing latency from seconds to milliseconds.
+Workflows change this by enabling **end users to extend the system
+themselves**. A user demonstrates a task or describes it in their own words;
+a reasoning agent generalizes what it observed into a reusable script with
+parameters and grammar rules; and the resulting workflow becomes a first-class
+action that anyone can invoke.
+
+### The core insight: saved workflows win
+
+Once a task is captured as a workflow, execution is **deterministic and fast**
+— milliseconds instead of seconds. The LLM is used once to _create_ the
+workflow, not on every invocation. This is the fundamental value proposition:
+trade one-time LLM reasoning for unlimited fast reuse.
+
+### Three-phase lifecycle
+
+The user-facing model is simple:
+
+| Phase       | What happens                                                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| **Capture** | User demonstrates or describes a task; reasoning agent writes code against a domain API; workflow registers via `reloadAgentSchema()` |
+| **Run**     | User utterance matches grammar; workflow executes deterministically                                                                   |
+| **Repair**  | If execution fails, reasoning agent rewrites the workflow in place                                                                    |
+
+See [Common lifecycle](#common-lifecycle) for implementation details
+(five phases: Capture → Persist → Register → Execute → Feedback).
+
+### Where workflows apply
+
+| Domain                    | Example                                          | Status      |
+| ------------------------- | ------------------------------------------------ | ----------- |
+| PowerShell scripts        | _"Show my running processes"_                    | Implemented |
+| Web browser automation    | _"Buy AAA batteries on Amazon"_                  | Implemented |
+| Cross-agent workflows     | _"Get top 10 K-pop songs and create a playlist"_ | Implemented |
+| Office macros             | _"Format this spreadsheet for quarterly review"_ | Planned     |
+| Knowledge-base automation | _"Run the network troubleshooting guide"_        | Planned     |
 
 ### Key concepts
 
-| Term                | Meaning                                                                                                                        |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| **Flow**            | A parameterized, reusable automation definition that registers as a dispatchable action with grammar patterns for NL matching. |
-| **Flow store**      | Per-agent instance storage that persists flow definitions, scripts, and an index file across sessions.                         |
-| **Dynamic schema**  | A runtime-generated TypeScript type definition that constrains LLM-translated parameter values to valid flow names.            |
-| **Dynamic grammar** | Runtime-generated `.agr` rules that enable grammar matching for registered flows.                                              |
-| **Script executor** | The sandboxed execution environment for each flow type (PowerShell runner, WebFlow script executor, TaskFlow script executor). |
-| **Script host**     | A sandboxed execution environment for scripts (PowerShell constrained runspace, Node.js `new Function()` sandbox).             |
-| **Self-repair**     | Fallback to LLM reasoning when a flow execution fails, with context about the failure to guide correction.                     |
+| Term                | Meaning                                                                                                                            |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **Workflow**        | A parameterized, reusable automation definition that registers as a dispatchable action with grammar patterns for NL matching.     |
+| **Workflow store**  | Per-agent instance storage that persists workflow definitions, scripts, and an index file across sessions.                         |
+| **Dynamic schema**  | A runtime-generated TypeScript type definition that constrains LLM-translated parameter values to valid workflow names.            |
+| **Dynamic grammar** | Runtime-generated `.agr` rules that enable grammar matching for registered workflows.                                              |
+| **Script executor** | The sandboxed execution environment for each workflow type (PowerShell runner, WebFlow script executor, TaskFlow script executor). |
+| **Script host**     | A sandboxed execution environment for scripts (PowerShell constrained runspace, Node.js `new Function()` sandbox).                 |
+| **Self-repair**     | Fallback to LLM reasoning when a workflow execution fails, with context about the failure to guide correction.                     |
 
-### Three flow types
+### Three workflow types
 
 ```
                         +-----------------+
@@ -62,11 +92,28 @@ without LLM involvement, reducing latency from seconds to milliseconds.
 | **Scope**     | System-wide                             | Per-site or global                                | Any agent combination                              |
 | **Platform**  | Windows only                            | Any (browser required)                            | Any                                                |
 
+> **Design trade-off — why three separate workflow types instead of one?**
+>
+> We could have a single unified workflow format that handles all domains.
+> We chose three types because:
+>
+> 1. **Sandbox requirements differ** — PowerShell needs OS-level isolation
+>    (constrained runspace); browser scripts need DOM access prevention;
+>    cross-agent flows need dispatcher validation.
+> 2. **Capture mechanisms differ** — PowerShell imports existing `.ps1` files;
+>    WebFlows record browser interactions; TaskFlows capture reasoning traces.
+> 3. **Execution substrates differ** — PowerShell runs in a child process;
+>    WebFlows proxy to the browser; TaskFlows call the dispatcher.
+>
+> The cost is three parallel implementations of storage, dynamic schema,
+> and grammar generation. See [Design principles](#design-principles) for
+> the full list of architectural invariants.
+
 ---
 
 ## Common lifecycle
 
-All three flow types share a five-phase lifecycle:
+All three workflow types share a five-phase lifecycle:
 
 ```
   +-----------+     +----------+     +----------+     +-----------+
@@ -80,7 +127,7 @@ All three flow types share a five-phase lifecycle:
 
 ### Phase 1 — Capture
 
-How flows are created depends on the flow type and trigger:
+How workflows are created depends on the workflow type and trigger:
 
 | Flow type  | Trigger                       | Pipeline                                                                                                    |
 | ---------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------- |
@@ -102,21 +149,21 @@ How flows are created depends on the flow type and trigger:
 
 ### Phase 2 — Persist
 
-All flows use **instance storage** (`~/.typeagent/profiles/<profile>/`) for
+All workflows use **instance storage** (`~/.typeagent/profiles/<profile>/`) for
 cross-session persistence. See [Storage and persistence](#storage-and-persistence)
 for the full layout.
 
 ### Phase 3 — Register
 
-Flows become matchable through dynamic grammar and schema registration.
-On agent activation (or after a flow mutation), the agent calls
+Workflows become matchable through dynamic grammar and schema registration.
+On agent activation (or after a workflow mutation), the agent calls
 `reloadAgentSchema()` and the dispatcher queries `getDynamicGrammar()` and
 `getDynamicSchema()` to pick up new patterns and type constraints. See
 [Dynamic schema and grammar API](#dynamic-schema-and-grammar-api) for details.
 
 ### Phase 4 — Execute
 
-Each flow type has a domain-specific execution sandbox. See the per-type
+Each workflow type has a domain-specific execution sandbox. See the per-type
 sections ([PowerShell](#powershell), [WebFlow](#webflow),
 [TaskFlow](#taskflow)) for architecture details.
 
@@ -127,7 +174,7 @@ context about the failure. See [Self-repair and reasoning fallback](#self-repair
 
 ---
 
-## Flow definition formats
+## Workflow definition formats
 
 ### PowerShell recipe (`ScriptRecipe`)
 
@@ -181,7 +228,7 @@ interface SandboxPolicy {
 }
 ```
 
-Persisted as two files per flow: a `.flow.json` (metadata, parameters,
+Persisted as two files per workflow: a `.flow.json` (metadata, parameters,
 sandbox policy, grammar patterns) and a `.ps1` (script body).
 
 ### WebFlow definition (`WebFlowDefinition`)
@@ -220,9 +267,9 @@ interface WebFlowSource {
 }
 ```
 
-Persisted as two files per flow: a `.json` (metadata without script) and
-a `.js` (script body). Scope determines the storage path — global flows
-go to `flows/global/`, site-scoped flows go to `flows/sites/{domain}/`.
+Persisted as two files per workflow: a `.json` (metadata without script) and
+a `.js` (script body). Scope determines the storage path — global workflows
+go to `flows/global/`, site-scoped workflows go to `flows/sites/{domain}/`.
 
 ### TaskFlow recipe (`ScriptRecipe`)
 
@@ -248,7 +295,7 @@ interface RecipeParameter {
 }
 ```
 
-Persisted as two files per flow: a `.flow.json` (metadata without script)
+Persisted as two files per workflow: a `.flow.json` (metadata without script)
 and a `.ts` (TypeScript script body). Scripts execute via
 `executeTaskFlowScript()` with access to `TaskFlowScriptAPI` for calling
 other agents.
@@ -264,6 +311,10 @@ other agents.
 | **Sandbox policy**    | Explicit `SandboxPolicy` object        | Implicit (frozen API + validator)                         | Frozen API + blocked globals           |
 | **Scope**             | System-wide (no scope field)           | `WebFlowScope` (site/global)                              | System-wide (no scope field)           |
 | **Source tracking**   | `source.type`: reasoning, manual, seed | `source.type`: goal-driven, recording, discovered, manual | `source.type`: reasoning, manual, seed |
+
+Note: The type names (`WebFlow`, `TaskFlow`, `PowerShell`) are product/code identifiers.
+Throughout this document, "workflow" refers to the general concept; the specific
+type names are preserved where they match code.
 
 ---
 
@@ -286,7 +337,7 @@ PowerShell supports two creation paths:
      v    - Infers parameters from param() block or hardcoded values
      v    - Generates grammar patterns (2-4 patterns)
      v    - Identifies required cmdlets for sandbox policy
-     v  Saved to instance storage as active flow
+     v  Saved to instance storage as active workflow
      v  reloadAgentSchema() -> grammar + schema updated
 ```
 
@@ -299,7 +350,7 @@ PowerShell supports two creation paths:
   }
      |
      v  actionHandler builds ScriptRecipe from provided fields
-     v  Saved to instance storage as active flow
+     v  Saved to instance storage as active workflow
      v  reloadAgentSchema() -> grammar + schema updated
 ```
 
@@ -466,23 +517,36 @@ async function executeWebFlowScript(
 
 ### Script validation
 
-Before execution, `scriptValidator.mts` performs regex-based validation:
+Before execution, `scriptValidator.mts` performs TypeScript-compiler-based
+validation with an AST security walker:
 
-- Checks for 27 blocked identifiers using word-boundary regex (`\b`):
+- Parses script through the TypeScript compiler
+- Walks AST to detect 27+ blocked identifiers:
   ```
   eval, Function, require, import, fetch, XMLHttpRequest, WebSocket,
   window, document, globalThis, self, setTimeout, setInterval,
   clearTimeout, clearInterval, chrome, process, Buffer,
   __dirname, __filename
   ```
-- Strips string literals before checking to reduce false positives
 - Validates function signature: `async function execute(browser, params)`
-- Checks for dynamic code patterns: `new Function()`, `import()`
+- Blocks dangerous patterns: `new Function()`, dynamic `import()`,
+  `with` statements, `__proto__`, `constructor.constructor` chains
 
-> **Note:** Validation is regex-based, not true AST parsing.
-> Sophisticated obfuscation techniques (unicode escapes,
-> `constructor.constructor` chains, multi-line template literals)
-> could bypass the scanner.
+> **Design trade-off — why AST validation instead of true sandboxing?**
+>
+> True sandboxing (e.g., V8 isolates, WebAssembly) would provide stronger
+> guarantees. We chose AST-based validation because:
+>
+> 1. **Performance** — Creating V8 isolates has ~50ms overhead per
+>    execution; AST scanning is <5ms.
+> 2. **API access** — Scripts need to call `browser.*` methods that cross
+>    the sandbox boundary; true isolation would require complex serialization.
+> 3. **Debuggability** — `new Function()` errors include stack traces;
+>    isolated contexts obscure failure locations.
+>
+> We mitigate bypass risk by freezing the API object and running in
+> strict mode. The validation catches common dangerous patterns; the
+> frozen API limits what escaped code could do.
 
 ### Browser API contract
 
@@ -712,7 +776,7 @@ async function execute(
 taskflow/
   index.json                         # TaskFlowIndex
   flows/
-    createTopSongsPlaylist.flow.json # Flow metadata (without script)
+    createTopSongsPlaylist.flow.json # Workflow metadata (without script)
     weeklyEmailDigest.flow.json
   scripts/
     createTopSongsPlaylist.ts        # TypeScript script (separate file)
@@ -748,8 +812,24 @@ If the script returns a value without a `success` field, the executor wraps it:
 
 The dynamic schema mechanism allows any agent to update its action
 types and grammar rules at runtime. This is the generic extension point
-that all three flow systems use to register their flows with the
+that all three workflow systems use to register their workflows with the
 dispatcher.
+
+### Why this matters
+
+Three properties make this system valuable:
+
+1. **The LLM is constrained** — The translator sees TypeScript union types
+   generated at runtime, so it can only produce valid workflow names and
+   parameter types. Hallucinated workflow names fail type validation.
+
+2. **Pickup is instant** — When a workflow is added or removed, the grammar
+   matcher absorbs new patterns immediately — no restart required. The
+   user can invoke a newly-captured workflow in the same session.
+
+3. **It's pluggable** — New domains (Excel, VS Code, database queries)
+   slot in without dispatcher changes. PowerShell, WebFlow, and TaskFlow
+   are just the first three implementations of this extension point.
 
 ### Agent-side callbacks
 
@@ -776,7 +856,7 @@ reloadAgentSchema(): Promise<void>;
 ### Data flow
 
 ```
-  Agent starts up / flow mutated
+  Agent starts up / workflow mutated
        |
        v
   Agent calls reloadAgentSchema()
@@ -811,12 +891,12 @@ reloadAgentSchema(): Promise<void>;
 
 ### Example: PowerShell dynamic schema
 
-PowerShell generates a **per-flow action type** for each registered
-flow, plus the built-in management actions. With flows `listFiles` and
+PowerShell generates a **per-workflow action type** for each registered
+workflow, plus the built-in management actions. With workflows `listFiles` and
 `findLargeFiles` registered, the dynamic schema is:
 
 ```typescript
-// Per-flow action types (generated at runtime)
+// Per-workflow action types (generated at runtime)
 export type ListFilesAction = {
     actionName: "listFiles";
     parameters: {
@@ -870,7 +950,7 @@ for grammar matching.
 
 ## Storage and persistence
 
-All flow stores use the `Storage` interface from `@typeagent/agent-sdk`
+All workflow stores use the `Storage` interface from `@typeagent/agent-sdk`
 backed by instance storage at `~/.typeagent/profiles/<profile>/`.
 
 ### PowerShell storage layout
@@ -911,7 +991,7 @@ browser/webflows/
 taskflow/
   index.json                         # TaskFlowIndex
   flows/
-    createTopSongsPlaylist.flow.json # Flow metadata (without script)
+    createTopSongsPlaylist.flow.json # Workflow metadata (without script)
     weeklyEmailDigest.flow.json
   scripts/
     createTopSongsPlaylist.ts        # TypeScript script (separate file)
@@ -947,14 +1027,14 @@ All three index types share a common pattern:
 
 ### Sample seeding
 
-All three flow types ship bundled sample recipes that are loaded on
+All three workflow types ship bundled sample recipes that are loaded on
 first activation:
 
-| Flow type  | Sample location                    | Seeding behavior                                                  |
-| ---------- | ---------------------------------- | ----------------------------------------------------------------- |
-| PowerShell | `samples/*.recipe.json` in package | Copied to instance storage; skipped if flow exists or was deleted |
-| TaskFlow   | `samples/*.recipe.json` in package | Same behavior                                                     |
-| WebFlow    | `samples/*.json` in package        | Same; discovered placeholders upgraded to real samples            |
+| Flow type  | Sample location                    | Seeding behavior                                                      |
+| ---------- | ---------------------------------- | --------------------------------------------------------------------- |
+| PowerShell | `samples/*.recipe.json` in package | Copied to instance storage; skipped if workflow exists or was deleted |
+| TaskFlow   | `samples/*.recipe.json` in package | Same behavior                                                         |
+| WebFlow    | `samples/*.json` in package        | Same; discovered placeholders upgraded to real samples                |
 
 Deleted sample tracking (`deletedSamples[]` in PowerShell/TaskFlow
 indexes) prevents re-seeding flows the user has intentionally removed.
@@ -963,7 +1043,7 @@ indexes) prevents re-seeding flows the user has intentionally removed.
 
 ## Self-repair and reasoning fallback
 
-When a flow execution fails, the action handler can signal the dispatcher
+When a workflow execution fails, the action handler can signal the dispatcher
 to retry via LLM reasoning with context about the failure.
 
 ### PowerShell self-repair
@@ -986,20 +1066,20 @@ to retry via LLM reasoning with context about the failure.
   Dispatcher calls executeReasoning() with fallback context
        |
        v
-  LLM reasoning sees: failed flow name, error details, hint
+  LLM reasoning sees: failed workflow name, error details, hint
        |
        v
   LLM generates: editPowerShellFlow { flowName, script, allowedCmdlets }
        |
        v
-  Flow fixed in-place, grammar unchanged, next invocation works
+  Workflow fixed in-place, grammar unchanged, next invocation works
 ```
 
 ### TaskFlow self-repair
 
 TaskFlow steps execute through the dispatcher's `executeAction()`, so
 individual step failures produce standard `ActionResult` errors. The
-flow interpreter aborts at the failing step and propagates the error.
+workflow interpreter aborts at the failing step and propagates the error.
 The TaskFlow action handler can set `fallbackToReasoning: true` on the
 outer result.
 
@@ -1012,12 +1092,75 @@ enabling automatic self-repair via LLM reasoning.
 
 The fallback context includes:
 
-- Failed flow name
+- Failed workflow name
 - Error message from script execution
 - Hint to use `editWebFlow` to fix the script
 
 This mirrors PowerShell's self-repair mechanism, providing a consistent
-error recovery experience across all flow types.
+error recovery experience across all workflow types.
+
+> **Design trade-off — why in-place editing instead of creating new workflows?**
+>
+> When a workflow fails, the LLM could create a new workflow with a fixed script.
+> We chose in-place editing because:
+>
+> 1. **Preserves grammar** — The user's mental model ("list files") maps to
+>    a single workflow. Creating duplicates ("listFiles2") is confusing.
+> 2. **Avoids clutter** — Failed experiments don't accumulate in the index.
+> 3. **Enables iteration** — The LLM can refine the same workflow across multiple
+>    repair attempts without namespace pollution.
+>
+> The cost is potential regression if the edit makes things worse. Future
+> work could add versioning/undo capability (see [Future directions](#future-directions)).
+
+---
+
+## Invariants
+
+### Workflow registration invariants
+
+**#1 — Unique action names.**
+Each workflow within an agent must have a unique `actionName` / `name`. Duplicate
+names cause the second workflow to overwrite the first in the index.
+_Impact:_ Lost workflows, grammar collisions.
+
+**#2 — Grammar pattern validity.**
+Every grammar pattern in `grammarPatterns` must be syntactically valid `.agr`
+and must not conflict with existing static grammar rules.
+_Impact:_ Grammar compilation failure breaks all matching for the agent.
+
+**#3 — Dynamic schema consistency.**
+After `reloadAgentSchema()`, the schema returned by `getDynamicSchema()` must
+include action types for all enabled workflows in the index.
+_Impact:_ LLM can't translate requests for workflows missing from schema.
+
+### Execution invariants
+
+**#4 — Sandbox policy enforcement.**
+PowerShell scripts can only execute cmdlets listed in `allowedCmdlets`.
+_Impact:_ Unlisted cmdlets fail with "not recognized" even if installed.
+
+**#5 — Frozen API immutability.**
+WebFlow and TaskFlow scripts receive `Object.freeze()`d API and params objects.
+Scripts cannot modify these objects or add properties.
+_Impact:_ Mutations silently fail (strict mode) or are ignored.
+
+**#6 — Single-threaded script execution.**
+Only one workflow script executes at a time per agent instance. Concurrent
+invocations are queued.
+_Impact:_ Long-running scripts block subsequent requests.
+
+### Self-repair invariants
+
+**#7 — No duplicates on repair.**
+When a workflow fails and self-repair succeeds, the existing workflow is edited
+in place. A new workflow with a different name is never created.
+_Impact:_ User's mental model and grammar patterns are preserved.
+
+**#8 — Failure context propagation.**
+The `fallbackContext` object must include the failed workflow name, error message,
+and an actionable hint (e.g., "Use editPowerShellFlow to fix").
+_Impact:_ Without context, the LLM may generate an unrelated fix.
 
 ---
 
@@ -1169,7 +1312,7 @@ interface GrammarContent {
 ### Scenario 1 — PowerShell: first use to instant reuse
 
 ```
-  === First request (no existing flow) ===
+  === First request (no existing workflow) ===
 
   User: "list the files in my downloads"
     |
@@ -1177,16 +1320,16 @@ interface GrammarContent {
     v Direct execution: scriptHost.ps1 runs Get-ChildItem with Path param
     v Display: "Here are your files..." (~500ms, no reasoning)
 
-  Alternatively, if no seed flow exists:
+  Alternatively, if no seed workflow exists:
     |
     v Grammar: no match
     v LLM translation: routes to powershell or utility
-    v Reasoning: uses createPowerShellFlow to define a flow with
+    v Reasoning: uses createPowerShellFlow to define a workflow with
     v   script body, parameters, grammar patterns, sandbox policy
     v Flow saved, reloadAgentSchema() called
-    v Display: "Here are your files..." + "PowerShell flow registered: listFiles"
+    v Display: "Here are your files..." + "PowerShell workflow registered: listFiles"
 
-  === Second request (flow exists) ===
+  === Second request (workflow exists) ===
 
   User: "list the files in c:\users\me\documents"
     |
@@ -1224,7 +1367,7 @@ interface GrammarContent {
 ### Scenario 3 — TaskFlow: cross-agent workflow
 
 ```
-  === Seed flow loaded on activation ===
+  === Seed workflow loaded on activation ===
 
   Sample recipe "createTopSongsPlaylist.recipe.json" contains:
     - TypeScript script that:
@@ -1259,7 +1402,7 @@ interface GrammarContent {
     v actionHandler returns: { error: "...", fallbackToReasoning: true }
     v
     v Dispatcher calls executeReasoning() with context:
-    v   "Failed flow: listNodeProcesses"
+    v   "Failed workflow: listNodeProcesses"
     v   "Error: Get-CimInstance not in allowed cmdlets"
     v   "Hint: Use editPowerShellFlow to fix the script and sandbox"
     v
@@ -1269,7 +1412,7 @@ interface GrammarContent {
     v   allowedCmdlets: ["Get-Process", "Where-Object", "Format-Table"]
     v }
     v
-    v Flow updated in-place, grammar unchanged
+    v Workflow updated in-place, grammar unchanged
     v LLM then executes: executePowerShellFlow { flowName: "listNodeProcesses" }
     v Success: process list displayed
 ```
@@ -1278,28 +1421,64 @@ interface GrammarContent {
 
 ## Design principles
 
-1. **Capture once, reuse forever** — Scripts discovered during reasoning
+1. **Saved workflows win** — Once a task is captured as a workflow,
+   execution is deterministic and fast — milliseconds instead of seconds.
+   The LLM is used once to _create_ the workflow, not on every invocation.
+   This is the fundamental value proposition: trade one-time reasoning for
+   unlimited fast reuse.
+
+2. **Capture once, reuse forever** — Scripts discovered during reasoning
    become instantly available for future grammar matching, eliminating
    repeated LLM calls for the same task.
 
-2. **Sandbox everything** — Each domain has its own security model
+3. **Sandbox everything** — Each domain has its own security model
    appropriate to its execution substrate: PowerShell constrained
    language mode with cmdlet whitelists, browser frozen APIs with
    blocked identifiers, dispatcher action validation for cross-agent
-   flows.
+   workflows.
 
-3. **Self-repairing flows** — Failed executions fall back to reasoning
+4. **Self-repairing workflows** — Failed executions fall back to reasoning
    with context about the failure. The LLM can edit the broken script
    in-place rather than creating duplicates, preserving the grammar
-   registration and user's mental model.
+   registration and user's mental model. Two properties matter:
 
-4. **Dynamic schema keeps LLM honest** — Runtime-generated TypeScript
-   type unions prevent the LLM from hallucinating non-existent flow
-   names or invalid parameter values. When flows are added or removed,
+   - **No duplicates** — the broken workflow is repaired, not replaced
+   - **Failure context guides the LLM** — error message and hint
+     converge it on a targeted fix
+
+5. **Dynamic schema keeps LLM honest** — Runtime-generated TypeScript
+   type unions prevent the LLM from hallucinating non-existent workflow
+   names or invalid parameter values. When workflows are added or removed,
    `reloadAgentSchema()` immediately updates the translator's view.
 
-5. **Generic extension points** — `getDynamicSchema()`,
+6. **Generic extension points** — `getDynamicSchema()`,
    `getDynamicGrammar()`, and `reloadAgentSchema()` work for any agent,
-   not just flow agents. Future domains (Excel, VS Code, etc.) can
+   not just workflow agents. Future domains (Excel, VS Code, etc.) can
    plug into the same infrastructure to support user-defined composite
    actions.
+
+---
+
+## Future directions
+
+### New execution domains
+
+The dynamic schema API is designed to support additional workflow types:
+
+| Domain                        | Use case                                         | Sandbox approach                                   |
+| ----------------------------- | ------------------------------------------------ | -------------------------------------------------- |
+| **Excel automation**          | _"Format this spreadsheet for quarterly review"_ | Office.js API with cell-range restrictions         |
+| **VS Code extensions**        | _"Run the TypeScript build and show errors"_     | VS Code extension API with workspace-scoped access |
+| **Database queries**          | _"Show customers who ordered last week"_         | Parameterized SQL with read-only connections       |
+| **Kubernetes management**     | _"Scale the frontend deployment to 3 replicas"_  | kubectl commands with namespace restrictions       |
+| **Knowledge-base automation** | _"Run the network troubleshooting guide"_        | Step-by-step decision tree execution               |
+
+### Capability roadmap
+
+| Capability                    | Description                                                                         | Status  |
+| ----------------------------- | ----------------------------------------------------------------------------------- | ------- |
+| **Workflow namespaces**       | Group workflows into named collections for better organization as the system scales | Planned |
+| **Confirmation gates**        | Require user confirmation before destructive operations (delete files, send emails) | Planned |
+| **Grammar overlap detection** | Detect when new workflow patterns conflict with existing rules before registration  | Planned |
+| **Workflow sharing**          | Export/import workflows between users or teams                                      | Planned |
+| **Version history**           | Track workflow edits with undo capability                                           | Planned |
