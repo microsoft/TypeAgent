@@ -216,10 +216,12 @@ coordinate."
 
 ### 3.5 Hide-by-default `bind` is the matching half
 
-Pure SSA is "single def"; hide-by-default is "addressable only when
-the author opts in." Together they give the author full control over
-both _when_ a name is bound and _whether_ it is visible at all. This
-is what makes the IR a usable codegen target for a DSL with
+Pure SSA is "single def"; hide-by-default (§8.15 of
+[../ir-v1.md](../ir-v1.md), full analysis in
+[0001-bound-outputs.md](0001-bound-outputs.md)) is "addressable only
+when the author opts in." Together they give the author full control
+over both _when_ a name is bound and _whether_ it is visible at all.
+This is what makes the IR a usable codegen target for a DSL with
 let-bindings, lexical scope, and explicit return values: each DSL
 construct lowers to a `bind` decision plus an SSA-compatible
 reference, with no need for the DSL to invent its own renaming or

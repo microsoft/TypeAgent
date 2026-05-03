@@ -1887,29 +1887,20 @@ Costs accepted:
   for a globally simpler validator and engine model. §6.3 is the
   worked example of how the resulting shape reads.
 
-Alternatives considered (and rejected by the same property):
+Alternatives considered: per-node `stateWrites` (§8.5), implicit
+node-id naming (§8.15), an explicit rebind/update form, and a
+pure-functional model with no named bindings. Each is rejected
+against the same single criterion above. Full walk-through with
+their rejection arguments lives in
+[decisions/0004-pure-ssa.md](decisions/0004-pure-ssa.md) §7; this
+entry's job is the short rationale.
 
-- Alt A: per-node `stateWrites` (in-place mutation of the `state`
-  namespace from inside the body). Rejected; full analysis in §8.5.
-- Alt B: every node id is implicitly a name (no `bind`, all outputs
-  always addressable). Rejected; full analysis in §8.15. This is
-  not literally an SSA violation, but it eliminates the author's
-  ability to mark a value as not-for-export, which is the
-  hide-by-default counterpart to single-assignment that the SSA
-  framing relies on.
-- Alt C: an explicit "rebind" or "update" form that mutates an
-  existing name in place. Rejected: would require a new validator
-  pass to track ordering and would re-introduce the dead-write
-  question §8.5 closed. If post-v1 wants mutable accumulators, the
-  natural shape is a new namespace with its own frame rules, not a
-  carve-out in any existing one.
+The pure-SSA framing is what allows the §8 alternatives to be
+analyzed by a single criterion ("does it preserve single assignment
+within a frame?") rather than by ad-hoc weighing of each mechanism.
 
-Full pure-SSA framing of the IR is what allows the §8 alternatives to
-be analyzed by a single criterion ("does it preserve single
-assignment within a frame?") rather than by ad-hoc weighing of each
-mechanism.
-
-Full analysis: [decisions/0004-pure-ssa.md](decisions/0004-pure-ssa.md).
+Full case for the choice, including what the property does not buy
+and the v2 reopening conditions: [decisions/0004-pure-ssa.md](decisions/0004-pure-ssa.md).
 
 ---
 
