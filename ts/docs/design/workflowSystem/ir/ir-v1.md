@@ -164,14 +164,15 @@ when reader and writer pull in different directions, v1 picks the
 reader and expects writer tooling to absorb the difference. The
 following are the largest:
 
-| Tension                                | Writer pull                                                        | Engine sufficiency / cost                                                                                       | v1 resolution                                                                                                                                                                   | Where                |
-| -------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
-| Schema redundancy on task nodes        | Omit, inherit                                                      | Static drift check needs both sides at validation time; runtime dispatch needs schemas without registry lookup. | Required, drift-checked                                                                                                                                                         | §8.16, decision 0003 |
-| Reference encoding (string vs. object) | String shorthand                                                   | Engine needs source kind, name, and path without a parser; analyzers need uniform structural access.            | Object form                                                                                                                                                                     | §8.2                 |
-| IR encoding format                     | YAML for terseness                                                 | Engine needs a strict, ambiguity-free parse; LLM emitters need no whitespace traps.                             | JSON                                                                                                                                                                            | §8.14                |
-| Branch model                           | Predicate `if/else`                                                | Engine needs total dispatch with no expression evaluator on the hot path.                                       | Discriminant switch with required `default`                                                                                                                                     | §8.3                 |
-| Bound outputs                          | Implicit publication                                               | Engine needs a static liveness signal to free unreferenced values immediately (§5.7 SHOULD).                    | Hide-by-default `bind` switch                                                                                                                                                   | §8.15, decision 0001 |
-| Verbosity tax in the LLM era           | Codegen output size; human review/diff burden when reading IR cold | Engine needs the verbose, explicit, locally validatable form regardless of who writes it.                       | Build a DSL when authors are LLM or human; codegen pays the tax once per change rather than per emission. IR remains emittable so the LLM-direct fallback in §1.1.2 stays open. | §1.1.2 LLM rows      |
+| Tension                                | Writer pull                                                        | Engine sufficiency / cost                                                                                                                                                                                 | v1 resolution                                                                                                                                                                   | Where                |
+| -------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| Schema redundancy on task nodes        | Omit, inherit                                                      | Static drift check needs both sides at validation time; runtime dispatch needs schemas without registry lookup.                                                                                           | Required, drift-checked                                                                                                                                                         | §8.16, decision 0003 |
+| Reference encoding (string vs. object) | String shorthand                                                   | Engine needs source kind, name, and path without a parser; analyzers need uniform structural access.                                                                                                      | Object form                                                                                                                                                                     | §8.2                 |
+| IR encoding format                     | YAML for terseness                                                 | Engine needs a strict, ambiguity-free parse; LLM emitters need no whitespace traps.                                                                                                                       | JSON                                                                                                                                                                            | §8.14                |
+| Branch model                           | Predicate `if/else`                                                | Engine needs total dispatch with no expression evaluator on the hot path.                                                                                                                                 | Discriminant switch with required `default`                                                                                                                                     | §8.3                 |
+| Bound outputs                          | Implicit publication                                               | Engine needs a static liveness signal to free unreferenced values immediately (§5.7 SHOULD).                                                                                                              | Hide-by-default `bind` switch                                                                                                                                                   | §8.15, decision 0001 |
+| Mutable state / implicit carry-forward | Less verbose `iterateState`; "natural" update syntax               | Validator and engine want a single-assignment-per-frame model so dominance + phi (textbook SSA) are the only data-flow rules; in-place mutation forces bespoke ordering rules and forecloses parallelism. | Pure SSA per namespace; codegen restates state at each `@iterate`.                                                                                                              | §8.17, decision 0004 |
+| Verbosity tax in the LLM era           | Codegen output size; human review/diff burden when reading IR cold | Engine needs the verbose, explicit, locally validatable form regardless of who writes it.                                                                                                                 | Build a DSL when authors are LLM or human; codegen pays the tax once per change rather than per emission. IR remains emittable so the LLM-direct fallback in §1.1.2 stays open. | §1.1.2 LLM rows      |
 
 Each row is "writer asked for X, engine needed something specific to do
 its job correctly or cheaply, writer pays the cost via tooling." The §8
@@ -375,15 +376,28 @@ Every node belongs to exactly one scope. A scope owns its `nodes` map and its
 own `entry` node. Scopes nest: a loop's body scope is nested inside the scope
 that contains the loop node.
 
-**Namespaces.** Within a scope, names are partitioned into four disjoint
-namespaces, one per `$from` discriminant:
+**v1 is pure SSA.** Every `$from` namespace is single-assignment within its
+**frame**: each name is bound at most once per frame and never mutated in
+place. What differs across namespaces is only the lifetime of the frame.
+Apparent "updates" - re-running a binding node on the next iteration,
+advancing `state` across `@iterate` - are not mutations; they are entries
+into a new frame that re-binds the name. The §3.3 multiple-binders rule and
+the §4.1 pass 6 dominator check are the standard SSA join (phi) and
+dominance constraint applied per namespace.
 
-| Namespace  | `$from` value | Declared at                                                           | Visible in                   |
-| ---------- | ------------- | --------------------------------------------------------------------- | ---------------------------- |
-| `input`    | `"input"`     | The enclosing scope's `input` (workflow) or the loop's `inputs` block | Only the scope it belongs to |
-| `constant` | `"constant"`  | Workflow root `constants`                                             | Every scope                  |
-| `scope`    | `"scope"`     | A node's `bind` field publishes a value into this namespace           | Only the scope it belongs to |
-| `state`    | `"state"`     | The enclosing loop's `state` block                                    | Only that loop's body scope  |
+**Namespaces.** Within a scope, names are partitioned into disjoint
+namespaces, one per `$from` discriminant. The first four are scope-wide;
+`error` and `trigger` are pseudo-sources legal only on a `handler` node's
+`inputs` (see §3.8).
+
+| `$from`      | Declared at                                        | Visible in                       | Frame (single-assignment lifetime)                                                             |
+| ------------ | -------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `"input"`    | Workflow `input` block, or a loop's `inputs` block | The scope it belongs to          | Workflow input: the run. Loop `inputs`: evaluated once per loop activation, stable thereafter. |
+| `"constant"` | Workflow root `constants`                          | Every scope                      | The run.                                                                                       |
+| `"scope"`    | A node's `bind` field publishes the node's output  | The scope the node belongs to    | One execution of the binding node. In a loop body, re-bound each iteration.                    |
+| `"state"`    | The enclosing loop's `state` block                 | That loop's body scope           | One iteration. Frame transition is `@iterate`, which evaluates `iterateState` (§3.7.1).        |
+| `"error"`    | Pseudo-source; not declared                        | A `handler` node's `inputs` only | One handler invocation; reads the failure value of the trigger (§3.8).                         |
+| `"trigger"`  | Pseudo-source; not declared                        | A `handler` node's `inputs` only | One handler invocation; reads an input field of the triggering node (§3.8).                    |
 
 Because the namespaces are disjoint, the same name may appear in more than one
 of them without conflict. For example, a workflow may have an input field
@@ -412,13 +426,11 @@ Body nodes cannot reference outer-scope `scope` variables, outer-scope
 `input` fields, or another loop's `state`. This is the **scope closure**
 property (P4) and is enforced by validation pass 5.
 
-**Sentinels and pseudo-sources.** `@iterate` and `@exit` are reserved
-tokens, not names, scoped to where they are legal (only inside a loop body
-as `next` or branch case targets). `$from: "error"` and `$from: "trigger"`
-are pseudo-sources legal only on a `handler` node's `inputs`: `error` reads
-the failure value, `trigger` reads an input field of the triggering node
-(see section 3.8). Neither pseudo-source participates in the four-namespace
-table above; they are handler-local and do not name scope-wide values.
+**Sentinels.** `@iterate` and `@exit` are reserved tokens, not names,
+scoped to where they are legal (only inside a loop body as `next` or branch
+case targets). They participate in the CFG only and never appear in
+reference objects. The handler-local pseudo-sources `error` and `trigger`
+are listed in the namespace table above and detailed in §3.8.
 
 **Forward note (post-v1, nested loops).** When loops may contain loops, an
 inner body's only outer-data channels remain its own loop's `inputs`, its
@@ -676,6 +688,9 @@ keeps the branch node a pure structural construct.
     "<outputFieldName>": { /* reference object resolved in body scope at @exit */ }
   },
   "outputSchema": { /* JSON Schema */ },
+  "iterateState": {
+    "<stateVarName>": { /* reference object resolved in body scope at @iterate */ }
+  },
   "maxIterations": 1000,
   "next": "<nodeId>" | null,
   "onError": "<nodeId>" | null,
@@ -693,11 +708,13 @@ Key points:
 - `state` declares cross-iteration variables (P2 scenario 15). Each state
   variable has a schema and an initial value (resolved once at loop entry from
   the outer scope).
-- A body node writes to state by declaring `stateWrites` (section 3.7.1).
-  There is no implicit "node output overwrites state" rule. Every cross-
-  iteration write is declared. A body node's `stateWrites` reference to its
-  own output value works without requiring a `bind` (the writing node and
-  the value source are the same node; see section 3.7.1).
+- `iterateState` declares how each state variable is computed for the
+  **next** iteration (section 3.7.1). It is the symmetric companion of
+  `state[*].initial`: `initial` builds iteration 0's state from the outer
+  scope; `iterateState` builds iteration N+1's state from the body scope at
+  the moment `@iterate` is taken. There is no implicit "node output
+  overwrites state" rule and no per-node write declaration; every
+  cross-iteration value flows through `iterateState`.
 - `outputs` is resolved when the body reaches `@exit`. Each field is a
   reference resolved in the body scope (typically against `state`, since
   per-iteration scope variables do not survive across iterations).
@@ -706,65 +723,61 @@ Key points:
 - `bind` on the loop publishes the resolved `outputs` value as a scope
   variable in the **outer** scope, just like any other value-producing node.
 
-#### 3.7.1 State writes
+#### 3.7.1 Iterate state
 
-Writes are explicit and attached to the body node that produces the value:
+`iterateState` lives on the loop node and declares the **complete** state
+for the next iteration. It is structurally parallel to `state[*].initial`:
 
-```jsonc
-{
-  "kind": "task",
-  /* ... */
-  "stateWrites": {
-    "<stateVarName>": {
-      /* reference object resolved in body scope */
-    },
-  },
-}
-```
+| Site               | Computes              | References resolved in   |
+| ------------------ | --------------------- | ------------------------ |
+| `state[*].initial` | iteration 0's state   | outer scope              |
+| `iterateState[*]`  | iteration N+1's state | body scope at `@iterate` |
 
-The reference inside `stateWrites` follows the normal reference rules with
-one allowance: a node's `stateWrites` may reference its own output as if
-the node had `bind: true`, without requiring an explicit `bind`. (The
-writer and the value source are the same node; the reference cannot escape
-to other nodes.) Any other producer named in `stateWrites` must be a bound
-dominator like normal.
+Rules:
 
-State writes are committed when the writing node completes successfully. If a
-node's `next` is `@iterate`, the next iteration sees the new values. State
-reads (`$from: "state"`) inside an iteration always see the value as of loop
-entry for that iteration, not partial mid-iteration writes. This makes
-iteration semantics deterministic and predictable (P5).
+- `iterateState` MUST contain an entry for every state variable declared in
+  `state`. There is no implicit carry-forward; a variable that should keep
+  its current value writes `{ "$from": "state", "name": "<S>" }` (P5: no
+  surprise defaults).
+- Each entry is a normal reference object resolved in the body scope at the
+  moment `@iterate` is taken. References to bound producers (`$from:
+"scope"`) must be satisfied on every body-CFG path that reaches `@iterate`,
+  using the standard dominator + multiple-binders (phi) rules of §3.3 and
+  §4.1 pass 6.
+- Each entry's resolved value must be type-compatible with the corresponding
+  `state[*].schema` (§4.1 pass 7).
 
-**No-race rule for state writes.** For any two body nodes A and B that
-both declare `stateWrites.S` for the same state variable S, A and B must
-either be on mutually exclusive control-flow paths (at most one runs per
-iteration) **or** be totally ordered by dominance in the body CFG (one
-dominates the other, so the order in which they commit is fixed). What
-is forbidden is the third case: A and B can both run on the same path
-_and_ neither dominates the other. That is the only configuration where
-the engine's scheduling choice between two independent body nodes would
-decide which write survives, and it is the one configuration P5 cannot
-tolerate.
+State reads (`$from: "state"`) inside iteration `i` always see the values
+computed by iteration `i-1`'s `iterateState` evaluation (or by
+`state[*].initial` for `i = 0`). They never see partial mid-iteration
+values because there are none: state only changes at the `@iterate`
+boundary.
 
-When A and B are dominance-ordered (say A dominates B), both writes
-commit in CFG order on every path that reaches B: A's `stateWrites.S`
-commits at A's completion, then B's overwrites at B's completion. The
-iteration-end value is B's. Intra-iteration reads (`$from: "state"`)
-still see the start-of-iteration value regardless (§3.7.1 above), so the
-intermediate commit by A is not observable inside the iteration; it is
-simply superseded before iteration end. This makes sequential writes to
-the same state variable last-writer-wins, deterministically, without
-requiring the engine to define a happens-before across independent
-body nodes.
+**Why this shape.** Centralizing next-iteration state on the loop node
+(rather than scattering writes across body nodes) means:
 
-The validator enforces this rule statically (§4.1 pass 6 extension). The
-rule is principled on its own terms - it makes intra-iteration `state`
-semantics deterministic and last-writer-wins under sequential execution -
-and does not depend on whether the engine ever runs body nodes
-concurrently. v1 specifies sequential execution (§5.7); a post-v1
-parallelism decision (§2.2) inherits this rule as a precondition that
-removes write/write races on `state` from whatever scheduling model it
-adopts.
+- The phi structure of state values is the same SSA mechanism as for bound
+  scope variables (§3.3): different body paths may bind a name like
+  `newDraft`, and `iterateState.draft = { "$from": "scope", "name":
+"newDraft" }` resolves via the standard phi at the `@iterate` join. No
+  separate "no-race" rule for state writes is needed.
+- Branches inside the body remain pure control flow; they do not carry
+  state-write declarations even when they target `@iterate` directly.
+- Reasoning about "what changes per iteration" is local to the loop node;
+  reviewers do not have to scan every body node looking for writers.
+
+**Path-dependent next state.** When different body paths produce the next
+value differently, have each arm `bind` its result under the **same** scope
+name (the standard §3.3 phi); `iterateState` then reads that one name and
+the dominator pass (§4.1 pass 6) verifies coverage. If the arms produce
+differently shaped values, normalize at the join: each arm's tail task
+emits the canonical state shape and binds it under the shared name. Do not
+try to encode per-arm conditionals inside an `iterateState` entry; it is
+just a reference object.
+
+**Failure semantics.** If the body fails before reaching any `@iterate`,
+`iterateState` is never evaluated; state simply stays at the current
+iteration's values and the failure propagates per §5.4 step 5.
 
 #### 3.7.2 Sentinels
 
@@ -772,8 +785,9 @@ adopts.
 case targets) **inside a loop body**. They are explicit because P5 scenario
 37 says implicit re-entry is surprising.
 
-- `@iterate` - increment the iteration counter and re-enter at `body.entry`,
-  using the post-write state.
+- `@iterate` - evaluate the loop's `iterateState` against the current body
+  scope to compute the next iteration's state (§3.7.1), increment the
+  iteration counter, and re-enter at `body.entry`.
 - `@exit` - leave the loop; resolve `outputs` against the final state and
   body-scope values, then continue at the loop's outer `next`.
 
@@ -995,24 +1009,16 @@ reference will resolve) for any execution path.
    leaves X unbound and the reference must be `optional` (or the
    consumer is not a dominator of both outcomes).
 
-   The `stateWrites` keys of body nodes carry a related but weaker rule.
-   For every loop body and every state variable name S, let W(S) be the
-   set of body nodes whose `stateWrites` includes S. Every pair (A, B) in
-   W(S) must either (i) lie on mutually exclusive control-flow paths
-   within one iteration (no path from `body.entry` to `@iterate` or
-   `@exit` reaches both), or (ii) be totally ordered by dominance in the
-   body CFG (one of them dominates the other). The forbidden case is
-   when A and B can co-occur on a single path and neither dominates the
-   other - the validator rejects that. The dominance-ordered case is
-   permitted because commits then happen in a fixed CFG order with
-   last-writer-wins semantics (§3.7.1); the engine does not have to
-   define a happens-before across independent body nodes. State writers
-   do not require coverage (a state variable may be unwritten on some
-   iteration paths and retain its prior value). This rule is the static
-   guarantee underlying §3.7.1's no-race rule: it makes intra-iteration
-   `state` semantics deterministic under sequential execution and keeps
-   the door open for a post-v1 parallelism decision (§2.2) to inherit a
-   race-free state model regardless of which scheduling form it takes.
+   References inside `iterateState` (loop node, §3.7.1) participate in
+   this pass like any other reference, but their dominance question is
+   asked against the body CFG joined at `@iterate`: every body-CFG path
+   from `body.entry` to any `@iterate` target must satisfy each
+   `iterateState[*]` reference (a binder of the named value dominates
+   that path's `@iterate` site, or the reference is `optional` and the
+   target schema admits `null`). Multiple-binder phi (§3.3) is the
+   mechanism for path-dependent next-iteration values: different arms
+   may bind the same name, and `iterateState` resolves to whichever
+   binder ran on the path that reached `@iterate`.
 
 7. **Type compatibility pass (P1).** For every reference, the producer's
    declared type is a structural subtype of the field type at the consumer's
@@ -1035,9 +1041,13 @@ reference will resolve) for any execution path.
     is acyclic. Iteration is expressed only via `@iterate` inside a loop body.
     This makes the dominator computation a standard DAG analysis and prevents
     "accidental loops" (P3 scenario 26).
-11. **State soundness pass.** Every loop state variable has at least one
-    write path (else it is constant and should be a constant) and every read
-    is type-compatible with its schema.
+11. **State soundness pass.** Every loop state variable declared in `state`
+    has a corresponding entry in `iterateState`, and every read
+    (`$from: "state"`) is type-compatible with the variable's schema. A
+    state variable whose `iterateState` entry is just
+    `{ "$from": "state", "name": "<self>" }` for every iteration is a
+    candidate to be a workflow `constant` instead; the validator MAY warn
+    but does not reject.
 12. **Output binding pass.** `outputBinding` (workflow root) and each loop's
     `outputs` field references must resolve to bound producers (the writer
     of a state value bound by `bind` is fine; for `outputBinding`, the
@@ -1125,14 +1135,14 @@ output, and other nodes never reference a branch as a data source.
 4. Begin iteration:
    - If `i >= maxIterations`, fail with `LoopMaxIterationsExceeded`.
    - Execute body starting at `body.entry`. Inside the body:
-     - `$from: "state"` reads see the values committed at the start of this
-       iteration.
-     - `stateWrites` are buffered; they commit when the writing node
-       successfully completes.
-     - The body terminates when a body node's `next` is `@iterate` or
-       `@exit`.
-   - On `@iterate`: increment `i`; restart at `body.entry` with the latest
-     committed state.
+     - `$from: "state"` reads see the values established at the start of
+       this iteration. State does not change during a body iteration.
+     - The body terminates when a body node's `next` (or a branch case
+       target) is `@iterate` or `@exit`.
+   - On `@iterate`: evaluate the loop's `iterateState` against the current
+     body scope to produce the next iteration's state; validate each
+     resolved value against its `state[*].schema`; increment `i`; restart
+     at `body.entry` with the new state.
    - On `@exit`: resolve `outputs` against the final body scope (state +
      last-iteration node values), validate against `outputSchema`, and
      proceed to the loop node's outer `next`.
@@ -1189,9 +1199,10 @@ parallelism question (declared vs. opportunistic) to post-v1 (§2.2).
    node before dispatching its `next` successor. v1 does not specify
    concurrent execution of independent nodes; the parallelism question is
    deferred to post-v1 (§2.2).
-3. Commit `state` writes per the transactional rules in section 3.7.1
-   (writes commit on iteration success; failure during the iteration
-   discards the iteration's writes).
+3. Compute next-iteration `state` at `@iterate` per section 3.7.1
+   (evaluate `iterateState` against the body scope; failure before
+   `@iterate` leaves state unchanged and propagates per section 5.4
+   step 5).
 4. Route failures via `onError` per section 5.5; propagate uncaught
    failures to the enclosing scope per section 5.4 step 5.
 5. Resolve sentinels (`@iterate`, `@exit`) per loop semantics in
@@ -1213,9 +1224,9 @@ parallelism question (declared vs. opportunistic) to post-v1 (§2.2).
 
 - **Free unbound outputs immediately.** A node without `bind` cannot be
   referenced by any other node, so its output value may be released the
-  moment the node completes (after `outputSchema` validation, after
-  `stateWrites` evaluation, and after observability emission). This is a
-  static property of the IR; no analysis required.
+  moment the node completes (after `outputSchema` validation and after
+  observability emission). This is a static property of the IR; no
+  analysis required.
 - **Free bound outputs after their last reader.** For nodes with `bind`,
   the DDG is fully static; a one-pass liveness analysis at validation time
   identifies, for each bound output, the set of dominated descendants that
@@ -1473,9 +1484,6 @@ be declared in the enclosing workflow's `types` block, e.g.:
           "previous": { "$from": "state", "name": "draft" },
           "feedback": { "$from": "state", "name": "feedback" },
         },
-        "stateWrites": {
-          "draft": { "$from": "scope", "name": "write", "path": ["text"] },
-        },
         "next": "evaluate",
         "bind": true,
       },
@@ -1489,13 +1497,6 @@ be declared in the enclosing workflow's `types` block, e.g.:
         },
         "outputSchema": { "$ref": "#/types/Evaluation" },
         "inputs": { "text": { "$from": "state", "name": "draft" } },
-        "stateWrites": {
-          "feedback": {
-            "$from": "scope",
-            "name": "evaluate",
-            "path": ["feedback"],
-          },
-        },
         "next": "decide",
         "bind": true,
       },
@@ -1514,6 +1515,10 @@ be declared in the enclosing workflow's `types` block, e.g.:
   },
   "outputs": { "article": { "$from": "state", "name": "draft" } },
   "outputSchema": { "$ref": "#/types/Article" },
+  "iterateState": {
+    "draft": { "$from": "scope", "name": "write", "path": ["text"] },
+    "feedback": { "$from": "scope", "name": "evaluate", "path": ["feedback"] },
+  },
   "maxIterations": 5,
   "next": null,
 }
@@ -1630,21 +1635,34 @@ own design review against P5.
   P5 - reader has to learn that `terminal: true` means "exit the loop".
 - Alt C: implicit re-entry when `next` is omitted. Rejected by P5 scenario 37.
 
-### 8.5 State writes: declared on the writing node
+### 8.5 Next-iteration state: declared centrally on the loop (`iterateState`)
 
-- **Chosen:** each body node declares its `stateWrites` map.
-- Alt A: state writes declared centrally on the loop. Rejected: separates the
-  write from the value-producing node, harder to read locally (P4).
-- Alt B: implicit "node output of name X overwrites state X". Rejected by P2
-  scenario 15.
+- **Chosen:** the loop node carries an `iterateState` block that, at every
+  `@iterate` transition, computes the complete next-iteration state from the
+  body scope. Symmetric with `state[*].initial`.
+- Alt A: per-body-node `stateWrites` map (the original v1 design). Rejected:
+  forced a no-race validation rule across multiple writers, admitted
+  dominance-ordered "dead writes" that are unobservable under snapshot
+  reads (§3.7.1's "reads see start-of-iteration values"), and required
+  branches that target `@iterate` directly to either disallow that or carry
+  state-write declarations (compromising the pure-control-flow story for
+  branches). Centralizing on the loop removes all three problems and reuses
+  the existing multiple-binders phi (§3.3) for path-dependent next state.
+- Alt B: implicit "node output of name X overwrites state X". Rejected by
+  P2 scenario 15 and P5.
 
-### 8.6 State commit timing: at successful node completion, visible next iteration
+### 8.6 State commit timing: at `@iterate`, visible next iteration
 
-- **Chosen:** writes commit on success; reads in iteration `i` see state as of
-  iteration-`i` start.
+- **Chosen:** state changes only at the `@iterate` boundary, by evaluating
+  the loop's `iterateState` against the body scope. Reads in iteration `i`
+  see state as of iteration-`i` start; there is no intra-iteration state
+  mutation.
 - Alt A: writes visible immediately within the same iteration. Rejected:
-  reads now depend on the order of writes; harder to reason about locally
-  (P4, P5).
+  reads would depend on the order of writes; harder to reason about
+  locally (P4, P5).
+- Alt B: per-node writes that buffer and commit on node success (the
+  original v1 design). Rejected together with the per-node write site
+  itself in \u00a78.5.
 
 ### 8.7 Handler model: per-trigger node, structurally a task
 
@@ -1803,6 +1821,89 @@ Full analysis: [decisions/0001-bound-outputs.md](decisions/0001-bound-outputs.md
 
 Full analysis: [decisions/0003-task-schema-source.md](decisions/0003-task-schema-source.md).
 
+### 8.17 Pure SSA per namespace
+
+The "v1 is pure SSA" property asserted at the top of §3.2.1 is not a
+description after the fact; it is a design constraint that drove several
+of the decisions in this section. This entry consolidates the rationale
+so the property has one canonical justification.
+
+- **Chosen:** every `$from` namespace is single-assignment within its
+  frame. There is no in-place mutation anywhere in v1; every apparent
+  update (re-running a binding node on the next iteration, advancing
+  `state` across `@iterate`, a handler firing) is the entry into a new
+  frame that re-binds the name.
+
+Why this matters:
+
+- **Validator falls out of textbook SSA.** The dominator pass (§4.1
+  pass 6) and the multiple-binders join (§3.3) are the standard SSA
+  dominance and phi rules, applied per namespace. No bespoke
+  "no-race", "last-writer-wins", or write-ordering rules are needed.
+  §8.5 records what happens when this invariant is broken: the
+  per-node `stateWrites` design forced a dedicated no-race rule and
+  still admitted unobservable dead writes under snapshot reads. Pure
+  SSA removes the whole class of question.
+- **No observable mid-frame state.** A reader at any program point
+  sees one value per name in scope. The §3.7.1 snapshot rule for
+  `state` ("reads in iteration `i` see iteration-`i-1`'s
+  `iterateState` result") is then a consequence of the property, not
+  a special case to remember.
+- **Engine implementation latitude (§1.1).** With no in-place
+  mutation, an engine may re-execute, memoize, persist per-frame
+  snapshots, or schedule independent DDG branches in parallel
+  without changing program meaning. The IR makes no commitment to
+  which strategy an engine picks; the parallelism question is
+  deferred to post-v1 (§2.2) precisely because the SSA shape leaves
+  the door open without prescribing.
+- **Splice safety (P4).** Inserting or removing a node never
+  silently overwrites someone else's value. The worst case is a
+  missing binder, which the dominator pass catches statically. This
+  is the property that makes DSL fragments compose without rename
+  passes (§1.2 splice safety).
+- **Hide-by-default `bind` (§8.15) is the matching half.** Pure SSA
+  is "single def"; hide-by-default is "addressable only when the
+  author opts in". Together they give the author full control over
+  both _when_ a name is bound and _whether_ it is visible at all.
+
+Costs accepted:
+
+- **Verbosity at frame boundaries.** `iterateState` must restate
+  every state variable on every iteration boundary (§3.7.1, no
+  implicit carry-forward). The §3.3 phi requires a binder of the
+  shared name on every reaching path. These are P5 (no surprise
+  defaults) and land on codegen per §1.1, not on the IR's
+  one-time-author cost story.
+- **No "natural" mutable accumulator.** Patterns that read like
+  "update X each iteration" must be expressed as "compute next-X
+  from current X in `iterateState`." The trade is local readability
+  for a globally simpler validator and engine model. §6.3 is the
+  worked example of how the resulting shape reads.
+
+Alternatives considered (and rejected by the same property):
+
+- Alt A: per-node `stateWrites` (in-place mutation of the `state`
+  namespace from inside the body). Rejected; full analysis in §8.5.
+- Alt B: every node id is implicitly a name (no `bind`, all outputs
+  always addressable). Rejected; full analysis in §8.15. This is
+  not literally an SSA violation, but it eliminates the author's
+  ability to mark a value as not-for-export, which is the
+  hide-by-default counterpart to single-assignment that the SSA
+  framing relies on.
+- Alt C: an explicit "rebind" or "update" form that mutates an
+  existing name in place. Rejected: would require a new validator
+  pass to track ordering and would re-introduce the dead-write
+  question §8.5 closed. If post-v1 wants mutable accumulators, the
+  natural shape is a new namespace with its own frame rules, not a
+  carve-out in any existing one.
+
+Full pure-SSA framing of the IR is what allows the §8 alternatives to
+be analyzed by a single criterion ("does it preserve single
+assignment within a frame?") rather than by ad-hoc weighing of each
+mechanism.
+
+Full analysis: [decisions/0004-pure-ssa.md](decisions/0004-pure-ssa.md).
+
 ---
 
 ## 9. Review checklist (consistency self-check)
@@ -1844,6 +1945,7 @@ for traceability; full per-decision rationale lives in §8.
 | Default branch requirement (§8.3)   | Closed: engine wants total dispatch with no exhaustiveness analysis on the hot path; codegen can synthesize a `default`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Reference form (§8.2)               | Closed: object form is parser-free for engine and analyzers; codegen has no preference between forms.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | State commit timing (§8.6)          | Closed by P4/P5 (lens-neutral): inter-iteration commit makes per-iteration reads independent of write order.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Pure SSA per namespace (§8.17)      | Closed: every reader population is a net win (validator gets textbook dominance + phi; humans get one-value-per-name locality; analyzers get standard SSA tooling). Codegen pays verbosity (§3.7.1 no-implicit-carry-forward, §3.3 phi coverage) and gets back splice safety and validator precision. Engine latitude (re-execute / memoize / per-frame snapshot / future parallelism) is preserved without being IR-observable, which is why §2.2 can defer parallelism without prescribing.                                                                                                                                |
 | Handler reuse (§8.7, §3.8)          | Closed for v1: one-trigger handlers keep dominator analysis trivial. Most "same handler over several nodes" scenarios are addressed post-v1 by **block scope** (a single handler over a region of nodes within one scope; sketch in [post-v1/block-scope.md](post-v1/block-scope.md)). Cross-scope shared handlers (same handler reachable from triggers in different scopes) remain a separate question with its own trigger in [revisit-triggers.md](revisit-triggers.md) row 4. Codegen can also duplicate a logical handler into per-trigger copies if neither mechanism is available.                                   |
 | Shared schemas (§8.13)              | Closed: validator identity-checks (§1.1 acceptable performance), codegen single emission, and reviewer locality (P4) all favor named `types`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | IR encoding (§8.14)                 | Closed: JSON serves engine parsing, the LLM-direct fallback, and the door-kept distribution role (§1.1).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
