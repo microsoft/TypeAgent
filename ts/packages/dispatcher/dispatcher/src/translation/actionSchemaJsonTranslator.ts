@@ -15,6 +15,7 @@ import {
     generateActionActionFunctionJsonSchemas,
     ActionObjectJsonSchema,
     ActionFunctionJsonSchema,
+    resolveTypeReference,
 } from "@typeagent/action-schema";
 import {
     createJsonTranslatorWithValidator,
@@ -48,6 +49,30 @@ function convertJsonSchemaOutput(
         };
     }
     return (jsonObject as any).response;
+}
+
+// Fields that Excel agent schemas declare on every action (see CLAUDE.md
+// "userRequest parameter" convention). The LLM learns the convention from
+// those schemas and then emits `parameters.userRequest` for non-Excel agents
+// too, whose schemas don't declare it — producing "Extraneous property"
+// validation failures. Strip only these known cross-schema fields; other
+// unknown properties still fail loudly so prompt/schema bugs stay visible.
+const CROSS_SCHEMA_PARAM_ALLOWLIST = ["userRequest"];
+
+function stripKnownParameterLeakage(
+    actionSchema: ActionSchemaTypeDefinition,
+    value: any,
+) {
+    const parameters = value?.parameters;
+    if (!parameters || typeof parameters !== "object") return;
+    const paramsField = actionSchema.type.fields.parameters;
+    const resolved = resolveTypeReference(paramsField?.type);
+    if (!resolved || resolved.type !== "object") return;
+    for (const key of CROSS_SCHEMA_PARAM_ALLOWLIST) {
+        if (key in parameters && !(key in resolved.fields)) {
+            delete parameters[key];
+        }
+    }
 }
 
 export function createActionSchemaJsonValidator<T extends TranslatedAction>(
@@ -103,6 +128,7 @@ export function createActionSchemaJsonValidator<T extends TranslatedAction>(
                 }
 
                 if (schemaValidate) {
+                    stripKnownParameterLeakage(actionSchema, value);
                     validateAction(actionSchema, value);
                 }
                 // Return the unwrapped value with generateJsonSchema as the translated result

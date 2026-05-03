@@ -16,7 +16,8 @@ import { expandHome } from "../../../utils/fsUtils.js";
 import { isChatHistoryInput } from "../../chatHistory.js";
 import { setActivityContext } from "../../../execute/activityContext.js";
 import { DispatcherActivityName } from "../../dispatcher/dispatcherUtils.js";
-import { clearReasoningSession } from "../../../reasoning/claude.js";
+import { clearReasoningSession as clearClaudeReasoningSession } from "../../../reasoning/claude.js";
+import { clearReasoningSession as clearCopilotReasoningSession } from "../../../reasoning/copilot.js";
 
 class HistoryListCommandHandler implements CommandHandlerNoParams {
     public readonly description = "List history";
@@ -45,7 +46,8 @@ class HistoryClearCommandHandler implements CommandHandler {
         const systemContext = context.sessionContext.agentContext;
         const history = systemContext.chatHistory;
         history.clear();
-        clearReasoningSession(systemContext);
+        clearClaudeReasoningSession(systemContext);
+        clearCopilotReasoningSession(systemContext);
         if (param.flags.activity) {
             setActivityContext(DispatcherActivityName, null, systemContext);
         }

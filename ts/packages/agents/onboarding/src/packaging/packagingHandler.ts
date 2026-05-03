@@ -23,6 +23,14 @@ import { getPackagingModel } from "../lib/llm.js";
 import { spawn } from "child_process";
 import path from "path";
 import fs from "fs/promises";
+import { fileURLToPath } from "node:url";
+
+// `<typeagent-root>` derived from this file's location.
+// Compiled file path: <root>/packages/agents/onboarding/dist/src/packaging/packagingHandler.js
+const TYPEAGENT_REPO_ROOT = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../../../..",
+);
 
 export async function executePackagingAction(
     action: TypeAgentAction<PackagingActions>,
@@ -411,10 +419,16 @@ async function registerWithDispatcher(
     integrationName: string,
     agentDir: string,
 ): Promise<string> {
-    // Add agent to defaultAgentProvider config.json
-    const configPath = path.resolve(
-        agentDir,
-        "../../../../defaultAgentProvider/data/config.json",
+    // Add agent to defaultAgentProvider config.json. Anchor the config path
+    // at the TypeAgent monorepo root rather than walking up from agentDir —
+    // agents scaffolded outside the monorepo (e.g. in SecretAgents) sit at
+    // a different depth than `<root>/packages/agents/<name>`.
+    const configPath = path.join(
+        TYPEAGENT_REPO_ROOT,
+        "packages",
+        "defaultAgentProvider",
+        "data",
+        "config.json",
     );
 
     try {
@@ -426,9 +440,30 @@ async function registerWithDispatcher(
             return `Agent "${integrationName}" is already registered in the dispatcher config.`;
         }
 
-        config.agents[integrationName] = {
+        const agentEntry: Record<string, unknown> = {
             name: `${integrationName}-agent`,
         };
+
+        // For agents outside the monorepo, the dispatcher needs an explicit
+        // path (it can't resolve via npm). Emit a relative path from the
+        // defaultAgentProvider package, matching the existing convention
+        // (e.g. excel: "../../SecretAgents/ts/packages/agents/excel").
+        const insideMonorepo = path
+            .resolve(agentDir)
+            .startsWith(TYPEAGENT_REPO_ROOT + path.sep);
+        if (!insideMonorepo) {
+            const providerDir = path.join(
+                TYPEAGENT_REPO_ROOT,
+                "packages",
+                "defaultAgentProvider",
+            );
+            agentEntry.path = path
+                .relative(providerDir, agentDir)
+                .replace(/\\/g, "/");
+            agentEntry.execMode = "dispatcher";
+        }
+
+        config.agents[integrationName] = agentEntry;
 
         await fs.writeFile(
             configPath,
