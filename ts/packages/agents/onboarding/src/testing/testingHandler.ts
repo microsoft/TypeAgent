@@ -244,13 +244,20 @@ async function handleRunTests(
         )
         .join("\n");
 
+    if (failed === 0) {
+        // Auto-approve testing when every phrase round-trips. Otherwise the
+        // workflow gets stuck: approveRepair is the only path that flips
+        // testing to "approved", but it requires a proposed repair.
+        await updatePhase(integrationName, "testing", { status: "approved" });
+    }
+
     return createActionResultFromMarkdownDisplay(
         `## Test results: ${integrationName}\n\n` +
             `**Pass rate:** ${passRate}% (${passed}/${results.length})\n\n` +
             (failed > 0
                 ? `**Failing tests (first 10):**\n${failingSummary}\n\n` +
                   `Use \`proposeRepair\` to get LLM-suggested schema/grammar fixes.`
-                : `All tests passed! Use \`approveRepair\` to finalize or proceed to packaging.`),
+                : `All tests passed — testing phase auto-approved. Run \`packageAgent\` to proceed.`),
     );
 }
 

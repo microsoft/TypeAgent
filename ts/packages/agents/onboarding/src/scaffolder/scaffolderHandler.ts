@@ -216,6 +216,7 @@ async function handleScaffoldAgent(
                 pascalName,
                 pattern,
                 subSchemaNames,
+                targetDir,
             ),
             null,
             2,
@@ -541,12 +542,49 @@ async function executeAction(
 `;
 }
 
+// Map of TypeAgent workspace packages to their location relative to the
+// monorepo root. Used to emit `file:` deps when scaffolding outside the
+// monorepo (e.g. into a sibling SecretAgents repo) — `workspace:*` only
+// resolves inside the originating pnpm workspace.
+const TYPEAGENT_WORKSPACE_PACKAGES: Record<string, string> = {
+    "@typeagent/agent-sdk": "packages/agentSdk",
+    aiclient: "packages/aiclient",
+    typechat: "packages/utils/typechatUtils",
+    "@typeagent/action-schema-compiler": "packages/actionSchemaCompiler",
+    "action-grammar-compiler": "packages/actionGrammarCompiler",
+};
+
+// AGENTS_DIR is `<typeagent-root>/packages/agents`; up two levels = repo root.
+const TYPEAGENT_REPO_ROOT = path.resolve(AGENTS_DIR, "..", "..");
+
+function getWorkspaceDepValue(
+    depName: string,
+    targetDir: string | undefined,
+): string {
+    // If we're scaffolding inside the main TypeAgent workspace, plain
+    // `workspace:*` works. Outside it (e.g. SecretAgents), pnpm cannot
+    // resolve the workspace alias — emit a `file:` path relative to
+    // `targetDir` so install picks up the source on disk.
+    const insideMonorepo =
+        targetDir === undefined ||
+        path.resolve(targetDir).startsWith(TYPEAGENT_REPO_ROOT + path.sep);
+    if (insideMonorepo) return "workspace:*";
+
+    const pkgPath = TYPEAGENT_WORKSPACE_PACKAGES[depName];
+    if (!pkgPath) return "workspace:*"; // unknown — best-effort fallback
+    const absolute = path.join(TYPEAGENT_REPO_ROOT, pkgPath);
+    let rel = path.relative(targetDir, absolute).replace(/\\/g, "/");
+    if (!rel.startsWith(".")) rel = "./" + rel;
+    return `file:${rel}`;
+}
+
 function buildPackageJson(
     name: string,
     packageName: string,
     pascalName: string,
     pattern: AgentPattern = "schema-grammar",
     subSchemaNames?: string[],
+    targetDir?: string,
 ) {
     const scripts: Record<string, string> = {
         asc: `asc -i ./src/${name}Schema.ts -o ./dist/${name}Schema.pas.json -t ${pascalName}Actions`,
@@ -570,6 +608,8 @@ function buildPackageJson(
 
     scripts.build = `concurrently ${buildTargets.join(" ")}`;
 
+    const depFor = (n: string) => getWorkspaceDepValue(n, targetDir);
+
     return {
         name: packageName,
         version: "0.0.1",
@@ -584,18 +624,23 @@ function buildPackageJson(
         },
         scripts,
         dependencies: {
-            "@typeagent/agent-sdk": "workspace:*",
+            "@typeagent/agent-sdk": depFor("@typeagent/agent-sdk"),
             ...(pattern === "llm-streaming"
-                ? { aiclient: "workspace:*", typechat: "workspace:*" }
+                ? {
+                      aiclient: depFor("aiclient"),
+                      typechat: depFor("typechat"),
+                  }
                 : pattern === "external-api"
-                  ? { aiclient: "workspace:*" }
+                  ? { aiclient: depFor("aiclient") }
                   : pattern === "websocket-bridge"
                     ? { ws: "^8.18.0" }
                     : {}),
         },
         devDependencies: {
-            "@typeagent/action-schema-compiler": "workspace:*",
-            "action-grammar-compiler": "workspace:*",
+            "@typeagent/action-schema-compiler": depFor(
+                "@typeagent/action-schema-compiler",
+            ),
+            "action-grammar-compiler": depFor("action-grammar-compiler"),
             concurrently: "^9.1.2",
             rimraf: "^6.0.1",
             typescript: "~5.4.5",
@@ -857,6 +902,7 @@ function buildExternalApiHandler(name: string, pascalName: string): string {
 import {
     ActionContext,
     AppAgent,
+    SessionContext,
     TypeAgentAction,
     ActionResult,
 } from "@typeagent/agent-sdk";
@@ -899,8 +945,9 @@ async function initializeAgentContext(): Promise<Context> {
 }
 
 async function updateAgentContext(
-    enable: boolean,
-    _context: ActionContext<Context>,
+    _enable: boolean,
+    _context: SessionContext<Context>,
+    _schemaName: string,
 ): Promise<void> {
     // Optionally authenticate eagerly when the agent is enabled.
 }
@@ -909,7 +956,7 @@ async function executeAction(
     action: TypeAgentAction<${pascalName}Actions>,
     context: ActionContext<Context>,
 ): Promise<ActionResult> {
-    const { client } = context.agentContext;
+    const { client } = context.sessionContext.agentContext;
     // TODO: map each action to a client.callApi() call.
     return createActionResultFromTextDisplay(
         \`Executing \${action.actionName} — not yet implemented.\`,
@@ -1030,6 +1077,7 @@ function buildWebSocketBridgeHandler(name: string, pascalName: string): string {
 import {
     ActionContext,
     AppAgent,
+    SessionContext,
     TypeAgentAction,
     ActionResult,
 } from "@typeagent/agent-sdk";
@@ -1105,10 +1153,11 @@ async function initializeAgentContext(): Promise<Context> {
 
 async function updateAgentContext(
     _enable: boolean,
-    _context: ActionContext<Context>,
+    _context: SessionContext<Context>,
+    _schemaName: string,
 ): Promise<void> {}
 
-async function closeAgentContext(context: ActionContext<Context>): Promise<void> {
+async function closeAgentContext(context: SessionContext<Context>): Promise<void> {
     await context.agentContext.bridge.stop();
 }
 
@@ -1116,7 +1165,7 @@ async function executeAction(
     action: TypeAgentAction<${pascalName}Actions>,
     context: ActionContext<Context>,
 ): Promise<ActionResult> {
-    const { bridge } = context.agentContext;
+    const { bridge } = context.sessionContext.agentContext;
     if (!bridge.connected) {
         return {
             error: \`Host plugin not connected. Make sure the ${name} plugin is running on port \${BRIDGE_PORT}.\`,
@@ -1300,6 +1349,7 @@ function buildViewUiHandler(name: string, pascalName: string): string {
 import {
     ActionContext,
     AppAgent,
+    SessionContext,
     TypeAgentAction,
     ActionResult,
 } from "@typeagent/agent-sdk";
@@ -1324,22 +1374,23 @@ async function initializeAgentContext(): Promise<unknown> {
 
 async function updateAgentContext(
     enable: boolean,
-    context: ActionContext<unknown>,
+    context: SessionContext<unknown>,
+    _schemaName: string,
 ): Promise<void> {
     if (enable) {
-        await context.sessionContext.agentIO.openLocalView(
-            context.sessionContext.requestId,
+        await context.agentIO.openLocalView(
+            context.requestId,
             VIEW_PORT,
         );
     } else {
-        await context.sessionContext.agentIO.closeLocalView(
-            context.sessionContext.requestId,
+        await context.agentIO.closeLocalView(
+            context.requestId,
             VIEW_PORT,
         );
     }
 }
 
-async function closeAgentContext(_context: ActionContext<unknown>): Promise<void> {
+async function closeAgentContext(_context: SessionContext<unknown>): Promise<void> {
     // TODO: stop the local HTTP server
 }
 
