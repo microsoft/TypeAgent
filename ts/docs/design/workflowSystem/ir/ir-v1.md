@@ -265,22 +265,22 @@ inputs.
 
 ### 2.2 Out of scope for v1 (post-v1)
 
-| Area                                   | Why deferred                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Sub-workflow calls                     | P3 scenario 24 explicitly marks this "future". Adds a node kind; defer until v1 stabilizes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Side-effect / capability declarations  | Called out as "expanding the boundary" in the principles; useful but additive. v1 keeps tasks fully opaque. **Planned closure of the v1 control-flow ambiguity** noted in §3.2.2: once tasks declare effects, the validator can warn on `next` edges that carry neither data nor effect-ordering.                                                                                                                                                                                                                                                                                       |
-| Parallelism / concurrency annotations  | P2 scenario 13 says the IR carries enough info to derive parallelism. v1 leaves the engine free; no IR surface.                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| IR versioning, checkpointing, resume   | Explicitly out of scope per design-principles.md ("Out of scope for v1" section).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| Authoring sugar / DSL                  | Per the IR principle. Belongs in a separate layer.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| Schema migration / evolution           | Same rationale as versioning.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| Computed / dynamic reference targets   | P1 scenario 8: ruled out by design; expressed via branch + decision tree.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| External-state side channels           | P2 scenarios 16-17: deliberately invisible to the IR in v1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Cross-loop shared mutable state        | P4 scenario 34: forced into explicit boundary wiring; no global state.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| Reusable handler nodes across scopes   | P4 scenario 35: each scope owns its handlers in v1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Explicit `block` scope                 | A run-once scope kind (sibling of loop body) that can carry a single `onError` over a region of nodes. Closes the "multi-statement try" gap cheaply by reusing the existing scope contract. Sketch in [post-v1/block-scope.md](post-v1/block-scope.md).                                                                                                                                                                                                                                                                                                                                 |
-| Streaming / partial outputs from tasks | Tasks are "input in, output out" per the principles' boundary statement.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| User-interaction / suspend-resume      | Not mentioned in principles; out of v1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| Dynamic task registry                  | v1 assumes the registry is static across a single engine load (§5.7 MUST 7); the load-time drift check (§4.1 pass 3) rules out `TaskNotFound` and `TaskContractDrift` before execution begins. Allowing the registry to mutate under a running workflow opens a runtime failure class that v1 deliberately does not specify, since the failure-routing question (`onError`? whole-workflow abort? pinned task version?) is dangerous to get wrong and pulls in versioning and resume concerns also deferred from v1. Door is open: the static-registry decision is additive to revisit. |
+| Area                                   | Why deferred                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sub-workflow calls                     | P3 scenario 24 explicitly marks this "future". Adds a node kind; defer until v1 stabilizes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Side-effect / capability declarations  | Called out as "expanding the boundary" in the principles; useful but additive. v1 keeps tasks fully opaque. **Planned closure of the v1 control-flow ambiguity** noted in §3.2.2: once tasks declare effects, the validator can warn on `next` edges that carry neither data nor effect-ordering.                                                                                                                                                                                                                                                                                                                 |
+| Parallelism / concurrency annotations  | Whether parallelism is _declared_ in the IR (an explicit `parallel` construct authored or lowered from the DSL) or _derived_ opportunistically by the engine (from the DDG and `next`) is deferred. v1 commits to neither and specifies sequential execution along `next` chains (§5.7); both options remain open as additive post-v1 work, and no v1 IR shape decision forecloses either. The §3.2.2 v1-limitation (`next` edges are load-bearing-by-assumption while tasks are opaque) is one of the questions a parallelism decision will need to resolve, jointly with the side-effect/capability work above. |
+| IR versioning, checkpointing, resume   | Explicitly out of scope per design-principles.md ("Out of scope for v1" section).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Authoring sugar / DSL                  | Per the IR principle. Belongs in a separate layer.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Schema migration / evolution           | Same rationale as versioning.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Computed / dynamic reference targets   | P1 scenario 8: ruled out by design; expressed via branch + decision tree.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| External-state side channels           | P2 scenarios 16-17: deliberately invisible to the IR in v1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Cross-loop shared mutable state        | P4 scenario 34: forced into explicit boundary wiring; no global state.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Reusable handler nodes across scopes   | P4 scenario 35: each scope owns its handlers in v1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Explicit `block` scope                 | A run-once scope kind (sibling of loop body) that can carry a single `onError` over a region of nodes. Closes the "multi-statement try" gap cheaply by reusing the existing scope contract. Sketch in [post-v1/block-scope.md](post-v1/block-scope.md).                                                                                                                                                                                                                                                                                                                                                           |
+| Streaming / partial outputs from tasks | Tasks are "input in, output out" per the principles' boundary statement.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| User-interaction / suspend-resume      | Not mentioned in principles; out of v1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Dynamic task registry                  | v1 assumes the registry is static across a single engine load (§5.7 MUST 7); the load-time drift check (§4.1 pass 3) rules out `TaskNotFound` and `TaskContractDrift` before execution begins. Allowing the registry to mutate under a running workflow opens a runtime failure class that v1 deliberately does not specify, since the failure-routing question (`onError`? whole-workflow abort? pinned task version?) is dangerous to get wrong and pulls in versioning and resume concerns also deferred from v1. Door is open: the static-registry decision is additive to revisit.                           |
 
 ---
 
@@ -455,9 +455,13 @@ This separation is deliberate. It lets:
 - **Side-effecting tasks be sequenced without faking data flow.** "Run the
   migration, then run the readiness check" can be expressed as a `next` edge
   even though the readiness check does not consume the migration's output.
-- **The engine optimize.** The DDG is the _minimum_ set of ordering
-  constraints; an effect-aware engine (post-v1) can use it to derive
-  parallelism opportunities the CFG alone would not reveal.
+- **A future engine reason about ordering precisely.** The DDG is the
+  _minimum_ set of ordering constraints; the CFG carries everything else.
+  Whether a post-v1 engine uses the DDG to derive parallelism opportunities,
+  or whether parallelism is declared explicitly in the IR, is deferred (§2.2);
+  v1 takes no position. The two-graph distinction is principled on its own
+  terms (validator clarity, P2 scenario 13's data/control separation) regardless
+  of which way that decision goes.
 
 ##### v1 limitation: control-flow edges are ambiguous
 
@@ -549,8 +553,11 @@ reference form (minimalism):
 - `$from: "state"` - read a loop-scoped state variable. Only legal inside a
   loop body.
 - `$from: "error"` - read the triggering error value. Only legal inside a
-  `handler` node's `inputs` (see section 3.8). `name` and `path` are
-  optional and default to reading the entire error object.
+  `handler` node's `inputs` (see section 3.8). The value has the fixed
+  shape defined in §3.8.1 (the `Error` object). `name` and `path` are
+  optional: omitting both reads the entire error object; `path` projects
+  into it using the same RFC 6901 semantics as any other reference
+  (§3.4.1).
 - `$from: "trigger"` - read an input field of the handler's triggering node.
   Only legal inside a `handler` node's `inputs`. `name` is the field name in
   the trigger's `inputs` map (see section 3.8).
@@ -750,11 +757,14 @@ the same state variable last-writer-wins, deterministically, without
 requiring the engine to define a happens-before across independent
 body nodes.
 
-The validator enforces this rule statically (§4.1 pass 6 extension), so
-the engine is free to parallelize any two body nodes whose `stateWrites`
-key sets are disjoint, and to parallelize any two writers of the same
-key that the validator has accepted (since acceptance implies either
-mutual exclusion or a dominance order the engine can honor cheaply).
+The validator enforces this rule statically (§4.1 pass 6 extension). The
+rule is principled on its own terms - it makes intra-iteration `state`
+semantics deterministic and last-writer-wins under sequential execution -
+and does not depend on whether the engine ever runs body nodes
+concurrently. v1 specifies sequential execution (§5.7); a post-v1
+parallelism decision (§2.2) inherits this rule as a precondition that
+removes write/write races on `state` from whatever scheduling model it
+adopts.
 
 #### 3.7.2 Sentinels
 
@@ -812,6 +822,89 @@ top-level, must lead somewhere in a loop body). A handler can also have
 `next: "@iterate"` inside a loop body to implement bounded retry (P3
 scenario 27 - the explicit retry-loop alternative).
 
+**No `onError` on a handler.** A `handler` node MUST NOT declare
+`onError`. Handler chains (handler-of-a-handler) are not a v1 mechanism:
+they raise the question of when the chain terminates and how a handler
+that itself keeps failing is observable, and the answer in v1 is the
+simple one - a handler is the last chance to recover, and if it fails,
+the failure propagates. The validator (§4.1 pass 1 / 4) rejects an IR
+that puts `onError` on a handler. If a handler needs to retry the work
+that originally failed, it does so via `next: "@iterate"` in a loop
+body (the retry pattern above), not by attaching another handler to
+itself.
+
+**Handler failure semantics.** When a handler fails (its task throws,
+or its return value violates `outputSchema`), the failure propagates to
+the enclosing scope of the _triggering node_, exactly as if the
+triggering node itself had failed with no `onError`. Inside a loop
+body this means the handler's failure fails the loop node; at top level
+it fails the workflow. The original triggering error is not
+recoverable from the propagated error in v1; the handler's failure is
+what surfaces. (A post-v1 error-chain mechanism could change this, but
+v1 keeps the propagation single-valued for predictability.)
+
+**Bind-name sharing across `onError`.** A triggering node `T` with both
+`next: A` and `onError: H` produces two mutually exclusive outcomes on
+any single execution path: either T succeeds and control flows to A
+(and through whatever chain A heads), or T fails and control flows to
+H. A scope variable name X may therefore be bound on the success side
+(by some node dominated by A, or by A itself) and also by H without
+violating the phi-soundness rule of §3.3, because no path through T
+reaches both sides. The dominator pass (§4.1 pass 6) treats T as a
+splitting node for this purpose, analogous to a branch with `cases:
+{ ok: A }, default: H`. This is what allows the §6.2 pattern of
+`format` and `classifyError` both binding `final` to be valid.
+
+#### 3.8.1 Error value shape
+
+The value carried by `$from: "error"` is a JSON object with this fixed
+schema:
+
+```jsonc
+{
+  "code":      "<string>",        // machine-readable error code
+  "message":   "<string>",        // human-readable summary
+  "source":    "task" | "runtime", // where the failure originated
+  "task":      "<string>",        // task type id from the failing node, optional
+  "node":      "<string>",        // failing node id within its scope, optional
+  "scopePath": ["<string>", ...],  // path to the failing node's scope, optional
+  "data":      <any>              // task- or runtime-specific payload, optional
+}
+```
+
+Required fields: `code`, `message`, `source`. The remaining fields are
+optional and may be absent. An engine MAY include additional fields
+beyond those listed; consumers MUST treat unknown fields as opaque.
+
+**`source` discriminates the failure origin.**
+
+- `"task"` - the registered task implementation threw, returned a value
+  that violated `outputSchema` (§5.2), or otherwise signaled failure.
+  `task` and `node` SHOULD be populated.
+- `"runtime"` - the engine itself raised the failure (loop
+  `maxIterations` exceeded, branch selector value did not match any
+  `cases` or `default`, reference resolution failed at runtime, etc.).
+  `code` distinguishes the runtime case (well-known codes include
+  `LoopMaxIterationsExceeded`, `BranchSelectorUnmatched`,
+  `ReferenceUnresolved`; the full list is engine-defined and surfaced
+  through the validator's error-code table - see §4.3).
+
+A handler that wants to be type-strict about the error it consumes
+declares its `inputSchema` to require this shape (or a narrowing of it -
+e.g., requiring `data` to match a specific schema for a known task
+failure). A handler that only needs the message can declare just
+`{ "message": { "type": "string" } }` and rely on structural subtyping
+(§4.2). The `path` projection on `$from: "error"` works the same as on
+any other reference (§3.4.1), so a handler can read just `error.code`
+or `error.data.foo` without binding the whole object.
+
+The shape is fixed in v1 to keep handlers writable without needing to
+look up the failing task. Per-task or per-error-code typed payloads
+belong in `data` and are out-of-band of v1's contract: a handler that
+cares unpacks `data` with a runtime check, exactly as it would for any
+open-world JSON. A future error-taxonomy mechanism could lift `data`
+into a discriminated union; that work is post-v1.
+
 ### 3.9 The full node grammar
 
 ```
@@ -865,6 +958,8 @@ reference will resolve) for any execution path.
    exists; sentinels are only used inside loop bodies; `onError` targets a
    `handler` in the same scope; `entry` names an existing node. `bind: true`
    resolves to the node id. `branch` nodes do not declare `bind`.
+   `handler` nodes do not declare `onError` (no recursive handler chains
+   in v1; see §3.8).
    References with `$from: "scope"` resolve to at least one binder of that
    name in scope. References with `$from: "error"` or `$from: "trigger"`
    appear only inside a `handler` node's `inputs`, and `$from: "trigger"`
@@ -888,6 +983,18 @@ reference will resolve) for any execution path.
    trigger T; references using `$from: "trigger"` always resolve and do not
    require T to bind.
 
+   For phi soundness (a) on a name X bound by both a node H reached only
+   via `T.onError` and a node S on T's success side (S is T itself, T's
+   `next`, or any node dominated by them), H and S are treated as on
+   mutually exclusive paths even though both are dominated by T. The
+   intuition is that T splits its outgoing control flow into a success
+   continuation (`next`) and a failure continuation (`onError`), and no
+   single execution reaches both. Coverage (b) for a downstream consumer
+   that depends on X must be satisfied by binders on each of T's two
+   outcomes - if only the success side binds X, a path through `onError`
+   leaves X unbound and the reference must be `optional` (or the
+   consumer is not a dominator of both outcomes).
+
    The `stateWrites` keys of body nodes carry a related but weaker rule.
    For every loop body and every state variable name S, let W(S) be the
    set of body nodes whose `stateWrites` includes S. Every pair (A, B) in
@@ -902,10 +1009,10 @@ reference will resolve) for any execution path.
    define a happens-before across independent body nodes. State writers
    do not require coverage (a state variable may be unwritten on some
    iteration paths and retain its prior value). This rule is the static
-   guarantee underlying §3.7.1's no-race rule and the §5.7
-   "parallelize independent nodes" SHOULD: it removes intra-iteration
-   write/write races on `state` from the engine's responsibility while
-   still allowing the natural sequential-overwrite pattern.
+   guarantee underlying §3.7.1's no-race rule: it makes intra-iteration
+   `state` semantics deterministic under sequential execution and keeps
+   the door open for a post-v1 parallelism decision (§2.2) to inherit a
+   race-free state model regardless of which scheduling form it takes.
 
 7. **Type compatibility pass (P1).** For every reference, the producer's
    declared type is a structural subtype of the field type at the consumer's
@@ -970,8 +1077,12 @@ This makes errors localizable (P4 scenario 30).
 
 ## 5. Execution semantics
 
-The execution model is described abstractly. The engine is free to optimize
-(parallelism, batching) as long as it preserves these semantics.
+The execution model is described abstractly. v1 specifies sequential
+execution along `next` chains (see §5.7 MUST 2); the engine is free to
+optimize within that bound (batching, fusion, memory liveness) as long as
+it preserves these semantics. Whether parallelism is added later as a
+declared IR construct or as an opportunistic engine derivation is deferred
+to post-v1 (§2.2).
 
 ### 5.1 Top-level execution
 
@@ -1032,10 +1143,17 @@ output, and other nodes never reference a branch as a data source.
 ### 5.5 Handler execution
 
 A handler is executed when the triggering node (`T` such that `T.onError = H`)
-fails. The handler's input `error` is the failure value (a structured error
-object). All other handler `inputs` resolve against H's scope using the
-dominator semantics described in 3.8. The handler's `next` then drives the
-rest of the run.
+fails. The handler's input `error` is the failure value, a structured
+`Error` object whose shape is fixed by §3.8.1. All other handler `inputs`
+resolve against H's scope using the dominator semantics described in 3.8.
+The handler's `next` then drives the rest of the run.
+
+If the handler itself fails (its task throws, or its return value
+violates `outputSchema`), the failure propagates to T's enclosing scope
+as if T had failed with no `onError` (§3.8 "Handler failure
+semantics"). The original triggering error is dropped; the handler's
+failure is what surfaces. Handlers do not carry `onError` (§3.8), so
+there is no recursive handler chain to walk.
 
 ### 5.6 Observability
 
@@ -1052,20 +1170,25 @@ back to an IR coordinate (P3 scenario 21).
 
 ### 5.7 Conformance bar (MUST / SHOULD / MAY)
 
-The IR is declarative; many quality-of-implementation choices (parallelism,
-memory liveness, retry granularity) are left to the engine. The conformance
-bar serves two audiences: it ensures any IR running on one v1 engine runs
-on all v1 engines, and it keeps the bar narrow enough that a future engine
+The IR is declarative; some quality-of-implementation choices (memory
+liveness, retry granularity) are left to the engine. The conformance bar
+serves two audiences: it ensures any IR running on one v1 engine runs on
+all v1 engines, and it keeps the bar narrow enough that a future engine
 or downstream consumer can implement just the MUST list and remain
 interoperable (§1.1 door-keeping). v1 distinguishes the conformance bar
-from recommended optimizations on that basis.
+from recommended optimizations on that basis. Concurrency is not in either
+bar: v1 specifies sequential execution along `next` chains and defers the
+parallelism question (declared vs. opportunistic) to post-v1 (§2.2).
 
 **A conforming v1 engine MUST:**
 
 1. Run the validation passes in section 4.1 and reject any IR that fails
    them.
-2. Execute the CFG, dispatching each node when its `inputs` are
-   resolvable per the dominator rules in section 3.2.
+2. Execute the CFG sequentially: dispatch each node when its `inputs` are
+   resolvable per the dominator rules in section 3.2, and complete each
+   node before dispatching its `next` successor. v1 does not specify
+   concurrent execution of independent nodes; the parallelism question is
+   deferred to post-v1 (§2.2).
 3. Commit `state` writes per the transactional rules in section 3.7.1
    (writes commit on iteration success; failure during the iteration
    discards the iteration's writes).
@@ -1103,15 +1226,6 @@ from recommended optimizations on that basis.
   freeing such an output before the loop entry is observed would break the
   loop. (Bound outputs only referenced by `state.initial` are dropped
   immediately after loop initialization.)
-- **Parallelize independent nodes.** Two nodes with no DDG path between
-  them and no `next` chain ordering them may execute concurrently.
-  The IR carries enough information to derive this safely
-  (P2 scenario 13). The validator's no-race rule (§3.7.1) forbids two
-  writers of the same `state` variable from co-occurring without a
-  dominance order, so any two body nodes the engine might run
-  concurrently are guaranteed not to race on `state`. Buffered writes from all successful
-  body nodes commit together at iteration end and are discarded
-  together on iteration failure (§3.7.1).
 - **Retry without restarting the workflow.** When a handler resumes
   via `next`, the engine should not recompute upstream nodes whose
   outputs are still live.
@@ -1292,8 +1406,12 @@ rather than requiring the workflow `input` to be threaded through `classify`'s
 bound output - the handler's needs do not leak into `classify`'s contract.
 Both `format` and `classifyError` bind the workflow result as `final`; only
 one of them runs in any given execution, so the bind names do not collide at
-runtime, and the validator accepts the shared name because they are on
-mutually exclusive control-flow paths.
+runtime, and the validator accepts the shared name under the
+`onError`-mutual-exclusion clause of the dominator pass (§4.1 pass 6,
+§3.8 "Bind-name sharing across `onError`"): `classify` splits into a
+success continuation that reaches `format` and a failure continuation
+that reaches `classifyError`, and no path through `classify` reaches
+both.
 
 ### 6.3 Loop with state and bounded retry
 
