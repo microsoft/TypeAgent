@@ -1,0 +1,151 @@
+{
+  "selector": "/Window[Name=\"Clock\"]",
+  "name": "Clock",
+  "controlType": "Window",
+  "className": "ApplicationFrameWindow",
+  "isEnabled": true,
+  "isOffscreen": false,
+  "hasKeyboardFocus": true,
+  "patterns": [
+    "Window"
+  ],
+  "boundingRect": {
+    "x": 150,
+    "y": 120,
+    "width": 1224,
+    "height": 1014
+  },
+  "children": [
+    {
+      "selector": "/Window[Name=\"Clock\"]/Window[AutomationId=\"TitleBar\"]",
+      "automationId": "TitleBar",
+      "name": "Clock",
+      "controlType": "Window",
+      "className": "ApplicationFrameTitleBarWindow",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "hasKeyboardFocus": false,
+      "patterns": [
+        "Value"
+      ],
+      "boundingRect": {
+        "x": 159,
+        "y": 121,
+        "width": 1206,
+        "height": 40
+      },
+      "value": "Clock",
+      "children": [
+        {
+          "selector": "/Window[Name=\"Clock\"]/Window[AutomationId=\"TitleBar\"]/MenuBar[AutomationId=\"SystemMenuBar\"]",
+          "automationId": "SystemMenuBar",
+          "name": "System",
+          "controlType": "MenuBar",
+          "isEnabled": true,
+          "isOffscreen": false,
+          "hasKeyboardFocus": false,
+          "patterns": [],
+          "boundingRect": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "children": [
+            {
+              "selector": "/Window[Name=\"Clock\"]/Window[AutomationId=\"TitleBar\"]/MenuBar[AutomationId=\"SystemMenuBar\"]/MenuItem[Name=\"System\"]",
+              "name": "System",
+              "controlType": "MenuItem",
+              "isEnabled": true,
+              "isOffscreen": false,
+              "hasKeyboardFocus": false,
+              "patterns": [
+                "ExpandCollapse"
+              ],
+              "boundingRect": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0
+              },
+              "children": []
+            }
+          ]
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"]/Window[AutomationId=\"TitleBar\"]/Button[AutomationId=\"Minimize\"]",
+          "automationId": "Minimize",
+          "name": "Minimize Clock",
+          "controlType": "Button",
+          "isEnabled": true,
+          "isOffscreen": false,
+          "hasKeyboardFocus": false,
+          "patterns": [
+            "Invoke"
+          ],
+          "boundingRect": {
+            "x": 1194,
+            "y": 121,
+            "width": 57,
+            "height": 40
+          },
+          "children": []
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"]/Window[AutomationId=\"TitleBar\"]/Button[AutomationId=\"Maximize\"]",
+          "automationId": "Maximize",
+          "name": "Maximize Clock",
+          "controlType": "Button",
+          "isEnabled": true,
+          "isOffscreen": false,
+          "hasKeyboardFocus": false,
+          "patterns": [
+            "Invoke"
+          ],
+          "boundingRect": {
+            "x": 1251,
+            "y": 121,
+            "width": 57,
+            "height": 40
+          },
+          "children": []
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"]/Window[AutomationId=\"TitleBar\"]/Button[AutomationId=\"Close\"]",
+          "automationId": "Close",
+          "name": "Close Clock",
+          "controlType": "Button",
+          "isEnabled": true,
+          "isOffscreen": false,
+          "hasKeyboardFocus": false,
+          "patterns": [
+            "Invoke"
+          ],
+          "boundingRect": {
+            "x": 1308,
+            "y": 121,
+            "width": 57,
+            "height": 40
+          },
+          "children": []
+        }
+      ]
+    },
+    {
+      "selector": "/Window[Name=\"Clock\"]/Pane[ClassName=\"ApplicationFrameInputSinkWindow\"]",
+      "controlType": "Pane",
+      "className": "ApplicationFrameInputSinkWindow",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "hasKeyboardFocus": false,
+      "patterns": [],
+      "boundingRect": {
+        "x": 159,
+        "y": 161,
+        "width": 1206,
+        "height": 964
+      },
+      "children": []
+    }
+  ]
+}
