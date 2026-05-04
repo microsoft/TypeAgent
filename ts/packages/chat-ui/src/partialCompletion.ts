@@ -203,10 +203,37 @@ export class PartialCompletion {
             }
             return false;
         }
-        if (event.key === "Tab" || event.key === "Enter") {
+        if (event.key === "Tab") {
+            // Tab accepts in both inline and dropdown modes.  In
+            // dropdown mode, if no item is currently selected (e.g.
+            // an auto-opened subcommand dropdown that the user hasn't
+            // navigated yet — see firstUpdate in LocalSearchMenuUI),
+            // snap to the first item instead of accepting nothing.
+            // A second Tab will then accept that item.
+            if (!this.effectiveInline() && this.menu) {
+                if (!this.menu.selectCompletion()) {
+                    this.menu.adjustSelection(1);
+                }
+                event.preventDefault();
+                return true;
+            }
             this.acceptInlineOrSelected();
             event.preventDefault();
             return true;
+        }
+        if (event.key === "Enter") {
+            // Enter accepts only in dropdown mode.  In inline mode we
+            // intentionally let Enter fall through to ChatPanel's
+            // submit handler so the user sends what they typed (the
+            // ghost text is just a preview and is NOT silently
+            // accepted).  Mirrors PR #2277's shell behavior.
+            if (!this.effectiveInline() && this.menu) {
+                if (this.menu.selectCompletion()) {
+                    event.preventDefault();
+                    return true;
+                }
+            }
+            return false;
         }
         return false;
     }
