@@ -536,8 +536,8 @@ Every node carries a discriminant `kind` (P5: self-describing).
   "kind": "task" | "branch" | "loop" | "handler",
   "inputs":  { /* per-kind: see below */ },
   "next":    /* per-kind: see below */,
-  "onError": "<nodeId>" | null,   // optional; null/absent = propagate
-  "bind":    "<scopeVarName>" | null   // optional; default null/absent = unbound (hidden)
+  "onError": "<nodeId>",          // optional; absent = propagate
+  "bind":    "<scopeVarName>"     // optional; absent = unbound (hidden)
 }
 ```
 
@@ -546,11 +546,19 @@ Every node carries a discriminant `kind` (P5: self-describing).
 schema (section 3.5). `onError`, when present, must point to a `handler` node
 in the same scope.
 
+**Absent fields, no `null`.** Optional fields throughout the IR
+(`onError`, `bind`, `next` for terminals, `path` and `optional` on
+references) are written by **omission**. Explicit `null` is not a
+second legal spelling. The §1.3 consistency clause is what rules this
+out: one rule ("field unset → default behavior") must have one
+surface form. Validators that encounter `null` in any of these
+positions reject the IR.
+
 **`bind`** publishes the node's output as a scope variable, addressable by
 other nodes via `$from: "scope"`. The value of `bind` may be:
 
 - A non-empty string: the bound name.
-- Absent or `null`: the node's output is **not** addressable by other nodes.
+- Absent: the node's output is **not** addressable by other nodes.
   The node may still execute, sequence successors via `next`, and have side
   effects, but no reference can read its value.
 
@@ -586,8 +594,8 @@ reference form (minimalism):
 {
   "$from": "input" | "constant" | "scope" | "state" | "error" | "trigger",
   "name":  "<name>",            // input field, constant name, scope variable, or state var
-  "path":  ["a", "b", 0, "c"],  // optional JSON-pointer-style path into the value
-  "optional": true              // optional; default false
+  "path":  ["a", "b", 0, "c"],  // optional; omit (do not write []) when no projection is needed
+  "optional": true              // optional; include only when true (absent = required)
 }
 ```
 
@@ -625,6 +633,10 @@ string elements address object fields, integer elements address array
 indices. The projection is applied after the source is resolved, before
 the value is handed to the consumer.
 
+The canonical encoding of "no projection" is to **omit `path`**.
+The empty array `[]` is not an accepted spelling of the same thing
+(per the absent-fields-no-null rule in §3.3).
+
 - If every path element resolves, the projected value is what the consumer
   sees, and the consumer's `inputSchema` checks against the projected type.
 - If any path element cannot be resolved (missing field, out-of-range index,
@@ -645,15 +657,21 @@ validator, and analyzers in agreement on a single observable behavior
 ```jsonc
 {
   "kind": "task",
-  "task": "<task type identifier>",   // names a registered task implementation
-  "inputSchema":  { /* JSON Schema */ },
-  "outputSchema": { /* JSON Schema */ },
-  "inputs": {
-    "<fieldName>": { /* reference object */ }
+  "task": "<task type identifier>", // names a registered task implementation
+  "inputSchema": {
+    /* JSON Schema */
   },
-  "next": "<nodeId>" | null,          // null => terminal (top-level only)
-  "onError": "<nodeId>" | null,
-  "bind": "<scopeVarName>" | null    // optional; see section 3.3
+  "outputSchema": {
+    /* JSON Schema */
+  },
+  "inputs": {
+    "<fieldName>": {
+      /* reference object */
+    },
+  },
+  "next": "<nodeId>", // optional; absent = terminal (top-level only)
+  "onError": "<nodeId>", // optional; see section 3.3
+  "bind": "<scopeVarName>", // optional; see section 3.3
 }
 ```
 
@@ -664,22 +682,26 @@ validator, and analyzers in agreement on a single observable behavior
   `outputSchema`. A task whose `bind` is absent has no addressable output,
   but `outputSchema` is still required (it documents the contract and is
   used by the runtime to validate the task implementation's return value).
-- `next: null` is legal **only** in the top-level scope. In a loop body, every
-  task must have `next` set to another body node, `@iterate`, or `@exit`
-  (P5 scenario 39).
+- An absent `next` (terminal node) is legal **only** in the top-level
+  scope. In a loop body, every task must have `next` set to another body
+  node, `@iterate`, or `@exit` (P5 scenario 39).
 
 ### 3.6 Branch node
 
 ```jsonc
 {
   "kind": "branch",
-  "selector": { /* reference object yielding a discriminant value */ },
-  "selectorSchema": { /* JSON Schema with "enum" or string-typed discriminant */ },
+  "selector": {
+    /* reference object yielding a discriminant value */
+  },
+  "selectorSchema": {
+    /* JSON Schema with "enum" or string-typed discriminant */
+  },
   "cases": {
-    "<caseValue>": "<nodeId>"
+    "<caseValue>": "<nodeId>",
   },
   "default": "<nodeId>",
-  "onError": "<nodeId>" | null
+  "onError": "<nodeId>", // optional; see section 3.3
 }
 ```
 
@@ -706,29 +728,46 @@ keeps the branch node a pure structural construct.
 {
   "kind": "loop",
   "inputs": {
-    "<boundaryInputName>": { /* reference from outer scope */ }
+    "<boundaryInputName>": {
+      /* reference from outer scope */
+    },
   },
-  "inputSchema":  { /* JSON Schema for the boundary inputs */ },
+  "inputSchema": {
+    /* JSON Schema for the boundary inputs */
+  },
   "state": {
     "<stateVarName>": {
-      "schema": { /* JSON Schema */ },
-      "initial": { /* reference object resolved at loop entry, in outer scope */ }
-    }
+      "schema": {
+        /* JSON Schema */
+      },
+      "initial": {
+        /* reference object resolved at loop entry, in outer scope */
+      },
+    },
   },
   "body": {
-    "kind": "scope",
-    "nodes": { "<bodyNodeId>": { /* node object */ } },
-    "entry": "<bodyNodeId>"
+    "nodes": {
+      "<bodyNodeId>": {
+        /* node object */
+      },
+    },
+    "entry": "<bodyNodeId>",
   },
-  "output": { /* reference object resolved in body scope at @exit */ },
-  "outputSchema": { /* JSON Schema */ },
+  "output": {
+    /* reference object resolved in body scope at @exit */
+  },
+  "outputSchema": {
+    /* JSON Schema */
+  },
   "iterateState": {
-    "<stateVarName>": { /* reference object resolved in body scope at @iterate */ }
+    "<stateVarName>": {
+      /* reference object resolved in body scope at @iterate */
+    },
   },
   "maxIterations": 1000,
-  "next": "<nodeId>" | null,
-  "onError": "<nodeId>" | null,
-  "bind": "<scopeVarName>" | null    // optional; loop output is the resolved `output` value
+  "next": "<nodeId>", // optional; see section 3.3
+  "onError": "<nodeId>", // optional; see section 3.3
+  "bind": "<scopeVarName>", // optional; loop output is the resolved `output` value
 }
 ```
 
@@ -837,15 +876,21 @@ There are no other sentinels in v1.
 ```jsonc
 {
   "kind": "handler",
-  "inputSchema":  { /* JSON Schema */ },
-  "outputSchema": { /* JSON Schema */ },
+  "inputSchema": {
+    /* JSON Schema */
+  },
+  "outputSchema": {
+    /* JSON Schema */
+  },
   "task": "<task type identifier>",
   "inputs": {
-    "<fieldName>": { /* reference object */ },
-    "error":      { "$from": "error" }   // see below
+    "<fieldName>": {
+      /* reference object */
+    },
+    "error": { "$from": "error" }, // see below
   },
-  "next": "<nodeId>" | null,
-  "bind": "<scopeVarName>" | null   // optional; handler is a value-producing node
+  "next": "<nodeId>", // optional; see section 3.3
+  "bind": "<scopeVarName>", // optional; handler is a value-producing node
 }
 ```
 
@@ -1075,8 +1120,9 @@ reference will resolve) for any execution path.
    over an enum-typed selector or a `default`. v1 requires `default`
    regardless.
 9. **Termination pass.** Every node in the top-level scope can reach a
-   terminal (`next: null` task/handler, or a branch all of whose targets
-   transitively terminate). Every body node can reach `@exit` or `@iterate`.
+   terminal (a task or handler with `next` absent, or a branch all of whose
+   targets transitively terminate). Every body node can reach `@exit` or
+   `@iterate`.
    Pure cycles without `@iterate`/`@exit` are rejected (P3 scenario 26).
 10. **Acyclicity within scope (P3 + P4).** The intra-scope control-flow graph
     is acyclic. Iteration is expressed only via `@iterate` inside a loop body.
@@ -1147,7 +1193,7 @@ to post-v1 (§2.2).
 3. For each visited node N:
    a. Resolve `inputs` from references (in N's scope).
    b. Execute N (kind-specific, see below).
-   c. If N succeeds: if N is a loop with `next: null` and we are top-level,
+   c. If N succeeds: if N is a loop with no `next` and we are top-level,
    finish; else proceed to the node named by `next` (or by branch `cases`).
    d. If N fails: if `onError` is set, route to that handler with the error
    bound to `$from: "error"`; otherwise propagate failure to the enclosing
@@ -1351,7 +1397,6 @@ poor memory or latency profiles on realistic workflows.
       "inputs": {
         "text": { "$from": "scope", "name": "page", "path": ["body"] },
       },
-      "next": null,
       "bind": "result",
     },
   },
@@ -1421,7 +1466,7 @@ an identity check.
       /* task ... outputSchema: { "$ref": "#/types/Result" } ... bind: "output" ... next: "format" */
     },
     "format": {
-      /* task ... outputSchema: { "$ref": "#/types/Result" } ... bind: "final" ... next: null */
+      /* task ... outputSchema: { "$ref": "#/types/Result" } ... bind: "final" (terminal: next omitted) */
     },
     "classifyError": {
       "kind": "handler",
@@ -1435,7 +1480,6 @@ an identity check.
         "error": { "$from": "error" },
         "doc": { "$from": "trigger", "name": "doc" },
       },
-      "next": null,
       "bind": "final",
     },
   },
@@ -1566,7 +1610,6 @@ be declared in the enclosing workflow's `types` block, e.g.:
     "feedback": { "$from": "scope", "name": "evaluate", "path": ["feedback"] },
   },
   "maxIterations": 5,
-  "next": null,
 }
 ```
 
@@ -1593,7 +1636,6 @@ iteration (P5 universally-unsurprising default with explicit cap).
     "primary":  { "$from": "scope", "name": "fetch" },
     "enriched": { "$from": "scope", "name": "enrich", "optional": true }
   },
-  "next": null,
   "bind": "merged"
 }
 ```
@@ -1994,7 +2036,7 @@ and the v2 reopening conditions: [decisions/0004-pure-ssa.md](decisions/0004-pur
 - [x] Node outputs are hidden by default; sharing requires explicit `bind`
       (P4 data hiding, P5 lifetime predictability).
 - [x] No implicit "missing field" behavior except those P5 calls universally
-      unsurprising (`onError` absent => propagate; top-level `next: null` =>
+      unsurprising (`onError` absent => propagate; top-level `next` absent =>
       terminal).
 - [x] Loops cannot exist as topology accidents (P3, validation pass 9).
 - [x] Branches are exhaustive (P5, validation pass 8).
@@ -2063,3 +2105,30 @@ reopening condition (e.g., "revisit Option 3 if IR size becomes a pain
 point"), see [revisit-triggers.md](revisit-triggers.md). Some entries
 appear in both this section and that index - here as the v1 closure
 under the lens, there as a longer-term trigger.
+
+### 10.1 Open under the consistency clause (\u00a71.3)
+
+Survey items surfaced after the variance lens was made
+bidirectional (\u00a71.3 "Consistency"). Each is one surface form
+encoding what may be one rule, or vice versa. Listed for a future
+pass; none are blockers for v1.
+
+- **Loop `state` shape vs. workflow root.** The loop carries
+  `state[*].schema` and `state[*].initial` nested per variable, then
+  `iterateState[*]` as a sibling field. The workflow root and task
+  nodes carry the same value/type/name triple flat:
+  `inputSchema`/`inputs`, `outputSchema`/`output`. Proposed rename:
+  `stateSchema` (the type, mirrors `inputSchema`), `initialState`
+  (the value-into-frame, mirrors `inputs`), `iterateState` (already
+  the right shape). Makes the loop boundary look exactly like the
+  workflow boundary and the task boundary - one rule, one surface.
+  Worth doing at the same time as any future loop-shape work.
+- **Branch `selector`/`selectorSchema` vs. `inputs`/`inputSchema`.**
+  Branches encode "typed data into a node" with a different field
+  pair than every other node kind. One rule (typed inputs), two
+  surface forms. Defensible (a branch has structurally one input,
+  not a map) but worth recording as an open question.
+- **Error object location fields (\u00a73.8.1).** `task`, `node`, and
+  `scopePath` are three optional fields all addressing "where did
+  the failure originate". Could collapse to a single optional
+  `location` sub-object. Cosmetic; low-priority.
