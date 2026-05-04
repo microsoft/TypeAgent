@@ -190,6 +190,12 @@ let demoResolve: ((action: "continue" | "cancel") => void) | undefined;
 let demoStatusItem: vscode.StatusBarItem | undefined;
 let demoRunning = false;
 let demoCancelRequested = false;
+// Sync flag set BEFORE any await in runDemoScript() so two quick
+// invocations (e.g. user spamming the right-click action while the
+// file picker is open) can't both pass the `if (demoRunning)` check
+// and end up interleaving lines.  Mirrors the demoStarting fix in
+// PR #2277's @shell run.
+let demoStarting = false;
 
 function setDemoState(
     running: boolean,
@@ -249,12 +255,22 @@ async function runDemoScript(): Promise<void> {
         );
         return;
     }
-    if (demoRunning) {
+    if (demoStarting || demoRunning) {
         vscode.window.showWarningMessage(
-            "TypeAgent: a demo script is already running.",
+            "TypeAgent: a demo is already running. Wait for it to finish, press Esc to cancel it, or reload the window before starting another.",
         );
         return;
     }
+    demoStarting = true;
+    try {
+        await runDemoScriptInner();
+    } finally {
+        demoStarting = false;
+    }
+}
+
+async function runDemoScriptInner(): Promise<void> {
+    if (!activeChat) return;
     const picked = await vscode.window.showOpenDialog({
         canSelectFiles: true,
         canSelectFolders: false,
