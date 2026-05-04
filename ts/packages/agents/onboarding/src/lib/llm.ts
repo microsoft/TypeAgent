@@ -47,3 +47,9 @@ export function getPackagingModel(endpoint?: string): ChatModel {
         "onboarding:packaging",
     ]);
 }
+
+export function getExploreModel(endpoint?: string): ChatModel {
+    return openai.createChatModel(endpoint, undefined, undefined, [
+        "onboarding:explore",
+    ]);
+}
