@@ -22,13 +22,17 @@ try {
 // suffixed timeout (aiclient's empty-string default short-circuits the
 // fallback to the unsuffixed var).
 process.env.AZURE_OPENAI_MAX_TIMEOUT_GPT_5 = "300000";
+process.env.AZURE_OPENAI_MAX_TIMEOUT_GPT_v = "180000";
 process.env.AZURE_OPENAI_MAX_TIMEOUT = "300000";
 process.env.OPENAI_MAX_TIMEOUT = "300000";
 
 import { runExploration } from "../explorer.js";
 import { HelperClient } from "../helperClient.js";
+import {
+    iterativeReconnoiter,
+    renderIterativeReconAsGoal,
+} from "../iterativeReconnaissance.js";
 import { LlmOracle } from "../llmOracle.js";
-import { reconnoiterApp, renderReconAsGoal } from "../tabReconnaissance.js";
 import { inferSnapshotPolicy } from "../snapshotPolicy.js";
 import { synthesize } from "../synthesizer.js";
 
@@ -87,25 +91,33 @@ async function main(): Promise<void> {
         await client.eventsIdle({ debounceMs: 800, maxWaitMs: 5000 });
         log(`launched pid=${launch.pid}`);
 
-        log("=== phase 1: vision reconnaissance (per-tab survey) ===");
-        const recon = await reconnoiterApp({
+        log("=== phase 1: iterative vision reconnaissance ===");
+        const recon = await iterativeReconnoiter({
             client,
             rootSelector: launch.mainWindow,
             appHint: "Windows Clock (Microsoft Alarms & Clock)",
+            maxIterations: 25,
+            settleMs: 1000,
         });
         log(
-            `recon found ${recon.tabs.length} tab(s), ${recon.expectedActions.length} expected action(s):`,
+            `recon found ${recon.expectedActions.length} expected action(s) in ${recon.iterationsUsed} turn(s)`,
         );
-        for (const s of recon.surveys) {
-            log(
-                `  ${s.tab.name} (${s.recon.purpose}): ${s.recon.expectedActions.length} action(s)`,
-            );
-            for (const a of s.recon.expectedActions) {
+        const byTab = new Map<string, typeof recon.expectedActions>();
+        for (const a of recon.expectedActions) {
+            const list = byTab.get(a.tabOrSection) ?? [];
+            list.push(a);
+            byTab.set(a.tabOrSection, list);
+        }
+        for (const [tab, actions] of byTab) {
+            log(`  ${tab} (${actions.length} action(s)):`);
+            for (const a of actions) {
                 const params = a.parameters
                     .map((p) => `${p.name}:${p.type}=${JSON.stringify(p.example)}`)
                     .join(", ");
                 const flags = `${a.priority}${a.destructive ? "/destructive" : ""}`;
-                log(`    • ${a.intentName}(${params}) [${flags}] — ${a.description}`);
+                log(
+                    `    • ${a.intentName}(${params}) [${flags}]`,
+                );
             }
         }
         // Save the reconnaissance for inspection.
@@ -114,7 +126,7 @@ async function main(): Promise<void> {
             JSON.stringify(recon, null, 2),
         );
 
-        const goal = renderReconAsGoal(recon);
+        const goal = renderIterativeReconAsGoal(recon);
         log("");
         log("=== phase 2: targeted exploration (LLM oracle, recon-driven goal) ===");
         log(`goal preview: ${goal.split("\n").slice(0, 4).join(" / ")}...`);

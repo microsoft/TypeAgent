@@ -4,35 +4,57 @@ This subsystem turns a Windows desktop app into a TypeAgent-replayable action se
 
 It's the alternative to API-based onboarding (`crawlDocUrl`, `parseOpenApiSpec`, `crawlCliHelp`): when the app has no public API surface but does have a UI, we crawl the UI directly via Microsoft's UI Automation framework.
 
+## Status (2026-05-04)
+
+**Working end-to-end:** the helper, exploration loop, snapshot capture/restore, dynamic-controls calibration, record mode, synthesis with merge-into-workspace, validation pass, vision-driven reconnaissance, playback executor. A real Clock crawl produces correct, replay-ready actions; the playback executor has been confirmed to create a brand-new alarm with parameters the LLM never saw during the crawl.
+
+**What's still left (by priority):**
+
+1. **TypeAgent integration** (`ui-automation` scaffolder pattern). The `discoveredActions.json` is correct; what's missing is wiring it into the dispatcher. A scaffolder pass should generate `packages/agents/<name>/` containing schema.ts (typed actions from discoveredActions), schema.agr (NL phrasings — phraseGen handles this), and an actionHandler that uses `playbackExecutor.ts`. After that, *"create an alarm at 7am called Wake up"* through the TypeAgent shell will work.
+2. **Synthesis prompt iteration on richer crawls.** With reconnaissance feeding the explorer a TODO list, the chunks per intent become much cleaner — but tightening of the synthesis prompts hasn't been re-validated against this richer input. Some sub-step actions (`nameAlarm`, `setAlarmTime`) emitted by the recon LLM should roll up into one `createAlarm(name, hour, minute)` action; the synthesis pass already does this for explore-only crawls but the recon-driven flow needs a check.
+3. **Selector decay through dynamic ancestors** (e.g., `Group[Name="Stopwatch, Paused, 12 seconds"]` ancestors invalidating after the stopwatch starts). The current `Selectors.BuildSegment` adds ClassName for disambiguation when AutomationId is missing, but a Group with only a dynamic Name can't be salvaged that way. Future work: a selector-relative resolver that searches descendants from the nearest stable ancestor.
+4. **Per-tab focused crawls + merge.** Synthesis quality is best with bounded chunk sets focused on one feature area. The merge-into-workspace logic is in place; what's missing is a workflow tool (`runFocusedCrawl(tab)`) that targets a single tab, synthesizes, and merges.
+5. **Selector fallback for action playback.** Single-identifier selectors break when an app version changes a Name or AutomationId. A multi-identifier selector format (record AutomationId AND Name AND ClassName at capture; resolver tries them in order) would harden replay.
+
 ## Pipeline overview
 
 ```
-                ┌─ phase 0: snapshot baseline (UWP folders / registry / etc.)
-                │
-                ▼
-          ┌─────────────┐    ┌─────────────────┐    ┌───────────────────┐
-   AUMID ─►│  helper.exe │ ─► │  explore loop   │ ─► │  state graph      │
-          │  (UIA via   │    │  (LLM oracle    │    │  states.jsonl +   │
-          │   FlaUI)    │    │   picks moves)  │    │  transitions.jsonl│
-          └─────────────┘    └─────────────────┘    └─────────┬─────────┘
-                                                              │
-                                                              ▼
-                                                    ┌───────────────────┐
-                                                    │  synthesis        │
-                                                    │  (neutral classify│
-                                                    │   → chunk         │
-                                                    │   → cluster       │
-                                                    │   → synthesize    │
-                                                    │   → validate)     │
-                                                    └─────────┬─────────┘
-                                                              │
-                                                              ▼
-                                                    discoveredActions.json
-                ▲                                       (with playback recipes)
-                │
-                └─ phase N: snapshot restore  ◄──── playback executor
-                                                    can replay against
-                                                    a fresh app instance
+            ┌─ phase 0: snapshot baseline (UWP folders / registry / etc.)
+            │
+            ▼                                  optional vision-LLM phase:
+       ┌────────┐    ┌────────────────┐        per-tab survey or iterative
+AUMID ►│ helper │ ─► │ reconnaissance │ ─► ExpectedAction[] (TODO list)
+       │        │    │ (vision LLM)   │           │
+       └────────┘    └────────────────┘           ▼
+            │                            ┌──────────────────┐
+            └─────────────────────────► │  explore loop    │
+                                         │  (LLM oracle —   │
+                                         │  drives the TODO │
+                                         │  list, observes) │
+                                         └────────┬─────────┘
+                                                  ▼
+                                         state graph (states.jsonl +
+                                         transitions.jsonl + per-state
+                                         TreeNode JSON)
+                                                  │
+                                                  ▼
+                                         ┌──────────────────────┐
+                                         │  synthesis (GPT-5)   │
+                                         │  neutral-classify →  │
+                                         │  chunk → cluster →   │
+                                         │  synthesize →        │
+                                         │  validate (auto-     │
+                                         │  merge duplicates)   │
+                                         └────────┬─────────────┘
+                                                  ▼
+                                         discoveredActions.json
+            ▲                            (parameters + playback recipes,
+            │                             merged into workspace-level file)
+            │                                     │
+            └─ phase N: snapshot restore   ◄──────┤
+                                                  ▼
+                                         playback executor replays any
+                                         action with new parameter values
 ```
 
 ## Components
@@ -57,6 +79,22 @@ Methods (one-line summaries — see `helperClient.ts` for full types):
 Selectors are a custom XPath-like DSL: `/Window[Name="Clock"][ClassName="ApplicationFrameWindow"]/Window[Name="Clock"][ClassName="Windows.UI.Core.CoreWindow"]/Custom[AutomationId="NavView"]/...`
 
 Capture-time the helper picks the most stable identifier in priority order (AutomationId → Name + ClassName → ClassName → bare type) and resolves the path as a UIA descendant chain.
+
+### Reconnaissance (`tabReconnaissance.ts`, `iterativeReconnaissance.ts`)
+
+Optional but highly effective: send screenshots + filtered control trees to a vision-capable LLM and have it enumerate the actions each tab/screen supports BEFORE running the autonomous explorer. The output (`ExpectedAction[]`) becomes a numbered TODO list that's fed into the explore loop's goal — much more deterministic coverage than free-form exploration.
+
+Two flavors:
+
+- **`tabReconnaissance.reconnoiterApp`** — deterministic tab discovery (largest cluster of sibling ListItems with SelectionItem pattern), then ONE vision call per tab. Fast (~1–2 min), shallow (only sees top-level tab content).
+
+- **`iterativeReconnaissance.iterativeReconnoiter`** — multi-turn loop. Per turn the vision LLM sees the current screenshot + filtered tree + already-discovered list, returns `newDiscoveries[]` plus a `click` / `back` / `done` decision. **Drills INTO modals/dialogs** to enumerate their fields, then clicks Cancel to back out. Way richer — Clock test with 20 turns produced 34 distinct actions across 5 tabs including secondary features (`keepTimerOnTop`, `linkSpotify`, `repeatAlarm` with days-of-week enum, `setAlarmSound` with sound enum). Correctly flagged `resetStopwatch` as destructive.
+
+Vision model selection: `getReconModel()` defaults to **GPT-v** (the dedicated vision deployment in this Azure config). GPT-5 deployments here returned "API version not supported" for `image_url` content; GPT-4o uses a `/openai/v1/...` URL shape that aiclient doesn't construct correctly. GPT-v on the standard `/openai/deployments/...` path works directly.
+
+TypeChat wiring for vision: image content goes in `promptHistory` as a prior user message; the schema-bearing text prompt goes via `translate(request)` so TypeChat's standard "respond with this JSON schema" wrapper is appended. The markdown agent uses the same pattern.
+
+`renderIterativeReconAsGoal(recon)` turns the discovered list into a TODO-style goal string for the explore loop. The explorer then drives each action concretely (with the recon's example parameter values), producing one chunk per intent — clustering and synthesis become easier downstream.
 
 ### Explorer (`explorer.ts` + `llmOracle.ts`)
 
@@ -200,6 +238,8 @@ The shipping smoke tests under `test/` exercise each phase:
 | `clockCrawl.ts` / `clockFullCrawl.ts` | full crawl with snapshot baseline + restore at end |
 | `clockAgentDemo.ts` | replay a crawled action with new parameters + verify in the UI |
 | `resynthesize.ts` | re-run synthesis on an existing `runs/<runId>/` without re-crawling |
+| `clockIterativeRecon.ts` | iterative vision recon only (fast iteration on the recon prompt) |
+| `clockReconCrawl.ts` | recon → goal-from-recon → crawl → synthesize → restore (the "best" pipeline) |
 
 Run any of them with `node packages/agents/onboarding/dist/uiCapture/test/<name>.js` after `pnpm --filter onboarding-agent run build`.
 
@@ -209,21 +249,27 @@ For a real crawl, env vars `AZURE_OPENAI_API_KEY_GPT_5` + `AZURE_OPENAI_ENDPOINT
 
 The pipeline produces real, replay-ready actions, but a few quality patterns are worth knowing:
 
-- **GPT-5 is the difference.** The same crawl data goes from "12 fragmented actions" with an older model to "7 well-shaped actions" with GPT-5 + tightened prompts + validation. The reasoning model is doing structural work that smaller models can't.
+- **GPT-5 is the difference for synthesis.** The same crawl data goes from "12 fragmented actions" with the default model to "7 well-shaped actions" with GPT-5 + tightened prompts + validation. The reasoning model is doing structural work that smaller models can't.
+- **Vision recon is the difference for coverage.** Free-form explore alone catches ~7-8 actions because the LLM oracle gravitates to obvious primary buttons. Vision-driven iterative recon caught 34 actions on Clock by drilling into Add-X dialogs and noticing secondary features (`keepTimerOnTop`, `linkSpotify`, `repeatAlarm` enum, etc.). Recon is now the recommended starting point.
 - **Single-chunk clusters can't parameterize.** If only one chunk in the cluster has `setValue "New York"`, the synthesizer can't guess that the city should be a parameter. A second crawl that exercises the same intent with a different city fixes it. The validator flags these (`ambiguous` verdict, "consider parameterizing X").
 - **Modal-name selectors can decay mid-flow.** Some UWP Group containers embed running state into their `Name` (e.g., `Stopwatch, Paused, 12 seconds 23 centiseconds`). Selectors built on those Names go stale immediately when the state changes. The current selector grammar handles this by adding ClassName disambiguation when no AutomationId is present, but ancestors with dynamic names remain a real issue.
 - **UWP InvokedEvent doesn't fire in-process.** The autonomous loop doesn't depend on this (it re-dumps the tree after each action), but record-mode against a same-process driver only catches StructureChanged events.
 - **Snapshot-restore is critical.** Without the baseline, every crawl leaves alarms / timers / cities behind. Make sure `snapshotPolicy.detectionStatus === "user-confirmed"` before any non-trivial run.
+- **API-version + URL-shape gotchas in aiclient.** GPT-5 and GPT-v deployments work via standard Azure paths. GPT-4o uses `/openai/v1/chat/completions` (Responses-API style) which aiclient doesn't construct correctly — request returns "API version not supported." Stick to GPT-5 for synthesis and GPT-v for vision; revisit if we need GPT-4o specifically.
+- **Endpoint-suffixed env vars don't fall back.** aiclient's `getEnvSetting` short-circuits on its empty-string default and doesn't fall back from `_GPT_5`-suffixed vars to base vars when an endpoint suffix is set. Smoke tests have to set BOTH `AZURE_OPENAI_MAX_TIMEOUT` and `AZURE_OPENAI_MAX_TIMEOUT_GPT_5` (and `_GPT_v`) explicitly.
 
 ## Adding a new integration
 
-For a UWP app with a Microsoft AUMID and a recognizable English UI, expect:
+For a UWP app with a Microsoft AUMID and a recognizable English UI, the recommended sequence:
 
 1. `inferSnapshotPolicy({ aumid })` → review the candidate folders, set `detectionStatus: "user-confirmed"`
-2. Optional: `calibrateDynamicControls()` if the app has live time / progress / animation
-3. `runExploration({ goal: "...task-oriented goal...", budget: { maxIterations: 25–60 } })` with the LLM oracle
-4. `synthesize({ runDir, integrationName, workspaceDir })` — applies merge-into-workspace
-5. Inspect `discoveredActions.json` and `synthesisReport.md`
-6. If gaps: re-run `runExploration` with a *focused* goal naming only the missing area; synthesis merges automatically. Per-tab focused crawls produce much cleaner output than one mega-crawl.
+2. Optional: `calibrateDynamicControls()` if the app has live time / progress / animation that would otherwise pollute the state fingerprint
+3. **`iterativeReconnoiter({ appHint, maxIterations: 20–25 })`** — vision LLM enumerates actions per tab including modals. This is the new step that dramatically lifts coverage.
+4. `runExploration({ goal: renderIterativeReconAsGoal(recon), budget: { maxIterations: 30–60 } })` — the explorer drives the recon's TODO list; its LLM oracle picks moves to complete each action.
+5. `synthesize({ runDir, integrationName, workspaceDir })` — neutral classify → chunk → cluster → synthesize → validate; merges into the workspace-level `discoveredActions.json`.
+6. Inspect `discoveredActions.json` and `synthesisReport.md`. If validation flagged duplicates / fragments, the merge step already auto-fixed obvious ones; the rest are notes for human review.
+7. If gaps: re-run `runExploration` with a *focused* goal naming only the missing area; synthesis merges automatically. Per-tab focused crawls produce cleaner output than one mega-crawl.
 
-For non-UWP apps: snapshot auto-detection won't find folders, so the user fills in the policy manually (or sets `markStateless` if there's no persisted state).
+The `clockReconCrawl.ts` smoke runs this whole sequence end-to-end against Windows Clock — read it as a reference implementation.
+
+For non-UWP apps: snapshot auto-detection won't find folders, so the user fills in the policy manually (or sets `markStateless` if there's no persisted state). Reconnaissance + exploration work the same way.
