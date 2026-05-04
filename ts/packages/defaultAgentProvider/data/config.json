@@ -73,6 +73,9 @@
     },
     "github-cli": {
       "name": "github-cli-agent"
+    },
+    "visualStudio": {
+      "name": "visualstudio-agent"
     }
   },
   "mcpServers": {

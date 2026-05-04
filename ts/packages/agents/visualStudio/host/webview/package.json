@@ -1,0 +1,26 @@
+{
+  "name": "visualstudio-extension-webview",
+  "version": "0.0.1",
+  "private": true,
+  "description": "WebView2 chat panel content for the Visual Studio TypeAgent extension",
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log"
+  },
+  "dependencies": {
+    "@typeagent/agent-rpc": "workspace:*",
+    "@typeagent/agent-sdk": "workspace:*",
+    "@typeagent/agent-server-protocol": "workspace:*",
+    "@typeagent/dispatcher-rpc": "workspace:*",
+    "chat-ui": "workspace:*"
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5",
+    "vite": "^5.4.10"
+  }
+}
