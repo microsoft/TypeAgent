@@ -64,3 +64,14 @@ export function getSynthesisModel(endpoint?: string): ChatModel {
         "onboarding:synthesis",
     ]);
 }
+
+export function getReconModel(endpoint?: string): ChatModel {
+    // Reconnaissance is vision-driven (sends screenshots) so we must use a
+    // multimodal-capable deployment. GPT-v is the dedicated vision endpoint
+    // in this Azure config. (GPT-5 deployments here returned "API version
+    // not supported" for image_url content; GPT-4o uses a /v1/ URL shape
+    // that aiclient doesn't construct correctly.)
+    return openai.createChatModel(endpoint ?? "GPT_v", undefined, undefined, [
+        "onboarding:recon",
+    ]);
+}
