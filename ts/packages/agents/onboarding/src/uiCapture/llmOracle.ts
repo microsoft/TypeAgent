@@ -23,7 +23,13 @@ Ground rules:
 - Avoid window-management actions (close, minimize, maximize, app-switch).
 - Prefer Buttons/MenuItems/ListItems over scrollbars or text fields unless the goal targets them.
 - If the same frontier has been picked over and explored without yielding new states, choose "stop" or "restore".
-- expectedDelta should be a short prediction in plain English; we'll compare it against what actually happens.`;
+- expectedDelta should be a short prediction in plain English; we'll compare it against what actually happens.
+
+Modal/popup handling:
+- If the current state appears to be a modal dialog or popup (controls in a Popup/Dialog/Flyout container, an overlay, or a fixed-position card), recognize it.
+- When a popup is in the way of your goal, dismiss it: look for Cancel / Close / "X" / Back buttons in the popup's controls, and click them.
+- When a popup IS the goal (e.g., a "Save alarm" dialog where you've set fields), commit it via Save / OK / Confirm rather than Cancel.
+- Don't get stuck repeating the same setValue on a control that didn't change state — try a sibling control, or dismiss and re-approach.`;
 
 export type LlmOracleOptions = {
     goal: string;

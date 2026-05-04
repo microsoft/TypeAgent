@@ -103,3 +103,40 @@ export type PlaybackStep = {
     /** Optional: short description of what changed after this step (sanity check at replay time). */
     expectedDeltaSummary?: string;
 };
+
+/* ---------- Validation ---------- */
+
+/** Result of reviewing the full synthesized action set for quality issues. */
+export type ValidationResult = {
+    /** Per-action review. */
+    reviews: ActionReview[];
+    /**
+     * Action names that should be MERGED — they're really the same intent
+     * with different parameters and should be one parameterized action.
+     * Each entry lists the names to combine.
+     */
+    mergeRecommendations?: MergeRecommendation[];
+    /** High-level notes about the overall set: gaps, naming conventions, etc. */
+    overallNotes?: string;
+};
+
+export type ActionReview = {
+    actionName: string;
+    /** Quality verdict. */
+    verdict: "ok" | "fragment" | "duplicate" | "broken" | "ambiguous";
+    /** One sentence explanation of any concern. */
+    note: string;
+    /** Suggested fix in plain English (optional — only when verdict != "ok"). */
+    suggestion?: string;
+};
+
+export type MergeRecommendation = {
+    /** Names of the existing actions that should be merged into one. */
+    actionNames: string[];
+    /** Proposed combined name (camelCase verb-noun). */
+    proposedName: string;
+    /** Proposed parameter name that distinguishes the variants (the dimension along which they differ). */
+    proposedParam: { name: string; type: "string" | "number" | "boolean" | "enum"; enumValues?: string[] };
+    /** One sentence: why these belong together. */
+    rationale: string;
+};
