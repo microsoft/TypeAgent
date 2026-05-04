@@ -84,7 +84,7 @@ internal static class AppMethods
         return new { pid, mainWindow = BuildWindowSelector(window) };
     }
 
-    private static object? List()
+    private static object? List() => ComRetry.Run(() =>
     {
         var desktop = AutomationHost.Automation.GetDesktop();
         var cf = AutomationHost.Automation.ConditionFactory;
@@ -106,8 +106,8 @@ internal static class AppMethods
                 mainWindow = BuildWindowSelector(w),
             });
         }
-        return results;
-    }
+        return (object?)results;
+    });
 
     private static object? Kill(System.Text.Json.JsonElement? @params)
     {
@@ -152,7 +152,7 @@ internal static class AppMethods
     }
 
     internal static string BuildWindowSelector(AutomationElement window) =>
-        Selectors.BuildSegment(window);
+        Selectors.BuildAbsolutePath(window);
 }
 
 internal sealed class AppLaunchParams

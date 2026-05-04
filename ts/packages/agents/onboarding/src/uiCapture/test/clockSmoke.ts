@@ -13,6 +13,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturesDir = path.resolve(__dirname, "../../..", "test/fixtures/uiCapture");
 
 const CLOCK_AUMID = "Microsoft.WindowsAlarms_8wekyb3d8bbwe!App";
+const CLOSE_SELECTOR =
+    '/Window[Name="Clock"]/Window[AutomationId="TitleBar"]/Button[AutomationId="Close"]';
 
 function log(msg: string): void {
     process.stdout.write(`[smoke] ${msg}\n`);
@@ -22,24 +24,15 @@ function countNodes(node: TreeNode): number {
     return 1 + node.children.reduce((s, c) => s + countNodes(c), 0);
 }
 
-function countInvocableButtons(node: TreeNode): number {
-    let n = node.patterns.includes("Invoke") && node.controlType === "Button" ? 1 : 0;
-    for (const c of node.children) {
-        n += countInvocableButtons(c);
-    }
-    return n;
-}
-
-function findInvocable(node: TreeNode, namePrefix?: string): TreeNode | null {
-    if (
-        node.patterns.includes("Invoke") &&
-        node.isEnabled &&
-        (!namePrefix || (node.name ?? "").startsWith(namePrefix))
-    ) {
+function findFirst(
+    node: TreeNode,
+    pred: (n: TreeNode) => boolean,
+): TreeNode | null {
+    if (pred(node)) {
         return node;
     }
     for (const c of node.children) {
-        const f = findInvocable(c, namePrefix);
+        const f = findFirst(c, pred);
         if (f) {
             return f;
         }
@@ -51,6 +44,11 @@ async function sleep(ms: number): Promise<void> {
     await new Promise<void>((res) => setTimeout(res, ms));
 }
 
+function saveFixture(name: string, data: unknown): void {
+    writeFileSync(path.join(fixturesDir, name), JSON.stringify(data, null, 2));
+    log(`saved ${name}`);
+}
+
 async function main(): Promise<void> {
     mkdirSync(fixturesDir, { recursive: true });
     log(`fixtures → ${fixturesDir}`);
@@ -60,13 +58,13 @@ async function main(): Promise<void> {
         const ping = await client.ping();
         log(`ping ok, version=${ping.version}`);
 
+        // Close any pre-existing Clock instances.
         const existing = await client.appList();
-        const stale = existing.filter((w) => w.title.includes("Clock"));
-        for (const w of stale) {
+        for (const w of existing.filter((x) => x.title.includes("Clock"))) {
             log(`closing existing Clock pid=${w.pid}`);
             await client.appKill({ pid: w.pid });
         }
-        if (stale.length) {
+        if (existing.some((x) => x.title.includes("Clock"))) {
             await sleep(1500);
         }
 
@@ -74,48 +72,107 @@ async function main(): Promise<void> {
         const launch = await client.appLaunch({ aumid: CLOCK_AUMID });
         log(`launched pid=${launch.pid} mainWindow=${launch.mainWindow}`);
 
-        // Poll until the UWP tree populates with at least a few invokable buttons.
-        let tree = await client.treeDump({ root: launch.mainWindow, maxDepth: 6 });
+        // Wait for UIA to settle, then poll until the NavView shows up
+        // (UWP populates the tree progressively after window creation).
+        const idle1 = await client.eventsIdle({ debounceMs: 800, maxWaitMs: 5000 });
+        log(`events.idle #1: idle=${idle1.idle}, waited=${idle1.waitedMs}ms`);
+
+        let tree = await client.treeDump({ root: launch.mainWindow, maxDepth: 8 });
         let attempts = 0;
-        while (countInvocableButtons(tree) < 3 && attempts < 10) {
-            await sleep(500);
-            tree = await client.treeDump({ root: launch.mainWindow, maxDepth: 6 });
+        while (
+            !findFirst(tree, (n) => n.automationId === "NavView") &&
+            attempts < 8
+        ) {
+            await sleep(400);
+            tree = await client.treeDump({ root: launch.mainWindow, maxDepth: 8 });
             attempts++;
         }
         log(
-            `tree settled after ${attempts} polls: ${countNodes(tree)} nodes, ` +
-                `${countInvocableButtons(tree)} invokable buttons`,
+            `tree settled after ${attempts} polls: ${countNodes(tree)} nodes ` +
+                `(NavView ${findFirst(tree, (n) => n.automationId === "NavView") ? "found" : "missing"})`,
         );
-
-        writeFileSync(
-            path.join(fixturesDir, "clock-tree-launched.json"),
-            JSON.stringify(tree, null, 2),
-        );
-        log("saved clock-tree-launched.json");
+        saveFixture("clock-tree-launched.json", tree);
 
         const shot = await client.screenshot({ root: launch.mainWindow });
         writeFileSync(
             path.join(fixturesDir, "clock-launched.png"),
             Buffer.from(shot.pngBase64, "base64"),
         );
-        log(`saved clock-launched.png (${shot.rect.width}x${shot.rect.height})`);
+        log(`screenshot saved (${shot.rect.width}x${shot.rect.height})`);
 
-        // Pick a target for do.invoke. Prefer Close so we leave the system clean.
-        const target = findInvocable(tree, "Close ") ?? findInvocable(tree);
-        if (!target) {
-            throw new Error("no invokable element found in Clock tree");
+        // Verify `find` works against a known stable selector.
+        const closeFind = await client.find({ selector: CLOSE_SELECTOR });
+        if (!closeFind.found) {
+            throw new Error("find: Close button not resolved");
         }
-        log(`do.invoke target: ${target.selector}`);
-        await client.doInvoke({ selector: target.selector });
-        await sleep(800);
+        log(`find: Close button resolved=${closeFind.resolved}`);
 
-        // If Close was invoked, Clock is gone. Try kill anyway as belt-and-suspenders.
+        // Try to navigate to a known nav tab. NavView items are ListItem
+        // with SelectionItem pattern (so do.select, not do.invoke).
+        const navNames = [
+            "Alarm",
+            "Alarms",
+            "Timer",
+            "Stopwatch",
+            "World clock",
+            "Focus sessions",
+        ];
+        const navTab = navNames.reduce<TreeNode | null>(
+            (acc, n) =>
+                acc ??
+                findFirst(
+                    tree,
+                    (node) =>
+                        node.name === n &&
+                        (node.patterns.includes("SelectionItem") ||
+                            node.patterns.includes("Invoke")),
+                ),
+            null,
+        );
+
+        if (navTab) {
+            const verb = navTab.patterns.includes("SelectionItem")
+                ? "select"
+                : "invoke";
+            log(`nav tab found: ${navTab.name} → ${navTab.selector}`);
+            const navFind = await client.find({
+                selector: navTab.selector,
+                timeoutMs: 1000,
+            });
+            log(`find nav tab: found=${navFind.found}`);
+            log(`do.${verb} nav tab`);
+            if (verb === "select") {
+                await client.doSelect({ selector: navTab.selector });
+            } else {
+                await client.doInvoke({ selector: navTab.selector });
+            }
+            const idle2 = await client.eventsIdle({
+                debounceMs: 800,
+                maxWaitMs: 3000,
+            });
+            log(`events.idle #2: idle=${idle2.idle}, waited=${idle2.waitedMs}ms`);
+            const navTree = await client.treeDump({
+                root: launch.mainWindow,
+                maxDepth: 8,
+            });
+            saveFixture("clock-tree-navigated.json", navTree);
+            log(`post-nav tree: ${countNodes(navTree)} nodes`);
+        } else {
+            log("no nav tab found, skipping navigation");
+        }
+
+        // Exercise do.focus (no observable result, just that it doesn't throw).
+        await client.doFocus({ selector: CLOSE_SELECTOR });
+        log("do.focus ok");
+
+        // Final cleanup: invoke Close.
+        await client.doInvoke({ selector: CLOSE_SELECTOR });
+        await sleep(800);
         try {
             await client.appKill({ pid: launch.pid });
         } catch {
             /* already gone */
         }
-
         log("DONE");
     } finally {
         await client.dispose();

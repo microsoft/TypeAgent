@@ -211,6 +211,71 @@ export class HelperClient {
         return this.call("do.invoke", p);
     }
 
+    doToggle(p: {
+        selector: string;
+        value?: boolean;
+    }): Promise<{ ok: true; toggleState: string }> {
+        return this.call("do.toggle", p);
+    }
+
+    doSetValue(p: {
+        selector: string;
+        value: string | number | boolean;
+    }): Promise<{ ok: true }> {
+        return this.call("do.setValue", p);
+    }
+
+    doSelect(p: {
+        selector: string;
+        item?: string | number;
+    }): Promise<{ ok: true }> {
+        return this.call("do.select", p);
+    }
+
+    doExpand(p: { selector: string; expand: boolean }): Promise<{ ok: true }> {
+        return this.call("do.expand", p);
+    }
+
+    doScroll(p: {
+        selector: string;
+        direction: "up" | "down" | "left" | "right";
+        amount?: "small" | "large";
+    }): Promise<{ ok: true }> {
+        return this.call("do.scroll", p);
+    }
+
+    doFocus(p: { selector: string }): Promise<{ ok: true }> {
+        return this.call("do.focus", p);
+    }
+
+    doClick(p: {
+        selector: string;
+        button?: "left" | "right";
+        position?: { x?: number; y?: number };
+    }): Promise<{ ok: true }> {
+        return this.call("do.click", p);
+    }
+
+    doSendKeys(p: {
+        selector?: string;
+        keys: string;
+    }): Promise<{ ok: true }> {
+        return this.call("do.sendKeys", p);
+    }
+
+    find(p: {
+        selector: string;
+        timeoutMs?: number;
+    }): Promise<{ found: boolean; resolved?: string }> {
+        return this.call("find", p);
+    }
+
+    eventsIdle(
+        p: { debounceMs?: number; maxWaitMs?: number } = {},
+    ): Promise<{ ok: true; idle: boolean; waitedMs: number }> {
+        return this.call("events.idle", p);
+    }
+
     /**
      * Close the helper's stdin and wait up to `timeoutMs` for graceful exit.
      * If it doesn't exit, send SIGKILL.

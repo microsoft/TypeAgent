@@ -21,9 +21,12 @@ internal static class TreeMethods
         {
             throw new Models.RpcException(Models.RpcErrorCode.InvalidParams, "'root' is required");
         }
-        var element = SelectorResolver.ResolveOrThrow(p.Root);
-        var depth = p.MaxDepth ?? 20;
-        return TreeWalker.Walk(element, p.Root, depth);
+        return ComRetry.Run(() =>
+        {
+            var element = SelectorResolver.ResolveOrThrow(p.Root);
+            int depth = p.MaxDepth ?? 20;
+            return (object?)TreeWalker.Walk(element, p.Root, depth);
+        });
     }
 }
 

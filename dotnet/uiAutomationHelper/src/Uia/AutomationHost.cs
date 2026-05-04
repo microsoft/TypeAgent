@@ -14,14 +14,9 @@ internal static class AutomationHost
     {
         get
         {
-            if (_automation != null)
-            {
-                return _automation;
-            }
             lock (_lock)
             {
-                _automation ??= new UIA3Automation();
-                return _automation;
+                return _automation ??= new UIA3Automation();
             }
         }
     }

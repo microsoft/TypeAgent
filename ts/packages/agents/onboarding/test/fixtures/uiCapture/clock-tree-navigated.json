@@ -1,0 +1,793 @@
+{
+  "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]",
+  "name": "Clock",
+  "controlType": "Window",
+  "className": "ApplicationFrameWindow",
+  "isEnabled": true,
+  "isOffscreen": false,
+  "hasKeyboardFocus": false,
+  "patterns": [
+    "Window"
+  ],
+  "boundingRect": {
+    "x": 150,
+    "y": 120,
+    "width": 1224,
+    "height": 1014
+  },
+  "children": [
+    {
+      "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"PopupHost\"][ClassName=\"Xaml_WindowedPopupClass\"]",
+      "name": "PopupHost",
+      "controlType": "Window",
+      "className": "Xaml_WindowedPopupClass",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "hasKeyboardFocus": false,
+      "patterns": [],
+      "boundingRect": {
+        "x": 297,
+        "y": 209,
+        "width": 75,
+        "height": 52
+      },
+      "children": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"PopupHost\"][ClassName=\"Xaml_WindowedPopupClass\"]/Window[Name=\"Popup\"][ClassName=\"Popup\"]",
+          "name": "Popup",
+          "controlType": "Window",
+          "className": "Popup",
+          "isEnabled": true,
+          "isOffscreen": true,
+          "hasKeyboardFocus": false,
+          "patterns": [],
+          "boundingRect": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "children": [
+            {
+              "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"PopupHost\"][ClassName=\"Xaml_WindowedPopupClass\"]/Window[Name=\"Popup\"][ClassName=\"Popup\"]/ToolTip[Name=\"Alarm\"][ClassName=\"ToolTip\"]",
+              "name": "Alarm",
+              "controlType": "ToolTip",
+              "className": "ToolTip",
+              "isEnabled": true,
+              "isOffscreen": false,
+              "hasKeyboardFocus": false,
+              "patterns": [],
+              "boundingRect": {
+                "x": 302,
+                "y": 211,
+                "width": 64,
+                "height": 40
+              },
+              "children": [
+                {
+                  "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"PopupHost\"][ClassName=\"Xaml_WindowedPopupClass\"]/Window[Name=\"Popup\"][ClassName=\"Popup\"]/ToolTip[Name=\"Alarm\"][ClassName=\"ToolTip\"]/Text[Name=\"Alarm\"][ClassName=\"TextBlock\"]",
+                  "name": "Alarm",
+                  "controlType": "Text",
+                  "className": "TextBlock",
+                  "isEnabled": true,
+                  "isOffscreen": false,
+                  "hasKeyboardFocus": false,
+                  "patterns": [
+                    "Text"
+                  ],
+                  "boundingRect": {
+                    "x": 314,
+                    "y": 220,
+                    "width": 40,
+                    "height": 20
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[AutomationId=\"TitleBar\"]",
+      "automationId": "TitleBar",
+      "name": "Clock",
+      "controlType": "Window",
+      "className": "ApplicationFrameTitleBarWindow",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "hasKeyboardFocus": false,
+      "patterns": [
+        "Value"
+      ],
+      "boundingRect": {
+        "x": 1132,
+        "y": 121,
+        "width": 233,
+        "height": 40
+      },
+      "value": "Clock",
+      "children": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[AutomationId=\"TitleBar\"]/MenuBar[AutomationId=\"SystemMenuBar\"]",
+          "automationId": "SystemMenuBar",
+          "name": "System",
+          "controlType": "MenuBar",
+          "isEnabled": true,
+          "isOffscreen": false,
+          "hasKeyboardFocus": false,
+          "patterns": [],
+          "boundingRect": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "children": [
+            {
+              "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[AutomationId=\"TitleBar\"]/MenuBar[AutomationId=\"SystemMenuBar\"]/MenuItem[Name=\"System\"]",
+              "name": "System",
+              "controlType": "MenuItem",
+              "isEnabled": true,
+              "isOffscreen": false,
+              "hasKeyboardFocus": false,
+              "patterns": [
+                "ExpandCollapse"
+              ],
+              "boundingRect": {
+                "x": 0,
+                "y": 0,
+                "width": 0,
+                "height": 0
+              },
+              "children": []
+            }
+          ]
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[AutomationId=\"TitleBar\"]/Button[AutomationId=\"Minimize\"]",
+          "automationId": "Minimize",
+          "name": "Minimize Clock",
+          "controlType": "Button",
+          "isEnabled": true,
+          "isOffscreen": false,
+          "hasKeyboardFocus": false,
+          "patterns": [
+            "Invoke"
+          ],
+          "boundingRect": {
+            "x": 1194,
+            "y": 121,
+            "width": 57,
+            "height": 40
+          },
+          "children": []
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[AutomationId=\"TitleBar\"]/Button[AutomationId=\"Maximize\"]",
+          "automationId": "Maximize",
+          "name": "Maximize Clock",
+          "controlType": "Button",
+          "isEnabled": true,
+          "isOffscreen": false,
+          "hasKeyboardFocus": false,
+          "patterns": [
+            "Invoke"
+          ],
+          "boundingRect": {
+            "x": 1251,
+            "y": 121,
+            "width": 57,
+            "height": 40
+          },
+          "children": []
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[AutomationId=\"TitleBar\"]/Button[AutomationId=\"Close\"]",
+          "automationId": "Close",
+          "name": "Close Clock",
+          "controlType": "Button",
+          "isEnabled": true,
+          "isOffscreen": false,
+          "hasKeyboardFocus": false,
+          "patterns": [
+            "Invoke"
+          ],
+          "boundingRect": {
+            "x": 1308,
+            "y": 121,
+            "width": 57,
+            "height": 40
+          },
+          "children": []
+        }
+      ]
+    },
+    {
+      "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]",
+      "name": "Clock",
+      "controlType": "Window",
+      "className": "Windows.UI.Core.CoreWindow",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "hasKeyboardFocus": true,
+      "patterns": [],
+      "boundingRect": {
+        "x": 159,
+        "y": 121,
+        "width": 1206,
+        "height": 1004
+      },
+      "children": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]",
+          "automationId": "NavView",
+          "controlType": "Custom",
+          "isEnabled": true,
+          "isOffscreen": false,
+          "hasKeyboardFocus": false,
+          "patterns": [
+            "Selection"
+          ],
+          "boundingRect": {
+            "x": 159,
+            "y": 121,
+            "width": 1206,
+            "height": 1004
+          },
+          "children": [
+            {
+              "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Window[AutomationId=\"PaneRoot\"]",
+              "automationId": "PaneRoot",
+              "controlType": "Window",
+              "className": "SplitViewPane",
+              "isEnabled": true,
+              "isOffscreen": false,
+              "hasKeyboardFocus": false,
+              "patterns": [],
+              "boundingRect": {
+                "x": 159,
+                "y": 121,
+                "width": 350,
+                "height": 1004
+              },
+              "children": [
+                {
+                  "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Window[AutomationId=\"PaneRoot\"]/Pane[AutomationId=\"MenuItemsScrollViewer\"]",
+                  "automationId": "MenuItemsScrollViewer",
+                  "controlType": "Pane",
+                  "className": "ScrollViewer",
+                  "isEnabled": true,
+                  "isOffscreen": false,
+                  "hasKeyboardFocus": false,
+                  "patterns": [
+                    "Scroll"
+                  ],
+                  "boundingRect": {
+                    "x": 159,
+                    "y": 166,
+                    "width": 350,
+                    "height": 854
+                  },
+                  "children": [
+                    {
+                      "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Window[AutomationId=\"PaneRoot\"]/Pane[AutomationId=\"MenuItemsScrollViewer\"]/Group[AutomationId=\"MenuItemsHost\"]",
+                      "automationId": "MenuItemsHost",
+                      "controlType": "Group",
+                      "isEnabled": true,
+                      "isOffscreen": false,
+                      "hasKeyboardFocus": false,
+                      "patterns": [],
+                      "boundingRect": {
+                        "x": 164,
+                        "y": 169,
+                        "width": 340,
+                        "height": 245
+                      },
+                      "children": [
+                        {
+                          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Window[AutomationId=\"PaneRoot\"]/Pane[AutomationId=\"MenuItemsScrollViewer\"]/Group[AutomationId=\"MenuItemsHost\"]/ListItem[AutomationId=\"FocusButton\"]",
+                          "automationId": "FocusButton",
+                          "name": "Focus sessions",
+                          "controlType": "ListItem",
+                          "className": "Microsoft.UI.Xaml.Controls.NavigationViewItem",
+                          "isEnabled": true,
+                          "isOffscreen": false,
+                          "hasKeyboardFocus": false,
+                          "patterns": [
+                            "SelectionItem"
+                          ],
+                          "boundingRect": {
+                            "x": 164,
+                            "y": 169,
+                            "width": 340,
+                            "height": 45
+                          },
+                          "children": []
+                        },
+                        {
+                          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Window[AutomationId=\"PaneRoot\"]/Pane[AutomationId=\"MenuItemsScrollViewer\"]/Group[AutomationId=\"MenuItemsHost\"]/ListItem[AutomationId=\"TimerButton\"]",
+                          "automationId": "TimerButton",
+                          "name": "Timer",
+                          "controlType": "ListItem",
+                          "className": "Microsoft.UI.Xaml.Controls.NavigationViewItem",
+                          "isEnabled": true,
+                          "isOffscreen": false,
+                          "hasKeyboardFocus": false,
+                          "patterns": [
+                            "SelectionItem"
+                          ],
+                          "boundingRect": {
+                            "x": 164,
+                            "y": 219,
+                            "width": 340,
+                            "height": 45
+                          },
+                          "children": []
+                        },
+                        {
+                          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Window[AutomationId=\"PaneRoot\"]/Pane[AutomationId=\"MenuItemsScrollViewer\"]/Group[AutomationId=\"MenuItemsHost\"]/ListItem[AutomationId=\"AlarmButton\"]",
+                          "automationId": "AlarmButton",
+                          "name": "Alarm",
+                          "controlType": "ListItem",
+                          "className": "Microsoft.UI.Xaml.Controls.NavigationViewItem",
+                          "isEnabled": true,
+                          "isOffscreen": false,
+                          "hasKeyboardFocus": true,
+                          "patterns": [
+                            "SelectionItem"
+                          ],
+                          "boundingRect": {
+                            "x": 164,
+                            "y": 269,
+                            "width": 340,
+                            "height": 45
+                          },
+                          "children": []
+                        },
+                        {
+                          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Window[AutomationId=\"PaneRoot\"]/Pane[AutomationId=\"MenuItemsScrollViewer\"]/Group[AutomationId=\"MenuItemsHost\"]/ListItem[AutomationId=\"StopwatchButton\"]",
+                          "automationId": "StopwatchButton",
+                          "name": "Stopwatch",
+                          "controlType": "ListItem",
+                          "className": "Microsoft.UI.Xaml.Controls.NavigationViewItem",
+                          "isEnabled": true,
+                          "isOffscreen": false,
+                          "hasKeyboardFocus": false,
+                          "patterns": [
+                            "SelectionItem"
+                          ],
+                          "boundingRect": {
+                            "x": 164,
+                            "y": 319,
+                            "width": 340,
+                            "height": 45
+                          },
+                          "children": []
+                        },
+                        {
+                          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Window[AutomationId=\"PaneRoot\"]/Pane[AutomationId=\"MenuItemsScrollViewer\"]/Group[AutomationId=\"MenuItemsHost\"]/ListItem[AutomationId=\"ClockButton\"]",
+                          "automationId": "ClockButton",
+                          "name": "World clock",
+                          "controlType": "ListItem",
+                          "className": "Microsoft.UI.Xaml.Controls.NavigationViewItem",
+                          "isEnabled": true,
+                          "isOffscreen": false,
+                          "hasKeyboardFocus": false,
+                          "patterns": [
+                            "SelectionItem"
+                          ],
+                          "boundingRect": {
+                            "x": 164,
+                            "y": 369,
+                            "width": 340,
+                            "height": 45
+                          },
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Window[AutomationId=\"PaneRoot\"]/Button[AutomationId=\"SignInButton\"]",
+                  "automationId": "SignInButton",
+                  "name": "Logged user: Robert Gruen",
+                  "controlType": "Button",
+                  "className": "Button",
+                  "isEnabled": true,
+                  "isOffscreen": false,
+                  "hasKeyboardFocus": false,
+                  "patterns": [
+                    "Invoke"
+                  ],
+                  "boundingRect": {
+                    "x": 164,
+                    "y": 1020,
+                    "width": 340,
+                    "height": 45
+                  },
+                  "children": [
+                    {
+                      "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Window[AutomationId=\"PaneRoot\"]/Button[AutomationId=\"SignInButton\"]/Text[AutomationId=\"TipBlock\"]",
+                      "automationId": "TipBlock",
+                      "controlType": "Text",
+                      "className": "TextBlock",
+                      "isEnabled": true,
+                      "isOffscreen": false,
+                      "hasKeyboardFocus": false,
+                      "patterns": [
+                        "Text"
+                      ],
+                      "boundingRect": {
+                        "x": 217,
+                        "y": 1031,
+                        "width": 104,
+                        "height": 24
+                      },
+                      "children": []
+                    },
+                    {
+                      "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Window[AutomationId=\"PaneRoot\"]/Button[AutomationId=\"SignInButton\"]/Text[AutomationId=\"UserNameBlock\"]",
+                      "automationId": "UserNameBlock",
+                      "name": "Robert Gruen",
+                      "controlType": "Text",
+                      "className": "TextBlock",
+                      "isEnabled": true,
+                      "isOffscreen": false,
+                      "hasKeyboardFocus": false,
+                      "patterns": [
+                        "Text"
+                      ],
+                      "boundingRect": {
+                        "x": 217,
+                        "y": 1031,
+                        "width": 104,
+                        "height": 24
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Window[AutomationId=\"PaneRoot\"]/Pane[AutomationId=\"FooterItemsScrollViewer\"]",
+                  "automationId": "FooterItemsScrollViewer",
+                  "controlType": "Pane",
+                  "className": "ScrollViewer",
+                  "isEnabled": true,
+                  "isOffscreen": false,
+                  "hasKeyboardFocus": false,
+                  "patterns": [
+                    "Scroll"
+                  ],
+                  "boundingRect": {
+                    "x": 159,
+                    "y": 1070,
+                    "width": 350,
+                    "height": 50
+                  },
+                  "children": [
+                    {
+                      "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Window[AutomationId=\"PaneRoot\"]/Pane[AutomationId=\"FooterItemsScrollViewer\"]/Group[AutomationId=\"FooterMenuItemsHost\"]",
+                      "automationId": "FooterMenuItemsHost",
+                      "controlType": "Group",
+                      "isEnabled": true,
+                      "isOffscreen": false,
+                      "hasKeyboardFocus": false,
+                      "patterns": [],
+                      "boundingRect": {
+                        "x": 164,
+                        "y": 1073,
+                        "width": 340,
+                        "height": 45
+                      },
+                      "children": [
+                        {
+                          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Window[AutomationId=\"PaneRoot\"]/Pane[AutomationId=\"FooterItemsScrollViewer\"]/Group[AutomationId=\"FooterMenuItemsHost\"]/ListItem[AutomationId=\"SettingsItem\"]",
+                          "automationId": "SettingsItem",
+                          "name": "Settings",
+                          "controlType": "ListItem",
+                          "className": "Microsoft.UI.Xaml.Controls.NavigationViewItem",
+                          "isEnabled": true,
+                          "isOffscreen": false,
+                          "hasKeyboardFocus": false,
+                          "patterns": [
+                            "SelectionItem"
+                          ],
+                          "boundingRect": {
+                            "x": 164,
+                            "y": 1073,
+                            "width": 340,
+                            "height": 45
+                          },
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]",
+              "automationId": "PART_Pane1ScrollViewer",
+              "controlType": "Pane",
+              "className": "ScrollViewer",
+              "isEnabled": true,
+              "isOffscreen": false,
+              "hasKeyboardFocus": false,
+              "patterns": [
+                "Scroll"
+              ],
+              "boundingRect": {
+                "x": 510,
+                "y": 161,
+                "width": 855,
+                "height": 964
+              },
+              "children": [
+                {
+                  "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/Pane[AutomationId=\"AlarmsScrollViewer\"]",
+                  "automationId": "AlarmsScrollViewer",
+                  "controlType": "Pane",
+                  "className": "ScrollViewer",
+                  "isEnabled": true,
+                  "isOffscreen": false,
+                  "hasKeyboardFocus": false,
+                  "patterns": [
+                    "Scroll"
+                  ],
+                  "boundingRect": {
+                    "x": 510,
+                    "y": 161,
+                    "width": 855,
+                    "height": 964
+                  },
+                  "children": [
+                    {
+                      "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/Pane[AutomationId=\"AlarmsScrollViewer\"]/DataItem[AutomationId=\"AlarmViewGrid\"]",
+                      "automationId": "AlarmViewGrid",
+                      "name": "Edit alarm, Good morning, 7‎:‎00‎AM, Every day, ",
+                      "controlType": "DataItem",
+                      "className": "ToggleButton",
+                      "isEnabled": true,
+                      "isOffscreen": false,
+                      "hasKeyboardFocus": false,
+                      "patterns": [
+                        "Toggle"
+                      ],
+                      "boundingRect": {
+                        "x": 580,
+                        "y": 186,
+                        "width": 715,
+                        "height": 228
+                      },
+                      "toggleState": "off",
+                      "children": [
+                        {
+                          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/Pane[AutomationId=\"AlarmsScrollViewer\"]/DataItem[AutomationId=\"AlarmViewGrid\"]/Text[AutomationId=\"AlarmTime\"]",
+                          "automationId": "AlarmTime",
+                          "name": "7:00",
+                          "controlType": "Text",
+                          "className": "TimeTextBlock",
+                          "isEnabled": false,
+                          "isOffscreen": false,
+                          "hasKeyboardFocus": false,
+                          "patterns": [
+                            "Value"
+                          ],
+                          "boundingRect": {
+                            "x": 600,
+                            "y": 206,
+                            "width": 620,
+                            "height": 61
+                          },
+                          "children": [
+                            {
+                              "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/Pane[AutomationId=\"AlarmsScrollViewer\"]/DataItem[AutomationId=\"AlarmViewGrid\"]/Text[AutomationId=\"AlarmTime\"]/Text[AutomationId=\"AlarmPeriod\"]",
+                              "automationId": "AlarmPeriod",
+                              "name": "AM",
+                              "controlType": "Text",
+                              "className": "TextBlock",
+                              "isEnabled": true,
+                              "isOffscreen": false,
+                              "hasKeyboardFocus": false,
+                              "patterns": [
+                                "Text"
+                              ],
+                              "boundingRect": {
+                                "x": 763,
+                                "y": 254,
+                                "width": 30,
+                                "height": 13
+                              },
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/Pane[AutomationId=\"AlarmsScrollViewer\"]/DataItem[AutomationId=\"AlarmViewGrid\"]/Button[AutomationId=\"AlarmToggleSwitch\"]",
+                          "automationId": "AlarmToggleSwitch",
+                          "name": "Alarm On Off",
+                          "controlType": "Button",
+                          "className": "ToggleSwitch",
+                          "isEnabled": true,
+                          "isOffscreen": false,
+                          "hasKeyboardFocus": false,
+                          "patterns": [
+                            "Toggle"
+                          ],
+                          "boundingRect": {
+                            "x": 1220,
+                            "y": 191,
+                            "width": 65,
+                            "height": 51
+                          },
+                          "toggleState": "off",
+                          "children": []
+                        },
+                        {
+                          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/Pane[AutomationId=\"AlarmsScrollViewer\"]/DataItem[AutomationId=\"AlarmViewGrid\"]/Text[Name=\"in 8 hours, 41 minutes\"][ClassName=\"TextBlock\"]",
+                          "name": "in 8 hours, 41 minutes",
+                          "controlType": "Text",
+                          "className": "TextBlock",
+                          "isEnabled": true,
+                          "isOffscreen": false,
+                          "hasKeyboardFocus": false,
+                          "patterns": [
+                            "Text"
+                          ],
+                          "boundingRect": {
+                            "x": 625,
+                            "y": 284,
+                            "width": 148,
+                            "height": 11
+                          },
+                          "children": []
+                        },
+                        {
+                          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/Pane[AutomationId=\"AlarmsScrollViewer\"]/DataItem[AutomationId=\"AlarmViewGrid\"]/Text[AutomationId=\"AlarmName\"]",
+                          "automationId": "AlarmName",
+                          "name": "Good morning",
+                          "controlType": "Text",
+                          "className": "TextBlock",
+                          "isEnabled": true,
+                          "isOffscreen": false,
+                          "hasKeyboardFocus": false,
+                          "patterns": [
+                            "Text"
+                          ],
+                          "boundingRect": {
+                            "x": 600,
+                            "y": 307,
+                            "width": 620,
+                            "height": 34
+                          },
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/AppBar[ClassName=\"ApplicationBar\"]",
+                  "controlType": "AppBar",
+                  "className": "ApplicationBar",
+                  "isEnabled": true,
+                  "isOffscreen": false,
+                  "hasKeyboardFocus": false,
+                  "patterns": [
+                    "Toggle",
+                    "ExpandCollapse"
+                  ],
+                  "boundingRect": {
+                    "x": 1227,
+                    "y": 1040,
+                    "width": 113,
+                    "height": 60
+                  },
+                  "toggleState": "off",
+                  "children": [
+                    {
+                      "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/AppBar[ClassName=\"ApplicationBar\"]/Button[AutomationId=\"EditAlarmsButton\"]",
+                      "automationId": "EditAlarmsButton",
+                      "name": "Edit alarms",
+                      "controlType": "Button",
+                      "className": "AppBarButton",
+                      "isEnabled": true,
+                      "isOffscreen": false,
+                      "hasKeyboardFocus": false,
+                      "patterns": [
+                        "Invoke"
+                      ],
+                      "boundingRect": {
+                        "x": 1232,
+                        "y": 1040,
+                        "width": 50,
+                        "height": 60
+                      },
+                      "children": []
+                    },
+                    {
+                      "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/AppBar[ClassName=\"ApplicationBar\"]/Button[AutomationId=\"AddAlarmButton\"]",
+                      "automationId": "AddAlarmButton",
+                      "name": "Add an alarm",
+                      "controlType": "Button",
+                      "className": "AppBarButton",
+                      "isEnabled": true,
+                      "isOffscreen": false,
+                      "hasKeyboardFocus": false,
+                      "patterns": [
+                        "Invoke"
+                      ],
+                      "boundingRect": {
+                        "x": 1282,
+                        "y": 1040,
+                        "width": 50,
+                        "height": 60
+                      },
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Image[ClassName=\"Image\"]",
+          "controlType": "Image",
+          "className": "Image",
+          "isEnabled": true,
+          "isOffscreen": false,
+          "hasKeyboardFocus": false,
+          "patterns": [],
+          "boundingRect": {
+            "x": 177,
+            "y": 131,
+            "width": 25,
+            "height": 25
+          },
+          "children": []
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Text[AutomationId=\"AppName\"]",
+          "automationId": "AppName",
+          "name": "Clock",
+          "controlType": "Text",
+          "className": "TextBlock",
+          "isEnabled": true,
+          "isOffscreen": false,
+          "hasKeyboardFocus": false,
+          "patterns": [
+            "Text"
+          ],
+          "boundingRect": {
+            "x": 217,
+            "y": 134,
+            "width": 37,
+            "height": 20
+          },
+          "children": []
+        }
+      ]
+    },
+    {
+      "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Pane[ClassName=\"ApplicationFrameInputSinkWindow\"]",
+      "controlType": "Pane",
+      "className": "ApplicationFrameInputSinkWindow",
+      "isEnabled": true,
+      "isOffscreen": false,
+      "hasKeyboardFocus": false,
+      "patterns": [],
+      "boundingRect": {
+        "x": 159,
+        "y": 161,
+        "width": 1206,
+        "height": 964
+      },
+      "children": []
+    }
+  ]
+}

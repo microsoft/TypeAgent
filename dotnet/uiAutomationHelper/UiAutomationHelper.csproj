@@ -7,9 +7,10 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>UiAutomationHelper</RootNamespace>
     <AssemblyName>UiAutomationHelper</AssemblyName>
+    <Version>0.1.0</Version>
     <OutputPath>bin\$(Configuration)</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <NoWarn>$(NoWarn);SYSLIB1054</NoWarn>
+    <NoWarn>$(NoWarn);SYSLIB1054;CA1508;CA1859</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="test/**" />

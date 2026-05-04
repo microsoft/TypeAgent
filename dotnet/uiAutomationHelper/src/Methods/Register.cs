@@ -14,5 +14,7 @@ internal static class Register
         TreeMethods.Register(dispatch);
         ScreenshotMethods.Register(dispatch);
         ActionMethods.Register(dispatch);
+        FindMethods.Register(dispatch);
+        EventMethods.Register(dispatch);
     }
 }
