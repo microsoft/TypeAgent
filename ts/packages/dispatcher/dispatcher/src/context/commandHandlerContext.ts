@@ -82,6 +82,11 @@ import { createSchemaInfoProvider } from "../translation/actionSchemaFileCache.j
 import { createBuiltinAppAgentProvider } from "./inlineAgentProvider.js";
 import { CommandResult } from "@typeagent/dispatcher-types";
 import { DispatcherName } from "./dispatcher/dispatcherUtils.js";
+import {
+    CollisionEvent,
+    createCollisionRingBuffer,
+    emitCollisionEvent,
+} from "./collisionTelemetry.js";
 import lockfile from "proper-lockfile";
 import { IndexManager } from "./indexManager.js";
 import { ActionContextWithClose } from "../execute/actionContext.js";
@@ -191,6 +196,12 @@ export type CommandHandlerContext = {
     userRequestKnowledgeExtraction: boolean;
     actionResultEntityStorage: boolean; // store entities in chat history (fast)
     actionResultKnowledgeExtraction: boolean; // also push to conversationManager/conversationMemory (slow LLM)
+
+    // Ring buffer of recent collision-detection events. Bounded; see collisionTelemetry.ts.
+    collisionEvents: CollisionEvent[];
+    // True while a MultipleAction batch is being executed; consulted by the
+    // collision resolver to apply collision.multipleActionBehavior.
+    executingMultipleAction: boolean;
 };
 
 export function getRequestId(context: CommandHandlerContext): RequestId {
@@ -441,7 +452,18 @@ async function addAppAgentProviders(
         );
 
         if (appAgentProviders) {
-            const stateRefreshFn = () => setAppAgentStates(context);
+            // onSchemaReady path: rerun collision detection in degraded mode so
+            // a slow agent can never throw and crash an active session.
+            const stateRefreshFn = async () => {
+                await setAppAgentStates(context);
+                try {
+                    await runStaticCollisionDetection(context, true);
+                } catch (e) {
+                    debugError(
+                        `Async static collision detection failed: ${e}`,
+                    );
+                }
+            };
             for (const provider of appAgentProviders) {
                 await context.agents.addProvider(
                     provider,
@@ -453,6 +475,9 @@ async function addAppAgentProviders(
                 );
             }
         }
+        // Initial-path collision detection. Honors strategy="error" — a static
+        // collision will throw and prevent the dispatcher from coming up dirty.
+        await runStaticCollisionDetection(context, false);
         if (embeddingCachePath) {
             return saveActionEmbeddings(context, embeddingCachePath);
         }
@@ -500,6 +525,13 @@ export async function installAppProvider(
     );
 
     await setAppAgentStates(context);
+    // Re-run collision detection now that a new agent has been installed.
+    // Degrade to warn — installing into a live session must never crash it.
+    try {
+        await runStaticCollisionDetection(context, true);
+    } catch (e) {
+        debugError(`Post-install collision detection failed: ${e}`);
+    }
 
     const embeddingCachePath = getEmbeddingCachePath(context);
     if (embeddingCachePath !== undefined) {
@@ -637,6 +669,9 @@ export async function initializeCommandHandlerContext(
             actionResultKnowledgeExtraction:
                 options?.conversationMemorySettings
                     ?.actionResultKnowledgeExtraction ?? true,
+
+            collisionEvents: createCollisionRingBuffer(),
+            executingMultipleAction: false,
         };
 
         await initializeMemory(context, sessionDirPath);
@@ -664,6 +699,85 @@ export async function initializeCommandHandlerContext(
             instanceDirLock();
         }
         throw e;
+    }
+}
+
+/**
+ * Run static action-collision detection (exact-name + fuzzy/semantic) against
+ * all currently loaded agents. Honors session config:
+ *   collision.static.detect / collision.static.strategy
+ *   collision.fuzzy.detect / collision.fuzzy.staticEnabled / .scorer / .similarityThreshold
+ *
+ * @param degradeToWarn If true, the static.strategy="error" mode is downgraded
+ * to "warn". Used by the onSchemaReady path so a slow agent can never crash a
+ * live session.
+ */
+export async function runStaticCollisionDetection(
+    context: CommandHandlerContext,
+    degradeToWarn: boolean,
+): Promise<void> {
+    const cfg = context.session.getConfig().collision;
+    const startedAt = performance.now();
+
+    if (cfg.static.detect) {
+        const collisions = context.agents.scanActionNameCollisions();
+        if (collisions.length > 0) {
+            const summary = collisions
+                .map(
+                    (c) =>
+                        `${c.actionName} -> [${c.occurrences
+                            .map((o) => `${o.agentName}:${o.schemaName}`)
+                            .join(", ")}]`,
+                )
+                .join("; ")
+                .slice(0, 500);
+            const effective =
+                cfg.static.strategy === "error" && !degradeToWarn
+                    ? "error"
+                    : "warn";
+            for (const c of collisions) {
+                emitCollisionEvent(
+                    {
+                        kind: "static",
+                        candidates: c.occurrences.map((o) => ({
+                            schemaName: o.schemaName,
+                            actionName: c.actionName,
+                        })),
+                        strategy: effective,
+                        elapsedMs: performance.now() - startedAt,
+                    },
+                    context,
+                );
+            }
+            if (effective === "error") {
+                throw new Error(
+                    `Action collision detected across agents: ${summary}`,
+                );
+            }
+            debug(`[collision.static] ${collisions.length} collision(s) found: ${summary}`);
+        }
+    }
+
+    if (cfg.fuzzy.detect && cfg.fuzzy.staticEnabled) {
+        const fuzzy = await context.agents.runStaticFuzzyScan(
+            cfg.fuzzy.scorer,
+            cfg.fuzzy.similarityThreshold,
+        );
+        for (const c of fuzzy) {
+            emitCollisionEvent(
+                {
+                    kind: "fuzzy",
+                    candidates: [
+                        { schemaName: c.a.schemaName, actionName: c.a.actionName },
+                        { schemaName: c.b.schemaName, actionName: c.b.actionName },
+                    ],
+                    strategy: cfg.fuzzy.strategy,
+                    elapsedMs: performance.now() - startedAt,
+                    note: `similarity=${c.similarity.toFixed(3)}`,
+                },
+                context,
+            );
+        }
     }
 }
 

@@ -10,8 +10,21 @@ import {
     createExecutableAction,
     ExecutableAction,
     HistoryContext,
+    ParamObjectType,
     RequestAction,
 } from "agent-cache";
+import {
+    DispatcherClarifyName,
+} from "../context/dispatcher/dispatcherUtils.js";
+import {
+    AgentMatchCandidate,
+    buildClarifyMultipleAgentMatches,
+} from "../context/dispatcher/schema/clarifyActionSchema.js";
+import {
+    CollisionStrategy,
+    emitCollisionEvent,
+} from "../context/collisionTelemetry.js";
+import { getAgentPriority } from "./matchCollision.js";
 import {
     CachedImageWithDetails,
     IncrementalJsonValueCallBack,
@@ -23,6 +36,7 @@ import {
 } from "./multipleActionSchema.js";
 import {
     createTypeAgentTranslatorForSelectedActions,
+    getAppAgentName,
     isAdditionalActionLookupAction,
     loadAgentJsonTranslator,
     TranslatedAction,
@@ -219,18 +233,30 @@ async function getTranslatorForSelectedActions(
     );
 }
 
+/**
+ * Result type for pickInitialSchema. Returns a chosen schemaName, or a
+ * pre-built ExecutableAction representing a clarify request when LLM-select
+ * collision detection determined the embedding result was ambiguous and the
+ * configured strategy is "user-clarify".
+ */
+type PickInitialSchemaResult =
+    | { kind: "schema"; schemaName: string }
+    | { kind: "clarify"; clarify: ExecutableAction };
+
 async function pickInitialSchema(
     request: string,
     activeSchemas: Set<string>,
     systemContext: CommandHandlerContext,
-) {
+): Promise<PickInitialSchemaResult> {
     const switchConfig = systemContext.session.getConfig().translation.switch;
+    const collisionCfg =
+        systemContext.session.getConfig().collision.llmSelect;
     if (switchConfig.fixed !== "") {
         if (!activeSchemas.has(switchConfig.fixed)) {
             throw new Error("Fixed initial schema not active");
         }
-
-        return switchConfig.fixed;
+        // Fixed pin overrides any ambiguity detection by definition.
+        return { kind: "schema", schemaName: switchConfig.fixed };
     }
 
     // Start with the last translator used
@@ -241,10 +267,17 @@ async function pickInitialSchema(
     if (embedding && request.length > 0) {
         debugSemanticSearch(`Using embedding for schema selection`);
         // Use embedding to determine the most likely action schema and use the schema name for that.
+        // When LLM-select collision detection is on, ask for top-N so we can
+        // compare scores and decide whether the choice is ambiguous.
+        const maxMatches = collisionCfg.detect
+            ? Math.max(2, collisionCfg.topN)
+            : debugSemanticSearch.enabled
+              ? 5
+              : 1;
         try {
             const result = await agents.semanticSearchActionSchema(
                 request,
-                debugSemanticSearch.enabled ? 5 : 1,
+                maxMatches,
                 (schemaName: string) => activeSchemas.has(schemaName),
             );
             if (result) {
@@ -258,8 +291,42 @@ async function pickInitialSchema(
                 );
                 if (result.length > 0) {
                     const found = result[0].item.actionSchemaFile.schemaName;
-                    // If it is close to dispatcher actions (unknown and clarify), just use the last used action schema
-                    if (found !== DispatcherName) {
+
+                    // Ambiguity check: top-2 score delta within threshold.
+                    // Skip when the top result is already the dispatcher (unknown/clarify)
+                    // since that path falls back to lastActionSchemaName anyway.
+                    if (
+                        collisionCfg.detect &&
+                        found !== DispatcherName &&
+                        result.length >= 2
+                    ) {
+                        const delta = result[0].score - result[1].score;
+                        if (delta < collisionCfg.scoreDeltaThreshold) {
+                            const cluster = result.filter(
+                                (r) =>
+                                    result[0].score - r.score <
+                                    collisionCfg.scoreDeltaThreshold,
+                            );
+                            const decision = applyLlmSelectStrategy(
+                                cluster.map((r) => ({
+                                    schemaName:
+                                        r.item.actionSchemaFile.schemaName,
+                                    actionName: r.item.definition.name,
+                                    score: r.score,
+                                })),
+                                collisionCfg.strategy,
+                                request,
+                                systemContext,
+                            );
+                            if (decision.kind === "clarify") {
+                                return decision;
+                            }
+                            schemaName = decision.schemaName;
+                        } else if (found !== DispatcherName) {
+                            schemaName = found;
+                        }
+                    } else if (found !== DispatcherName) {
+                        // If it is close to dispatcher actions (unknown and clarify), just use the last used action schema
                         schemaName = found;
                     }
                 }
@@ -283,7 +350,76 @@ async function pickInitialSchema(
             `Translating request using current translator: ${schemaName}`,
         );
     }
-    return schemaName;
+    return { kind: "schema", schemaName };
+}
+
+/**
+ * Apply the configured LLM-select collision strategy to an ambiguous cluster
+ * of embedding matches. Returns either the chosen schema name (string) or a
+ * synthesized clarify ExecutableAction when strategy is "user-clarify".
+ */
+function applyLlmSelectStrategy(
+    cluster: AgentMatchCandidate[],
+    strategy: CollisionStrategy,
+    request: string,
+    systemContext: CommandHandlerContext,
+): PickInitialSchemaResult {
+    const startedAt = performance.now();
+    let chosen: AgentMatchCandidate;
+    switch (strategy) {
+        case "first-match":
+        case "score-rank":
+            chosen = cluster[0];
+            break;
+        case "priority": {
+            const sorted = [...cluster].sort(
+                (a, b) =>
+                    getAgentPriority(
+                        getAppAgentName(a.schemaName),
+                        systemContext,
+                    ) -
+                    getAgentPriority(
+                        getAppAgentName(b.schemaName),
+                        systemContext,
+                    ),
+            );
+            chosen = sorted[0];
+            break;
+        }
+        case "user-clarify": {
+            const clarify = buildClarifyMultipleAgentMatches(request, cluster);
+            const action = createExecutableAction(
+                DispatcherClarifyName,
+                clarify.actionName,
+                clarify.parameters as unknown as ParamObjectType,
+            );
+            emitCollisionEvent(
+                {
+                    kind: "llmSelect",
+                    request,
+                    candidates: cluster,
+                    strategy,
+                    elapsedMs: performance.now() - startedAt,
+                },
+                systemContext,
+            );
+            return { kind: "clarify", clarify: action };
+        }
+        default:
+            chosen = cluster[0];
+    }
+    emitCollisionEvent(
+        {
+            kind: "llmSelect",
+            request,
+            candidates: cluster,
+            chosen,
+            strategy,
+            elapsedMs: performance.now() - startedAt,
+        },
+        systemContext,
+    );
+    return { kind: "schema", schemaName: chosen.schemaName };
 }
 
 function needAllAction(translatedAction: TranslatedAction, schemaName: string) {
@@ -688,11 +824,19 @@ async function translateRequestWithActiveSchemas(
     usageCallback: (usage: ai.CompletionUsageStats) => void,
 ): Promise<ExecutableAction | ExecutableAction[]> {
     const systemContext = context.sessionContext.agentContext;
-    const schemaName = await pickInitialSchema(
+    const picked = await pickInitialSchema(
         request,
         activeSchemas,
         systemContext,
     );
+
+    if (picked.kind === "clarify") {
+        // LLM-select detected ambiguity and the user-clarify strategy is on.
+        // Short-circuit translation; downstream execution dispatches the
+        // synthesized ClarifyMultipleAgentMatches action.
+        return picked.clarify;
+    }
+    const schemaName = picked.schemaName;
 
     const result = await translateRequestWithSchema(
         schemaName,

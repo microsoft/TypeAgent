@@ -73,6 +73,10 @@
     },
     "github-cli": {
       "name": "github-cli-agent"
+    },
+    "vampire": {
+      "name": "vampire-agent",
+      "execMode": "dispatcher"
     }
   },
   "mcpServers": {

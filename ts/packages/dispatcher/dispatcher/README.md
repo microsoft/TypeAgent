@@ -192,6 +192,113 @@ By default agents runs out of proc in their own process. This is to ensure that 
 | `@config explanation on\|off` | Toggle LLM explanation (Turn off to stop updating construction store)          |
 | `@config log db on\|off`      | Toggle sending logging information to a remote database                        |
 
+## Action Collision Detection
+
+When two or more agents can plausibly handle the same user input, the dispatcher needs a policy for picking a winner. The default ("first-match") preserves legacy behavior — silently take the first validated match — but the dispatcher also supports detecting collisions across four points and applying one of four configurable resolution strategies. This subsystem is **off by default**; opt in per detection point via session config.
+
+### Detection points
+
+| Point              | When it fires                                                                                                                      | Source                                                                                                                                                            |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`static`**       | At agent registration time — duplicate `actionName` declared by more than one schema (e.g. both `player.play` and `vampire.play`). | [`appAgentManager.scanActionNameCollisions`](src/context/appAgentManager.ts), invoked from [`runStaticCollisionDetection`](src/context/commandHandlerContext.ts). |
+| **`grammarMatch`** | At runtime, in the cache/grammar match path — multiple agents return validated matches for the same input.                         | [`getValidatedMatches`](src/translation/matchRequest.ts) + [`resolveGrammarCollision`](src/translation/matchCollision.ts).                                        |
+| **`llmSelect`**    | At runtime, during embedding-based schema selection — top-N embedding scores are within `scoreDeltaThreshold`.                     | [`pickInitialSchema`](src/translation/translateRequest.ts).                                                                                                       |
+| **`fuzzy`**        | Static and/or runtime — actions whose **meaning** overlaps even when names/grammars differ (e.g. `delete` vs `remove`).            | [`fuzzyCollision.ts`](src/translation/fuzzyCollision.ts) — **scaffolded only; default scorer returns 0**.                                                         |
+
+### Resolution strategies
+
+All runtime detection points share the same four-way strategy enum. Each detection point selects one independently.
+
+| Strategy       | Behavior                                                                                                                                                                                            |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `first-match`  | Pick the heuristically-first validated candidate. Byte-identical to legacy behavior.                                                                                                                |
+| `score-rank`   | Sort by `(matchedCount desc, nonOptionalCount desc, -wildcardCharCount)`; ties fall through to `priority`.                                                                                          |
+| `priority`     | Pick the candidate from the highest-priority agent. Priority comes from `priorityOrder` (comma-separated list) if set, otherwise agent registration order.                                          |
+| `user-clarify` | Synthesize a [`ClarifyMultipleAgentMatches`](src/context/dispatcher/schema/clarifyActionSchema.ts) action listing all candidates so the user can pick. The user's reply re-enters the request loop. |
+
+The `static` point uses a separate two-way enum: `warn` (log and continue) or `error` (throw). The async `onSchemaReady` path always degrades `error` → `warn` so a slow agent can never crash a live session.
+
+### Config schema
+
+Defined as `CollisionConfig` in [`session.ts`](src/context/session.ts). All defaults preserve current behavior — `detect: false` everywhere, `strategy: "first-match"`.
+
+```ts
+collision: {
+    static: {
+        detect: boolean;                    // scan duplicate actionNames at registration
+        strategy: "warn" | "error";
+    };
+    grammarMatch: {
+        detect: boolean;
+        classifier: "distinctActions" | "tiedHeuristics";
+        strategy: "first-match" | "score-rank" | "priority" | "user-clarify";
+    };
+    llmSelect: {
+        detect: boolean;
+        topN: number;                       // default 3
+        scoreDeltaThreshold: number;        // default 0.05 — within = ambiguous
+        strategy: "first-match" | "score-rank" | "priority" | "user-clarify";
+    };
+    fuzzy: {
+        detect: boolean;
+        staticEnabled: boolean;
+        runtimeEnabled: boolean;            // (TODO: runtime hook not yet wired into matchCollision.ts)
+        similarityThreshold: number;        // default 0.85 — placeholder until calibrated
+        scorer: "placeholder" | "actionEmbedding";
+        strategy: "first-match" | "score-rank" | "priority" | "user-clarify";
+    };
+    priorityOrder: string;                  // comma-separated agent names; "" = registration order
+    multipleActionBehavior:
+        | "downgrade-to-priority"           // safest default
+        | "pause-and-prompt"                // (TODO: requires batch-executor changes; currently degrades to priority)
+        | "abort";
+    telemetry: {
+        emit: boolean;                      // append to ring buffer (size 50) on CommandHandlerContext
+        debugLog: boolean;                  // also log via debug("typeagent:dispatcher:collision")
+    };
+};
+```
+
+### Telemetry & evaluation surface
+
+When `telemetry.emit` is true, every detected collision is appended to a 50-entry ring buffer on `CommandHandlerContext.collisionEvents`. Each event records the candidate set, chosen winner (if any), strategy, and elapsed time. This is the **A/B evaluation surface** — toggle the strategy in session config and inspect the buffer to compare outcomes on the same input.
+
+`DEBUG=typeagent:dispatcher:collision` enables a log line per event when `telemetry.debugLog` is true (on by default).
+
+### Usage example
+
+The collision config block lives under `dispatcher` in session settings; today it's mutated programmatically via `session.updateSettings`. To exercise grammar-match detection with user clarification:
+
+```ts
+session.updateSettings({
+  collision: {
+    grammarMatch: { detect: true, strategy: "user-clarify" },
+    telemetry: { emit: true, debugLog: true },
+  },
+});
+```
+
+For deliberate, repeatable collisions during evaluation, enable the [vampire test agent](../../agents/vampire) (default-disabled) — it ships actions and grammar rules engineered to collide with player, list, and calendar.
+
+### MultipleAction interaction
+
+`multipleActionBehavior` controls what happens when `user-clarify` would fire on a sub-action inside a `MultipleAction` batch:
+
+- `downgrade-to-priority` (default, safest): silently fall back to `priority`. Telemetry still records the original collision so the choice is auditable.
+- `pause-and-prompt`: **TODO** — requires non-trivial batch-executor changes. Today this value falls back to `downgrade-to-priority`.
+- `abort`: surface the clarify and fail the batch; the user re-issues the request.
+
+### TODOs / open work
+
+- **Real `ActionEmbeddingScorer` implementation** — the fuzzy detection point is fully wired but the only shipped scorer (`PlaceholderScorer`) returns 0 for all pairs. Selecting `scorer: "actionEmbedding"` today logs a "not implemented; falling back to placeholder" warning. Reusing the embedding model already loaded by `semanticSearchActionSchema` is the natural follow-up.
+- **Runtime fuzzy detection hook** — `fuzzy.runtimeEnabled` is in the config but the call site in `matchCollision.ts` (post-resolver fuzzy candidate scan) is not yet wired up. Static fuzzy scanning is wired.
+- **`pause-and-prompt` for `MultipleAction`** — requires batch-executor pause/resume support. Today this strategy auto-degrades to `downgrade-to-priority`.
+- **`@dispatcher debug collisions` command** — surface `lastStaticCollisions` and the `collisionEvents` ring buffer through a CLI/shell command rather than requiring code-level introspection.
+- **Threshold calibration** — `fuzzy.similarityThreshold: 0.85` is a placeholder. Once a real scorer lands, calibrate against a labeled set of agent-action pairs.
+- **On-disk fuzzy matrix cache** — once fuzzy scoring is non-trivial, cache the static pairwise matrix in the agent cache directory so it doesn't re-run on every dispatcher boot.
+- **Clarify-loop bias** — when the user picks an agent in response to a `ClarifyMultipleAgentMatches`, the same collision can repeat on the next round-trip. Mitigation: temporarily set `lastActionSchemaName` to the user's pick to bias re-translation. Deferred until/unless it bites in evaluation.
+- **`@config collision …` shell command** — programmatic-only setting today; a CLI surface would make A/B evaluation easier.
+
 ## Developer
 
 ### Adding Dispatcher Agent

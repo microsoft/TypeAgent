@@ -1,7 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { HistoryContext, MatchResult } from "agent-cache";
+import {
+    createExecutableAction,
+    HistoryContext,
+    MatchResult,
+    ParamObjectType,
+    RequestAction,
+} from "agent-cache";
 import { CommandHandlerContext } from "../context/commandHandlerContext.js";
 import { ActionContext, ActivityContext } from "@typeagent/agent-sdk";
 import { TranslationResult } from "./translateRequest.js";
@@ -11,8 +17,13 @@ import { getAppAgentName } from "./agentTranslators.js";
 import { canResolvePropertyEntity } from "../execute/pendingActions.js";
 import {
     DispatcherActivityName,
+    DispatcherClarifyName,
     DispatcherName,
 } from "../context/dispatcher/dispatcherUtils.js";
+import {
+    isCollision,
+    resolveGrammarCollision,
+} from "./matchCollision.js";
 
 const debugConstValidation = registerDebug("typeagent:const:validation");
 
@@ -89,24 +100,26 @@ async function validateEntityWildcardMatch(
 }
 
 /**
- * Assuming the match results are sorted by most likely to least likely by some heuristics, return the first
- * validated match.  Matches that doesn't have wildcard are assumed validated.
+ * Walks the heuristically-sorted match results and returns ALL matches that
+ * pass entity-wildcard and wildcard validation, preserving original order.
  *
- * @param matches
- * @param context
- * @returns the validate matched.
+ * Today's caller takes [0] (matching prior `getValidatedMatch` behavior); the
+ * collision resolver looks at the full list when collision detection is
+ * enabled in session config.
  */
-async function getValidatedMatch(
+async function getValidatedMatches(
     matches: MatchResult[],
     context: CommandHandlerContext,
-) {
+): Promise<MatchResult[]> {
+    const accepted: MatchResult[] = [];
     for (const match of matches) {
         if (!(await validateEntityWildcardMatch(match, context))) {
             continue;
         }
 
         if (match.wildcardCharCount === 0) {
-            return match;
+            accepted.push(match);
+            continue;
         }
         if (await validateWildcardMatch(match, context)) {
             debugConstValidation(
@@ -115,14 +128,15 @@ async function getValidatedMatch(
             console.log(
                 `[Cache Validation Success] Wildcard match validated and accepted`,
             );
-            return match;
+            accepted.push(match);
+            continue;
         }
         debugConstValidation(`Wildcard match rejected: ${match.match.actions}`);
         console.log(
             `[Cache Validation Rejected] Wildcard validation failed for match. Trying next match...`,
         );
     }
-    return undefined;
+    return accepted;
 }
 
 export function getActivityActiveSchemas(
@@ -230,8 +244,8 @@ export async function matchRequest(
 
     const elapsedMs = performance.now() - startTime;
 
-    const match = await getValidatedMatch(matches, systemContext);
-    if (match === undefined) {
+    const validated = await getValidatedMatches(matches, systemContext);
+    if (validated.length === 0) {
         if (matches.length > 0) {
             console.log(
                 `[Cache Validation Failed] "${request}" - ${matches.length} match(es) found but validation rejected all. Falling back to LLM translation.`,
@@ -240,9 +254,52 @@ export async function matchRequest(
         return undefined;
     }
 
+    // Collision detection — opt-in via session config. With detect=false this
+    // is a no-op and we use validated[0], identical to legacy behavior.
+    const collisionCfg = config.collision.grammarMatch;
+    let chosen = validated[0];
+    if (
+        collisionCfg.detect &&
+        isCollision(validated, collisionCfg.classifier)
+    ) {
+        const decision = resolveGrammarCollision(
+            validated,
+            systemContext,
+            request,
+        );
+        if (decision.kind === "match") {
+            chosen = decision.match;
+        } else {
+            // user-clarify — synthesize a translation result whose action is the
+            // ClarifyMultipleAgentMatches dispatcher action. Downstream execution
+            // routes it to the dispatcher agent's clarify handler.
+            const clarifyAction = createExecutableAction(
+                DispatcherClarifyName,
+                decision.clarify.actionName,
+                decision.clarify.parameters as unknown as ParamObjectType,
+            );
+            const clarifyRequestAction = new RequestAction(request, [
+                clarifyAction,
+            ]);
+            return {
+                type: "grammar",
+                requestAction: clarifyRequestAction,
+                elapsedMs,
+                config: {
+                    ...matchConfig,
+                    explainerName: systemContext.agentCache.explainerName,
+                },
+                allMatches: matches.map((m) => {
+                    const { match, ...rest } = m;
+                    return { action: match.actions, ...rest };
+                }),
+            };
+        }
+    }
+
     return {
-        type: match.type,
-        requestAction: match.match,
+        type: chosen.type,
+        requestAction: chosen.match,
         elapsedMs,
         config: {
             ...matchConfig,

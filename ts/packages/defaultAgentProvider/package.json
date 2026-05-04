@@ -79,6 +79,7 @@
     "typechat": "^0.1.1",
     "typechat-utils": "workspace:*",
     "utility-typeagent": "workspace:*",
+    "vampire-agent": "workspace:*",
     "video-agent": "workspace:*",
     "weather-agent": "workspace:*",
     "ws": "^8.17.1",

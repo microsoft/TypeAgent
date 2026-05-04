@@ -75,6 +75,7 @@ async function executeDispatcherAction(
             switch (action.actionName) {
                 case "clarifyMultiplePossibleActionName":
                 case "clarifyMissingParameter":
+                case "clarifyMultipleAgentMatches":
                     return clarifyRequestAction(action, context);
                 case "clarifyUnresolvedReference":
                     const result = await clarifyWithLookup(action, context);

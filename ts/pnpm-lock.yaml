@@ -2638,6 +2638,31 @@ importers:
         specifier: ~5.4.5
         version: 5.4.5
 
+  packages/agents/vampire:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+    devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
+      action-grammar-compiler:
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   packages/agents/video:
     dependencies:
       '@typeagent/agent-sdk':
@@ -3427,6 +3452,9 @@ importers:
       utility-typeagent:
         specifier: workspace:*
         version: link:../agents/utility
+      vampire-agent:
+        specifier: workspace:*
+        version: link:../agents/vampire
       video-agent:
         specifier: workspace:*
         version: link:../agents/video
