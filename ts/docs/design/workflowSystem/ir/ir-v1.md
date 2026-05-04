@@ -237,6 +237,18 @@ design-principles.md (the unnumbered minimization rule).
   concepts wearing one name. The test for an extension is "does it
   add a behavioral rule existing concepts do not already cover?" not
   "does it add a name?"
+- Consistency (the same rule, run backward). Counting concepts as
+  behavioral rules also constrains the surface: **the same rule is
+  written the same way wherever it appears**. Two surface forms that
+  obey one rule are a minimization candidate (collapse them to one
+  form); one surface form that obeys two rules in different contexts
+  is a split candidate (give each rule its own concept). The
+  pre-revision loop `outputs` map vs. workflow `output` reference
+  (§8.10 Alt C) and the `bind: true` shorthand (§8.15 "Removed sugar")
+  are the worked examples of the first failure mode; per-node
+  `stateWrites` is the worked example of the second. The variance test
+  is symmetric: count behavioral rules, count surface forms, and check
+  they match. The §10 variance lens uses this test.
 - Concrete consequence: v1 has exactly four node kinds (`task`, `branch`,
   `loop`, `handler`) and one reference form. Every additional concept proposed
   during the design review will be measured against this rule.
@@ -2007,15 +2019,21 @@ Three lenses close the items previously flagged here:
   downstream consumers are door-kept): which direction of change is
   additive vs. breaking. Used to break ties when the audience lens is
   neutral.
-- **Variance lens (§1.3)**: minimize behavioral variance within a
-  concept category. Reach for it when two alternatives are audience-
-  and staging-comparable but one introduces a dedicated rule (no-race,
-  last-writer-wins, ordering, drift) the other does not need. The
-  pure-SSA decision (§8.17) is the v1 example: per-node `stateWrites`
-  (§8.5) and centralized `iterateState` are audience-comparable and
-  staging-comparable, but `stateWrites` adds a dedicated no-race rule
-  that `iterateState` does not need. The variance lens rejects the
-  extra rule.
+- **Variance lens (§1.3)**: keep surface variance equal to behavioral
+  variance. Two directions:
+  - _Split direction._ When two alternatives are audience- and
+    staging-comparable but one introduces a dedicated rule (no-race,
+    last-writer-wins, ordering, drift) the other does not need, reject
+    the extra rule. The pure-SSA decision (§8.17) is the v1 example:
+    per-node `stateWrites` (§8.5) and centralized `iterateState` are
+    audience- and staging-comparable, but `stateWrites` adds a
+    dedicated no-race rule that `iterateState` does not need.
+  - _Collapse direction._ When two surface forms obey one behavioral
+    rule, collapse them to one form. The loop `outputs` map vs.
+    workflow `output` reference (§8.10 Alt C, rejected) and the
+    `bind: true` shorthand (§8.15 "Removed sugar") are the v1
+    examples; both wrote one rule two ways.
+    Reach for the lens when audience and staging are tied or quiet.
 
 The closures below are listed for traceability; full per-decision
 rationale lives in §8.
