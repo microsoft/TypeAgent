@@ -131,6 +131,8 @@ export class BenchmarkRunner {
     private loadScenarios(): BenchmarkScenario[] {
         const scenarioFiles = [
             "grammar-match.json",
+            "grammar-subschemas.json",
+            "grammar-competition.json",
             "execution.json",
             "llm-translation.json",
             "fallback-chain.json",
@@ -243,13 +245,18 @@ export class BenchmarkRunner {
             }
 
             // Resolve canonical flow names to actual LLM-generated names
+            // ONLY for non-grammar scenarios - grammar tests use built-in action names
+            const isGrammarTest = scenario.category.startsWith("grammar");
             const resolvedUtterance = {
                 ...utterance,
                 expected: {
                     ...utterance.expected,
-                    matchedFlow: utterance.expected.matchedFlow
-                        ? this.resolveFlowName(utterance.expected.matchedFlow)
-                        : utterance.expected.matchedFlow,
+                    matchedFlow:
+                        utterance.expected.matchedFlow && !isGrammarTest
+                            ? this.resolveFlowName(
+                                  utterance.expected.matchedFlow,
+                              )
+                            : utterance.expected.matchedFlow,
                 },
             };
 

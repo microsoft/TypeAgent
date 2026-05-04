@@ -47,6 +47,38 @@ export function evaluateGrammarMatch(
         }
     }
 
+    // Check if the right agent was matched (for competition testing)
+    if (expected.matchedAgent !== undefined) {
+        const actualAgent = extractAgentName(commandResult, trace);
+        if (expected.matchedAgent === null) {
+            // Negative test: should NOT match powershell
+            results.push({
+                passed: actualAgent !== "powershell",
+                component: "grammar",
+                expected: "not powershell",
+                actual: actualAgent ?? "no match",
+                message:
+                    actualAgent === "powershell"
+                        ? `Expected non-powershell match but matched powershell`
+                        : undefined,
+            });
+        } else {
+            results.push({
+                passed:
+                    actualAgent?.toLowerCase() ===
+                    expected.matchedAgent.toLowerCase(),
+                component: "grammar",
+                expected: `agent: ${expected.matchedAgent}`,
+                actual: `agent: ${actualAgent ?? "no match"}`,
+                message:
+                    actualAgent?.toLowerCase() !==
+                    expected.matchedAgent.toLowerCase()
+                        ? `Expected agent '${expected.matchedAgent}' but got '${actualAgent ?? "no match"}'`
+                        : undefined,
+            });
+        }
+    }
+
     // Check extracted parameters
     if (
         expected.extractedParams &&
@@ -96,6 +128,24 @@ export function evaluateGrammarMatch(
     return results;
 }
 
+function extractAgentName(
+    commandResult: unknown,
+    trace: PipelineTrace,
+): string | null {
+    if (trace.matchedAgent) return trace.matchedAgent;
+    const result = commandResult as any;
+
+    const firstAction = result?.actions?.[0];
+    if (firstAction?.schemaName) {
+        // Extract base agent name from schema (e.g., "powershell-files" -> "powershell")
+        const schemaName = firstAction.schemaName as string;
+        if (schemaName.startsWith("powershell")) return "powershell";
+        return schemaName.split("-")[0];
+    }
+
+    return null;
+}
+
 function extractFlowName(
     commandResult: unknown,
     trace: PipelineTrace,
@@ -108,7 +158,11 @@ function extractFlowName(
     const firstAction = result?.actions?.[0];
     if (firstAction) {
         // Per-flow action types: actionName IS the flow name
-        if (firstAction.schemaName === "powershell") {
+        // Handle both monolithic "powershell" and sub-schemas "powershell-*"
+        if (
+            firstAction.schemaName === "powershell" ||
+            firstAction.schemaName?.startsWith("powershell-")
+        ) {
             return firstAction.actionName;
         }
         // Legacy: executePowerShellFlow with flowName param
