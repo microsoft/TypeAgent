@@ -1,0 +1,1315 @@
+[
+  {
+    "id": "gs-files-01",
+    "category": "grammar-subschemas",
+    "description": "Files: listFiles - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-files"] },
+    "utterances": [
+      {
+        "text": "list files in downloads",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listFiles",
+          "extractedParams": { "path": "downloads" }
+        }
+      },
+      {
+        "text": "show me the files in documents",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listFiles",
+          "extractedParams": { "path": "documents" }
+        }
+      },
+      {
+        "text": "what's in C:\\temp",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listFiles",
+          "extractedParams": { "path": "C:\\temp" }
+        }
+      },
+      {
+        "text": "dir C:\\Users",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listFiles",
+          "extractedParams": { "path": "C:\\Users" }
+        }
+      },
+      {
+        "text": "display all the files",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listFiles",
+          "extractedParams": {}
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-files-02",
+    "category": "grammar-subschemas",
+    "description": "Files: readFile - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-files"] },
+    "utterances": [
+      {
+        "text": "read config.json",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "readFile",
+          "extractedParams": { "path": "config.json" }
+        }
+      },
+      {
+        "text": "show the contents of readme.md",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "readFile",
+          "extractedParams": { "path": "readme.md" }
+        }
+      },
+      {
+        "text": "cat package.json",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "readFile",
+          "extractedParams": { "path": "package.json" }
+        }
+      },
+      {
+        "text": "show last 20 lines of app.log",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "readFile",
+          "extractedParams": { "path": "app.log", "tail": 20 }
+        }
+      },
+      {
+        "text": "display file settings.xml",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "readFile",
+          "extractedParams": { "path": "settings.xml" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-files-03",
+    "category": "grammar-subschemas",
+    "description": "Files: writeFile - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-files"] },
+    "utterances": [
+      {
+        "text": "write 'hello world' to test.txt",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "writeFile",
+          "extractedParams": { "content": "'hello world'", "path": "test.txt" }
+        }
+      },
+      {
+        "text": "save 'test data' to output.txt",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "writeFile",
+          "extractedParams": { "content": "'test data'", "path": "output.txt" }
+        }
+      },
+      {
+        "text": "append 'new line' to log.txt",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "writeFile",
+          "extractedParams": {
+            "content": "'new line'",
+            "path": "log.txt",
+            "append": true
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-files-04",
+    "category": "grammar-subschemas",
+    "description": "Files: copyFile - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-files"] },
+    "utterances": [
+      {
+        "text": "copy report.pdf to backup",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "copyFile",
+          "extractedParams": { "source": "report.pdf", "destination": "backup" }
+        }
+      },
+      {
+        "text": "cp config.json config.backup.json",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "copyFile",
+          "extractedParams": {
+            "source": "config.json",
+            "destination": "config.backup.json"
+          }
+        }
+      },
+      {
+        "text": "duplicate document.docx to archives",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "copyFile",
+          "extractedParams": {
+            "source": "document.docx",
+            "destination": "archives"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-files-05",
+    "category": "grammar-subschemas",
+    "description": "Files: moveFile - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-files"] },
+    "utterances": [
+      {
+        "text": "move old.txt to archive",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "moveFile",
+          "extractedParams": { "source": "old.txt", "destination": "archive" }
+        }
+      },
+      {
+        "text": "rename document.docx to final.docx",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "moveFile",
+          "extractedParams": {
+            "source": "document.docx",
+            "destination": "final.docx"
+          }
+        }
+      },
+      {
+        "text": "mv temp.log logs",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "moveFile",
+          "extractedParams": { "source": "temp.log", "destination": "logs" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-files-06",
+    "category": "grammar-subschemas",
+    "description": "Files: deleteFile - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-files"] },
+    "utterances": [
+      {
+        "text": "delete temp.txt",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "deleteFile",
+          "extractedParams": { "path": "temp.txt" }
+        }
+      },
+      {
+        "text": "remove old-backup",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "deleteFile",
+          "extractedParams": { "path": "old-backup" }
+        }
+      },
+      {
+        "text": "rm debug.log",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "deleteFile",
+          "extractedParams": { "path": "debug.log" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-files-07",
+    "category": "grammar-subschemas",
+    "description": "Files: testPath - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-files"] },
+    "utterances": [
+      {
+        "text": "check if config.json exists",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "testPath",
+          "extractedParams": { "path": "config.json" }
+        }
+      },
+      {
+        "text": "does backup.zip exist",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "testPath",
+          "extractedParams": { "path": "backup.zip" }
+        }
+      },
+      {
+        "text": "is there a file named settings.json",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "testPath",
+          "extractedParams": { "path": "settings.json" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-files-08",
+    "category": "grammar-subschemas",
+    "description": "Files: findText - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-files"] },
+    "utterances": [
+      {
+        "text": "find error in logs",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "findText",
+          "extractedParams": { "pattern": "error", "path": "logs" }
+        }
+      },
+      {
+        "text": "grep TODO src",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "findText",
+          "extractedParams": { "pattern": "TODO", "path": "src" }
+        }
+      },
+      {
+        "text": "search for password in config",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "findText",
+          "extractedParams": { "pattern": "password", "path": "config" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-files-09",
+    "category": "grammar-subschemas",
+    "description": "Files: newItem - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-files"] },
+    "utterances": [
+      {
+        "text": "create a new file notes.txt",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "newItem",
+          "extractedParams": { "path": "notes.txt", "itemType": "file" }
+        }
+      },
+      {
+        "text": "make a directory backups",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "newItem",
+          "extractedParams": { "path": "backups", "itemType": "directory" }
+        }
+      },
+      {
+        "text": "mkdir logs",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "newItem",
+          "extractedParams": { "path": "logs", "itemType": "directory" }
+        }
+      },
+      {
+        "text": "touch placeholder.txt",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "newItem",
+          "extractedParams": { "path": "placeholder.txt", "itemType": "file" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-proc-01",
+    "category": "grammar-subschemas",
+    "description": "Processes: listProcesses - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-processes"] },
+    "utterances": [
+      {
+        "text": "show running processes",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listProcesses",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "list processes named chrome",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listProcesses",
+          "extractedParams": { "name": "chrome" }
+        }
+      },
+      {
+        "text": "ps notepad",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listProcesses",
+          "extractedParams": { "name": "notepad" }
+        }
+      },
+      {
+        "text": "what processes are running",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listProcesses",
+          "extractedParams": {}
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-proc-02",
+    "category": "grammar-subschemas",
+    "description": "Processes: processMemory - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-processes"] },
+    "utterances": [
+      {
+        "text": "what's using the most memory",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "processMemory",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "show top 5 memory hogs",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "processMemory",
+          "extractedParams": { "topN": 5 }
+        }
+      },
+      {
+        "text": "memory usage by process",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "processMemory",
+          "extractedParams": {}
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-proc-03",
+    "category": "grammar-subschemas",
+    "description": "Processes: processCpu - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-processes"] },
+    "utterances": [
+      {
+        "text": "what's using the most cpu",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "processCpu",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "show top 10 cpu hogs",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "processCpu",
+          "extractedParams": { "topN": 10 }
+        }
+      },
+      {
+        "text": "cpu usage by process",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "processCpu",
+          "extractedParams": {}
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-proc-04",
+    "category": "grammar-subschemas",
+    "description": "Processes: stopProcess - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-processes"] },
+    "utterances": [
+      {
+        "text": "kill notepad",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "stopProcess",
+          "extractedParams": { "name": "notepad" }
+        }
+      },
+      {
+        "text": "stop process chrome",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "stopProcess",
+          "extractedParams": { "name": "chrome" }
+        }
+      },
+      {
+        "text": "kill process id 1234",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "stopProcess",
+          "extractedParams": { "id": 1234 }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-proc-05",
+    "category": "grammar-subschemas",
+    "description": "Processes: startProcess - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-processes"] },
+    "utterances": [
+      {
+        "text": "start notepad",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "startProcess",
+          "extractedParams": { "path": "notepad" }
+        }
+      },
+      {
+        "text": "launch calculator",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "startProcess",
+          "extractedParams": { "path": "calculator" }
+        }
+      },
+      {
+        "text": "run cmd",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "startProcess",
+          "extractedParams": { "path": "cmd" }
+        }
+      },
+      {
+        "text": "open explorer",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "startProcess",
+          "extractedParams": { "path": "explorer" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-sys-01",
+    "category": "grammar-subschemas",
+    "description": "System: systemInfo - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-system"] },
+    "utterances": [
+      {
+        "text": "show system information",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "systemInfo",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "get computer info",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "systemInfo",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "about this pc",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "systemInfo",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "system details",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "systemInfo",
+          "extractedParams": {}
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-sys-02",
+    "category": "grammar-subschemas",
+    "description": "System: diskUsage - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-system"] },
+    "utterances": [
+      {
+        "text": "show disk usage",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "diskUsage",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "how much free space",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "diskUsage",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "drive capacity",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "diskUsage",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "df",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "diskUsage",
+          "extractedParams": {}
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-sys-03",
+    "category": "grammar-subschemas",
+    "description": "System: hotFixes - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-system"] },
+    "utterances": [
+      {
+        "text": "show installed hotfixes",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "hotFixes",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "list updates",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "hotFixes",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "what updates are installed",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "hotFixes",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "windows updates",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "hotFixes",
+          "extractedParams": {}
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-sys-04",
+    "category": "grammar-subschemas",
+    "description": "System: uptime - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-system"] },
+    "utterances": [
+      {
+        "text": "show uptime",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "uptime",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "how long has the computer been running",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "uptime",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "when did the system boot",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "uptime",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "uptime",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "uptime",
+          "extractedParams": {}
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-sys-05",
+    "category": "grammar-subschemas",
+    "description": "System: envVars - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-system"] },
+    "utterances": [
+      {
+        "text": "show environment variables",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "envVars",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "get env var JAVA_HOME",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "envVars",
+          "extractedParams": { "name": "JAVA_HOME" }
+        }
+      },
+      {
+        "text": "what is the path variable",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "envVars",
+          "extractedParams": { "name": "PATH" }
+        }
+      },
+      {
+        "text": "list env vars",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "envVars",
+          "extractedParams": {}
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-svc-01",
+    "category": "grammar-subschemas",
+    "description": "Services: listServices - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-services"] },
+    "utterances": [
+      {
+        "text": "list all services",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listServices",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "show running services",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listServices",
+          "extractedParams": { "status": "running" }
+        }
+      },
+      {
+        "text": "what services are running",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listServices",
+          "extractedParams": { "status": "running" }
+        }
+      },
+      {
+        "text": "show windows services",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listServices",
+          "extractedParams": {}
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-svc-02",
+    "category": "grammar-subschemas",
+    "description": "Services: serviceStatus - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-services"] },
+    "utterances": [
+      {
+        "text": "is spooler running",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "serviceStatus",
+          "extractedParams": { "name": "spooler" }
+        }
+      },
+      {
+        "text": "check service wuauserv",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "serviceStatus",
+          "extractedParams": { "name": "wuauserv" }
+        }
+      },
+      {
+        "text": "status of AudioSrv service",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "serviceStatus",
+          "extractedParams": { "name": "AudioSrv" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-svc-03",
+    "category": "grammar-subschemas",
+    "description": "Services: startService - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-services"] },
+    "utterances": [
+      {
+        "text": "start service spooler",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "startService",
+          "extractedParams": { "name": "spooler" }
+        }
+      },
+      {
+        "text": "enable wuauserv service",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "startService",
+          "extractedParams": { "name": "wuauserv" }
+        }
+      },
+      {
+        "text": "turn on AudioSrv",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "startService",
+          "extractedParams": { "name": "AudioSrv" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-svc-04",
+    "category": "grammar-subschemas",
+    "description": "Services: stopService - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-services"] },
+    "utterances": [
+      {
+        "text": "stop service spooler",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "stopService",
+          "extractedParams": { "name": "spooler" }
+        }
+      },
+      {
+        "text": "disable wuauserv service",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "stopService",
+          "extractedParams": { "name": "wuauserv" }
+        }
+      },
+      {
+        "text": "turn off AudioSrv",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "stopService",
+          "extractedParams": { "name": "AudioSrv" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-svc-05",
+    "category": "grammar-subschemas",
+    "description": "Services: restartService - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-services"] },
+    "utterances": [
+      {
+        "text": "restart service spooler",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "restartService",
+          "extractedParams": { "name": "spooler" }
+        }
+      },
+      {
+        "text": "bounce wuauserv service",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "restartService",
+          "extractedParams": { "name": "wuauserv" }
+        }
+      },
+      {
+        "text": "cycle AudioSrv",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "restartService",
+          "extractedParams": { "name": "AudioSrv" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-net-01",
+    "category": "grammar-subschemas",
+    "description": "Network: testConnection - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-network"] },
+    "utterances": [
+      {
+        "text": "ping google.com",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "testConnection",
+          "extractedParams": { "computerName": "google.com" }
+        }
+      },
+      {
+        "text": "test connection to 192.168.1.1",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "testConnection",
+          "extractedParams": { "computerName": "192.168.1.1" }
+        }
+      },
+      {
+        "text": "is github.com reachable",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "testConnection",
+          "extractedParams": { "computerName": "github.com" }
+        }
+      },
+      {
+        "text": "ping localhost port 8080",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "testConnection",
+          "extractedParams": { "computerName": "localhost", "port": 8080 }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-net-02",
+    "category": "grammar-subschemas",
+    "description": "Network: portListeners - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-network"] },
+    "utterances": [
+      {
+        "text": "what's listening on port 80",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "portListeners",
+          "extractedParams": { "port": 80 }
+        }
+      },
+      {
+        "text": "show open ports",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "portListeners",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "list port listeners",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "portListeners",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "which process is using port 3000",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "portListeners",
+          "extractedParams": { "port": 3000 }
+        }
+      },
+      {
+        "text": "netstat",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "portListeners",
+          "extractedParams": {}
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-net-03",
+    "category": "grammar-subschemas",
+    "description": "Network: networkAdapters - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-network"] },
+    "utterances": [
+      {
+        "text": "show network adapters",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "networkAdapters",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "list interfaces",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "networkAdapters",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "get adapter Ethernet",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "networkAdapters",
+          "extractedParams": { "name": "Ethernet" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-net-04",
+    "category": "grammar-subschemas",
+    "description": "Network: ipConfig - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-network"] },
+    "utterances": [
+      {
+        "text": "show my ip address",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "ipConfig",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "ipconfig",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "ipConfig",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "what's my ip",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "ipConfig",
+          "extractedParams": {}
+        }
+      },
+      {
+        "text": "get ip config",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "ipConfig",
+          "extractedParams": {}
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-net-05",
+    "category": "grammar-subschemas",
+    "description": "Network: dnsLookup - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-network"] },
+    "utterances": [
+      {
+        "text": "lookup microsoft.com",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "dnsLookup",
+          "extractedParams": { "name": "microsoft.com" }
+        }
+      },
+      {
+        "text": "nslookup google.com",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "dnsLookup",
+          "extractedParams": { "name": "google.com" }
+        }
+      },
+      {
+        "text": "dns lookup for github.com",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "dnsLookup",
+          "extractedParams": { "name": "github.com" }
+        }
+      },
+      {
+        "text": "resolve gmail.com MX",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "dnsLookup",
+          "extractedParams": { "name": "gmail.com", "type": "MX" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-data-01",
+    "category": "grammar-subschemas",
+    "description": "Data: readJson - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-data"] },
+    "utterances": [
+      {
+        "text": "read json from config.json",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "readJson",
+          "extractedParams": { "path": "config.json" }
+        }
+      },
+      {
+        "text": "parse json settings.json",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "readJson",
+          "extractedParams": { "path": "settings.json" }
+        }
+      },
+      {
+        "text": "show json file package.json",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "readJson",
+          "extractedParams": { "path": "package.json" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-data-02",
+    "category": "grammar-subschemas",
+    "description": "Data: readCsv - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-data"] },
+    "utterances": [
+      {
+        "text": "read csv data.csv",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "readCsv",
+          "extractedParams": { "path": "data.csv" }
+        }
+      },
+      {
+        "text": "import csv users.csv",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "readCsv",
+          "extractedParams": { "path": "users.csv" }
+        }
+      },
+      {
+        "text": "show csv file sales.csv",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "readCsv",
+          "extractedParams": { "path": "sales.csv" }
+        }
+      },
+      {
+        "text": "load records.csv as csv",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "readCsv",
+          "extractedParams": { "path": "records.csv" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-data-03",
+    "category": "grammar-subschemas",
+    "description": "Data: filterCsv - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-data"] },
+    "utterances": [
+      {
+        "text": "filter csv sales.csv where region equals West",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "filterCsv",
+          "extractedParams": {
+            "path": "sales.csv",
+            "column": "region",
+            "pattern": "West"
+          }
+        }
+      },
+      {
+        "text": "find in csv users.csv where status is active",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "filterCsv",
+          "extractedParams": {
+            "path": "users.csv",
+            "column": "status",
+            "pattern": "active"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-data-04",
+    "category": "grammar-subschemas",
+    "description": "Data: convertFormat - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-data"] },
+    "utterances": [
+      {
+        "text": "convert data.csv to json",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "convertFormat",
+          "extractedParams": { "input": "data.csv", "format": "json" }
+        }
+      },
+      {
+        "text": "convert config.json to xml",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "convertFormat",
+          "extractedParams": { "input": "config.json", "format": "xml" }
+        }
+      },
+      {
+        "text": "convert report.json to csv",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "convertFormat",
+          "extractedParams": { "input": "report.json", "format": "csv" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-arch-01",
+    "category": "grammar-subschemas",
+    "description": "Archives: compress - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-archives"] },
+    "utterances": [
+      {
+        "text": "zip logs to backup.zip",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "compress",
+          "extractedParams": {
+            "sourcePath": "logs",
+            "destinationPath": "backup.zip"
+          }
+        }
+      },
+      {
+        "text": "compress src as archive.zip",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "compress",
+          "extractedParams": {
+            "sourcePath": "src",
+            "destinationPath": "archive.zip"
+          }
+        }
+      },
+      {
+        "text": "create a zip of documents",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "compress",
+          "extractedParams": { "sourcePath": "documents" }
+        }
+      },
+      {
+        "text": "zip reports",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "compress",
+          "extractedParams": { "sourcePath": "reports" }
+        }
+      }
+    ]
+  },
+  {
+    "id": "gs-arch-02",
+    "category": "grammar-subschemas",
+    "description": "Archives: expand - multiple phrasings",
+    "setup": { "requiredSchemas": ["powershell-archives"] },
+    "utterances": [
+      {
+        "text": "unzip backup.zip",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "expand",
+          "extractedParams": { "archivePath": "backup.zip" }
+        }
+      },
+      {
+        "text": "extract archive.zip to output",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "expand",
+          "extractedParams": {
+            "archivePath": "archive.zip",
+            "destinationPath": "output"
+          }
+        }
+      },
+      {
+        "text": "expand package.zip in downloads",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "expand",
+          "extractedParams": {
+            "archivePath": "package.zip",
+            "destinationPath": "downloads"
+          }
+        }
+      },
+      {
+        "text": "open archive release.zip",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "expand",
+          "extractedParams": { "archivePath": "release.zip" }
+        }
+      }
+    ]
+  }
+]

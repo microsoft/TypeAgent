@@ -2181,6 +2181,13 @@ async function createViewServiceHost(
     const port = context.agentContext.localHostPort;
     const sessionDir = await getSessionFolderPath(context);
 
+    if (!sessionDir) {
+        debug(
+            "Session directory not available, skipping view service host creation",
+        );
+        return undefined;
+    }
+
     const timeoutPromise = new Promise<undefined>((_resolve, reject) => {
         timeoutHandle = setTimeout(
             () => reject(new Error("Browser views service creation timed out")),
@@ -2198,7 +2205,7 @@ async function createViewServiceHost(
                     ),
                 );
 
-                const folderPath = path.join(sessionDir!, "files");
+                const folderPath = path.join(sessionDir, "files");
 
                 fs.mkdirSync(folderPath, { recursive: true });
 
