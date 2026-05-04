@@ -2998,6 +2998,9 @@ importers:
       '@typeagent/agent-sdk':
         specifier: workspace:*
         version: link:../agentSdk
+      '@typeagent/completion-ui':
+        specifier: workspace:*
+        version: link:../completionUI
       ansi_up:
         specifier: ^6.0.2
         version: 6.0.5
@@ -3289,6 +3292,22 @@ importers:
       ts-jest:
         specifier: ^29.1.2
         version: 29.3.3(@babel/core@7.28.4)(@jest/transform@29.7.0)(@jest/types@29.6.3)(babel-jest@29.7.0(@babel/core@7.28.4))(jest@29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5)))(typescript@5.4.5)
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
+  packages/completionUI:
+    dependencies:
+      agent-dispatcher:
+        specifier: workspace:*
+        version: link:../dispatcher/dispatcher
+    devDependencies:
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
@@ -3943,7 +3962,7 @@ importers:
         version: 4.4.3(supports-color@8.1.1)
       typechat:
         specifier: ^0.1.1
-        version: 0.1.1(typescript@5.4.5)(zod@4.1.13)
+        version: 0.1.1(typescript@5.4.5)(zod@3.25.76)
     devDependencies:
       '@types/better-sqlite3':
         specifier: ^7.6.8
@@ -4373,6 +4392,9 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../utils/commonUtils
+      '@typeagent/completion-ui':
+        specifier: workspace:*
+        version: link:../completionUI
       '@typeagent/dispatcher-rpc':
         specifier: workspace:*
         version: link:../dispatcher/rpc
@@ -4803,6 +4825,79 @@ importers:
       typescript:
         specifier: ~5.4.5
         version: 5.4.5
+
+  packages/vscode-shell:
+    dependencies:
+      '@typeagent/agent-rpc':
+        specifier: file:../agentRpc
+        version: file:packages/agentRpc
+      '@typeagent/agent-sdk':
+        specifier: file:../agentSdk
+        version: file:packages/agentSdk
+      '@typeagent/agent-server-client':
+        specifier: file:../agentServer/client
+        version: file:packages/agentServer/client(ws@8.19.0)
+      '@typeagent/agent-server-protocol':
+        specifier: file:../agentServer/protocol
+        version: file:packages/agentServer/protocol
+      '@typeagent/completion-ui':
+        specifier: file:../completionUI
+        version: file:packages/completionUI
+      '@typeagent/dispatcher-rpc':
+        specifier: file:../dispatcher/rpc
+        version: file:packages/dispatcher/rpc
+      '@typeagent/dispatcher-types':
+        specifier: file:../dispatcher/types
+        version: file:packages/dispatcher/types
+      agent-dispatcher:
+        specifier: file:../dispatcher/dispatcher
+        version: file:packages/dispatcher/dispatcher(typescript@5.9.3)(ws@8.19.0)
+      ansi_up:
+        specifier: ^6.0.6
+        version: 6.0.6
+      chat-ui:
+        specifier: workspace:*
+        version: link:../chat-ui
+      debug:
+        specifier: ^4.4.0
+        version: 4.4.3(supports-color@8.1.1)
+      dompurify:
+        specifier: ^3.4.1
+        version: 3.4.1
+      isomorphic-ws:
+        specifier: ^5.0.0
+        version: 5.0.0(ws@8.19.0)
+      markdown-it:
+        specifier: ^14.1.1
+        version: 14.1.1
+      ws:
+        specifier: ^8.18.0
+        version: 8.19.0
+    devDependencies:
+      '@types/debug':
+        specifier: ^4.1.0
+        version: 4.1.12
+      '@types/markdown-it':
+        specifier: ^14.1.2
+        version: 14.1.2
+      '@types/vscode':
+        specifier: ^1.90.0
+        version: 1.100.0
+      '@types/ws':
+        specifier: ^8.5.0
+        version: 8.18.1
+      '@vscode/vsce':
+        specifier: ^3.2.1
+        version: 3.4.0
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.11
+      mkdirp:
+        specifier: ^3.0.1
+        version: 3.0.1
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
 
   tools:
     dependencies:
@@ -7722,6 +7817,27 @@ packages:
   '@tsconfig/node16@1.0.4':
     resolution: {integrity: sha512-vxhUy4J8lyeyinH7Azl1pdd43GJhZH/tP2weN8TntQblOY+A0XbT8DJk1/oCPuOOyg/Ja757rG0CgHcWC8OfMA==}
 
+  '@typeagent/agent-rpc@file:packages/agentRpc':
+    resolution: {directory: packages/agentRpc, type: directory}
+
+  '@typeagent/agent-sdk@file:packages/agentSdk':
+    resolution: {directory: packages/agentSdk, type: directory}
+
+  '@typeagent/agent-server-client@file:packages/agentServer/client':
+    resolution: {directory: packages/agentServer/client, type: directory}
+
+  '@typeagent/agent-server-protocol@file:packages/agentServer/protocol':
+    resolution: {directory: packages/agentServer/protocol, type: directory}
+
+  '@typeagent/completion-ui@file:packages/completionUI':
+    resolution: {directory: packages/completionUI, type: directory}
+
+  '@typeagent/dispatcher-rpc@file:packages/dispatcher/rpc':
+    resolution: {directory: packages/dispatcher/rpc, type: directory}
+
+  '@typeagent/dispatcher-types@file:packages/dispatcher/types':
+    resolution: {directory: packages/dispatcher/types, type: directory}
+
   '@types/async@3.2.24':
     resolution: {integrity: sha512-8iHVLHsCCOBKjCF2KwFe0p9Z3rfM9mL+sSP8btyR5vTjJRAqpBYD28/ZLgXPf0pjG1VxOvtCV/BgXkQbpSe8Hw==}
 
@@ -8415,6 +8531,9 @@ packages:
     resolution: {integrity: sha512-jRR5wdylq8CkOe6hei19GGZnxM6rBGwFl3Bg0YItGDimvjGtAvdZk4Pu6Cl4u4Igsws4a1fd1Vq3ezrhn4KmFw==}
     engines: {node: '>= 14'}
 
+  agent-dispatcher@file:packages/dispatcher/dispatcher:
+    resolution: {directory: packages/dispatcher/dispatcher, type: directory}
+
   agentkeepalive@4.6.0:
     resolution: {integrity: sha512-kja8j7PjmncONqaTsB8fQ+wE2mSU2DJ9D4XKoJ5PFWIdRMa6SLSN1ff4mOr4jCbfRSsxR4keIiySJU0N9T5hIQ==}
     engines: {node: '>= 8.0.0'}
@@ -8494,6 +8613,9 @@ packages:
 
   ansi_up@6.0.5:
     resolution: {integrity: sha512-bo4K8S5usgFivfgvgQozTC2EfusPf76o7w0LUVdAOkpISvVmQqtwCdF5c6okokrgIN13KhFIVB/0BhnNXueQeA==}
+
+  ansi_up@6.0.6:
+    resolution: {integrity: sha512-yIa1x3Ecf8jWP4UWEunNjqNX6gzE4vg2gGz+xqRGY+TBSucnYp6RRdPV4brmtg6bQ1ljD48mZ5iGSEj7QEpRKA==}
 
   ansis@3.17.0:
     resolution: {integrity: sha512-0qWUglt9JEqLFr3w1I1pbrChn1grhaiAR2ocX1PP/flRmxgtwTzPFFFnfIlD6aMOLQZgSuCRlidD70lvx8yhzg==}
@@ -9767,6 +9889,9 @@ packages:
 
   dompurify@3.4.0:
     resolution: {integrity: sha512-nolgK9JcaUXMSmW+j1yaSvaEaoXYHwWyGJlkoCTghc97KgGDDSnpoU/PlEnw63Ah+TGKFOyY+X5LnxaWbCSfXg==}
+
+  dompurify@3.4.1:
+    resolution: {integrity: sha512-JahakDAIg1gyOm7dlgWSDjV4n7Ip2PKR55NIT6jrMfIgLFgWo81vdr1/QGqWtFNRqXP9UV71oVePtjqS2ebnPw==}
 
   domutils@2.8.0:
     resolution: {integrity: sha512-w96Cjofp72M5IIhpjgobBimYEfoPjx1Vx0BSX9P30WBdZW2WIKU0T1Bd0kz2eNZ9ikjKgHbEyKx8BB6H1L3h3A==}
@@ -15494,6 +15619,39 @@ snapshots:
       - ws
       - zod
 
+  '@azure/ai-projects@1.0.0-beta.8(ws@8.19.0)(zod@4.3.6)':
+    dependencies:
+      '@azure-rest/ai-inference': 1.0.0-beta.6
+      '@azure-rest/core-client': 2.4.0
+      '@azure/abort-controller': 2.1.2
+      '@azure/ai-agents': 1.0.0-beta.3
+      '@azure/core-auth': 1.9.0
+      '@azure/core-lro': 3.2.0
+      '@azure/core-paging': 1.6.2
+      '@azure/core-rest-pipeline': 1.20.0
+      '@azure/core-sse': 2.2.0
+      '@azure/core-tracing': 1.2.0
+      '@azure/core-util': 1.11.0
+      '@azure/logger': 1.2.0
+      '@azure/opentelemetry-instrumentation-azure-sdk': 1.0.0-beta.8
+      '@azure/storage-blob': 12.27.0
+      '@opentelemetry/api': 1.9.0
+      '@opentelemetry/api-logs': 0.200.0
+      '@opentelemetry/exporter-logs-otlp-grpc': 0.200.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/exporter-trace-otlp-grpc': 0.200.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/instrumentation': 0.57.2(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-logs': 0.200.0(@opentelemetry/api@1.9.0)
+      '@opentelemetry/sdk-trace-node': 1.30.1(@opentelemetry/api@1.9.0)
+      '@traceloop/instrumentation-langchain': 0.13.0(@opentelemetry/api@1.9.0)
+      '@traceloop/instrumentation-openai': 0.13.0(@opentelemetry/api@1.9.0)
+      openai: 4.103.0(ws@8.19.0)(zod@4.3.6)
+      tslib: 2.8.1
+    transitivePeerDependencies:
+      - encoding
+      - supports-color
+      - ws
+      - zod
+
   '@azure/arm-authorization@9.0.0':
     dependencies:
       '@azure/core-auth': 1.9.0
@@ -17619,7 +17777,7 @@ snapshots:
       '@types/lodash.debounce': 4.0.9
       '@types/lodash.throttle': 4.1.9
       clsx: 2.1.1
-      dompurify: 3.4.0
+      dompurify: 3.4.1
       lodash.debounce: 4.0.8
       lodash.throttle: 4.1.1
       nanoid: 5.1.5
@@ -19050,6 +19208,51 @@ snapshots:
 
   '@tsconfig/node16@1.0.4': {}
 
+  '@typeagent/agent-rpc@file:packages/agentRpc':
+    dependencies:
+      '@typeagent/agent-sdk': link:packages/agentSdk
+      '@typeagent/common-utils': link:packages/utils/commonUtils
+      debug: 4.4.3(supports-color@8.1.1)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@typeagent/agent-sdk@file:packages/agentSdk':
+    dependencies:
+      debug: 4.4.3(supports-color@8.1.1)
+      type-fest: 4.41.0
+    transitivePeerDependencies:
+      - supports-color
+
+  '@typeagent/agent-server-client@file:packages/agentServer/client(ws@8.19.0)':
+    dependencies:
+      '@typeagent/agent-rpc': link:packages/agentRpc
+      '@typeagent/agent-server-protocol': link:packages/agentServer/protocol
+      '@typeagent/dispatcher-rpc': link:packages/dispatcher/rpc
+      debug: 4.4.3(supports-color@8.1.1)
+      isomorphic-ws: 5.0.0(ws@8.19.0)
+    transitivePeerDependencies:
+      - supports-color
+      - ws
+
+  '@typeagent/agent-server-protocol@file:packages/agentServer/protocol':
+    dependencies:
+      '@typeagent/dispatcher-rpc': link:packages/dispatcher/rpc
+      '@typeagent/dispatcher-types': link:packages/dispatcher/types
+
+  '@typeagent/completion-ui@file:packages/completionUI':
+    dependencies:
+      agent-dispatcher: link:packages/dispatcher/dispatcher
+
+  '@typeagent/dispatcher-rpc@file:packages/dispatcher/rpc':
+    dependencies:
+      '@typeagent/agent-rpc': link:packages/agentRpc
+      '@typeagent/agent-sdk': link:packages/agentSdk
+      '@typeagent/dispatcher-types': link:packages/dispatcher/types
+
+  '@typeagent/dispatcher-types@file:packages/dispatcher/types':
+    dependencies:
+      '@typeagent/agent-sdk': link:packages/agentSdk
+
   '@types/async@3.2.24': {}
 
   '@types/babel__core@7.20.5':
@@ -19440,7 +19643,7 @@ snapshots:
   '@types/node-fetch@2.6.12':
     dependencies:
       '@types/node': 20.19.25
-      form-data: 4.0.4
+      form-data: 4.0.5
 
   '@types/node-forge@1.3.11':
     dependencies:
@@ -19669,7 +19872,7 @@ snapshots:
       cheerio: 1.1.0
       cockatiel: 3.2.1
       commander: 12.1.0
-      form-data: 4.0.4
+      form-data: 4.0.5
       glob: 11.1.0
       hosted-git-info: 4.1.0
       jsonc-parser: 3.2.1
@@ -19901,6 +20104,52 @@ snapshots:
 
   agent-base@7.1.3: {}
 
+  agent-dispatcher@file:packages/dispatcher/dispatcher(typescript@5.9.3)(ws@8.19.0):
+    dependencies:
+      '@anthropic-ai/claude-agent-sdk': 0.2.105(zod@4.3.6)
+      '@azure/ai-agents': 1.0.0-beta.3
+      '@azure/ai-projects': 1.0.0-beta.8(ws@8.19.0)(zod@4.3.6)
+      '@azure/core-client': 1.10.1
+      '@azure/core-rest-pipeline': 1.22.2
+      '@azure/cosmos': 4.9.1(@azure/core-client@1.10.1)
+      '@azure/identity': 4.10.0
+      '@github/copilot-sdk': 0.2.0
+      '@typeagent/action-schema': link:packages/actionSchema
+      '@typeagent/agent-rpc': link:packages/agentRpc
+      '@typeagent/agent-sdk': link:packages/agentSdk
+      '@typeagent/common-utils': link:packages/utils/commonUtils
+      '@typeagent/dispatcher-types': link:packages/dispatcher/types
+      action-grammar: link:packages/actionGrammar
+      agent-cache: link:packages/cache
+      aiclient: link:packages/aiclient
+      azure-ai-foundry: link:packages/azure-ai-foundry
+      chalk: 5.6.2
+      conversation-memory: link:packages/memory/conversation
+      debug: 4.4.3(supports-color@8.1.1)
+      exifreader: 4.30.1
+      file-size: 1.0.0
+      glob: 13.0.6
+      html-to-text: 9.0.5
+      image-memory: link:packages/memory/image
+      knowledge-processor: link:packages/knowledgeProcessor
+      knowpro: link:packages/knowPro
+      open: 10.1.2
+      proper-lockfile: 4.1.2
+      string-width: 7.2.0
+      taskflow-typeagent: link:packages/agents/taskflow
+      telemetry: link:packages/telemetry
+      typeagent: link:packages/typeagent
+      typechat: 0.1.1(typescript@5.9.3)(zod@4.3.6)
+      typechat-utils: link:packages/utils/typechatUtils
+      website-memory: link:packages/memory/website
+      zod: 4.3.6
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - encoding
+      - supports-color
+      - typescript
+      - ws
+
   agentkeepalive@4.6.0:
     dependencies:
       humanize-ms: 1.2.1
@@ -19968,6 +20217,8 @@ snapshots:
   ansi-styles@6.2.3: {}
 
   ansi_up@6.0.5: {}
+
+  ansi_up@6.0.6: {}
 
   ansis@3.17.0: {}
 
@@ -21483,6 +21734,10 @@ snapshots:
       domelementtype: 2.3.0
 
   dompurify@3.4.0:
+    optionalDependencies:
+      '@types/trusted-types': 2.0.7
+
+  dompurify@3.4.1:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -23875,7 +24130,7 @@ snapshots:
       decimal.js: 10.5.0
       domexception: 4.0.0
       escodegen: 2.1.0
-      form-data: 4.0.4
+      form-data: 4.0.5
       html-encoding-sniffer: 3.0.0
       http-proxy-agent: 7.0.2
       https-proxy-agent: 5.0.1
@@ -25162,6 +25417,21 @@ snapshots:
     optionalDependencies:
       ws: 8.19.0
       zod: 4.1.13
+    transitivePeerDependencies:
+      - encoding
+
+  openai@4.103.0(ws@8.19.0)(zod@4.3.6):
+    dependencies:
+      '@types/node': 18.19.130
+      '@types/node-fetch': 2.6.12
+      abort-controller: 3.0.0
+      agentkeepalive: 4.6.0
+      form-data-encoder: 1.7.2
+      formdata-node: 4.4.1
+      node-fetch: 2.7.0(encoding@0.1.13)
+    optionalDependencies:
+      ws: 8.19.0
+      zod: 4.3.6
     transitivePeerDependencies:
       - encoding
 
@@ -27248,6 +27518,11 @@ snapshots:
   typechat@0.1.1(typescript@5.4.5)(zod@4.3.6):
     optionalDependencies:
       typescript: 5.4.5
+      zod: 4.3.6
+
+  typechat@0.1.1(typescript@5.9.3)(zod@4.3.6):
+    optionalDependencies:
+      typescript: 5.9.3
       zod: 4.3.6
 
   typed-array-buffer@1.0.3:
