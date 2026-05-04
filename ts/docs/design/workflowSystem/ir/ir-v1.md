@@ -226,6 +226,17 @@ design-principles.md (the unnumbered minimization rule).
   generates: fewer concepts mean less for the engine and analyzers to
   implement, and writer convenience is neutral-to-favorable, so there is
   no audience tension to overrule.
+- Measurement: a concept is a **behavioral rule**, not a surface label.
+  The six `$from` discriminants count as one concept (named state
+  container with path-projected reads) parameterized by frame lifetime
+  and visibility, because they all obey the single rule of §3.2.1
+  (single assignment within a frame). A single label whose semantics
+  depend on context counts as two concepts: the per-node `stateWrites`
+  design rejected in §8.5 is the worked example - one keyword carried
+  both a write op and an implicit no-race rule, which made it two
+  concepts wearing one name. The test for an extension is "does it
+  add a behavioral rule existing concepts do not already cover?" not
+  "does it add a name?"
 - Concrete consequence: v1 has exactly four node kinds (`task`, `branch`,
   `loop`, `handler`) and one reference form. Every additional concept proposed
   during the design review will be measured against this rule.
@@ -1929,12 +1940,27 @@ and the v2 reopening conditions: [decisions/0004-pure-ssa.md](decisions/0004-pur
 
 ## 10. Areas flagged for reviewer adjustment
 
-The audience lens (§1.1) and the staging lens (v1 commits to the
-compile-target role; other downstream consumers are door-kept) close
-every item previously flagged here. Where the audience lens is neutral,
-the staging lens (revisit-asymmetry: which direction of change is
-additive vs. breaking) breaks the tie. The closures are listed below
-for traceability; full per-decision rationale lives in §8.
+Three lenses close the items previously flagged here:
+
+- **Audience lens (§1.1)**: which reader or writer population pays or
+  benefits from the choice. Dominant when reader and writer pull in
+  different directions.
+- **Staging lens** (v1 commits to the compile-target role; other
+  downstream consumers are door-kept): which direction of change is
+  additive vs. breaking. Used to break ties when the audience lens is
+  neutral.
+- **Variance lens (§1.3)**: minimize behavioral variance within a
+  concept category. Reach for it when two alternatives are audience-
+  and staging-comparable but one introduces a dedicated rule (no-race,
+  last-writer-wins, ordering, drift) the other does not need. The
+  pure-SSA decision (§8.17) is the v1 example: per-node `stateWrites`
+  (§8.5) and centralized `iterateState` are audience-comparable and
+  staging-comparable, but `stateWrites` adds a dedicated no-race rule
+  that `iterateState` does not need. The variance lens rejects the
+  extra rule.
+
+The closures below are listed for traceability; full per-decision
+rationale lives in §8.
 
 | Topic                               | Status under the lens                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

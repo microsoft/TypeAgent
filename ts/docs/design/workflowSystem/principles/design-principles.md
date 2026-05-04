@@ -13,6 +13,8 @@ A good principle should:
 
 The IR schema should use the fewest concepts necessary to satisfy P1-P5. Each new node type, field, or construct must earn its place by enabling something the existing concepts cannot express without violating a principle. This is not a numbered principle (it governs the IR schema, not individual IR designs), but a discipline applied when evaluating schema extensions.
 
+"Concept" here is measured by **behavioral variance**, not by surface label count. A family of discriminants that all obey a single rule and differ only by a parameter (e.g., several `$from` values that all use single-assignment-per-frame and differ only in frame lifetime) counts as one concept with parameters. A single label whose semantics depend on context counts as two concepts wearing one name (the per-node `stateWrites` design rejected in IR §8.5 is the worked example: one keyword carried both a write op and an implicit no-race rule, so two concepts). The test for an extension is not "does it add a name?" but "does it add a behavioral rule the existing concepts do not already cover?"
+
 ## Principles govern the boundary, not the interior
 
 A task is a black box: typed input in, typed output out. The workflow author chooses where to draw the task boundary. In the extreme, the entire workflow could be a single task - trivially satisfying all five principles (no references, no data flow, no structure to validate).
