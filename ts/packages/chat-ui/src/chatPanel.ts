@@ -159,41 +159,88 @@ function escapeHtml(s: string): string {
 }
 
 // Lightweight JSON syntax highlighter — returns HTML with span wrappers
-// around tokens. We pre-escape `<`, `>`, `&` so any non-token segment
-// emitted as-is is already safe; the tokenizer regex itself only
-// matches `"`-delimited strings, numbers, and the bare keywords
-// true/false/null, none of which can contain HTML metacharacters
-// after JSON.stringify (and pre-escaping doesn't perturb them since
-// we leave `"` alone). The string-literal sub-pattern is "unrolled"
-// (`[^"\\]*(?:\\.[^"\\]*)*`) to avoid the polynomial-backtracking
-// alternation `(?:\\.|[^"\\])*` flagged by CodeQL.
+// around tokens. Implemented as a hand-rolled scanner rather than a
+// single tokenizing regex so we have no chance of polynomial backtracking
+// on adversarial input (the JSON comes from action data which can carry
+// arbitrary user content). Also escapes <, >, & in any character that
+// passes through.
 // Avoids pulling in highlight.js / Prism just to colorize the action
 // JSON popup.
 function highlightJson(json: string): string {
-    const preEscaped = json
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-    return preEscaped.replace(
-        /("[^"\\]*(?:\\.[^"\\]*)*"\s*:)|("[^"\\]*(?:\\.[^"\\]*)*")|(\b(?:true|false)\b)|(\bnull\b)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g,
-        (
-            _m,
-            key?: string,
-            str?: string,
-            bool?: string,
-            nul?: string,
-            num?: string,
-        ): string => {
-            // Tokens are taken from the already pre-escaped string, so
-            // wrapping them in a span needs no further escaping.
-            if (key) return `<span class="json-key">${key}</span>`;
-            if (str) return `<span class="json-string">${str}</span>`;
-            if (bool) return `<span class="json-bool">${bool}</span>`;
-            if (nul) return `<span class="json-null">${nul}</span>`;
-            if (num) return `<span class="json-number">${num}</span>`;
-            return _m;
-        },
-    );
+    const escapeChar = (c: string): string =>
+        c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c;
+    const wrap = (cls: string, text: string): string =>
+        `<span class="${cls}">${text}</span>`;
+
+    let out = "";
+    let i = 0;
+    const n = json.length;
+    while (i < n) {
+        const ch = json[i];
+        if (ch === '"') {
+            // Linear scan to the matching closing quote, honoring `\\`
+            // and `\"` escapes. Each character is consumed at most once,
+            // so this is O(n) worst case.
+            let j = i + 1;
+            let raw = '"';
+            while (j < n) {
+                const cj = json[j];
+                if (cj === "\\" && j + 1 < n) {
+                    raw += "\\" + escapeChar(json[j + 1]);
+                    j += 2;
+                    continue;
+                }
+                raw += escapeChar(cj);
+                j++;
+                if (cj === '"') break;
+            }
+            i = j;
+            // If a colon follows (optionally with whitespace), this is a
+            // JSON object key; otherwise a string value.
+            let k = i;
+            while (k < n && (json[k] === " " || json[k] === "\t")) k++;
+            if (json[k] === ":") {
+                out += wrap("json-key", raw + json.slice(i, k + 1));
+                i = k + 1;
+            } else {
+                out += wrap("json-string", raw);
+            }
+        } else if (
+            (ch >= "0" && ch <= "9") ||
+            (ch === "-" &&
+                i + 1 < n &&
+                json[i + 1] >= "0" &&
+                json[i + 1] <= "9")
+        ) {
+            let j = i + 1;
+            while (
+                j < n &&
+                ((json[j] >= "0" && json[j] <= "9") ||
+                    json[j] === "." ||
+                    json[j] === "e" ||
+                    json[j] === "E" ||
+                    json[j] === "+" ||
+                    json[j] === "-")
+            ) {
+                j++;
+            }
+            out += wrap("json-number", json.slice(i, j));
+            i = j;
+        } else if (json.startsWith("true", i)) {
+            out += wrap("json-bool", "true");
+            i += 4;
+        } else if (json.startsWith("false", i)) {
+            out += wrap("json-bool", "false");
+            i += 5;
+        } else if (json.startsWith("null", i)) {
+            out += wrap("json-null", "null");
+            i += 4;
+        } else {
+            out += escapeChar(ch);
+            i++;
+        }
+    }
+    return out;
 }
 
 // Generates a UUID for tagging user-message bubbles. Falls back to a

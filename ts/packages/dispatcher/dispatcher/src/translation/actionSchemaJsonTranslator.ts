@@ -130,8 +130,7 @@ export function createActionSchemaJsonValidator<T extends TranslatedAction>(
                         value.actionName = bareName;
                         actionSchema = candidate;
                     } else {
-                        const injected =
-                            injectedSchemaNameMap?.get(bareName);
+                        const injected = injectedSchemaNameMap?.get(bareName);
                         if (injected !== undefined) {
                             value.actionName = bareName;
                             value.schemaName = injected;

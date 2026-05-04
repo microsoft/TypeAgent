@@ -55,17 +55,14 @@ export async function createWebSocketChannelServer(
                     return;
                 }
                 try {
-                    ws.send(
-                        data,
-                        (err) => {
-                            if (err) {
-                                debugError(`send error callback: ${err}`);
-                            }
-                            if (cb) {
-                                cb(err ?? null);
-                            }
-                        },
-                    );
+                    ws.send(data, (err) => {
+                        if (err) {
+                            debugError(`send error callback: ${err}`);
+                        }
+                        if (cb) {
+                            cb(err ?? null);
+                        }
+                    });
                 } catch (err) {
                     // Synchronous failures from ws.send (e.g. socket closed
                     // mid-write) — surface to the caller if it asked, but
