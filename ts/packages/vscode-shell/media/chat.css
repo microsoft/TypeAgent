@@ -16,6 +16,10 @@ body {
     background: var(--vscode-editor-background);
     height: 100vh;
     overflow: hidden;
+
+    /* Map shared chat-ui host-neutral tokens onto VS Code theme vars so
+       chat-ui CSS rules pick up the editor theme automatically. */
+    --chat-input-button-color: var(--vscode-foreground);
 }
 
 #chat-container {

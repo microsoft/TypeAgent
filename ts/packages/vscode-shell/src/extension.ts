@@ -235,6 +235,18 @@ function setDemoPaused(paused: boolean, message?: string): void {
 
 function requestDemoCancel(): void {
     demoCancelRequested = true;
+    // Tell every chat webview to abort any in-flight typing animation
+    // so the current demo line stops typing immediately. The webview
+    // posts back `demoLineCancelled` which releases the matching
+    // bridge.runCommand await so the loop's top-of-iteration check can
+    // see `demoCancelRequested` and break.
+    for (const entry of chats.values()) {
+        try {
+            entry.bridge.broadcastCancelTyping();
+        } catch {
+            // best effort
+        }
+    }
     // If we're currently waiting at an @pauseForInput, resolve it as
     // cancel so the loop wakes up and breaks. Otherwise the loop's
     // top-of-iteration check will handle it on the next line.

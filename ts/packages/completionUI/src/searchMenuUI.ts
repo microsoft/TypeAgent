@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 import type { SearchMenuItem } from "agent-dispatcher/helpers/completion";
 
 export type { SearchMenuItem };

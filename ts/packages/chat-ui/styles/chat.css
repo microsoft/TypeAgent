@@ -96,9 +96,10 @@
   padding: 0px;
   margin: 6px 3.5px;
   cursor: pointer;
-  /* Match VS Code theme so glyph buttons (e.g. stop ■) render in the
-     same colour as the surrounding text instead of the browser default. */
-  color: var(--vscode-foreground, #e8e8f0);
+  /* Inherit the host theme's foreground so glyph buttons (e.g. stop ■)
+     render in the same colour as the surrounding text instead of the
+     browser default. Hosts can override --chat-input-button-color. */
+  color: var(--chat-input-button-color, #e8e8f0);
 }
 
 .chat-input-button:disabled svg {

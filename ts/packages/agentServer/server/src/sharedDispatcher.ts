@@ -409,20 +409,32 @@ export async function createSharedDispatcher(
                     // best effort
                 }
                 try {
-                    // Broadcast a "commandComplete" notify to all clients in
-                    // this session so peer tabs (which did not await the
-                    // local processCommand promise) can clear lingering
-                    // temporary status messages and apply timing metrics.
-                    // The Electron shell ignores unknown notify events.
-                    const sent = broadcast(
-                        "notify",
-                        {
-                            connectionId,
-                            requestId: "",
-                            clientRequestId,
-                        },
-                        (cio) =>
-                            cio.notify(
+                    // Notify peer panels (other clients sharing this
+                    // session) that the command finished so they can
+                    // clear lingering temporary status messages and
+                    // apply timing metrics. We deliberately skip the
+                    // originator: it already gets the result back via
+                    // the resolved processCommand RPC promise, and a
+                    // duplicate notify would run completion twice (in
+                    // the VS Code webview that produces a stray
+                    // "⚠ Cancelled" bubble after the first pass cleared
+                    // the request mapping).
+                    let sent = 0;
+                    for (const [
+                        peerId,
+                        peerRecord,
+                    ] of clients) {
+                        if (peerId === connectionId) continue;
+                        if (
+                            peerRecord.filter &&
+                            peerId !== connectionId
+                        ) {
+                            // Filtered clients only receive their own
+                            // events; don't leak peer completions.
+                            continue;
+                        }
+                        try {
+                            peerRecord.clientIO.notify(
                                 {
                                     connectionId,
                                     requestId: "",
@@ -431,8 +443,14 @@ export async function createSharedDispatcher(
                                 "commandComplete",
                                 { result: result ?? null },
                                 "system",
-                            ),
-                    );
+                            );
+                            sent++;
+                        } catch (e) {
+                            debugClientIOError(
+                                `commandComplete notify failed for ${peerId}: ${e}`,
+                            );
+                        }
+                    }
                     debugCommand(
                         `commandComplete broadcast: connectionId=${connectionId} clientRequestId=${clientRequestId} sent=${sent} clients=${clients.size}`,
                     );

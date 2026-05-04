@@ -146,7 +146,7 @@ function formatDuration(ms: number): string {
 }
 
 function metricsLine(label: string, duration: number): string {
-    return `${label}: <b>${formatDuration(duration)}</b>`;
+    return `${escapeHtml(label)}: <b>${formatDuration(duration)}</b>`;
 }
 
 function escapeHtml(s: string): string {
@@ -159,16 +159,23 @@ function escapeHtml(s: string): string {
 }
 
 // Lightweight JSON syntax highlighter — returns HTML with span wrappers
-// around tokens. Operates on the raw JSON.stringify output (so the
-// regex can match `"`), then escapes <,>,& in each segment. Token
-// classes: json-key, json-string, json-number, json-bool, json-null.
+// around tokens. We pre-escape `<`, `>`, `&` so any non-token segment
+// emitted as-is is already safe; the tokenizer regex itself only
+// matches `"`-delimited strings, numbers, and the bare keywords
+// true/false/null, none of which can contain HTML metacharacters
+// after JSON.stringify (and pre-escaping doesn't perturb them since
+// we leave `"` alone). The string-literal sub-pattern is "unrolled"
+// (`[^"\\]*(?:\\.[^"\\]*)*`) to avoid the polynomial-backtracking
+// alternation `(?:\\.|[^"\\])*` flagged by CodeQL.
 // Avoids pulling in highlight.js / Prism just to colorize the action
 // JSON popup.
 function highlightJson(json: string): string {
-    const escapeText = (s: string): string =>
-        s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    return json.replace(
-        /("(?:\\.|[^"\\])*"\s*:)|("(?:\\.|[^"\\])*")|(\b(?:true|false)\b)|(\bnull\b)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g,
+    const preEscaped = json
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    return preEscaped.replace(
+        /("[^"\\]*(?:\\.[^"\\]*)*"\s*:)|("[^"\\]*(?:\\.[^"\\]*)*")|(\b(?:true|false)\b)|(\bnull\b)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g,
         (
             _m,
             key?: string,
@@ -177,15 +184,14 @@ function highlightJson(json: string): string {
             nul?: string,
             num?: string,
         ): string => {
-            if (key) return `<span class="json-key">${escapeText(key)}</span>`;
-            if (str)
-                return `<span class="json-string">${escapeText(str)}</span>`;
-            if (bool)
-                return `<span class="json-bool">${escapeText(bool)}</span>`;
-            if (nul) return `<span class="json-null">${escapeText(nul)}</span>`;
-            if (num)
-                return `<span class="json-number">${escapeText(num)}</span>`;
-            return escapeText(_m);
+            // Tokens are taken from the already pre-escaped string, so
+            // wrapping them in a span needs no further escaping.
+            if (key) return `<span class="json-key">${key}</span>`;
+            if (str) return `<span class="json-string">${str}</span>`;
+            if (bool) return `<span class="json-bool">${bool}</span>`;
+            if (nul) return `<span class="json-null">${nul}</span>`;
+            if (num) return `<span class="json-number">${num}</span>`;
+            return _m;
         },
     );
 }
@@ -373,6 +379,11 @@ export class ChatPanel {
     private isHistoryLoading = false;
     private isDemoPaused = false;
     private isDemoRunning = false;
+    // Flipped by `cancelTypingAnimation()` (called from the host when the
+    // user cancels the demo). `typeAndSend` checks this on every iteration
+    // of its character loop so a cancel mid-typing actually halts the
+    // current line instead of typing it out before we honor the cancel.
+    private demoTypingCancelled = false;
     private inputHint?: string;
     private demoKeyHandler?: (e: KeyboardEvent) => void;
     private avatarMap: Record<string, string> = { ...DEFAULT_AVATAR_MAP };
@@ -788,8 +799,17 @@ export class ChatPanel {
      * instead of an instant paste-and-send.
      *
      * Resolves once the message has been submitted (after onSend fires).
+     * Returns `true` if submitted, `false` if cancellation was requested
+     * mid-animation (in which case `send()` is NOT invoked and the host
+     * must release any waiters of its own).
      */
-    public async typeAndSend(text: string, requestId: string): Promise<void> {
+    public async typeAndSend(
+        text: string,
+        requestId: string,
+    ): Promise<boolean> {
+        // Each new typeAndSend starts fresh — a stale cancel from a prior
+        // line shouldn't suppress this one.
+        this.demoTypingCancelled = false;
         // Wait for any in-flight disable (e.g., session loading) to clear.
         for (
             let i = 0;
@@ -807,6 +827,13 @@ export class ChatPanel {
         this.textInput.contentEditable = "false";
         try {
             for (let i = 0; i < text.length; i++) {
+                if (this.demoTypingCancelled) {
+                    // Wipe whatever we typed so the input doesn't keep a
+                    // partial command for the user to inadvertently send,
+                    // then bail without firing send().
+                    this.textInput.textContent = "";
+                    return false;
+                }
                 this.textInput.textContent =
                     (this.textInput.textContent ?? "") + text[i];
                 // 25-40ms per char (random within range), matches Electron shell.
@@ -816,9 +843,25 @@ export class ChatPanel {
         } finally {
             this.textInput.contentEditable = wasEditable;
         }
+        if (this.demoTypingCancelled) {
+            this.textInput.textContent = "";
+            return false;
+        }
         // Defer to send() so all bookkeeping (command history, attachments,
         // user-bubble creation, sendButton/ghost reset) stays in one place.
         this.send(requestId);
+        return true;
+    }
+
+    /**
+     * Signal `typeAndSend()` to stop typing the current line. Safe to call
+     * when no animation is in flight — the flag is reset at the start of
+     * each `typeAndSend()`. Use this from the host on demo cancel so the
+     * remainder of the current line isn't typed out before the cancel
+     * takes effect.
+     */
+    public cancelTypingAnimation(): void {
+        this.demoTypingCancelled = true;
     }
 
     /**
@@ -957,17 +1000,6 @@ export class ChatPanel {
             (phase?.duration !== undefined && phase.duration !== null) ||
             (phase?.marks && Object.keys(phase.marks).length > 0) ||
             totalDuration !== undefined;
-        // eslint-disable-next-line no-console
-        console.debug(
-            "[chat-ui] applyUserMetrics",
-            requestId,
-            "found?",
-            !!container,
-            "hasContent?",
-            hasContent,
-            "phase=",
-            phase,
-        );
         if (!container || !hasContent) return;
         const metricsDiv = container.querySelector(
             ".chat-message-metrics-user",
@@ -987,7 +1019,7 @@ export class ChatPanel {
                 const suffix =
                     value.count !== 1 ? `(out of ${value.count})` : "";
                 markLines.push(
-                    `${key}: <b>${formatDuration(avg)}${suffix}</b>`,
+                    `${escapeHtml(key)}: <b>${formatDuration(avg)}${suffix}</b>`,
                 );
             }
         }
@@ -2186,7 +2218,7 @@ class AgentMessageContainer {
                 const suffix =
                     value.count !== 1 ? `(out of ${value.count})` : "";
                 leftLines.push(
-                    `${key}: <b>${formatDuration(avg)}${suffix}</b>`,
+                    `${escapeHtml(key)}: <b>${formatDuration(avg)}${suffix}</b>`,
                 );
             }
         }

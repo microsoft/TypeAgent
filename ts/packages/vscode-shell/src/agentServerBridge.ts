@@ -107,6 +107,7 @@ export type BridgeToWebviewMessage =
           message?: string;
       }
     | { type: "demoTypeAndSend"; command: string; requestId: string }
+    | { type: "demoCancelTyping" }
     | { type: "historyLoading"; loading: boolean }
     | {
           type: "historyReplay";
@@ -153,7 +154,8 @@ export type BridgeFromWebviewMessage =
     | { type: "pcDismiss"; input: string; direction: CompletionDirection }
     | { type: "pcHide" }
     | { type: "pcDispose" }
-    | { type: "demoCommand"; action: "continue" | "cancel" };
+    | { type: "demoCommand"; action: "continue" | "cancel" }
+    | { type: "demoLineCancelled"; requestId: string };
 
 /**
  * Manages the RPC connection to the agent server from the extension host
@@ -1062,7 +1064,30 @@ export class AgentServerBridge {
                         : "vscode-shell.demoCancel",
                 );
                 break;
+            case "demoLineCancelled": {
+                // Webview's typeAndSend bailed mid-animation in response
+                // to a cancelTyping signal; release the matching demo
+                // runner await so the script's loop can see the cancel
+                // and exit cleanly instead of hanging on this requestId.
+                const resolve = this.demoCompletionResolvers.get(
+                    msg.requestId,
+                );
+                if (resolve) {
+                    this.demoCompletionResolvers.delete(msg.requestId);
+                    resolve();
+                }
+                break;
+            }
         }
+    }
+
+    /**
+     * Tell every connected webview to abort an in-flight typing animation.
+     * Called from the demo cancel path so the current line stops typing
+     * immediately instead of completing first.
+     */
+    public broadcastCancelTyping(): void {
+        this.broadcastToWebviews({ type: "demoCancelTyping" });
     }
 
     private ensureCompletionController(

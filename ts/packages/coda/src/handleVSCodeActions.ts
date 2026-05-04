@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import * as vscode from "vscode";
+import * as path from "path";
 import { ActionResult } from "./helpers";
 import { handleWorkbenchActions } from "./handleWorkBenchActions";
 import { handleDebugActions } from "./handleDebugActions";
@@ -283,6 +284,22 @@ export async function handleBaseEditorActions(
                     workspaceFolder.uri,
                     fileName!.trim(),
                 );
+                // Reject any path that escapes the workspace root via
+                // `..` traversal or absolute components — vscode.Uri
+                // .joinPath happily resolves them and we'd otherwise
+                // overwrite arbitrary files on disk.
+                const root = workspaceFolder.uri.fsPath;
+                const target = fileUri.fsPath;
+                const rootWithSep = root.endsWith(path.sep)
+                    ? root
+                    : root + path.sep;
+                const insideWorkspace =
+                    target === root || target.startsWith(rootWithSep);
+                if (!insideWorkspace) {
+                    actionResult.message = `Refused to create file outside workspace: ${fileName}`;
+                    actionResult.handled = false;
+                    break;
+                }
                 try {
                     await vscode.workspace.fs.stat(fileUri);
                     actionResult.message = `File ${fileName} already exists`;

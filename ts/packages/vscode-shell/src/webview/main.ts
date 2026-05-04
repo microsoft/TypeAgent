@@ -395,8 +395,22 @@ window.addEventListener("message", (event) => {
         case "demoTypeAndSend":
             // Animate typing into the chat input then submit, so demo
             // playback in the extension matches the Electron shell's
-            // natural-keystroke effect.
-            void chatPanel.typeAndSend(msg.command, msg.requestId);
+            // natural-keystroke effect. If cancelled mid-animation,
+            // notify the host so it can release its waiter on this
+            // requestId and let the demo loop see the cancel.
+            void chatPanel
+                .typeAndSend(msg.command, msg.requestId)
+                .then((sent) => {
+                    if (!sent) {
+                        vscode.postMessage({
+                            type: "demoLineCancelled",
+                            requestId: msg.requestId,
+                        });
+                    }
+                });
+            break;
+        case "demoCancelTyping":
+            chatPanel.cancelTypingAnimation();
             break;
     }
 });
