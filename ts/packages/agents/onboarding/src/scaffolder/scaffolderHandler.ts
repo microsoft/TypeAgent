@@ -107,8 +107,11 @@ async function handleScaffoldAgent(
 
     await updatePhase(integrationName, "scaffolder", { status: "in-progress" });
 
-    // Determine package name and Pascal-case type name
-    const packageName = `${integrationName}-agent`;
+    // Determine package name and Pascal-case type name. The npm `name` field
+    // must be lowercase, so lowercase the integration name when composing the
+    // package name only — file names, type names, and schema dirs keep the
+    // original camelCase form.
+    const packageName = `${integrationName.toLowerCase()}-agent`;
     const pascalName = toPascalCase(integrationName);
     const targetDir = outputDir ?? path.join(AGENTS_DIR, integrationName);
     const srcDir = path.join(targetDir, "src");
@@ -127,26 +130,21 @@ async function handleScaffoldAgent(
             ? subSchemaSuggestion.groups
             : undefined;
 
-    // Write core schema and grammar
-    await writeFile(path.join(srcDir, `${integrationName}Schema.ts`), schemaTs);
-    await writeFile(
-        path.join(srcDir, `${integrationName}Schema.agr`),
-        grammarAgr.replace(
-            /from "\.\/schema\.ts"/g,
-            `from "./${integrationName}Schema.ts"`,
-        ),
-    );
-
     // Track all files created for the output summary
-    const files: string[] = [
-        `src/${integrationName}Schema.ts`,
-        `src/${integrationName}Schema.agr`,
-    ];
+    const files: string[] = [];
 
-    // If sub-schema groups exist, generate per-group schema and grammar files
+    // If sub-schema groups exist, partition actions disjointly: each action
+    // type is emitted in exactly one schema file. Actions belonging to a group
+    // move to that sub-schema; any remaining (un-grouped) actions stay in the
+    // main schema. Mirrors the `code` agent pattern at packages/agents/code/.
     if (subGroups) {
         const actionsDir = path.join(srcDir, "actions");
         await fs.mkdir(actionsDir, { recursive: true });
+
+        const groupedActions = new Set<string>();
+        for (const group of subGroups) {
+            for (const a of group.actions) groupedActions.add(a);
+        }
 
         for (const group of subGroups) {
             const groupPascal = toPascalCase(group.name);
@@ -178,7 +176,44 @@ async function handleScaffoldAgent(
             );
             files.push(`src/actions/${group.name}ActionsSchema.agr`);
         }
+
+        // Emit the main schema with only un-grouped action types, so types are
+        // disjoint between main and sub-schemas. If every action is grouped,
+        // the main schema will contain no action types and a placeholder union.
+        const mainSchemaContent = buildMainSchemaWithSubGroups(
+            pascalName,
+            schemaTs,
+            groupedActions,
+        );
+        await writeFile(
+            path.join(srcDir, `${integrationName}Schema.ts`),
+            mainSchemaContent,
+        );
+        await writeFile(
+            path.join(srcDir, `${integrationName}Schema.agr`),
+            buildMainGrammarWithSubGroups(grammarAgr, groupedActions).replace(
+                /from "\.\/schema\.ts"/g,
+                `from "./${integrationName}Schema.ts"`,
+            ),
+        );
+    } else {
+        // No sub-groups: write the schema and grammar verbatim.
+        await writeFile(
+            path.join(srcDir, `${integrationName}Schema.ts`),
+            schemaTs,
+        );
+        await writeFile(
+            path.join(srcDir, `${integrationName}Schema.agr`),
+            grammarAgr.replace(
+                /from "\.\/schema\.ts"/g,
+                `from "./${integrationName}Schema.ts"`,
+            ),
+        );
     }
+    files.push(
+        `src/${integrationName}Schema.ts`,
+        `src/${integrationName}Schema.agr`,
+    );
 
     // Stamp out manifest (with sub-action manifests if groups exist)
     await writeFile(
@@ -282,30 +317,179 @@ function buildSubSchemaTs(
     // and then a union:
     //   export type FooActions = BoldAction | ItalicAction | ...;
     //
-    // We emit a new file that re-exports only the relevant action types and
-    // creates a new union type for this sub-schema group.
+    // We emit a new file containing the full action type definitions (so the
+    // sub-schema is self-contained — main schema will NOT redeclare them).
 
-    const actionTypeNames = group.actions.map(
-        (a) => `${a.charAt(0).toUpperCase()}${a.slice(1)}Action`,
-    );
+    const actionTypeNames = group.actions.map(actionTypeName);
 
-    // Find action type blocks in the full schema that belong to this group
     const actionBlocks: string[] = [];
-    for (const actionName of group.actions) {
-        // Match "export type XxxAction = ..." blocks
-        const typeName = `${actionName.charAt(0).toUpperCase()}${actionName.slice(1)}Action`;
-        const regex = new RegExp(
-            `(export\\s+type\\s+${typeName}\\s*=\\s*\\{[\\s\\S]*?\\};)`,
-        );
-        const match = fullSchemaTs.match(regex);
-        if (match) {
-            actionBlocks.push(match[1]);
-        }
+    for (const typeName of actionTypeNames) {
+        const block = extractTypeBlock(fullSchemaTs, typeName);
+        if (block) actionBlocks.push(block);
     }
 
     const unionType = `export type ${groupPascal}Actions =\n    | ${actionTypeNames.join("\n    | ")};`;
 
-    return `// Copyright (c) Microsoft Corporation.\n// Licensed under the MIT License.\n\n// Sub-schema: ${group.name} — ${group.description}\n// Auto-generated by the onboarding scaffolder.\n\n${actionBlocks.join("\n\n")}\n\n${unionType}\n`;
+    return `// Copyright (c) Microsoft Corporation.\n// Licensed under the MIT License.\n\n// Sub-schema: ${group.name} — ${group.description}\n// Auto-generated by the onboarding scaffolder.\n\n${unionType}\n\n${actionBlocks.join("\n\n")}\n`;
+}
+
+// Convert "addBreakpoint" → "AddBreakpointAction".
+function actionTypeName(actionName: string): string {
+    return `${actionName.charAt(0).toUpperCase()}${actionName.slice(1)}Action`;
+}
+
+// Extract a complete `export type Name = {...};` block by tracking brace
+// depth. This emits balanced braces even when the type body contains
+// multiple nested objects (e.g. `parameters: { ... }`) — fixes the prior
+// regex-based extractor that could terminate at the first `};` it saw,
+// producing files with unclosed braces.
+function extractTypeBlock(source: string, typeName: string): string | undefined {
+    const exportRegex = new RegExp(
+        `export\\s+type\\s+${typeName}\\s*=\\s*\\{`,
+    );
+    const startMatch = source.match(exportRegex);
+    if (!startMatch || startMatch.index === undefined) return undefined;
+
+    // Capture any preceding line-comment block immediately above the type so
+    // documentation travels with the action.
+    let blockStart = startMatch.index;
+    const before = source.slice(0, blockStart);
+    const commentMatch = before.match(/((?:^|\n)(?:[ \t]*\/\/[^\n]*\n)+)$/);
+    if (commentMatch && commentMatch.index !== undefined) {
+        blockStart = commentMatch.index + (commentMatch[1].startsWith("\n") ? 1 : 0);
+    }
+
+    // Walk forward from the opening brace to find the matching closing brace,
+    // ignoring braces inside string literals.
+    const openBraceIdx = startMatch.index + startMatch[0].length - 1;
+    let depth = 1;
+    let i = openBraceIdx + 1;
+    let inString: '"' | "'" | "`" | undefined;
+    while (i < source.length && depth > 0) {
+        const ch = source[i];
+        if (inString) {
+            if (ch === "\\") {
+                i += 2;
+                continue;
+            }
+            if (ch === inString) inString = undefined;
+        } else {
+            if (ch === '"' || ch === "'" || ch === "`") inString = ch;
+            else if (ch === "{") depth++;
+            else if (ch === "}") depth--;
+        }
+        i++;
+    }
+    if (depth !== 0) return undefined;
+    // i now sits just past the matching `}`. Consume an optional `;`.
+    let end = i;
+    if (source[end] === ";") end++;
+    return source.slice(blockStart, end);
+}
+
+// Build the main schema TypeScript file when sub-groups exist. Removes any
+// action types that belong to a sub-group so each action lives in exactly
+// one file. Rewrites the top-level `XxxActions` union to only include
+// un-grouped actions (or emits a placeholder union if all actions moved).
+function buildMainSchemaWithSubGroups(
+    pascalName: string,
+    fullSchemaTs: string,
+    groupedActions: Set<string>,
+): string {
+    let out = fullSchemaTs;
+
+    // Remove each grouped action's type block from the main schema.
+    for (const actionName of groupedActions) {
+        const typeName = actionTypeName(actionName);
+        const block = extractTypeBlock(out, typeName);
+        if (block) {
+            out = out.replace(block, "").replace(/\n{3,}/g, "\n\n");
+        }
+    }
+
+    // Identify all action type names that are still in the schema (heuristic:
+    // any `export type XxxAction = {...}` that survived removal).
+    const remainingTypeNames: string[] = [];
+    const typeDeclRegex = /export\s+type\s+(\w+Action)\s*=\s*\{/g;
+    let m: RegExpExecArray | null;
+    while ((m = typeDeclRegex.exec(out)) !== null) {
+        remainingTypeNames.push(m[1]);
+    }
+
+    // Replace the existing top-level union (`export type <Pascal>Actions = ...;`)
+    // with one that only references the remaining types. If the union was not
+    // found, append one. If no remaining types, emit a placeholder so the
+    // file remains valid TypeScript that the dispatcher can register.
+    const unionRegex = new RegExp(
+        `export\\s+type\\s+${pascalName}Actions\\s*=[^;]+;`,
+    );
+    let unionDecl: string;
+    if (remainingTypeNames.length > 0) {
+        unionDecl = `export type ${pascalName}Actions =\n    | ${remainingTypeNames.join("\n    | ")};`;
+    } else {
+        // Placeholder union — sub-schemas carry all actions. The dispatcher
+        // routes to sub-action manifests; the main type just needs to compile.
+        unionDecl = `// All actions live in sub-schemas (see subActionManifests).\n// This placeholder keeps the main schema file valid.\nexport type ${pascalName}Actions = { actionName: "__placeholder__" };`;
+    }
+
+    if (unionRegex.test(out)) {
+        out = out.replace(unionRegex, unionDecl);
+    } else {
+        out = `${out.trimEnd()}\n\n${unionDecl}\n`;
+    }
+
+    return out.trimEnd() + "\n";
+}
+
+// Build the main grammar when sub-groups exist by removing any rule whose
+// action output references a grouped actionName. The grammar parser sees
+// only the rules for un-grouped actions; sub-schema grammars own the rest.
+function buildMainGrammarWithSubGroups(
+    fullGrammarAgr: string,
+    groupedActions: Set<string>,
+): string {
+    if (groupedActions.size === 0) return fullGrammarAgr;
+
+    // Split into top-level statements. Rules end with `;` at column 0.
+    // We keep header lines (imports, comments, `<Start>` rule) verbatim.
+    const lines = fullGrammarAgr.split("\n");
+    const out: string[] = [];
+    let buffer: string[] = [];
+    let inRule = false;
+
+    const flushBuffer = () => {
+        if (buffer.length === 0) return;
+        const block = buffer.join("\n");
+        // Drop the rule if its output object references any grouped actionName.
+        const actionNameMatch = block.match(/actionName\s*:\s*"([^"]+)"/);
+        if (
+            actionNameMatch &&
+            groupedActions.has(actionNameMatch[1])
+        ) {
+            // skip
+        } else {
+            out.push(block);
+        }
+        buffer = [];
+    };
+
+    for (const line of lines) {
+        const isRuleStart = /^\s*<\w+>\s*[:=]/.test(line);
+        if (isRuleStart && inRule) {
+            flushBuffer();
+        }
+        if (isRuleStart) {
+            inRule = true;
+        }
+        buffer.push(line);
+        if (inRule && line.trimEnd().endsWith(";")) {
+            flushBuffer();
+            inRule = false;
+        }
+    }
+    flushBuffer();
+
+    return out.join("\n");
 }
 
 // Build a sub-schema grammar file that includes only the rules relevant to
@@ -644,6 +828,11 @@ function buildPackageJson(
             concurrently: "^9.1.2",
             rimraf: "^6.0.1",
             typescript: "~5.4.5",
+            // The websocket-bridge handler imports types from `ws` (WebSocketServer,
+            // WebSocket), so the corresponding @types package is required.
+            ...(pattern === "websocket-bridge"
+                ? { "@types/ws": "^8.5.10" }
+                : {}),
         },
     };
 }
