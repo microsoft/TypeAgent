@@ -47,7 +47,7 @@ dependency in any IR is an instance of one of these.
 | 6   | `loop.state[v].initial`                       | the **outer** scope of the loop node | input, constant, scope, state\* of outer | bound producer in outer scope                                                     | schema of state variable `v`       | when the loop is entered (once)          |
 | 7   | `task.stateWrites[v]` (inside a body)         | the **body** scope                   | input (loop's), constant, scope, state   | bound producer in body scope (own-output reference allowed without `bind`)        | schema of state variable `v`       | when the writing task succeeds           |
 | 8   | `loop.outputs[k]`                             | the **body** scope at `@exit`        | input (loop's), constant, scope, state   | bound producer in body scope (must dominate every path that reaches `@exit`)      | field `k` of `loop.outputSchema`   | when the body reaches `@exit`            |
-| 9   | `workflow.outputBinding`                      | the **workflow** scope               | input, constant, scope                   | bound producer in workflow scope (must dominate every reached top-level terminal) | `workflow.output`                  | when the workflow reaches a top terminal |
+| 9   | `workflow.output`                             | the **workflow** scope               | input, constant, scope                   | bound producer in workflow scope (must dominate every reached top-level terminal) | `workflow.output`                  | when the workflow reaches a top terminal |
 
 (\*"state" is only legal when the enclosing scope is a body scope. The `scope`
 namespace was renamed from `node` when bound outputs landed; see
@@ -514,7 +514,7 @@ then scores each model.
 - **B3.** Iteration semantics. CFG (loop entry) + DDG (state reads) +
   state write commits.
 - **B4.** Error routing. CFG (`onError`) + DDG (`$from: "error"`).
-- **B5.** Output assembly. DDG (`outputBinding`) + CFG (which terminal
+- **B5.** Output assembly. DDG (`output`) + CFG (which terminal
   reached).
 
 #### Category C - Performance and parallelism
@@ -816,7 +816,11 @@ roadmap is what makes it durably correct.
 
 - Cross-namespace name reuse: silently allowed today; should the
   validator emit a soft warning?
-- Loop's `inputs` block uses the same word "input" as the workflow's
-  top-level `input` schema. Worth a rename for clarity?
+- ~~Loop's `inputs` block uses the same word "input" as the workflow's
+  top-level `input` schema. Worth a rename for clarity?~~ Resolved: the
+  workflow root field was renamed to `inputSchema` (the schema typing
+  the run input), the loop's `inputs` block remains a map of references,
+  and the namespace token `$from: "input"` reads from whichever the
+  enclosing scope declares.
 - For nested loops (post-v1), confirm the boundary-closure rule
   recorded in \u00a73.2.1 forward note.

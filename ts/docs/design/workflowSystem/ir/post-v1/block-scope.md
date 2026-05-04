@@ -45,7 +45,7 @@ contract. A new scope kind only specifies the cells in this table:
 | Carries declared `inputs` | yes             | yes (loop-level)     | yes                      | yes                  |
 | Carries `state`           | no              | yes                  | optional                 | no (proposed)        |
 | Carries `constants`       | yes             | no                   | yes                      | no (proposed)        |
-| Carries `outputs`         | `outputBinding` | `outputs` on `@exit` | yes                      | yes                  |
+| Carries `outputs`         | `output` | `outputs` on `@exit` | yes                      | yes                  |
 | Allowed sentinels         | none            | `@iterate`, `@exit`  | none                     | `@exit` only         |
 | `next: null` legality     | yes             | no                   | yes (terminates the sub) | no (use `@exit`)     |
 | Cross-scope visibility    | n/a             | only outer constants | only declared `inputs`   | only outer constants |
@@ -73,7 +73,7 @@ no changes to handler semantics, no changes to the reference model.
     }
   },
   "outputSchema": { /* shape of the block's output */ },
-  "outputBinding": { "$from": "node", "name": "ship" },
+  "output": { "$from": "node", "name": "ship" },
   "next": "notify",
   "onError": "buildShipError"
 }
@@ -81,7 +81,7 @@ no changes to handler semantics, no changes to the reference model.
 
 `buildShipError` is a handler in the **outer** scope. It catches any
 failure inside `body` that wasn't caught by an inner body-scope handler,
-plus any failure of the block's own `inputs` / `outputBinding` resolution.
+plus any failure of the block's own `inputs` / `output` resolution.
 
 Inside the block, individual nodes can still carry their own `onError`
 pointing to body-scope handlers, exactly like a loop body. Nested catch

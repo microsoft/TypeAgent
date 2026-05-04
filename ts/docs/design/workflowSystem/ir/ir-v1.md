@@ -308,8 +308,8 @@ The IR is a JSON document. Every example in this document is JSON.
   "kind": "workflow",
   "name": "string identifier",
   "version": "1",                 // IR schema version, not workflow version
-  "input":  { /* JSON Schema for workflow input */ },
-  "output": { /* JSON Schema for workflow output */ },
+  "inputSchema":  { /* JSON Schema for workflow input */ },
+  "outputSchema": { /* JSON Schema for workflow output */ },
   "types": {
     "<typeName>": { /* JSON Schema; referenced as { "$ref": "#/types/<typeName>" } */ }
   },
@@ -323,18 +323,28 @@ The IR is a JSON document. Every example in this document is JSON.
     "<nodeId>": { /* node object, see 3.3 */ }
   },
   "entry": "<nodeId>",            // single entry node
-  "outputBinding": { /* reference object that yields workflow output */ }
+  "output": { /* reference object that yields workflow output */ }
 }
 ```
 
-Required fields: `kind`, `name`, `version`, `input`, `output`, `nodes`,
-`entry`, `outputBinding`. `types` and `constants` are optional.
+Required fields: `kind`, `name`, `version`, `inputSchema`, `outputSchema`,
+`nodes`, `entry`, `output`. `types` and `constants` are optional.
+
+Note on naming. Three fields travel together on every value-producing
+scope and on every value-producing node: `output` is the **value**
+(a reference object, resolved at scope or node exit), `outputSchema`
+is the **type** (a JSON Schema the resolved value must satisfy), and
+`bind` (on a node) is the **outer-scope name** the value is published
+under. The workflow root has the first two and is itself the outer
+scope, so it has no `bind`. The same triple appears on `loop` nodes
+and, mirrored on the input side, on `task` and `handler` nodes
+(`inputs` + `inputSchema`).
 
 #### 3.1.1 Shared schemas (`types`)
 
-Any JSON Schema field in the IR (`input`, `output`, `inputSchema`,
-`outputSchema`, `selectorSchema`, `state[*].schema`, `constants[*].schema`,
-and nested positions inside any of these) may be replaced by a reference to a
+Any JSON Schema field in the IR (`inputSchema`, `outputSchema`,
+`selectorSchema`, `state[*].schema`, `constants[*].schema`, and nested
+positions inside any of these) may be replaced by a reference to a
 named entry in the workflow's `types` block:
 
 ```jsonc
@@ -402,14 +412,14 @@ namespaces, one per `$from` discriminant. The first four are scope-wide;
 `error` and `trigger` are pseudo-sources legal only on a `handler` node's
 `inputs` (see §3.8).
 
-| `$from`      | Declared at                                        | Visible in                       | Frame (single-assignment lifetime)                                                             |
-| ------------ | -------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `"input"`    | Workflow `input` block, or a loop's `inputs` block | The scope it belongs to          | Workflow input: the run. Loop `inputs`: evaluated once per loop activation, stable thereafter. |
-| `"constant"` | Workflow root `constants`                          | Every scope                      | The run.                                                                                       |
-| `"scope"`    | A node's `bind` field publishes the node's output  | The scope the node belongs to    | One execution of the binding node. In a loop body, re-bound each iteration.                    |
-| `"state"`    | The enclosing loop's `state` block                 | That loop's body scope           | One iteration. Frame transition is `@iterate`, which evaluates `iterateState` (§3.7.1).        |
-| `"error"`    | Pseudo-source; not declared                        | A `handler` node's `inputs` only | One handler invocation; reads the failure value of the trigger (§3.8).                         |
-| `"trigger"`  | Pseudo-source; not declared                        | A `handler` node's `inputs` only | One handler invocation; reads an input field of the triggering node (§3.8).                    |
+| `$from`      | Declared at                                                             | Visible in                       | Frame (single-assignment lifetime)                                                             |
+| ------------ | ----------------------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `"input"`    | Workflow `inputSchema` typing the run input, or a loop's `inputs` block | The scope it belongs to          | Workflow input: the run. Loop `inputs`: evaluated once per loop activation, stable thereafter. |
+| `"constant"` | Workflow root `constants`                                               | Every scope                      | The run.                                                                                       |
+| `"scope"`    | A node's `bind` field publishes the node's output                       | The scope the node belongs to    | One execution of the binding node. In a loop body, re-bound each iteration.                    |
+| `"state"`    | The enclosing loop's `state` block                                      | That loop's body scope           | One iteration. Frame transition is `@iterate`, which evaluates `iterateState` (§3.7.1).        |
+| `"error"`    | Pseudo-source; not declared                                             | A `handler` node's `inputs` only | One handler invocation; reads the failure value of the trigger (§3.8).                         |
+| `"trigger"`  | Pseudo-source; not declared                                             | A `handler` node's `inputs` only | One handler invocation; reads an input field of the triggering node (§3.8).                    |
 
 Because the namespaces are disjoint, the same name may appear in more than one
 of them without conflict. For example, a workflow may have an input field
@@ -552,7 +562,7 @@ Not every node kind produces a value worth binding:
 - `task` and `handler` nodes produce values; `bind` is the publishing switch.
 - `branch` nodes produce no value (they are pure control flow); `bind` is
   not allowed on a branch.
-- `loop` nodes produce a value (the resolved `outputBinding` reference); `bind`
+- `loop` nodes produce a value (the resolved `output` reference); `bind`
   works on the loop node like any other value-producing node.
 
 ### 3.4 Reference objects
@@ -698,7 +708,7 @@ keeps the branch node a pure structural construct.
     "nodes": { "<bodyNodeId>": { /* node object */ } },
     "entry": "<bodyNodeId>"
   },
-  "outputBinding": { /* reference object resolved in body scope at @exit */ },
+  "output": { /* reference object resolved in body scope at @exit */ },
   "outputSchema": { /* JSON Schema */ },
   "iterateState": {
     "<stateVarName>": { /* reference object resolved in body scope at @iterate */ }
@@ -706,7 +716,7 @@ keeps the branch node a pure structural construct.
   "maxIterations": 1000,
   "next": "<nodeId>" | null,
   "onError": "<nodeId>" | null,
-  "bind": "<scopeVarName>" | null    // optional; loop output is the resolved `outputBinding` value
+  "bind": "<scopeVarName>" | null    // optional; loop output is the resolved `output` value
 }
 ```
 
@@ -727,17 +737,17 @@ Key points:
   the moment `@iterate` is taken. There is no implicit "node output
   overwrites state" rule and no per-node write declaration; every
   cross-iteration value flows through `iterateState`.
-- `outputBinding` is resolved when the body reaches `@exit`. It is a single
+- `output` is resolved when the body reaches `@exit`. It is a single
   reference object resolved in the body scope (typically against `state`,
   since per-iteration scope variables do not survive across iterations),
-  exactly the same shape as the workflow root's `outputBinding` (§3.1).
+  exactly the same shape as the workflow root's `output` (§3.1).
   Loops that need to publish more than one value wrap them in an object
   built by a tail body node and bound under one name; the loop's
-  `outputBinding` then references that single name. This keeps every
+  `output` then references that single name. This keeps every
   value-producing scope (workflow, loop) on one shape.
 - `maxIterations` is required and bounded; if exceeded, the loop fails with
   a well-known error type (consumable by `onError`).
-- `bind` on the loop publishes the resolved `outputBinding` value as a scope
+- `bind` on the loop publishes the resolved `output` value as a scope
   variable in the **outer** scope, just like any other value-producing node.
 
 #### 3.7.1 Iterate state
@@ -805,7 +815,7 @@ case targets) **inside a loop body**. They are explicit because P5 scenario
 - `@iterate` - evaluate the loop's `iterateState` against the current body
   scope to compute the next iteration's state (§3.7.1), increment the
   iteration counter, and re-enter at `body.entry`.
-- `@exit` - leave the loop; resolve `outputBinding` against the final state
+- `@exit` - leave the loop; resolve `output` against the final state
   and body-scope values, then continue at the loop's outer `next`.
 
 There are no other sentinels in v1.
@@ -941,12 +951,12 @@ into a discriminated union; that work is post-v1.
 ```
 Node     := TaskNode | BranchNode | LoopNode | HandlerNode
 Scope    := { nodes: Map<Id, Node>, entry: Id }
-Workflow := { name, version, input, output, constants?, ...Scope, outputBinding }
+Workflow := { name, version, inputSchema, outputSchema, constants?, ...Scope, output }
 ```
 
 Four node kinds, one scope shape, one reference form, two sentinels, one
-bind switch, one `outputBinding` shape shared by every value-producing
-scope. This is the entire v1 surface.
+bind switch, one `output` reference shape shared by every value-producing
+scope (workflow root, loop). This is the entire v1 surface.
 
 ---
 
@@ -1043,8 +1053,8 @@ reference will resolve) for any execution path.
    declared type is a structural subtype of the field type at the consumer's
    `inputSchema`. When multiple binders contribute to the same name (phi
    merge), every binder's `outputSchema` must be a structural subtype of the
-   consumer's expected type. `outputBinding`'s reference type is checked
-   against the workflow's `output` schema. Branch `selectorSchema` checks
+   consumer's expected type. `output`'s reference type is checked
+   against the workflow's `outputSchema`. Branch `selectorSchema` checks
    against the reference type; `cases` keys must be valid values in
    `selectorSchema`. Fast path: if all producer and consumer positions are
    the same `"#/types/<typeName>"` reference, compatibility holds by
@@ -1067,14 +1077,15 @@ reference will resolve) for any execution path.
     `{ "$from": "state", "name": "<self>" }` for every iteration is a
     candidate to be a workflow `constant` instead; the validator MAY warn
     but does not reject.
-12. **Output binding pass.** Every `outputBinding` reference (the workflow
+12. **Output binding pass.** Every `output` reference (the workflow
     root's, and each loop node's) must resolve to a bound producer or to a
     state value: a `$from: "scope"` reference targets a node with `bind`
     set; a `$from: "state"` reference (legal only for a loop's
-    `outputBinding`) targets a declared state variable. The reference's
-    resolved type must be compatible with the corresponding `outputSchema`
-    (workflow `output` for the root; the loop's `outputSchema` for a loop)
-    via the §4.2 subtype relation.
+    `output`) targets a declared state variable. The reference's
+    resolved type must be compatible with the scope's `outputSchema`
+    (the workflow root's `outputSchema` for the workflow `output`; the
+    loop's `outputSchema` for a loop's `output`) via the §4.2 subtype
+    relation.
 
 ### 4.2 Compatibility (the type relation)
 
@@ -1119,7 +1130,7 @@ to post-v1 (§2.2).
 
 ### 5.1 Top-level execution
 
-1. The engine receives the workflow's typed input (validated against `input`).
+1. The engine receives the workflow's typed input (validated against `inputSchema`).
 2. It begins at `entry`.
 3. For each visited node N:
    a. Resolve `inputs` from references (in N's scope).
@@ -1129,7 +1140,7 @@ to post-v1 (§2.2).
    d. If N fails: if `onError` is set, route to that handler with the error
    bound to `$from: "error"`; otherwise propagate failure to the enclosing
    scope. A loop body propagating failure fails the loop node itself.
-4. When a top-level terminal is reached, resolve `outputBinding` and return
+4. When a top-level terminal is reached, resolve `output` and return
    its value as the workflow output.
 
 ### 5.2 Task execution
@@ -1166,7 +1177,7 @@ output, and other nodes never reference a branch as a data source.
      body scope to produce the next iteration's state; validate each
      resolved value against its `state[*].schema`; increment `i`; restart
      at `body.entry` with the new state.
-   - On `@exit`: resolve `outputBinding` against the final body scope (state +
+   - On `@exit`: resolve `output` against the final body scope (state +
      last-iteration node values), validate against `outputSchema`, and
      proceed to the loop node's outer `next`.
 5. Failure inside the body that is not caught by a body-scope handler
@@ -1303,8 +1314,8 @@ poor memory or latency profiles on realistic workflows.
       "required": ["summary"],
     },
   },
-  "input": { "$ref": "#/types/Url" },
-  "output": { "$ref": "#/types/Summary" },
+  "inputSchema": { "$ref": "#/types/Url" },
+  "outputSchema": { "$ref": "#/types/Summary" },
   "entry": "fetch",
   "nodes": {
     "fetch": {
@@ -1332,13 +1343,13 @@ poor memory or latency profiles on realistic workflows.
       "bind": "result",
     },
   },
-  "outputBinding": { "$from": "scope", "name": "result" },
+  "output": { "$from": "scope", "name": "result" },
 }
 ```
 
-Note how `Url` is shared between the workflow `input` and the `fetch` task's
-`inputSchema`, and `Summary` is shared between the workflow `output`, the
-`summarize` task's `outputSchema`, and (transitively, via `outputBinding`)
+Note how `Url` is shared between the workflow `inputSchema` and the `fetch` task's
+`inputSchema`, and `Summary` is shared between the workflow `outputSchema`, the
+`summarize` task's `outputSchema`, and (transitively, via `output`)
 the workflow result. The compatibility pass collapses each ref-equal pair to
 an identity check.
 
@@ -1367,8 +1378,8 @@ an identity check.
       "required": ["label"],
     },
   },
-  "input": { "$ref": "#/types/Doc" },
-  "output": { "$ref": "#/types/Result" },
+  "inputSchema": { "$ref": "#/types/Doc" },
+  "outputSchema": { "$ref": "#/types/Result" },
   "entry": "classify",
   "nodes": {
     "classify": {
@@ -1416,7 +1427,7 @@ an identity check.
       "bind": "final",
     },
   },
-  "outputBinding": { "$from": "scope", "name": "final" },
+  "output": { "$from": "scope", "name": "final" },
 }
 ```
 
@@ -1436,7 +1447,7 @@ compatible output that `format` can consume - this is P1 scenario 3 (diamond
 merge).
 
 The `classifyError` handler reads the original `doc` via `$from: "trigger"`
-rather than requiring the workflow `input` to be threaded through `classify`'s
+rather than requiring the workflow `inputSchema` field `doc` to be threaded through `classify`'s
 bound output - the handler's needs do not leak into `classify`'s contract.
 Both `format` and `classifyError` bind the workflow result as `final`; only
 one of them runs in any given execution, so the bind names do not collide at
@@ -1536,7 +1547,7 @@ be declared in the enclosing workflow's `types` block, e.g.:
       },
     },
   },
-  "outputBinding": { "$from": "state", "name": "draft" },
+  "output": { "$from": "state", "name": "draft" },
   "outputSchema": { "$ref": "#/types/Article" },
   "iterateState": {
     "draft": { "$from": "scope", "name": "write", "path": ["text"] },
@@ -1589,9 +1600,9 @@ reference them.
 | Principle | Design feature(s) that satisfy it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | P1        | **Intra-IR axis:** single reference form with named source; static dominator pass over an acyclic intra-scope CFG; structural type compatibility pass; `optional` flag for declared partial deps; finite `cases`+`default`; SSA-style phi soundness on shared bound names. **External-contract axis:** registry-gated IR/task drift pass (§4.1 pass 3) checks each task node's `inputSchema`/`outputSchema` against the registered task's contract using the §4.2 subtype relation; runtime output validation (§5.2) is the defense-in-depth layer when the registry is absent at validation time. |
-| P2        | Only six declared `$from` sources (input, constant, scope, state, error, trigger); no ambient/global state; cross-iteration data is a declared `state` variable with declared writes; outputs flow via `outputBinding`; bound outputs make the data-flow contract explicit per node                                                                                                                                                                                                                                                                                                                |
+| P2        | Only six declared `$from` sources (input, constant, scope, state, error, trigger); no ambient/global state; cross-iteration data is a declared `state` variable with declared writes; outputs flow via `output`; bound outputs make the data-flow contract explicit per node                                                                                                                                                                                                                                                                                                                       |
 | P3        | Distinct node `kind`s for `task`/`branch`/`loop`/`handler`; loop bodies are a structural sub-scope, not a flat cycle; iteration is `@iterate`, not a back-edge; pure cycles are rejected; `bind` mirrors "some steps publish, some don't" from real programs                                                                                                                                                                                                                                                                                                                                       |
-| P4        | Body scope closure (no cross-scope name reach); declared loop `inputs`/`outputBinding`/`state`; per-scope handlers; localizable validation errors with scope paths; hide-by-default `bind` keeps internal computations out of the scope's contract                                                                                                                                                                                                                                                                                                                                                 |
+| P4        | Body scope closure (no cross-scope name reach); declared loop `inputs`/`output`/`state`; per-scope handlers; localizable validation errors with scope paths; hide-by-default `bind` keeps internal computations out of the scope's contract                                                                                                                                                                                                                                                                                                                                                        |
 | P5        | Required `kind` discriminant; required explicit `next` in loop bodies; explicit sentinels; required `default` in branches; one reference form (no shorthand/inference); declared `maxIterations`; explicit `bind` makes value lifetime statically predictable                                                                                                                                                                                                                                                                                                                                      |
 
 ---
@@ -1730,14 +1741,14 @@ constants through the same root closure, so adding blocks does not require
 revisiting this decision. If block-scoped constants ever become motivated,
 they land as the additive per-scope extension above.
 
-### 8.10 Scope output: explicit `outputBinding`
+### 8.10 Scope output: explicit `output`
 
 - **Chosen:** every value-producing scope (workflow root, loop) names its
-  exit value with a single `outputBinding` reference resolved at scope
+  exit value with a single `output` reference resolved at scope
   termination, validated against the scope's `outputSchema`. The shape is
   identical for both scopes. A scope that needs to publish multiple values
   wraps them in an object built by a tail node and bound under one name;
-  `outputBinding` then references that single name.
+  `output` then references that single name.
 - Alt A: implicit "the last node's output". Rejected by P5: which node is
   "last" when there are multiple terminals?
 - Alt B: a designated `output` node kind. Rejected: extra kind for what is
