@@ -26,6 +26,33 @@ type Pending = {
 
 export type HelperRpcError = Error & { code?: number };
 
+export type EventType =
+    | "Invoked"
+    | "ValueChanged"
+    | "ToggleStateChanged"
+    | "StructureChanged";
+
+export type ControlSnapshot = {
+    controlType: string;
+    name?: string;
+    automationId?: string;
+    className?: string;
+    value?: string;
+    toggleState?: string;
+};
+
+export type CapturedEvent = {
+    subscriptionId: string;
+    eventType: string;
+    selector: string;
+    controlSnapshot?: ControlSnapshot;
+    newValue?: string;
+    changeType?: string;
+    timestamp: string;
+};
+
+export type EventHandler = (evt: CapturedEvent) => void;
+
 export interface HelperClientOptions {
     binaryPath?: string;
     debug?: boolean;
@@ -62,6 +89,7 @@ function resolveBinary(opts: HelperClientOptions): string {
 export class HelperClient {
     private nextId = 1;
     private readonly pending = new Map<number, Pending>();
+    private readonly eventHandlers = new Set<EventHandler>();
     private exited = false;
     private exitCode: number | null = null;
 
@@ -122,6 +150,8 @@ export class HelperClient {
         }
         let msg: {
             id?: number | string | null;
+            method?: string;
+            params?: unknown;
             result?: unknown;
             error?: { code: number; message: string; data?: unknown };
         };
@@ -135,7 +165,18 @@ export class HelperClient {
         }
         const id = typeof msg.id === "number" ? msg.id : null;
         if (id == null) {
-            // Notifications not handled in slice 1.
+            // JSON-RPC notification (server → client).
+            if (msg.method === "event.fired" && msg.params) {
+                for (const h of this.eventHandlers) {
+                    try {
+                        h(msg.params as CapturedEvent);
+                    } catch (e) {
+                        if (this.debug) {
+                            process.stderr.write(`[uia-helper handler-throw] ${e}\n`);
+                        }
+                    }
+                }
+            }
             return;
         }
         const p = this.pending.get(id);
@@ -152,6 +193,17 @@ export class HelperClient {
         } else {
             p.resolve(msg.result);
         }
+    }
+
+    /**
+     * Register a callback for `event.fired` notifications. Returns a
+     * disposer that removes the handler.
+     */
+    onEvent(handler: EventHandler): () => void {
+        this.eventHandlers.add(handler);
+        return () => {
+            this.eventHandlers.delete(handler);
+        };
     }
 
     private call<T = unknown>(method: string, params?: unknown): Promise<T> {
@@ -307,6 +359,19 @@ export class HelperClient {
 
     snapshotDelete(p: { snapshotDir: string }): Promise<{ ok: true }> {
         return this.call("snapshot.delete", p);
+    }
+
+    eventsSubscribe(p: {
+        root: string;
+        eventTypes: EventType[];
+    }): Promise<{ subscriptionId: string }> {
+        return this.call("events.subscribe", p);
+    }
+
+    eventsUnsubscribe(p: {
+        subscriptionId: string;
+    }): Promise<{ ok: boolean }> {
+        return this.call("events.unsubscribe", p);
     }
 
     /**

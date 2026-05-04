@@ -27,6 +27,36 @@ internal sealed class JsonRpcServer
         _dispatch = dispatch;
     }
 
+    /// <summary>
+    /// Send a JSON-RPC notification (server → client, no id). Safe to call
+    /// from background threads (UIA event handler thread, etc.).
+    /// </summary>
+    public void Notify(string method, object? @params)
+    {
+        var msg = new RpcNotification { Method = method, Params = @params };
+        string json;
+        try
+        {
+            json = JsonSerializer.Serialize(msg, JsonOpts);
+        }
+        catch
+        {
+            return; // best-effort
+        }
+        lock (_writeLock)
+        {
+            try
+            {
+                _output.WriteLine(json);
+                _output.Flush();
+            }
+            catch
+            {
+                // Pipe may be closed during shutdown; ignore.
+            }
+        }
+    }
+
     public async Task RunAsync(CancellationToken ct = default)
     {
         while (!ct.IsCancellationRequested)

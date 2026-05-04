@@ -25,6 +25,7 @@ internal static class Program
         Methods.Register.All(dispatch);
 
         var server = new JsonRpcServer(Console.In, Console.Out, dispatch);
+        Notifier.Init(server);
         await server.RunAsync(cts.Token).ConfigureAwait(false);
         return 0;
     }
