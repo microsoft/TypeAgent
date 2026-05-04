@@ -137,7 +137,13 @@ authoring-time brevity.
      mechanism preserves it in principle.
   2. Two ways to do the same thing (with and without the schema). Slight
      P5 surprise: a reader cannot tell from one node whether the schema
-     is the canonical contract or a narrowing.
+     is the canonical contract or a narrowing. (Variance lens, IR §1.3
+     / §10: the same `inputSchema` field shape carries a context-
+     dependent rule - canonical-contract vs. narrowing-of-loader-
+     expansion - which is the "one label, two rules" pattern. The
+     trade-off is real but small here because the loader expansion
+     reduces both readings to the same canonical form before the drift
+     check runs.)
   3. Validator complexity: now does subtype-of-registry-or-defaults-to,
      plus the existing producer-to-consumer subtyping.
 

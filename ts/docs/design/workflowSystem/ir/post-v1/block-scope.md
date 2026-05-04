@@ -73,7 +73,7 @@ no changes to handler semantics, no changes to the reference model.
     }
   },
   "outputSchema": { /* shape of the block's output */ },
-  "outputs": { "shipped": { "$from": "node", "name": "ship" } },
+  "outputBinding": { "$from": "node", "name": "ship" },
   "next": "notify",
   "onError": "buildShipError"
 }
@@ -81,7 +81,7 @@ no changes to handler semantics, no changes to the reference model.
 
 `buildShipError` is a handler in the **outer** scope. It catches any
 failure inside `body` that wasn't caught by an inner body-scope handler,
-plus any failure of the block's own `inputs` / `outputs` resolution.
+plus any failure of the block's own `inputs` / `outputBinding` resolution.
 
 Inside the block, individual nodes can still carry their own `onError`
 pointing to body-scope handlers, exactly like a loop body. Nested catch

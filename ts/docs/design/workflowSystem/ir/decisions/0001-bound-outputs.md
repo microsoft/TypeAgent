@@ -105,7 +105,23 @@ Three options:
 
 **Decision (v1): (c).** `bind: true` is shorthand for the node id;
 `bind: "<name>"` overrides. Common case has zero surface cost; rename
-case is opt-in.
+case is opt-in. Variance lens (IR §1.3 / §10): the chosen design is
+one concept (bound name) parameterized by "use node id" vs. "use
+explicit alias". The rejected (a) and the implicit-publication design
+in §1's K-discussion both collapse two rules (CFG identity + DDG
+publication) under one label - one label, two concepts.
+
+**Update (v1, post-revision): the `bind: true` shorthand was removed.**
+The variance lens applied a second time to the surface itself: `bind:
+"<name>"` and `bind: true` carry one publication rule but two writing
+forms; the boolean is sugar by the §1.2 "no sugar" test, and the
+shortcut it bought (saving a few characters) does not earn its second
+writing form. The chosen v1 surface is `bind: "<name>" | null` only;
+authors who want "publish under the node id" write the id explicitly.
+The (c) framing above is preserved as the historical reasoning that
+led to (b)-with-an-alias-allowed; the conclusion of that re-analysis
+is (b) outright. This decision document records the shape of the
+thought; IR §8.15 carries the current normative statement.
 
 ### K4. Multiple slots per node
 

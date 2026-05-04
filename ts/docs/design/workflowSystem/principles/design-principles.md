@@ -262,6 +262,7 @@ Testable: look at the IR structure, then look at the execution trace and the set
 - _Why P3 requires a different expression:_ An IR where every step computes intermediate values used only by itself looks structurally identical to one where every intermediate is part of the inter-node contract. The reader cannot tell, from the IR structure, which values are shared and which are step-local. The data-publication side of structural correspondence is lost: publication becomes a topological accident (any node placed before a potential consumer is implicitly published) rather than an intentional structural choice.
 - _Alternative:_ The IR distinguishes values that participate in its inter-node namespace from values that do not. Step-internal values do not appear as referenceable names; published values do.
 - _Tradeoff:_ An extra structural declaration when sharing is intended. In return, the IR structure communicates "this step contributes these values to the surrounding scope; this step contributes none," mirroring the same distinction real programs make between locals and visible outputs.
+- _Variance test (see top of this file, and IR §1.3 / §10):_ "every node id is implicitly a name" makes one label (the node id) carry both CFG identity and DDG publication. Two behavioral rules under one label, so two concepts wearing one name. The hide-by-default `bind` design (IR §8.15, decision 0001) is the variance-correct alternative.
 
 ### Outside the boundary
 
@@ -337,6 +338,7 @@ A part can be understood, validated, and tested when both sides of its contract 
 - _Why P4 requires a different expression:_ The intermediate node's mere presence expands the set of names other nodes in the scope can in principle reference. A future change that renames or removes the intermediate then becomes a contract change rather than a local edit, because some other node may have started referencing the implicitly-published name. The part's contribution to the scope's namespace is not declared at the part's boundary; it is a side effect of being placed in the scope.
 - _Alternative:_ Each node declares what it contributes to the enclosing scope's namespace. Inserting a node that declares no contribution leaves the scope's contract unchanged. Removing or renaming such a node is a local edit by construction.
 - _Tradeoff:_ A declaration is required when sharing is wanted, instead of being free. In return, a node's external surface is exactly what the node declares, and locality is preserved across edits.
+- _Variance test (see top of this file, and IR §1.3 / §10):_ "placed in scope" carrying both "runs here" and "contributes to namespace" is one label, two rules. The bind-to-share rule splits these into one parameterized concept (placement = always; namespace contribution = only when `bind` is set).
 
 ### Outside the boundary
 
@@ -403,6 +405,7 @@ Both axes apply the same surprise test: would a reader who understands the gener
 - _Why P5 requires a different expression:_ A reader looking at a node cannot predict whether its output will be retained after the node completes; the answer depends on whether some later node, possibly far away in the IR, eventually references it. The reader has to perform a downstream usage analysis to predict liveness, and a conservative engine may simply retain every value to scope end. The lifetime axis is not predictable from local reading.
 - _Alternative:_ The IR distinguishes outputs that participate in its inter-node namespace from outputs that do not. The reader sees, locally at the producing node, whether the output is retained for consumers or releasable on completion. Engine liveness becomes a local reading, not a global analysis.
 - _Tradeoff:_ An extra declaration per shared output. But both reader and engine can predict liveness without traversing the rest of the IR.
+- _Variance test (see top of this file, and IR §1.3 / §10):_ "completed" carrying both "finished executing" and "value still live" is one label, two rules - and which rule applies depends on a global usage scan. The `bind` switch splits these so that lifetime is locally readable at the producer.
 
 ### Outside the boundary
 

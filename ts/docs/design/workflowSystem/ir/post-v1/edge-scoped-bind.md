@@ -71,7 +71,7 @@ This means:
 - **Name resolution stays scope-flat per namespace.** The reader sees
   `$from: "edge"` and knows the lookup rule without looking at the CFG
   context (P5 holds: "predict by reading").
-- **No third `bind` form.** Producers keep `bind: "<name>" | true | null`.
+- **No third `bind` form.** Producers keep `bind: "<name>" | null`.
   Visibility is a read-side concept.
 - **No interaction with phi merge.** `B(X)` for a `$from: "scope", name: X`
   reference is unchanged; edge-scoped reads aren't in any binder set.
@@ -107,7 +107,7 @@ The legality column is what carries the new validator rule. See §6.
   "task": "http.get",
   "inputs": { "url": { "$from": "input", "name": "url" } },
   "next": "summarize",
-  "bind": true                       // produces the value
+  "bind": "fetch"                    // produces the value
 },
 "summarize": {
   "kind": "task",
@@ -220,7 +220,7 @@ must enter via the scope's declared `inputs`, exactly as today.
   working unchanged.
 - **Dominator pass.** Edge-scope adds a one-step lookup, not a
   dominance query. The pass 6 algorithm is the same.
-- **Producer's `bind`.** Still `"<name>" | true | null`. Still publishes
+- **Producer's `bind`.** Still `"<name>" | null`. Still publishes
   to the scope namespace. Edge-scope is a parallel read mechanism, not
   a replacement.
 - **Refactor semantics.** Inserting a node between producer and

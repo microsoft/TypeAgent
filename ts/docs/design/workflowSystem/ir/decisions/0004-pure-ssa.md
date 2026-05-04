@@ -299,7 +299,9 @@ If accumulator patterns become common enough that the verbosity is a
 real friction point, the resolution is **not** to weaken the SSA
 property. It is to introduce a new namespace with its own frame rules
 (see §7 Alt C below) so the SSA invariant for the existing
-namespaces stays intact.
+namespaces stays intact. This move is the variance lens applied (IR
+§1.3 / §10): a different behavioral rule earns its own concept rather
+than relaxing an existing concept's rule into a context-dependent one.
 
 Both costs above are paid by codegen and by the LLM-direct-to-IR
 fallback. §5 records why that audience distribution is the right

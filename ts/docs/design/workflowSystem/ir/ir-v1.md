@@ -418,8 +418,7 @@ scope; a reference always names which namespace it reads from via `$from`.
 The validator does not warn on cross-namespace name reuse, but tools may.
 
 **The `scope` namespace is hide-by-default.** A node's output is **not**
-addressable from other nodes unless the node declares `bind: "<name>"` (or
-`bind: true`, which uses the node id as the bound name; see section 3.3).
+addressable from other nodes unless the node declares `bind: "<name>"`.
 Nodes that do not bind execute normally; their outputs simply have no name
 in the scope and cannot be referenced. This is the central data-visibility
 rule of v1: **bind to share, omit to hide.**
@@ -516,7 +515,7 @@ Every node carries a discriminant `kind` (P5: self-describing).
   "inputs":  { /* per-kind: see below */ },
   "next":    /* per-kind: see below */,
   "onError": "<nodeId>" | null,   // optional; null/absent = propagate
-  "bind":    "<scopeVarName>" | true | null   // optional; default null/absent = unbound (hidden)
+  "bind":    "<scopeVarName>" | null   // optional; default null/absent = unbound (hidden)
 }
 ```
 
@@ -529,10 +528,13 @@ in the same scope.
 other nodes via `$from: "scope"`. The value of `bind` may be:
 
 - A non-empty string: the bound name.
-- `true`: a shorthand for "bind under my own node id".
 - Absent or `null`: the node's output is **not** addressable by other nodes.
   The node may still execute, sequence successors via `next`, and have side
   effects, but no reference can read its value.
+
+There is no boolean shorthand (the earlier `bind: true` form was removed
+under the §1.3 variance lens; see §8.15 "Removed sugar"). Authors who
+want to publish under the node id write the id explicitly: `bind: "<nodeId>"`.
 
 **Multiple binders, one name (SSA-style merge).** A single bound name may be
 produced by more than one node in the same scope **if no two such binders
@@ -550,8 +552,8 @@ Not every node kind produces a value worth binding:
 - `task` and `handler` nodes produce values; `bind` is the publishing switch.
 - `branch` nodes produce no value (they are pure control flow); `bind` is
   not allowed on a branch.
-- `loop` nodes produce a value (the resolved `outputs` block); `bind` works
-  on the loop node like any other value-producing node.
+- `loop` nodes produce a value (the resolved `outputBinding` reference); `bind`
+  works on the loop node like any other value-producing node.
 
 ### 3.4 Reference objects
 
@@ -629,7 +631,7 @@ validator, and analyzers in agreement on a single observable behavior
   },
   "next": "<nodeId>" | null,          // null => terminal (top-level only)
   "onError": "<nodeId>" | null,
-  "bind": "<scopeVarName>" | true | null    // optional; see section 3.3
+  "bind": "<scopeVarName>" | null    // optional; see section 3.3
 }
 ```
 
@@ -696,9 +698,7 @@ keeps the branch node a pure structural construct.
     "nodes": { "<bodyNodeId>": { /* node object */ } },
     "entry": "<bodyNodeId>"
   },
-  "outputs": {
-    "<outputFieldName>": { /* reference object resolved in body scope at @exit */ }
-  },
+  "outputBinding": { /* reference object resolved in body scope at @exit */ },
   "outputSchema": { /* JSON Schema */ },
   "iterateState": {
     "<stateVarName>": { /* reference object resolved in body scope at @iterate */ }
@@ -706,7 +706,7 @@ keeps the branch node a pure structural construct.
   "maxIterations": 1000,
   "next": "<nodeId>" | null,
   "onError": "<nodeId>" | null,
-  "bind": "<scopeVarName>" | true | null    // optional; loop output is the resolved `outputs` block
+  "bind": "<scopeVarName>" | null    // optional; loop output is the resolved `outputBinding` value
 }
 ```
 
@@ -727,12 +727,17 @@ Key points:
   the moment `@iterate` is taken. There is no implicit "node output
   overwrites state" rule and no per-node write declaration; every
   cross-iteration value flows through `iterateState`.
-- `outputs` is resolved when the body reaches `@exit`. Each field is a
-  reference resolved in the body scope (typically against `state`, since
-  per-iteration scope variables do not survive across iterations).
+- `outputBinding` is resolved when the body reaches `@exit`. It is a single
+  reference object resolved in the body scope (typically against `state`,
+  since per-iteration scope variables do not survive across iterations),
+  exactly the same shape as the workflow root's `outputBinding` (§3.1).
+  Loops that need to publish more than one value wrap them in an object
+  built by a tail body node and bound under one name; the loop's
+  `outputBinding` then references that single name. This keeps every
+  value-producing scope (workflow, loop) on one shape.
 - `maxIterations` is required and bounded; if exceeded, the loop fails with
   a well-known error type (consumable by `onError`).
-- `bind` on the loop publishes the resolved `outputs` value as a scope
+- `bind` on the loop publishes the resolved `outputBinding` value as a scope
   variable in the **outer** scope, just like any other value-producing node.
 
 #### 3.7.1 Iterate state
@@ -800,8 +805,8 @@ case targets) **inside a loop body**. They are explicit because P5 scenario
 - `@iterate` - evaluate the loop's `iterateState` against the current body
   scope to compute the next iteration's state (§3.7.1), increment the
   iteration counter, and re-enter at `body.entry`.
-- `@exit` - leave the loop; resolve `outputs` against the final state and
-  body-scope values, then continue at the loop's outer `next`.
+- `@exit` - leave the loop; resolve `outputBinding` against the final state
+  and body-scope values, then continue at the loop's outer `next`.
 
 There are no other sentinels in v1.
 
@@ -818,7 +823,7 @@ There are no other sentinels in v1.
     "error":      { "$from": "error" }   // see below
   },
   "next": "<nodeId>" | null,
-  "bind": "<scopeVarName>" | true | null   // optional; handler is a value-producing node
+  "bind": "<scopeVarName>" | null   // optional; handler is a value-producing node
 }
 ```
 
@@ -940,7 +945,8 @@ Workflow := { name, version, input, output, constants?, ...Scope, outputBinding 
 ```
 
 Four node kinds, one scope shape, one reference form, two sentinels, one
-bind switch. This is the entire v1 surface.
+bind switch, one `outputBinding` shape shared by every value-producing
+scope. This is the entire v1 surface.
 
 ---
 
@@ -982,8 +988,9 @@ reference will resolve) for any execution path.
      See §8.16.
 4. **Name resolution pass.** Within each scope: every reference's target name
    exists; sentinels are only used inside loop bodies; `onError` targets a
-   `handler` in the same scope; `entry` names an existing node. `bind: true`
-   resolves to the node id. `branch` nodes do not declare `bind`.
+   `handler` in the same scope; `entry` names an existing node. `bind`, when
+   present, is a non-empty string (no boolean shorthand in v1; see §8.15).
+   `branch` nodes do not declare `bind`.
    `handler` nodes do not declare `onError` (no recursive handler chains
    in v1; see §3.8).
    References with `$from: "scope"` resolve to at least one binder of that
@@ -1060,10 +1067,14 @@ reference will resolve) for any execution path.
     `{ "$from": "state", "name": "<self>" }` for every iteration is a
     candidate to be a workflow `constant` instead; the validator MAY warn
     but does not reject.
-12. **Output binding pass.** `outputBinding` (workflow root) and each loop's
-    `outputs` field references must resolve to bound producers (the writer
-    of a state value bound by `bind` is fine; for `outputBinding`, the
-    target node must have `bind` set).
+12. **Output binding pass.** Every `outputBinding` reference (the workflow
+    root's, and each loop node's) must resolve to a bound producer or to a
+    state value: a `$from: "scope"` reference targets a node with `bind`
+    set; a `$from: "state"` reference (legal only for a loop's
+    `outputBinding`) targets a declared state variable. The reference's
+    resolved type must be compatible with the corresponding `outputSchema`
+    (workflow `output` for the root; the loop's `outputSchema` for a loop)
+    via the §4.2 subtype relation.
 
 ### 4.2 Compatibility (the type relation)
 
@@ -1155,7 +1166,7 @@ output, and other nodes never reference a branch as a data source.
      body scope to produce the next iteration's state; validate each
      resolved value against its `state[*].schema`; increment `i`; restart
      at `body.entry` with the new state.
-   - On `@exit`: resolve `outputs` against the final body scope (state +
+   - On `@exit`: resolve `outputBinding` against the final body scope (state +
      last-iteration node values), validate against `outputSchema`, and
      proceed to the loop node's outer `next`.
 5. Failure inside the body that is not caught by a body-scope handler
@@ -1185,7 +1196,7 @@ Per P3, the engine emits an event stream that mirrors the IR structure:
 - `nodeCompleted(scopePath, nodeId, iteration?, output)`
 - `nodeFailed(scopePath, nodeId, iteration?, error)`
 - `loopIterationStarted(scopePath, loopNodeId, iteration)`
-- `loopExited(scopePath, loopNodeId, iteration, outputs)`
+- `loopExited(scopePath, loopNodeId, iteration, output)`
 
 Iterations are addressable; the consumer of these events can map every event
 back to an IR coordinate (P3 scenario 21).
@@ -1497,7 +1508,7 @@ be declared in the enclosing workflow's `types` block, e.g.:
           "feedback": { "$from": "state", "name": "feedback" },
         },
         "next": "evaluate",
-        "bind": true,
+        "bind": "write",
       },
       "evaluate": {
         "kind": "task",
@@ -1510,7 +1521,7 @@ be declared in the enclosing workflow's `types` block, e.g.:
         "outputSchema": { "$ref": "#/types/Evaluation" },
         "inputs": { "text": { "$from": "state", "name": "draft" } },
         "next": "decide",
-        "bind": true,
+        "bind": "evaluate",
       },
       "decide": {
         "kind": "branch",
@@ -1525,7 +1536,7 @@ be declared in the enclosing workflow's `types` block, e.g.:
       },
     },
   },
-  "outputs": { "article": { "$from": "state", "name": "draft" } },
+  "outputBinding": { "$from": "state", "name": "draft" },
   "outputSchema": { "$ref": "#/types/Article" },
   "iterateState": {
     "draft": { "$from": "scope", "name": "write", "path": ["text"] },
@@ -1568,7 +1579,8 @@ Here `enrich` is behind a branch and does not dominate `merge`. The optional
 reference makes the partial dependency explicit (P1 scenario 7), the
 consumer's schema admits `null`, and the merge task itself decides what to do
 when enrichment is absent (boundary choice). Both `fetch` and `enrich` must
-be bound (assume `bind: true` on each) for `merge` to reference them.
+be bound (assume `bind: "fetch"` and `bind: "enrich"`) for `merge` to
+reference them.
 
 ---
 
@@ -1579,7 +1591,7 @@ be bound (assume `bind: true` on each) for `merge` to reference them.
 | P1        | **Intra-IR axis:** single reference form with named source; static dominator pass over an acyclic intra-scope CFG; structural type compatibility pass; `optional` flag for declared partial deps; finite `cases`+`default`; SSA-style phi soundness on shared bound names. **External-contract axis:** registry-gated IR/task drift pass (§4.1 pass 3) checks each task node's `inputSchema`/`outputSchema` against the registered task's contract using the §4.2 subtype relation; runtime output validation (§5.2) is the defense-in-depth layer when the registry is absent at validation time. |
 | P2        | Only six declared `$from` sources (input, constant, scope, state, error, trigger); no ambient/global state; cross-iteration data is a declared `state` variable with declared writes; outputs flow via `outputBinding`; bound outputs make the data-flow contract explicit per node                                                                                                                                                                                                                                                                                                                |
 | P3        | Distinct node `kind`s for `task`/`branch`/`loop`/`handler`; loop bodies are a structural sub-scope, not a flat cycle; iteration is `@iterate`, not a back-edge; pure cycles are rejected; `bind` mirrors "some steps publish, some don't" from real programs                                                                                                                                                                                                                                                                                                                                       |
-| P4        | Body scope closure (no cross-scope name reach); declared loop `inputs`/`outputs`/`state`; per-scope handlers; localizable validation errors with scope paths; hide-by-default `bind` keeps internal computations out of the scope's contract                                                                                                                                                                                                                                                                                                                                                       |
+| P4        | Body scope closure (no cross-scope name reach); declared loop `inputs`/`outputBinding`/`state`; per-scope handlers; localizable validation errors with scope paths; hide-by-default `bind` keeps internal computations out of the scope's contract                                                                                                                                                                                                                                                                                                                                                 |
 | P5        | Required `kind` discriminant; required explicit `next` in loop bodies; explicit sentinels; required `default` in branches; one reference form (no shorthand/inference); declared `maxIterations`; explicit `bind` makes value lifetime statically predictable                                                                                                                                                                                                                                                                                                                                      |
 
 ---
@@ -1681,6 +1693,10 @@ own design review against P5.
 - **Chosen:** handler is a task-like node attached to exactly one trigger via
   `onError`.
 - Alt A: shared handler nodes. Deferred (P4 scenario 35 / out of v1 scope).
+  Also fails the variance lens (§10): a shared handler's dominator set
+  becomes the intersection of its triggers' dominators, so the handler
+  declaration carries different reference legality depending on which
+  triggers point at it - one label, context-dependent rule.
 - Alt B: handlers as fields on the failing task (no separate node). Rejected:
   loses the ability to give the handler its own `next` and to participate in
   the IR graph (visualization, observability events).
@@ -1714,14 +1730,26 @@ constants through the same root closure, so adding blocks does not require
 revisiting this decision. If block-scoped constants ever become motivated,
 they land as the additive per-scope extension above.
 
-### 8.10 Workflow output: explicit `outputBinding`
+### 8.10 Scope output: explicit `outputBinding`
 
-- **Chosen:** the workflow's output is a single reference resolved at
-  termination.
+- **Chosen:** every value-producing scope (workflow root, loop) names its
+  exit value with a single `outputBinding` reference resolved at scope
+  termination, validated against the scope's `outputSchema`. The shape is
+  identical for both scopes. A scope that needs to publish multiple values
+  wraps them in an object built by a tail node and bound under one name;
+  `outputBinding` then references that single name.
 - Alt A: implicit "the last node's output". Rejected by P5: which node is
   "last" when there are multiple terminals?
 - Alt B: a designated `output` node kind. Rejected: extra kind for what is
   effectively one reference.
+- Alt C: loops carry an `outputs: { fieldName: ref, ... }` map (the
+  pre-revision shape) while workflows use a single reference. Rejected
+  under the §1.3 variance lens: the rule ("resolve a reference at scope
+  exit, validate against the scope's output schema") is the same on both
+  scopes; the asymmetric _shape_ (map vs single ref) was variance with no
+  rule difference behind it. Loops that genuinely produce multiple values
+  pay the same wrap-in-an-object cost as a workflow that needs to do the
+  same.
 
 ### 8.11 Error edge dominator semantics
 
@@ -1767,11 +1795,14 @@ they land as the additive per-scope extension above.
 - **Chosen:** a node's output is **not** addressable by other nodes unless
   the node declares `bind`. References to bound values use
   `$from: "scope"`. Multiple binders may share a name on mutually exclusive
-  paths (SSA-style phi at branch joins).
+  paths (SSA-style phi at branch joins). `bind`, when present, is a
+  non-empty string; the bound name is always written explicitly.
 - Alt A: every node id is implicitly a name (the previous draft). Rejected:
   no data hiding, refactor fragility (CFG changes silently invalidate
   references), no clean DSL `let`-with-limited-scope target, weak engine
-  liveness story (every output potentially live until scope end).
+  liveness story (every output potentially live until scope end). Variance
+  lens (§10): the node id would carry both CFG identity and DDG
+  publication - one label, two rules, two concepts wearing one name.
 - Alt B: per-node `private: true` opt-in flag. Rejected: hide should be the
   default, not the opt-in. Wrong polarity yields the same problems as Alt A
   in practice.
@@ -1789,6 +1820,19 @@ they land as the additive per-scope extension above.
   inputs to the handler without forcing the trigger to bind upstream values
   for the handler's benefit. Keeps each node's bind contract focused on its
   own consumers.
+
+**Removed sugar (`bind: true`).** An earlier v1 draft accepted
+`bind: true` as shorthand for "bind under my own node id" alongside
+`bind: "<name>"`. The variance lens (§1.3 / §10) caught it on a second
+review pass: the two writing forms carry one publication rule, the
+boolean saves a few characters, and §1.2 is explicit that the IR has
+no sugar. The boolean form was removed; `bind`, when present, is now
+always a non-empty string. Authors who want "publish under the node id"
+write the id explicitly. Codegen pays the few-character cost; readers
+get one writing form. This is a worked example of the variance lens
+applied to a surface choice rather than to a behavioral one. See
+[decisions/0001-bound-outputs.md](decisions/0001-bound-outputs.md)
+"Update (v1, post-revision)" for the original (c)-then-(b) reasoning.
 
 Full analysis: [decisions/0001-bound-outputs.md](decisions/0001-bound-outputs.md).
 
@@ -1818,7 +1862,10 @@ Full analysis: [decisions/0001-bound-outputs.md](decisions/0001-bound-outputs.md
 - Alt B: registry is the source of truth (the node omits its schemas;
   validator and runtime look them up). Rejected: IR is no longer
   self-contained, no specialization at the call site, schema evolution
-  in the implementation silently changes IR semantics.
+  in the implementation silently changes IR semantics. Variance lens
+  (§10): the same `inputSchema` field would mean "authoritative contract"
+  in some IRs and "look elsewhere" in others - one label, context-
+  dependent rule.
 - Alt C: hybrid sugar. Schemas are optional on the node; if absent, the
   loader fills them in from the registry before validation, then the
   drift check runs as usual. Deferred: attractive as a v1.1 or DSL-layer
