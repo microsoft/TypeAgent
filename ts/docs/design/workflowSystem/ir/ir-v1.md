@@ -249,9 +249,11 @@ design-principles.md (the unnumbered minimization rule).
   `stateWrites` is the worked example of the second. The variance test
   is symmetric: count behavioral rules, count surface forms, and check
   they match. The §10 variance lens uses this test.
-- Concrete consequence: v1 has exactly four node kinds (`task`, `branch`,
-  `loop`, `handler`) and one reference form. Every additional concept proposed
-  during the design review will be measured against this rule.
+- Concrete consequence: v1 has exactly three node kinds (`task`, `branch`,
+  `loop`) and one reference form. Error recovery is an `onError` edge to a
+  task node (the engine injects two input fields when dispatching via that
+  edge; see §3.8); it is not a separate node kind. Every additional concept
+  proposed during the design review will be measured against this rule.
 
 ### 1.4 Boundary closure
 
@@ -276,14 +278,14 @@ inputs.
 
 | Area                  | v1 covers                                                                                  |
 | --------------------- | ------------------------------------------------------------------------------------------ |
-| Node kinds            | `task`, `branch`, `loop`, `handler` (error)                                                |
+| Node kinds            | `task`, `branch`, `loop`                                                                   |
 | Data references       | Static refs to: workflow inputs, declared constants, node outputs, loop state              |
 | Reference modality    | Required and optional references                                                           |
 | Type compatibility    | Structural subtyping over JSON Schema-described types                                      |
 | Control flow          | Explicit `next` per node; sentinel `@iterate` and `@exit` inside loop bodies               |
 | Branching             | Discriminant-based switch with exhaustive cases and required `default`                     |
 | Loops                 | Single-entry loop construct with declared state, declared boundary I/O, max-iteration cap  |
-| Error handling        | Per-node `onError` edge to a `handler` node; uncaught errors propagate and fail the run    |
+| Error handling        | Per-node `onError` edge to a task node; engine injects `error`/`trigger` input fields (§3.8); uncaught errors propagate and fail the run |
 | Validation            | Static: dominator, type compatibility, scope closure, exhaustiveness, sentinel correctness |
 | Observability surface | `nodeStarted` / `nodeCompleted` / `nodeFailed` events per node, including loop iterations  |
 
@@ -300,9 +302,9 @@ inputs.
 | Computed / dynamic reference targets   | P1 scenario 8: ruled out by design; expressed via branch + decision tree.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | External-state side channels           | P2 scenarios 16-17: deliberately invisible to the IR in v1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Cross-loop shared mutable state        | P4 scenario 34: forced into explicit boundary wiring; no global state.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Reusable handler nodes across scopes   | P4 scenario 35: each scope owns its handlers in v1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Reusable recovery tasks across scopes  | P4 scenario 35: each scope owns its `onError` recovery tasks in v1. (Pre-revision drafts called these "handlers"; v1 collapsed the kind into `task` per §3.8 and §8.7.)                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | Explicit `block` scope                 | A run-once scope kind (sibling of loop body) that can carry a single `onError` over a region of nodes. Closes the "multi-statement try" gap cheaply by reusing the existing scope contract. Sketch in [post-v1/block-scope.md](post-v1/block-scope.md).                                                                                                                                                                                                                                                                                                                                                           |
-| Edge-scoped `bind` reads               | A seventh `$from` namespace (`"edge"`) that resolves against the unique CFG predecessor, expressing one-step producer/consumer handoffs without widening visibility to the full scope. Read-side switch only; producer's `bind` is unchanged. Sketch in [post-v1/edge-scoped-bind.md](post-v1/edge-scoped-bind.md).                                                                                                                                                                                                                                                                                               |
+| Edge-scoped `bind` reads               | A fifth `$from` namespace (`"edge"`) that resolves against the unique CFG predecessor, expressing one-step producer/consumer handoffs without widening visibility to the full scope. Read-side switch only; producer's `bind` is unchanged. Sketch in [post-v1/edge-scoped-bind.md](post-v1/edge-scoped-bind.md).                                                                                                                                                                                                                                                                                                |
 | Streaming / partial outputs from tasks | Tasks are "input in, output out" per the principles' boundary statement.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | User-interaction / suspend-resume      | Not mentioned in principles; out of v1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Dynamic task registry                  | v1 assumes the registry is static across a single engine load (§5.7 MUST 7); the load-time drift check (§4.1 pass 3) rules out `TaskNotFound` and `TaskContractDrift` before execution begins. Allowing the registry to mutate under a running workflow opens a runtime failure class that v1 deliberately does not specify, since the failure-routing question (`onError`? whole-workflow abort? pinned task version?) is dangerous to get wrong and pulls in versioning and resume concerns also deferred from v1. Door is open: the static-registry decision is additive to revisit.                           |
@@ -349,7 +351,7 @@ is the **type** (a JSON Schema the resolved value must satisfy), and
 `bind` (on a node) is the **outer-scope name** the value is published
 under. The workflow root has the first two and is itself the outer
 scope, so it has no `bind`. The same triple appears on `loop` nodes
-and, mirrored on the input side, on `task` and `handler` nodes
+and, mirrored on the input side, on `task` nodes
 (`inputs` + `inputSchema`).
 
 #### 3.1.1 Shared schemas (`types`)
@@ -420,9 +422,8 @@ the §4.1 pass 6 dominator check are the standard SSA join (phi) and
 dominance constraint applied per namespace.
 
 **Namespaces.** Within a scope, names are partitioned into disjoint
-namespaces, one per `$from` discriminant. The first four are scope-wide;
-`error` and `trigger` are pseudo-sources legal only on a `handler` node's
-`inputs` (see §3.8).
+namespaces, one per `$from` discriminant. All four namespaces are
+scope-wide.
 
 | `$from`      | Declared at                                                             | Visible in                       | Frame (single-assignment lifetime)                                                             |
 | ------------ | ----------------------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------- |
@@ -430,8 +431,15 @@ namespaces, one per `$from` discriminant. The first four are scope-wide;
 | `"constant"` | Workflow root `constants`                                               | Every scope                      | The run.                                                                                       |
 | `"scope"`    | A node's `bind` field publishes the node's output                       | The scope the node belongs to    | One execution of the binding node. In a loop body, re-bound each iteration.                    |
 | `"state"`    | The enclosing loop's `state` block                                      | That loop's body scope           | One iteration. Frame transition is `@iterate`, which evaluates `iterateState` (§3.7.1).        |
-| `"error"`    | Pseudo-source; not declared                                             | A `handler` node's `inputs` only | One handler invocation; reads the failure value of the trigger (§3.8).                         |
-| `"trigger"`  | Pseudo-source; not declared                                             | A `handler` node's `inputs` only | One handler invocation; reads an input field of the triggering node (§3.8).                    |
+
+A task node dispatched via an `onError` edge additionally receives two
+engine-injected input fields named `error` and `trigger` before its
+`inputs` block is resolved (see §3.8). These fields are part of the
+recovery node's `inputSchema` and are read with `$from: "input"` like
+any other input field; they are not a `$from` namespace because they
+are never declared at any reference site. The collapse of the previous
+handler-local `error` and `trigger` discriminants into ordinary
+engine-injected input fields is recorded in §8.7.
 
 Because the namespaces are disjoint, the same name may appear in more than one
 of them without conflict. For example, a workflow may have an input field
@@ -462,8 +470,7 @@ property (P4) and is enforced by validation pass 5.
 **Sentinels.** `@iterate` and `@exit` are reserved tokens, not names,
 scoped to where they are legal (only inside a loop body as `next` or branch
 case targets). They participate in the CFG only and never appear in
-reference objects. The handler-local pseudo-sources `error` and `trigger`
-are listed in the namespace table above and detailed in §3.8.
+reference objects.
 
 **Forward note (post-v1, nested loops).** When loops may contain loops, an
 inner body's only outer-data channels remain its own loop's `inputs`, its
@@ -478,7 +485,7 @@ re-litigated when nested loops land.
 
 Every IR encodes **two distinct graphs over the same node set**:
 
-1. The **control-flow graph (CFG).** Edges come from `next` (task, handler,
+1. The **control-flow graph (CFG).** Edges come from `next` (task,
    loop), branch `cases` and `default`, `onError`, and the loop sentinels
    `@iterate` and `@exit`. The CFG says _when_ a node runs.
 2. The **data-dependency graph (DDG).** Edges come from reference objects
@@ -494,9 +501,13 @@ may carry additional `next` edges that no data dependency requires.
 
 This separation is deliberate. It lets:
 
-- **Branches and handlers stay pure control-flow constructs.** A branch
-  produces no value; a handler consumes only the failure (`$from: "error"`).
-  Both contribute CFG edges with no DDG counterpart.
+- **Branches stay pure control-flow constructs.** A branch produces no
+  value and contributes a CFG edge with no DDG counterpart. The `onError`
+  edge is also a pure CFG edge: the recovery task is dispatched along it
+  and reads its triggering context via the engine-injected `error` /
+  `trigger` input fields (§3.8). The recovery task's own data
+  dependencies on its surrounding scope go through ordinary `$from`
+  references and contribute DDG edges like any other task.
 - **Side-effecting tasks be sequenced without faking data flow.** "Run the
   migration, then run the readiness check" can be expressed as a `next` edge
   even though the readiness check does not consume the migration's output.
@@ -533,7 +544,7 @@ Every node carries a discriminant `kind` (P5: self-describing).
 
 ```jsonc
 {
-  "kind": "task" | "branch" | "loop" | "handler",
+  "kind": "task" | "branch" | "loop",
   "inputs":  { /* per-kind: see below */ },
   "next":    /* per-kind: see below */,
   "onError": "<nodeId>",          // optional; absent = propagate
@@ -543,8 +554,9 @@ Every node carries a discriminant `kind` (P5: self-describing).
 
 `inputs` is always a map of named fields whose values are **reference objects**
 (section 3.4). The shape of `inputs` is part of the node's typed input
-schema (section 3.5). `onError`, when present, must point to a `handler` node
-in the same scope.
+schema (section 3.5). `onError`, when present, must point to a `task` node
+in the same scope; the engine dispatches that task with two injected input
+fields (`error` and `trigger`) per §3.8.
 
 **Absent fields, no `null`.** Optional fields throughout the IR
 (`onError`, `bind`, `next` for terminals, `path` and `optional` on
@@ -579,7 +591,9 @@ merge mechanism.
 
 Not every node kind produces a value worth binding:
 
-- `task` and `handler` nodes produce values; `bind` is the publishing switch.
+- `task` nodes produce values; `bind` is the publishing switch. A task
+  reached via an `onError` edge is still a task: it produces a value the
+  same way and may be `bind`ed.
 - `branch` nodes produce no value (they are pure control flow); `bind` is
   not allowed on a branch.
 - `loop` nodes produce a value (the resolved `output` reference); `bind`
@@ -592,14 +606,17 @@ reference form (minimalism):
 
 ```jsonc
 {
-  "$from": "input" | "constant" | "scope" | "state" | "error" | "trigger",
+  "$from": "input" | "constant" | "scope" | "state",
   "name":  "<name>",            // input field, constant name, scope variable, or state var
   "path":  ["a", "b", 0, "c"],  // optional; omit (do not write []) when no projection is needed
   "optional": true              // optional; include only when true (absent = required)
 }
 ```
 
-- `$from: "input"` - read from the enclosing scope's declared input.
+- `$from: "input"` - read from the enclosing scope's declared input. On a
+  task node dispatched via an `onError` edge, the engine-injected `error`
+  and `trigger` fields are part of that node's `inputs` and are read with
+  `$from: "input"` like any other input field (§3.8).
 - `$from: "constant"` - read a declared constant in the enclosing workflow.
   (Constants are workflow-global; readable from any scope. They are values
   declared in the IR, so this does not violate P4.)
@@ -608,15 +625,6 @@ reference form (minimalism):
   Validated by dominance + type compatibility (P1).
 - `$from: "state"` - read a loop-scoped state variable. Only legal inside a
   loop body.
-- `$from: "error"` - read the triggering error value. Only legal inside a
-  `handler` node's `inputs` (see section 3.8). The value has the fixed
-  shape defined in §3.8.1 (the `Error` object). `name` and `path` are
-  optional: omitting both reads the entire error object; `path` projects
-  into it using the same RFC 6901 semantics as any other reference
-  (§3.4.1).
-- `$from: "trigger"` - read an input field of the handler's triggering node.
-  Only legal inside a `handler` node's `inputs`. `name` is the field name in
-  the trigger's `inputs` map (see section 3.8).
 
 `optional: true` declares the reference may not be satisfied on every path
 (P1 scenarios 4, 5, 7). When unsatisfied, the consumer receives JSON `null`.
@@ -685,6 +693,12 @@ validator, and analyzers in agreement on a single observable behavior
 - An absent `next` (terminal node) is legal **only** in the top-level
   scope. In a loop body, every task must have `next` set to another body
   node, `@iterate`, or `@exit` (P5 scenario 39).
+- A task node may be the target of one or more `next`/`cases`/`default`
+  edges (its normal dispatch paths) **or** the target of an `onError` edge
+  from exactly one trigger T (the recovery dispatch path), but not both.
+  A node reached via an `onError` edge receives two engine-injected input
+  fields (`error` and `trigger`) before its `inputs` are resolved; the
+  dispatch rules and dominator semantics for that case are in §3.8.
 
 ### 3.6 Branch node
 
@@ -871,92 +885,84 @@ case targets) **inside a loop body**. They are explicit because P5 scenario
 
 There are no other sentinels in v1.
 
-### 3.8 Handler node
+### 3.8 onError dispatch
 
-```jsonc
-{
-  "kind": "handler",
-  "inputSchema": {
-    /* JSON Schema */
-  },
-  "outputSchema": {
-    /* JSON Schema */
-  },
-  "task": "<task type identifier>",
-  "inputs": {
-    "<fieldName>": {
-      /* reference object */
-    },
-    "error": { "$from": "error" }, // see below
-  },
-  "next": "<nodeId>", // optional; see section 3.3
-  "bind": "<scopeVarName>", // optional; handler is a value-producing node
-}
-```
+v1 has no separate handler node kind. Error recovery is expressed by
+pointing a node's `onError` field at a `task` node N in the same scope.
+When the trigger T fails, the engine dispatches N as the recovery task,
+and injects two fields into N's `inputs` before resolving the rest of
+N's references:
 
-A `handler` is structurally a task with two extra capabilities:
+- `error` - the failure value, a structured object whose shape is fixed
+  by §3.8.1 (the `Error` type).
+- `trigger` - an object whose fields are T's resolved `inputs` (the
+  values T was about to consume when it failed). This avoids forcing T to
+  bind upstream values purely so the recovery can inspect them.
 
-1. It can read the triggering error via the special reference
-   `{ "$from": "error" }`.
-2. It can read inputs of its triggering node directly via
-   `{ "$from": "trigger", "name": "<inputFieldName>" }`. This avoids forcing
-   the trigger to bind upstream values purely so the handler can inspect
-   them, which would leak the handler's needs into the trigger's contract.
-   The named field must exist in the trigger's `inputs`.
+N's `inputSchema` MUST declare both fields (typed against
+`#/types/Error` and against an object schema describing T's inputs,
+respectively); the validator checks this when N is the target of an
+`onError` edge. N reads them with `$from: "input"` like any other input
+field.
 
-Its **dominator scope** is the activation point: every node `T` that has
-`onError: H` contributes to H's dominator set as the intersection of dominators
-of all such `T`s (P1 scenario 2). Concretely: if H is reached only via `T`'s
-error edge, then everything that dominates `T` (including `T`'s own
-predecessors) is referenceable from H, subject to the bind-to-share rule
-(those dominators must have `bind` set).
+**Rules for an `onError` recovery target N (with trigger T).** All four
+are validator obligations and follow from the single "recovery task per
+trigger" model:
 
-In v1 a handler is referenced by exactly **one** triggering node (the
-"shared handler" pattern is P4 scenario 35 / out of scope). This keeps the
-dominator analysis trivial and the handler testable in isolation.
+1. **Reached only via T's `onError` edge.** N MUST NOT be the target of
+   `next`, branch `cases` / `default`, or its scope's `entry`. The
+   recovery dispatch path is exclusive.
+2. **Single trigger.** At most one `onError` edge in the scope points at
+   N. (Shared-handler reuse across triggers is post-v1; see §2.2 and
+   §8.7.)
+3. **Dominator scope.** N's reference legality uses
+   `dominators(T) ∪ {T}`: every node that dominates T (including T's
+   own predecessors) is referenceable from N, subject to the
+   bind-to-share rule. T itself is treated as having executed for the
+   purpose of dominance, even though N runs *because* T failed; this is
+   the P1 scenario 2 semantics.
+4. **No recursive recovery.** N MUST NOT itself declare `onError`.
+   Recovery chains (recovery-of-recovery) are not a v1 mechanism: they
+   raise the question of when the chain terminates and how a recovery
+   that itself keeps failing is observable, and the answer in v1 is the
+   simple one - the recovery task is the last chance, and if it fails,
+   the failure propagates. If a recovery needs to retry the work that
+   originally failed, it does so via `next: "@iterate"` in a loop body
+   (the bounded-retry pattern, P3 scenario 27), not by attaching
+   another `onError` to itself.
 
-A handler's `next` follows the same rules as a task's `next` (terminal in
-top-level, must lead somewhere in a loop body). A handler can also have
-`next: "@iterate"` inside a loop body to implement bounded retry (P3
-scenario 27 - the explicit retry-loop alternative).
+A recovery node's `next` follows the same rules as any task's `next`
+(terminal in top-level, must lead somewhere in a loop body), and a
+recovery node may be `bind`-ed like any other task; it is a task in
+every structural respect.
 
-**No `onError` on a handler.** A `handler` node MUST NOT declare
-`onError`. Handler chains (handler-of-a-handler) are not a v1 mechanism:
-they raise the question of when the chain terminates and how a handler
-that itself keeps failing is observable, and the answer in v1 is the
-simple one - a handler is the last chance to recover, and if it fails,
-the failure propagates. The validator (§4.1 pass 1 / 4) rejects an IR
-that puts `onError` on a handler. If a handler needs to retry the work
-that originally failed, it does so via `next: "@iterate"` in a loop
-body (the retry pattern above), not by attaching another handler to
-itself.
+**Recovery failure semantics.** When the recovery task N fails (its
+implementation throws, or its return value violates `outputSchema`), the
+failure propagates to the enclosing scope of the *trigger* T, exactly
+as if T had failed with no `onError`. Inside a loop body this means
+the recovery's failure fails the loop node; at top level it fails the
+workflow. The original triggering error is not recoverable from the
+propagated error in v1; the recovery's failure is what surfaces. (A
+post-v1 error-chain mechanism could change this, but v1 keeps the
+propagation single-valued for predictability.)
 
-**Handler failure semantics.** When a handler fails (its task throws,
-or its return value violates `outputSchema`), the failure propagates to
-the enclosing scope of the _triggering node_, exactly as if the
-triggering node itself had failed with no `onError`. Inside a loop
-body this means the handler's failure fails the loop node; at top level
-it fails the workflow. The original triggering error is not
-recoverable from the propagated error in v1; the handler's failure is
-what surfaces. (A post-v1 error-chain mechanism could change this, but
-v1 keeps the propagation single-valued for predictability.)
-
-**Bind-name sharing across `onError`.** A triggering node `T` with both
-`next: A` and `onError: H` produces two mutually exclusive outcomes on
+**Bind-name sharing across `onError`.** A trigger T with both
+`next: A` and `onError: N` produces two mutually exclusive outcomes on
 any single execution path: either T succeeds and control flows to A
 (and through whatever chain A heads), or T fails and control flows to
-H. A scope variable name X may therefore be bound on the success side
-(by some node dominated by A, or by A itself) and also by H without
+N. A scope variable name X may therefore be bound on the success side
+(by some node dominated by A, or by A itself) and also by N without
 violating the phi-soundness rule of §3.3, because no path through T
 reaches both sides. The dominator pass (§4.1 pass 6) treats T as a
 splitting node for this purpose, analogous to a branch with `cases:
-{ ok: A }, default: H`. This is what allows the §6.2 pattern of
+{ ok: A }, default: N`. This is what allows the §6.2 pattern of
 `format` and `classifyError` both binding `final` to be valid.
 
 #### 3.8.1 Error value shape
 
-The value carried by `$from: "error"` is a JSON object with this fixed
-schema:
+The value the engine injects as the recovery task's `error` input field
+is a JSON object with this fixed schema, available as the built-in
+`#/types/Error`:
 
 ```jsonc
 {
@@ -969,6 +975,14 @@ schema:
   "data":      <any>              // task- or runtime-specific payload, optional
 }
 ```
+
+`Error` is a built-in type name reserved by v1: every conforming engine
+provides `#/types/Error` implicitly, and a workflow's `types` block
+MUST NOT redefine it. A recovery task's `inputSchema` references it as
+`{ "$ref": "#/types/Error" }` for the `error` field without having to
+declare it. (Codegen cannot reasonably synthesize this shape from a
+workflow's own type catalog; making it built-in lets every recovery
+node opt into the canonical envelope by reference.)
 
 Required fields: `code`, `message`, `source`. The remaining fields are
 optional and may be absent. An engine MAY include additional fields
@@ -987,18 +1001,24 @@ beyond those listed; consumers MUST treat unknown fields as opaque.
   `ReferenceUnresolved`; the full list is engine-defined and surfaced
   through the validator's error-code table - see §4.3).
 
-A handler that wants to be type-strict about the error it consumes
-declares its `inputSchema` to require this shape (or a narrowing of it -
-e.g., requiring `data` to match a specific schema for a known task
-failure). A handler that only needs the message can declare just
+A recovery task that wants to be type-strict about the error it
+consumes can narrow the schema for its `error` input field below
+`#/types/Error` (e.g., requiring `data` to match a specific schema for
+a known task failure). One that only needs the message can declare just
 `{ "message": { "type": "string" } }` and rely on structural subtyping
-(§4.2). The `path` projection on `$from: "error"` works the same as on
-any other reference (§3.4.1), so a handler can read just `error.code`
+(§4.2). Path projection (§3.4.1) on the `error` input works the same
+as on any other input field, so a recovery can read just `error.code`
 or `error.data.foo` without binding the whole object.
 
-The shape is fixed in v1 to keep handlers writable without needing to
+The `trigger` field's schema mirrors the trigger T's `inputs` map: an
+object whose properties are the field names T declares in its own
+`inputSchema`. The validator can derive this shape from T directly; the
+recovery node restates it (or a narrowing of it) the same way it
+restates `Error`, for IR self-containment.
+
+The shape is fixed in v1 to keep recoveries writable without needing to
 look up the failing task. Per-task or per-error-code typed payloads
-belong in `data` and are out-of-band of v1's contract: a handler that
+belong in `data` and are out-of-band of v1's contract: a recovery that
 cares unpacks `data` with a runtime check, exactly as it would for any
 open-world JSON. A future error-taxonomy mechanism could lift `data`
 into a discriminated union; that work is post-v1.
@@ -1006,14 +1026,16 @@ into a discriminated union; that work is post-v1.
 ### 3.9 The full node grammar
 
 ```
-Node     := TaskNode | BranchNode | LoopNode | HandlerNode
+Node     := TaskNode | BranchNode | LoopNode
 Scope    := { nodes: Map<Id, Node>, entry: Id }
 Workflow := { name, version, inputSchema, outputSchema, constants?, ...Scope, output }
 ```
 
-Four node kinds, one scope shape, one reference form, two sentinels, one
+Three node kinds, one scope shape, one reference form, two sentinels, one
 bind switch, one `output` reference shape shared by every value-producing
-scope (workflow root, loop). This is the entire v1 surface.
+scope (workflow root, loop). This is the entire v1 surface. Error
+recovery is an `onError` edge to a task node (§3.8); it adds no node
+kind.
 
 ---
 
@@ -1032,7 +1054,7 @@ reference will resolve) for any execution path.
    The graph of refs between `types` entries is acyclic. After this pass,
    subsequent passes may treat any schema position as either an inline schema
    or an opaque reference to a named type.
-3. **IR/task drift pass (registry-required for engines, optional for offline tools).** Every `task` and `handler` node's `inputSchema` is checked
+3. **IR/task drift pass (registry-required for engines, optional for offline tools).** Every `task` node's `inputSchema` is checked
    to be a subtype of the registered task's declared input schema, and
    the registered task's declared output schema is checked to be a
    subtype of the node's `outputSchema` (the §4.2 subtype relation).
@@ -1055,21 +1077,22 @@ reference will resolve) for any execution path.
      See §8.16.
 4. **Name resolution pass.** Within each scope: every reference's target name
    exists; sentinels are only used inside loop bodies; `onError` targets a
-   `handler` in the same scope; `entry` names an existing node. `bind`, when
+   `task` node in the same scope; `entry` names an existing node. `bind`, when
    present, is a non-empty string (no boolean shorthand in v1; see §8.15).
    `branch` nodes do not declare `bind`.
-   `handler` nodes do not declare `onError` (no recursive handler chains
-   in v1; see §3.8).
+   A node N that is the target of an `onError` edge from a trigger T:
+   MUST NOT itself declare `onError`; MUST NOT be the target of any
+   `next`, branch `cases` / `default`, or scope `entry` (the recovery
+   dispatch path is exclusive); and MUST be the target of at most one
+   `onError` edge in its scope (no shared recoveries in v1; see §3.8).
    References with `$from: "scope"` resolve to at least one binder of that
-   name in scope. References with `$from: "error"` or `$from: "trigger"`
-   appear only inside a `handler` node's `inputs`, and `$from: "trigger"`
-   names an input field present in the triggering node's `inputs`.
+   name in scope.
 5. **Scope closure pass (P4).** Body nodes do not reference outer-scope scope
    variables. The only outer data visible in a body is via `$from: "input"`
    (loop boundary inputs), `$from: "state"` (loop state), and
    `$from: "constant"` (workflow constants).
 6. **Dominator pass (P1).** For every reference of the form
-   `$from: "scope", name: X` inside a node Y (or its handler), and for the
+   `$from: "scope", name: X` inside a node Y, and for the
    set of binders B(X) = { nodes in scope with `bind: X` }:
    (a) **Phi soundness:** no two binders in B(X) lie on the same path from
    scope entry to Y (i.e., no binder dominates another binder of the
@@ -1079,21 +1102,23 @@ reference will resolve) for any execution path.
    least one binder in B(X) (some binder of X dominates Y on every
    path). For optional references, coverage is not required, but the
    consumer's schema must accept `null` at that field.
-   Inside a handler, dominator semantics use `dominators(T) ∪ {T}` for the
-   trigger T; references using `$from: "trigger"` always resolve and do not
-   require T to bind.
+   When Y is the target of an `onError` edge from a trigger T,
+   dominator semantics use `dominators(T) ∪ {T}` for Y's `$from:
+   "scope"` references; the engine-injected `error` and `trigger`
+   input fields are part of Y's own `inputs` and do not participate in
+   dominator reasoning.
 
-   For phi soundness (a) on a name X bound by both a node H reached only
-   via `T.onError` and a node S on T's success side (S is T itself, T's
-   `next`, or any node dominated by them), H and S are treated as on
-   mutually exclusive paths even though both are dominated by T. The
-   intuition is that T splits its outgoing control flow into a success
-   continuation (`next`) and a failure continuation (`onError`), and no
-   single execution reaches both. Coverage (b) for a downstream consumer
-   that depends on X must be satisfied by binders on each of T's two
-   outcomes - if only the success side binds X, a path through `onError`
-   leaves X unbound and the reference must be `optional` (or the
-   consumer is not a dominator of both outcomes).
+   For phi soundness (a) on a name X bound by both a node R reached only
+   via `T.onError` (the recovery task) and a node S on T's success side
+   (S is T itself, T's `next`, or any node dominated by them), R and S
+   are treated as on mutually exclusive paths even though both are
+   dominated by T. The intuition is that T splits its outgoing control
+   flow into a success continuation (`next`) and a failure continuation
+   (`onError`), and no single execution reaches both. Coverage (b) for a
+   downstream consumer that depends on X must be satisfied by binders on
+   each of T's two outcomes - if only the success side binds X, a path
+   through `onError` leaves X unbound and the reference must be
+   `optional` (or the consumer is not a dominator of both outcomes).
 
    References inside `iterateState` (loop node, §3.7.1) participate in
    this pass like any other reference, but their dominance question is
@@ -1120,7 +1145,7 @@ reference will resolve) for any execution path.
    over an enum-typed selector or a `default`. v1 requires `default`
    regardless.
 9. **Termination pass.** Every node in the top-level scope can reach a
-   terminal (a task or handler with `next` absent, or a branch all of whose
+   terminal (a task with `next` absent, or a branch all of whose
    targets transitively terminate). Every body node can reach `@exit` or
    `@iterate`.
    Pure cycles without `@iterate`/`@exit` are rejected (P3 scenario 26).
@@ -1161,8 +1186,8 @@ is a structural subtype of `C`:
 - `null` is only compatible with a consumer that explicitly allows `null`.
 
 Structural subtyping was chosen (vs nominal exact match) because it lets
-handlers and downstream tasks accept "at least these fields" without forcing
-upstream tasks to know every consumer's exact shape.
+recovery tasks and downstream tasks accept "at least these fields" without
+forcing upstream tasks to know every consumer's exact shape.
 
 ### 4.3 Error model for the validator
 
@@ -1195,9 +1220,11 @@ to post-v1 (§2.2).
    b. Execute N (kind-specific, see below).
    c. If N succeeds: if N is a loop with no `next` and we are top-level,
    finish; else proceed to the node named by `next` (or by branch `cases`).
-   d. If N fails: if `onError` is set, route to that handler with the error
-   bound to `$from: "error"`; otherwise propagate failure to the enclosing
-   scope. A loop body propagating failure fails the loop node itself.
+   d. If N fails: if `onError` is set, dispatch the recovery task R per
+   §3.8 (the engine injects R's `error` and `trigger` input fields
+   before resolving R's other references); otherwise propagate failure
+   to the enclosing scope. A loop body propagating failure fails the
+   loop node itself.
 4. When a top-level terminal is reached, resolve `output` and return
    its value as the workflow output.
 
@@ -1238,24 +1265,31 @@ output, and other nodes never reference a branch as a data source.
    - On `@exit`: resolve `output` against the final body scope (state +
      last-iteration node values), validate against `outputSchema`, and
      proceed to the loop node's outer `next`.
-5. Failure inside the body that is not caught by a body-scope handler
-   propagates to the loop node, which then routes to its own `onError` (if
-   any) or fails its outer scope.
+5. Failure inside the body that is not caught by a body-scope `onError`
+   edge propagates to the loop node, which then routes to its own
+   `onError` (if any) or fails its outer scope.
 
-### 5.5 Handler execution
+### 5.5 onError dispatch
 
-A handler is executed when the triggering node (`T` such that `T.onError = H`)
-fails. The handler's input `error` is the failure value, a structured
-`Error` object whose shape is fixed by §3.8.1. All other handler `inputs`
-resolve against H's scope using the dominator semantics described in 3.8.
-The handler's `next` then drives the rest of the run.
+When a trigger node T fails (T's task throws or returns a value that
+violates `outputSchema`) and T declares `onError: R`, the engine
+dispatches R as the recovery task:
 
-If the handler itself fails (its task throws, or its return value
-violates `outputSchema`), the failure propagates to T's enclosing scope
-as if T had failed with no `onError` (§3.8 "Handler failure
-semantics"). The original triggering error is dropped; the handler's
-failure is what surfaces. Handlers do not carry `onError` (§3.8), so
-there is no recursive handler chain to walk.
+1. Build R's `inputs` map: inject `error` (the structured failure value
+   per §3.8.1) and `trigger` (an object whose fields are T's resolved
+   inputs) as input fields, then resolve R's other declared `inputs`
+   references against R's scope using `dominators(T) ∪ {T}` for `$from:
+   "scope"` reads.
+2. Validate the assembled inputs against R's `inputSchema`.
+3. Execute R as an ordinary task (§5.2).
+4. On success, follow R's `next` (or terminate, if R is a top-level
+   terminal). On failure, propagate per the rule below.
+
+If the recovery task R itself fails, the failure propagates to T's
+enclosing scope as if T had failed with no `onError` (§3.8 "Recovery
+failure semantics"). The original triggering error is dropped; the
+recovery's failure is what surfaces. R does not itself carry `onError`
+(§3.8 rule 4), so there is no recursive recovery chain to walk.
 
 ### 5.6 Observability
 
@@ -1301,7 +1335,7 @@ parallelism question (declared vs. opportunistic) to post-v1 (§2.2).
    section 5.4.
 6. Emit the observability events listed in section 5.6.
 7. Run §4.1 pass 3 (IR/task drift) at engine load time with the
-   registry available, and reject any IR whose `task` or `handler`
+   registry available, and reject any IR whose `task`
    nodes name a missing task or whose declared `inputSchema` /
    `outputSchema` contradict the registered task's contract per the
    §4.2 subtype relation. v1 assumes the registry is static across
@@ -1311,6 +1345,10 @@ parallelism question (declared vs. opportunistic) to post-v1 (§2.2).
    semantics (where a task can disappear or change contract under a
    running workflow) are post-v1 and own the question of how those
    failures should be surfaced (§2.2 row "Dynamic task registry").
+8. When dispatching a task R via an `onError` edge from a trigger T,
+   inject `error` and `trigger` into R's `inputs` per §3.8 before
+   resolving R's declared references and validating against R's
+   `inputSchema`.
 
 **A conforming v1 engine SHOULD:**
 
@@ -1329,9 +1367,9 @@ parallelism question (declared vs. opportunistic) to post-v1 (§2.2).
   freeing such an output before the loop entry is observed would break the
   loop. (Bound outputs only referenced by `state.initial` are dropped
   immediately after loop initialization.)
-- **Retry without restarting the workflow.** When a handler resumes
-  via `next`, the engine should not recompute upstream nodes whose
-  outputs are still live.
+- **Retry without restarting the workflow.** When a recovery task
+  resumes via `next`, the engine should not recompute upstream nodes
+  whose outputs are still live.
 
 **A conforming v1 engine MAY:**
 
@@ -1410,7 +1448,7 @@ Note how `Url` is shared between the workflow `inputSchema` and the `fetch` task
 the workflow result. The compatibility pass collapses each ref-equal pair to
 an identity check.
 
-### 6.2 Branch with handler
+### 6.2 Branch with `onError` recovery
 
 ```jsonc
 {
@@ -1469,17 +1507,22 @@ an identity check.
       /* task ... outputSchema: { "$ref": "#/types/Result" } ... bind: "final" (terminal: next omitted) */
     },
     "classifyError": {
-      "kind": "handler",
+      "kind": "task",
       "task": "errors.report",
       "inputSchema": {
         "type": "object",
-        "properties": { "error": {}, "doc": { "type": "string" } },
+        "properties": {
+          "error":   { "$ref": "#/types/Error" },
+          "trigger": {
+            "type": "object",
+            "properties": { "doc": { "type": "string" } },
+            "required": ["doc"],
+          },
+        },
+        "required": ["error", "trigger"],
       },
       "outputSchema": { "$ref": "#/types/Result" },
-      "inputs": {
-        "error": { "$from": "error" },
-        "doc": { "$from": "trigger", "name": "doc" },
-      },
+      "inputs": {}, // `error` and `trigger` are engine-injected per §3.8
       "bind": "final",
     },
   },
@@ -1502,17 +1545,19 @@ branch-selected path. The author must arrange that all three produce a
 compatible output that `format` can consume - this is P1 scenario 3 (diamond
 merge).
 
-The `classifyError` handler reads the original `doc` via `$from: "trigger"`
-rather than requiring the workflow `inputSchema` field `doc` to be threaded through `classify`'s
-bound output - the handler's needs do not leak into `classify`'s contract.
-Both `format` and `classifyError` bind the workflow result as `final`; only
-one of them runs in any given execution, so the bind names do not collide at
-runtime, and the validator accepts the shared name under the
-`onError`-mutual-exclusion clause of the dominator pass (§4.1 pass 6,
-§3.8 "Bind-name sharing across `onError`"): `classify` splits into a
-success continuation that reaches `format` and a failure continuation
-that reaches `classifyError`, and no path through `classify` reaches
-both.
+The `classifyError` recovery task receives the original `doc` via the
+engine-injected `trigger` field (whose value is `classify`'s resolved
+`inputs`), and the failure value via the engine-injected `error` field
+(typed against the built-in `#/types/Error`). Neither field has to be
+threaded through `classify`'s bound output, so the recovery's needs do
+not leak into `classify`'s contract. Both `format` and `classifyError`
+bind the workflow result as `final`; only one of them runs in any given
+execution, so the bind names do not collide at runtime, and the
+validator accepts the shared name under the `onError`-mutual-exclusion
+clause of the dominator pass (§4.1 pass 6, §3.8 "Bind-name sharing
+across `onError`"): `classify` splits into a success continuation that
+reaches `format` and a failure continuation that reaches
+`classifyError`, and no path through `classify` reaches both.
 
 ### 6.3 Loop with state and bounded retry
 
@@ -1654,9 +1699,9 @@ reference them.
 | Principle | Design feature(s) that satisfy it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | P1        | **Intra-IR axis:** single reference form with named source; static dominator pass over an acyclic intra-scope CFG; structural type compatibility pass; `optional` flag for declared partial deps; finite `cases`+`default`; SSA-style phi soundness on shared bound names. **External-contract axis:** registry-gated IR/task drift pass (§4.1 pass 3) checks each task node's `inputSchema`/`outputSchema` against the registered task's contract using the §4.2 subtype relation; runtime output validation (§5.2) is the defense-in-depth layer when the registry is absent at validation time. |
-| P2        | Only six declared `$from` sources (input, constant, scope, state, error, trigger); no ambient/global state; cross-iteration data is a declared `state` variable with declared writes; outputs flow via `output`; bound outputs make the data-flow contract explicit per node                                                                                                                                                                                                                                                                                                                       |
-| P3        | Distinct node `kind`s for `task`/`branch`/`loop`/`handler`; loop bodies are a structural sub-scope, not a flat cycle; iteration is `@iterate`, not a back-edge; pure cycles are rejected; `bind` mirrors "some steps publish, some don't" from real programs                                                                                                                                                                                                                                                                                                                                       |
-| P4        | Body scope closure (no cross-scope name reach); declared loop `inputs`/`output`/`state`; per-scope handlers; localizable validation errors with scope paths; hide-by-default `bind` keeps internal computations out of the scope's contract                                                                                                                                                                                                                                                                                                                                                        |
+| P2        | Only four declared `$from` sources (input, constant, scope, state); error recovery dispatches a task via `onError` and injects `error` / `trigger` as ordinary input fields, not as additional `$from` discriminants; no ambient/global state; cross-iteration data is a declared `state` variable with declared writes; outputs flow via `output`; bound outputs make the data-flow contract explicit per node                                                                                                                                                                                                                                                                                                                       |
+| P3        | Distinct node `kind`s for `task`/`branch`/`loop`; error recovery is an `onError` edge to a task node, not a fourth kind; loop bodies are a structural sub-scope, not a flat cycle; iteration is `@iterate`, not a back-edge; pure cycles are rejected; `bind` mirrors "some steps publish, some don't" from real programs                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| P4        | Body scope closure (no cross-scope name reach); declared loop `inputs`/`output`/`state`; per-scope `onError` recovery tasks; localizable validation errors with scope paths; hide-by-default `bind` keeps internal computations out of the scope's contract                                                                                                                                                                                                                                                                                                                                       |
 | P5        | Required `kind` discriminant; required explicit `next` in loop bodies; explicit sentinels; required `default` in branches; one reference form (no shorthand/inference); declared `maxIterations`; explicit `bind` makes value lifetime statically predictable                                                                                                                                                                                                                                                                                                                                      |
 
 ---
@@ -1753,18 +1798,55 @@ own design review against P5.
   original v1 design). Rejected together with the per-node write site
   itself in \u00a78.5.
 
-### 8.7 Handler model: per-trigger node, structurally a task
+### 8.7 Recovery model: task dispatched via `onError` with engine-injected fields
 
-- **Chosen:** handler is a task-like node attached to exactly one trigger via
-  `onError`.
-- Alt A: shared handler nodes. Deferred (P4 scenario 35 / out of v1 scope).
-  Also fails the variance lens (§10): a shared handler's dominator set
-  becomes the intersection of its triggers' dominators, so the handler
-  declaration carries different reference legality depending on which
-  triggers point at it - one label, context-dependent rule.
-- Alt B: handlers as fields on the failing task (no separate node). Rejected:
-  loses the ability to give the handler its own `next` and to participate in
-  the IR graph (visualization, observability events).
+- **Chosen:** error recovery is an `onError` edge to an ordinary `task`
+  node in the same scope; the engine injects two input fields (`error`
+  per §3.8.1 and `trigger`, an object whose fields are the trigger's
+  resolved inputs) before resolving the recovery task's other inputs.
+  The recovery node is a task in every structural respect (it has
+  `inputs`, `inputSchema`, `outputSchema`, `next`, optional `bind`,
+  optional retry via `next: "@iterate"` in a loop body). The validator
+  enforces four edge-role rules (§3.8): reached only via T's `onError`
+  edge, single trigger, dominator scope `dominators(T) ∪ {T}`, no
+  recursive `onError` on the recovery itself.
+- **Antecedent in pre-revision v1.** An earlier draft introduced a
+  separate `kind: "handler"` node together with two pseudo-`$from`
+  discriminants (`"error"` and `"trigger"`) and a per-kind
+  trigger-input read mechanism. The variance lens (§1.3) flagged this
+  as one behavioral concept ("task dispatched on a recovery edge with
+  two extra inputs") wearing two surface labels: a node kind whose
+  rules differed from `task` only because of the edge that reaches it,
+  plus a pair of `$from` namespaces whose visibility was scoped to that
+  one node kind. Collapsing the kind into `task` and the pseudo-sources
+  into engine-injected input fields removes one node kind, two `$from`
+  discriminants, and three validator special cases without changing
+  any expressible workflow.
+- Alt A: keep the dedicated `kind: "handler"` and the `error` /
+  `trigger` `$from` namespaces (the antecedent). Rejected by the
+  variance lens above: one rule, three surface forms.
+- Alt B: shared recovery nodes (one recovery task reachable from
+  triggers in different scopes). Deferred (P4 scenario 35 / out of v1
+  scope; §2.2 "Reusable recovery tasks across scopes"). Also fails the
+  variance lens for v1: a shared recovery's dominator set becomes the
+  intersection of its triggers' dominators, so the recovery declaration
+  carries different reference legality depending on which triggers
+  point at it - one label, context-dependent rule. Most "same recovery
+  over several nodes" scenarios are addressed post-v1 by **block
+  scope** ([post-v1/block-scope.md](post-v1/block-scope.md)).
+- Alt C: handlers as fields on the failing task (no separate node).
+  Rejected: loses the ability to give the recovery its own `next`
+  chain, its own `bind`, its own loop-body retry, and its own
+  participation in the IR graph (visualization, observability events).
+  The collapse in Alt A's rejection is to a *task* node, not to an
+  inline field.
+- Alt D: merge `onError` into a node-level trigger declaration on the
+  recovery side (the recovery node names its triggers instead of each
+  trigger naming its recovery). Rejected: would remove the recovery
+  task's independent `next`, `outputSchema`, and `bind` (the trigger
+  would carry a single shared continuation), break the §3.8 retry
+  pattern, and force the §6.2 worked example into a different shape.
+  The chosen design preserves all of these.
 
 ### 8.8 Loop body: closed sub-scope, DAG only
 
@@ -1818,11 +1900,12 @@ they land as the additive per-scope extension above.
 
 ### 8.11 Error edge dominator semantics
 
-- **Chosen:** in v1, a handler is reachable from exactly one triggering node,
-  so its dominator set is `dominators(T) ∪ {T}` and any node in that set is
-  referenceable (P1 scenario 2 directly).
-- Alt A: shared handlers with intersection-of-dominators semantics. Sound but
-  more complex; deferred with shared-handler support.
+- **Chosen:** in v1, a recovery task is reached from exactly one trigger
+  T, so its dominator set is `dominators(T) ∪ {T}` and any node in that
+  set is referenceable (P1 scenario 2 directly).
+- Alt A: shared recoveries with intersection-of-dominators semantics.
+  Sound but more complex; deferred with shared-recovery support (§8.7
+  Alt B).
 
 ### 8.13 Shared schemas: named `types` with restricted `$ref`
 
@@ -1881,10 +1964,11 @@ they land as the additive per-scope extension above.
   for v1; this is an additive read-granularity refinement on the
   orthogonal axis. Sketch in
   [post-v1/edge-scoped-bind.md](post-v1/edge-scoped-bind.md).
-- Handler convenience: `$from: "trigger"` exposes the triggering node's
-  inputs to the handler without forcing the trigger to bind upstream values
-  for the handler's benefit. Keeps each node's bind contract focused on its
-  own consumers.
+- Recovery convenience: when a task is dispatched via an `onError` edge,
+  the engine injects the trigger's resolved inputs as a `trigger` input
+  field on the recovery (§3.8). This avoids forcing the trigger to bind
+  upstream values purely so the recovery can read them, keeping each
+  node's bind contract focused on its own consumers.
 
 **Removed sugar (`bind: true`).** An earlier v1 draft accepted
 `bind: true` as shorthand for "bind under my own node id" alongside
@@ -1904,7 +1988,7 @@ Full analysis: [decisions/0001-bound-outputs.md](decisions/0001-bound-outputs.md
 ### 8.16 Task schema source of truth
 
 - **Chosen (v1):** the registered task's declared contract is the
-  authoritative envelope; each `task` and `handler` node's
+  authoritative envelope; each `task` node's
   `inputSchema`/`outputSchema` is either a verbatim restatement of that
   contract (the common case) or a **narrowing** of it (the
   specialization case), and never a contradiction. Concretely, the
@@ -1961,7 +2045,7 @@ so the property has one canonical justification.
 - **Chosen:** every `$from` namespace is single-assignment within its
   frame. There is no in-place mutation anywhere in v1; every apparent
   update (re-running a binding node on the next iteration, advancing
-  `state` across `@iterate`, a handler firing) is the entry into a new
+  `state` across `@iterate`, a recovery task firing) is the entry into a new
   frame that re-binds the name.
 
 Why this matters:
@@ -2088,7 +2172,7 @@ rationale lives in §8.
 | Reference form (§8.2)               | Closed: object form is parser-free for engine and analyzers; codegen has no preference between forms.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | State commit timing (§8.6)          | Closed by P4/P5 (lens-neutral): inter-iteration commit makes per-iteration reads independent of write order.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Pure SSA per namespace (§8.17)      | Closed: every reader population is a net win (validator gets textbook dominance + phi; humans get one-value-per-name locality; analyzers get standard SSA tooling). Codegen pays verbosity (§3.7.1 no-implicit-carry-forward, §3.3 phi coverage) and gets back splice safety and validator precision. Engine latitude (re-execute / memoize / per-frame snapshot / future parallelism) is preserved without being IR-observable, which is why §2.2 can defer parallelism without prescribing.                                                                                                                                |
-| Handler reuse (§8.7, §3.8)          | Closed for v1: one-trigger handlers keep dominator analysis trivial. Most "same handler over several nodes" scenarios are addressed post-v1 by **block scope** (a single handler over a region of nodes within one scope; sketch in [post-v1/block-scope.md](post-v1/block-scope.md)). Cross-scope shared handlers (same handler reachable from triggers in different scopes) remain a separate question with its own trigger in [revisit-triggers.md](revisit-triggers.md) row 4. Codegen can also duplicate a logical handler into per-trigger copies if neither mechanism is available.                                   |
+| Recovery-task reuse (§8.7, §3.8)     | Closed for v1: one-trigger recovery tasks keep dominator analysis trivial. Most "same recovery over several nodes" scenarios are addressed post-v1 by **block scope** (a single `onError` over a region of nodes within one scope; sketch in [post-v1/block-scope.md](post-v1/block-scope.md)). Cross-scope shared recoveries (same task reachable from triggers in different scopes) remain a separate question with its own trigger in [revisit-triggers.md](revisit-triggers.md) row 4. Codegen can also duplicate a logical recovery into per-trigger copies if neither mechanism is available.                                |
 | Shared schemas (§8.13)              | Closed: validator identity-checks (§1.1 acceptable performance), codegen single emission, and reviewer locality (P4) all favor named `types`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | IR encoding (§8.14)                 | Closed: JSON serves engine parsing, the LLM-direct fallback, and the door-kept distribution role (§1.1).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Task schema source of truth (§8.16) | Closed for v1: IR self-containment serves both engine sufficiency and door-keeping; hybrid sugar (loader-filled omissions) belongs in the DSL. Reopening trigger in [revisit-triggers.md](revisit-triggers.md) row 6.                                                                                                                                                                                                                                                                                                                                                                                                        |
