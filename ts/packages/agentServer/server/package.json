@@ -33,6 +33,7 @@
     "tsc": "tsc -b"
   },
   "dependencies": {
+    "@azure/identity": "^4.10.0",
     "@typeagent/agent-rpc": "workspace:*",
     "@typeagent/agent-server-client": "workspace:*",
     "@typeagent/agent-server-protocol": "workspace:*",

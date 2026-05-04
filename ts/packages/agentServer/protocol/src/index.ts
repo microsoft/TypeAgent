@@ -7,6 +7,8 @@ export {
     AgentServerChannelName,
     ConversationInfo,
     JoinConversationResult,
+    UserIdentity,
+    DefaultUserIdentity,
     getDispatcherChannelName,
     getClientIOChannelName,
     registerClientType,

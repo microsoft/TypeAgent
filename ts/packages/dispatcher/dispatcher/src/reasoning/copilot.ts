@@ -55,7 +55,29 @@ function withAbortSignal<T>(
     });
 }
 
-const defaultModel = "claude-sonnet-4.5";
+const FALLBACK_MODEL = "claude-sonnet-4.5";
+
+function resolveModel(): string {
+    return process.env.COPILOT_REASONING_MODEL?.trim() || FALLBACK_MODEL;
+}
+
+function resolveReasoningEffort():
+    | "low"
+    | "medium"
+    | "high"
+    | "xhigh"
+    | undefined {
+    const raw = process.env.COPILOT_REASONING_EFFORT?.trim().toLowerCase();
+    if (
+        raw === "low" ||
+        raw === "medium" ||
+        raw === "high" ||
+        raw === "xhigh"
+    ) {
+        return raw;
+    }
+    return undefined;
+}
 
 // Track Copilot clients per dispatcher instance (WeakMap for GC)
 const copilotClients = new WeakMap<object, CopilotClient>();
@@ -82,6 +104,15 @@ function setSessionId(
     sessionId: string,
 ): void {
     copilotSessionIds.set(context.sessionContext.agentContext, sessionId);
+}
+
+/**
+ * Clear the stored Copilot reasoning session ID for the given agent context.
+ * Call this before starting a new reasoning loop to avoid topic pollution
+ * from prior sessions. Exported so @history clear can invoke it.
+ */
+export function clearReasoningSession(agentContext: object): void {
+    copilotSessionIds.delete(agentContext);
 }
 
 /**
@@ -459,9 +490,13 @@ function getCopilotSessionConfig(
         },
     });
 
+    const model = resolveModel();
+    const reasoningEffort = resolveReasoningEffort();
+
     return {
         clientName: "TypeAgent",
-        model: defaultModel,
+        model,
+        ...(reasoningEffort ? { reasoningEffort } : {}),
         streaming: true,
         tools: [discoverTool, executeTool],
         availableTools: [
@@ -753,7 +788,7 @@ async function executeReasoningWithTracing(
         sessionId: systemContext.session.getSessionDirPath() || "unknown",
         originalRequest,
         requestId,
-        model: defaultModel,
+        model: resolveModel(),
         planReuseEnabled: true,
     });
 
