@@ -7,7 +7,13 @@ import path from "node:path";
 import { createInterface, Interface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
-import type { Rect, Screenshot, TreeNode, WindowInfo } from "./types.js";
+import type {
+    Rect,
+    Screenshot,
+    SnapshotPolicy,
+    TreeNode,
+    WindowInfo,
+} from "./types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -276,6 +282,24 @@ export class HelperClient {
         return this.call("events.idle", p);
     }
 
+    snapshotCapture(p: {
+        snapshotDir: string;
+        policy: SnapshotPolicy;
+    }): Promise<{ snapshotId: string; bytes: number; sourceCount: number }> {
+        return this.call("snapshot.capture", p);
+    }
+
+    snapshotRestore(p: {
+        snapshotDir: string;
+        policy: SnapshotPolicy;
+    }): Promise<{ ok: true; bytes: number }> {
+        return this.call("snapshot.restore", p);
+    }
+
+    snapshotDelete(p: { snapshotDir: string }): Promise<{ ok: true }> {
+        return this.call("snapshot.delete", p);
+    }
+
     /**
      * Close the helper's stdin and wait up to `timeoutMs` for graceful exit.
      * If it doesn't exit, send SIGKILL.
@@ -296,4 +320,4 @@ export class HelperClient {
     }
 }
 
-export type { Rect, Screenshot, TreeNode, WindowInfo };
+export type { Rect, Screenshot, SnapshotPolicy, TreeNode, WindowInfo };

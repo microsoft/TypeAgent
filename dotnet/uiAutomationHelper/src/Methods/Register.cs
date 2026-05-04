@@ -16,5 +16,6 @@ internal static class Register
         ActionMethods.Register(dispatch);
         FindMethods.Register(dispatch);
         EventMethods.Register(dispatch);
+        SnapshotMethods.Register(dispatch);
     }
 }

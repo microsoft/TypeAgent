@@ -68,3 +68,49 @@ export type Screenshot = {
     pngBase64: string;
     rect: Rect;
 };
+
+export type ScriptHook = {
+    command: string;
+    args?: string[];
+    cwd?: string;
+};
+
+export type SnapshotSource =
+    | {
+          kind: "folder";
+          path: string;
+          recursive?: boolean;
+          exclude?: string[];
+          requireKill?: boolean;
+      }
+    | { kind: "registry"; key: string; requireKill?: boolean }
+    | {
+          kind: "appCommand";
+          capture?: ScriptHook;
+          restore: ScriptHook;
+          requireKill?: boolean;
+      };
+
+export type ProcessIdentity = {
+    aumid?: string;
+    processName?: string;
+    exePath?: string;
+};
+
+export type DetectionStatus =
+    | "auto-candidate"
+    | "user-confirmed"
+    | "user-provided"
+    | "no-state";
+
+export type SnapshotPolicy = {
+    version: 1;
+    integrationName: string;
+    detectionStatus: DetectionStatus;
+    processIdentity: ProcessIdentity;
+    state: SnapshotSource[];
+    hooks?: {
+        beforeCapture?: ScriptHook[];
+        afterRestore?: ScriptHook[];
+    };
+};

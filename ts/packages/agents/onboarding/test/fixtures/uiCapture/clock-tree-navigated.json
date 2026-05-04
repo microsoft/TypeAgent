@@ -628,8 +628,8 @@
                           "children": []
                         },
                         {
-                          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/Pane[AutomationId=\"AlarmsScrollViewer\"]/DataItem[AutomationId=\"AlarmViewGrid\"]/Text[Name=\"in 8 hours, 41 minutes\"][ClassName=\"TextBlock\"]",
-                          "name": "in 8 hours, 41 minutes",
+                          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/Pane[AutomationId=\"AlarmsScrollViewer\"]/DataItem[AutomationId=\"AlarmViewGrid\"]/Text[Name=\"in 8 hours, 32 minutes\"][ClassName=\"TextBlock\"]",
+                          "name": "in 8 hours, 32 minutes",
                           "controlType": "Text",
                           "className": "TextBlock",
                           "isEnabled": true,
@@ -641,7 +641,7 @@
                           "boundingRect": {
                             "x": 625,
                             "y": 284,
-                            "width": 148,
+                            "width": 150,
                             "height": 11
                           },
                           "children": []
