@@ -8,6 +8,8 @@ import { createInterface, Interface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
 import type {
+    DynamicControlRule,
+    FingerprintResult,
     Rect,
     Screenshot,
     SnapshotPolicy,
@@ -209,6 +211,13 @@ export class HelperClient {
         return this.call("tree.dump", p);
     }
 
+    treeFingerprint(p: {
+        root: string;
+        dynamicRules?: DynamicControlRule[];
+    }): Promise<FingerprintResult> {
+        return this.call("tree.fingerprint", p);
+    }
+
     screenshot(p: { root: string }): Promise<Screenshot> {
         return this.call("screenshot", p);
     }
@@ -320,4 +329,12 @@ export class HelperClient {
     }
 }
 
-export type { Rect, Screenshot, SnapshotPolicy, TreeNode, WindowInfo };
+export type {
+    DynamicControlRule,
+    FingerprintResult,
+    Rect,
+    Screenshot,
+    SnapshotPolicy,
+    TreeNode,
+    WindowInfo,
+};

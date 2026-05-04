@@ -114,3 +114,54 @@ export type SnapshotPolicy = {
         afterRestore?: ScriptHook[];
     };
 };
+
+export type DynamicProperty = "value" | "toggleState" | "name";
+
+export type ControlMatcher =
+    | { kind: "automationId"; value: string }
+    | { kind: "selector"; value: string }
+    | { kind: "selectorPattern"; pattern: string }
+    | {
+          kind: "container";
+          container: string;
+          controlType: string;
+          nameRegex?: string;
+          classNameRegex?: string;
+      };
+
+export type DynamicRuleReason =
+    | "calibration-drift"
+    | "explore-drift"
+    | "user-marked"
+    | "imported";
+
+export type DynamicControlRule = {
+    id: string;
+    match: ControlMatcher;
+    dynamicProperties: DynamicProperty[];
+    semantic?: string;
+    reason: DynamicRuleReason;
+    confidence: number;
+    observations: number;
+    firstSeen: string;
+    lastConfirmed: string;
+    notes?: string;
+};
+
+export type DynamicControlsFile = {
+    version: 1;
+    integrationName: string;
+    calibration?: {
+        lastRun: string;
+        durationMs: number;
+        dumpsCompared: number;
+    };
+    rules: DynamicControlRule[];
+};
+
+export type FingerprintResult = {
+    hash: string;
+    controlCount: number;
+    activeWindowTitle: string;
+    focusedSelector?: string;
+};
