@@ -433,7 +433,7 @@ type Backtrack =
 //      frames.
 type MemoCache = Map<
     ReadonlyArray<GrammarRule>,
-    Map<string, SuccessDelta[] | "failed">
+    Map<number, SuccessDelta[] | "failed">
 >;
 
 // Externally-observable mutation delta produced by ONE successful
@@ -516,14 +516,38 @@ type SuccessDelta = {
         | undefined;
 };
 
+// Encode (leading, pendingWildcard, requireValue, carrier) into the
+// low 5 bits: leading occupies bits 2..3 (4 modes → 2 bits),
+// pendingWildcard bit 2 is already taken so shift: actually lay out as
+//   bits 4..3 = leading (0..3)
+//   bit 2    = pendingWildcard
+//   bit 1    = requireValue
+//   bit 0    = carrier
+// Then `(index << 5) | flagBits`.
+//
+// Overflow: `index` is bounded by `request.length`.  V8 caps string
+// length at ~2^28; shifting by 5 gives ~2^33, well within
+// Number.MAX_SAFE_INTEGER (2^53 - 1).  No guard needed.
+const memoLeadingBits: Record<"required" | "optional" | "none", number> = {
+    required: 0,
+    optional: 1,
+    none: 2,
+};
 function memoCacheKey(
     index: number,
     leading: CompiledSpacingMode,
     pendingWildcard: boolean,
     requireValue: boolean,
     carrier: boolean,
-): string {
-    return `${index}|${leading}|${pendingWildcard ? 1 : 0}|${requireValue ? 1 : 0}|${carrier ? 1 : 0}`;
+): number {
+    const leadingIdx = leading === undefined ? 3 : memoLeadingBits[leading];
+    return (
+        (index << 5) |
+        (leadingIdx << 3) |
+        (pendingWildcard ? 4 : 0) |
+        (requireValue ? 2 : 0) |
+        (carrier ? 1 : 0)
+    );
 }
 
 // Deep-copy a `ValueIdNode` chain (terminating at `undefined` or
