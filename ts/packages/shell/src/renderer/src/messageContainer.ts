@@ -15,7 +15,7 @@ import {
 } from "agent-dispatcher";
 
 import { ChoicePanel, InputChoice } from "./choicePanel";
-import { setContent, swapContent } from "./setContent";
+import { setContent } from "./setContent";
 import { ChatView } from "./chat/chatView";
 import { iconCheckMarkCircle, iconRoadrunner, iconX } from "./icon";
 import { TemplateEditor } from "./templateEditor";
@@ -80,6 +80,12 @@ export class MessageContainer {
     public readonly div: HTMLDivElement;
     private readonly messageBodyDiv: HTMLDivElement;
     private readonly messageDiv: HTMLDivElement;
+    // Sibling of messageDiv inside messageBodyDiv. Holds the action JSON
+    // (pretty-printed) shown when the user clicks the agent name. Hidden
+    // by default; toggled visible via toggleActionData. Mirrors chat-ui's
+    // separate detailsDiv pattern (chatPanel.ts) so the JSON expands
+    // BELOW the message instead of replacing it in place.
+    private actionDataDiv?: HTMLPreElement;
     private readonly timestampDiv: HTMLDivElement;
     private readonly iconDiv?: HTMLDivElement;
     private nameSpan: HTMLSpanElement;
@@ -158,14 +164,14 @@ export class MessageContainer {
 
     public updateActionData(data: any) {
         this.action = data;
-        const label = this.timestampDiv.firstChild as HTMLSpanElement;
         if (this.action !== undefined && !Array.isArray(this.action)) {
-            label.setAttribute(
-                "action-data",
-                JSON.stringify(this.action, undefined, 2),
-            );
-
-            // mark the span as clickable
+            const json = JSON.stringify(this.action, undefined, 2);
+            this.setActionDataPanel(json);
+            // Keep the legacy attribute for back-compat with any external
+            // callers (e.g. tests, copy-action handlers); the panel below
+            // is the user-visible surface.
+            const label = this.timestampDiv.firstChild as HTMLSpanElement;
+            label.setAttribute("action-data", json);
             this.nameSpan.classList.add("clickable");
         }
     }
@@ -178,18 +184,32 @@ export class MessageContainer {
         } else {
             this.diagnosticData.push(data);
         }
-        const label = this.timestampDiv.firstChild as HTMLSpanElement;
-        label.setAttribute(
-            "action-data",
-            JSON.stringify(
-                this.diagnosticData.length === 1
-                    ? this.diagnosticData[0]
-                    : this.diagnosticData,
-                undefined,
-                2,
-            ),
+        const json = JSON.stringify(
+            this.diagnosticData.length === 1
+                ? this.diagnosticData[0]
+                : this.diagnosticData,
+            undefined,
+            2,
         );
+        this.setActionDataPanel(json);
+        const label = this.timestampDiv.firstChild as HTMLSpanElement;
+        label.setAttribute("action-data", json);
         this.nameSpan.classList.add("clickable");
+    }
+
+    private setActionDataPanel(json: string): void {
+        if (this.actionDataDiv === undefined) {
+            const pre = document.createElement("pre");
+            pre.className = "chat-action-data-panel";
+            // Hidden by default — visibility is toggled by clicking the
+            // agent name span (see constructor).
+            pre.style.display = "none";
+            this.messageBodyDiv.appendChild(pre);
+            this.actionDataDiv = pre;
+        }
+        // textContent (not innerHTML) so the JSON renders verbatim and
+        // can't introduce script/markup execution from action payloads.
+        this.actionDataDiv.textContent = json;
     }
 
     private createTimestampDiv(timestamp: Date, className: string) {
@@ -227,7 +247,15 @@ export class MessageContainer {
         this.nameSpan = document.createElement("span");
         this.nameSpan.className = "agent-name";
         this.nameSpan.addEventListener("click", () => {
-            swapContent(this.nameSpan, this.messageDiv);
+            // Toggle the action-data panel below the message instead of
+            // swapping the message body (the previous behavior overlaid
+            // the JSON on top of the response, which the user perceived
+            // as the action XML "covering" the message). The panel is
+            // created lazily by setActionDataPanel; if no action data
+            // has been attached, this click is a no-op.
+            if (this.actionDataDiv === undefined) return;
+            this.actionDataDiv.style.display =
+                this.actionDataDiv.style.display === "none" ? "" : "none";
         });
 
         const timestampDiv = this.createTimestampDiv(
