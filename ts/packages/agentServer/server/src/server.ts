@@ -434,4 +434,13 @@ process.on("uncaughtException", (err) => {
     // Log but do not exit for non-fatal errors.
 });
 
-await main();
+await main().catch((err: any) => {
+    if (err?.code === "ERR_INSTANCE_LOCKED") {
+        // Friendly, single-line message — no stack trace for this expected
+        // case (another shell/server already owns the profile directory).
+        console.error(`\n[agent-server] ${err.message}\n`);
+        process.exit(1);
+    }
+    console.error("[agent-server] Fatal startup error:", err);
+    process.exit(1);
+});

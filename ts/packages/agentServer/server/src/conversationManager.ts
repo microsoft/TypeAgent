@@ -88,24 +88,63 @@ export async function createConversationManager(
     idleTimeoutMs: number = DEFAULT_IDLE_TIMEOUT_MS,
 ): Promise<ConversationManager> {
     const conversationsDir = path.join(baseDir, CONVERSATIONS_DIR);
-    await fs.promises.mkdir(conversationsDir, { recursive: true });
 
-    // Migrate old on-disk layout: "server-sessions/" → "conversations/"
+    // Migrate old on-disk layout: "server-sessions/" → "conversations/".
+    // IMPORTANT: do this BEFORE creating the destination — otherwise
+    // `fs.rename` fails with EPERM/EEXIST on Windows when the target
+    // already exists, silently stranding all historical conversations
+    // in the old directory.
     const oldConversationsDir = path.join(baseDir, "server-sessions");
-    try {
-        await fs.promises.rename(oldConversationsDir, conversationsDir);
-        debugConversation(
-            `Migrated on-disk directory "server-sessions" → "conversations"`,
-        );
-    } catch (e: any) {
-        if (
-            e?.code !== "ENOENT" &&
-            e?.code !== "EEXIST" &&
-            e?.code !== "EPERM"
-        ) {
-            debugConversationErr("Failed to migrate server-sessions dir:", e);
+    if (
+        !fs.existsSync(conversationsDir) &&
+        fs.existsSync(oldConversationsDir)
+    ) {
+        try {
+            await fs.promises.rename(oldConversationsDir, conversationsDir);
+            debugConversation(
+                `Migrated on-disk directory "server-sessions" → "conversations"`,
+            );
+        } catch (e: any) {
+            debugConversationErr(
+                "Failed to migrate server-sessions dir:",
+                e,
+            );
+        }
+    } else if (fs.existsSync(oldConversationsDir)) {
+        // Both directories exist — earlier builds raced and pre-created
+        // the destination. Move stragglers across so users don't lose history.
+        try {
+            for (const entry of await fs.promises.readdir(
+                oldConversationsDir,
+                { withFileTypes: true },
+            )) {
+                const src = path.join(oldConversationsDir, entry.name);
+                const dst = path.join(conversationsDir, entry.name);
+                if (fs.existsSync(dst)) continue;
+                try {
+                    await fs.promises.rename(src, dst);
+                } catch (e: any) {
+                    debugConversationErr(
+                        `Failed to migrate ${entry.name}:`,
+                        e,
+                    );
+                }
+            }
+            // Best-effort cleanup; will fail silently if non-empty.
+            await fs.promises
+                .rmdir(oldConversationsDir)
+                .catch(() => undefined);
+            debugConversation(
+                `Merged stragglers from "server-sessions" → "conversations"`,
+            );
+        } catch (e: any) {
+            debugConversationErr(
+                "Failed to merge server-sessions stragglers:",
+                e,
+            );
         }
     }
+    await fs.promises.mkdir(conversationsDir, { recursive: true });
     // Migrate old metadata filename: "sessions.json" → "conversations.json"
     const oldMetadataPath = path.join(conversationsDir, "sessions.json");
     const newMetadataPath = path.join(conversationsDir, METADATA_FILE);

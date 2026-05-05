@@ -72,6 +72,14 @@ export async function lockInstanceDir(instanceDir: string) {
             },
         });
     } catch (e: any) {
+        if (e?.code === "ELOCKED") {
+            const err: any = new Error(
+                `Another agent-server (or shell) is already using the instance directory:\n  ${instanceDir}\n\nOnly one process can hold this directory at a time. Stop the other instance and try again, or set TYPEAGENT_USER_DATA_DIR to use a separate profile.`,
+            );
+            err.code = "ERR_INSTANCE_LOCKED";
+            err.instanceDir = instanceDir;
+            throw err;
+        }
         throw new Error(
             `Unable to lock instance directory ${instanceDir}. Only one client per instance directory can be active at a time. Cause: ${e?.code ?? "unknown"} — ${e?.message ?? e}`,
         );

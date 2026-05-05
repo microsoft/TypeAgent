@@ -16,11 +16,11 @@ pnpm run build
 
 Then build & install the three pieces that live outside the standard build:
 
-| Component | Location | Command |
-|---|---|---|
-| **coda** VS Code extension (required for `code` agent: split, theme, new file) | `ts/packages/coda` | `pnpm run build`, then install the `.vsix` in VS Code (or F5 launch) |
-| **vscode-shell** VS Code extension (the sidebar chat) | `ts/packages/vscode-shell` | `pnpm --filter vscode-shell run deploy:local` (or F5) |
-| **autoShell** (so `switch to Code` actually foregrounds the IDE) | `dotnet/autoShell` | `dotnet build`; ensure the desktop agent is configured to use the built exe |
+| Component                                                                      | Location                   | Command                                                                     |
+| ------------------------------------------------------------------------------ | -------------------------- | --------------------------------------------------------------------------- |
+| **coda** VS Code extension (required for `code` agent: split, theme, new file) | `ts/packages/coda`         | `pnpm run build`, then install the `.vsix` in VS Code (or F5 launch)        |
+| **vscode-shell** VS Code extension (the sidebar chat)                          | `ts/packages/vscode-shell` | `pnpm --filter vscode-shell run deploy:local` (or F5)                       |
+| **autoShell** (so `switch to Code` actually foregrounds the IDE)               | `dotnet/autoShell`         | `dotnet build`; ensure the desktop agent is configured to use the built exe |
 
 Reinstall coda after any changes to `ts/packages/coda` or `ts/packages/agents/code`.
 Reinstall vscode-shell after any changes to `ts/packages/vscode-shell` (including
@@ -87,19 +87,19 @@ listener installed by the webview.
 
 ## 6. Known weak spots — verify or have a backup plan
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| `add label "X" to issue N` returns "'X' not found" | Label does not exist in repo | Pre-create with `gh label create X --color HEXCOLOR --repo OWNER/REPO` |
-| "add label to that issue" / "delete that issue" doesn't resolve | Entity resolution requires the prior turn to be `issueCreate`/`prCreate` and stays in the same conversation | The `issueCreate` and `prCreate` actions emit a `resultEntity` for the new issue/PR; use immediately after creation |
-| `show check runs for that PR` runs `gh run view <num>` and 404s | Reasoning maps "for that PR" to a workflow-run id, and there's no conversation memory of the prior PR | Use the explicit phrasing `show check runs for PR N [in OWNER/REPO]` (now backed by `gh pr checks`) |
-| `create scratch.ts` returns "Unknown action name: code.code-general" | Reasoning hallucinates a sub-schema name as an action name | Rephrase as `create a typescript file scratch.ts with a hello world function` (drop "called" and "new"); long-term tracked in plan.md |
-| `splitEditor` returns "Did not handle the action" | Installed coda is older than `ts/packages/coda` source | Rebuild & reinstall coda |
-| `splitEditor` returns "No websocket connection" | Code agent WS server isn't up in this session | `@config schema code on` (then verify port 8082 is listening) |
-| `create scratch.ts` returns "Integration ... not found" | Onboarding agent grabbed the request | `@config schema onboarding off` |
-| `change my color theme to ...` toggles the title-bar instead of the theme | Desktop agent grabbed the request because the prompt didn't say "vscode" | Use the exact wording in the demo file |
-| "remind me which PR we were just looking at" hallucinates PR #123 / `example/repo` | Reasoning has no conversation memory | `@config request reasoning copilot` |
-| `switch to Code` doesn't foreground the IDE | autoShell missing or desktop agent not pointed at it | Rebuild `dotnet/autoShell` and re-link |
-| Sidebar opens to a different session than the shell | vscode-shell session sync hasn't picked up | Reload the VS Code window after starting agent-server |
+| Symptom                                                                            | Cause                                                                                                       | Fix                                                                                                                                   |
+| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `add label "X" to issue N` returns "'X' not found"                                 | Label does not exist in repo                                                                                | Pre-create with `gh label create X --color HEXCOLOR --repo OWNER/REPO`                                                                |
+| "add label to that issue" / "delete that issue" doesn't resolve                    | Entity resolution requires the prior turn to be `issueCreate`/`prCreate` and stays in the same conversation | The `issueCreate` and `prCreate` actions emit a `resultEntity` for the new issue/PR; use immediately after creation                   |
+| `show check runs for that PR` runs `gh run view <num>` and 404s                    | Reasoning maps "for that PR" to a workflow-run id, and there's no conversation memory of the prior PR       | Use the explicit phrasing `show check runs for PR N [in OWNER/REPO]` (now backed by `gh pr checks`)                                   |
+| `create scratch.ts` returns "Unknown action name: code.code-general"               | Reasoning hallucinates a sub-schema name as an action name                                                  | Rephrase as `create a typescript file scratch.ts with a hello world function` (drop "called" and "new"); long-term tracked in plan.md |
+| `splitEditor` returns "Did not handle the action"                                  | Installed coda is older than `ts/packages/coda` source                                                      | Rebuild & reinstall coda                                                                                                              |
+| `splitEditor` returns "No websocket connection"                                    | Code agent WS server isn't up in this session                                                               | `@config schema code on` (then verify port 8082 is listening)                                                                         |
+| `create scratch.ts` returns "Integration ... not found"                            | Onboarding agent grabbed the request                                                                        | `@config schema onboarding off`                                                                                                       |
+| `change my color theme to ...` toggles the title-bar instead of the theme          | Desktop agent grabbed the request because the prompt didn't say "vscode"                                    | Use the exact wording in the demo file                                                                                                |
+| "remind me which PR we were just looking at" hallucinates PR #123 / `example/repo` | Reasoning has no conversation memory                                                                        | `@config request reasoning copilot`                                                                                                   |
+| `switch to Code` doesn't foreground the IDE                                        | autoShell missing or desktop agent not pointed at it                                                        | Rebuild `dotnet/autoShell` and re-link                                                                                                |
+| Sidebar opens to a different session than the shell                                | vscode-shell session sync hasn't picked up                                                                  | Reload the VS Code window after starting agent-server                                                                                 |
 
 ---
 
