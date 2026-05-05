@@ -6,7 +6,8 @@
 ## What exists today
 
 A lightweight approval mechanism that gates side-effecting tasks before
-execution:
+execution. Secure-by-default: side-effecting tasks are ALWAYS gated,
+regardless of how the engine is invoked.
 
 - `TaskDefinition.sideEffects?: boolean` marks tasks that touch the outside
   world (shell, filesystem, network, LLM).
@@ -14,8 +15,11 @@ execution:
   happens when a side-effecting task is reached.
 - `ApprovalFn` callback lets the host (CLI, GUI, test harness) decide
   interactively.
-- Default for side-effecting tasks with no explicit policy: `"prompt"`.
-- CLI supports `--dry-run` (sets all side-effecting tasks to `"deny"`).
+- Default for side-effecting tasks with no explicit policy entry: `"prompt"`.
+- `"prompt"` without an `ApprovalFn` is treated as `"deny"`.
+- Callers must explicitly opt in via `policy: { "task.name": "allow" }` or
+  provide an `ApprovalFn` that returns true.
+- CLI supports `--dry-run` (deny all) and `--allow-all` (allow all).
 
 ## What this is NOT
 

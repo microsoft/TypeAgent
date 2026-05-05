@@ -9,7 +9,7 @@
  * sentinels, branch nodes, and all six standard-library tasks.
  */
 
-import { WorkflowIR, TaskDefinition } from "workflow-model";
+import { WorkflowIR, TaskDefinition, TaskPolicy } from "workflow-model";
 import {
     TaskRegistry,
     WorkflowEngine,
@@ -22,6 +22,13 @@ import { readFileSync, unlinkSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
+
+// Policy that allows all side-effecting builtins (for tests exercising tasks).
+const allowAllPolicy: TaskPolicy = Object.fromEntries(
+    allBuiltinTasks
+        .filter((t) => t.sideEffects)
+        .map((t) => [t.name, "allow" as const]),
+);
 
 // ---- Mock domain tasks ----
 
@@ -1311,7 +1318,10 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "result" } as any,
             };
 
-            const result = await eng.run(ir, {});
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+            });
             expect(result.success).toBe(true);
             const output = result.output as {
                 stdout: string;
@@ -1362,7 +1372,10 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "result" } as any,
             };
 
-            const result = await eng.run(ir, {});
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+            });
             expect(result.success).toBe(true);
             const output = result.output as {
                 stdout: string;
@@ -1412,7 +1425,10 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "result" } as any,
             };
 
-            const result = await eng.run(ir, {});
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+            });
             expect(result.success).toBe(false);
             expect(result.error?.message).toContain("ENOENT");
         });
@@ -1436,8 +1452,8 @@ describe("WorkflowEngine (IR v1)", () => {
             // Run with dummy input to trigger validation
             // (validation happens inside engine.run)
             const result = await eng.run(ir, {
-                repos: ["/tmp"],
-                author: "test",
+                input: { repos: ["/tmp"], author: "test" },
+                policy: allowAllPolicy,
             });
 
             // Even if git log fails on /tmp, the workflow should at least
@@ -1529,7 +1545,10 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
 
             const ir = loadD4();
-            const result = await eng.run(ir, { repoPath: "/tmp" });
+            const result = await eng.run(ir, {
+                input: { repoPath: "/tmp" },
+                policy: allowAllPolicy,
+            });
 
             if (!result.success) {
                 expect(result.error?.message).not.toContain(
@@ -1738,7 +1757,10 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
 
             const ir = loadD5();
-            const result = await eng.run(ir, { repoPath: "/tmp" });
+            const result = await eng.run(ir, {
+                input: { repoPath: "/tmp" },
+                policy: allowAllPolicy,
+            });
 
             if (!result.success) {
                 expect(result.error?.message).not.toContain(
@@ -1935,7 +1957,10 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "result" } as any,
             };
 
-            const result = await eng.run(ir, {});
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+            });
             expect(result.success).toBe(true);
             const output = result.output as {
                 body: string;
@@ -1992,7 +2017,10 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "result" } as any,
             };
 
-            const writeResult = await eng.run(writeIr, {});
+            const writeResult = await eng.run(writeIr, {
+                input: {},
+                policy: allowAllPolicy,
+            });
             expect(writeResult.success).toBe(true);
             expect((writeResult.output as any).path).toBe(testFile);
 
@@ -2027,7 +2055,10 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "result" } as any,
             };
 
-            const readResult = await eng.run(readIr, {});
+            const readResult = await eng.run(readIr, {
+                input: {},
+                policy: allowAllPolicy,
+            });
             expect(readResult.success).toBe(true);
             expect((readResult.output as any).content).toBe(
                 "hello from workflow",
@@ -2051,8 +2082,11 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const ir = loadD8();
             const result = await eng.run(ir, {
-                url: "https://example.com",
-                outputPath: "/tmp/test.txt",
+                input: {
+                    url: "https://example.com",
+                    outputPath: "/tmp/test.txt",
+                },
+                policy: allowAllPolicy,
             });
 
             if (!result.success) {
@@ -2451,11 +2485,11 @@ describe("WorkflowEngine (IR v1)", () => {
             expect((result.output as any).result).toBe(5);
         });
 
-        it("existing tests still pass with legacy (ir, input) signature", async () => {
+        it("existing tests still pass with legacy (ir, input) signature for pure tasks", async () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
-            // Confirm the old two-arg signature still works
+            // Confirm the old two-arg signature still works for pure tasks
             const ir: WorkflowIR = {
                 kind: "workflow",
                 name: "legacyTest",
@@ -2492,6 +2526,17 @@ describe("WorkflowEngine (IR v1)", () => {
             const result = await eng.run(ir, { a: 1, b: 2 });
             expect(result.success).toBe(true);
             expect((result.output as any).result).toBe(30);
+        });
+
+        it("denies side-effecting tasks with legacy (ir, input) signature", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir = sideEffectWorkflow("file.read");
+            // Legacy call with plain input - should still deny
+            const result = await eng.run(ir, {});
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("approval not granted");
         });
     });
 });
