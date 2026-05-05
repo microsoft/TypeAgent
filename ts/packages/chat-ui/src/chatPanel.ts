@@ -422,6 +422,7 @@ export class ChatPanel {
 
     private readonly stopButton: HTMLButtonElement;
     private readonly ghostSpan: HTMLSpanElement;
+    private reconnectBanner: HTMLDivElement | undefined;
     private currentAgentContainer: AgentMessageContainer | undefined;
     private statusContainer: AgentMessageContainer | undefined;
     private historyAgentContainer: AgentMessageContainer | undefined;
@@ -536,6 +537,13 @@ export class ChatPanel {
         // Build DOM structure
         const wrapper = document.createElement("div");
         wrapper.className = "chat-panel-wrapper";
+
+        // Reconnect banner — hidden by default. Hosts call setReconnectStatus()
+        // to show retry/connecting state to the user instead of a silent UI.
+        this.reconnectBanner = document.createElement("div");
+        this.reconnectBanner.className = "chat-reconnect-banner";
+        this.reconnectBanner.style.display = "none";
+        wrapper.appendChild(this.reconnectBanner);
 
         // Scrollable message area
         this.messageDiv = document.createElement("div");
@@ -1995,6 +2003,28 @@ export class ChatPanel {
             this.inputArea.classList.remove("chat-input-disabled");
         } else {
             this.inputArea.classList.add("chat-input-disabled");
+            // No commands can be in flight when input is disabled (typically
+            // because the dispatcher disconnected). Hide the stop button so
+            // users can't try to cancel into a dead RPC channel.
+            if (this.activeRequestId !== undefined) {
+                this.setIdle();
+            }
+        }
+    }
+
+    /**
+     * Show or hide the reconnect banner above the chat. Pass `undefined` to
+     * hide. The banner is plain text only — hosts format the message
+     * (countdown, attempt number, etc.) before passing it in.
+     */
+    public setReconnectStatus(message: string | undefined): void {
+        if (this.reconnectBanner === undefined) return;
+        if (message === undefined) {
+            this.reconnectBanner.style.display = "none";
+            this.reconnectBanner.textContent = "";
+        } else {
+            this.reconnectBanner.textContent = message;
+            this.reconnectBanner.style.display = "";
         }
     }
 

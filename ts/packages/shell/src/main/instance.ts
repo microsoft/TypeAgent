@@ -213,11 +213,30 @@ async function initializeDispatcher(
             let onConnectionLost: (() => void) | undefined;
 
             const giveUpAndQuit = (msg: string): void => {
+                broadcastReconnect(undefined);
                 dialog.showErrorBox(
                     "Disconnected",
                     `The connection to the dispatcher was lost and could not be re-established.\n\n${msg}`,
                 );
                 app.quit();
+            };
+
+            const broadcastReconnect = (
+                message: string | undefined,
+            ): void => {
+                try {
+                    if (!shellWindow.chatView.webContents.isDestroyed()) {
+                        shellWindow.chatView.webContents.send(
+                            "reconnect-status",
+                            message,
+                        );
+                    }
+                } catch (e: any) {
+                    debugShellInit(
+                        "broadcastReconnect failed:",
+                        e?.message ?? e,
+                    );
+                }
             };
 
             const attemptReconnect = async (): Promise<void> => {
@@ -236,16 +255,24 @@ async function initializeDispatcher(
                         debugShellInit(
                             `Reconnect attempt ${reconnectAttempt} in ${backoffSec}s`,
                         );
-                        await new Promise((r) =>
-                            setTimeout(r, backoffSec * 1000),
-                        );
-                        if (quitting) return;
-                        try {
-                            await ensureAgentServer(
-                                connect,
-                                effectiveHidden,
-                                effectiveIdleTimeout,
+                        // Countdown banner (updated every second so the user
+                        // sees the time tick down instead of a static label).
+                        for (let s = backoffSec; s > 0 && !quitting; s--) {
+                            broadcastReconnect(
+                                `Disconnected — retrying in ${s}s (attempt ${reconnectAttempt})`,
                             );
+                            await new Promise((r) => setTimeout(r, 1000));
+                        }
+                        if (quitting) return;
+                        broadcastReconnect(
+                            `Disconnected — connecting (attempt ${reconnectAttempt})…`,
+                        );
+                        try {
+                            // NOTE: deliberately do NOT call ensureAgentServer
+                            // here — auto-spawning a replacement server in a
+                            // new window is surprising when the user killed it
+                            // intentionally. Just try to reconnect to the
+                            // existing one; if it's gone we keep retrying.
                             const fresh = await connectAgentServer(
                                 url,
                                 () => onConnectionLost?.(),
@@ -302,6 +329,7 @@ async function initializeDispatcher(
                             connection = fresh;
                             rebindDispatcher(freshConversation.dispatcher);
                             reconnectAttempt = 0;
+                            broadcastReconnect(undefined);
                             debugShellInit("Reconnected to dispatcher");
                             return;
                         } catch (e: any) {
@@ -326,6 +354,7 @@ async function initializeDispatcher(
                 debugShellInit(
                     "Dispatcher connection lost; will attempt to reconnect.",
                 );
+                broadcastReconnect("Disconnected — preparing to reconnect…");
                 void attemptReconnect();
             };
 

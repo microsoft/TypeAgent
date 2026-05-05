@@ -51,6 +51,17 @@
   pointer-events: none;
 }
 
+.chat-reconnect-banner {
+  background-color: #fff4ce;
+  color: #5c3c00;
+  border-bottom: 1px solid #ffc83d;
+  padding: 6px 12px;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 12px;
+  text-align: center;
+  flex: 0 0 auto;
+}
+
 .chat-input-text-wrapper {
   display: flex;
   flex-wrap: wrap;

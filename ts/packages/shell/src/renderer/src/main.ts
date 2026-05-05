@@ -990,6 +990,9 @@ function registerClient(
         demoStateChanged(state: "running" | "paused" | "idle"): void {
             chatView.setDemoState(state);
         },
+        reconnectStatusChanged(message: string | undefined): void {
+            chatView.setReconnectStatus(message);
+        },
     };
 
     getClientAPI().registerClient(client);
