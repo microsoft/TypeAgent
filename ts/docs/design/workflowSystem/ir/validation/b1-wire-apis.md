@@ -500,7 +500,7 @@ the design - it is on every realistic path.
 | S1 (boolean discriminant)              | §3.6. **Suggested:** clarification edit + maybe `decisions/0008-discriminant-key-encoding.md`.                                                                                                                          |
 | S2 (body bindings don't survive @exit) | §3.7 wording + worked example. Possibly `decisions/0009-loop-output-source.md` if the symmetric rule is to be defended.                                                                                                 |
 | S3 (no object construction)            | **Strongest finding.** **Accepted:** [`decisions/0007-value-construction-in-references.md`](../decisions/0007-value-construction-in-references.md) (Alternative G, template model). Cross-scenario evidence with A4 S1. |
-| G1 (expressions, again)                | Reinforces A4 S2. Two scenarios is enough evidence; write the record.                                                                                                                                                   |
+| G1 (expressions, again)                | Reinforces A4 S2. **Adopted:** [`decisions/0006-no-expressions-in-ir.md`](../decisions/0006-no-expressions-in-ir.md) (no expressions; standard-library tasks; DSL hides them).                                          |
 | G2 (retry pattern complexity)          | Reinforces A4. Worth a §3.8 worked example for the bounded-retry pattern specifically.                                                                                                                                  |
 
 ## 5. DSL hint

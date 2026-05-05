@@ -272,7 +272,8 @@ close surface ambiguities or ensure future-stable bijections;
 minimization (§1.3.1) generates counter-pressure to defer those
 concepts until a scenario forces them. This is the same shape as
 every other P3-vs.-minimization tension in the design (MapNode
-deferred, expressions deferred, per-scope constants deferred).
+deferred, expressions decided ([decision 0006](decisions/0006-no-expressions-in-ir.md)),
+per-scope constants deferred).
 Decision 0007 (G-K1.a vs. G-K1.b) is the worked example for
 the representation-surface axis specifically.
 
@@ -1897,7 +1898,9 @@ Notes (post-v1):
   `default`.
 - Alt A: predicate-based `if/else` with an embedded expression language.
   Rejected: introduces an expression language (more concepts, P5 surprise
-  surface) and pushes decision logic out of tasks.
+  surface) and pushes decision logic out of tasks. See also
+  [decision 0006](decisions/0006-no-expressions-in-ir.md) (no expressions
+  in the IR; standard-library tasks are the answer).
 - Alt B: exhaustive switch with no `default`. Rejected for v1: simpler to
   always require `default`; can be relaxed later when enum exhaustiveness is
   trusted.

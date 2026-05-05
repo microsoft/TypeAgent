@@ -195,8 +195,8 @@ the §1.1 budget.
 ### K8. What about expressions?
 
 This proposal does NOT introduce expressions (arithmetic,
-concatenation, comparisons). Those remain the topic of a separate,
-forthcoming decision (provisionally `0008-no-expressions-in-ir.md`).
+concatenation, comparisons). Those are the topic of a separate
+decision: [0006-no-expressions-in-ir.md](0006-no-expressions-in-ir.md).
 The two questions are separable: literals + object construction is
 about value _shape_; expressions are about value _computation_.
 Deciding one does not commit the other.

@@ -721,7 +721,7 @@ decision; recording it makes the cost visible.
 | Finding              | Targets                                                                                                                                                                                  |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | S1 (literals)        | §1.2, §1.3 (variance lens). **Accepted:** [`decisions/0007-value-construction-in-references.md`](../decisions/0007-value-construction-in-references.md) (Alternative G, template model). |
-| S2 (expressions)     | §1.3, principle-gaps, no current record. **Suggested:** add `decisions/0006-no-expressions.md` even if the conclusion is "no, here's why and what the DSL does instead".                 |
+| S2 (expressions)     | §1.3, principle-gaps. **Adopted:** [`decisions/0006-no-expressions-in-ir.md`](../decisions/0006-no-expressions-in-ir.md) (no expressions; standard-library tasks; DSL hides them).       |
 | S3 (forced sequence) | §3.2.2 v1-limitation, §1.1.3. Lift this to §1.1.3 as a named tension.                                                                                                                    |
 | G1 (fan-out)         | §2.2 already defers; no change.                                                                                                                                                          |
 | G2 (foreach)         | §1.3 and `post-v1/`. Worth a sketch.                                                                                                                                                     |
