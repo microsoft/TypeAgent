@@ -90,24 +90,24 @@ e.g. `@code rename this conversation to Brainstorm`.
 
 ### Keybindings (defaults)
 
-| Action | Windows / Linux | macOS |
-| --- | --- | --- |
+| Action                | Windows / Linux | macOS         |
+| --------------------- | --------------- | ------------- |
 | New Chat (Side Panel) | `Ctrl+K Ctrl+T` | `Cmd+K Cmd+T` |
-| New Conversation | `Ctrl+K Ctrl+N` | `Cmd+K Cmd+N` |
-| Switch Conversation | `Ctrl+K Ctrl+S` | `Cmd+K Cmd+S` |
-| Rename Conversation | `Ctrl+K Ctrl+R` | `Cmd+K Cmd+R` |
-| Clear Chat View | `Ctrl+K Ctrl+L` | `Cmd+K Cmd+L` |
+| New Conversation      | `Ctrl+K Ctrl+N` | `Cmd+K Cmd+N` |
+| Switch Conversation   | `Ctrl+K Ctrl+S` | `Cmd+K Cmd+S` |
+| Rename Conversation   | `Ctrl+K Ctrl+R` | `Cmd+K Cmd+R` |
+| Clear Chat View       | `Ctrl+K Ctrl+L` | `Cmd+K Cmd+L` |
 
 These chord bindings are gated on the chat being focused (a `when` clause
 on the `vscode-shell.chatFocused` context key).
 
 ## Settings
 
-| Setting | Default | Description |
-| --- | --- | --- |
-| `typeagent.serverUrl` | `ws://localhost:8999` | WebSocket URL of the TypeAgent agent server |
-| `typeagent.autoStart` | `false` | (Reserved) Auto-start the agent server if not running |
-| `typeagent.serverPort` | `8999` | (Reserved) Port to use when auto-starting the server |
+| Setting                | Default               | Description                                           |
+| ---------------------- | --------------------- | ----------------------------------------------------- |
+| `typeagent.serverUrl`  | `ws://localhost:8999` | WebSocket URL of the TypeAgent agent server           |
+| `typeagent.autoStart`  | `false`               | (Reserved) Auto-start the agent server if not running |
+| `typeagent.serverPort` | `8999`                | (Reserved) Port to use when auto-starting the server  |
 
 ## Multiple chat panels
 
@@ -120,13 +120,13 @@ agent-server connection. You can:
 
 ## Development
 
-| Script | Description |
-| --- | --- |
-| `npm run compile` | One-shot esbuild bundle for both extension host and webview. |
-| `npm run watch` | esbuild in watch mode. |
-| `npm run package` | Produce `dist-pub/vscode-shell.vsix`. |
-| `npm run deploy:local` | Package and install the VSIX into the local `code` CLI. |
-| `npm run clean` | Remove `dist`, `dist-pub`, and stray `.vsix` files. |
+| Script                 | Description                                                  |
+| ---------------------- | ------------------------------------------------------------ |
+| `npm run compile`      | One-shot esbuild bundle for both extension host and webview. |
+| `npm run watch`        | esbuild in watch mode.                                       |
+| `npm run package`      | Produce `dist-pub/vscode-shell.vsix`.                        |
+| `npm run deploy:local` | Package and install the VSIX into the local `code` CLI.      |
+| `npm run clean`        | Remove `dist`, `dist-pub`, and stray `.vsix` files.          |
 
 The extension host code lives in `src/`; the webview UI in `src/webview/`.
 The host owns the WebSocket connection to the agent server; the webview
@@ -135,14 +135,6 @@ talks to the host via `postMessage`.
 ## License
 
 MIT — see the [TypeAgent repository LICENSE](../../../LICENSE).
-
-## Trademarks
-
-This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft
-trademarks or logos is subject to and must follow
-[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
-Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
-Any use of third-party trademarks or logos are subject to those third-party's policies.
 
 ## Trademarks
 
