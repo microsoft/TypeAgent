@@ -199,15 +199,139 @@ async function initializeDispatcher(
                 effectiveIdleTimeout,
             );
             const url = `ws://localhost:${connect}`;
-            connection = await connectAgentServer(url, () => {
-                if (!quitting) {
-                    dialog.showErrorBox(
-                        "Disconnected",
-                        "The connection to the dispatcher was lost.",
-                    );
-                    app.quit();
+
+            // Reconnect state. When the WebSocket drops we attempt a few
+            // backoff retries before giving up and surfacing the modal
+            // "Disconnected" dialog. This keeps the shell alive across
+            // brief server hiccups (server restart, transient network
+            // blip when running with --connect to a remote host).
+            // Backoff schedule mirrors the vscode-shell extension's
+            // AgentServerBridge.scheduleReconnect (4/6/8/...30s cap).
+            const MAX_RECONNECT_ATTEMPTS = 12; // ~5 minutes total at the 30s cap
+            let reconnectAttempt = 0;
+            let reconnecting = false;
+            let onConnectionLost: (() => void) | undefined;
+
+            const giveUpAndQuit = (msg: string): void => {
+                dialog.showErrorBox(
+                    "Disconnected",
+                    `The connection to the dispatcher was lost and could not be re-established.\n\n${msg}`,
+                );
+                app.quit();
+            };
+
+            const attemptReconnect = async (): Promise<void> => {
+                if (quitting || reconnecting) return;
+                reconnecting = true;
+                try {
+                    while (
+                        !quitting &&
+                        reconnectAttempt < MAX_RECONNECT_ATTEMPTS
+                    ) {
+                        reconnectAttempt++;
+                        const backoffSec = Math.min(
+                            30,
+                            2 + reconnectAttempt * 2,
+                        );
+                        debugShellInit(
+                            `Reconnect attempt ${reconnectAttempt} in ${backoffSec}s`,
+                        );
+                        await new Promise((r) =>
+                            setTimeout(r, backoffSec * 1000),
+                        );
+                        if (quitting) return;
+                        try {
+                            await ensureAgentServer(
+                                connect,
+                                effectiveHidden,
+                                effectiveIdleTimeout,
+                            );
+                            const fresh = await connectAgentServer(
+                                url,
+                                () => onConnectionLost?.(),
+                            );
+                            // Re-join the conversation we were on. Read the
+                            // latest saved conversation id from userSettings
+                            // — switchConversation writes it on every switch
+                            // and the initial join writes it too, so this is
+                            // always up to date as a single source of truth.
+                            const targetConversationId = (loadUserSettings()
+                                .conversation.lastConversationId ??
+                                initialConversationId) as string | undefined;
+                            let freshConversation:
+                                | Awaited<
+                                      ReturnType<
+                                          typeof fresh.joinConversation
+                                      >
+                                  >
+                                | undefined;
+                            if (targetConversationId) {
+                                try {
+                                    freshConversation =
+                                        await fresh.joinConversation(
+                                            clientIO,
+                                            {
+                                                conversationId:
+                                                    targetConversationId,
+                                            },
+                                        );
+                                } catch (e: any) {
+                                    debugShellInit(
+                                        "Reconnect: saved conversation gone, falling back to default Shell:",
+                                        e.message,
+                                    );
+                                }
+                            }
+                            if (freshConversation === undefined) {
+                                // Fall back to the default Shell conversation.
+                                const list = await fresh.listConversations(
+                                    "Shell",
+                                );
+                                const m = list.find(
+                                    (s) => s.name.toLowerCase() === "shell",
+                                );
+                                const id =
+                                    m?.conversationId ??
+                                    (await fresh.createConversation("Shell"))
+                                        .conversationId;
+                                freshConversation =
+                                    await fresh.joinConversation(clientIO, {
+                                        conversationId: id,
+                                    });
+                            }
+                            connection = fresh;
+                            rebindDispatcher(freshConversation.dispatcher);
+                            reconnectAttempt = 0;
+                            debugShellInit("Reconnected to dispatcher");
+                            return;
+                        } catch (e: any) {
+                            debugShellInit(
+                                `Reconnect attempt ${reconnectAttempt} failed: ${e.message}`,
+                            );
+                            // continue loop
+                        }
+                    }
+                    if (!quitting) {
+                        giveUpAndQuit(
+                            `Tried ${reconnectAttempt} times without success.`,
+                        );
+                    }
+                } finally {
+                    reconnecting = false;
                 }
-            });
+            };
+
+            onConnectionLost = () => {
+                if (quitting) return;
+                debugShellInit(
+                    "Dispatcher connection lost; will attempt to reconnect.",
+                );
+                void attemptReconnect();
+            };
+
+            connection = await connectAgentServer(url, () =>
+                onConnectionLost?.(),
+            );
             // Find-or-create the default "Shell" conversation, matching CLI behavior.
             const SHELL_CONVERSATION_NAME = "Shell";
             let conversation:
