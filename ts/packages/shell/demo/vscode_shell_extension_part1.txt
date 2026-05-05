@@ -43,7 +43,7 @@ show PR 2196 in microsoft/TypeAgent
 
 # Bring the IDE to the foreground (use the exact Start Menu name
 # so the desktop agent's fuzzy matcher doesn't pick a different app).
-launch vscode
+launch Code
 
 # PRESENTER: the IDE comes to the foreground. Continue with
 # vscode_shell_extension_part2.txt inside the extension's

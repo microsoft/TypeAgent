@@ -78,8 +78,19 @@ code --install-extension dist-pub/vscode-shell.vsix --force
 
 ### Conversation management (chat-driven)
 
-When the `code` agent's `code-vscode-shell` sub-schema is loaded by the
-agent server, you can drive the extension's conversation tabs from chat:
+The `code` agent's `code-vscode-shell` sub-schema implements a
+`vscode-shell-action` client action that this extension handles. It is
+**not** enabled by default (other hosts of the `code` agent — e.g. the
+Electron shell — don't implement that client action and would otherwise
+silently no-op the request). Enable it once per session in the chat:
+
+```
+@config schema code-vscode-shell on
+```
+
+The setting is persisted in your TypeAgent user settings, so you only
+need to do this on first use. After it's on, you can drive the
+extension's conversation tabs from chat:
 
 - "**new conversation**" / "**new conversation named X**"
 - "**rename this conversation to X**"
@@ -92,7 +103,7 @@ e.g. `@code rename this conversation to Brainstorm`.
 
 | Action                | Windows / Linux | macOS         |
 | --------------------- | --------------- | ------------- |
-| New Chat (Side Panel) | `Ctrl+K Ctrl+T` | `Cmd+K Cmd+T` |
+| New Chat in Editor    | `Ctrl+K Ctrl+T` | `Cmd+K Cmd+T` |
 | New Conversation      | `Ctrl+K Ctrl+N` | `Cmd+K Cmd+N` |
 | Switch Conversation   | `Ctrl+K Ctrl+S` | `Cmd+K Cmd+S` |
 | Rename Conversation   | `Ctrl+K Ctrl+R` | `Cmd+K Cmd+R` |
