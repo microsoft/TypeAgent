@@ -260,4 +260,22 @@ export class MessageGroup {
     public hideUserMessage() {
         this.userMessage.hide();
     }
+
+    // Removes all DOM nodes owned by this group from their parents. Used by
+    // ephemeral notification groups (e.g. OS-notification dismiss) so the
+    // chat bubble disappears when the underlying notification is cleared.
+    public dispose() {
+        const removeFromParent = (el: HTMLElement | undefined) => {
+            if (el && el.parentNode) {
+                el.parentNode.removeChild(el);
+            }
+        };
+        removeFromParent(this.userMessage.div);
+        removeFromParent(this.statusMessage?.div);
+        for (const agentMessage of this.agentMessages) {
+            removeFromParent(agentMessage?.div);
+        }
+        removeFromParent(this.metricsDiv?.mainMetricsDiv);
+        removeFromParent(this.metricsDiv?.markMetricsDiv);
+    }
 }

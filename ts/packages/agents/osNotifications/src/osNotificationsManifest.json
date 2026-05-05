@@ -1,0 +1,5 @@
+{
+  "emojiChar": "🔔",
+  "description": "Forwards OS-level notifications (Windows Action Center, Linux freedesktop) into chat. Off by default; opt in via @config agent enable osNotifications.",
+  "defaultEnabled": false
+}

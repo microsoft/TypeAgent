@@ -68,6 +68,7 @@
     "music": "workspace:*",
     "music-local": "workspace:*",
     "onboarding-agent": "workspace:*",
+    "os-notifications-agent": "workspace:*",
     "photo-agent": "workspace:*",
     "powershell-typeagent": "workspace:*",
     "proper-lockfile": "^4.1.2",

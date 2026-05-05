@@ -1,0 +1,42 @@
+{
+  "name": "os-notifications-agent",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Forwards OS-level notifications (Windows Action Center, Linux freedesktop) into TypeAgent chat as ephemeral toasts/inline messages",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/agents/osNotifications"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/osNotificationsManifest.json",
+    "./agent/handlers": "./dist/osNotificationsActionHandler.js"
+  },
+  "scripts": {
+    "build": "npm run tsc",
+    "postbuild": "copyfiles -u 1 \"bin/**/*\" dist",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
+    "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
+    "dbus-next": "^0.10.2",
+    "debug": "^4.4.0"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.12",
+    "copyfiles": "^2.4.1",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

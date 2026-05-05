@@ -322,13 +322,19 @@ function registerClient(
                 case AppAgentEvent.Error:
                 case AppAgentEvent.Warning:
                 case AppAgentEvent.Info:
-                    notifications.push({
-                        event,
-                        source,
-                        data,
-                        read: false,
-                        requestId,
-                    });
+                    // OS-forwarded notifications are ephemeral by design —
+                    // do not record them in the @notify show buffer (they
+                    // would otherwise persist longer than the underlying
+                    // OS notification).
+                    if (source !== "osNotifications") {
+                        notifications.push({
+                            event,
+                            source,
+                            data,
+                            read: false,
+                            requestId,
+                        });
+                    }
                     break;
 
                 // Display-focused events - for now show toast notification inline
@@ -336,14 +342,29 @@ function registerClient(
                 case AppAgentEvent.Inline:
                 case AppAgentEvent.Toast:
                     chatView.addNotificationMessage(data, source, requestId);
-                    // Also add to notifications list for @notify show
-                    notifications.push({
-                        event,
-                        source,
-                        data,
-                        read: false,
-                        requestId,
-                    });
+                    if (source !== "osNotifications") {
+                        // OS notifications are tracked by the OS itself; do
+                        // not surface them in @notify show.
+                        notifications.push({
+                            event,
+                            source,
+                            data,
+                            read: false,
+                            requestId,
+                        });
+                    }
+                    break;
+
+                // OS-notifications agent: the underlying OS notification has
+                // been dismissed (left the action center). Remove the chat
+                // bubble we added when it first arrived. data.id matches the
+                // notificationId we used on the corresponding "added" event.
+                case "osDismiss":
+                    if (data && typeof data.id === "string") {
+                        chatView.removeNotificationGroup(
+                            `notification-async-osNotifications-${data.id}`,
+                        );
+                    }
                     break;
 
                 default:

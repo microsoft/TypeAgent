@@ -287,6 +287,28 @@ export async function createSharedDispatcher(
             log.logAppendDisplay(message, mode);
             log.saveQueued();
         };
+
+        // Notifications are ephemeral by default — only log when the producer
+        // explicitly opts in via options.persist. Agents (e.g. OS-notification
+        // forwarding) that should never enter durable history MUST leave the
+        // flag unset.
+        const origNotify = orig.notify.bind(orig) as (
+            ...args: Parameters<ClientIO["notify"]>
+        ) => void;
+        orig.notify = (
+            notificationId: any,
+            event: any,
+            data: any,
+            source: any,
+            seq?: any,
+            options?: any,
+        ) => {
+            origNotify(notificationId, event, data, source, seq, options);
+            if (options?.persist === true) {
+                log.logNotify(notificationId, event, data, source);
+                log.saveQueued();
+            }
+        };
     }
 
     const dispatchers = new Map<string, Dispatcher>();

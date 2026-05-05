@@ -2079,7 +2079,9 @@ export function getEnhancedConsolePrompt(_text: string): string {
  *
  * User requests are printed as styled prompt lines; agent display entries are
  * forwarded through setDisplay / appendDisplay exactly as live messages would
- * be. Notifications and display-info entries are skipped — they are ephemeral.
+ * be. Display-info entries are ephemeral and skipped. Notifications are
+ * ephemeral by default and not in the log; persist:true notifications are
+ * present and get re-emitted through clientIO.notify on replay.
  */
 export async function replayDisplayHistory(
     dispatcher: Dispatcher,
@@ -2156,7 +2158,17 @@ export async function replayDisplayHistory(
                 pendingInteractions.delete(entry.interactionId);
                 break;
             }
-            // notify and set-display-info are ephemeral — skip them
+            case "notify":
+                // Only persist:true notifications are in the log; replay them
+                // through the same channel they were emitted on.
+                clientIO.notify(
+                    entry.notificationId,
+                    entry.event,
+                    entry.data,
+                    entry.source,
+                );
+                break;
+            // set-display-info entries are ephemeral — skip them
         }
     }
 

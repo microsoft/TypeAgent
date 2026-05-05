@@ -45,6 +45,13 @@ export type NotifyExplainedData = {
     time: string;
 };
 
+// Options for ClientIO.notify. All notifications are ephemeral by default and
+// are NOT written to the DisplayLog — set persist:true to opt a notification
+// in to durable logging and replay on conversation rejoin.
+export type NotifyOptions = {
+    persist?: boolean;
+};
+
 // Client provided IO
 export interface ClientIO {
     clear(requestId: RequestId): void;
@@ -90,12 +97,16 @@ export interface ClientIO {
     ): Promise<unknown>;
 
     // Notification (TODO: turn these in to dispatcher events)
+    // Default behavior is ephemeral: notifications are broadcast to clients
+    // but not written to the DisplayLog. Pass options.persist=true to opt in
+    // to logging and history replay.
     notify(
         notificationId: string | RequestId | undefined,
         event: string,
         data: any,
         source: string,
         seq?: number,
+        options?: NotifyOptions,
     ): void;
     notify(
         requestId: RequestId,
@@ -103,6 +114,7 @@ export interface ClientIO {
         data: NotifyExplainedData,
         source: string,
         seq?: number,
+        options?: NotifyOptions,
     ): void;
 
     openLocalView(requestId: RequestId, port: number): Promise<void>;

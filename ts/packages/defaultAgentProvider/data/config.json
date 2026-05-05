@@ -75,6 +75,9 @@
     "onboarding": {
       "name": "onboarding-agent"
     },
+    "osNotifications": {
+      "name": "os-notifications-agent"
+    },
     "timer": {
       "name": "timer-agent"
     },
