@@ -221,9 +221,7 @@ async function initializeDispatcher(
                 app.quit();
             };
 
-            const broadcastReconnect = (
-                message: string | undefined,
-            ): void => {
+            const broadcastReconnect = (message: string | undefined): void => {
                 try {
                     if (!shellWindow.chatView.webContents.isDestroyed()) {
                         shellWindow.chatView.webContents.send(
@@ -273,9 +271,8 @@ async function initializeDispatcher(
                             // new window is surprising when the user killed it
                             // intentionally. Just try to reconnect to the
                             // existing one; if it's gone we keep retrying.
-                            const fresh = await connectAgentServer(
-                                url,
-                                () => onConnectionLost?.(),
+                            const fresh = await connectAgentServer(url, () =>
+                                onConnectionLost?.(),
                             );
                             // Re-join the conversation we were on. Read the
                             // latest saved conversation id from userSettings
@@ -287,21 +284,16 @@ async function initializeDispatcher(
                                 initialConversationId) as string | undefined;
                             let freshConversation:
                                 | Awaited<
-                                      ReturnType<
-                                          typeof fresh.joinConversation
-                                      >
+                                      ReturnType<typeof fresh.joinConversation>
                                   >
                                 | undefined;
                             if (targetConversationId) {
                                 try {
                                     freshConversation =
-                                        await fresh.joinConversation(
-                                            clientIO,
-                                            {
-                                                conversationId:
-                                                    targetConversationId,
-                                            },
-                                        );
+                                        await fresh.joinConversation(clientIO, {
+                                            conversationId:
+                                                targetConversationId,
+                                        });
                                 } catch (e: any) {
                                     debugShellInit(
                                         "Reconnect: saved conversation gone, falling back to default Shell:",
@@ -311,9 +303,8 @@ async function initializeDispatcher(
                             }
                             if (freshConversation === undefined) {
                                 // Fall back to the default Shell conversation.
-                                const list = await fresh.listConversations(
-                                    "Shell",
-                                );
+                                const list =
+                                    await fresh.listConversations("Shell");
                                 const m = list.find(
                                     (s) => s.name.toLowerCase() === "shell",
                                 );
@@ -789,10 +780,7 @@ export function initializeInstance(
                         [],
                     )
                     .catch((e: any) => {
-                        debugShell(
-                            "Initial greeting failed:",
-                            e?.message ?? e,
-                        );
+                        debugShell("Initial greeting failed:", e?.message ?? e);
                     });
             }
             return;
