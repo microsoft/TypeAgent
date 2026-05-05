@@ -97,12 +97,51 @@ async function ensureAppRunning(state: AgentState): Promise<void> {
     await client.eventsIdle({ debounceMs: 800, maxWaitMs: 5000 });
 }
 
+function navigateActionForTab(tab: string): SynthesizedAction | undefined {
+    const name = "navigateTo" + tab.charAt(0).toUpperCase() + tab.slice(1);
+    return loadDiscoveredActions().actions.find((a) => a.actionName === name);
+}
+
+function tabFromNeutralState(neutralState: string | undefined): string | null {
+    if (!neutralState) return null;
+    const first = neutralState.split(".")[0];
+    return first.endsWith("Tab") ? first : null;
+}
+
+async function ensureOnRequiredTab(
+    state: AgentState,
+    def: SynthesizedAction,
+): Promise<void> {
+    if (def.actionName.startsWith("navigateTo")) {
+        return;
+    }
+    const tab = tabFromNeutralState(def.preconditions?.neutralState);
+    if (!tab) {
+        return;
+    }
+    const nav = navigateActionForTab(tab);
+    if (!nav) {
+        return;
+    }
+    const client = await ensureClient(state);
+    await executePlayback(
+        nav,
+        {},
+        {
+            client,
+            defaultIdleDebounceMs: 700,
+            defaultIdleMaxWaitMs: 4000,
+        },
+    );
+}
+
 async function runPlayback(
     state: AgentState,
     action: TypeAgentAction<WindowsClockAction>,
     def: SynthesizedAction,
 ): Promise<ActionResult> {
     await ensureAppRunning(state);
+    await ensureOnRequiredTab(state, def);
     const client = await ensureClient(state);
     const result = await executePlayback(
         def,
