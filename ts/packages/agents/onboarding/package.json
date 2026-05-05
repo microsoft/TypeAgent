@@ -14,7 +14,8 @@
   "type": "module",
   "exports": {
     "./agent/manifest": "./src/onboardingManifest.json",
-    "./agent/handlers": "./dist/onboardingActionHandler.js"
+    "./agent/handlers": "./dist/onboardingActionHandler.js",
+    "./uiCapture": "./dist/uiCapture/index.js"
   },
   "scripts": {
     "agc:discovery": "agc -i ./src/discovery/discoverySchema.agr -o ./dist/discoverySchema.ag.json",
