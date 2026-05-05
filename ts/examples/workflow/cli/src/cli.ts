@@ -14,13 +14,15 @@ import {
 } from "workflow-engine";
 
 const usage = `Usage:
-  workflow run <file.json> [--input <json>] [--dry-run]   Run a workflow
-  workflow validate <file.json>                           Validate a workflow
-  workflow list-tasks                                     List registered tasks
+  workflow run <file.json> [--input <json>] [--dry-run | --allow-all]   Run a workflow
+  workflow validate <file.json>                                        Validate a workflow
+  workflow list-tasks                                                  List registered tasks
 
 Options:
-  --dry-run   Deny all side-effecting tasks (shell, network, file, LLM)
-              without prompting. Useful for testing workflow structure.`;
+  --dry-run     Deny all side-effecting tasks (shell, network, file, LLM)
+                without prompting. Useful for testing workflow structure.
+  --allow-all   Allow all tasks without prompting. Use for scripted/CI runs
+                where you trust the workflow.`;
 
 function fail(msg: string): never {
     console.error(msg);
@@ -53,7 +55,7 @@ function makeEngine(): WorkflowEngine {
 async function cmdRun(
     file: string,
     inputJson?: string,
-    dryRun?: boolean,
+    mode?: "dry-run" | "allow-all",
 ): Promise<void> {
     const ir = loadIR(file);
     const input = inputJson ? JSON.parse(inputJson) : {};
@@ -78,12 +80,11 @@ async function cmdRun(
         }
     });
 
-    // Build policy: in dry-run mode deny all side-effecting tasks.
-    // Otherwise, prompt for each one interactively.
+    // Build policy based on mode.
     let policy: TaskPolicy | undefined;
     let approve: ApprovalFn | undefined;
 
-    if (dryRun) {
+    if (mode === "dry-run") {
         policy = {};
         for (const task of allBuiltinTasks) {
             if (task.sideEffects) {
@@ -91,6 +92,8 @@ async function cmdRun(
             }
         }
         console.error("[dry-run] Side-effecting tasks will be denied.");
+    } else if (mode === "allow-all") {
+        // No policy, no approve - legacy path, no enforcement.
     } else {
         // Interactive approval via readline
         approve = async (
@@ -203,8 +206,12 @@ switch (command) {
         if (!file) fail(usage);
         const inputIdx = args.indexOf("--input");
         const inputJson = inputIdx >= 0 ? args[inputIdx + 1] : undefined;
-        const dryRun = args.includes("--dry-run");
-        await cmdRun(file, inputJson, dryRun);
+        const mode = args.includes("--dry-run")
+            ? "dry-run"
+            : args.includes("--allow-all")
+              ? "allow-all"
+              : undefined;
+        await cmdRun(file, inputJson, mode);
         break;
     }
     case "validate": {
