@@ -15,6 +15,7 @@ export {
     llmGenerate,
     textTemplate,
     stringJoin,
+    stringSplit,
     standardLibraryTasks,
     allBuiltinTasks,
 } from "./builtinTasks.js";

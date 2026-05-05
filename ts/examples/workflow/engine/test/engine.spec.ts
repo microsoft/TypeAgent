@@ -1620,4 +1620,242 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(output.message).toContain("add new line");
         });
     });
+
+    describe("string.split task", () => {
+        it("splits text by delimiter and filters empty strings", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "splitTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    split: {
+                        kind: "task",
+                        task: "string.split",
+                        inputSchema: {
+                            type: "object",
+                            required: ["text", "delimiter"],
+                            properties: {
+                                text: { type: "string" },
+                                delimiter: { type: "string" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["list"],
+                            properties: {
+                                list: {
+                                    type: "array",
+                                    items: { type: "string" },
+                                },
+                            },
+                        },
+                        inputs: {
+                            text: "foo.ts\nbar.ts\nbaz.ts\n" as any,
+                            delimiter: "\n",
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "split",
+                output: { $from: "scope", name: "result" } as any,
+            };
+
+            const result = await eng.run(ir, {});
+            expect(result.success).toBe(true);
+            expect(result.output).toEqual({
+                list: ["foo.ts", "bar.ts", "baz.ts"],
+            });
+        });
+
+        it("handles empty input", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "splitEmpty",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    split: {
+                        kind: "task",
+                        task: "string.split",
+                        inputSchema: {
+                            type: "object",
+                            required: ["text", "delimiter"],
+                            properties: {
+                                text: { type: "string" },
+                                delimiter: { type: "string" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["list"],
+                            properties: {
+                                list: {
+                                    type: "array",
+                                    items: { type: "string" },
+                                },
+                            },
+                        },
+                        inputs: {
+                            text: "" as any,
+                            delimiter: "\n",
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "split",
+                output: { $from: "scope", name: "result" } as any,
+            };
+
+            const result = await eng.run(ir, {});
+            expect(result.success).toBe(true);
+            expect(result.output).toEqual({ list: [] });
+        });
+    });
+
+    describe("D5 code-review-prep workflow", () => {
+        function loadD5(): WorkflowIR {
+            const __dirname = dirname(fileURLToPath(import.meta.url));
+            const path = resolve(
+                __dirname,
+                "../../../workflows/d5-code-review-prep.json",
+            );
+            return JSON.parse(readFileSync(path, "utf8")) as WorkflowIR;
+        }
+
+        it("validates against all builtins", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir = loadD5();
+            const result = await eng.run(ir, { repoPath: "/tmp" });
+
+            if (!result.success) {
+                expect(result.error?.message).not.toContain(
+                    "Validation failed",
+                );
+            }
+        });
+
+        it("runs with mocked shell.exec and llm.generate", async () => {
+            const fileDiffs: Record<string, string> = {
+                "src/engine.ts":
+                    "diff --git a/src/engine.ts\n+new engine code\n",
+                "src/tasks.ts": "diff --git a/src/tasks.ts\n+new task impl\n",
+                "README.md": "diff --git a/README.md\n+updated docs\n",
+            };
+
+            let callCount = 0;
+            const mockShellExec: TaskDefinition = {
+                name: "shell.exec",
+                inputSchema: {
+                    type: "object",
+                    required: ["command"],
+                    properties: {
+                        command: { type: "string" },
+                        args: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        cwd: { type: "string" },
+                    },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["stdout", "stderr", "exitCode"],
+                    properties: {
+                        stdout: { type: "string" },
+                        stderr: { type: "string" },
+                        exitCode: { type: "integer" },
+                    },
+                },
+                async execute(input: any) {
+                    callCount++;
+                    const args = input.args as string[];
+                    if (args.includes("--name-only")) {
+                        return {
+                            kind: "ok",
+                            output: {
+                                stdout:
+                                    Object.keys(fileDiffs).join("\n") + "\n",
+                                stderr: "",
+                                exitCode: 0,
+                            },
+                        };
+                    }
+                    // Per-file diff
+                    const fileArg = args[args.length - 1];
+                    return {
+                        kind: "ok",
+                        output: {
+                            stdout: fileDiffs[fileArg] ?? `diff for ${fileArg}`,
+                            stderr: "",
+                            exitCode: 0,
+                        },
+                    };
+                },
+            };
+
+            const summaries: string[] = [];
+            const mockLlmGenerate: TaskDefinition = {
+                name: "llm.generate",
+                inputSchema: {
+                    type: "object",
+                    required: ["prompt"],
+                    properties: { prompt: { type: "string" } },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["text"],
+                    properties: { text: { type: "string" } },
+                },
+                async execute(input: any) {
+                    const prompt = input.prompt as string;
+                    // Extract the file name from the prompt
+                    const match = prompt.match(/File: (.+)\n/);
+                    const file = match ? match[1] : "unknown";
+                    const summary = `Changes to ${file} look good.`;
+                    summaries.push(summary);
+                    return { kind: "ok", output: { text: summary } };
+                },
+            };
+
+            const reg = makeRegistry(
+                ...standardLibraryTasks,
+                mockShellExec,
+                mockLlmGenerate,
+                ...allBuiltinTasks.filter(
+                    (t) =>
+                        t.name !== "shell.exec" &&
+                        t.name !== "llm.generate" &&
+                        !standardLibraryTasks.some((s) => s.name === t.name),
+                ),
+            );
+            const eng = new WorkflowEngine(reg);
+
+            const ir = loadD5();
+            const result = await eng.run(ir, { repoPath: "/repos/project" });
+
+            expect(result.success).toBe(true);
+            const output = result.output as { guide: string };
+            expect(output.guide).toContain("# Code Review Guide");
+            expect(output.guide).toContain("### src/engine.ts");
+            expect(output.guide).toContain("### src/tasks.ts");
+            expect(output.guide).toContain("### README.md");
+            expect(output.guide).toContain("Changes to src/engine.ts");
+            expect(output.guide).toContain("Changes to README.md");
+            // 1 git diff --name-only + 3 per-file diffs = 4 shell calls
+            expect(callCount).toBe(4);
+            // 3 LLM calls (one per file)
+            expect(summaries).toHaveLength(3);
+        });
+    });
 });

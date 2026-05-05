@@ -307,6 +307,32 @@ export const stringJoin: TaskDefinition<
     },
 };
 
+export const stringSplit: TaskDefinition<
+    { text: string; delimiter: string },
+    { list: string[] }
+> = {
+    name: "string.split",
+    inputSchema: {
+        type: "object",
+        required: ["text", "delimiter"],
+        properties: {
+            text: { type: "string" },
+            delimiter: { type: "string" },
+        },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["list"],
+        properties: { list: { type: "array", items: { type: "string" } } },
+    },
+    async execute(input) {
+        const list = input.text
+            .split(input.delimiter)
+            .filter((s) => s.length > 0);
+        return { kind: "ok", output: { list } };
+    },
+};
+
 /** The 6 original standard-library tasks (pure, no IO). */
 export const standardLibraryTasks: TaskDefinition[] = [
     intAdd,
@@ -324,4 +350,5 @@ export const allBuiltinTasks: TaskDefinition[] = [
     llmGenerate,
     textTemplate,
     stringJoin,
+    stringSplit,
 ];
