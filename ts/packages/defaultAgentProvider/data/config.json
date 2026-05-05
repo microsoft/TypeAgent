@@ -75,7 +75,7 @@
       "name": "github-cli-agent"
     },
     "windowsClock": {
-      "name": "windowsClock-agent"
+      "name": "windowsclock-agent"
     },
     "visualStudio": {
       "name": "visualstudio-agent"

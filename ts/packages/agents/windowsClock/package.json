@@ -1,8 +1,16 @@
 {
-  "name": "windowsClock-agent",
+  "name": "windowsclock-agent",
   "version": "0.0.1",
   "private": true,
   "description": "windowsClock TypeAgent — UI Automation playback",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/agents/windowsClock"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
   "type": "module",
   "exports": {
     "./agent/manifest": "./src/windowsClockManifest.json",

@@ -506,7 +506,7 @@
                     {
                       "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/Pane[AutomationId=\"AlarmsScrollViewer\"]/DataItem[AutomationId=\"AlarmViewGrid\"]",
                       "automationId": "AlarmViewGrid",
-                      "name": "Edit alarm, Good morning, 7‎:‎00‎AM, Every day, ",
+                      "name": "Edit alarm, Good morning, 7:00AM, Every day, ",
                       "controlType": "DataItem",
                       "className": "ToggleButton",
                       "isEnabled": true,
