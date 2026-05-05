@@ -1,6 +1,6 @@
 # Workflow Engine v1 - Plan
 
-Status: Active.
+Status: **Complete.** All exit criteria met.
 
 ## 1. Goal
 
@@ -250,16 +250,16 @@ and which do not.
 
 #### Decision records
 
-| Decision                     | Claim                                              | Validated? | Value?   | Choose again? | How                                                                    |
-| ---------------------------- | -------------------------------------------------- | ---------- | -------- | ------------- | ---------------------------------------------------------------------- |
-| 0001 - Bound outputs         | `bind` + named scope refs beats positional wiring  | Yes        | **High** | Yes           | Named refs are self-documenting; reordering nodes has no data impact   |
-| 0002 - CFG/DDG separation    | Control and data are separate concerns             | Implicitly | **High** | Yes           | Engine sequences producers correctly without coupling control to data  |
-| 0003 - Task schema source    | Schemas live in IR, not in registry                | Yes        | **High** | Yes           | Enables schema validation without task implementation present          |
-| 0004 - Pure SSA              | Scope bindings are write-once                      | Yes        | Neutral  | Probably      | Harmless constraint; may matter more with mutation-heavy tasks later   |
-| 0006 - No expressions        | Stdlib tasks replace inline expressions            | Tracked    | Moderate | **Revisit**   | Works but scaling concern: every new operator = new task + node        |
-| 0007 - Template model        | Mixed literals + `$from` refs at any depth         | Partially  | **High** | Yes           | 50-line resolver handles all cases; no workflow hit depth limits       |
-| 0008 - Discriminant encoding | Case keys are strings; `bool.toLabel` for booleans | Yes        | **Low**  | **No**        | Would use inline `true`/`false` case keys instead; avoids stdlib bloat |
-| 0009 - Loop output source    | `output` resolves in full body scope at `@exit`    | Yes        | **High** | Yes           | Correct choice: body bindings are fresh, state is stale at exit        |
+| Decision                     | Claim                                             | Validated? | Value?   | Choose again? | How                                                                   |
+| ---------------------------- | ------------------------------------------------- | ---------- | -------- | ------------- | --------------------------------------------------------------------- |
+| 0001 - Bound outputs         | `bind` + named scope refs beats positional wiring | Yes        | **High** | Yes           | Named refs are self-documenting; reordering nodes has no data impact  |
+| 0002 - CFG/DDG separation    | Control and data are separate concerns            | Implicitly | **High** | Yes           | Engine sequences producers correctly without coupling control to data |
+| 0003 - Task schema source    | Schemas live in IR, not in registry               | Yes        | **High** | Yes           | Enables schema validation without task implementation present         |
+| 0004 - Pure SSA              | Scope bindings are write-once                     | Yes        | Neutral  | Probably      | Harmless constraint; may matter more with mutation-heavy tasks later  |
+| 0006 - No expressions        | Stdlib tasks replace inline expressions           | Tracked    | Moderate | **Revisit**   | Works but scaling concern: every new operator = new task + node       |
+| 0007 - Template model        | Mixed literals + `$from` refs at any depth        | Partially  | **High** | Yes           | 50-line resolver handles all cases; no workflow hit depth limits      |
+| 0008 - Discriminant encoding | Case keys are strings; `String()` coercion        | Yes        | **High** | Yes (fixed)   | Booleans match `"true"`/`"false"` case keys; `bool.toLabel` removed   |
+| 0009 - Loop output source    | `output` resolves in full body scope at `@exit`   | Yes        | **High** | Yes           | Correct choice: body bindings are fresh, state is stale at exit       |
 
 **Value assessment key:**
 
@@ -339,11 +339,13 @@ are trivial to add.
 
 ### Criterion 9: Stdlib surface area
 
-New pure tasks added beyond the original 6 stdlib: `text.template`,
-`string.join`, `string.split` (3 tasks). All three are genuine
-utility operations that would be one-liners with expressions. The
-count is exactly at the threshold (3). Decision 0006 (no expressions)
-holds: the stdlib approach works, though the threshold confirms that
+New pure tasks added beyond the original 5 stdlib: `text.template`,
+`string.join`, `string.split` (3 tasks). `bool.toLabel` was demoted
+from stdlib after 0008 fix (booleans now branch directly via
+`String()` coercion). All three remaining are genuine utility
+operations that would be one-liners with expressions. The count is
+exactly at the threshold (3). Decision 0006 (no expressions) holds:
+the stdlib approach works, though the threshold confirms that
 expressions would reduce verbosity. This is expected and is what the
 DSL layer addresses.
 

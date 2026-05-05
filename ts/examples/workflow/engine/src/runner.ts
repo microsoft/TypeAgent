@@ -552,7 +552,8 @@ export class WorkflowEngine {
         },
         scope: ScopeContext,
     ): string {
-        const selector = resolveTemplate(node.selector, scope) as string;
+        const raw = resolveTemplate(node.selector, scope);
+        const selector = String(raw);
         return node.cases[selector] ?? node.default;
     }
 

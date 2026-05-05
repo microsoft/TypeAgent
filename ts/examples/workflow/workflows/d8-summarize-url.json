@@ -135,47 +135,18 @@
               },
               "b": { "$from": "input", "name": "maxRetries" }
             },
-            "next": "retryLabel",
-            "bind": "shouldRetry"
-          },
-          "retryLabel": {
-            "kind": "task",
-            "task": "bool.toLabel",
-            "inputSchema": {
-              "type": "object",
-              "required": ["value", "ifTrue", "ifFalse"],
-              "properties": {
-                "value": { "type": "boolean" },
-                "ifTrue": { "type": "string" },
-                "ifFalse": { "type": "string" }
-              }
-            },
-            "outputSchema": {
-              "type": "object",
-              "required": ["label"],
-              "properties": { "label": { "type": "string" } }
-            },
-            "inputs": {
-              "value": {
-                "$from": "scope",
-                "name": "shouldRetry",
-                "path": ["result"]
-              },
-              "ifTrue": "retry",
-              "ifFalse": "giveUp"
-            },
             "next": "branchRetry",
-            "bind": "retryDecision"
+            "bind": "shouldRetry"
           },
           "branchRetry": {
             "kind": "branch",
             "selector": {
               "$from": "scope",
-              "name": "retryDecision",
-              "path": ["label"]
+              "name": "shouldRetry",
+              "path": ["result"]
             },
-            "selectorSchema": { "enum": ["retry", "giveUp"] },
-            "cases": { "retry": "@iterate", "giveUp": "@exit" },
+            "selectorSchema": { "type": "boolean" },
+            "cases": { "true": "@iterate", "false": "@exit" },
             "default": "@exit"
           }
         }

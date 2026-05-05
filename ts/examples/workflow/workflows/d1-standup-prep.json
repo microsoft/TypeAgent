@@ -244,47 +244,18 @@
               "a": { "$from": "scope", "name": "stepped", "path": ["result"] },
               "b": { "$from": "scope", "name": "repoCount", "path": ["length"] }
             },
-            "next": "labelDone",
-            "bind": "hasMore"
-          },
-          "labelDone": {
-            "kind": "task",
-            "task": "bool.toLabel",
-            "inputSchema": {
-              "type": "object",
-              "required": ["value", "ifTrue", "ifFalse"],
-              "properties": {
-                "value": { "type": "boolean" },
-                "ifTrue": { "type": "string" },
-                "ifFalse": { "type": "string" }
-              }
-            },
-            "outputSchema": {
-              "type": "object",
-              "required": ["label"],
-              "properties": { "label": { "type": "string" } }
-            },
-            "inputs": {
-              "value": {
-                "$from": "scope",
-                "name": "hasMore",
-                "path": ["result"]
-              },
-              "ifTrue": "more",
-              "ifFalse": "done"
-            },
             "next": "checkDone",
-            "bind": "doneLabel"
+            "bind": "hasMore"
           },
           "checkDone": {
             "kind": "branch",
             "selector": {
               "$from": "scope",
-              "name": "doneLabel",
-              "path": ["label"]
+              "name": "hasMore",
+              "path": ["result"]
             },
-            "selectorSchema": { "enum": ["more", "done"] },
-            "cases": { "more": "@iterate", "done": "@exit" },
+            "selectorSchema": { "type": "boolean" },
+            "cases": { "true": "@iterate", "false": "@exit" },
             "default": "@exit"
           }
         }

@@ -598,47 +598,18 @@ function makeA4IR(): WorkflowIR {
                                     path: ["length"],
                                 },
                             },
-                            next: "labelDone",
-                            bind: "hasMore",
-                        },
-                        labelDone: {
-                            kind: "task",
-                            task: "bool.toLabel",
-                            inputSchema: {
-                                type: "object",
-                                required: ["value", "ifTrue", "ifFalse"],
-                                properties: {
-                                    value: { type: "boolean" },
-                                    ifTrue: { type: "string" },
-                                    ifFalse: { type: "string" },
-                                },
-                            },
-                            outputSchema: {
-                                type: "object",
-                                required: ["label"],
-                                properties: { label: { type: "string" } },
-                            },
-                            inputs: {
-                                value: {
-                                    $from: "scope",
-                                    name: "hasMore",
-                                    path: ["result"],
-                                },
-                                ifTrue: "more",
-                                ifFalse: "done",
-                            },
                             next: "checkDone",
-                            bind: "doneLabel",
+                            bind: "hasMore",
                         },
                         checkDone: {
                             kind: "branch",
                             selector: {
                                 $from: "scope",
-                                name: "doneLabel",
-                                path: ["label"],
+                                name: "hasMore",
+                                path: ["result"],
                             },
-                            selectorSchema: { enum: ["more", "done"] },
-                            cases: { more: "@iterate", done: "@exit" },
+                            selectorSchema: { type: "boolean" },
+                            cases: { true: "@iterate", false: "@exit" },
                             default: "@exit",
                         },
                     },
@@ -913,7 +884,9 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(result.output).toEqual({ result: 10 });
         });
 
-        it("bool.toLabel converts boolean to string", async () => {
+        it("bool.toLabel converts boolean to string (legacy)", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
             const ir: WorkflowIR = {
                 kind: "workflow",
                 name: "labelTest",
@@ -950,14 +923,14 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "result" } as any,
             };
 
-            const result = await engine.run(ir, {});
+            const result = await eng.run(ir, {});
             expect(result.success).toBe(true);
             expect(result.output).toEqual({ label: "yes" });
         });
     });
 
     describe("branch nodes", () => {
-        it("routes based on discriminant value", async () => {
+        it("routes based on boolean discriminant", async () => {
             const ir: WorkflowIR = {
                 kind: "workflow",
                 name: "branchTest",
@@ -965,40 +938,11 @@ describe("WorkflowEngine (IR v1)", () => {
                 inputSchema: { type: "object" },
                 outputSchema: { type: "object" },
                 nodes: {
-                    label: {
-                        kind: "task",
-                        task: "bool.toLabel",
-                        inputSchema: {
-                            type: "object",
-                            required: ["value", "ifTrue", "ifFalse"],
-                            properties: {
-                                value: { type: "boolean" },
-                                ifTrue: { type: "string" },
-                                ifFalse: { type: "string" },
-                            },
-                        },
-                        outputSchema: {
-                            type: "object",
-                            required: ["label"],
-                            properties: { label: { type: "string" } },
-                        },
-                        inputs: {
-                            value: false as any,
-                            ifTrue: "yes",
-                            ifFalse: "no",
-                        },
-                        next: "decide",
-                        bind: "labelResult",
-                    },
                     decide: {
                         kind: "branch",
-                        selector: {
-                            $from: "scope",
-                            name: "labelResult",
-                            path: ["label"],
-                        } as any,
-                        selectorSchema: { enum: ["yes", "no"] },
-                        cases: { yes: "onYes", no: "onNo" },
+                        selector: false as any,
+                        selectorSchema: { type: "boolean" },
+                        cases: { true: "onYes", false: "onNo" },
                         default: "onNo",
                     },
                     onYes: {
@@ -1040,7 +984,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         bind: "answer",
                     },
                 },
-                entry: "label",
+                entry: "decide",
                 output: { $from: "scope", name: "answer" } as any,
             };
 

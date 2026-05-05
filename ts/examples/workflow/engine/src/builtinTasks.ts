@@ -444,19 +444,19 @@ export const fileWrite: TaskDefinition<
     },
 };
 
-/** The 6 original standard-library tasks (pure, no IO). */
+/** The 5 standard-library tasks (pure, no IO). */
 export const standardLibraryTasks: TaskDefinition[] = [
     intAdd,
     intLessThan,
     listLength,
     listElementAt,
     listAppend,
-    boolToLabel,
 ];
 
-/** All builtin tasks: stdlib + IO + utility. */
+/** All builtin tasks: stdlib + IO + utility + legacy. */
 export const allBuiltinTasks: TaskDefinition[] = [
     ...standardLibraryTasks,
+    boolToLabel,
     shellExec,
     llmGenerate,
     httpGet,
