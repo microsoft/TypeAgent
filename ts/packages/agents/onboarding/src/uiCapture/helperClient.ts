@@ -19,6 +19,8 @@ import type {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const HELPER_SLN_RELATIVE = "dotnet/uiAutomationHelper/UiAutomationHelper.sln";
+
 type Pending = {
     resolve: (value: unknown) => void;
     reject: (error: Error) => void;
@@ -80,6 +82,68 @@ function resolveBinary(opts: HelperClientOptions): string {
     return repoRelative;
 }
 
+function resolveHelperSln(): string {
+    return path.resolve(__dirname, "../../../../../..", HELPER_SLN_RELATIVE);
+}
+
+/**
+ * Thrown by HelperClient.start() when the helper executable is missing.
+ * Callers can catch this to offer to build the helper interactively
+ * instead of surfacing a raw error.
+ */
+export class HelperBinaryMissingError extends Error {
+    readonly binaryPath: string;
+    readonly slnPath: string;
+
+    constructor(binaryPath: string, slnPath: string) {
+        super(
+            `Helper binary not found at ${binaryPath}. ` +
+                `Build it via: dotnet build -c Release ${slnPath}`,
+        );
+        this.name = "HelperBinaryMissingError";
+        this.binaryPath = binaryPath;
+        this.slnPath = slnPath;
+    }
+}
+
+/**
+ * Builds the .NET UI Automation helper via `dotnet build -c Release`.
+ * Resolves on success; rejects with stderr output on failure.
+ */
+export async function buildHelperBinary(
+    opts: { onProgress?: (line: string) => void } = {},
+): Promise<void> {
+    const slnPath = resolveHelperSln();
+    if (!existsSync(slnPath)) {
+        throw new Error(`Helper solution not found at ${slnPath}`);
+    }
+    return new Promise((resolve, reject) => {
+        const child = spawn("dotnet", ["build", "-c", "Release", slnPath], {
+            stdio: ["ignore", "pipe", "pipe"],
+            windowsHide: true,
+        });
+        const stderrChunks: string[] = [];
+        child.stdout!.on("data", (data: Buffer) => {
+            opts.onProgress?.(data.toString());
+        });
+        child.stderr!.on("data", (data: Buffer) => {
+            stderrChunks.push(data.toString());
+        });
+        child.on("error", reject);
+        child.on("exit", (code) => {
+            if (code === 0) {
+                resolve();
+            } else {
+                reject(
+                    new Error(
+                        `dotnet build exited with code ${code}: ${stderrChunks.join("").trim()}`,
+                    ),
+                );
+            }
+        });
+    });
+}
+
 /**
  * JSON-RPC 2.0 client over stdio for the .NET UIA helper.
  *
@@ -102,11 +166,7 @@ export class HelperClient {
     static async start(opts: HelperClientOptions = {}): Promise<HelperClient> {
         const binary = resolveBinary(opts);
         if (!existsSync(binary)) {
-            throw new Error(
-                `Helper binary not found at ${binary}. ` +
-                    `Build it via: dotnet build -c Release ` +
-                    `dotnet/uiAutomationHelper/UiAutomationHelper.sln`,
-            );
+            throw new HelperBinaryMissingError(binary, resolveHelperSln());
         }
         const child = spawn(binary, [], {
             stdio: ["pipe", "pipe", "pipe"],
@@ -116,7 +176,11 @@ export class HelperClient {
             input: child.stdout!,
             crlfDelay: Infinity,
         });
-        const client = new HelperClient(child, stdoutLines, opts.debug ?? false);
+        const client = new HelperClient(
+            child,
+            stdoutLines,
+            opts.debug ?? false,
+        );
         client.attach();
         // Verify the helper is actually responding before returning.
         await client.ping();
@@ -172,7 +236,9 @@ export class HelperClient {
                         h(msg.params as CapturedEvent);
                     } catch (e) {
                         if (this.debug) {
-                            process.stderr.write(`[uia-helper handler-throw] ${e}\n`);
+                            process.stderr.write(
+                                `[uia-helper handler-throw] ${e}\n`,
+                            );
                         }
                     }
                 }
@@ -323,10 +389,7 @@ export class HelperClient {
         return this.call("do.click", p);
     }
 
-    doSendKeys(p: {
-        selector?: string;
-        keys: string;
-    }): Promise<{ ok: true }> {
+    doSendKeys(p: { selector?: string; keys: string }): Promise<{ ok: true }> {
         return this.call("do.sendKeys", p);
     }
 
@@ -368,9 +431,7 @@ export class HelperClient {
         return this.call("events.subscribe", p);
     }
 
-    eventsUnsubscribe(p: {
-        subscriptionId: string;
-    }): Promise<{ ok: boolean }> {
+    eventsUnsubscribe(p: { subscriptionId: string }): Promise<{ ok: boolean }> {
         return this.call("events.unsubscribe", p);
     }
 

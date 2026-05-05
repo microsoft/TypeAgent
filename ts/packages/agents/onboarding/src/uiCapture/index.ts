@@ -5,7 +5,11 @@
 // (discoveredActions.json + the helper binary). Generated agents import
 // from this entry point: `import { ... } from "onboarding-agent/uiCapture"`.
 
-export { HelperClient } from "./helperClient.js";
+export {
+    HelperClient,
+    HelperBinaryMissingError,
+    buildHelperBinary,
+} from "./helperClient.js";
 export type {
     CapturedEvent,
     ControlSnapshot,

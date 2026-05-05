@@ -3,16 +3,21 @@
 
 import {
     ActionContext,
+    ActionResult,
     AppAgent,
     SessionContext,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
+    ChoiceManager,
     createActionResultFromError,
     createActionResultFromTextDisplay,
+    createYesNoChoiceResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import {
+    buildHelperBinary,
     executePlayback,
+    HelperBinaryMissingError,
     HelperClient,
     SynthesizedAction,
 } from "onboarding-agent/uiCapture";
@@ -47,6 +52,7 @@ type AgentState = {
     client: HelperClient | null;
     appPid: number | null;
     appMainWindow: string | null;
+    choiceManager: ChoiceManager;
 };
 
 async function ensureClient(state: AgentState): Promise<HelperClient> {
@@ -83,10 +89,73 @@ async function ensureAppRunning(state: AgentState): Promise<void> {
         await client.eventsIdle({ debounceMs: 600, maxWaitMs: 3000 });
         return;
     }
-    const launch = await client.appLaunch({ aumid: "Microsoft.WindowsAlarms_8wekyb3d8bbwe!App" });
+    const launch = await client.appLaunch({
+        aumid: "Microsoft.WindowsAlarms_8wekyb3d8bbwe!App",
+    });
     state.appPid = launch.pid;
     state.appMainWindow = launch.mainWindow;
     await client.eventsIdle({ debounceMs: 800, maxWaitMs: 5000 });
+}
+
+async function runPlayback(
+    state: AgentState,
+    action: TypeAgentAction<WindowsClockAction>,
+    def: SynthesizedAction,
+): Promise<ActionResult> {
+    await ensureAppRunning(state);
+    const client = await ensureClient(state);
+    const result = await executePlayback(
+        def,
+        (action.parameters ?? {}) as Record<string, string | number | boolean>,
+        {
+            client,
+            defaultIdleDebounceMs: 700,
+            defaultIdleMaxWaitMs: 4000,
+        },
+    );
+    if (!result.success) {
+        const failed = result.steps[result.failedAtStep ?? 0];
+        return createActionResultFromError(
+            `Playback failed at step ${(result.failedAtStep ?? 0) + 1}: ${failed?.errorMessage ?? "unknown"}`,
+        );
+    }
+    return createActionResultFromTextDisplay(
+        `Done: ${action.actionName} (${result.steps.length} steps)`,
+    );
+}
+
+function offerHelperBuild(
+    state: AgentState,
+    error: HelperBinaryMissingError,
+    action: TypeAgentAction<WindowsClockAction>,
+    def: SynthesizedAction,
+): ActionResult {
+    return createYesNoChoiceResult(
+        state.choiceManager,
+        `The Windows Clock UI Automation helper isn't built yet (expected at ${error.binaryPath}). ` +
+            `Build it now? This runs 'dotnet build -c Release' on UiAutomationHelper.sln and may take ~30s.`,
+        async (confirmed: boolean) => {
+            if (!confirmed) {
+                return createActionResultFromTextDisplay(
+                    "Helper build skipped — action cancelled.",
+                );
+            }
+            try {
+                await buildHelperBinary();
+            } catch (buildError) {
+                return createActionResultFromError(
+                    `Helper build failed: ${buildError instanceof Error ? buildError.message : String(buildError)}`,
+                );
+            }
+            try {
+                return await runPlayback(state, action, def);
+            } catch (e) {
+                return createActionResultFromError(
+                    e instanceof Error ? e.message : String(e),
+                );
+            }
+        },
+    );
 }
 
 export function instantiate(): AppAgent {
@@ -96,6 +165,7 @@ export function instantiate(): AppAgent {
                 client: null,
                 appPid: null,
                 appMainWindow: null,
+                choiceManager: new ChoiceManager(),
             } as AgentState;
         },
         async updateAgentContext(
@@ -119,34 +189,25 @@ export function instantiate(): AppAgent {
                 );
             }
             try {
-                await ensureAppRunning(state);
-                const client = await ensureClient(state);
-                const result = await executePlayback(
-                    def,
-                    (action.parameters ?? {}) as Record<
-                        string,
-                        string | number | boolean
-                    >,
-                    {
-                        client,
-                        defaultIdleDebounceMs: 700,
-                        defaultIdleMaxWaitMs: 4000,
-                    },
-                );
-                if (!result.success) {
-                    const failed = result.steps[result.failedAtStep ?? 0];
-                    return createActionResultFromError(
-                        `Playback failed at step ${(result.failedAtStep ?? 0) + 1}: ${failed?.errorMessage ?? "unknown"}`,
-                    );
-                }
-                return createActionResultFromTextDisplay(
-                    `Done: ${action.actionName} (${result.steps.length} steps)`,
-                );
+                return await runPlayback(state, action, def);
             } catch (e) {
+                if (e instanceof HelperBinaryMissingError) {
+                    return offerHelperBuild(state, e, action, def);
+                }
                 return createActionResultFromError(
                     e instanceof Error ? e.message : String(e),
                 );
             }
+        },
+        async handleChoice(
+            choiceId: string,
+            response: boolean | number[],
+            context: ActionContext<AgentState>,
+        ) {
+            return context.sessionContext.agentContext.choiceManager.handleChoice(
+                choiceId,
+                response,
+            );
         },
         async closeAgentContext(context: SessionContext<AgentState>) {
             const state = context.agentContext;
