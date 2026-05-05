@@ -5,13 +5,17 @@ export interface BenchmarkScenario {
     id: string;
     category:
         | "grammar-match"
+        | "grammar-subschemas"
+        | "grammar-competition"
         | "llm-translation"
         | "execution"
         | "fallback-chain"
         | "end-to-end";
     description: string;
     setup: {
-        requiredFlows: string[];
+        requiredFlows?: string[];
+        requiredSchemas?: string[];
+        allAgents?: boolean;
         environmentSetup?: string;
         configOverrides?: Record<string, unknown>;
     };
@@ -24,6 +28,7 @@ export interface TestUtterance {
     expected: {
         routedTo: "grammar" | "llm-translation" | "reasoning";
         matchedFlow?: string | null;
+        matchedAgent?: string | null;
         extractedParams?: Record<string, unknown>;
         execution?: {
             shouldSucceed: boolean;
