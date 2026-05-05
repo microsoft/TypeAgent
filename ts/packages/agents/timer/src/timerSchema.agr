@@ -1,0 +1,72 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+// Generated grammar for timerSchema.
+// Types: wildcard = 1+ words, word = exactly 1 word.
+
+// setReminder — natural-language patterns. Kind defaults to "bubble" in the
+// handler when omitted, so we do not surface it in the grammar.
+<SetReminder> = remind me to $(message:wildcard) in $(when:wildcard) -> {
+    actionName: "setReminder",
+    parameters: {
+        message,
+        when
+    }
+}
+  | remind me $(message:wildcard) in $(when:wildcard) -> {
+    actionName: "setReminder",
+    parameters: {
+        message,
+        when
+    }
+}
+  | (set)? (a)? reminder (to)? $(message:wildcard) in $(when:wildcard) -> {
+    actionName: "setReminder",
+    parameters: {
+        message,
+        when
+    }
+}
+  | remind me to $(message:wildcard) at $(when:wildcard) -> {
+    actionName: "setReminder",
+    parameters: {
+        message,
+        when
+    }
+};
+
+// listReminders — show all pending reminders.
+<ListReminders> = (show)? (list)? (my)? reminders -> {
+    actionName: "listReminders",
+    parameters: {}
+}
+  | what (are)? (my)? (pending)? reminders -> {
+    actionName: "listReminders",
+    parameters: {}
+};
+
+// cancelReminder — by id, or all of them.
+<CancelReminder> = cancel reminder $(id:wildcard) -> {
+    actionName: "cancelReminder",
+    parameters: {
+        id
+    }
+}
+  | cancel all (my)? reminders -> {
+    actionName: "cancelReminder",
+    parameters: {
+        id: "all"
+    }
+}
+  | clear (all)? (my)? reminders -> {
+    actionName: "cancelReminder",
+    parameters: {
+        id: "all"
+    }
+};
+
+import { TimerAction } from "./timerSchema.ts";
+
+<Start> : TimerAction = <SetReminder>
+  | <ListReminders>
+  | <CancelReminder>;

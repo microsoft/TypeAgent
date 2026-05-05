@@ -71,6 +71,9 @@
     "onboarding": {
       "name": "onboarding-agent"
     },
+    "timer": {
+      "name": "timer-agent"
+    },
     "github-cli": {
       "name": "github-cli-agent"
     }

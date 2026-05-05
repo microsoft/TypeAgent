@@ -75,6 +75,7 @@
     "string-width": "^7.2.0",
     "taskflow-typeagent": "workspace:*",
     "telemetry": "workspace:*",
+    "timer-agent": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
     "typechat-utils": "workspace:*",
