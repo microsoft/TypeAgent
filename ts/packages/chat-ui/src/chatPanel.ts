@@ -1249,9 +1249,21 @@ export class ChatPanel {
         if (!requestId && this.currentAgentContainer) {
             return this.currentAgentContainer;
         }
+        // If the dispatcher already announced this action's source/icon
+        // via setDisplayInfo, use those when creating the bubble — even
+        // if the first message routed into it is the dispatcher's own
+        // transient "[X] Executing action ..." status (source="dispatcher",
+        // no icon). Without this, the bubble would be created with the
+        // dispatcher robot avatar and stay that way (subsequent setMessage
+        // calls only update the name label, not the icon).
+        const effectiveSource = this.pendingDisplayInfo?.source ?? source;
+        const effectiveIcon =
+            this.pendingDisplayInfo?.sourceIcon ??
+            sourceIcon ??
+            this.iconForSource(effectiveSource);
         const container = this.createAgentContainer(
-            source ?? "assistant",
-            sourceIcon ?? this.iconForSource(source),
+            effectiveSource ?? "assistant",
+            effectiveIcon,
         );
         this.currentAgentContainer = container;
         if (requestId) {
