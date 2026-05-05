@@ -141,6 +141,7 @@ type TranslatorPartition = {
 export async function selectFromPartitions(
     partitions: TranslatorPartition[],
     request: string,
+    signal?: AbortSignal,
 ): Promise<Result<AssistantSelection>> {
     partitions.forEach(({ names }) =>
         debugSwitchSearch(`Switch: searching ${names.join(", ")}`),
@@ -156,6 +157,13 @@ export async function selectFromPartitions(
     );
     // Await results in partition order; return as soon as outcome is decided.
     for (const promise of promises) {
+        // Check for cancellation before awaiting each partition result
+        if (signal?.aborted) {
+            throw (
+                signal.reason ??
+                new DOMException("The operation was aborted.", "AbortError")
+            );
+        }
         const result = await promise;
         if (!result.success) {
             return result;
@@ -222,7 +230,7 @@ export function loadAssistantSelectionJsonTranslator(
     });
 
     return {
-        translate: (request: string) =>
-            selectFromPartitions(translators, request),
+        translate: (request: string, signal?: AbortSignal) =>
+            selectFromPartitions(translators, request, signal),
     };
 }

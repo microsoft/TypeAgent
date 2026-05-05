@@ -66,16 +66,26 @@ export interface TypeChatJsonTranslatorWithStreaming<T extends object>
         attachments?: CachedImageWithDetails[] | undefined,
         cb?: IncrementalJsonValueCallBack,
         usageCallback?: CompleteUsageStatsCallback,
+        signal?: AbortSignal,
     ) => Promise<Result<T>>;
 }
 
 // This rely on the fact that the prompt preamble based to typechat are copied to the final prompt.
 // Add a internal section so we can pass information from the caller to the model.complete function.
+//
+// TECH DEBT: This is an intentional workaround for TypeChat's limited translate()
+// signature, which only accepts (request, promptPreamble). We smuggle additional
+// parameters (parser, usageCallback, signal) through the prompt array using a
+// synthetic section with role: "model". This works because TypeChat copies prompt
+// sections to the final prompt without inspecting "model" role entries, and our
+// model.complete wrapper strips them before the actual API call. This coupling is
+// fragile and should be replaced if TypeChat adds extensible translate() options.
 type ModelParamSection = {
     role: "model";
     content: {
         parser: IncrementalJsonParser | undefined;
         usageCallback: CompleteUsageStatsCallback | undefined;
+        signal: AbortSignal | undefined;
     };
 };
 
@@ -83,8 +93,13 @@ function addModelParamSection(
     promptPreamble?: string | PromptSection[],
     cb?: IncrementalJsonValueCallBack,
     usageCallback?: CompleteUsageStatsCallback,
+    signal?: AbortSignal,
 ) {
-    if (cb === undefined && usageCallback === undefined) {
+    if (
+        cb === undefined &&
+        usageCallback === undefined &&
+        signal === undefined
+    ) {
         return promptPreamble;
     }
     const prompts: (PromptSection | ModelParamSection)[] =
@@ -103,6 +118,7 @@ function addModelParamSection(
         content: {
             parser,
             usageCallback,
+            signal,
         },
     });
 
@@ -125,6 +141,7 @@ function getModelParams(
     return {
         parser: internal[0].content.parser,
         usageCallback: internal[0].content.usageCallback,
+        signal: internal[0].content.signal,
         actualPrompt: newPrompt as PromptSection[],
     };
 }
@@ -149,17 +166,24 @@ export function enableJsonTranslatorStreaming<T extends object>(
                 promptLogger?.logModelRequest,
             );
         }
-        const { parser, usageCallback, actualPrompt } = modelParams;
+        const { parser, usageCallback, signal, actualPrompt } = modelParams;
         if (parser === undefined) {
             return originalComplete(
                 actualPrompt,
                 usageCallback,
                 undefined,
                 promptLogger?.logModelRequest,
+                signal,
             );
         }
         const chunks = [];
-        const result = await model.completeStream(actualPrompt, usageCallback);
+        const result = await model.completeStream(
+            actualPrompt,
+            usageCallback,
+            undefined,
+            undefined,
+            signal,
+        );
         if (!result.success) {
             return result;
         }
@@ -180,11 +204,12 @@ export function enableJsonTranslatorStreaming<T extends object>(
         attachments?: CachedImageWithDetails[],
         cb?: IncrementalJsonValueCallBack,
         usageCallback?: CompleteUsageStatsCallback,
+        signal?: AbortSignal,
     ) => {
         await attachAttachments(attachments, promptPreamble);
         return originalTranslate(
             request,
-            addModelParamSection(promptPreamble, cb, usageCallback),
+            addModelParamSection(promptPreamble, cb, usageCallback, signal),
         );
     };
 
@@ -301,12 +326,23 @@ export function createJsonTranslatorWithValidator<T extends object>(
             prompt: string | PromptSection[],
             usageCallback?: CompleteUsageStatsCallback,
         ) => {
-            debugPrompt(prompt);
+            const modelParams = getModelParams(prompt);
+            const actualPrompt = modelParams?.actualPrompt ?? prompt;
+            const actualUsageCallback =
+                modelParams?.usageCallback ?? usageCallback;
+            const signal = modelParams?.signal;
+            debugPrompt(actualPrompt);
             const jsonSchema = validator.getJsonSchema?.();
             if (jsonSchema !== undefined) {
                 debugJsonSchema(jsonSchema);
             }
-            return originalCompleteStream(prompt, usageCallback, jsonSchema);
+            return originalCompleteStream(
+                actualPrompt,
+                actualUsageCallback,
+                jsonSchema,
+                undefined,
+                signal,
+            );
         };
     }
 

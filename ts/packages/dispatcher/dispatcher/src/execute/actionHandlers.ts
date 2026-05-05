@@ -584,6 +584,10 @@ export function startStreamPartialAction(
     context.streamingActionContext = actionContextWithClose;
 
     return (name: string, value: any, delta?: string) => {
+        // Gap 2: Drop streaming chunks after cancellation to avoid
+        // dispatching to agents once the request has been aborted.
+        if (context.currentAbortSignal?.aborted) return;
+
         appAgent.streamPartialAction!(
             actionName,
             name,

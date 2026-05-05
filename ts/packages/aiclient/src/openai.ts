@@ -553,6 +553,7 @@ function createAzureOpenAIChatModel(
         usageCallback?: CompleteUsageStatsCallback,
         jsonSchema?: CompletionJsonSchema,
         logFn?: (msg: any) => void,
+        signal?: AbortSignal,
     ): Promise<Result<string>> {
         verifyPromptLength(settings, prompt);
 
@@ -564,6 +565,7 @@ function createAzureOpenAIChatModel(
         const params = getParams(messages, jsonSchema);
         const result = await callJsonApiWithPool(pool, buildRequest(params), {
             retryPauseMs: settings.retryPauseMs,
+            signal,
         });
         if (!result.success) {
             return result;
@@ -619,6 +621,7 @@ function createAzureOpenAIChatModel(
         usageCallback?: CompleteUsageStatsCallback,
         jsonSchema?: CompletionJsonSchema,
         logFn?: (msg: any) => void,
+        signal?: AbortSignal,
     ): Promise<Result<AsyncIterableIterator<string>>> {
         verifyPromptLength(settings, prompt);
 
@@ -647,6 +650,7 @@ function createAzureOpenAIChatModel(
         });
         const result = await callApiWithPool(pool, buildRequest(params), {
             retryPauseMs: settings.retryPauseMs,
+            signal,
         });
         if (!result.success) {
             return result;

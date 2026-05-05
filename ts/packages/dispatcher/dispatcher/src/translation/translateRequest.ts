@@ -449,6 +449,7 @@ async function translateWithTranslator(
             attachments,
             onProperty,
             usageCallback,
+            systemContext.currentAbortSignal,
         );
 
         if (!response.success) {
@@ -491,7 +492,10 @@ async function findAssistantForRequest(
         systemContext.promptLogger,
     );
 
-    const result = await selectTranslator.translate(request);
+    const result = await selectTranslator.translate(
+        request,
+        systemContext.currentAbortSignal,
+    );
     if (!result.success) {
         displayWarn(`Failed to switch assistant: ${result.message}`, context);
         return undefined;

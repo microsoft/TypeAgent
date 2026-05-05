@@ -187,6 +187,7 @@ export function createOllamaChatModel(
 
     async function complete(
         prompt: string | PromptSection[],
+        // TODO: thread AbortSignal through to fetch() for cancellation support (see interrupt-design.md)
     ): Promise<Result<string>> {
         const messages =
             typeof prompt === "string"
@@ -233,6 +234,7 @@ export function createOllamaChatModel(
 
     async function completeStream(
         prompt: string | PromptSection[],
+        // TODO: thread AbortSignal through to fetch() for cancellation support (see interrupt-design.md)
     ): Promise<Result<AsyncIterableIterator<string>>> {
         const messages: PromptSection[] =
             typeof prompt === "string"
