@@ -108,7 +108,13 @@ async function interpretRequestWithActiveSchemas(
     );
     const canUseCacheMatch = cannotUseCacheReason === undefined;
     const match = canUseCacheMatch
-        ? await matchRequest(context, request, history, activeSchemaNames)
+        ? await matchRequest(
+              context,
+              request,
+              history,
+              activeSchemaNames,
+              context.sessionContext.agentContext.currentAbortSignal,
+          )
         : undefined;
 
     return (
