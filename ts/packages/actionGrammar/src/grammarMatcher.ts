@@ -325,16 +325,15 @@ export type BacktrackOrigin =
     // a future entry with the same context can short-circuit.
     // Never restored as a parse path; always skipped past.
     | "memoMarker"
-    // Replay frame for SUCCESS memoization.  Pushed by
-    // `enterRulesAlternation` on a cache HIT with a captured
-    // `SuccessDelta[]`: the live state applies `delta[0]`
-    // immediately and pushes one `memoReplay` frame per
-    // remaining delta in REVERSE order so LIFO pop yields source
-    // order.  Each frame carries the OUTER state snapshot at the
-    // entry point plus the single delta to apply on restore.
-    // Treated like an alternation cursor for suppression purposes
-    // (always survives - represents an alternative parse the
-    // caller may want to enumerate).
+    // Replay cursor for SUCCESS memoization.  Pushed by
+    // `memoLookup` on a cache HIT with a captured
+    // `SuccessDelta[]`: the live state applies `deltas[0]`
+    // immediately and pushes a single cursor frame that holds the
+    // entire delta array plus an advancing index.  On each
+    // `tryNextBacktrack` pop the cursor restores the base snapshot
+    // and applies the next delta; once the cursor reaches the end
+    // of the array the frame unlinks.  Identical to the
+    // `alternation` cursor pattern but for replay deltas.
     | "memoReplay";
 
 // Persistent linked-list of unexplored DFS branches (most recent
@@ -516,10 +515,41 @@ type SuccessDelta = {
         | undefined;
 };
 
+// Compute a numeric key that captures all delta fields influencing
+// suffix matching after a memoReplay restore.  Two deltas with the
+// same suffix-state key will follow identical code paths through the
+// remainder of the grammar, so a failure for one implies failure for
+// all.
+//
+// Layout (fits in ~36 bits, well within MAX_SAFE_INTEGER):
+//   bits 0..15  = endOffset (up to 65535 chars)
+//   bits 16..17 = spacingModeAtExit index (0..3)
+//   bits 18..19 = leadingSpacingModeAtExit index (0..3)
+//   bits 20..35 = pendingWildcardOffset + 1 (0 = undefined sentinel)
+const spacingModeIdx: Record<"required" | "optional" | "none", number> = {
+    required: 1,
+    optional: 2,
+    none: 3,
+};
+function suffixStateKey(delta: SuccessDelta): number {
+    const sIdx =
+        delta.spacingModeAtExit === undefined
+            ? 0
+            : spacingModeIdx[delta.spacingModeAtExit];
+    const lIdx =
+        delta.leadingSpacingModeAtExit === undefined
+            ? 0
+            : spacingModeIdx[delta.leadingSpacingModeAtExit];
+    const pwo =
+        delta.pendingWildcardOffset === undefined
+            ? 0
+            : delta.pendingWildcardOffset + 1;
+    return delta.endOffset | (sIdx << 16) | (lIdx << 18) | (pwo << 20);
+}
+
 // Encode (leading, pendingWildcard, requireValue, carrier) into the
-// low 5 bits: leading occupies bits 2..3 (4 modes → 2 bits),
-// pendingWildcard bit 2 is already taken so shift: actually lay out as
-//   bits 4..3 = leading (0..3)
+// low 5 bits using `suffixSpacingIdx` for the leading mode:
+//   bits 4..3 = leading (0..3, same encoding as suffixSpacingIdx)
 //   bit 2    = pendingWildcard
 //   bit 1    = requireValue
 //   bit 0    = carrier
@@ -528,11 +558,6 @@ type SuccessDelta = {
 // Overflow: `index` is bounded by `request.length`.  V8 caps string
 // length at ~2^28; shifting by 5 gives ~2^33, well within
 // Number.MAX_SAFE_INTEGER (2^53 - 1).  No guard needed.
-const memoLeadingBits: Record<"required" | "optional" | "none", number> = {
-    required: 0,
-    optional: 1,
-    none: 2,
-};
 function memoCacheKey(
     index: number,
     leading: CompiledSpacingMode,
@@ -540,7 +565,7 @@ function memoCacheKey(
     requireValue: boolean,
     carrier: boolean,
 ): number {
-    const leadingIdx = leading === undefined ? 3 : memoLeadingBits[leading];
+    const leadingIdx = leading === undefined ? 0 : spacingModeIdx[leading];
     return (
         (index << 5) |
         (leadingIdx << 3) |
@@ -902,15 +927,32 @@ type MemoMarkerBacktrack = {
     readonly prev: Backtrack | undefined;
 };
 
-// Replay frame for SUCCESS memoization.  See the `"memoReplay"`
-// entry on `BacktrackOrigin`.  On restore, `tryNextBacktrack`
-// `Object.assign`s `snapshot` onto the live state (resetting it
-// to the pre-entry outer state) and then invokes `applyDelta` to
-// re-impose the captured exit state.
+// Replay cursor for SUCCESS memoization.  See the `"memoReplay"`
+// entry on `BacktrackOrigin`.  A single cursor frame replaces the
+// previous N-1 per-delta linked-list frames: it holds the full
+// `SuccessDelta[]` array and an advancing `cursor` index (starts
+// at 1; delta 0 was applied live).  On each `tryNextBacktrack`
+// pop the cursor `Object.assign`s `snapshot` (the pre-entry outer
+// state) and invokes `applyDelta(deltas[cursor])`.  The frame
+// stays at the chain head until all deltas have been consumed;
+// new frames pushed during the restored delta's suffix sit on top
+// and resolve before the next cursor advance.
 type MemoReplayBacktrack = {
     readonly origin: "memoReplay";
     readonly snapshot: SnapshotState;
-    readonly delta: SuccessDelta;
+    readonly deltas: SuccessDelta[];
+    // Mutable cursor advanced by `tryNextBacktrack` on each
+    // restore.  Starts at 1 (delta 0 is the live alternative);
+    // the frame unlinks once `cursor` reaches `deltas.length`.
+    cursor: number;
+    // Suffix-failure pruning: when the outer continuation fails
+    // after replaying a delta, that delta's suffix-state key is
+    // added here.  Subsequent deltas with the same key are
+    // skipped: the suffix depends only on input position and
+    // spacing/wildcard modes (not captured values), so it will
+    // fail identically.  Lossless: only provably-doomed
+    // branches are pruned.
+    readonly failedSuffixKeys: Set<number>;
     readonly prev: Backtrack | undefined;
 };
 
@@ -1044,6 +1086,14 @@ export type MatchState = PendingMatchState & {
     // push entirely - no failure caching, no success capture, no
     // replay.  See `memoization` on `GrammarMatchOptions`.
     memoization: boolean;
+
+    // Tracks the most recently replayed batch's failedSuffixKeys
+    // set and the suffix-state key that was just applied.  After
+    // `matchState` returns false, `matchGrammar` uses these to
+    // record the failed key so `tryNextBacktrack` can skip
+    // sibling replay frames with the same suffix state.
+    lastReplayBatch?: Set<number> | undefined;
+    lastReplaySuffixKey?: number | undefined;
 
     // Per-call memoization cache for sub-rule entries.  Allocated
     // once at `initialMatchState` time and reused across every
@@ -1289,16 +1339,39 @@ export function tryNextBacktrack(state: MatchState): boolean {
             continue;
         }
         if (frame.origin === "memoReplay") {
+            // Cursor frame: scan forward through the delta array,
+            // skipping deltas whose suffix-state key is already
+            // recorded as failed.
+            const { deltas, failedSuffixKeys } = frame;
+            let i = frame.cursor;
+            while (
+                i < deltas.length &&
+                failedSuffixKeys.has(suffixStateKey(deltas[i]))
+            ) {
+                i++;
+            }
+            if (i >= deltas.length) {
+                // All remaining deltas exhausted or skipped.
+                state.backtracks = frame.prev;
+                continue;
+            }
+            const delta = deltas[i];
+            frame.cursor = i + 1;
             // Restore the OUTER pre-entry snapshot, then re-impose
             // the captured exit state via `applyDelta`.  The
-            // snapshot omits `backtracks` so we explicitly
-            // advance the chain head past this frame; subsequent
-            // replay frames (if any) remain on `frame.prev` and
-            // will be popped LIFO in source order.
+            // snapshot omits `backtracks`; the cursor frame stays
+            // at head until fully consumed.  New frames pushed
+            // during this delta's suffix sit on top and resolve
+            // before the next cursor advance.
             Object.assign(state, frame.snapshot);
-            state.backtracks = frame.prev;
-            applyDelta(state, frame.delta);
-            debugMatch(state, `Restoring memoReplay frame`);
+            if (frame.cursor >= deltas.length) {
+                // Last delta: unlink the cursor frame.
+                state.backtracks = frame.prev;
+            }
+            applyDelta(state, delta);
+            state.lastReplayBatch = failedSuffixKeys;
+            state.lastReplaySuffixKey = suffixStateKey(delta);
+            debugMatch(state, `Restoring memoReplay cursor [${i}]`);
             return true;
         }
         // The snapshot omits `backtracks`, so Object.assign won't
@@ -2634,9 +2707,8 @@ export function matchState(state: MatchState, request: string) {
             // Skipped for repeat / pendingWildcard-active entries
             // (see `noSuccessCache`); failure caching is unaffected.
             if (parentMemo !== undefined && !parentMemo.noSuccessCache) {
-                parentMemo.successes.push(
-                    captureSuccessDelta(state, parentMemo),
-                );
+                const delta = captureSuccessDelta(state, parentMemo);
+                parentMemo.successes.push(delta);
             }
 
             // Check the trailing boundary after the nested rule using the
@@ -2811,23 +2883,30 @@ function memoLookup(
         // first delta is applied live; deltas[1..N-1] are pushed
         // in REVERSE so LIFO pop yields source order.
         const baseSnapshot = forkMatchState(state);
-        // Push (N-1) replay frames first so the first delta we
-        // apply live executes against the same chain shape
-        // (`state.backtracks` already extended) the original code
-        // path produces (memoMarker + alternation cursor below
-        // current top).  In the replay world there is no marker
-        // and no cursor: only the replay frames.
-        let chain = state.backtracks;
-        for (let i = cached.length - 1; i >= 1; i--) {
-            chain = {
+        // Shared set for suffix-failure pruning: when the outer
+        // continuation fails after replaying a delta with a given
+        // endOffset, that offset is recorded here and sibling
+        // replay frames with the same offset are skipped.
+        const failedSuffixKeys = new Set<number>();
+        // Push a single replay cursor frame covering deltas[1..N-1].
+        // Delta 0 is applied live below; the cursor advances
+        // forward through the remaining deltas on each
+        // `tryNextBacktrack` pop (same pattern as the alternation
+        // cursor).  One frame instead of N-1 saves ~80 bytes per
+        // delta in the pathological case.
+        if (cached.length > 1) {
+            state.backtracks = {
                 origin: "memoReplay",
                 snapshot: baseSnapshot,
-                delta: cached[i],
-                prev: chain,
+                deltas: cached,
+                cursor: 1,
+                failedSuffixKeys,
+                prev: state.backtracks,
             };
         }
-        state.backtracks = chain;
         applyDelta(state, cached[0]);
+        state.lastReplayBatch = failedSuffixKeys;
+        state.lastReplaySuffixKey = suffixStateKey(cached[0]);
         debugMatchRaw(
             `memoReplay: cache hit for rules@${state.index - cached[0].endOffset}|${childLeadingSpacingMode}|0 - replaying ${cached.length} delta(s)`,
         );
@@ -2841,6 +2920,8 @@ function memoLookup(
     // exhausted, the memoMarker becomes head and `tryNextBacktrack`
     // pops it, populating the failure cache if no member ever
     // flipped its flag.
+    const noSuccessCache =
+        repeat || pendingWildcardActive || state.valueIds === null;
     const marker: MemoMarkerBacktrack = {
         origin: "memoMarker",
         rules,
@@ -2854,8 +2935,7 @@ function memoLookup(
         lastMatchedPartInfoAtEntry: state.lastMatchedPartInfo,
         carrier: isCarrier,
         requireValue,
-        noSuccessCache:
-            repeat || pendingWildcardActive || state.valueIds === null,
+        noSuccessCache,
         successes: [],
         prev: state.backtracks,
     };
@@ -3326,7 +3406,26 @@ export function matchGrammar(
     // the live state's parts left-to-right; on success collect the
     // result and prune any per-policy first-success frames; then
     // pop the most-recently-pushed unexplored sibling and resume.
-    do {
+    //
+    // Suffix-failure pruning for memoReplay batches: after each
+    // match cycle, if the cycle was a memoReplay that produced no
+    // new results, its endOffset is recorded as failed on the
+    // batch's shared set.  Future replay frames in the same batch
+    // with the same endOffset are skipped in `tryNextBacktrack`.
+    // This is lossless: the suffix depends only on input position,
+    // not captured values, so a position that fails the suffix
+    // once will fail for every value-variant at that position.
+    let resultCountAtCycleStart = 0;
+    for (;;) {
+        // Snapshot replay tracking for this cycle (set by
+        // memoLookup on initial entry or tryNextBacktrack on
+        // replay restore).
+        const cycleReplayBatch = state.lastReplayBatch;
+        const cycleReplaySuffixKey = state.lastReplaySuffixKey;
+        state.lastReplayBatch = undefined;
+        state.lastReplaySuffixKey = undefined;
+        resultCountAtCycleStart = results.length;
+
         debugMatch(state, `resume state`);
         if (
             matchState(state, request) &&
@@ -3334,7 +3433,20 @@ export function matchGrammar(
         ) {
             suppressBacktracksAfterSuccess(state);
         }
-    } while (tryNextBacktrack(state));
+
+        // Record suffix failure BEFORE tryNextBacktrack so the
+        // skip check inside tryNextBacktrack sees it immediately.
+        if (
+            cycleReplayBatch !== undefined &&
+            results.length === resultCountAtCycleStart
+        ) {
+            cycleReplayBatch.add(cycleReplaySuffixKey!);
+        }
+
+        if (!tryNextBacktrack(state)) {
+            break;
+        }
+    }
 
     return results;
 }
