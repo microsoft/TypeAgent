@@ -237,29 +237,46 @@ and which do not.
 
 #### Core structural choices
 
-| Choice                                       | Validated? | How                                                            | Notes                                                            |
-| -------------------------------------------- | ---------- | -------------------------------------------------------------- | ---------------------------------------------------------------- |
-| Three node kinds (task/branch/loop)          | Yes        | D1 (loop), D5 (branch), D4 (task)                              | All three exercised by real workflows                            |
-| Four namespaces (input/constant/scope/state) | Yes        | All workflows use input/constant/scope; D1 uses state          |                                                                  |
-| `next` as explicit control edge              | Yes        | All workflows                                                  |                                                                  |
-| Closed loop scopes                           | Yes        | D1 loop body cannot reference outer bindings                   |                                                                  |
-| `onError` edge model                         | Partially  | D8 exercises recovery; A4 test covers placeholder substitution | No nested onError or loop-level onError tested                   |
-| Per-node schemas (0003)                      | Yes        | Schema validation at load time + runtime (§7.3 item 1)         | Runtime via ajv; static path checking implemented                |
-| Dominator-based reference validity           | **No**     | Deferred to post-v1                                            | Designed but not implemented                                     |
-| Structural subtyping over JSON Schema        | Partially  | Static path checking + runtime output validation               | Full subtype depth (covariance) deferred; path existence checked |
+| Choice                                       | Validated? | Value?   | Choose again? | How                                                            | Notes                                                           |
+| -------------------------------------------- | ---------- | -------- | ------------- | -------------------------------------------------------------- | --------------------------------------------------------------- |
+| Three node kinds (task/branch/loop)          | Yes        | **High** | Yes           | D1 (loop), D5 (branch), D4 (task)                              | Minimal set; adding a 4th (parallel) would be the next step     |
+| Four namespaces (input/constant/scope/state) | Yes        | **High** | Yes           | All workflows use input/constant/scope; D1 uses state          | Alternative (flat namespace + prefixes) would be ambiguous      |
+| `next` as explicit control edge              | Yes        | **High** | Yes           | All workflows                                                  | Alternative (implicit ordering) hides intent; explicit is cheap |
+| Closed loop scopes                           | Yes        | Neutral  | Probably      | D1 loop body cannot reference outer bindings                   | Could relax later without breaking existing workflows           |
+| `onError` edge model                         | Partially  | **High** | Yes           | D8 exercises recovery; A4 test covers placeholder substitution | Better than try/catch blocks; keeps IR flat                     |
+| Per-node schemas (0003)                      | Yes        | **High** | Yes           | Schema validation at load time + runtime (§7.3 item 1)         | Alternative (registry-only) blocks offline validation           |
+| Dominator-based reference validity           | **No**     | Unknown  | Undecided     | Deferred to post-v1                                            | Designed but not implemented; may not be needed if SSA holds    |
+| Structural subtyping over JSON Schema        | Partially  | Moderate | Leaning yes   | Static path checking + runtime output validation               | Path checking is cheap; full depth is deferred not abandoned    |
 
 #### Decision records
 
-| Decision                     | Claim                                              | Validated? | How                                                                       |
-| ---------------------------- | -------------------------------------------------- | ---------- | ------------------------------------------------------------------------- |
-| 0001 - Bound outputs         | `bind` + named scope refs beats positional wiring  | Yes        | All workflows use bind + scope refs                                       |
-| 0002 - CFG/DDG separation    | Control and data are separate concerns             | Implicitly | Engine sequences independent producers correctly                          |
-| 0003 - Task schema source    | Schemas live in IR, not in registry                | Yes        | Schema validation uses IR-declared schemas                                |
-| 0004 - Pure SSA              | Scope bindings are write-once                      | Yes        | Engine enforces; any violation is a runtime error                         |
-| 0006 - No expressions        | Stdlib tasks replace inline expressions            | Tracked    | Stdlib surface area count at exit (§7.3 item 2)                           |
-| 0007 - Template model        | Mixed literals + `$from` refs at any depth         | Partially  | Flat and one-level nesting exercised; depth is a watch item (§7.3 item 4) |
-| 0008 - Discriminant encoding | Case keys are strings; `bool.toLabel` for booleans | Yes        | Branch node in D5                                                         |
-| 0009 - Loop output source    | `output` resolves in full body scope at `@exit`    | Yes        | A4 engine test; D1 loop                                                   |
+| Decision                     | Claim                                              | Validated? | Value?   | Choose again? | How                                                                    |
+| ---------------------------- | -------------------------------------------------- | ---------- | -------- | ------------- | ---------------------------------------------------------------------- |
+| 0001 - Bound outputs         | `bind` + named scope refs beats positional wiring  | Yes        | **High** | Yes           | Named refs are self-documenting; reordering nodes has no data impact   |
+| 0002 - CFG/DDG separation    | Control and data are separate concerns             | Implicitly | **High** | Yes           | Engine sequences producers correctly without coupling control to data  |
+| 0003 - Task schema source    | Schemas live in IR, not in registry                | Yes        | **High** | Yes           | Enables schema validation without task implementation present          |
+| 0004 - Pure SSA              | Scope bindings are write-once                      | Yes        | Neutral  | Probably      | Harmless constraint; may matter more with mutation-heavy tasks later   |
+| 0006 - No expressions        | Stdlib tasks replace inline expressions            | Tracked    | Moderate | **Revisit**   | Works but scaling concern: every new operator = new task + node        |
+| 0007 - Template model        | Mixed literals + `$from` refs at any depth         | Partially  | **High** | Yes           | 50-line resolver handles all cases; no workflow hit depth limits       |
+| 0008 - Discriminant encoding | Case keys are strings; `bool.toLabel` for booleans | Yes        | **Low**  | **No**        | Would use inline `true`/`false` case keys instead; avoids stdlib bloat |
+| 0009 - Loop output source    | `output` resolves in full body scope at `@exit`    | Yes        | **High** | Yes           | Correct choice: body bindings are fresh, state is stale at exit        |
+
+**Value assessment key:**
+
+- **High**: actively prevented mistakes, simplified the engine, or enabled a real capability
+- **Moderate**: useful but the benefit is modest relative to alternatives
+- **Neutral**: neither helped nor hurt; untested in practice
+- **Low**: added friction or ceremony without observable benefit
+- **Unknown**: not exercised, cannot assess
+
+**Choose again? key:**
+
+- **Yes**: would make the same choice; alternatives are clearly worse
+- **Probably**: safe bet; no evidence against it, but untested alternatives exist
+- **Leaning yes**: likely correct but would want more data before committing permanently
+- **Revisit**: working but showing strain; alternative worth prototyping post-v1
+- **No**: would choose differently; the cost exceeded the benefit
+- **Undecided**: not enough evidence to judge
 
 ## 8. Exit criteria
 
