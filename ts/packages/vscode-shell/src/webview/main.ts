@@ -285,7 +285,7 @@ window.addEventListener("message", (event) => {
             chatPanel.replaceAgentMessage(
                 msg.message.message,
                 msg.message.source,
-                undefined,
+                msg.message.sourceIcon,
                 msg.requestId,
             );
             break;
@@ -293,7 +293,7 @@ window.addEventListener("message", (event) => {
             chatPanel.addAgentMessage(
                 msg.message.message,
                 msg.message.source,
-                undefined,
+                msg.message.sourceIcon,
                 msg.mode,
                 msg.requestId,
             );
