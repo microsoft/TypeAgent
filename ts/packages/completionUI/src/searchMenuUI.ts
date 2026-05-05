@@ -1,12 +1,18 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-// Copyright (c) Microsoft Corporation.
-// Licensed under the MIT License.
-
-import type { SearchMenuItem } from "agent-dispatcher/helpers/completion";
-
-export type { SearchMenuItem };
+// Canonical SearchMenuItem definition. Lives here (in the UI package) so
+// completion-ui has no runtime/declared dependency on agent-dispatcher; the
+// dispatcher imports this type from @typeagent/completion-ui instead.
+export type SearchMenuItem = {
+    matchText: string;
+    emojiChar?: string | undefined;
+    sortIndex?: number;
+    selectedText: string;
+    // When undefined, treated as true by consumers (add quotes if
+    // selectedText contains spaces).
+    needQuotes?: boolean | undefined;
+};
 
 export type SearchMenuPosition = {
     left: number;

@@ -2,16 +2,14 @@
 // Licensed under the MIT License.
 
 import { TST, normalizeMatchText } from "./trie.js";
+import type { SearchMenuItem } from "@typeagent/completion-ui";
 
 // ── Search menu types ─────────────────────────────────────────────────────────
 
-export type SearchMenuItem = {
-    matchText: string;
-    emojiChar?: string | undefined;
-    sortIndex?: number;
-    selectedText: string;
-    needQuotes?: boolean | undefined; // When undefined, treated as true by consumers (add quotes if selectedText has spaces).
-};
+// SearchMenuItem is defined canonically in @typeagent/completion-ui (the shared
+// UI package). Re-exported here so existing consumers that import via
+// "agent-dispatcher/helpers/completion" keep working unchanged.
+export type { SearchMenuItem };
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 

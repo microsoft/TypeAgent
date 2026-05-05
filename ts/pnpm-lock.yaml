@@ -3353,10 +3353,6 @@ importers:
         version: 5.4.5
 
   packages/completionUI:
-    dependencies:
-      agent-dispatcher:
-        specifier: workspace:*
-        version: link:../dispatcher/dispatcher
     devDependencies:
       prettier:
         specifier: ^3.5.3
@@ -3587,6 +3583,9 @@ importers:
       '@typeagent/common-utils':
         specifier: workspace:*
         version: link:../../utils/commonUtils
+      '@typeagent/completion-ui':
+        specifier: workspace:*
+        version: link:../../completionUI
       '@typeagent/dispatcher-types':
         specifier: workspace:*
         version: link:../types
@@ -4901,7 +4900,7 @@ importers:
         version: file:packages/agentServer/protocol
       '@typeagent/completion-ui':
         specifier: file:../completionUI
-        version: file:packages/completionUI
+        version: link:../completionUI
       '@typeagent/dispatcher-rpc':
         specifier: file:../dispatcher/rpc
         version: file:packages/dispatcher/rpc
@@ -8025,9 +8024,6 @@ packages:
 
   '@typeagent/agent-server-protocol@file:packages/agentServer/protocol':
     resolution: {directory: packages/agentServer/protocol, type: directory}
-
-  '@typeagent/completion-ui@file:packages/completionUI':
-    resolution: {directory: packages/completionUI, type: directory}
 
   '@typeagent/dispatcher-rpc@file:packages/dispatcher/rpc':
     resolution: {directory: packages/dispatcher/rpc, type: directory}
@@ -19529,10 +19525,6 @@ snapshots:
       '@typeagent/dispatcher-rpc': link:packages/dispatcher/rpc
       '@typeagent/dispatcher-types': link:packages/dispatcher/types
 
-  '@typeagent/completion-ui@file:packages/completionUI':
-    dependencies:
-      agent-dispatcher: link:packages/dispatcher/dispatcher
-
   '@typeagent/dispatcher-rpc@file:packages/dispatcher/rpc':
     dependencies:
       '@typeagent/agent-rpc': link:packages/agentRpc
@@ -20408,6 +20400,7 @@ snapshots:
       '@typeagent/agent-rpc': link:packages/agentRpc
       '@typeagent/agent-sdk': link:packages/agentSdk
       '@typeagent/common-utils': link:packages/utils/commonUtils
+      '@typeagent/completion-ui': link:packages/completionUI
       '@typeagent/dispatcher-types': link:packages/dispatcher/types
       action-grammar: link:packages/actionGrammar
       agent-cache: link:packages/cache
