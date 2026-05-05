@@ -109,8 +109,7 @@ async function killClock(client: HelperClient): Promise<void> {
 
 async function main(): Promise<void> {
     const argv = process.argv.slice(2);
-    const requestedTabs =
-        argv.length > 0 ? argv : Object.keys(TAB_GOALS);
+    const requestedTabs = argv.length > 0 ? argv : Object.keys(TAB_GOALS);
     log(`tabs to crawl: ${requestedTabs.join(", ")}`);
 
     const workspaceDir = path.join(
@@ -148,7 +147,10 @@ async function main(): Promise<void> {
         });
         log(`  ${cap.bytes} bytes captured`);
 
-        const oracle = new LlmOracle({ goal: "(per-tab override)", maxRetries: 2 });
+        const oracle = new LlmOracle({
+            goal: "(per-tab override)",
+            maxRetries: 2,
+        });
 
         for (const tab of requestedTabs) {
             const goal = TAB_GOALS[tab];
@@ -176,7 +178,9 @@ async function main(): Promise<void> {
             // Override the oracle's goal for THIS tab.
             (oracle as any).goal = goal;
 
-            log(`  exploring (max ${budget.maxIter} iter / ${budget.wallMs / 1000}s wall)`);
+            log(
+                `  exploring (max ${budget.maxIter} iter / ${budget.wallMs / 1000}s wall)`,
+            );
             const metrics = await runExploration({
                 client,
                 oracle,
@@ -216,7 +220,9 @@ async function main(): Promise<void> {
 
             await client.appKill({ pid: launch.pid });
 
-            log(`  synthesizing + merging into workspace discoveredActions.json...`);
+            log(
+                `  synthesizing + merging into workspace discoveredActions.json...`,
+            );
             const runDir = path.join(workspaceDir, "runs", metrics.runId);
             try {
                 const result = await synthesize({
@@ -233,7 +239,9 @@ async function main(): Promise<void> {
                     );
                 }
             } catch (e) {
-                log(`  synthesis failed: ${e instanceof Error ? e.message : e}`);
+                log(
+                    `  synthesis failed: ${e instanceof Error ? e.message : e}`,
+                );
             }
         }
 
@@ -244,7 +252,10 @@ async function main(): Promise<void> {
             const merged = JSON.parse(readFileSync(wsActions, "utf8"));
             for (const a of merged.actions) {
                 const params = a.parameters
-                    .map((p: { name: string; type: string }) => `${p.name}:${p.type}`)
+                    .map(
+                        (p: { name: string; type: string }) =>
+                            `${p.name}:${p.type}`,
+                    )
                     .join(", ");
                 const flags = a.destructive ? " DESTRUCTIVE" : "";
                 log(

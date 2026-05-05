@@ -12,10 +12,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 
-import type {
-    CapturedState,
-    CapturedTransition,
-} from "./exploreTypes.js";
+import type { CapturedState, CapturedTransition } from "./exploreTypes.js";
 import type { TreeNode } from "./types.js";
 
 /**
@@ -65,7 +62,9 @@ export class ExploreGraph {
         this.nextStateNum = this.statesById.size + 1;
         this.nextTransitionNum = this.transitions.length + 1;
         this.statesStream = createWriteStream(statesFile, { flags: "a" });
-        this.transitionsStream = createWriteStream(transitionsFile, { flags: "a" });
+        this.transitionsStream = createWriteStream(transitionsFile, {
+            flags: "a",
+        });
     }
 
     get stateCount(): number {
@@ -96,7 +95,8 @@ export class ExploreGraph {
         label?: string;
         fingerprint: string;
     }> {
-        const out: Array<{ id: string; label?: string; fingerprint: string }> = [];
+        const out: Array<{ id: string; label?: string; fingerprint: string }> =
+            [];
         for (const s of this.statesById.values()) {
             const item: { id: string; label?: string; fingerprint: string } = {
                 id: s.id,
@@ -178,6 +178,9 @@ export class ExploreGraph {
      * Append a JSON line to a sibling file (used for run.json snapshots).
      */
     writeRunMeta(name: string, content: object): void {
-        appendFileSync(path.join(this.runDir, name), JSON.stringify(content) + "\n");
+        appendFileSync(
+            path.join(this.runDir, name),
+            JSON.stringify(content) + "\n",
+        );
     }
 }

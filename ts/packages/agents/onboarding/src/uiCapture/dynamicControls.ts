@@ -126,12 +126,16 @@ function diffDumpsToRules(dumps: TreeNode[]): DynamicControlRule[] {
 function detectDynamicProperties(nodes: TreeNode[]): DynamicProperty[] {
     const props: DynamicProperty[] = [];
     if (
-        nodes.some((n, i) => i > 0 && (nodes[i - 1]!.value ?? "") !== (n.value ?? ""))
+        nodes.some(
+            (n, i) => i > 0 && (nodes[i - 1]!.value ?? "") !== (n.value ?? ""),
+        )
     ) {
         props.push("value");
     }
     if (
-        nodes.some((n, i) => i > 0 && (nodes[i - 1]!.name ?? "") !== (n.name ?? ""))
+        nodes.some(
+            (n, i) => i > 0 && (nodes[i - 1]!.name ?? "") !== (n.name ?? ""),
+        )
     ) {
         props.push("name");
     }
@@ -151,7 +155,10 @@ function countTransitions(nodes: TreeNode[], props: DynamicProperty[]): number {
     let transitions = 0;
     for (let i = 1; i < nodes.length; i++) {
         for (const p of props) {
-            if ((getProp(nodes[i - 1]!, p) ?? "") !== (getProp(nodes[i]!, p) ?? "")) {
+            if (
+                (getProp(nodes[i - 1]!, p) ?? "") !==
+                (getProp(nodes[i]!, p) ?? "")
+            ) {
                 transitions++;
                 break;
             }
@@ -187,7 +194,9 @@ async function sleep(ms: number): Promise<void> {
 
 /* persistence */
 
-export function loadDynamicControls(workspaceDir: string): DynamicControlsFile | null {
+export function loadDynamicControls(
+    workspaceDir: string,
+): DynamicControlsFile | null {
     const file = path.join(workspaceDir, "dynamicControls.json");
     if (!existsSync(file)) {
         return null;

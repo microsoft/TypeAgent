@@ -19,7 +19,9 @@ const execFileAsync = promisify(execFile);
  * Resolve PackageFamilyName for a UWP package name (the part of the AUMID
  * before the underscore). Returns null if the package isn't installed.
  */
-async function getPackageFamilyName(packageName: string): Promise<string | null> {
+async function getPackageFamilyName(
+    packageName: string,
+): Promise<string | null> {
     try {
         const { stdout } = await execFileAsync(
             "powershell.exe",
@@ -106,7 +108,9 @@ function inferProcessName(packageName: string): string | undefined {
     return map[packageName];
 }
 
-export function loadSnapshotPolicy(workspaceDir: string): SnapshotPolicy | null {
+export function loadSnapshotPolicy(
+    workspaceDir: string,
+): SnapshotPolicy | null {
     const file = path.join(workspaceDir, "snapshotPolicy.json");
     if (!existsSync(file)) {
         return null;

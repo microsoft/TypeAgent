@@ -91,7 +91,13 @@ export async function reconnoiterApp(
         const shot = await opts.client.screenshot({
             root: opts.rootSelector,
         });
-        const recon = await classifyTab(model, tab, tree, shot.pngBase64, opts.appHint);
+        const recon = await classifyTab(
+            model,
+            tab,
+            tree,
+            shot.pngBase64,
+            opts.appHint,
+        );
         if (recon) {
             surveys.push({ tab, recon });
         }
@@ -155,7 +161,10 @@ async function classifyTab(
     const dataUrl = `data:image/png;base64,${screenshotPngBase64}`;
     const imageOnlyContent: MultimodalPromptContent[] = [
         { type: "text", text: `Screenshot of the '${tab.name}' tab:` },
-        { type: "image_url", image_url: { url: dataUrl } } as MultimodalPromptContent,
+        {
+            type: "image_url",
+            image_url: { url: dataUrl },
+        } as MultimodalPromptContent,
     ];
     const result = await translator.translate(text, [
         { role: "user", content: imageOnlyContent },
@@ -169,7 +178,11 @@ async function classifyTab(
     return result.data;
 }
 
-function buildReconPrompt(tab: TabRef, tree: TreeNode, appHint: string): string {
+function buildReconPrompt(
+    tab: TabRef,
+    tree: TreeNode,
+    appHint: string,
+): string {
     const lines: string[] = [];
     lines.push(
         `You are reviewing a screenshot and accessibility tree for ONE tab of a Windows desktop application to enumerate the user-facing actions it supports.`,
@@ -183,11 +196,19 @@ function buildReconPrompt(tab: TabRef, tree: TreeNode, appHint: string): string 
     lines.push(
         "Identify what this tab is FOR (its purpose) and list the user-meaningful actions it supports. For each action:",
     );
-    lines.push("- Use a camelCase verb-noun name (createAlarm, startStopwatch, addCity, recordLap, navigateToTab, etc.).");
+    lines.push(
+        "- Use a camelCase verb-noun name (createAlarm, startStopwatch, addCity, recordLap, navigateToTab, etc.).",
+    );
     lines.push("- Describe what the user accomplishes.");
-    lines.push("- List parameters with types and a plausible EXAMPLE value (your best guess from the visible UI).");
-    lines.push("- Mark priority='primary' for the tab's main intent(s); priority='secondary' for adjacent features (settings, sign-in, music, etc.).");
-    lines.push("- destructive=true for delete/remove/reset/clear actions, else false.");
+    lines.push(
+        "- List parameters with types and a plausible EXAMPLE value (your best guess from the visible UI).",
+    );
+    lines.push(
+        "- Mark priority='primary' for the tab's main intent(s); priority='secondary' for adjacent features (settings, sign-in, music, etc.).",
+    );
+    lines.push(
+        "- destructive=true for delete/remove/reset/clear actions, else false.",
+    );
     lines.push("");
     lines.push(
         "Be aspirational: include actions that the screenshot/tree implies are possible even if you can't see them executed (e.g. if there's an 'Add' button visible, the action 'createX' is implied).",
@@ -224,9 +245,14 @@ function truncate(s: string, n: number): string {
     return s.length > n ? s.slice(0, n - 1) + "…" : s;
 }
 
-function makeReconTranslator(model: ChatModel): TypeChatJsonTranslator<TabRecon> {
+function makeReconTranslator(
+    model: ChatModel,
+): TypeChatJsonTranslator<TabRecon> {
     const schema = loadSchema(["reconLlmSchema.ts"], import.meta.url);
-    const validator = createTypeScriptJsonValidator<TabRecon>(schema, "TabRecon");
+    const validator = createTypeScriptJsonValidator<TabRecon>(
+        schema,
+        "TabRecon",
+    );
     return createJsonTranslator<TabRecon>(model, validator);
 }
 

@@ -60,7 +60,9 @@ async function testInferForClock(): Promise<void> {
     log("  ✓ Clock policy inferred with LocalState");
 }
 
-async function testCaptureRestoreSynthetic(client: HelperClient): Promise<void> {
+async function testCaptureRestoreSynthetic(
+    client: HelperClient,
+): Promise<void> {
     log("synthetic snapshot capture/restore...");
     // Create a sandboxed state directory we control.
     const root = path.join(
@@ -77,7 +79,10 @@ async function testCaptureRestoreSynthetic(client: HelperClient): Promise<void> 
     mkdirSync(stateDir, { recursive: true });
 
     // Seed state.
-    writeFileSync(path.join(stateDir, "alarms.txt"), "7:00 Wake\n8:00 Standup\n");
+    writeFileSync(
+        path.join(stateDir, "alarms.txt"),
+        "7:00 Wake\n8:00 Standup\n",
+    );
     writeFileSync(path.join(stateDir, "settings.json"), '{"sound":"chime"}');
     mkdirSync(path.join(stateDir, "nested"), { recursive: true });
     writeFileSync(path.join(stateDir, "nested", "log.txt"), "initial log\n");
@@ -107,7 +112,10 @@ async function testCaptureRestoreSynthetic(client: HelperClient): Promise<void> 
     // Dirty the state.
     writeFileSync(path.join(stateDir, "alarms.txt"), "(corrupted)\n");
     rmSync(path.join(stateDir, "settings.json"));
-    writeFileSync(path.join(stateDir, "extra.txt"), "should be removed on restore");
+    writeFileSync(
+        path.join(stateDir, "extra.txt"),
+        "should be removed on restore",
+    );
     writeFileSync(path.join(stateDir, "nested", "log.txt"), "(corrupted)\n");
     log("  state dirtied");
 

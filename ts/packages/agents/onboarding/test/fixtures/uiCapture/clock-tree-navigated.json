@@ -6,9 +6,7 @@
   "isEnabled": true,
   "isOffscreen": false,
   "hasKeyboardFocus": false,
-  "patterns": [
-    "Window"
-  ],
+  "patterns": ["Window"],
   "boundingRect": {
     "x": 150,
     "y": 120,
@@ -72,9 +70,7 @@
                   "isEnabled": true,
                   "isOffscreen": false,
                   "hasKeyboardFocus": false,
-                  "patterns": [
-                    "Text"
-                  ],
+                  "patterns": ["Text"],
                   "boundingRect": {
                     "x": 314,
                     "y": 220,
@@ -98,9 +94,7 @@
       "isEnabled": true,
       "isOffscreen": false,
       "hasKeyboardFocus": false,
-      "patterns": [
-        "Value"
-      ],
+      "patterns": ["Value"],
       "boundingRect": {
         "x": 1132,
         "y": 121,
@@ -132,9 +126,7 @@
               "isEnabled": true,
               "isOffscreen": false,
               "hasKeyboardFocus": false,
-              "patterns": [
-                "ExpandCollapse"
-              ],
+              "patterns": ["ExpandCollapse"],
               "boundingRect": {
                 "x": 0,
                 "y": 0,
@@ -153,9 +145,7 @@
           "isEnabled": true,
           "isOffscreen": false,
           "hasKeyboardFocus": false,
-          "patterns": [
-            "Invoke"
-          ],
+          "patterns": ["Invoke"],
           "boundingRect": {
             "x": 1194,
             "y": 121,
@@ -172,9 +162,7 @@
           "isEnabled": true,
           "isOffscreen": false,
           "hasKeyboardFocus": false,
-          "patterns": [
-            "Invoke"
-          ],
+          "patterns": ["Invoke"],
           "boundingRect": {
             "x": 1251,
             "y": 121,
@@ -191,9 +179,7 @@
           "isEnabled": true,
           "isOffscreen": false,
           "hasKeyboardFocus": false,
-          "patterns": [
-            "Invoke"
-          ],
+          "patterns": ["Invoke"],
           "boundingRect": {
             "x": 1308,
             "y": 121,
@@ -227,9 +213,7 @@
           "isEnabled": true,
           "isOffscreen": false,
           "hasKeyboardFocus": false,
-          "patterns": [
-            "Selection"
-          ],
+          "patterns": ["Selection"],
           "boundingRect": {
             "x": 159,
             "y": 121,
@@ -261,9 +245,7 @@
                   "isEnabled": true,
                   "isOffscreen": false,
                   "hasKeyboardFocus": false,
-                  "patterns": [
-                    "Scroll"
-                  ],
+                  "patterns": ["Scroll"],
                   "boundingRect": {
                     "x": 159,
                     "y": 166,
@@ -295,9 +277,7 @@
                           "isEnabled": true,
                           "isOffscreen": false,
                           "hasKeyboardFocus": false,
-                          "patterns": [
-                            "SelectionItem"
-                          ],
+                          "patterns": ["SelectionItem"],
                           "boundingRect": {
                             "x": 164,
                             "y": 169,
@@ -315,9 +295,7 @@
                           "isEnabled": true,
                           "isOffscreen": false,
                           "hasKeyboardFocus": false,
-                          "patterns": [
-                            "SelectionItem"
-                          ],
+                          "patterns": ["SelectionItem"],
                           "boundingRect": {
                             "x": 164,
                             "y": 219,
@@ -335,9 +313,7 @@
                           "isEnabled": true,
                           "isOffscreen": false,
                           "hasKeyboardFocus": true,
-                          "patterns": [
-                            "SelectionItem"
-                          ],
+                          "patterns": ["SelectionItem"],
                           "boundingRect": {
                             "x": 164,
                             "y": 269,
@@ -355,9 +331,7 @@
                           "isEnabled": true,
                           "isOffscreen": false,
                           "hasKeyboardFocus": false,
-                          "patterns": [
-                            "SelectionItem"
-                          ],
+                          "patterns": ["SelectionItem"],
                           "boundingRect": {
                             "x": 164,
                             "y": 319,
@@ -375,9 +349,7 @@
                           "isEnabled": true,
                           "isOffscreen": false,
                           "hasKeyboardFocus": false,
-                          "patterns": [
-                            "SelectionItem"
-                          ],
+                          "patterns": ["SelectionItem"],
                           "boundingRect": {
                             "x": 164,
                             "y": 369,
@@ -399,9 +371,7 @@
                   "isEnabled": true,
                   "isOffscreen": false,
                   "hasKeyboardFocus": false,
-                  "patterns": [
-                    "Invoke"
-                  ],
+                  "patterns": ["Invoke"],
                   "boundingRect": {
                     "x": 164,
                     "y": 1020,
@@ -417,9 +387,7 @@
                       "isEnabled": true,
                       "isOffscreen": false,
                       "hasKeyboardFocus": false,
-                      "patterns": [
-                        "Text"
-                      ],
+                      "patterns": ["Text"],
                       "boundingRect": {
                         "x": 217,
                         "y": 1031,
@@ -437,9 +405,7 @@
                       "isEnabled": true,
                       "isOffscreen": false,
                       "hasKeyboardFocus": false,
-                      "patterns": [
-                        "Text"
-                      ],
+                      "patterns": ["Text"],
                       "boundingRect": {
                         "x": 217,
                         "y": 1031,
@@ -458,9 +424,7 @@
                   "isEnabled": true,
                   "isOffscreen": false,
                   "hasKeyboardFocus": false,
-                  "patterns": [
-                    "Scroll"
-                  ],
+                  "patterns": ["Scroll"],
                   "boundingRect": {
                     "x": 159,
                     "y": 1070,
@@ -492,9 +456,7 @@
                           "isEnabled": true,
                           "isOffscreen": false,
                           "hasKeyboardFocus": false,
-                          "patterns": [
-                            "SelectionItem"
-                          ],
+                          "patterns": ["SelectionItem"],
                           "boundingRect": {
                             "x": 164,
                             "y": 1073,
@@ -517,9 +479,7 @@
               "isEnabled": true,
               "isOffscreen": false,
               "hasKeyboardFocus": false,
-              "patterns": [
-                "Scroll"
-              ],
+              "patterns": ["Scroll"],
               "boundingRect": {
                 "x": 510,
                 "y": 161,
@@ -535,9 +495,7 @@
                   "isEnabled": true,
                   "isOffscreen": false,
                   "hasKeyboardFocus": false,
-                  "patterns": [
-                    "Scroll"
-                  ],
+                  "patterns": ["Scroll"],
                   "boundingRect": {
                     "x": 510,
                     "y": 161,
@@ -554,9 +512,7 @@
                       "isEnabled": true,
                       "isOffscreen": false,
                       "hasKeyboardFocus": false,
-                      "patterns": [
-                        "Toggle"
-                      ],
+                      "patterns": ["Toggle"],
                       "boundingRect": {
                         "x": 580,
                         "y": 186,
@@ -574,9 +530,7 @@
                           "isEnabled": false,
                           "isOffscreen": false,
                           "hasKeyboardFocus": false,
-                          "patterns": [
-                            "Value"
-                          ],
+                          "patterns": ["Value"],
                           "boundingRect": {
                             "x": 600,
                             "y": 206,
@@ -593,9 +547,7 @@
                               "isEnabled": true,
                               "isOffscreen": false,
                               "hasKeyboardFocus": false,
-                              "patterns": [
-                                "Text"
-                              ],
+                              "patterns": ["Text"],
                               "boundingRect": {
                                 "x": 763,
                                 "y": 254,
@@ -615,9 +567,7 @@
                           "isEnabled": true,
                           "isOffscreen": false,
                           "hasKeyboardFocus": false,
-                          "patterns": [
-                            "Toggle"
-                          ],
+                          "patterns": ["Toggle"],
                           "boundingRect": {
                             "x": 1220,
                             "y": 191,
@@ -635,9 +585,7 @@
                           "isEnabled": true,
                           "isOffscreen": false,
                           "hasKeyboardFocus": false,
-                          "patterns": [
-                            "Text"
-                          ],
+                          "patterns": ["Text"],
                           "boundingRect": {
                             "x": 625,
                             "y": 284,
@@ -655,9 +603,7 @@
                           "isEnabled": true,
                           "isOffscreen": false,
                           "hasKeyboardFocus": false,
-                          "patterns": [
-                            "Text"
-                          ],
+                          "patterns": ["Text"],
                           "boundingRect": {
                             "x": 600,
                             "y": 307,
@@ -677,10 +623,7 @@
                   "isEnabled": true,
                   "isOffscreen": false,
                   "hasKeyboardFocus": false,
-                  "patterns": [
-                    "Toggle",
-                    "ExpandCollapse"
-                  ],
+                  "patterns": ["Toggle", "ExpandCollapse"],
                   "boundingRect": {
                     "x": 1227,
                     "y": 1040,
@@ -698,9 +641,7 @@
                       "isEnabled": true,
                       "isOffscreen": false,
                       "hasKeyboardFocus": false,
-                      "patterns": [
-                        "Invoke"
-                      ],
+                      "patterns": ["Invoke"],
                       "boundingRect": {
                         "x": 1232,
                         "y": 1040,
@@ -718,9 +659,7 @@
                       "isEnabled": true,
                       "isOffscreen": false,
                       "hasKeyboardFocus": false,
-                      "patterns": [
-                        "Invoke"
-                      ],
+                      "patterns": ["Invoke"],
                       "boundingRect": {
                         "x": 1282,
                         "y": 1040,
@@ -760,9 +699,7 @@
           "isEnabled": true,
           "isOffscreen": false,
           "hasKeyboardFocus": false,
-          "patterns": [
-            "Text"
-          ],
+          "patterns": ["Text"],
           "boundingRect": {
             "x": 217,
             "y": 134,

@@ -59,8 +59,7 @@ export async function runExploration(
     opts: ExploreOptions,
 ): Promise<ExploreRunMetrics> {
     const budget = { ...DEFAULT_BUDGET, ...(opts.budget ?? {}) };
-    const runId =
-        opts.runId ?? new Date().toISOString().replace(/[:.]/g, "-");
+    const runId = opts.runId ?? new Date().toISOString().replace(/[:.]/g, "-");
     const runDir = path.join(opts.workspaceDir, "runs", runId);
     mkdirSync(runDir, { recursive: true });
 
@@ -184,14 +183,12 @@ export async function runExploration(
             });
 
             // Re-capture for next iteration.
-            const next = await captureState(
-                opts,
-                graph,
-                opts.rootSelector,
-            );
-            if (graph.findStateByFingerprint(next.state.fingerprint)?.id ===
-                next.state.id &&
-                next.state.id !== state.id) {
+            const next = await captureState(opts, graph, opts.rootSelector);
+            if (
+                graph.findStateByFingerprint(next.state.fingerprint)?.id ===
+                    next.state.id &&
+                next.state.id !== state.id
+            ) {
                 lastNewStateIteration = iteration;
             }
             state = next.state;
@@ -265,7 +262,12 @@ async function executeAction(
         iteration: number;
         fromState: CapturedState;
         item: FrontierItem;
-        decision: { verb: string; value?: string | number | boolean; expectedDelta: string; rationale: string };
+        decision: {
+            verb: string;
+            value?: string | number | boolean;
+            expectedDelta: string;
+            rationale: string;
+        };
         rootSelector: string;
         idleDebounceMs: number;
         idleMaxWaitMs: number;
@@ -364,9 +366,10 @@ async function executeAction(
         },
         rationale: decision.rationale,
         expectedDelta: decision.expectedDelta,
-        observedDeltaSummary: args.fromState.id === toState.id
-            ? "no observable state change"
-            : `${args.fromState.id} → ${toState.id}`,
+        observedDeltaSummary:
+            args.fromState.id === toState.id
+                ? "no observable state change"
+                : `${args.fromState.id} → ${toState.id}`,
         source: "agent",
         timestamp: Date.now(),
         success,

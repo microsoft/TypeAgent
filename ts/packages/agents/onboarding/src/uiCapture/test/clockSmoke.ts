@@ -10,7 +10,11 @@ import type { TreeNode } from "../types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // dist/uiCapture/test/clockSmoke.js → package root is three levels up.
-const fixturesDir = path.resolve(__dirname, "../../..", "test/fixtures/uiCapture");
+const fixturesDir = path.resolve(
+    __dirname,
+    "../../..",
+    "test/fixtures/uiCapture",
+);
 
 const CLOCK_AUMID = "Microsoft.WindowsAlarms_8wekyb3d8bbwe!App";
 const CLOSE_SELECTOR =
@@ -74,17 +78,26 @@ async function main(): Promise<void> {
 
         // Wait for UIA to settle, then poll until the NavView shows up
         // (UWP populates the tree progressively after window creation).
-        const idle1 = await client.eventsIdle({ debounceMs: 800, maxWaitMs: 5000 });
+        const idle1 = await client.eventsIdle({
+            debounceMs: 800,
+            maxWaitMs: 5000,
+        });
         log(`events.idle #1: idle=${idle1.idle}, waited=${idle1.waitedMs}ms`);
 
-        let tree = await client.treeDump({ root: launch.mainWindow, maxDepth: 8 });
+        let tree = await client.treeDump({
+            root: launch.mainWindow,
+            maxDepth: 8,
+        });
         let attempts = 0;
         while (
             !findFirst(tree, (n) => n.automationId === "NavView") &&
             attempts < 8
         ) {
             await sleep(400);
-            tree = await client.treeDump({ root: launch.mainWindow, maxDepth: 8 });
+            tree = await client.treeDump({
+                root: launch.mainWindow,
+                maxDepth: 8,
+            });
             attempts++;
         }
         log(
@@ -150,7 +163,9 @@ async function main(): Promise<void> {
                 debounceMs: 800,
                 maxWaitMs: 3000,
             });
-            log(`events.idle #2: idle=${idle2.idle}, waited=${idle2.waitedMs}ms`);
+            log(
+                `events.idle #2: idle=${idle2.idle}, waited=${idle2.waitedMs}ms`,
+            );
             const navTree = await client.treeDump({
                 root: launch.mainWindow,
                 maxDepth: 8,

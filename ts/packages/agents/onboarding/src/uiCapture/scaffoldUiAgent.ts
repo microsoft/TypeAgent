@@ -120,9 +120,13 @@ function renderSchema(
             lines.push(`    parameters: {`);
             for (const p of a.parameters) {
                 if (p.description) {
-                    lines.push(`        // ${p.description.replace(/\n/g, " ")}`);
+                    lines.push(
+                        `        // ${p.description.replace(/\n/g, " ")}`,
+                    );
                 }
-                lines.push(`        ${p.name}${p.examples.length === 0 ? "?" : ""}: ${tsType(p)};`);
+                lines.push(
+                    `        ${p.name}${p.examples.length === 0 ? "?" : ""}: ${tsType(p)};`,
+                );
             }
             lines.push(`    };`);
         }

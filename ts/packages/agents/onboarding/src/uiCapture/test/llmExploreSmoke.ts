@@ -68,12 +68,16 @@ async function main(): Promise<void> {
         try {
             oracle = new LlmOracle({ goal: GOAL, maxRetries: 2 });
         } catch (e) {
-            log(`SKIP: failed to construct LlmOracle (likely missing API keys): ${e}`);
+            log(
+                `SKIP: failed to construct LlmOracle (likely missing API keys): ${e}`,
+            );
             await client.appKill({ pid: launch.pid });
             return;
         }
 
-        log("running exploration with LLM oracle (budget: 8 iterations / 60s)...");
+        log(
+            "running exploration with LLM oracle (budget: 8 iterations / 60s)...",
+        );
         const metrics = await runExploration({
             client,
             oracle,
@@ -114,7 +118,9 @@ async function main(): Promise<void> {
         log(
             `  successful=${metrics.successfulTransitions}  failed=${metrics.failedTransitions}`,
         );
-        log(`  stopReason=${metrics.stopReason}  walltime=${metrics.walltimeMs}ms`);
+        log(
+            `  stopReason=${metrics.stopReason}  walltime=${metrics.walltimeMs}ms`,
+        );
 
         const runDir = path.join(workspaceDir, "runs", metrics.runId);
         const stateLines = readFileSync(
@@ -139,9 +145,7 @@ async function main(): Promise<void> {
         for (const line of stateLines) {
             titles.add(JSON.parse(line).windowTitle);
         }
-        log(
-            `  distinct window titles: ${[...titles].join(", ") || "(none)"}`,
-        );
+        log(`  distinct window titles: ${[...titles].join(", ") || "(none)"}`);
 
         await client.appKill({ pid: launch.pid });
         log("DONE");

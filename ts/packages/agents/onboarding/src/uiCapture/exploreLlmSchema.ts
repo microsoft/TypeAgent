@@ -5,10 +5,7 @@
 // Loaded as text by TypeChat — keep self-contained, no runtime imports.
 
 /** One decision per iteration: act / stop / restore. */
-export type ExploreDecision =
-    | ActDecision
-    | StopDecision
-    | RestoreDecision;
+export type ExploreDecision = ActDecision | StopDecision | RestoreDecision;
 
 /** Take an action against a control on the current frontier. */
 export type ActDecision = {

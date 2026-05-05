@@ -136,7 +136,11 @@ export type MergeRecommendation = {
     /** Proposed combined name (camelCase verb-noun). */
     proposedName: string;
     /** Proposed parameter name that distinguishes the variants (the dimension along which they differ). */
-    proposedParam: { name: string; type: "string" | "number" | "boolean" | "enum"; enumValues?: string[] };
+    proposedParam: {
+        name: string;
+        type: "string" | "number" | "boolean" | "enum";
+        enumValues?: string[];
+    };
     /** One sentence: why these belong together. */
     rationale: string;
 };

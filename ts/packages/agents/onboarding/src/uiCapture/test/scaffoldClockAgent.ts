@@ -18,10 +18,7 @@ function log(msg: string): void {
 
 function main(): void {
     // From dist/uiCapture/test/scaffoldClockAgent.js, six levels up is ts/.
-    const tsRoot = path.resolve(
-        path.dirname(__filename),
-        "../../../../../..",
-    );
+    const tsRoot = path.resolve(path.dirname(__filename), "../../../../../..");
     const workspaceDir = path.join(
         homedir(),
         ".typeagent",
@@ -32,12 +29,7 @@ function main(): void {
         workspaceDir,
         "discoveredActions.json",
     );
-    const targetDir = path.join(
-        tsRoot,
-        "packages",
-        "agents",
-        "windowsClock",
-    );
+    const targetDir = path.join(tsRoot, "packages", "agents", "windowsClock");
 
     log(`source: ${discoveredActionsPath}`);
     log(`target: ${targetDir}`);

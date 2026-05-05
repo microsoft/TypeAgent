@@ -12,17 +12,13 @@
           "name": "cityQuery",
           "type": "string",
           "description": "Text to search for a matching city in the Add Clock box.",
-          "examples": [
-            "Tokyo"
-          ]
+          "examples": ["Tokyo"]
         },
         {
           "name": "suggestionItem",
           "type": "string",
           "description": "The specific suggestion to select from the list (city, country).",
-          "examples": [
-            "Tokyo, Japan"
-          ]
+          "examples": ["Tokyo, Japan"]
         }
       ],
       "playback": [
@@ -61,25 +57,19 @@
           "name": "alarmName",
           "type": "string",
           "description": "Displayed name of the alarm.",
-          "examples": [
-            "Wake Up Demo"
-          ]
+          "examples": ["Wake Up Demo"]
         },
         {
           "name": "hour",
           "type": "number",
           "description": "Hour component of the alarm time.",
-          "examples": [
-            7
-          ]
+          "examples": [7]
         },
         {
           "name": "minute",
           "type": "number",
           "description": "Minute component of the alarm time.",
-          "examples": [
-            30
-          ]
+          "examples": [30]
         }
       ],
       "playback": [
@@ -251,9 +241,7 @@
           "name": "name",
           "type": "string",
           "description": "The new name to assign to the timer.",
-          "examples": [
-            "Workout Timer"
-          ]
+          "examples": ["Workout Timer"]
         }
       ],
       "playback": [
@@ -306,10 +294,7 @@
           "name": "enabled",
           "type": "boolean",
           "description": "Distinguishes enableAlarm / disableAlarm variants.",
-          "examples": [
-            "alarm",
-            "alarm"
-          ]
+          "examples": ["alarm", "alarm"]
         }
       ],
       "playback": [
@@ -337,10 +322,7 @@
           "name": "running",
           "type": "boolean",
           "description": "Distinguishes startFocusSession / pauseFocusSession variants.",
-          "examples": [
-            "session",
-            "session"
-          ]
+          "examples": ["session", "session"]
         }
       ],
       "playback": [
@@ -367,10 +349,7 @@
           "name": "running",
           "type": "boolean",
           "description": "Distinguishes pauseStopwatch / resumeStopwatch variants.",
-          "examples": [
-            "stopwatch",
-            "stopwatch"
-          ]
+          "examples": ["stopwatch", "stopwatch"]
         }
       ],
       "playback": [
@@ -397,14 +376,8 @@
           "name": "mode",
           "type": "enum",
           "description": "Distinguishes expandTimerView / restoreTimerView variants.",
-          "examples": [
-            "view",
-            "view"
-          ],
-          "enumValues": [
-            "compact",
-            "full"
-          ]
+          "examples": ["view", "view"],
+          "enumValues": ["compact", "full"]
         }
       ],
       "playback": [

@@ -13,9 +13,7 @@
         "kind": "automationId",
         "value": "StopwatchTimerText"
       },
-      "dynamicProperties": [
-        "name"
-      ],
+      "dynamicProperties": ["name"],
       "semantic": "StopwatchTimerText",
       "reason": "calibration-drift",
       "confidence": 1,

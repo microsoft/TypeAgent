@@ -89,8 +89,7 @@ async function main(): Promise<void> {
         );
         const alarmTab = findFirst(
             tree,
-            (n) =>
-                n.name === "Alarm" && n.patterns.includes("SelectionItem"),
+            (n) => n.name === "Alarm" && n.patterns.includes("SelectionItem"),
         );
         const invokeBtn = findFirst(
             tree,

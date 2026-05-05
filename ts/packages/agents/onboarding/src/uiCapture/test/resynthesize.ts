@@ -1,7 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { existsSync, readdirSync, readFileSync, statSync, unlinkSync } from "node:fs";
+import {
+    existsSync,
+    readdirSync,
+    readFileSync,
+    statSync,
+    unlinkSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -120,7 +126,10 @@ async function main(): Promise<void> {
         for (const a of merged.actions) {
             const flags = a.destructive ? " DESTRUCTIVE" : "";
             const params = a.parameters
-                .map((p: { name: string; type: string }) => `${p.name}:${p.type}`)
+                .map(
+                    (p: { name: string; type: string }) =>
+                        `${p.name}:${p.type}`,
+                )
                 .join(", ");
             log(
                 `  • ${a.actionName}(${params})${flags} — ${a.playback.length} step(s)`,

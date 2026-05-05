@@ -4,11 +4,7 @@
 import { createWriteStream, mkdirSync, WriteStream } from "node:fs";
 import path from "node:path";
 
-import type {
-    CapturedEvent,
-    EventType,
-    HelperClient,
-} from "./helperClient.js";
+import type { CapturedEvent, EventType, HelperClient } from "./helperClient.js";
 
 const DEFAULT_EVENT_TYPES: EventType[] = [
     "Invoked",
@@ -70,10 +66,7 @@ export class Recorder {
         if (this.stopped) {
             return;
         }
-        if (
-            this.subscriptionId &&
-            evt.subscriptionId !== this.subscriptionId
-        ) {
+        if (this.subscriptionId && evt.subscriptionId !== this.subscriptionId) {
             return;
         }
         this.eventCount++;

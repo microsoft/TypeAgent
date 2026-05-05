@@ -9,10 +9,7 @@ import { createJsonTranslator, TypeChatJsonTranslator } from "typechat";
 import { createTypeScriptJsonValidator } from "typechat/ts";
 
 import { getSynthesisModel } from "../lib/llm.js";
-import type {
-    CapturedState,
-    CapturedTransition,
-} from "./exploreTypes.js";
+import type { CapturedState, CapturedTransition } from "./exploreTypes.js";
 import type {
     ClusteringResult,
     MergeRecommendation,
@@ -146,12 +143,7 @@ export async function synthesize(
     // Step 3: cluster chunks by intent (one LLM call).
     let clusters: ClusteringResult = { clusters: [], orphans: [] };
     if (chunks.length > 0) {
-        clusters = await clusterChunks(
-            model,
-            chunks,
-            graph,
-            neutralByState,
-        );
+        clusters = await clusterChunks(model, chunks, graph, neutralByState);
     }
 
     // Step 4: synthesize one action per cluster.
@@ -174,7 +166,10 @@ export async function synthesize(
     let validation: ValidationResult | undefined;
     if (actions.length > 0) {
         validation = await validateActions(model, actions);
-        if (validation.mergeRecommendations && validation.mergeRecommendations.length > 0) {
+        if (
+            validation.mergeRecommendations &&
+            validation.mergeRecommendations.length > 0
+        ) {
             actions = applyMergeRecommendations(
                 actions,
                 validation.mergeRecommendations,
@@ -183,7 +178,10 @@ export async function synthesize(
     }
 
     // Step 5: persist outputs.
-    const discoveredActionsPath = path.join(input.runDir, "discoveredActions.json");
+    const discoveredActionsPath = path.join(
+        input.runDir,
+        "discoveredActions.json",
+    );
     writeFileSync(
         discoveredActionsPath,
         JSON.stringify(
@@ -284,7 +282,9 @@ export function mergeIntoWorkspace(opts: {
 function loadDiscoveredActions(filePath: string): SynthesizedAction[] {
     if (!existsSync(filePath)) return [];
     try {
-        const f = JSON.parse(readFileSync(filePath, "utf8")) as DiscoveredActionsFile;
+        const f = JSON.parse(
+            readFileSync(filePath, "utf8"),
+        ) as DiscoveredActionsFile;
         return Array.isArray(f.actions) ? f.actions : [];
     } catch {
         return [];
@@ -394,7 +394,9 @@ async function classifyNeutralStates(
         lines.push(summarizeState(state, tree));
         lines.push("");
     }
-    lines.push("Return a NeutralStatesClassification with one entry per stateId.");
+    lines.push(
+        "Return a NeutralStatesClassification with one entry per stateId.",
+    );
     const result = await translator.translate(lines.join("\n"));
     if (!result.success) {
         process.stderr.write(
@@ -489,7 +491,10 @@ async function clusterChunks(
     graph: LoadedGraph,
     neutralByState: Map<string, NeutralStateClassification>,
 ): Promise<ClusteringResult> {
-    const translator = makeTranslator<ClusteringResult>(model, "ClusteringResult");
+    const translator = makeTranslator<ClusteringResult>(
+        model,
+        "ClusteringResult",
+    );
     const lines: string[] = [];
     lines.push(SYSTEM_PROMPT_BASE);
     lines.push("");
@@ -519,7 +524,8 @@ function renderChunkForLLM(
     graph: LoadedGraph,
     neutralByState: Map<string, NeutralStateClassification>,
 ): string {
-    const startLabel = neutralByState.get(chunk.startStateId)?.tabOrSection ?? "";
+    const startLabel =
+        neutralByState.get(chunk.startStateId)?.tabOrSection ?? "";
     const endLabel = neutralByState.get(chunk.endStateId)?.tabOrSection ?? "";
     const lines: string[] = [];
     lines.push(
@@ -547,7 +553,10 @@ async function synthesizeOneCluster(
     graph: LoadedGraph,
     neutralByState: Map<string, NeutralStateClassification>,
 ): Promise<SynthesizedAction | null> {
-    const translator = makeTranslator<SynthesizedAction>(model, "SynthesizedAction");
+    const translator = makeTranslator<SynthesizedAction>(
+        model,
+        "SynthesizedAction",
+    );
     const memberChunks = chunks.filter((c) => cluster.chunkIds.includes(c.id));
     if (memberChunks.length === 0) return null;
 
@@ -566,7 +575,8 @@ async function synthesizeOneCluster(
     lines.push("Use full selector paths exactly as they appear in the chunks.");
     lines.push("");
     for (const ch of memberChunks) {
-        const startLabel = neutralByState.get(ch.startStateId)?.tabOrSection ?? "";
+        const startLabel =
+            neutralByState.get(ch.startStateId)?.tabOrSection ?? "";
         const endLabel = neutralByState.get(ch.endStateId)?.tabOrSection ?? "";
         lines.push(
             `Chunk ${ch.id}: ${ch.startStateId}${startLabel ? ` (${startLabel})` : ""} → ${ch.endStateId}${endLabel ? ` (${endLabel})` : ""}`,
@@ -601,7 +611,10 @@ async function validateActions(
     model: ChatModel,
     actions: SynthesizedAction[],
 ): Promise<ValidationResult> {
-    const translator = makeTranslator<ValidationResult>(model, "ValidationResult");
+    const translator = makeTranslator<ValidationResult>(
+        model,
+        "ValidationResult",
+    );
     const lines: string[] = [];
     lines.push(SYSTEM_PROMPT_BASE);
     lines.push("");
@@ -643,7 +656,9 @@ async function validateActions(
                     : s.valueLiteral !== undefined
                       ? ` lit=${JSON.stringify(s.valueLiteral)}`
                       : "";
-            lines.push(`  ${i + 1}. ${s.verb}${v} on ${lastSegment(s.selector)}`);
+            lines.push(
+                `  ${i + 1}. ${s.verb}${v} on ${lastSegment(s.selector)}`,
+            );
         }
         lines.push("");
     }
@@ -708,13 +723,17 @@ function applyMergeRecommendations(
         };
 
         // Replace targets with merged.
-        working = working.filter((a) => !rec.actionNames.includes(a.actionName));
+        working = working.filter(
+            (a) => !rec.actionNames.includes(a.actionName),
+        );
         working.push(merged);
     }
     return working;
 }
 
-function collectExamples(actions: SynthesizedAction[]): Array<string | number | boolean> {
+function collectExamples(
+    actions: SynthesizedAction[],
+): Array<string | number | boolean> {
     // Use the actionName variants as examples when no parameters distinguish them.
     return actions.map((a) => {
         const m = a.actionName.match(/[A-Z][a-z]+$/);
@@ -746,9 +765,7 @@ function renderReport(args: {
     const lines: string[] = [];
     lines.push(`# Synthesis report: ${args.integrationName}`);
     lines.push("");
-    lines.push(
-        `Run dir: \`${args.graph.runDir}\``,
-    );
+    lines.push(`Run dir: \`${args.graph.runDir}\``);
     lines.push(
         `States: ${args.graph.states.length}  ·  Transitions: ${args.graph.transitions.length}  ·  Chunks: ${args.chunks.length}`,
     );
@@ -771,14 +788,14 @@ function renderReport(args: {
     }
     if (args.clusters.orphans && args.clusters.orphans.length > 0) {
         lines.push("");
-        lines.push(
-            `Orphan chunks: ${args.clusters.orphans.join(", ")}`,
-        );
+        lines.push(`Orphan chunks: ${args.clusters.orphans.join(", ")}`);
     }
     lines.push("");
     lines.push("## Synthesized actions");
     for (const a of args.actions) {
-        lines.push(`### ${a.actionName}${a.destructive ? " (destructive)" : ""}`);
+        lines.push(
+            `### ${a.actionName}${a.destructive ? " (destructive)" : ""}`,
+        );
         lines.push(a.description);
         lines.push("");
         lines.push("Parameters:");
@@ -832,7 +849,9 @@ function loadGraph(runDir: string): LoadedGraph {
     const statesFile = path.join(runDir, "states.jsonl");
     const transitionsFile = path.join(runDir, "transitions.jsonl");
     if (!existsSync(statesFile) || !existsSync(transitionsFile)) {
-        throw new Error(`Missing states.jsonl or transitions.jsonl in ${runDir}`);
+        throw new Error(
+            `Missing states.jsonl or transitions.jsonl in ${runDir}`,
+        );
     }
     const states = readFileSync(statesFile, "utf8")
         .split("\n")

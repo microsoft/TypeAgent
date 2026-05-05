@@ -88,7 +88,9 @@ async function main(): Promise<void> {
         log(
             `  successful=${metrics.successfulTransitions}  failed=${metrics.failedTransitions}`,
         );
-        log(`  stopReason=${metrics.stopReason}  walltime=${metrics.walltimeMs}ms`);
+        log(
+            `  stopReason=${metrics.stopReason}  walltime=${metrics.walltimeMs}ms`,
+        );
 
         // Verify artifacts.
         const runDir = path.join(workspaceDir, "runs", metrics.runId);

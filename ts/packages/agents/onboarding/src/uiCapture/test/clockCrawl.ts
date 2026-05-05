@@ -102,7 +102,9 @@ async function main(): Promise<void> {
         await client.eventsIdle({ debounceMs: 800, maxWaitMs: 5000 });
         log(`launched pid=${launch.pid} mainWindow=${launch.mainWindow}`);
 
-        log("=== phase 1: exploration (LLM oracle, budget: 25 iterations / 5min) ===");
+        log(
+            "=== phase 1: exploration (LLM oracle, budget: 25 iterations / 5min) ===",
+        );
         const oracle = new LlmOracle({ goal: GOAL, maxRetries: 2 });
         const metrics = await runExploration({
             client,

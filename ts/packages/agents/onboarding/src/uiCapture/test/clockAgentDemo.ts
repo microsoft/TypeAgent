@@ -42,10 +42,7 @@ function findMostRecentDir(parent: string): string {
     return entries[0]!.full;
 }
 
-function findActionByName(
-    file: string,
-    actionName: string,
-): SynthesizedAction {
+function findActionByName(file: string, actionName: string): SynthesizedAction {
     const json = JSON.parse(readFileSync(file, "utf8"));
     const action = json.actions.find(
         (a: SynthesizedAction) => a.actionName === actionName,
@@ -141,9 +138,7 @@ async function main(): Promise<void> {
             hour: 8,
             minute: 15,
         };
-        log(
-            `executing createAlarm with ${JSON.stringify(params)}...`,
-        );
+        log(`executing createAlarm with ${JSON.stringify(params)}...`);
         const result = await executePlayback(createAlarm, params, {
             client,
             defaultIdleDebounceMs: 700,

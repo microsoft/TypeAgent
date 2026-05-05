@@ -112,12 +112,13 @@ async function main(): Promise<void> {
             log(`  ${tab} (${actions.length} action(s)):`);
             for (const a of actions) {
                 const params = a.parameters
-                    .map((p) => `${p.name}:${p.type}=${JSON.stringify(p.example)}`)
+                    .map(
+                        (p) =>
+                            `${p.name}:${p.type}=${JSON.stringify(p.example)}`,
+                    )
                     .join(", ");
                 const flags = `${a.priority}${a.destructive ? "/destructive" : ""}`;
-                log(
-                    `    • ${a.intentName}(${params}) [${flags}]`,
-                );
+                log(`    • ${a.intentName}(${params}) [${flags}]`);
             }
         }
         // Save the reconnaissance for inspection.
@@ -128,7 +129,9 @@ async function main(): Promise<void> {
 
         const goal = renderIterativeReconAsGoal(recon);
         log("");
-        log("=== phase 2: targeted exploration (LLM oracle, recon-driven goal) ===");
+        log(
+            "=== phase 2: targeted exploration (LLM oracle, recon-driven goal) ===",
+        );
         log(`goal preview: ${goal.split("\n").slice(0, 4).join(" / ")}...`);
 
         const oracle = new LlmOracle({ goal, maxRetries: 2 });
@@ -208,7 +211,10 @@ async function main(): Promise<void> {
             for (const a of merged.actions) {
                 const flags = a.destructive ? " DESTRUCTIVE" : "";
                 const params = a.parameters
-                    .map((p: { name: string; type: string }) => `${p.name}:${p.type}`)
+                    .map(
+                        (p: { name: string; type: string }) =>
+                            `${p.name}:${p.type}`,
+                    )
                     .join(", ");
                 log(
                     `  • ${a.actionName}(${params})${flags} — ${a.playback.length} step(s)`,

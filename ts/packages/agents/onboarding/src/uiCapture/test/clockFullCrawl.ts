@@ -127,9 +127,7 @@ async function main(): Promise<void> {
                         `  iter ${iteration}: ${state.id} → ${decision.verb}${v} ${decision.frontierId}`,
                     );
                 } else {
-                    log(
-                        `  iter ${iteration}: ${state.id} → ${decision.kind}`,
-                    );
+                    log(`  iter ${iteration}: ${state.id} → ${decision.kind}`);
                 }
             },
         });

@@ -88,7 +88,9 @@ export async function iterativeReconnoiter(
 
         if (!step) {
             // Translation failed — record and try one more iteration with a recovery hint.
-            decisions.push("(LLM translation failed, attempting one more turn)");
+            decisions.push(
+                "(LLM translation failed, attempting one more turn)",
+            );
             continue;
         }
 
@@ -172,7 +174,10 @@ async function askVisionStep(
             type: "text",
             text: "Screenshot of the app's current screen for the next request:",
         },
-        { type: "image_url", image_url: { url: dataUrl } } as MultimodalPromptContent,
+        {
+            type: "image_url",
+            image_url: { url: dataUrl },
+        } as MultimodalPromptContent,
     ];
     const result = await translator.translate(text, [
         { role: "user", content: imageOnlyContent },
@@ -200,9 +205,7 @@ function buildIterativePrompt(args: {
     );
     lines.push("");
     lines.push(`App: ${args.appHint}`);
-    lines.push(
-        `Iteration: ${args.iteration} of ${args.budget}. Be efficient.`,
-    );
+    lines.push(`Iteration: ${args.iteration} of ${args.budget}. Be efficient.`);
     lines.push("");
     lines.push("Strategy:");
     lines.push(
@@ -222,7 +225,9 @@ function buildIterativePrompt(args: {
     );
     lines.push("");
     if (args.screenLog.length > 0) {
-        lines.push(`Screens visited so far: ${args.screenLog.slice(-10).join(" → ")}`);
+        lines.push(
+            `Screens visited so far: ${args.screenLog.slice(-10).join(" → ")}`,
+        );
         lines.push("");
     }
     if (args.discovered.length > 0) {
@@ -235,7 +240,9 @@ function buildIterativePrompt(args: {
         }
         lines.push("");
     }
-    lines.push("Actionable controls on the CURRENT screen (selector, type, name, patterns):");
+    lines.push(
+        "Actionable controls on the CURRENT screen (selector, type, name, patterns):",
+    );
     lines.push(summarizeActionableControls(args.tree));
     lines.push("");
     lines.push("Return an IterativeReconStep.");

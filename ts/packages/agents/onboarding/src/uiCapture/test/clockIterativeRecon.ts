@@ -78,9 +78,7 @@ async function main(): Promise<void> {
                 .map((p) => `${p.name}:${p.type}=${JSON.stringify(p.example)}`)
                 .join(", ");
             const flags = `${a.priority}${a.destructive ? "/destructive" : ""}`;
-            log(
-                `  • ${a.intentName}(${params}) [${a.tabOrSection}, ${flags}]`,
-            );
+            log(`  • ${a.intentName}(${params}) [${a.tabOrSection}, ${flags}]`);
             log(`      ${a.description}`);
         }
 

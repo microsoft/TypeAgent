@@ -19,7 +19,10 @@ export class StubOracle implements DecisionOracle {
     private decisions = 0;
 
     constructor(
-        private readonly opts: { maxDecisions?: number; preferVerbs?: string[] } = {},
+        private readonly opts: {
+            maxDecisions?: number;
+            preferVerbs?: string[];
+        } = {},
     ) {}
 
     async decide(input: DecisionInput): Promise<ExploreDecision> {

@@ -131,7 +131,8 @@ export class LlmOracle implements DecisionOracle {
             lines.push("Recent actions:");
             for (const t of input.recentTransitions) {
                 const arrow = t.success ? "→" : "✗";
-                const noChange = t.fromStateId === t.toStateId ? " (no change)" : "";
+                const noChange =
+                    t.fromStateId === t.toStateId ? " (no change)" : "";
                 lines.push(
                     `  iter ${t.iteration}: ${t.fromStateId} ${arrow} ${t.trigger.verb} ${t.trigger.selector.split("/").pop()} → ${t.toStateId}${noChange}`,
                 );

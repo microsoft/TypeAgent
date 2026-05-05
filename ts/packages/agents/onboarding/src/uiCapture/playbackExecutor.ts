@@ -2,10 +2,7 @@
 // Licensed under the MIT License.
 
 import type { HelperClient } from "./helperClient.js";
-import type {
-    PlaybackStep,
-    SynthesizedAction,
-} from "./synthesisLlmSchema.js";
+import type { PlaybackStep, SynthesizedAction } from "./synthesisLlmSchema.js";
 
 export type PlaybackParams = Record<string, string | number | boolean>;
 

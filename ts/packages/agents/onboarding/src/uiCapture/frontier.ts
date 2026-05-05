@@ -4,7 +4,8 @@
 import type { FrontierItem, FrontierVerb } from "./exploreTypes.js";
 import type { Pattern, TreeNode } from "./types.js";
 
-const DESTRUCTIVE_RE = /\b(delete|remove|reset|clear|erase|destroy|trash|discard)\b/i;
+const DESTRUCTIVE_RE =
+    /\b(delete|remove|reset|clear|erase|destroy|trash|discard)\b/i;
 
 /**
  * Walk a tree dump and emit one FrontierItem per actionable element.
@@ -19,11 +20,7 @@ export function computeFrontier(root: TreeNode): FrontierItem[] {
     return items;
 }
 
-function walk(
-    node: TreeNode,
-    out: FrontierItem[],
-    nextId: () => string,
-): void {
+function walk(node: TreeNode, out: FrontierItem[], nextId: () => string): void {
     if (node.isEnabled && !node.isOffscreen) {
         const verbs = verbsFor(node);
         if (verbs.length > 0) {
@@ -36,7 +33,8 @@ function walk(
                 boundingRect: node.boundingRect,
             };
             if (node.name !== undefined) item.name = node.name;
-            if (node.automationId !== undefined) item.automationId = node.automationId;
+            if (node.automationId !== undefined)
+                item.automationId = node.automationId;
             if (node.className !== undefined) item.className = node.className;
             out.push(item);
         }

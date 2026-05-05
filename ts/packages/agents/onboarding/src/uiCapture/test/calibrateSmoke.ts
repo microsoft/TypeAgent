@@ -10,7 +10,11 @@ import { HelperClient } from "../helperClient.js";
 import type { DynamicControlRule, TreeNode } from "../types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const fixturesDir = path.resolve(__dirname, "../../..", "test/fixtures/uiCapture");
+const fixturesDir = path.resolve(
+    __dirname,
+    "../../..",
+    "test/fixtures/uiCapture",
+);
 
 const CLOCK_AUMID = "Microsoft.WindowsAlarms_8wekyb3d8bbwe!App";
 
@@ -46,8 +50,7 @@ async function runStopwatchCalibration(
     let tree = await client.treeDump({ root: rootSelector, maxDepth: 8 });
     const stopwatchTab = findFirst(
         tree,
-        (n) =>
-            n.name === "Stopwatch" && n.patterns.includes("SelectionItem"),
+        (n) => n.name === "Stopwatch" && n.patterns.includes("SelectionItem"),
     );
     if (!stopwatchTab) {
         throw new Error("Stopwatch tab not found in NavView");

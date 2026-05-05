@@ -5,7 +5,5 @@
     "rootDir": ".",
     "outDir": "../dist"
   },
-  "include": [
-    "./**/*"
-  ]
+  "include": ["./**/*"]
 }
