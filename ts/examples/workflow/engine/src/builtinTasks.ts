@@ -154,6 +154,7 @@ export const shellExec: TaskDefinition<
     { stdout: string; stderr: string; exitCode: number }
 > = {
     name: "shell.exec",
+    sideEffects: true,
     inputSchema: {
         type: "object",
         required: ["command"],
@@ -228,6 +229,7 @@ export const llmGenerate: TaskDefinition<
     { text: string }
 > = {
     name: "llm.generate",
+    sideEffects: true,
     inputSchema: {
         type: "object",
         required: ["prompt"],
@@ -340,6 +342,7 @@ export const httpGet: TaskDefinition<
     { body: string; status: number }
 > = {
     name: "http.get",
+    sideEffects: true,
     inputSchema: {
         type: "object",
         required: ["url"],
@@ -380,6 +383,7 @@ export const httpGet: TaskDefinition<
 
 export const fileRead: TaskDefinition<{ path: string }, { content: string }> = {
     name: "file.read",
+    sideEffects: true,
     inputSchema: {
         type: "object",
         required: ["path"],
@@ -410,6 +414,7 @@ export const fileWrite: TaskDefinition<
     { path: string }
 > = {
     name: "file.write",
+    sideEffects: true,
     inputSchema: {
         type: "object",
         required: ["path", "content"],

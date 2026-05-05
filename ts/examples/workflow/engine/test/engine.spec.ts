@@ -14,6 +14,7 @@ import {
     TaskRegistry,
     WorkflowEngine,
     WorkflowEvent,
+    RunOptions,
     standardLibraryTasks,
     allBuiltinTasks,
 } from "../src/index.js";
@@ -2279,6 +2280,218 @@ describe("WorkflowEngine (IR v1)", () => {
                 (e) => e.type === "loopIterationStarted",
             );
             expect(iterEvents.length).toBe(2);
+        });
+    });
+
+    describe("task policy", () => {
+        // Minimal workflow that calls a single side-effecting task.
+        function sideEffectWorkflow(taskName: string): WorkflowIR {
+            return {
+                kind: "workflow",
+                name: "policyTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: taskName,
+                        inputSchema: {
+                            type: "object",
+                            required: ["path"],
+                            properties: { path: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["content"],
+                            properties: {
+                                content: { type: "string" },
+                            },
+                        },
+                        inputs: { path: "/etc/shadow" as any },
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as any,
+            };
+        }
+
+        it("denies a side-effecting task when policy is 'deny'", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir = sideEffectWorkflow("file.read");
+            const opts: RunOptions = {
+                input: {},
+                policy: { "file.read": "deny" },
+            };
+
+            const result = await eng.run(ir, opts);
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("denied by policy");
+        });
+
+        it("denies when policy is 'prompt' and no approve fn is provided", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir = sideEffectWorkflow("file.read");
+            // Provide an empty policy to activate enforcement.
+            // file.read defaults to "prompt" but no approve fn is given.
+            const opts: RunOptions = {
+                input: {},
+                policy: {},
+            };
+
+            const result = await eng.run(ir, opts);
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("approval not granted");
+        });
+
+        it("allows when approve fn returns true", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir = sideEffectWorkflow("file.read");
+            const approvedTasks: string[] = [];
+            const opts: RunOptions = {
+                input: {},
+                approve: async (name) => {
+                    approvedTasks.push(name);
+                    return true;
+                },
+            };
+
+            await eng.run(ir, opts);
+            // Will fail at runtime (can't read /etc/shadow) but the
+            // policy check itself passed.
+            expect(approvedTasks).toEqual(["file.read"]);
+        });
+
+        it("denies when approve fn returns false", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir = sideEffectWorkflow("file.read");
+            const opts: RunOptions = {
+                input: {},
+                approve: async () => false,
+            };
+
+            const result = await eng.run(ir, opts);
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("approval not granted");
+        });
+
+        it("allows side-effecting task when policy is 'allow'", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir = sideEffectWorkflow("file.read");
+            const opts: RunOptions = {
+                input: {},
+                policy: { "file.read": "allow" },
+            };
+
+            const result = await eng.run(ir, opts);
+            // Policy check passed; fails because /etc/shadow isn't readable
+            // (unless running as root, which tests shouldn't).
+            // The key assertion: it did NOT fail with a policy denial.
+            if (!result.success) {
+                expect(result.error?.message).not.toContain("denied by policy");
+                expect(result.error?.message).not.toContain(
+                    "approval not granted",
+                );
+            }
+        });
+
+        it("does not check policy for non-side-effecting tasks", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            // int.add has no sideEffects, should run even with no approve fn
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "pureTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    add: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: {
+                                result: { type: "integer" },
+                            },
+                        },
+                        inputs: { a: 2 as any, b: 3 as any },
+                        bind: "result",
+                    },
+                },
+                entry: "add",
+                output: { $from: "scope", name: "result" } as any,
+            };
+
+            // No policy, no approve fn: pure tasks should still work
+            const opts: RunOptions = { input: {} };
+            const result = await eng.run(ir, opts);
+            expect(result.success).toBe(true);
+            expect((result.output as any).result).toBe(5);
+        });
+
+        it("existing tests still pass with legacy (ir, input) signature", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            // Confirm the old two-arg signature still works
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "legacyTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    add: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: {
+                                result: { type: "integer" },
+                            },
+                        },
+                        inputs: { a: 10 as any, b: 20 as any },
+                        bind: "result",
+                    },
+                },
+                entry: "add",
+                output: { $from: "scope", name: "result" } as any,
+            };
+
+            const result = await eng.run(ir, { a: 1, b: 2 });
+            expect(result.success).toBe(true);
+            expect((result.output as any).result).toBe(30);
         });
     });
 });

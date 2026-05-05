@@ -10,6 +10,9 @@ import {
     LoopNode,
     TaskContext,
     TaskResult,
+    TaskPolicy,
+    TaskPolicyMode,
+    ApprovalFn,
     validateWorkflowIR,
 } from "workflow-model";
 import { TaskRegistry } from "./taskRegistry.js";
@@ -165,6 +168,28 @@ type ScopeExit =
 
 // ---- Public types ----
 
+export interface RunOptions {
+    /** Input data for the workflow. */
+    input?: Record<string, unknown>;
+    /** Abort signal for cooperative cancellation. */
+    signal?: AbortSignal;
+    /**
+     * Per-task policy for side-effecting tasks.
+     * Keys are task names; values are "allow", "prompt", or "deny".
+     * Tasks with sideEffects=true default to "prompt" if not specified.
+     * Tasks without sideEffects default to "allow".
+     *
+     * NOTE: Temporary guardrail. See TaskDefinition.sideEffects.
+     */
+    policy?: TaskPolicy;
+    /**
+     * Callback for tasks whose policy is "prompt".
+     * Called with (taskName, resolvedInputs); return true to allow.
+     * If not provided, "prompt" is treated as "deny".
+     */
+    approve?: ApprovalFn;
+}
+
 export interface RunResult {
     runId: string;
     success: boolean;
@@ -196,9 +221,31 @@ export class WorkflowEngine {
 
     async run(
         ir: WorkflowIR,
-        input?: Record<string, unknown>,
+        inputOrOptions?: Record<string, unknown> | RunOptions,
         signal?: AbortSignal,
     ): Promise<RunResult> {
+        // Normalize arguments: support both (ir, input, signal) and (ir, RunOptions)
+        let input: Record<string, unknown> | undefined;
+        let policy: TaskPolicy | undefined;
+        let approve: ApprovalFn | undefined;
+        let abortSignalArg: AbortSignal | undefined = signal;
+
+        if (
+            inputOrOptions &&
+            typeof inputOrOptions === "object" &&
+            ("input" in inputOrOptions ||
+                "policy" in inputOrOptions ||
+                "approve" in inputOrOptions)
+        ) {
+            const opts = inputOrOptions as RunOptions;
+            input = opts.input;
+            policy = opts.policy;
+            approve = opts.approve;
+            abortSignalArg = opts.signal ?? signal;
+        } else {
+            input = inputOrOptions as Record<string, unknown> | undefined;
+        }
+
         // Validate
         const validation = validateWorkflowIR(ir, this.registry.all());
         if (!validation.valid) {
@@ -213,7 +260,7 @@ export class WorkflowEngine {
         }
 
         const runId = `run-${randomUUID()}`;
-        const abortSignal = signal ?? new AbortController().signal;
+        const abortSignal = abortSignalArg ?? new AbortController().signal;
 
         // Build constants
         const constants = new Map<string, unknown>();
@@ -244,6 +291,8 @@ export class WorkflowEngine {
                 scopePath,
                 runId,
                 abortSignal,
+                policy,
+                approve,
             );
 
             const output = resolveTemplate(ir.output, scope);
@@ -278,6 +327,8 @@ export class WorkflowEngine {
         scopePath: string[],
         runId: string,
         signal: AbortSignal,
+        policy?: TaskPolicy,
+        approve?: ApprovalFn,
     ): Promise<ScopeExit> {
         let currentId: string | undefined = entryId;
         let pendingError:
@@ -326,6 +377,8 @@ export class WorkflowEngine {
                         (err, trigger) => {
                             pendingError = { error: err, trigger };
                         },
+                        policy,
+                        approve,
                     );
                     break;
 
@@ -341,6 +394,8 @@ export class WorkflowEngine {
                         scopePath,
                         runId,
                         signal,
+                        policy,
+                        approve,
                     );
                     break;
             }
@@ -361,6 +416,8 @@ export class WorkflowEngine {
             error: Record<string, unknown>,
             trigger: unknown,
         ) => void,
+        policy?: TaskPolicy,
+        approveFn?: ApprovalFn,
     ): Promise<string | undefined> {
         this.emit({
             type: "nodeStarted",
@@ -378,6 +435,32 @@ export class WorkflowEngine {
                 throw new EngineError(
                     `Task "${node.task}" not found in registry`,
                 );
+            }
+
+            // Policy check for side-effecting tasks.
+            // Only enforced when the caller explicitly provides policy
+            // or an approval callback (i.e., uses RunOptions). Legacy
+            // callers using run(ir, input) are not gated.
+            if (
+                task.sideEffects &&
+                (policy !== undefined || approveFn !== undefined)
+            ) {
+                const mode: TaskPolicyMode = policy?.[task.name] ?? "prompt";
+                if (mode === "deny") {
+                    throw new EngineError(
+                        `Task "${task.name}" denied by policy`,
+                    );
+                }
+                if (mode === "prompt") {
+                    const allowed = approveFn
+                        ? await approveFn(task.name, resolvedInput)
+                        : false;
+                    if (!allowed) {
+                        throw new EngineError(
+                            `Task "${task.name}" denied: approval not granted`,
+                        );
+                    }
+                }
             }
 
             const ctx: TaskContext = {
@@ -466,6 +549,8 @@ export class WorkflowEngine {
         scopePath: string[],
         runId: string,
         signal: AbortSignal,
+        policy?: TaskPolicy,
+        approve?: ApprovalFn,
     ): Promise<string | undefined> {
         this.emit({
             type: "nodeStarted",
@@ -520,6 +605,8 @@ export class WorkflowEngine {
                     bodyScopePath,
                     runId,
                     signal,
+                    policy,
+                    approve,
                 );
 
                 if (exit.kind === "terminal") {

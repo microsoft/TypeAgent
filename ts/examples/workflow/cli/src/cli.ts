@@ -4,13 +4,23 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { WorkflowIR } from "workflow-model";
-import { TaskRegistry, WorkflowEngine, allBuiltinTasks } from "workflow-engine";
+import { createInterface } from "node:readline";
+import { WorkflowIR, TaskPolicy, ApprovalFn } from "workflow-model";
+import {
+    TaskRegistry,
+    WorkflowEngine,
+    RunOptions,
+    allBuiltinTasks,
+} from "workflow-engine";
 
 const usage = `Usage:
-  workflow run <file.json> [--input <json>]   Run a workflow
-  workflow validate <file.json>               Validate a workflow
-  workflow list-tasks                         List registered tasks`;
+  workflow run <file.json> [--input <json>] [--dry-run]   Run a workflow
+  workflow validate <file.json>                           Validate a workflow
+  workflow list-tasks                                     List registered tasks
+
+Options:
+  --dry-run   Deny all side-effecting tasks (shell, network, file, LLM)
+              without prompting. Useful for testing workflow structure.`;
 
 function fail(msg: string): never {
     console.error(msg);
@@ -40,7 +50,11 @@ function makeEngine(): WorkflowEngine {
     return new WorkflowEngine(reg);
 }
 
-async function cmdRun(file: string, inputJson?: string): Promise<void> {
+async function cmdRun(
+    file: string,
+    inputJson?: string,
+    dryRun?: boolean,
+): Promise<void> {
     const ir = loadIR(file);
     const input = inputJson ? JSON.parse(inputJson) : {};
     const engine = makeEngine();
@@ -64,7 +78,54 @@ async function cmdRun(file: string, inputJson?: string): Promise<void> {
         }
     });
 
-    const result = await engine.run(ir, input);
+    // Build policy: in dry-run mode deny all side-effecting tasks.
+    // Otherwise, prompt for each one interactively.
+    let policy: TaskPolicy | undefined;
+    let approve: ApprovalFn | undefined;
+
+    if (dryRun) {
+        policy = {};
+        for (const task of allBuiltinTasks) {
+            if (task.sideEffects) {
+                policy[task.name] = "deny";
+            }
+        }
+        console.error("[dry-run] Side-effecting tasks will be denied.");
+    } else {
+        // Interactive approval via readline
+        approve = async (
+            taskName: string,
+            inputs: unknown,
+        ): Promise<boolean> => {
+            const summary = JSON.stringify(inputs, null, 2)
+                .split("\n")
+                .slice(0, 10)
+                .join("\n");
+            const rl = createInterface({
+                input: process.stdin,
+                output: process.stderr,
+            });
+            return new Promise((resolve) => {
+                rl.question(
+                    `\n[approve] Task "${taskName}" wants to execute with:\n${summary}\nAllow? (y/N) `,
+                    (answer) => {
+                        rl.close();
+                        resolve(
+                            answer.trim().toLowerCase() === "y" ||
+                                answer.trim().toLowerCase() === "yes",
+                        );
+                    },
+                );
+            });
+        };
+    }
+
+    const opts: RunOptions = {
+        input,
+        ...(policy ? { policy } : {}),
+        ...(approve ? { approve } : {}),
+    };
+    const result = await engine.run(ir, opts);
     if (result.success) {
         console.log(JSON.stringify(result.output, null, 2));
     } else {
@@ -142,7 +203,8 @@ switch (command) {
         if (!file) fail(usage);
         const inputIdx = args.indexOf("--input");
         const inputJson = inputIdx >= 0 ? args[inputIdx + 1] : undefined;
-        await cmdRun(file, inputJson);
+        const dryRun = args.includes("--dry-run");
+        await cmdRun(file, inputJson, dryRun);
         break;
     }
     case "validate": {

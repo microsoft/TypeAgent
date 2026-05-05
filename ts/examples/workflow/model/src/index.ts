@@ -13,7 +13,14 @@ export {
     WorkflowIR,
 } from "./ir.js";
 
-export { TaskResult, TaskContext, TaskDefinition } from "./taskDefinition.js";
+export {
+    TaskResult,
+    TaskContext,
+    TaskDefinition,
+    TaskPolicyMode,
+    TaskPolicy,
+    ApprovalFn,
+} from "./taskDefinition.js";
 
 export {
     ValidationError,

@@ -43,6 +43,38 @@ export interface TaskDefinition<I = unknown, O = unknown> {
     /** JSON Schema for the task's output. */
     outputSchema: JSONSchema;
 
+    /**
+     * Whether this task has side effects (network, filesystem, shell, etc.).
+     * When true, the engine's task policy is consulted before execution.
+     *
+     * NOTE: This is a temporary, minimal guardrail. A formal capability/
+     * permission model should be designed when there is a concrete trigger
+     * (e.g., multi-user execution, untrusted workflow sources, or a
+     * plugin ecosystem).
+     */
+    sideEffects?: boolean;
+
     /** Execute the task with validated input. */
     execute(input: I, ctx: TaskContext): Promise<TaskResult<O>>;
 }
+
+/**
+ * Policy for controlling execution of side-effecting tasks.
+ *
+ * - "allow": execute without prompting (default for tasks without sideEffects)
+ * - "prompt": call the approval callback before executing
+ * - "deny": fail immediately without executing
+ *
+ * NOTE: Temporary guardrail. See TaskDefinition.sideEffects.
+ */
+export type TaskPolicyMode = "allow" | "prompt" | "deny";
+export type TaskPolicy = Record<string, TaskPolicyMode>;
+
+/**
+ * Callback invoked when a task with sideEffects=true is about to execute
+ * and its policy is "prompt". Return true to allow, false to deny.
+ */
+export type ApprovalFn = (
+    taskName: string,
+    inputs: unknown,
+) => Promise<boolean>;
