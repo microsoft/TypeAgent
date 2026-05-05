@@ -111,12 +111,15 @@ export class MessageGroup {
                 { message: "⚠ Cancelled", source: "shell" },
                 false,
             );
-        } else if (this.statusMessage === undefined) {
+        } else if (
+            this.statusMessage === undefined &&
+            this.agentMessages.length === 0
+        ) {
             this.addStatusMessage(
                 { message: "Command completed", source: "shell" },
                 false,
             );
-        } else {
+        } else if (this.statusMessage !== undefined) {
             this.statusMessage.complete();
             this.chatView.updateScroll();
         }

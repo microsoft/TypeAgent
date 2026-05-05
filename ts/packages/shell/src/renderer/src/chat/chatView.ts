@@ -722,6 +722,35 @@ export class ChatView {
         const notification = options?.notification ?? false;
         const content: DisplayContent = msg.message;
 
+        // Consolidate the dispatcher's transient "[X] Executing action ..."
+        // status (sent with source="dispatcher", actionIndex=undefined,
+        // appendMode="temporary") into the most recently created agent
+        // bubble for this request, instead of letting it create a separate
+        // dispatcher-sourced status bubble that visually duplicates the
+        // upcoming agent reply. Mirrors chat-ui's behavior in chatPanel.ts.
+        if (
+            options?.appendMode === "temporary" &&
+            msg.actionIndex === undefined &&
+            msg.source === "dispatcher" &&
+            !notification
+        ) {
+            const mg = this.getMessageGroup(msg.requestId);
+            const last = mg?.getLastAgentMessage();
+            if (last) {
+                last.setMessage(
+                    content,
+                    msg.source,
+                    "temporary",
+                    msg.sourceIcon,
+                );
+                if (!scrollToMessage) {
+                    this.updateScroll();
+                    this.chatInputFocus();
+                }
+                return;
+            }
+        }
+
         const agentMessage = this.ensureAgentMessage(msg, notification);
         if (agentMessage === undefined) {
             return;

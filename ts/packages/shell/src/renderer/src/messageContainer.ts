@@ -319,11 +319,21 @@ export class MessageContainer {
         // Flush last temporary reset the lastAppendMode.
         this.flushLastTemporary();
 
-        this.source = source;
-        if (sourceIcon !== undefined) {
-            this._sourceIcon = sourceIcon;
+        // Don't change the displayed source/icon when the dispatcher's
+        // transient "Executing action ..." status overlays a bubble that
+        // already represents a real agent. Keeps the agent's avatar
+        // stable while showing the in-flight indicator inline.
+        const isDispatcherStatusOverlay =
+            source === "dispatcher" &&
+            this.source !== "" &&
+            this.source !== "dispatcher";
+        if (!isDispatcherStatusOverlay) {
+            this.source = source;
+            if (sourceIcon !== undefined) {
+                this._sourceIcon = sourceIcon;
+            }
+            this.updateSource();
         }
-        this.updateSource();
 
         const speakText = setContent(
             this.messageDiv,
