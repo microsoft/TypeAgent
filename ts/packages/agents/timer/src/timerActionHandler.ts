@@ -8,6 +8,7 @@ import {
     AppAgent,
     DisplayContent,
     SessionContext,
+    Storage,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import { createActionResultFromTextDisplay } from "@typeagent/agent-sdk/helpers/action";
@@ -18,6 +19,10 @@ type Reminder = {
     message: string;
     fireAt: number; // Date.now() ms
     kind: AgentMessageKind;
+    // For repeating reminders. After firing, the loop re-schedules
+    // fireAt = now + repeatMs and decrements remainingFires (if set).
+    repeatMs?: number;
+    remainingFires?: number;
 };
 
 type TimerContext = {
@@ -25,6 +30,57 @@ type TimerContext = {
     nextId: number;
     intervalHandle?: ReturnType<typeof setInterval>;
 };
+
+// Persistence: pending reminders survive a dispatcher restart so timers
+// the user set don't vanish silently. Stored under sessionStorage so the
+// state is per-conversation. A reminder whose fireAt is in the past on
+// rehydration fires on the next tick (intentional — "you missed this,
+// here it is now").
+const STORAGE_FILE = "reminders.json";
+
+type PersistedState = {
+    nextId: number;
+    reminders: Reminder[];
+};
+
+async function loadPersistedState(
+    storage: Storage | undefined,
+): Promise<PersistedState> {
+    if (!storage) return { nextId: 0, reminders: [] };
+    try {
+        if (!(await storage.exists(STORAGE_FILE))) {
+            return { nextId: 0, reminders: [] };
+        }
+        const data = await storage.read(STORAGE_FILE, "utf8");
+        const parsed = JSON.parse(data);
+        return {
+            nextId:
+                typeof parsed.nextId === "number" ? parsed.nextId : 0,
+            reminders: Array.isArray(parsed.reminders)
+                ? parsed.reminders
+                : [],
+        };
+    } catch {
+        return { nextId: 0, reminders: [] };
+    }
+}
+
+// Best-effort save. Fire-and-forget — a failed write doesn't propagate
+// to the caller (e.g. the action result still succeeds).
+function persistAsync(
+    storage: Storage | undefined,
+    ctx: TimerContext,
+): void {
+    if (!storage) return;
+    const state: PersistedState = {
+        nextId: ctx.nextId,
+        reminders: Array.from(ctx.reminders.values()),
+    };
+    storage.write(STORAGE_FILE, JSON.stringify(state)).catch((e) => {
+        // eslint-disable-next-line no-console
+        console.error("timer-agent: failed to persist reminders", e);
+    });
+}
 
 // Parse a "when" string. Accepts:
 //   - duration suffixes: "5s", "30 sec", "10m", "10 minutes", "1h", "2 hours"
@@ -73,6 +129,9 @@ async function timerValidateWildcardMatch(
     if (action.actionName === "setReminder") {
         return tryParseWhen(action.parameters.when) !== undefined;
     }
+    if (action.actionName === "repeatReminder") {
+        return tryParseWhen(action.parameters.every) !== undefined;
+    }
     return true;
 }
 
@@ -87,6 +146,13 @@ async function startBackgroundTasks(
     context: SessionContext<TimerContext>,
 ): Promise<void> {
     const ctx = context.agentContext;
+    // Rehydrate any reminders persisted in a previous session. A reminder
+    // whose fireAt has already passed will fire on the next tick.
+    const persisted = await loadPersistedState(context.sessionStorage);
+    ctx.nextId = Math.max(ctx.nextId, persisted.nextId);
+    for (const r of persisted.reminders) {
+        ctx.reminders.set(r.id, r);
+    }
     // Idempotent: if a previous startBackgroundTasks didn't get torn down,
     // clear it before installing a new tick. (Shouldn't happen under normal
     // lifecycle, but defends against double-init during dev reloads.)
@@ -114,8 +180,9 @@ function fireDueReminders(context: SessionContext<TimerContext>) {
     for (const r of ctx.reminders.values()) {
         if (r.fireAt <= now) due.push(r);
     }
+    if (due.length === 0) return;
+
     for (const reminder of due) {
-        ctx.reminders.delete(reminder.id);
         try {
             const thread = context.beginAgentThread(reminder.kind);
             const content: DisplayContent = {
@@ -133,7 +200,25 @@ function fireDueReminders(context: SessionContext<TimerContext>) {
                 e,
             );
         }
+
+        if (reminder.repeatMs !== undefined) {
+            // Repeating: decrement remaining-fires counter (if set) and
+            // re-schedule. Drop if the counter hits zero.
+            if (reminder.remainingFires !== undefined) {
+                reminder.remainingFires -= 1;
+                if (reminder.remainingFires <= 0) {
+                    ctx.reminders.delete(reminder.id);
+                    continue;
+                }
+            }
+            reminder.fireAt = now + reminder.repeatMs;
+        } else {
+            ctx.reminders.delete(reminder.id);
+        }
     }
+    // State has changed — save once per tick after all due reminders
+    // are processed, instead of once per reminder.
+    persistAsync(context.sessionStorage, ctx);
 }
 
 async function executeTimerAction(
@@ -141,6 +226,7 @@ async function executeTimerAction(
     actionContext: ActionContext<TimerContext>,
 ): Promise<ActionResult | undefined> {
     const ctx = actionContext.sessionContext.agentContext;
+    const storage = actionContext.sessionContext.sessionStorage;
     switch (action.actionName) {
         case "setReminder": {
             const { message, when, kind } = action.parameters;
@@ -153,12 +239,40 @@ async function executeTimerAction(
                 fireAt,
                 kind: resolvedKind,
             });
+            persistAsync(storage, ctx);
             const delaySec = Math.max(
                 0,
                 Math.round((fireAt - Date.now()) / 1000),
             );
             return createActionResultFromTextDisplay(
                 `Reminder ${id} set: "${message}" in ${delaySec}s (kind: ${resolvedKind}).`,
+            );
+        }
+        case "repeatReminder": {
+            const { message, every, kind, count } = action.parameters;
+            const interval = parseWhen(every);
+            const repeatMs = Math.max(1000, interval - Date.now());
+            const id = String(ctx.nextId++);
+            const resolvedKind: AgentMessageKind = kind ?? "bubble";
+            const reminder: Reminder = {
+                id,
+                message,
+                fireAt: Date.now() + repeatMs,
+                kind: resolvedKind,
+                repeatMs,
+            };
+            if (count !== undefined && count > 0) {
+                reminder.remainingFires = count;
+            }
+            ctx.reminders.set(id, reminder);
+            persistAsync(storage, ctx);
+            const intervalSec = Math.round(repeatMs / 1000);
+            const limitSuffix =
+                reminder.remainingFires !== undefined
+                    ? ` for ${reminder.remainingFires} fires`
+                    : "";
+            return createActionResultFromTextDisplay(
+                `Repeat reminder ${id} set: "${message}" every ${intervalSec}s${limitSuffix} (kind: ${resolvedKind}).`,
             );
         }
         case "listReminders": {
@@ -171,9 +285,20 @@ async function executeTimerAction(
             const lines: string[] = [];
             for (const r of ctx.reminders.values()) {
                 const sec = Math.max(0, Math.round((r.fireAt - now) / 1000));
-                lines.push(
-                    `- ${r.id}: "${r.message}" in ${sec}s (${r.kind})`,
-                );
+                if (r.repeatMs !== undefined) {
+                    const intervalSec = Math.round(r.repeatMs / 1000);
+                    const remaining =
+                        r.remainingFires !== undefined
+                            ? `, ${r.remainingFires} left`
+                            : "";
+                    lines.push(
+                        `- ${r.id}: "${r.message}" every ${intervalSec}s (next in ${sec}s, ${r.kind}${remaining})`,
+                    );
+                } else {
+                    lines.push(
+                        `- ${r.id}: "${r.message}" in ${sec}s (${r.kind})`,
+                    );
+                }
             }
             return createActionResultFromTextDisplay(
                 `Pending reminders:\n${lines.join("\n")}`,
@@ -184,11 +309,13 @@ async function executeTimerAction(
             if (id === "all") {
                 const n = ctx.reminders.size;
                 ctx.reminders.clear();
+                persistAsync(storage, ctx);
                 return createActionResultFromTextDisplay(
                     `Cancelled ${n} reminder(s).`,
                 );
             }
             if (ctx.reminders.delete(id)) {
+                persistAsync(storage, ctx);
                 return createActionResultFromTextDisplay(
                     `Cancelled reminder ${id}.`,
                 );

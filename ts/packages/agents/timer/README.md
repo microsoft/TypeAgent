@@ -9,14 +9,23 @@ to the chat without a preceding user request.
 
 | Phrasing | Effect |
 | --- | --- |
-| `remind me to <message> in <duration>` | bubble (default) |
-| `remind me to <message> in <duration> as a bubble` | bubble (explicit) |
-| `remind me to <message> in <duration> as a toast` | toast |
-| `remind me to <message> in <duration> as an inline` | inline |
-| `toast me <message> in <duration>` | toast |
-| `flash <message> in <duration>` | inline |
+| `remind me to <message> in <duration>` | one-shot bubble (default) |
+| `remind me to <message> in <duration> as a bubble` | one-shot bubble (explicit) |
+| `remind me to <message> in <duration> as a toast` | one-shot toast |
+| `remind me to <message> in <duration> as an inline` | one-shot inline |
+| `toast me <message> in <duration>` | one-shot toast |
+| `flash <message> in <duration>` | one-shot inline |
+| `remind me to <message> every <duration>` | repeating bubble |
+| `remind me to <message> every <duration> as a toast` | repeating toast |
+| `remind me to <message> every <duration> as an inline` | repeating inline |
+| `tick <message> every <duration>` | repeating bubble (rapid-fire) |
+| `repeat reminder <message> every <duration>` | repeating bubble |
 | `show reminders` / `list reminders` | list pending |
 | `cancel reminder <id>` / `cancel all reminders` | cancel |
+
+Pending reminders are persisted to `sessionStorage` (per-conversation),
+so they survive a dispatcher restart. A reminder whose fire time has
+passed during downtime fires on the next tick after rehydration.
 
 `<duration>` accepts `5s`, `30 sec`, `10m`, `10 minutes`, `1h`, `2 hours`,
 or an ISO 8601 timestamp like `2026-05-04T15:30:00`. If the wildcard
@@ -58,19 +67,11 @@ message path end to end. Track and pick up as needed.
 
 ### Timer agent (this package)
 
-- [ ] **Reminder persistence.** Reminders live in-memory; restarting the
-      dispatcher loses pending reminders. Persist to
-      `sessionContext.sessionStorage` and rehydrate in
-      `startBackgroundTasks`. Useful regardless of the broader Layer E.2
-      replay work since pending reminders aren't in the DisplayLog.
 - [ ] **`--kind` flag / direct invocation.** Today `kind` is reachable
       via the anchored grammar patterns ("as a toast", "toast me",
       "flash"). A command-style flag (`@timer set in 5s "hello" --kind toast`)
       would match the verbatim test recipe in the plan and avoid the
       grammar gymnastics.
-- [ ] **`RepeatReminder` action.** Useful for stress-testing rapid-fire
-      back-to-back agent-initiated messages and verifying the multi-thread
-      story.
 - [ ] **Richer `when` parsing.** Accept "in 1 hour 30 minutes", "tomorrow
       at 9am", relative phrases. Currently single-unit only.
 
@@ -103,6 +104,15 @@ message path end to end. Track and pick up as needed.
   `kind` field round-trips through `IAgentMessage` on replay; receiving
   UIs (Shell / CLI / chat-ui) honor it via the routing added in Layers
   C / D / B.
+- ~~**Reminder persistence.**~~ Pending reminders are saved to
+  `sessionStorage/reminders.json` on every mutation (set / cancel /
+  fire) and rehydrated by `startBackgroundTasks` on session start.
+  A reminder whose `fireAt` is in the past on rehydration fires on the
+  next 1-second tick (intentional — "you missed this, here it is now").
+- ~~**`RepeatReminder` action.**~~ Fires every `every` interval until
+  cancelled (or until `count` fires have elapsed if specified). Same
+  `kind` support as one-shot reminders. Useful for stress-testing
+  rapid-fire back-to-back agent-initiated messages.
 
 ## Trademarks
 

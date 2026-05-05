@@ -3,6 +3,7 @@
 
 export type TimerAction =
     | SetReminderAction
+    | RepeatReminderAction
     | ListRemindersAction
     | CancelReminderAction;
 
@@ -19,6 +20,25 @@ export type SetReminderAction = {
         when: string;
         // How the fired reminder should render. Defaults to "bubble".
         kind?: "bubble" | "toast" | "inline";
+    };
+};
+
+// Set a repeating reminder. Fires every `every` interval until cancelled
+// (or until `count` fires have elapsed if specified). Useful for stress
+// testing rapid-fire / back-to-back agent-initiated messages.
+export type RepeatReminderAction = {
+    actionName: "repeatReminder";
+    parameters: {
+        // What to remind the user about.
+        message: string;
+        // Interval between fires. Same format as SetReminder.when —
+        // a duration like "5s", "10m", "1h".
+        every: string;
+        // Render style for each fire. Defaults to "bubble".
+        kind?: "bubble" | "toast" | "inline";
+        // Optional max number of times to fire. If omitted, fires until
+        // explicitly cancelled.
+        count?: number;
     };
 };
 

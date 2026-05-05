@@ -81,6 +81,47 @@
     }
 };
 
+// repeatReminder — fires every interval. The literal "every" anchors
+// the right edge of the message wildcard (mirrors how setReminder uses
+// "in" / "at").
+<RepeatReminder> = remind me to $(message:wildcard) every $(every:wildcard) as (a)? toast -> {
+    actionName: "repeatReminder",
+    parameters: {
+        message,
+        every,
+        kind: "toast"
+    }
+}
+  | remind me to $(message:wildcard) every $(every:wildcard) as (an)? inline -> {
+    actionName: "repeatReminder",
+    parameters: {
+        message,
+        every,
+        kind: "inline"
+    }
+}
+  | remind me to $(message:wildcard) every $(every:wildcard) -> {
+    actionName: "repeatReminder",
+    parameters: {
+        message,
+        every
+    }
+}
+  | tick $(message:wildcard) every $(every:wildcard) -> {
+    actionName: "repeatReminder",
+    parameters: {
+        message,
+        every
+    }
+}
+  | repeat (a)? reminder (to)? $(message:wildcard) every $(every:wildcard) -> {
+    actionName: "repeatReminder",
+    parameters: {
+        message,
+        every
+    }
+};
+
 // listReminders — show all pending reminders.
 <ListReminders> = (show)? (list)? (my)? reminders -> {
     actionName: "listReminders",
@@ -114,5 +155,6 @@
 import { TimerAction } from "./timerSchema.ts";
 
 <Start> : TimerAction = <SetReminder>
+  | <RepeatReminder>
   | <ListReminders>
   | <CancelReminder>;
