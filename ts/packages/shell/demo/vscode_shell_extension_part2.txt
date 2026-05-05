@@ -14,6 +14,8 @@
 # the Electron shell. No login, no session picker.
 # ---------------------------------------------
 
+@pauseForInput
+
 # -------------------------------------
 # 1. Continue the conversation in the extension
 # -------------------------------------
@@ -33,6 +35,8 @@ show check runs for PR 2196 in microsoft/TypeAgent
 change my vscode color theme to Monokai
 
 create a new typescript file called scratch.ts with a hello world function
+
+@pauseForInput
 
 # PRESENTER PAUSE: theme flips and new file opens in the active
 # group. Let the audience absorb the visual change before moving
@@ -55,7 +59,7 @@ summarize what we've done in this session so far
 # -------------------------------------
 
 # File a tracking issue from the chat
-create issue "Demo: vscode-shell extension cross-surface flow"
+# create issue "Demo: vscode-shell extension cross-surface flow"
 
 # PRESENTER PAUSE: tab over to github.com on the browser and
 # refresh the repo's Issues tab — the new issue is right at
@@ -65,7 +69,7 @@ create issue "Demo: vscode-shell extension cross-surface flow"
 # one we just created (no number needed).
 # The "demo" label must exist in the repo — pre-create with:
 #   gh label create demo --color BFD4F2 --repo microsoft/TypeAgent
-add the "demo" label to that issue
+# add the "demo" label to that issue
 
 # Confirm it landed
 get latest 3 issues in microsoft/TypeAgent

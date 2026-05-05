@@ -23,12 +23,13 @@ import {
 
 const debug = registerDebug("typeagent:code");
 
-// The Coda WebSocket server is shared across all sessions in this agent process.
-// It is created on first enable and closed when the last session disables the
-// code agent. Storing it per-session caused "No websocket connection" errors
-// when an action ran on a session different from the one that originally
-// created the server (e.g. after schema enable on a different conversation),
-// and also masked EADDRINUSE failures from a second bind attempt on port 8082.
+// Shared WebSocket server that bridges this code agent to the Coda VS Code
+// extension (ts/packages/coda) on port 8082. Created on first enable, closed
+// when the last session disables the code agent. Storing it per-session caused
+// "No websocket connection" errors when an action ran on a session different
+// from the one that originally created the server (e.g. after schema enable on
+// a different conversation), and also masked EADDRINUSE failures from a second
+// bind attempt on port 8082.
 let sharedWebSocketServer: CodeAgentWebSocketServer | undefined;
 let sharedWebSocketRefCount = 0;
 const sharedPendingCalls: Map<

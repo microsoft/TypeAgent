@@ -19,15 +19,17 @@ export type EditorCodeActions =
 export type EditorActionCreateFile = {
     actionName: "createFile";
     parameters: {
-        fileName?: string;
+        fileName?: string; // "utils.ts"
+        // Name of the folder to create the file in (e.g., "src")
         folderName?: string;
+        // Optional: restrict to folders under this path or name
         folderRelativeTo?: string;
-        language?: string;
-        untitled?: boolean;
-        openInEditor?: boolean;
-        content?: string;
-        overwriteIfExists?: boolean;
-        focusExistingIfOpen?: boolean;
+        language?: string; // "typescript", "python", "csharp", "javascript" etc.
+        untitled?: boolean; // true → don't save to disk
+        openInEditor?: boolean; // default: true
+        content?: string; // actual content to write to the file
+        overwriteIfExists?: boolean; // default: false
+        focusExistingIfOpen?: boolean; // default: true
     };
 };
 
