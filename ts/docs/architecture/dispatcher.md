@@ -639,8 +639,10 @@ The big ones:
 - Real `ActionEmbeddingScorer` implementation (currently placeholder).
 - Runtime fuzzy detection hook (config exists; call site not yet wired).
 - `pause-and-prompt` behavior for `MultipleAction` (auto-degrades today).
-- `@dispatcher debug collisions` command for ring-buffer access.
 - Fuzzy threshold calibration once a real scorer lands.
+- Surface the runtime `collisionEvents` ring buffer through a command
+  (`@grammar collisions` covers the static-scan side; the runtime side is
+  still programmatic-only).
 
 ---
 
@@ -650,16 +652,36 @@ The dispatcher registers two built-in agents via `inlineAgentProvider`:
 
 ### System agent
 
-Handles `@`-prefixed system commands:
+Handles `@`-prefixed system commands. The full set is registered in
+`systemHandlers` ([systemAgent.ts](../../packages/dispatcher/dispatcher/src/context/system/systemAgent.ts)):
 
-- `@config` — Session configuration (models, caching, agents)
-- `@help` — Help and documentation
-- `@history` — Chat history management
-- `@trace` — Debug tracing
-- `@clear` — Clear display
-- `@notify` — Notification management
-- `@construction` — Cache construction management
-- `@explain` — Explanation of cached translations
+| Command         | Purpose                                                                                                                                        |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@action`       | Direct invocation of a typed action (bypasses NL translation).                                                                                 |
+| `@clear`        | Clear the display.                                                                                                                             |
+| `@config`       | Session configuration — models, caching, agents, schema toggles, collision detection.                                                          |
+| `@const`        | Construction store management (load/save, list, merge, delete, auto-save toggle).                                                              |
+| `@conversation` | Manage local dispatcher conversations (named, persisted under `~/.typeagent/profiles/<profile>/sessions`).                                     |
+| `@debug`        | Wait-for-debugger and other developer hooks.                                                                                                   |
+| `@display`      | Tweak how output is rendered.                                                                                                                  |
+| `@env`          | Inspect environment variables and config-relevant runtime values.                                                                              |
+| `@exit`         | Exit the program.                                                                                                                              |
+| `@grammar`      | Manage runtime-learned grammar rules (list/show/delete/clear) and scan static `.agr` files for cross-agent collisions (`@grammar collisions`). |
+| `@help`         | Inline help for any command.                                                                                                                   |
+| `@history`      | Chat history management — list/clear/delete/save/insert + entity inspection.                                                                   |
+| `@index`        | Image / memory indexing controls.                                                                                                              |
+| `@install`      | Install an external app agent.                                                                                                                 |
+| `@memory`       | Conversation-memory operations (RAG store maintenance).                                                                                        |
+| `@notify`       | Notification stream control.                                                                                                                   |
+| `@open`         | Open a file or folder via the host.                                                                                                            |
+| `@random`       | Issue a random sample request from a pre-generated dataset (or LLM-generated).                                                                 |
+| `@run`          | Execute a script of dispatcher commands in sequence.                                                                                           |
+| `@session`      | Local dispatcher session management — create/open/list/info/reset/clear/delete (lower-level than `@conversation`).                             |
+| `@settings`     | User-level settings (theme, etc.).                                                                                                             |
+| `@shutdown`     | Shut down the agent server and exit.                                                                                                           |
+| `@token`        | Token-counter inspection.                                                                                                                      |
+| `@trace`        | Add a `debug` trace pattern.                                                                                                                   |
+| `@uninstall`    | Uninstall an external app agent.                                                                                                               |
 
 Each command has a `CommandDescriptor` that defines expected parameters,
 subcommands, and help text.

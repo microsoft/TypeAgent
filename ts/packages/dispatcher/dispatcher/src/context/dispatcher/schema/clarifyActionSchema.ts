@@ -66,26 +66,3 @@ export interface AgentMatchCandidate {
     actionName: string;
     score?: number;
 }
-
-export function buildClarifyMultipleAgentMatches(
-    request: string,
-    candidates: AgentMatchCandidate[],
-): ClarifyMultipleAgentMatches {
-    const list = candidates
-        .map(
-            (c, i) =>
-                `${i + 1}. ${c.schemaName}.${c.actionName}` +
-                (c.score !== undefined ? ` (score ${c.score.toFixed(3)})` : ""),
-        )
-        .join("\n");
-    return {
-        actionName: "clarifyMultipleAgentMatches",
-        parameters: {
-            request,
-            candidates,
-            clarifyingQuestion:
-                `Multiple agents could handle this request. Which one did you mean?\n` +
-                list,
-        },
-    };
-}

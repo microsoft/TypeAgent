@@ -16,10 +16,8 @@ import {
 import {
     DispatcherClarifyName,
 } from "../context/dispatcher/dispatcherUtils.js";
-import {
-    AgentMatchCandidate,
-    buildClarifyMultipleAgentMatches,
-} from "../context/dispatcher/schema/clarifyActionSchema.js";
+import { AgentMatchCandidate } from "../context/dispatcher/schema/clarifyActionSchema.js";
+import { buildClarifyMultipleAgentMatches } from "./clarifyHelpers.js";
 import {
     CollisionStrategy,
     emitCollisionEvent,

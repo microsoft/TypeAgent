@@ -4,6 +4,8 @@
 export type {
     GrammarJson,
     Grammar,
+    GrammarRule,
+    GrammarPart,
     CompiledSpacingMode,
 } from "./grammarTypes.js";
 export { grammarFromJson } from "./grammarDeserializer.js";

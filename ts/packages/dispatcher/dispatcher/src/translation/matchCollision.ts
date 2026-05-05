@@ -14,10 +14,8 @@ import {
     emitCollisionEvent,
 } from "../context/collisionTelemetry.js";
 import { getAppAgentName } from "./agentTranslators.js";
-import {
-    ClarifyMultipleAgentMatches,
-    buildClarifyMultipleAgentMatches,
-} from "../context/dispatcher/schema/clarifyActionSchema.js";
+import { ClarifyMultipleAgentMatches } from "../context/dispatcher/schema/clarifyActionSchema.js";
+import { buildClarifyMultipleAgentMatches } from "./clarifyHelpers.js";
 
 export type GrammarCollisionDecision =
     | { kind: "match"; match: MatchResult }
