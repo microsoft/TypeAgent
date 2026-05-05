@@ -23,7 +23,12 @@ const BRIDGE_PORT = 5680;
 // ---- WebSocket bridge --------------------------------------------------
 
 type BridgeRequest = { id: string; actionName: string; parameters: unknown };
-type BridgeResponse = { id: string; success: boolean; result?: unknown; error?: string };
+type BridgeResponse = {
+    id: string;
+    success: boolean;
+    result?: unknown;
+    error?: string;
+};
 
 class VisualStudioBridge {
     private wss: WebSocketServer | undefined;
@@ -73,15 +78,23 @@ class VisualStudioBridge {
         const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
         return new Promise((resolve, reject) => {
             this.pending.set(id, (res) =>
-                res.success ? resolve(res.result) : reject(new Error(res.error)),
+                res.success
+                    ? resolve(res.result)
+                    : reject(new Error(res.error)),
             );
             this.client!.send(
-                JSON.stringify({ id, actionName, parameters } satisfies BridgeRequest),
+                JSON.stringify({
+                    id,
+                    actionName,
+                    parameters,
+                } satisfies BridgeRequest),
             );
         });
     }
 
-    get connected(): boolean { return this.client !== undefined; }
+    get connected(): boolean {
+        return this.client !== undefined;
+    }
 }
 
 // ---- Agent lifecycle ---------------------------------------------------
@@ -109,7 +122,9 @@ async function updateAgentContext(
     _schemaName: string,
 ): Promise<void> {}
 
-async function closeAgentContext(context: SessionContext<Context>): Promise<void> {
+async function closeAgentContext(
+    context: SessionContext<Context>,
+): Promise<void> {
     await context.agentContext.bridge.stop();
 }
 
@@ -125,7 +140,9 @@ async function executeAction(
     }
     try {
         const result = await bridge.send(action.actionName, action.parameters);
-        return createActionResultFromTextDisplay(JSON.stringify(result, null, 2));
+        return createActionResultFromTextDisplay(
+            JSON.stringify(result, null, 2),
+        );
     } catch (err: any) {
         return { error: err?.message ?? String(err) };
     }

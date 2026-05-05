@@ -343,10 +343,11 @@ function actionTypeName(actionName: string): string {
 // multiple nested objects (e.g. `parameters: { ... }`) — fixes the prior
 // regex-based extractor that could terminate at the first `};` it saw,
 // producing files with unclosed braces.
-function extractTypeBlock(source: string, typeName: string): string | undefined {
-    const exportRegex = new RegExp(
-        `export\\s+type\\s+${typeName}\\s*=\\s*\\{`,
-    );
+function extractTypeBlock(
+    source: string,
+    typeName: string,
+): string | undefined {
+    const exportRegex = new RegExp(`export\\s+type\\s+${typeName}\\s*=\\s*\\{`);
     const startMatch = source.match(exportRegex);
     if (!startMatch || startMatch.index === undefined) return undefined;
 
@@ -356,7 +357,8 @@ function extractTypeBlock(source: string, typeName: string): string | undefined 
     const before = source.slice(0, blockStart);
     const commentMatch = before.match(/((?:^|\n)(?:[ \t]*\/\/[^\n]*\n)+)$/);
     if (commentMatch && commentMatch.index !== undefined) {
-        blockStart = commentMatch.index + (commentMatch[1].startsWith("\n") ? 1 : 0);
+        blockStart =
+            commentMatch.index + (commentMatch[1].startsWith("\n") ? 1 : 0);
     }
 
     // Walk forward from the opening brace to find the matching closing brace,
@@ -462,10 +464,7 @@ function buildMainGrammarWithSubGroups(
         const block = buffer.join("\n");
         // Drop the rule if its output object references any grouped actionName.
         const actionNameMatch = block.match(/actionName\s*:\s*"([^"]+)"/);
-        if (
-            actionNameMatch &&
-            groupedActions.has(actionNameMatch[1])
-        ) {
+        if (actionNameMatch && groupedActions.has(actionNameMatch[1])) {
             // skip
         } else {
             out.push(block);

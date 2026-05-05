@@ -5,7 +5,10 @@ import { ChatPanel } from "chat-ui";
 import "chat-ui/styles";
 
 import { vsPlatformAdapter } from "./platformAdapter.js";
-import { connectDispatcher, type DispatcherHandle } from "./dispatcherConnection.js";
+import {
+    connectDispatcher,
+    type DispatcherHandle,
+} from "./dispatcherConnection.js";
 
 let chatPanel: ChatPanel;
 let dispatcherHandle: DispatcherHandle | undefined;
@@ -31,7 +34,8 @@ function initialize() {
         onSend: handleUserMessage,
         getCompletions: async (input: string) => {
             try {
-                const completions = await dispatcherHandle?.dispatcher.getCompletions(input);
+                const completions =
+                    await dispatcherHandle?.dispatcher.getCompletions(input);
                 return completions ?? null;
             } catch {
                 return null;
@@ -58,7 +62,11 @@ function handleUserMessage(
 ) {
     if (!dispatcherHandle) {
         chatPanel.addAgentMessage(
-            { type: "text", content: "Not connected to agent server.", kind: "error" },
+            {
+                type: "text",
+                content: "Not connected to agent server.",
+                kind: "error",
+            },
             "system",
         );
         return;
@@ -74,7 +82,11 @@ function handleUserMessage(
         })
         .catch((err: Error) => {
             chatPanel.addAgentMessage(
-                { type: "text", content: `Failed: ${err.message}`, kind: "error" },
+                {
+                    type: "text",
+                    content: `Failed: ${err.message}`,
+                    kind: "error",
+                },
                 "system",
             );
             chatPanel.setEnabled(true);
@@ -108,9 +120,12 @@ function setConnectionStatus(connected: boolean) {
         banner.className = "connection-banner connected";
         banner.style.display = "";
         chatPanel.setEnabled(true);
-        bannerHideTimer = setTimeout(() => { banner.style.display = "none"; }, 3000);
+        bannerHideTimer = setTimeout(() => {
+            banner.style.display = "none";
+        }, 3000);
     } else {
-        banner.textContent = "Not connected — ensure agent-server is running on ws://localhost:8999";
+        banner.textContent =
+            "Not connected — ensure agent-server is running on ws://localhost:8999";
         banner.className = "connection-banner";
         banner.style.display = "";
         chatPanel.setEnabled(false);

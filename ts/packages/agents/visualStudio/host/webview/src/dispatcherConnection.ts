@@ -20,10 +20,7 @@ import {
     getClientIOChannelName,
 } from "@typeagent/agent-server-protocol";
 import type { ChatPanel } from "chat-ui";
-import type {
-    DisplayAppendMode,
-    DisplayContent,
-} from "@typeagent/agent-sdk";
+import type { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
 
 const DEFAULT_AGENT_SERVER_URL = "ws://localhost:8999";
 
@@ -89,7 +86,11 @@ export async function connectDispatcher(
                         dispatcher,
                         onConnectionChange: (cb) => connectionListeners.add(cb),
                         close: async () => {
-                            try { ws.close(); } catch { /* noop */ }
+                            try {
+                                ws.close();
+                            } catch {
+                                /* noop */
+                            }
                         },
                     });
                 })
@@ -108,7 +109,9 @@ export async function connectDispatcher(
             channel.notifyDisconnected();
             notifyConnection(false);
             if (!resolved) {
-                reject(new Error(`Failed to connect to Agent Server at ${url}`));
+                reject(
+                    new Error(`Failed to connect to Agent Server at ${url}`),
+                );
             }
         };
 
@@ -120,9 +123,15 @@ export async function connectDispatcher(
 
 function createChatPanelClientIO(chatPanel: ChatPanel): ClientIO {
     return {
-        clear() { chatPanel.clear(); },
-        exit() { /* no-op in VSIX */ },
-        shutdown() { /* no-op in VSIX */ },
+        clear() {
+            chatPanel.clear();
+        },
+        exit() {
+            /* no-op in VSIX */
+        },
+        shutdown() {
+            /* no-op in VSIX */
+        },
         setUserRequest() {},
         setDisplayInfo(_requestId, source, actionIndex) {
             chatPanel.setDisplayInfo(source, actionIndex);
@@ -142,8 +151,16 @@ function createChatPanelClientIO(chatPanel: ChatPanel): ClientIO {
                 mode as DisplayAppendMode,
             );
         },
-        appendDiagnosticData() { /* not shown in VSIX */ },
-        setDynamicDisplay(_requestId, source, _actionIndex, displayId, nextRefreshMs) {
+        appendDiagnosticData() {
+            /* not shown in VSIX */
+        },
+        setDynamicDisplay(
+            _requestId,
+            source,
+            _actionIndex,
+            displayId,
+            nextRefreshMs,
+        ) {
             chatPanel.setDynamicDisplay(source, displayId, nextRefreshMs);
         },
         async question(_requestId, message, choices, defaultId) {
@@ -167,7 +184,11 @@ function createChatPanelClientIO(chatPanel: ChatPanel): ClientIO {
                 case "explained":
                     if ((data as { error?: string })?.error) {
                         chatPanel.addAgentMessage(
-                            { type: "text", content: (data as { error: string }).error, kind: "warning" },
+                            {
+                                type: "text",
+                                content: (data as { error: string }).error,
+                                kind: "warning",
+                            },
                             source,
                         );
                     }
@@ -176,9 +197,11 @@ function createChatPanelClientIO(chatPanel: ChatPanel): ClientIO {
                     chatPanel.addAgentMessage(
                         {
                             type: "text",
-                            content: typeof data === "string"
-                                ? data
-                                : ((data as { message?: string })?.message ?? "Error"),
+                            content:
+                                typeof data === "string"
+                                    ? data
+                                    : ((data as { message?: string })
+                                          ?.message ?? "Error"),
                             kind: "error",
                         },
                         source,
@@ -188,9 +211,11 @@ function createChatPanelClientIO(chatPanel: ChatPanel): ClientIO {
                     chatPanel.addAgentMessage(
                         {
                             type: "text",
-                            content: typeof data === "string"
-                                ? data
-                                : ((data as { message?: string })?.message ?? "Warning"),
+                            content:
+                                typeof data === "string"
+                                    ? data
+                                    : ((data as { message?: string })
+                                          ?.message ?? "Warning"),
                             kind: "warning",
                         },
                         source,
@@ -208,12 +233,26 @@ function createChatPanelClientIO(chatPanel: ChatPanel): ClientIO {
                     break;
             }
         },
-        async openLocalView() { /* not supported in VSIX */ },
-        async closeLocalView() { /* not supported in VSIX */ },
-        requestChoice() { /* not supported in VSIX */ },
-        requestInteraction() { /* not supported in VSIX */ },
-        interactionResolved() { /* not supported in VSIX */ },
-        interactionCancelled() { /* not supported in VSIX */ },
-        takeAction() { /* not supported in VSIX */ },
+        async openLocalView() {
+            /* not supported in VSIX */
+        },
+        async closeLocalView() {
+            /* not supported in VSIX */
+        },
+        requestChoice() {
+            /* not supported in VSIX */
+        },
+        requestInteraction() {
+            /* not supported in VSIX */
+        },
+        interactionResolved() {
+            /* not supported in VSIX */
+        },
+        interactionCancelled() {
+            /* not supported in VSIX */
+        },
+        takeAction() {
+            /* not supported in VSIX */
+        },
     };
 }

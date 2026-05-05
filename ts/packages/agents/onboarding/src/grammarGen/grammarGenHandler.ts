@@ -176,8 +176,7 @@ export function validateGrammar(grammarContent: string): string[] {
             const paramsBody = paramsMatch[1];
             // RHS bare identifiers: after `: ` not in quotes, and not a
             // boolean/numeric literal or array literal.
-            const rhsRegex =
-                /:\s*([A-Za-z_]\w*)(?=\s*[,}\n])/g;
+            const rhsRegex = /:\s*([A-Za-z_]\w*)(?=\s*[,}\n])/g;
             let r: RegExpExecArray | null;
             while ((r = rhsRegex.exec(paramsBody)) !== null) {
                 const ident = r[1];
@@ -196,7 +195,8 @@ export function validateGrammar(grammarContent: string): string[] {
                 }
             }
             // Object-property shorthand: `{ name, foo }` — name must be captured.
-            const shorthandRegex = /(?:^|[{,]\s*\n?\s*)([A-Za-z_]\w*)(?=\s*[,}\n])/g;
+            const shorthandRegex =
+                /(?:^|[{,]\s*\n?\s*)([A-Za-z_]\w*)(?=\s*[,}\n])/g;
             let s: RegExpExecArray | null;
             while ((s = shorthandRegex.exec(paramsBody)) !== null) {
                 const ident = s[1];
@@ -414,8 +414,8 @@ function buildGrammarPrompt(
                 "2. Every key in the parameters output object must reference EITHER a captured name (no $-prefix) OR a string literal — never a name that wasn't captured in the same rule's pattern.\n" +
                 "3. The captured name in the pattern MUST match the schema field name EXACTLY. If the schema field is `text`, capture `$(text:wildcard)` (NOT `$(searchTerm:wildcard)`). Check the schema before naming captures.\n" +
                 "4. Literal phrases in patterns may contain ONLY alphanumeric characters and spaces. Words containing `-`, `:`, `(`, `)`, `/`, `.`, etc. MUST be reworded (e.g. `compiler generated` instead of `compiler-generated`) or split into separate tokens.\n" +
-                "5. For schema fields whose type is a string union (e.g. `\"text\" | \"code\" | \"designer\"`), DO NOT use `$(name:wildcard)` — that would accept any value. Instead, capture using an alternation: `$(name:(text|code|designer))`. The capture name MUST equal the schema field name.\n" +
-                "6. Every literal value in the output object must be a string in double quotes. NEVER write `commandName: \"commandName\"` when you intended a capture reference — that emits the literal string. Use `commandName` (bare, no quotes) to reference the capture.\n" +
+                '5. For schema fields whose type is a string union (e.g. `"text" | "code" | "designer"`), DO NOT use `$(name:wildcard)` — that would accept any value. Instead, capture using an alternation: `$(name:(text|code|designer))`. The capture name MUST equal the schema field name.\n' +
+                '6. Every literal value in the output object must be a string in double quotes. NEVER write `commandName: "commandName"` when you intended a capture reference — that emits the literal string. Use `commandName` (bare, no quotes) to reference the capture.\n' +
                 "7. If a rule has no capture for a field, do NOT include that field in the output object — omit it entirely.\n\n" +
                 "The file must start with a copyright header comment and end with:\n" +
                 '  import { ActionType } from "./schemaFile.ts";\n' +

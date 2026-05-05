@@ -1,135 +1,164 @@
-```json
-{
-  "readme": "# Visual Studio TypeAgent
+# Visual Studio TypeAgent
 
 ## Overview
-The Visual Studio TypeAgent provides integration for editor, solution, build, and debug actions via the EnvDTE automation API. This agent allows you to manage breakpoints, control debugging, handle files, build and run solutions, search and navigate code, execute commands, and perform edit actions within Visual Studio.
 
-## Architecture Diagram
+The Visual Studio TypeAgent integrates TypeAgent with Visual Studio via the EnvDTE
+automation API. It exposes editor, solution, build, and debug actions — manage
+breakpoints, drive the debugger, open/save/close files, build and run the
+solution, search and navigate code, execute commands, and perform edit actions.
+
+This package contains the **Node-side agent**. The **host-side VSIX** that runs
+inside Visual Studio lives under [host/](host/) — see [host/README.md](host/README.md)
+for build and install instructions.
+
+## Architecture
+
 ```
-+---------------------+
-| Visual Studio       |
-| +-----------------+ |
-| | Office Add-in   | |
-| | (port 3003)     | |
-| +-----------------+ |
-+---------|-----------+
-          |
-          | WebSocket
-          | (port 5680)
-          |
-+---------|-----------+
-| Node.js Bridge      |
-| Server              |
-+---------------------+
++-------------------------------+        +--------------------+
+|  Visual Studio (VSIX)         |        |  TypeAgent         |
+|                               |        |  agent-server      |
+|  +------------------------+   |   WS   |                    |
+|  |  ChatToolWindow        |<--|------->|  +--------------+  |
+|  |   WebView2             |   |  8999  |  | dispatcher   |  |
+|  |     chat-ui            |   |        |  +------+-------+  |
+|  +------------------------+   |        |         |          |
+|                               |        |  +------v-------+  |
+|  +------------------------+   |        |  | visualstudio |  |
+|  |  AgentBridgeClient.cs  |<--|---WS---|->|    agent     |  |
+|  |   DTEActionExecutor.cs |   |  5680  |  +--------------+  |
+|  +-----------+------------+   |        +--------------------+
+|              |                |
+|              v EnvDTE         |
+|         (Solution, Build,     |
+|          Debugger, Editor)    |
++-------------------------------+
 ```
+
+Two WebSocket channels:
+
+- **Chat channel** (port 8999) — WebView2 inside the VSIX talks to the dispatcher.
+- **Action bridge** (port 5680) — this agent owns a `WebSocketServer`; the C#
+  host connects as a client and dispatches incoming actions through EnvDTE.
 
 ## Action Categories
-| Category              | Actions                                      |
-|-----------------------|----------------------------------------------|
-| **breakpointsManagement** | addBreakpoint, removeBreakpoint              |
+
+| Category                  | Actions                                             |
+| ------------------------- | --------------------------------------------------- |
+| **breakpointsManagement** | addBreakpoint, removeBreakpoint                     |
 | **debuggingControl**      | break, go, stepInto, stepOut, stepOver, stop, debug |
-| **fileOperations**        | openFile, closeAll, saveAll                    |
-| **buildAndRun**           | build, clean, run                              |
-| **searchAndNavigation**   | findInFiles, findText, gotoLine                |
-| **commandExecution**      | executeCommand                                 |
-| **editActions**           | redo, undo                                     |
+| **fileOperations**        | openFile, closeAll, saveAll                         |
+| **buildAndRun**           | build, clean, run                                   |
+| **searchAndNavigation**   | findInFiles, findText, gotoLine                     |
+| **commandExecution**      | executeCommand                                      |
+| **editActions**           | redo, undo                                          |
 
 ## Prerequisites
-- Visual Studio installed
-- Node.js installed
-- pnpm package manager installed
-- Office Add-in development tools installed
 
-## Quick Start
-1. **Build the agent package:**
-   ```sh
-   pnpm run build packages/agents/visualStudio
-   ```
+- Visual Studio 2022 (or later) with the **Visual Studio extension development**
+  workload installed
+- Node.js ≥ 20 and pnpm ≥ 10
 
-2. **Install Office Add-in development certificates:**
-   ```sh
-   npx office-addin-dev-certs install
-   ```
+## Build
 
-3. **Add the Visual Studio add-in:**
-   ```sh
-   pnpm run visualStudio:addin
-   ```
+The agent itself builds with the rest of the monorepo:
 
-## Manual Setup
-1. **Clone the repository:**
-   ```sh
-   git clone <repository-url>
-   cd <repository-directory>
-   ```
+```sh
+pnpm run build visualStudio
+```
 
-2. **Install dependencies:**
-   ```sh
-   pnpm install
-   ```
+The VSIX host has its own two-stage build (WebView2 bundle + MSBuild). See
+[host/README.md](host/README.md#build).
 
-3. **Build the agent package:**
-   ```sh
-   pnpm run build packages/agents/visualStudio
-   ```
+## Run
 
-4. **Install Office Add-in development certificates:**
-   ```sh
-   npx office-addin-dev-certs install
-   ```
+1. Start the TypeAgent agent-server.
+2. Ensure `visualstudio-agent` is enabled in your dispatcher config.
+3. Launch Visual Studio with the VSIX installed.
+4. **View → Other Windows → TypeAgent Chat**.
 
-5. **Add the Visual Studio add-in:**
-   ```sh
-   pnpm run visualStudio:addin
-   ```
+The chat panel connects to `ws://localhost:8999`. Once connected, the C# bridge
+auto-connects to `ws://localhost:5680`.
 
 ## Project Structure
+
 ```
-packages/
-├── agents/
-│   └── visualStudio/
-│       ├── src/
-│       │   ├── actions/
-│       │   │   ├── breakpointsManagement/
-│       │   │   ├── debuggingControl/
-│       │   │   ├── fileOperations/
-│       │   │   ├── buildAndRun/
-│       │   │   ├── searchAndNavigation/
-│       │   │   ├── commandExecution/
-│       │   │   └── editActions/
-│       │   ├── index.ts
-│       │   └── types.ts
-│       ├── package.json
-│       └── README.md
-└── bridge/
-    ├── src/
-    │   ├── server.ts
-    │   └── client.ts
-    ├── package.json
-    └── README.md
+packages/agents/visualStudio/
+├── src/
+│   ├── visualStudioActionHandler.ts   # AppAgent + WebSocket bridge server
+│   ├── visualStudioSchema.ts          # Action type definitions
+│   ├── visualStudioSchema.agr         # Grammar rules
+│   └── visualStudioManifest.json
+├── host/
+│   ├── csharp/                        # VSIX project (.NET / WPF)
+│   └── webview/                       # WebView2 chat content (TS + Vite)
+├── package.json
+└── README.md
 ```
 
 ## API Limitations
-- **breakpointsManagement**: Limited to adding and removing breakpoints.
-- **debuggingControl**: Limited to basic debugging controls such as break, go, stepInto, stepOut, stepOver, stop, and debug.
-- **fileOperations**: Limited to opening, closing, and saving files.
-- **buildAndRun**: Limited to building, cleaning, and running the solution.
-- **searchAndNavigation**: Limited to finding text in files, finding text, and navigating to a specific line.
-- **commandExecution**: Limited to executing commands within the Visual Studio environment.
-- **editActions**: Limited to redo and undo actions.
+
+- **breakpointsManagement** — add and remove only; no enable/disable, no hit-count
+  conditions.
+- **debuggingControl** — basic transport (break, go, step\*, stop, debug); no
+  attach-to-process, no exception-settings control.
+- **fileOperations** — open / close-all / save-all; no per-document save or
+  rename.
+- **buildAndRun** — solution-wide only; no per-project build, no configuration
+  switching.
+- **searchAndNavigation** — text-level only; no symbol search, no go-to-definition.
+- **commandExecution** — passes through to `DTE.ExecuteCommand`; the caller is
+  responsible for knowing the command name.
+- **editActions** — redo and undo only.
 
 ## Troubleshooting
-- **Issue:** Add-in not loading in Visual Studio.
-  - **Solution:** Ensure the Office Add-in development certificates are installed correctly using `npx office-addin-dev-certs install`.
 
-- **Issue:** WebSocket connection issues.
-  - **Solution:** Verify that the Node.js bridge server is running on port 5680 and the Office Add-in dev server is running on port 3003.
+- **VSIX doesn't load.** Confirm the **Visual Studio extension development**
+  workload is installed and that the VSIX target version matches your VS
+  install.
+- **Chat panel never connects.** The agent-server must be running before VS
+  opens the tool window. Check that port 8999 is reachable.
+- **Actions hang or error with "Host plugin not connected".** The C# bridge
+  could not reach port 5680 — confirm the `visualstudio-agent` is enabled in
+  the dispatcher and that no other process is bound to 5680.
+- **Action ran but did nothing visible.** Check the Visual Studio **Output**
+  window and the agent-server logs; EnvDTE silently no-ops on some commands
+  when the relevant context (e.g. an active document, an active debug session)
+  is missing.
 
-- **Issue:** Actions not executing as expected.
-  - **Solution:** Check the Visual Studio output window for any errors and ensure the EnvDTE automation API is accessible.
+## TODO — feature enhancements
 
-For further assistance, please refer to the project's documentation or open an issue on the repository.
-```
-}
-```
+None of these are in flight.
+
+### Candidate actions / action groups
+
+New groups and additions to existing groups, formatted to match the
+**Action Categories** table above.
+
+| Category                              | Proposed actions                                                                                                               |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **solutionManagement** _(new)_        | openSolution, closeSolution, switchConfiguration (Debug/Release/…), setStartupProject, addProject, removeProject, listProjects |
+| **testRunner** _(new)_                | runAllTests, runTestsInFile, runTest, rerunFailedTests, debugTest, listTests                                                   |
+| **diagnostics** _(new)_               | getErrorList (errors/warnings/info), getBuildOutput, getOutputPane (Build/Debug/General/…), clearOutputPane                    |
+| **packageManagement** _(new — NuGet)_ | installPackage, uninstallPackage, updatePackage, listPackages, restorePackages                                                 |
+| **buildAndRun** _(extend)_            | buildProject, cleanProject, rebuild, rebuildProject, runWithoutDebugging                                                       |
+| **searchAndNavigation** _(extend)_    | gotoDefinition, gotoImplementation, findAllReferences, gotoSymbol, gotoFile, navigateBack, navigateForward                     |
+| **editActions** _(extend)_            | insertTextAtLine, replaceSelection, replaceTextInFile, formatDocument, toggleLineComment, selectLines                          |
+| **fileOperations** _(extend)_         | saveActiveDocument, closeActiveDocument, renameFile, newFile, addExistingItem                                                  |
+| **breakpointsManagement** _(extend)_  | enableBreakpoint, disableBreakpoint, setHitCount, setCondition, listBreakpoints, clearAllBreakpoints                           |
+| **debuggingControl** _(extend)_       | attachToProcess, detach, evaluateExpression, getCallStack, getLocals, setNextStatement, runToCursor                            |
+
+Highest-leverage to land first, in opinion order: **diagnostics** (so the
+model can react to build/error output instead of running blind), then
+**testRunner**, **solutionManagement**, and symbol-level navigation under
+**searchAndNavigation**.
+
+### Infrastructure
+
+- **Bridge reliability.** `bridge.send()` has no request timeout — a hung host
+  stalls `executeAction` indefinitely. Also no reconnect on host disconnect,
+  and only a single client is tracked at a time (last-connection-wins).
+- **Tests.** No `*.spec.ts` exist for the agent; bridge framing and error
+  paths are good first targets.
+- **Schema-side validation.** Parameters like `line` are typed as `string` and
+  parsed in the host — push numeric types into the schema so the dispatcher
+  rejects bad input before it reaches EnvDTE.
