@@ -15,7 +15,7 @@ namespace Microsoft.TypeAgent.VisualStudio.Bridge
 {
     /// <summary>
     /// WebSocket client that connects to the visualstudio-agent's bridge
-    /// (default ws://localhost:5678). Receives BridgeRequest messages,
+    /// (default ws://localhost:5680). Receives BridgeRequest messages,
     /// dispatches them through DTEActionExecutor, and sends BridgeResponse
     /// messages back.
     ///

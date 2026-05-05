@@ -77,10 +77,10 @@
     "telemetry": "workspace:*",
     "typeagent": "workspace:*",
     "typechat": "^0.1.1",
-    "visualstudio-agent": "workspace:*",
     "typechat-utils": "workspace:*",
     "utility-typeagent": "workspace:*",
     "video-agent": "workspace:*",
+    "visualstudio-agent": "workspace:*",
     "weather-agent": "workspace:*",
     "ws": "^8.17.1",
     "zod": "^4.1.13"

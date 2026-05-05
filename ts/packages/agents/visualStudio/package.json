@@ -3,6 +3,12 @@
   "version": "0.0.1",
   "private": true,
   "description": "TypeAgent agent for Visual Studio (EnvDTE bridge)",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/agents/visualStudio"
+  },
   "license": "MIT",
   "author": "Microsoft",
   "type": "module",
@@ -11,11 +17,11 @@
     "./agent/handlers": "./dist/visualStudioActionHandler.js"
   },
   "scripts": {
-    "asc": "asc -i ./src/visualStudioSchema.ts -o ./dist/visualStudioSchema.pas.json -t VisualStudioActions",
     "agc": "agc -i ./src/visualStudioSchema.agr -o ./dist/visualStudioSchema.ag.json",
-    "tsc": "tsc -b",
+    "asc": "asc -i ./src/visualStudioSchema.ts -o ./dist/visualStudioSchema.pas.json -t VisualStudioActions",
+    "build": "concurrently npm:tsc npm:asc npm:agc",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
-    "build": "concurrently npm:tsc npm:asc npm:agc"
+    "tsc": "tsc -b"
   },
   "dependencies": {
     "@typeagent/agent-sdk": "workspace:*",
