@@ -1,8 +1,10 @@
-# UI Capture — autonomous UI Automation onboarding
+# UI Capture — autonomous UI Automation onboarding (experimental)
+
+> **Status: Experimental.** This UI-crawling approach is under active development. Selectors, helper RPC surface, synthesis prompts, and on-disk artifact shapes are not yet stable and may change without notice. Use it for evaluation and feedback, not as a production onboarding path.
 
 This subsystem turns a Windows desktop app into a TypeAgent-replayable action set by **driving the app autonomously and observing what it does**. Given an app's AUMID (or executable path), it produces a `discoveredActions.json` file containing user-meaningful actions with parameters and step-by-step playback recipes that can be replayed against a fresh instance of the app.
 
-It's the alternative to API-based onboarding (`crawlDocUrl`, `parseOpenApiSpec`, `crawlCliHelp`): when the app has no public API surface but does have a UI, we crawl the UI directly via Microsoft's UI Automation framework.
+It's the experimental alternative to API-based onboarding (`crawlDocUrl`, `parseOpenApiSpec`, `crawlCliHelp`): when the app has no public API surface but does have a UI, we crawl the UI directly via Microsoft's UI Automation framework.
 
 ## Status (2026-05-05)
 
