@@ -1,0 +1,11 @@
+{
+  "extends": "../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "../dist"
+  },
+  "ts-node": {
+    "esm": true
+  },
+  "references": [{ "path": "../../model/src" }, { "path": "../../engine/src" }]
+}

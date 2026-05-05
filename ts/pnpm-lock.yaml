@@ -891,6 +891,25 @@ importers:
         specifier: ^5.2.0
         version: 5.2.1(debug@4.4.1)(webpack-cli@5.1.4)(webpack@5.105.0)
 
+  examples/workflow/cli:
+    dependencies:
+      workflow-engine:
+        specifier: workspace:*
+        version: link:../engine
+      workflow-model:
+        specifier: workspace:*
+        version: link:../model
+    devDependencies:
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   examples/workflow/engine:
     dependencies:
       aiclient:
