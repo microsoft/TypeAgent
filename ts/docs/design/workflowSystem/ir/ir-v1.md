@@ -861,7 +861,11 @@ validator, and analyzers in agreement on a single observable behavior
 }
 ```
 
-- `selectorSchema` declares the legal set of discriminant values. The
+- `selectorSchema` declares the legal set of discriminant values and must
+  be string-typed: either `{ "type": "string" }` or `{ "enum": [...] }`
+  with all-string members. Non-string discriminants (e.g., booleans from
+  `int.lessThan`) require an explicit conversion task such as `bool.toLabel`
+  ([decision 0008](decisions/0008-discriminant-key-encoding.md)). The
   validator requires `cases` to be exhaustive over the declared enum **or**
   for `default` to be present. v1 requires both: `default` is mandatory
   (P5: no implicit fall-through).
@@ -945,9 +949,12 @@ Key points:
   overwrites state" rule and no per-node write declaration; every
   cross-iteration value flows through `iterateState`.
 - `output` is resolved when the body reaches `@exit`. It is a single
-  reference object resolved in the body scope (typically against `state`,
-  since per-iteration scope variables do not survive across iterations),
-  exactly the same shape as the workflow root's `output` (§3.1).
+  reference resolved in the full body scope (state, scope, input, and
+  constant namespaces - the same scope available to `iterateState` at
+  `@iterate`). For accumulator-pattern loops the output typically reads
+  from `state`; for retry-pattern loops it may read directly from a
+  body-scoped binding ([decision 0009](decisions/0009-loop-output-source.md)).
+  The shape is exactly the same as the workflow root's `output` (§3.1).
   Loops that need to publish more than one value wrap them in an object
   built by a tail body node and bound under one name; the loop's
   `output` then references that single name. This keeps every
