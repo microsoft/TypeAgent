@@ -196,6 +196,10 @@ let demoCancelRequested = false;
 // and end up interleaving lines.  Mirrors the demoStarting fix in
 // PR #2277's @shell run.
 let demoStarting = false;
+// The bridge that owns the currently-running demo. Demo state
+// notifications and Esc cancellation must target this bridge — NOT
+// `activeChat?.bridge`, which can shift mid-demo if focus moves.
+let activeDemoBridge: AgentServerBridge | undefined;
 
 function setDemoState(
     running: boolean,
@@ -209,6 +213,17 @@ function setDemoState(
         paused,
     );
     activeChat?.bridge.notifyDemoState(running, paused, message);
+    // Also notify the demo's own bridge if it's a different chat (the
+    // active chat can shift mid-demo if the user focuses another panel,
+    // and the demo state must always reach the panel that owns the
+    // running script).
+    if (activeDemoBridge && activeDemoBridge !== activeChat?.bridge) {
+        try {
+            activeDemoBridge.notifyDemoState(running, paused, message);
+        } catch {
+            // best effort
+        }
+    }
     if (paused) {
         if (!demoStatusItem) {
             demoStatusItem = vscode.window.createStatusBarItem(
@@ -243,6 +258,18 @@ function requestDemoCancel(): void {
     for (const entry of chats.values()) {
         try {
             entry.bridge.broadcastCancelTyping();
+        } catch {
+            // best effort
+        }
+    }
+    // Also cancel any in-flight dispatcher request the demo line has
+    // already submitted (typing finished, command running on the
+    // server). Without this Esc only stops mid-typing — once a line has
+    // been sent, the server runs to completion before the demo loop
+    // wakes up and sees the cancel flag.
+    if (activeDemoBridge) {
+        try {
+            activeDemoBridge.cancelAllInFlight();
         } catch {
             // best effort
         }
@@ -305,6 +332,7 @@ async function runDemoScriptInner(): Promise<void> {
     }
 
     const bridge = activeChat.bridge;
+    activeDemoBridge = bridge;
     const lines = content.split(/\r?\n/);
     const fileName = fileUri.path.split(/[\\/]/).pop() ?? "demo";
     let cancelled = false;
@@ -408,6 +436,7 @@ async function runDemoScriptInner(): Promise<void> {
         demoResolve = undefined;
         demoCancelRequested = false;
         setDemoState(false, false);
+        activeDemoBridge = undefined;
     }
 }
 

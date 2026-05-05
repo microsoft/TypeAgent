@@ -1167,6 +1167,29 @@ export class AgentServerBridge {
         this.broadcastToWebviews({ type: "demoCancelTyping" });
     }
 
+    /**
+     * Cancel every in-flight dispatcher request currently tracked by
+     * this bridge. Called from the demo cancel path so Esc interrupts
+     * the command that's executing on the server side, not just the
+     * pre-dispatch typing animation.
+     */
+    public cancelAllInFlight(): void {
+        if (!this.session) return;
+        const ids = Array.from(
+            new Set(this.clientToServerRequestId.values()),
+        );
+        for (const serverId of ids) {
+            try {
+                this.session.dispatcher.cancelCommand(serverId);
+            } catch (e) {
+                console.warn(
+                    "[agentServerBridge] cancelAllInFlight cancel failed:",
+                    e,
+                );
+            }
+        }
+    }
+
     private ensureCompletionController(
         webview: vscode.Webview,
     ): CompletionController | undefined {

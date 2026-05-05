@@ -82,6 +82,9 @@ async function updateCodeContext(
         if (agentContext.enabled.has(schemaName)) {
             return;
         }
+        if (agentContext.enabled.size === 0) {
+            sharedWebSocketRefCount++;
+        }
         agentContext.enabled.add(schemaName);
 
         if (!sharedWebSocketServer) {
@@ -111,7 +114,6 @@ async function updateCodeContext(
                 }
             };
         }
-        sharedWebSocketRefCount++;
         agentContext.webSocketServer = sharedWebSocketServer;
         agentContext.pendingCall = sharedPendingCalls;
     } else {

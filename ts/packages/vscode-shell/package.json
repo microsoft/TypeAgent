@@ -34,7 +34,7 @@
       },
       {
         "command": "vscode-shell.newChatPanel",
-        "title": "New Chat (Side Panel)",
+        "title": "New Chat in Editor",
         "category": "TypeAgent"
       },
       {
@@ -112,22 +112,26 @@
       {
         "command": "vscode-shell.newSession",
         "key": "ctrl+k ctrl+n",
-        "mac": "cmd+k cmd+n"
+        "mac": "cmd+k cmd+n",
+        "when": "vscode-shell.chatFocused"
       },
       {
         "command": "vscode-shell.switchSession",
         "key": "ctrl+k ctrl+s",
-        "mac": "cmd+k cmd+s"
+        "mac": "cmd+k cmd+s",
+        "when": "vscode-shell.chatFocused"
       },
       {
         "command": "vscode-shell.renameSession",
         "key": "ctrl+k ctrl+r",
-        "mac": "cmd+k cmd+r"
+        "mac": "cmd+k cmd+r",
+        "when": "vscode-shell.chatFocused"
       },
       {
         "command": "vscode-shell.clearChat",
         "key": "ctrl+k ctrl+l",
-        "mac": "cmd+k cmd+l"
+        "mac": "cmd+k cmd+l",
+        "when": "vscode-shell.chatFocused"
       },
       {
         "command": "vscode-shell.demoContinue",

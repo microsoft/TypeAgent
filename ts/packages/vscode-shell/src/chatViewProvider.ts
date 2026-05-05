@@ -30,9 +30,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         _token: vscode.CancellationToken,
     ): void {
         this._sidebarView = webviewView;
-        this.wireWebview(webviewView.webview, this._primaryBridge);
+        const bridgeDisposable = this.wireWebview(
+            webviewView.webview,
+            this._primaryBridge,
+        );
 
         webviewView.onDidDispose(() => {
+            // Drop the bridge's reference to this webview so it stops
+            // broadcasting to it (otherwise the bridge leaks listeners
+            // and dead webview handles across recreate cycles).
+            try {
+                bridgeDisposable.dispose();
+            } catch {
+                // best effort
+            }
             this._sidebarView = undefined;
         });
 
@@ -74,19 +85,23 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             "media",
             "chat.css",
         );
-        // Append the bundle's mtime as a query string so VS Code's
-        // webview cache doesn't serve a stale script after a deploy. The
-        // base URI is the same after a rebuild, so without this the
-        // browser re-uses the cached copy across "Reload Window".
-        let mtime = Date.now();
-        try {
-            const fs: typeof import("fs") = require("fs");
-            mtime = fs.statSync(scriptPath.fsPath).mtimeMs | 0;
-        } catch {
-            // best effort
-        }
-        const scriptUri = `${webview.asWebviewUri(scriptPath)}?v=${mtime}`;
-        const styleUri = `${webview.asWebviewUri(stylePath)}?v=${mtime}`;
+        // Append each bundle's mtime as a query string so VS Code's
+        // webview cache doesn't serve a stale resource after a deploy.
+        // The base URI is the same after a rebuild, so without this the
+        // browser re-uses the cached copy across "Reload Window". Use a
+        // separate stamp per file so a CSS-only change still invalidates
+        // the CSS cache (deriving both from the JS mtime would mask
+        // CSS-only deploys).
+        const fs: typeof import("fs") = require("fs");
+        const stamp = (uri: vscode.Uri): number => {
+            try {
+                return fs.statSync(uri.fsPath).mtimeMs | 0;
+            } catch {
+                return Date.now();
+            }
+        };
+        const scriptUri = `${webview.asWebviewUri(scriptPath)}?v=${stamp(scriptPath)}`;
+        const styleUri = `${webview.asWebviewUri(stylePath)}?v=${stamp(stylePath)}`;
         const nonce = getNonce();
 
         return /* html */ `<!DOCTYPE html>
