@@ -782,18 +782,32 @@ export function initializeInstance(
 
             // send the agent greeting if it's turned on
             if (shellSettings.user.agentGreeting) {
-                dispatcher.processCommand(
-                    `@greeting${mockGreetings ? " --mock" : ""}`,
-                    "agent-0",
-                    [],
-                );
+                dispatcher
+                    .processCommand(
+                        `@greeting${mockGreetings ? " --mock" : ""}`,
+                        "agent-0",
+                        [],
+                    )
+                    .catch((e: any) => {
+                        debugShell(
+                            "Initial greeting failed:",
+                            e?.message ?? e,
+                        );
+                    });
             }
             return;
         }
 
-        updateTitle(dispatcher);
+        updateTitle(dispatcher).catch((e: any) => {
+            debugShell("Initial updateTitle failed:", e?.message ?? e);
+        });
         setPendingUpdateCallback((version, background) => {
-            updateTitle(dispatcher);
+            updateTitle(dispatcher).catch((e: any) => {
+                debugShell(
+                    "updateTitle on pending update failed:",
+                    e?.message ?? e,
+                );
+            });
             if (background) {
                 new Notification({
                     title: `New version ${version.version} available`,
@@ -810,11 +824,15 @@ export function initializeInstance(
 
         // send the agent greeting if it's turned on
         if (shellSettings.user.agentGreeting) {
-            dispatcher.processCommand(
-                `@greeting${mockGreetings ? " --mock" : ""}`,
-                "agent-0",
-                [],
-            );
+            dispatcher
+                .processCommand(
+                    `@greeting${mockGreetings ? " --mock" : ""}`,
+                    "agent-0",
+                    [],
+                )
+                .catch((e: any) => {
+                    debugShell("Initial greeting failed:", e?.message ?? e);
+                });
         }
     };
     ipcMain.on("chat-view-ready", onChatViewReady);
