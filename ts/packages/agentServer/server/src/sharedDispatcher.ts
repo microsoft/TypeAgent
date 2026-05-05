@@ -297,13 +297,7 @@ export async function createSharedDispatcher(
             action,
             ...rest
         ) => {
-            origSetDisplayInfo(
-                requestId,
-                source,
-                actionIndex,
-                action,
-                ...rest,
-            );
+            origSetDisplayInfo(requestId, source, actionIndex, action, ...rest);
             log.logSetDisplayInfo(requestId, source, actionIndex, action);
             log.saveQueued();
         };
@@ -420,15 +414,9 @@ export async function createSharedDispatcher(
                     // "⚠ Cancelled" bubble after the first pass cleared
                     // the request mapping).
                     let sent = 0;
-                    for (const [
-                        peerId,
-                        peerRecord,
-                    ] of clients) {
+                    for (const [peerId, peerRecord] of clients) {
                         if (peerId === connectionId) continue;
-                        if (
-                            peerRecord.filter &&
-                            peerId !== connectionId
-                        ) {
+                        if (peerRecord.filter && peerId !== connectionId) {
                             // Filtered clients only receive their own
                             // events; don't leak peer completions.
                             continue;
