@@ -15,6 +15,12 @@ export interface UserSettings {
     };
     conversation: {
         resume: boolean;
+        // Conversation last actively joined by a shell-style host (the
+        // Electron shell). Persisted across launches so the host can
+        // restore the same conversation instead of always falling back
+        // to the default "Shell" conversation. Optional — absent value
+        // means "no prior preference".
+        lastConversationId?: string;
     };
 }
 

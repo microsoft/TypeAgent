@@ -46,7 +46,10 @@ import {
     stopAgentServer,
 } from "@typeagent/agent-server-client";
 import type { AgentServerConnection } from "@typeagent/agent-server-client";
-import { loadUserSettings } from "agent-dispatcher/helpers/userSettings";
+import {
+    loadUserSettings,
+    saveUserSettings,
+} from "agent-dispatcher/helpers/userSettings";
 
 type ShellInstance = {
     shellWindow: ShellWindow;
@@ -207,46 +210,91 @@ async function initializeDispatcher(
             });
             // Find-or-create the default "Shell" conversation, matching CLI behavior.
             const SHELL_CONVERSATION_NAME = "Shell";
-            const existing = await connection.listConversations(
-                SHELL_CONVERSATION_NAME,
-            );
-            const match = existing.find(
-                (s) =>
-                    s.name.toLowerCase() ===
-                    SHELL_CONVERSATION_NAME.toLowerCase(),
-            );
-            const shellConversationId =
-                match !== undefined
-                    ? match.conversationId
-                    : (
-                          await connection.createConversation(
-                              SHELL_CONVERSATION_NAME,
-                          )
-                      ).conversationId;
-            let conversation: Awaited<
-                ReturnType<typeof connection.joinConversation>
-            >;
-            try {
-                conversation = await connection.joinConversation(clientIO, {
-                    conversationId: shellConversationId,
-                });
-            } catch (e: any) {
-                // The conversation may have been deleted between listConversations and
-                // joinConversation (race condition). Fall back to creating a fresh one.
-                debugShellInit(
-                    "joinConversation failed for Shell conversation, creating new one:",
-                    e.message,
-                );
-                const fresh = await connection.createConversation(
+            let conversation:
+                | Awaited<ReturnType<typeof connection.joinConversation>>
+                | undefined;
+
+            // First, try to restore the conversation we last had open. This
+            // keeps the shell on the user's working conversation across
+            // restarts instead of always snapping back to the default
+            // "Shell" conversation. Best-effort: if the saved id no longer
+            // exists on the server (deleted, server data wiped, etc.) we
+            // fall through to the find-or-create flow below.
+            const savedConversationId = userSettings.conversation
+                .lastConversationId as string | undefined;
+            if (savedConversationId) {
+                try {
+                    conversation = await connection.joinConversation(clientIO, {
+                        conversationId: savedConversationId,
+                    });
+                    debugShellInit(
+                        "Restored last conversation",
+                        savedConversationId,
+                    );
+                } catch (e: any) {
+                    debugShellInit(
+                        "Failed to restore last conversation, falling back:",
+                        savedConversationId,
+                        e.message,
+                    );
+                    conversation = undefined;
+                }
+            }
+
+            if (conversation === undefined) {
+                const existing = await connection.listConversations(
                     SHELL_CONVERSATION_NAME,
                 );
-                conversation = await connection.joinConversation(clientIO, {
-                    conversationId: fresh.conversationId,
-                });
+                const match = existing.find(
+                    (s) =>
+                        s.name.toLowerCase() ===
+                        SHELL_CONVERSATION_NAME.toLowerCase(),
+                );
+                const shellConversationId =
+                    match !== undefined
+                        ? match.conversationId
+                        : (
+                              await connection.createConversation(
+                                  SHELL_CONVERSATION_NAME,
+                              )
+                          ).conversationId;
+                try {
+                    conversation = await connection.joinConversation(clientIO, {
+                        conversationId: shellConversationId,
+                    });
+                } catch (e: any) {
+                    // The conversation may have been deleted between listConversations and
+                    // joinConversation (race condition). Fall back to creating a fresh one.
+                    debugShellInit(
+                        "joinConversation failed for Shell conversation, creating new one:",
+                        e.message,
+                    );
+                    const fresh = await connection.createConversation(
+                        SHELL_CONVERSATION_NAME,
+                    );
+                    conversation = await connection.joinConversation(clientIO, {
+                        conversationId: fresh.conversationId,
+                    });
+                }
             }
             newDispatcher = conversation.dispatcher;
             initialConversationId = conversation.conversationId;
             initialConversationName = conversation.name;
+            // Persist the conversation we ended up on so the next launch
+            // restores it. Wrapped in try/catch because user-settings I/O
+            // shouldn't block startup if the disk write fails.
+            try {
+                saveUserSettings({
+                    conversation: {
+                        lastConversationId: conversation.conversationId,
+                    },
+                });
+            } catch (e: any) {
+                debugShellInit(
+                    "Failed to persist lastConversationId:",
+                    e.message,
+                );
+            }
             // Note: connection.close() is called by closeDispatcher() on
             // shutdown, so no override here — it would double-close the WebSocket.
 
