@@ -29,8 +29,11 @@ type TimerContext = {
 // Parse a "when" string. Accepts:
 //   - duration suffixes: "5s", "30 sec", "10m", "10 minutes", "1h", "2 hours"
 //   - absolute ISO 8601 timestamps: "2026-05-04T15:30:00"
-// Returns the absolute fire time in ms (Date.now() epoch).
-function parseWhen(when: string): number {
+// Returns the absolute fire time in ms, or undefined if the string is not
+// a recognized duration or timestamp. Used both at execution time and from
+// validateWildcardMatch to reject bad grammar groupings (e.g. when the
+// wildcard captures trailing words that aren't part of the duration).
+function tryParseWhen(when: string): number | undefined {
     const trimmed = when.trim();
     const m = trimmed.match(
         /^(\d+)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes|h|hr|hrs|hour|hours)$/i,
@@ -47,9 +50,30 @@ function parseWhen(when: string): number {
     }
     const t = Date.parse(trimmed);
     if (!Number.isNaN(t)) return t;
-    throw new Error(
-        `Cannot parse 'when' value: "${when}". Expected a duration like "5s" / "10m" / "1h" or an ISO 8601 timestamp.`,
-    );
+    return undefined;
+}
+
+function parseWhen(when: string): number {
+    const t = tryParseWhen(when);
+    if (t === undefined) {
+        throw new Error(
+            `Cannot parse 'when' value: "${when}". Expected a duration like "5s" / "10m" / "1h" or an ISO 8601 timestamp.`,
+        );
+    }
+    return t;
+}
+
+// Reject grammar matches where the $(when:wildcard) capture isn't a real
+// duration / timestamp — e.g. "in 5s (kind toast)" matches the grammar but
+// the wildcard greedily swallows trailing tokens. Returning false makes the
+// dispatcher discard this match and fall back to LLM translation.
+async function timerValidateWildcardMatch(
+    action: TimerAction,
+): Promise<boolean> {
+    if (action.actionName === "setReminder") {
+        return tryParseWhen(action.parameters.when) !== undefined;
+    }
+    return true;
 }
 
 async function initializeTimerContext(): Promise<TimerContext> {
@@ -180,6 +204,7 @@ export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeTimerContext,
         executeAction: executeTimerAction,
+        validateWildcardMatch: timerValidateWildcardMatch,
         startBackgroundTasks,
         stopBackgroundTasks,
     };

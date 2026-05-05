@@ -4,9 +4,55 @@
 // Generated grammar for timerSchema.
 // Types: wildcard = 1+ words, word = exactly 1 word.
 
-// setReminder — natural-language patterns. Kind defaults to "bubble" in the
-// handler when omitted, so we do not surface it in the grammar.
-<SetReminder> = remind me to $(message:wildcard) in $(when:wildcard) -> {
+// setReminder — natural-language patterns.
+//
+// Kind variants come first so the parser prefers them over the
+// kind-less fallthrough (which leaves kind unspecified and defaults
+// to "bubble" in the handler). Anchor phrases like "as a toast" /
+// "as an inline" / "as a bubble" terminate the $(when:wildcard) capture
+// — without them, the wildcard would greedily swallow everything to
+// end-of-input.
+<SetReminder> = remind me to $(message:wildcard) in $(when:wildcard) as (a)? toast -> {
+    actionName: "setReminder",
+    parameters: {
+        message,
+        when,
+        kind: "toast"
+    }
+}
+  | remind me to $(message:wildcard) in $(when:wildcard) as (an)? inline -> {
+    actionName: "setReminder",
+    parameters: {
+        message,
+        when,
+        kind: "inline"
+    }
+}
+  | remind me to $(message:wildcard) in $(when:wildcard) as (a)? bubble -> {
+    actionName: "setReminder",
+    parameters: {
+        message,
+        when,
+        kind: "bubble"
+    }
+}
+  | toast me $(message:wildcard) in $(when:wildcard) -> {
+    actionName: "setReminder",
+    parameters: {
+        message,
+        when,
+        kind: "toast"
+    }
+}
+  | flash $(message:wildcard) in $(when:wildcard) -> {
+    actionName: "setReminder",
+    parameters: {
+        message,
+        when,
+        kind: "inline"
+    }
+}
+  | remind me to $(message:wildcard) in $(when:wildcard) -> {
     actionName: "setReminder",
     parameters: {
         message,

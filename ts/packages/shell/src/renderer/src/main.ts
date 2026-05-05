@@ -191,11 +191,31 @@ function registerClient(
             if (seq !== undefined) {
                 maxSeqSeen = Math.max(maxSeqSeen, seq);
             }
+            // Agent-initiated messages (SessionContext.beginAgentThread) carry
+            // a render kind. "toast" and "inline" go through the same
+            // ephemeral notification path used for AppAgentEvent.Toast/Inline
+            // above; "bubble" (or absent) renders as a regular agent bubble.
+            if (message.kind === "toast" || message.kind === "inline") {
+                chatView.addNotificationMessage(
+                    message.message,
+                    message.source,
+                    message.requestId,
+                );
+                return;
+            }
             chatView.addAgentMessage(message);
         },
         appendDisplay: (message, mode, seq?) => {
             if (seq !== undefined) {
                 maxSeqSeen = Math.max(maxSeqSeen, seq);
+            }
+            if (message.kind === "toast" || message.kind === "inline") {
+                chatView.addNotificationMessage(
+                    message.message,
+                    message.source,
+                    message.requestId,
+                );
+                return;
             }
             chatView.addAgentMessage(message, { appendMode: mode });
         },
