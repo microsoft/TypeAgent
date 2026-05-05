@@ -82,6 +82,8 @@ Why this scenario complements A4:
     "noteName": { "schema": { "type": "string" }, "value": "summary.md" },
     "zero": { "schema": { "type": "integer" }, "value": 0 },
     "one": { "schema": { "type": "integer" }, "value": 1 },
+    "retryLabel": { "schema": { "type": "string" }, "value": "retry" },
+    "giveUpLabel": { "schema": { "type": "string" }, "value": "giveUp" },
   },
 
   "nodes": {
@@ -198,9 +200,9 @@ Why this scenario complements A4:
               "properties": { "summary": { "type": "string" } },
             },
             "inputs": {
-              /* ?? we want chunks[0] - first attempt - or some join across chunks.
-                 Either way: indexing requires another task or we just take
-                 the first chunk. Using path projection on bound output. */
+              /* Path projection with integer index: chunks[0] gives the
+                 first chunk. This is the v1 way to index into an array
+                 without a separate list.elementAt task. */
               "text": {
                 "$from": "scope",
                 "name": "chunked",
@@ -214,29 +216,59 @@ Why this scenario complements A4:
           },
 
           /* Decide whether to @iterate (retry with smaller chunk) or @exit
-             (give up and propagate). attempt=0 means we have one retry left. */
+             (give up and propagate). attempt=0 means we have one retry left.
+             Per decision 0008, discriminants must be strings, so we use
+             int.lessThan + bool.toLabel to produce a string selector. */
 
           "decideRetry": {
             "kind": "task",
-            "task": "int.lt" /* ?? same standard-library task as A4 S2 */,
+            "task": "int.lessThan",
             "inputSchema": {
               "type": "object",
-              "required": ["a", "b", "error", "trigger"],
+              "required": ["a", "b"],
               "properties": {
                 "a": { "type": "integer" },
                 "b": { "type": "integer" },
-                "error": { "$ref": "#/types/Error" },
-                "trigger": { "type": "object" },
               },
             },
             "outputSchema": {
               "type": "object",
-              "required": ["lt"],
-              "properties": { "lt": { "type": "boolean" } },
+              "required": ["result"],
+              "properties": { "result": { "type": "boolean" } },
             },
             "inputs": {
               "a": { "$from": "state", "name": "attempt" },
               "b": { "$from": "constant", "name": "one" },
+            },
+            "next": "retryLabel",
+            "bind": "compared",
+          },
+
+          "retryLabel": {
+            "kind": "task",
+            "task": "bool.toLabel",
+            "inputSchema": {
+              "type": "object",
+              "required": ["value", "ifTrue", "ifFalse"],
+              "properties": {
+                "value": { "type": "boolean" },
+                "ifTrue": { "type": "string" },
+                "ifFalse": { "type": "string" },
+              },
+            },
+            "outputSchema": {
+              "type": "object",
+              "required": ["label"],
+              "properties": { "label": { "type": "string" } },
+            },
+            "inputs": {
+              "value": {
+                "$from": "scope",
+                "name": "compared",
+                "path": ["result"],
+              },
+              "ifTrue": { "$from": "constant", "name": "retryLabel" },
+              "ifFalse": { "$from": "constant", "name": "giveUpLabel" },
             },
             "next": "branchRetry",
             "bind": "shouldRetry",
@@ -247,41 +279,60 @@ Why this scenario complements A4:
             "selector": {
               "$from": "scope",
               "name": "shouldRetry",
-              "path": ["lt"],
+              "path": ["label"],
             },
             "selectorSchema": {
-              "enum": [true, false],
-            } /* ?? boolean as enum */,
+              "type": "string",
+              "enum": ["retry", "giveUp"],
+            },
             "cases": {
-              "true": "@iterate",
-              "false": "@exit",
+              "retry": "bumpAttempt",
+              "giveUp": "@exit",
             },
             "default": "@exit",
+          },
+
+          /* Increment attempt counter before @iterate. Per decision
+             0006 this uses the int.add stdlib task. */
+
+          "bumpAttempt": {
+            "kind": "task",
+            "task": "int.add",
+            "inputSchema": {
+              "type": "object",
+              "required": ["a", "b"],
+              "properties": {
+                "a": { "type": "integer" },
+                "b": { "type": "integer" },
+              },
+            },
+            "outputSchema": {
+              "type": "object",
+              "required": ["result"],
+              "properties": { "result": { "type": "integer" } },
+            },
+            "inputs": {
+              "a": { "$from": "state", "name": "attempt" },
+              "b": { "$from": "constant", "name": "one" },
+            },
+            "next": "@iterate",
+            "bind": "stepped",
           },
         },
       },
 
       "iterateState": {
-        /* attempt += 1 - same int.add gap as A4 S2 */
-        "attempt": {
-          /* ?? want attempt + 1 */
-        },
+        "attempt": { "$from": "scope", "name": "stepped", "path": ["result"] },
         /* shrink to small chunk size on the second attempt */
         "chunkSize": { "$from": "constant", "name": "smallChunkSize" },
       },
 
-      /* The loop's output is whichever path reached @exit:
-         - happy path: summary was bound, but it was bound in a body
-           scope that does not survive @exit, so we need to thread it
-           through state - or accept that @exit-on-failure means
-           "no summary".
+      /* Per decision 0009, the loop's output resolves in the full body
+         scope at @exit. Body bindings ARE visible, so the summary
+         bound on the happy path is directly accessible. No need to
+         promote it to state. */
 
-         This is the second surprise (S2 below): scope variables in the
-         body do not survive @exit. The loop's `output` reference can
-         only resolve against `state`, never against body scope.
-         Therefore the summary must be promoted to state. */
-
-      "output": { "$from": "state", "name": "lastSummary" },
+      "output": { "$from": "scope", "name": "summary", "path": ["summary"] },
       "outputSchema": {
         "type": "object",
         "required": ["summary"],
@@ -349,125 +400,64 @@ Why this scenario complements A4:
 
   "entry": "fetch",
 
-  /* The output joins the joined path and the summary text.
-     There is no inline-object construction; we have to point at one
-     place. Either we read the bound `written` (which has path) plus
-     `summarized` (which has summary), OR we add a task whose only job
-     is to assemble the output object. v1 forces the assembler. */
+  /* Per decision 0007 (template model), the output position accepts
+     a template: an object whose values are $from references. This
+     constructs the multi-field output without a dedicated assembler
+     task. */
 
   "output": {
-    /* ?? cannot construct { path, summary } from two refs */
+    "path": { "$from": "scope", "name": "joined", "path": ["path"] },
+    "summary": { "$from": "scope", "name": "summarized", "path": ["summary"] },
   },
 }
 ```
 
-The IR is incomplete in three places, marked `/* ?? */`. Each is a
-finding.
+The IR is now complete. All `/* ?? */` markers from the original draft
+have been resolved by adopted decisions (0006, 0007, 0008, 0009).
 
 ## 4. What hurt
 
 ### 4.1 Surprises
 
-**S1. Boolean as enum is awkward.** The branch on `shouldRetry.lt` has
-`selectorSchema: { "enum": [true, false] }`. v1 §3.6 says the selector
-schema is "JSON Schema with `enum` or string-typed discriminant"; a
-boolean fits but cases must be the _strings_ `"true"` and `"false"` (or
-the JSON literals `true`/`false`?). The IR doesn't say which; the
-example `cases` map keys are JSON strings by definition (object key
-type), but the discriminant value is a boolean. The validator has to
-do JSON-to-string coercion to look up the case, which is exactly the
-kind of implicit conversion P5 disallows.
+**S1. Boolean as enum is awkward.** _(Resolved by
+[decision 0008](../decisions/0008-discriminant-key-encoding.md):
+discriminants must be strings. The IR above uses `bool.toLabel` to
+convert the boolean comparison result to a string selector, and the
+branch uses string-typed `"retry"` / `"giveUp"` cases.)_
 
-Decision pressure: §3.6 needs a sentence on what the legal `cases` key
-form is when the discriminant is non-string. Three options:
+The original draft had `selectorSchema: { "enum": [true, false] }` with
+JSON boolean values as case keys. Decision 0008 resolved this: all
+discriminant values must be strings, and `bool.toLabel` converts
+booleans to string labels for branching.
 
-1. **Discriminants must be strings.** Rule out boolean and integer
-   selectors; force authors to wrap in `int.toString` or
-   `bool.toString`. Most P5-pure, most verbose.
-2. **`cases` keys are JSON-stringified discriminant values.** What the
-   draft seems to assume but does not state. A `true` discriminant
-   matches case key `"true"`. Has hidden coercion (P5 risk) but is the
-   pragmatic answer.
-3. **`cases` keys may be any JSON literal.** Rewrites `cases` from a
-   JSON object (string keys only) to a JSON array of `{value, target}`
-   pairs. Most general, biggest schema change.
+**S2. Body-scope `bind`s do not survive `@exit`.** _(Resolved by
+[decision 0009](../decisions/0009-loop-output-source.md): `output`
+resolves in full body scope at `@exit`, so body bindings ARE visible.
+The IR above uses `$from: "scope", name: "summary"` directly.)_
 
-The current text papers over this. The scenario forces the choice.
+The original draft required promoting the summary to state. Decision
+0009 removed that requirement: the loop's `output` reference resolves
+in the body scope at `@exit`, where all body bindings from the final
+iteration are visible. This eliminates the state-promotion pattern
+for loops used as bounded retry.
 
-**S2. Body-scope `bind`s do not survive `@exit`.** The retry loop's
-"happy path" binds `summary` in the body, then takes `@exit`. The
-loop's `output` reference resolves _after_ body scope tears down, so
-it can only read from `state` (and constants/loop-inputs, which don't
-help here). To export the summary, it has to be promoted to state -
-i.e., declared as a state variable initialized to `null`-or-similar
-(another constant!), assigned in the body, and read by `output`.
+**S3. No object construction.** _(Resolved by
+[decision 0007](../decisions/0007-value-construction-in-references.md):
+the template model allows any reference position to hold a JSON object
+whose values are `$from` references, evaluated element-wise.)_
 
-This is technically consistent with §3.7 ("`output` is resolved when
-the body reaches `@exit`. It is a single reference object resolved in
-the body scope") - wait, the spec says "resolved in the body scope",
-which would suggest body bindings _should_ be visible. Re-reading:
-"typically against `state`, since per-iteration scope variables do
-not survive across iterations". So the spec acknowledges this and
-expects authors to thread through state.
-
-Decision pressure: this is one more thing the §1.2 verbosity tax
-quietly imposes. The §3.7 wording is correct but easy to miss. The
-scenario suggests adding a worked example: "to surface a single
-body-computed value through `output`, declare it as state with
-`initial: null`, write it on the success path, and read it from
-`output`." Without that, every loop with a single answer per run
-trips over this.
-
-A larger question: the rule "scope vars don't survive `@iterate` so
-they can't survive `@exit`" makes `@iterate` and `@exit` symmetric
-and that's clean. But for a loop that is being used as a bounded
-retry rather than as iteration over a list, this symmetry costs.
-Worth a note in §3.7 or its own decision record.
-
-**S3. No object construction.** The workflow's top-level `output` wants
-`{ path: ..., summary: ... }`. The two values exist in different bound
-nodes (`joined.path` and `summarized.summary`). There is no way to
-build a fresh object from two references; `output` is one reference
-object. So the IR needs an `assemble` task whose only job is:
-
-```jsonc
-"assemble": {
-  "kind": "task", "task": "obj.fromFields",
-  "inputs": { "path": { "$from": "scope", "name": "joined",     "path": ["path"] },
-              "summary": { "$from": "scope", "name": "summarized", "path": ["summary"] } },
-  "outputSchema": { "type": "object", ... },
-  "bind": "result"
-}
-```
-
-and `output` then resolves `{ "$from": "scope", "name": "result" }`.
-This is the same shape as the loop's `output` problem (S2): every
-value-producing scope can publish exactly one named value, which is
-fine when there is one, painful when there are several.
-
-Decision pressure: this collides with S1 from A4 (literals) and S2
-from A4 (expressions). Together they argue for **a record-construction
-form in references**, e.g.:
+The original draft could not construct the workflow's `{ path, summary }`
+output from two separate bound nodes. The template model (decision 0007,
+Alternative G) closes this gap: the `output` position now holds:
 
 ```jsonc
 "output": {
-  "$build": {
-    "path":    { "$from": "scope", "name": "joined",     "path": ["path"] },
-    "summary": { "$from": "scope", "name": "summarized", "path": ["summary"] }
-  }
+  "path":    { "$from": "scope", "name": "joined",     "path": ["path"] },
+  "summary": { "$from": "scope", "name": "summarized", "path": ["summary"] },
 }
 ```
 
-This is a behavioral rule the existing concepts do not cover (it lets
-a reference position assemble a new value rather than project from one)
-and it has clear analogs in any structured-data system (record literals
-in TypeScript, struct construction in Rust). It would close A4 S1
-(constants become inline values), would close B1 S3, and would make
-the "thread one value through state to surface from a loop" pattern
-much less ad-hoc.
-
-This is the strongest cross-scenario finding so far. Worth a
-`decisions/0007-value-construction-in-references.md`.
+No assembler task is needed.
 
 ### 4.2 Verbosity tax (working as intended)
 
@@ -475,9 +465,10 @@ Same as A4: per-task schemas, full reference objects. No new findings.
 
 ### 4.3 Gaps
 
-**G1. Same expressions gap as A4 S2.** `attempt + 1`, `int.lt` as a
-task, `int.toString` if we keep the boolean-discriminant workaround.
+**G1. Same expressions gap as A4 S2.** `attempt + 1` uses `int.add`,
+`int.lessThan` as a task, `bool.toLabel` for discriminant conversion.
 Confirms A4's finding; adds no new evidence beyond multiplicity.
+**Adopted:** [`decisions/0006-no-expressions-in-ir.md`](../decisions/0006-no-expressions-in-ir.md).
 
 **G2. The retry-via-loop pattern is correct but not obvious.** §3.8
 mentions the "bounded retry uses a loop body" pattern in passing.
@@ -551,12 +542,14 @@ Beyond the A4 set, this scenario adds:
   selects `@iterate` again, the engine should fail the loop with the
   `LoopMaxIterationsExceeded` runtime error (§3.8.1) and that failure
   should surface as the workflow failure (loop has no `onError`).
-- **Boolean discriminants.** Pending the S1 decision, the engine has
-  to either coerce or reject. Tests for both directions belong here.
-- **Body-scope vs. state-scope `output` resolution.** Pending the S2
-  decision, the engine has to enforce that `output` only reads from
-  state + loop-inputs + constants, not body scope vars.
+- **String discriminants via `bool.toLabel`.** Per decision 0008, the
+  engine resolves the selector and looks up the string case key
+  directly; no coercion needed.
+- **Body-scope `output` resolution.** Per decision 0009, the engine
+  resolves the loop's `output` in the body scope at `@exit`, where
+  body bindings from the final iteration are visible.
+- **Template model in workflow `output`.** Per decision 0007, the
+  engine evaluates a template object (with two `$from` refs) to
+  construct the multi-field workflow output.
 
-Still well within the "200-line engine" budget. The harder thing v1
-asks the engine to do (per A4) is dominator analysis at validation
-time, not anything at runtime.
+All of these are already implemented in the stub engine.
