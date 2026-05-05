@@ -4,17 +4,25 @@ This subsystem turns a Windows desktop app into a TypeAgent-replayable action se
 
 It's the alternative to API-based onboarding (`crawlDocUrl`, `parseOpenApiSpec`, `crawlCliHelp`): when the app has no public API surface but does have a UI, we crawl the UI directly via Microsoft's UI Automation framework.
 
-## Status (2026-05-04)
+## Status (2026-05-05)
 
-**Working end-to-end:** the helper, exploration loop, snapshot capture/restore, dynamic-controls calibration, record mode, synthesis with merge-into-workspace, validation pass, vision-driven reconnaissance, playback executor. A real Clock crawl produces correct, replay-ready actions; the playback executor has been confirmed to create a brand-new alarm with parameters the LLM never saw during the crawl.
+**Working end-to-end through TypeAgent.** The full pipeline ships — helper, exploration, snapshot capture/restore, dynamic-controls calibration, record mode, synthesis with merge-into-workspace, validation pass, vision-driven reconnaissance, playback executor, scaffolder for runtime agents, and dispatcher integration.
+
+Verified on Windows Clock with a 4-tab focused-crawl run:
+- 35 candidate actions surfaced by vision recon
+- 4 per-tab crawls (alarm, stopwatch, worldclock, focus) merged into 14 actions in `discoveredActions.json`
+- Scaffolded into `packages/agents/windowsClock/`, registered in dispatcher
+- `run request "in windows clock, set an alarm for 8:30 named morning"` → real "morning" alarm at 8:30 AM in Clock's tree
 
 **What's still left (by priority):**
 
-1. **TypeAgent integration** (`ui-automation` scaffolder pattern). The `discoveredActions.json` is correct; what's missing is wiring it into the dispatcher. A scaffolder pass should generate `packages/agents/<name>/` containing schema.ts (typed actions from discoveredActions), schema.agr (NL phrasings — phraseGen handles this), and an actionHandler that uses `playbackExecutor.ts`. After that, *"create an alarm at 7am called Wake up"* through the TypeAgent shell will work.
-2. **Synthesis prompt iteration on richer crawls.** With reconnaissance feeding the explorer a TODO list, the chunks per intent become much cleaner — but tightening of the synthesis prompts hasn't been re-validated against this richer input. Some sub-step actions (`nameAlarm`, `setAlarmTime`) emitted by the recon LLM should roll up into one `createAlarm(name, hour, minute)` action; the synthesis pass already does this for explore-only crawls but the recon-driven flow needs a check.
-3. **Selector decay through dynamic ancestors** (e.g., `Group[Name="Stopwatch, Paused, 12 seconds"]` ancestors invalidating after the stopwatch starts). The current `Selectors.BuildSegment` adds ClassName for disambiguation when AutomationId is missing, but a Group with only a dynamic Name can't be salvaged that way. Future work: a selector-relative resolver that searches descendants from the nearest stable ancestor.
-4. **Per-tab focused crawls + merge.** Synthesis quality is best with bounded chunk sets focused on one feature area. The merge-into-workspace logic is in place; what's missing is a workflow tool (`runFocusedCrawl(tab)`) that targets a single tab, synthesizes, and merges.
-5. **Selector fallback for action playback.** Single-identifier selectors break when an app version changes a Name or AutomationId. A multi-identifier selector format (record AutomationId AND Name AND ClassName at capture; resolver tries them in order) would harden replay.
+1. **createAlarm assumes the right tab is already active.** Synthesis correctly extracted the alarm-creation flow but discarded the tab-navigate prefix (it became its own `navigateToAlarmTab` action). Multi-step user requests through TypeAgent need to chain `navigateToAlarmTab` → `createAlarm`. Real fix: the runtime handler should auto-call `navigateToTab` matching the action's `tabOrSection` if the app isn't already there. Synthesizer could also inject the prefix step explicitly.
+2. **Toggle boolean parameter examples are nonsense.** Auto-merged actions like `setStopwatchRunning(running: boolean)` get `examples: ['stopwatch']` instead of `[true, false]` — `applyMergeRecommendations` falls back to `collectExamples` which derives from the action-name suffix. Recipes still execute correctly because the boolean isn't referenced in the 1-step toggle playback, but the schema example values are misleading. Fix: pass `[true, false]` for boolean enum params during merge.
+3. **Dispatcher construction cache misroutes common phrasings.** Phrases like *"create an alarm"* hit the onboarding-agent's `scaffoldAgent`, *"go to X"* hits `excel.navigateToCell`, *"switch to"* hits `player.selectDevice`. Workaround during testing: include "windows clock" in the request to force fresh translation. Real fix: clear the construction cache after adding a new agent OR write explicit grammar (`.agr`) for windowsClock so its phrases populate the cache with the right routing.
+4. **TypeAgent integration via the scaffolder is now the canonical path.** Synthesizer prompts haven't been iterated against the recon-driven richer input — some sub-step actions (`nameAlarm`, `setAlarmTime`) emitted by recon should roll up into one `createAlarm(name, hour, minute)`. The current synthesis pass mostly handles this but a focused review is warranted.
+5. **Selector decay through dynamic ancestors** (e.g., `Group[Name="Stopwatch, Paused, 12 seconds"]` ancestors invalidating once the stopwatch starts). `Selectors.BuildSegment` adds ClassName for disambiguation when AutomationId is missing, but a Group with ONLY a dynamic Name can't be salvaged that way. Future work: a selector-relative resolver that searches descendants from the nearest stable ancestor. Showed up in the multi-tab crawl as the only repeated failure (`recordLap` and `setStopwatchRunning` had stale selectors after the stopwatch started ticking).
+6. **Selector fallback for action playback.** Single-identifier selectors break when an app version changes a Name or AutomationId. A multi-identifier selector format (record AutomationId AND Name AND ClassName at capture; resolver tries them in order) would harden replay.
+7. **Helper bundling for shipped agents.** The runtime agent currently resolves the helper binary via a repo-relative dev path. For an agent that ships independently, the helper exe needs to be bundled into the agent's `bin/` and the resolver updated.
 
 ## Pipeline overview
 
