@@ -3514,7 +3514,7 @@ importers:
       weather-agent:
         specifier: workspace:*
         version: link:../agents/weather
-      windowsClock-agent:
+      windowsclock-agent:
         specifier: workspace:*
         version: link:../agents/windowsClock
       ws:
