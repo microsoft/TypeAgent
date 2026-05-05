@@ -108,6 +108,15 @@ export interface AppAgent extends Partial<AppAgentCommandInterface> {
     ): Promise<void>;
     closeAgentContext?(context: SessionContext): Promise<void>;
 
+    // Background lifecycle for agent-initiated work (timers, watchers,
+    // external-event subscriptions). startBackgroundTasks runs once per
+    // session, after initializeAgentContext succeeds and before the first
+    // updateAgentContext call. stopBackgroundTasks runs once at session
+    // teardown, before any updateAgentContext(false, ...) calls and before
+    // closeAgentContext.
+    startBackgroundTasks?(context: SessionContext): Promise<void>;
+    stopBackgroundTasks?(context: SessionContext): Promise<void>;
+
     // Actions
     streamPartialAction?(
         actionName: string,

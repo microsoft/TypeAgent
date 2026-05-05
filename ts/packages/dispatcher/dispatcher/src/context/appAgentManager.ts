@@ -1157,6 +1157,13 @@ export class AppAgentManager implements ActionConfigProvider {
         );
 
         debug(`Session context created for ${record.name}`);
+
+        if (appAgent.startBackgroundTasks !== undefined) {
+            await callEnsureError(() =>
+                appAgent.startBackgroundTasks!(record.sessionContext!),
+            );
+            debug(`Background tasks started for ${record.name}`);
+        }
         return record.sessionContext;
     }
 
@@ -1173,6 +1180,23 @@ export class AppAgentManager implements ActionConfigProvider {
             try {
                 // Since we have a session context, appAgent must be defined as well.
                 const appAgent = record.appAgent!;
+                // Stop background work first so it can't race against teardown
+                // by emitting agent-initiated messages or touching state we're
+                // about to dispose. Errors here are isolated from the rest of
+                // the teardown path so a misbehaving agent can't block close.
+                if (appAgent.stopBackgroundTasks !== undefined) {
+                    try {
+                        await appAgent.stopBackgroundTasks(sessionContext);
+                        debug(
+                            `Background tasks stopped for ${record.name}`,
+                        );
+                    } catch (e) {
+                        debugError(
+                            `stopBackgroundTasks failed for ${record.name}. Error ignored`,
+                            e,
+                        );
+                    }
+                }
                 if (appAgent.updateAgentContext !== undefined) {
                     // Disable all actions first.
                     for (const action of record.actions) {

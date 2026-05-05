@@ -553,6 +553,12 @@ export async function createAgentRpcClient(
         closeAgentContext(context: SessionContext<ShimContext>) {
             return rpc.invoke("closeAgentContext", getContextParam(context));
         },
+        startBackgroundTasks(context: SessionContext<ShimContext>) {
+            return rpc.invoke("startBackgroundTasks", getContextParam(context));
+        },
+        stopBackgroundTasks(context: SessionContext<ShimContext>) {
+            return rpc.invoke("stopBackgroundTasks", getContextParam(context));
+        },
 
         getCommands(
             context: SessionContext<ShimContext>,

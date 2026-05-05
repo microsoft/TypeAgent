@@ -205,6 +205,8 @@ export type AgentInvokeFunctions = {
         },
     ) => Promise<DynamicDisplay>;
     closeAgentContext: (param: Partial<ContextParams>) => Promise<void>;
+    startBackgroundTasks: (param: Partial<ContextParams>) => Promise<void>;
+    stopBackgroundTasks: (param: Partial<ContextParams>) => Promise<void>;
     getCommands: (param: Partial<ContextParams>) => Promise<CommandDescriptors>;
     getCommandCompletion(
         param: Partial<ContextParams> & {

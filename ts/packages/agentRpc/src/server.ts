@@ -165,6 +165,20 @@ export function createAgentRpcServer(
             unregisterAgentContext(param.agentContextId!);
             return result;
         },
+        async startBackgroundTasks(param): Promise<void> {
+            if (agent.startBackgroundTasks === undefined) {
+                throw new Error(
+                    "Invalid invocation of startBackgroundTasks",
+                );
+            }
+            await agent.startBackgroundTasks(getSessionContextShim(param));
+        },
+        async stopBackgroundTasks(param): Promise<void> {
+            if (agent.stopBackgroundTasks === undefined) {
+                throw new Error("Invalid invocation of stopBackgroundTasks");
+            }
+            await agent.stopBackgroundTasks(getSessionContextShim(param));
+        },
 
         async getCommands(param): Promise<any> {
             if (agent.getCommands === undefined) {
