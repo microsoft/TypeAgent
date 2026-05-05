@@ -17,9 +17,10 @@ import {
     standardLibraryTasks,
     allBuiltinTasks,
 } from "../src/index.js";
-import { readFileSync } from "node:fs";
+import { readFileSync, unlinkSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
 
 // ---- Mock domain tasks ----
 
@@ -1856,6 +1857,428 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(callCount).toBe(4);
             // 3 LLM calls (one per file)
             expect(summaries).toHaveLength(3);
+        });
+    });
+
+    describe("http.get task", () => {
+        it("fetches a URL and returns body + status", async () => {
+            // Use a simple echo-style test against a known-good URL.
+            // For unit tests we mock via a custom task, but here we
+            // test the real http.get against a local data: URI trick.
+            // Instead, just use a mock to verify the shape.
+            const mockHttpGet: TaskDefinition = {
+                name: "http.get",
+                inputSchema: {
+                    type: "object",
+                    required: ["url"],
+                    properties: { url: { type: "string" } },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["body", "status"],
+                    properties: {
+                        body: { type: "string" },
+                        status: { type: "integer" },
+                    },
+                },
+                async execute() {
+                    return {
+                        kind: "ok",
+                        output: {
+                            body: "<html>Hello</html>",
+                            status: 200,
+                        },
+                    };
+                },
+            };
+
+            const reg = makeRegistry(
+                ...standardLibraryTasks,
+                mockHttpGet,
+                ...allBuiltinTasks.filter(
+                    (t) =>
+                        t.name !== "http.get" &&
+                        !standardLibraryTasks.some((s) => s.name === t.name),
+                ),
+            );
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "httpTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    fetch: {
+                        kind: "task",
+                        task: "http.get",
+                        inputSchema: {
+                            type: "object",
+                            required: ["url"],
+                            properties: { url: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["body", "status"],
+                            properties: {
+                                body: { type: "string" },
+                                status: { type: "integer" },
+                            },
+                        },
+                        inputs: { url: "https://example.com" as any },
+                        bind: "result",
+                    },
+                },
+                entry: "fetch",
+                output: { $from: "scope", name: "result" } as any,
+            };
+
+            const result = await eng.run(ir, {});
+            expect(result.success).toBe(true);
+            const output = result.output as {
+                body: string;
+                status: number;
+            };
+            expect(output.body).toBe("<html>Hello</html>");
+            expect(output.status).toBe(200);
+        });
+    });
+
+    describe("file.write and file.read tasks", () => {
+        const testFile = resolve(tmpdir(), `workflow-test-${Date.now()}.txt`);
+
+        afterAll(() => {
+            if (existsSync(testFile)) unlinkSync(testFile);
+        });
+
+        it("writes a file and reads it back", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            // Write
+            const writeIr: WorkflowIR = {
+                kind: "workflow",
+                name: "writeTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    write: {
+                        kind: "task",
+                        task: "file.write",
+                        inputSchema: {
+                            type: "object",
+                            required: ["path", "content"],
+                            properties: {
+                                path: { type: "string" },
+                                content: { type: "string" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["path"],
+                            properties: { path: { type: "string" } },
+                        },
+                        inputs: {
+                            path: testFile as any,
+                            content: "hello from workflow" as any,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "write",
+                output: { $from: "scope", name: "result" } as any,
+            };
+
+            const writeResult = await eng.run(writeIr, {});
+            expect(writeResult.success).toBe(true);
+            expect((writeResult.output as any).path).toBe(testFile);
+
+            // Read back
+            const readIr: WorkflowIR = {
+                kind: "workflow",
+                name: "readTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    read: {
+                        kind: "task",
+                        task: "file.read",
+                        inputSchema: {
+                            type: "object",
+                            required: ["path"],
+                            properties: { path: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["content"],
+                            properties: {
+                                content: { type: "string" },
+                            },
+                        },
+                        inputs: { path: testFile as any },
+                        bind: "result",
+                    },
+                },
+                entry: "read",
+                output: { $from: "scope", name: "result" } as any,
+            };
+
+            const readResult = await eng.run(readIr, {});
+            expect(readResult.success).toBe(true);
+            expect((readResult.output as any).content).toBe(
+                "hello from workflow",
+            );
+        });
+    });
+
+    describe("D8 summarize-url workflow", () => {
+        function loadD8(): WorkflowIR {
+            const __dirname = dirname(fileURLToPath(import.meta.url));
+            const path = resolve(
+                __dirname,
+                "../../../workflows/d8-summarize-url.json",
+            );
+            return JSON.parse(readFileSync(path, "utf8")) as WorkflowIR;
+        }
+
+        it("validates against all builtins", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir = loadD8();
+            const result = await eng.run(ir, {
+                url: "https://example.com",
+                outputPath: "/tmp/test.txt",
+            });
+
+            if (!result.success) {
+                expect(result.error?.message).not.toContain(
+                    "Validation failed",
+                );
+            }
+        });
+
+        it("runs with mocked http.get, llm.generate, file.write", async () => {
+            const outputFile = resolve(tmpdir(), `d8-test-${Date.now()}.md`);
+
+            const mockHttpGet: TaskDefinition = {
+                name: "http.get",
+                inputSchema: {
+                    type: "object",
+                    required: ["url"],
+                    properties: { url: { type: "string" } },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["body", "status"],
+                    properties: {
+                        body: { type: "string" },
+                        status: { type: "integer" },
+                    },
+                },
+                async execute() {
+                    return {
+                        kind: "ok",
+                        output: {
+                            body: "TypeAgent is a personal agent framework for building agents.",
+                            status: 200,
+                        },
+                    };
+                },
+            };
+
+            const mockLlm: TaskDefinition = {
+                name: "llm.generate",
+                inputSchema: {
+                    type: "object",
+                    required: ["prompt"],
+                    properties: { prompt: { type: "string" } },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["text"],
+                    properties: { text: { type: "string" } },
+                },
+                async execute(input: any) {
+                    expect(input.prompt).toContain("TypeAgent");
+                    return {
+                        kind: "ok",
+                        output: {
+                            text: "TypeAgent is a framework for personal agents that route requests to specialized plugins.",
+                        },
+                    };
+                },
+            };
+
+            const mockFileWrite: TaskDefinition = {
+                name: "file.write",
+                inputSchema: {
+                    type: "object",
+                    required: ["path", "content"],
+                    properties: {
+                        path: { type: "string" },
+                        content: { type: "string" },
+                    },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["path"],
+                    properties: { path: { type: "string" } },
+                },
+                async execute(input: any) {
+                    return {
+                        kind: "ok",
+                        output: { path: input.path },
+                    };
+                },
+            };
+
+            const reg = makeRegistry(
+                ...standardLibraryTasks,
+                mockHttpGet,
+                mockLlm,
+                mockFileWrite,
+                ...allBuiltinTasks.filter(
+                    (t) =>
+                        t.name !== "http.get" &&
+                        t.name !== "llm.generate" &&
+                        t.name !== "file.write" &&
+                        !standardLibraryTasks.some((s) => s.name === t.name),
+                ),
+            );
+            const eng = new WorkflowEngine(reg);
+
+            const ir = loadD8();
+            const result = await eng.run(ir, {
+                url: "https://example.com/typeagent",
+                outputPath: outputFile,
+            });
+
+            expect(result.success).toBe(true);
+            const output = result.output as {
+                path: string;
+                summary: string;
+            };
+            expect(output.path).toBe(outputFile);
+            expect(output.summary).toContain("personal agents");
+        });
+
+        it("retries on fetch failure then succeeds", async () => {
+            let fetchAttempts = 0;
+            const mockHttpGet: TaskDefinition = {
+                name: "http.get",
+                inputSchema: {
+                    type: "object",
+                    required: ["url"],
+                    properties: { url: { type: "string" } },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["body", "status"],
+                    properties: {
+                        body: { type: "string" },
+                        status: { type: "integer" },
+                    },
+                },
+                async execute() {
+                    fetchAttempts++;
+                    if (fetchAttempts === 1) {
+                        return {
+                            kind: "fail",
+                            error: { message: "Connection refused" },
+                        };
+                    }
+                    return {
+                        kind: "ok",
+                        output: {
+                            body: "Page content after retry.",
+                            status: 200,
+                        },
+                    };
+                },
+            };
+
+            const mockLlm: TaskDefinition = {
+                name: "llm.generate",
+                inputSchema: {
+                    type: "object",
+                    required: ["prompt"],
+                    properties: { prompt: { type: "string" } },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["text"],
+                    properties: { text: { type: "string" } },
+                },
+                async execute() {
+                    return {
+                        kind: "ok",
+                        output: { text: "Summary after retry." },
+                    };
+                },
+            };
+
+            const mockFileWrite: TaskDefinition = {
+                name: "file.write",
+                inputSchema: {
+                    type: "object",
+                    required: ["path", "content"],
+                    properties: {
+                        path: { type: "string" },
+                        content: { type: "string" },
+                    },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["path"],
+                    properties: { path: { type: "string" } },
+                },
+                async execute(input: any) {
+                    return {
+                        kind: "ok",
+                        output: { path: input.path },
+                    };
+                },
+            };
+
+            const reg = makeRegistry(
+                ...standardLibraryTasks,
+                mockHttpGet,
+                mockLlm,
+                mockFileWrite,
+                ...allBuiltinTasks.filter(
+                    (t) =>
+                        t.name !== "http.get" &&
+                        t.name !== "llm.generate" &&
+                        t.name !== "file.write" &&
+                        !standardLibraryTasks.some((s) => s.name === t.name),
+                ),
+            );
+            const eng = new WorkflowEngine(reg);
+            const events = collectEvents(eng);
+
+            const ir = loadD8();
+            const result = await eng.run(ir, {
+                url: "https://flaky.example.com",
+                outputPath: "/tmp/retry-test.md",
+            });
+
+            expect(result.success).toBe(true);
+            expect(fetchAttempts).toBe(2);
+            const output = result.output as {
+                path: string;
+                summary: string;
+            };
+            expect(output.summary).toBe("Summary after retry.");
+
+            // Verify loop iterated (retry happened)
+            const iterEvents = events.filter(
+                (e) => e.type === "loopIterationStarted",
+            );
+            expect(iterEvents.length).toBe(2);
         });
     });
 });

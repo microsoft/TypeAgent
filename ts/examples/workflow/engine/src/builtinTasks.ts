@@ -12,6 +12,8 @@
  */
 
 import { execFile } from "node:child_process";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
 import { TaskDefinition } from "workflow-model";
 import { openai } from "aiclient";
 
@@ -333,6 +335,110 @@ export const stringSplit: TaskDefinition<
     },
 };
 
+export const httpGet: TaskDefinition<
+    { url: string; headers?: Record<string, string> },
+    { body: string; status: number }
+> = {
+    name: "http.get",
+    inputSchema: {
+        type: "object",
+        required: ["url"],
+        properties: {
+            url: { type: "string" },
+            headers: { type: "object" },
+        },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["body", "status"],
+        properties: {
+            body: { type: "string" },
+            status: { type: "integer" },
+        },
+    },
+    async execute(input, ctx) {
+        try {
+            const resp = await fetch(input.url, {
+                ...(input.headers ? { headers: input.headers } : {}),
+                signal: ctx.signal,
+            });
+            const body = await resp.text();
+            return {
+                kind: "ok",
+                output: { body, status: resp.status },
+            };
+        } catch (err) {
+            return {
+                kind: "fail",
+                error: {
+                    message: err instanceof Error ? err.message : String(err),
+                },
+            };
+        }
+    },
+};
+
+export const fileRead: TaskDefinition<{ path: string }, { content: string }> = {
+    name: "file.read",
+    inputSchema: {
+        type: "object",
+        required: ["path"],
+        properties: { path: { type: "string" } },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["content"],
+        properties: { content: { type: "string" } },
+    },
+    async execute(input) {
+        try {
+            const content = await readFile(input.path, "utf8");
+            return { kind: "ok", output: { content } };
+        } catch (err) {
+            return {
+                kind: "fail",
+                error: {
+                    message: err instanceof Error ? err.message : String(err),
+                },
+            };
+        }
+    },
+};
+
+export const fileWrite: TaskDefinition<
+    { path: string; content: string },
+    { path: string }
+> = {
+    name: "file.write",
+    inputSchema: {
+        type: "object",
+        required: ["path", "content"],
+        properties: {
+            path: { type: "string" },
+            content: { type: "string" },
+        },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["path"],
+        properties: { path: { type: "string" } },
+    },
+    async execute(input) {
+        try {
+            await mkdir(dirname(input.path), { recursive: true });
+            await writeFile(input.path, input.content, "utf8");
+            return { kind: "ok", output: { path: input.path } };
+        } catch (err) {
+            return {
+                kind: "fail",
+                error: {
+                    message: err instanceof Error ? err.message : String(err),
+                },
+            };
+        }
+    },
+};
+
 /** The 6 original standard-library tasks (pure, no IO). */
 export const standardLibraryTasks: TaskDefinition[] = [
     intAdd,
@@ -348,6 +454,9 @@ export const allBuiltinTasks: TaskDefinition[] = [
     ...standardLibraryTasks,
     shellExec,
     llmGenerate,
+    httpGet,
+    fileRead,
+    fileWrite,
     textTemplate,
     stringJoin,
     stringSplit,
