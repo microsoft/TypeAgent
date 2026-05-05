@@ -3,12 +3,21 @@
 
 import {
     ActionContext,
+    ActionResult,
     AppAction,
     AppAgent,
     SessionContext,
 } from "@typeagent/agent-sdk";
-import { createActionResult } from "@typeagent/agent-sdk/helpers/action";
 import {
+    ChoiceManager,
+    createActionResult,
+    createActionResultFromError,
+    createActionResultFromTextDisplay,
+    createYesNoChoiceResult,
+} from "@typeagent/agent-sdk/helpers/action";
+import {
+    AutoShellMissingError,
+    buildAutoShell,
     disableDesktopActionContext,
     DesktopActionContext,
     runDesktopActions,
@@ -20,6 +29,16 @@ export function instantiate(): AppAgent {
         initializeAgentContext: initializeDesktopContext,
         updateAgentContext: updateDesktopContext,
         executeAction: executeDesktopAction,
+        async handleChoice(
+            choiceId: string,
+            response: boolean | number[],
+            context: ActionContext<DesktopActionContext>,
+        ) {
+            return context.sessionContext.agentContext.choiceManager.handleChoice(
+                choiceId,
+                response,
+            );
+        },
     };
 }
 
@@ -30,6 +49,7 @@ async function initializeDesktopContext(): Promise<DesktopActionContext> {
         backupProgramNameTable: undefined,
         refreshPromise: undefined,
         abortRefresh: undefined,
+        choiceManager: new ChoiceManager(),
     };
 }
 
@@ -45,10 +65,10 @@ async function updateDesktopContext(
     }
 }
 
-async function executeDesktopAction(
+async function runAction(
     action: AppAction,
     context: ActionContext<DesktopActionContext>,
-) {
+): Promise<ActionResult> {
     const result = await runDesktopActions(
         action as AllDesktopActions,
         context.sessionContext.agentContext,
@@ -64,6 +84,54 @@ async function executeDesktopAction(
         return createActionResult(displayText);
     }
     return { error: result.message };
+}
+
+function offerAutoShellBuild(
+    context: ActionContext<DesktopActionContext>,
+    error: AutoShellMissingError,
+    action: AppAction,
+): ActionResult {
+    const state = context.sessionContext.agentContext;
+    return createYesNoChoiceResult(
+        state.choiceManager,
+        `The desktop automation helper (autoShell.exe) isn't built yet (expected at ${error.binaryPath}). ` +
+            `Build it now? This runs 'dotnet build -c Release' on autoShell.sln and may take ~30s.`,
+        async (confirmed: boolean) => {
+            if (!confirmed) {
+                return createActionResultFromTextDisplay(
+                    "autoShell build skipped — action cancelled.",
+                );
+            }
+            try {
+                await buildAutoShell();
+            } catch (buildError) {
+                return createActionResultFromError(
+                    `autoShell build failed: ${buildError instanceof Error ? buildError.message : String(buildError)}`,
+                );
+            }
+            try {
+                return await runAction(action, context);
+            } catch (e) {
+                return createActionResultFromError(
+                    e instanceof Error ? e.message : String(e),
+                );
+            }
+        },
+    );
+}
+
+async function executeDesktopAction(
+    action: AppAction,
+    context: ActionContext<DesktopActionContext>,
+) {
+    try {
+        return await runAction(action, context);
+    } catch (e) {
+        if (e instanceof AutoShellMissingError) {
+            return offerAutoShellBuild(context, e, action);
+        }
+        throw e;
+    }
 }
 
 function formatResultDisplay(
