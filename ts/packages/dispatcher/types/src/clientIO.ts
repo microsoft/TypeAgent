@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import {
+    AgentMessageKind,
     DisplayAppendMode,
     DisplayContent,
     TemplateSchema,
@@ -32,6 +33,9 @@ export interface IAgentMessage {
     sourceIcon?: string | undefined;
     actionIndex?: number | undefined;
     metrics?: RequestMetrics | undefined;
+    // Render style for agent-initiated messages. Absent for messages that are
+    // a response to a user request — those continue to render as bubbles.
+    kind?: AgentMessageKind | undefined;
 }
 
 export type NotifyExplainedData = {

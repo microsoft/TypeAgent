@@ -4,6 +4,7 @@
 import {
     ActionResult,
     ActivityContext,
+    AgentMessageKind,
     AppAction,
     AppAgentEvent,
     AppAgentInitSettings,
@@ -35,6 +36,27 @@ export type AgentContextCallFunctions = {
         message: string | DisplayContent,
         notificationId?: string,
     ): void;
+    // Agent-initiated thread lifecycle. The agent-side shim mints a threadId
+    // (UUID) per beginAgentThread() call and routes setDisplay/appendDisplay/
+    // complete through it; the dispatcher side caches the real handle by
+    // threadId.
+    agentThreadBegin: (
+        contextId: number,
+        threadId: string,
+        kind: AgentMessageKind,
+    ) => void;
+    agentThreadSetDisplay: (
+        contextId: number,
+        threadId: string,
+        content: DisplayContent,
+    ) => void;
+    agentThreadAppendDisplay: (
+        contextId: number,
+        threadId: string,
+        content: DisplayContent,
+        mode: DisplayAppendMode,
+    ) => void;
+    agentThreadComplete: (contextId: number, threadId: string) => void;
     setDisplay: (param: {
         actionContextId: number;
         content: DisplayContent;

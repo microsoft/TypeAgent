@@ -11,6 +11,8 @@ export {
     SchemaManifest,
     AppAgent,
     AppAgentEvent,
+    AgentMessageKind,
+    AgentThreadHandle,
     SessionContext,
     StorageListOptions,
     Storage,

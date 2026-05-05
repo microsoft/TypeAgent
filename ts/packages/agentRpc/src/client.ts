@@ -2,6 +2,8 @@
 // Licensed under the MIT License.
 
 import {
+    AgentMessageKind,
+    AgentThreadHandle,
     AppAgent,
     ActionContext,
     SessionContext,
@@ -401,9 +403,41 @@ export async function createAgentRpcClient(
         },
     };
 
+    const agentThreadHandles = new Map<string, AgentThreadHandle>();
     const agentContextCallHandlers: AgentContextCallFunctions = {
         notify: (contextId: number, ...args) => {
             contextMap.get(contextId).notify(...args);
+        },
+        agentThreadBegin: (
+            contextId: number,
+            threadId: string,
+            kind: AgentMessageKind,
+        ) => {
+            agentThreadHandles.set(
+                threadId,
+                contextMap.get(contextId).beginAgentThread(kind),
+            );
+        },
+        agentThreadSetDisplay: (
+            _contextId: number,
+            threadId: string,
+            content: DisplayContent,
+        ) => {
+            agentThreadHandles.get(threadId)?.setDisplay(content);
+        },
+        agentThreadAppendDisplay: (
+            _contextId: number,
+            threadId: string,
+            content: DisplayContent,
+            mode: DisplayAppendMode,
+        ) => {
+            agentThreadHandles.get(threadId)?.appendDisplay(content, mode);
+        },
+        agentThreadComplete: (_contextId: number, threadId: string) => {
+            const handle = agentThreadHandles.get(threadId);
+            if (handle === undefined) return;
+            handle.complete();
+            agentThreadHandles.delete(threadId);
         },
         setDisplay: (param: {
             actionContextId: number;

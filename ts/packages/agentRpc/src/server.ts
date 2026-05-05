@@ -3,6 +3,8 @@
 
 import {
     ActionContext,
+    AgentMessageKind,
+    AgentThreadHandle,
     AppAgent,
     SessionContext,
     Storage,
@@ -421,6 +423,45 @@ export function createAgentRpcServer(
                 notificationId?: string,
             ): void => {
                 rpc.send("notify", contextId, event, message, notificationId);
+            },
+            beginAgentThread: (kind: AgentMessageKind): AgentThreadHandle => {
+                const threadId = globalThis.crypto.randomUUID();
+                let completed = false;
+                const completedError = () =>
+                    new Error(
+                        `Agent thread ${threadId} is completed; call beginAgentThread() to start a new thread.`,
+                    );
+                rpc.send("agentThreadBegin", contextId, threadId, kind);
+                return {
+                    kind,
+                    setDisplay(content: DisplayContent) {
+                        if (completed) throw completedError();
+                        rpc.send(
+                            "agentThreadSetDisplay",
+                            contextId,
+                            threadId,
+                            content,
+                        );
+                    },
+                    appendDisplay(
+                        content: DisplayContent,
+                        mode: DisplayAppendMode = "block",
+                    ) {
+                        if (completed) throw completedError();
+                        rpc.send(
+                            "agentThreadAppendDisplay",
+                            contextId,
+                            threadId,
+                            content,
+                            mode,
+                        );
+                    },
+                    complete() {
+                        if (completed) return;
+                        completed = true;
+                        rpc.send("agentThreadComplete", contextId, threadId);
+                    },
+                };
             },
             popupQuestion: async (
                 message: string,

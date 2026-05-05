@@ -8,6 +8,7 @@ import {
     DisplayType,
     DynamicDisplay,
     DisplayContent,
+    DisplayAppendMode,
 } from "./display.js";
 import { Entity } from "./memory.js";
 import { Profiler } from "./profiler.js";
@@ -190,6 +191,23 @@ export enum AppAgentEvent {
     Inline = "inline",
 }
 
+// Render style for agent-initiated messages (messages not paired with a user
+// request). Selected per-message via SessionContext.beginAgentThread().
+export type AgentMessageKind = "bubble" | "toast" | "inline";
+
+// Handle returned by SessionContext.beginAgentThread(). Lets an agent push
+// display content into the UI without a preceding user request.
+//
+// Lifetime: setDisplay/appendDisplay can be called any number of times. After
+// complete() the handle is finished — call beginAgentThread() again to start
+// a new thread.
+export interface AgentThreadHandle {
+    readonly kind: AgentMessageKind;
+    setDisplay(content: DisplayContent): void;
+    appendDisplay(content: DisplayContent, mode?: DisplayAppendMode): void;
+    complete(): void;
+}
+
 export interface SessionContext<T = unknown> {
     readonly agentContext: T;
     readonly sessionStorage: Storage | undefined;
@@ -200,6 +218,12 @@ export interface SessionContext<T = unknown> {
         message: string | DisplayContent,
         notificationId?: string,
     ): void;
+
+    // Begin an agent-initiated message thread. The returned handle can push
+    // display content (setDisplay/appendDisplay) into the UI without a
+    // preceding user request. Each call mints a fresh clientRequestId of the
+    // form "agent-<agentName>-<uuid>".
+    beginAgentThread(kind: AgentMessageKind): AgentThreadHandle;
 
     // choices default to ["Yes", "No"]
     popupQuestion(
