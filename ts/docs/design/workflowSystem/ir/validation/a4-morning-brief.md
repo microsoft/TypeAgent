@@ -532,7 +532,7 @@ are genuine registered implementations under v1's model.
         "i": { "$from": "scope", "name": "stepped", "path": ["result"] },
         "sections": { "$from": "scope", "name": "appended", "path": ["list"] },
       },
-      "output": { "$from": "state", "name": "sections" },
+      "output": { "$from": "scope", "name": "appended", "path": ["list"] },
       "outputSchema": {
         "type": "array",
         "items": { "$ref": "#/types/Section" },

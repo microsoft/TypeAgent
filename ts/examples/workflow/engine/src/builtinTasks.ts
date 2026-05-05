@@ -1,134 +1,151 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+/**
+ * Standard-library tasks for IR v1 (decision 0006).
+ *
+ * These fill the "no expressions" gap: all computation goes through
+ * registered tasks. The DSL lowers inline expressions to these.
+ */
+
 import { TaskDefinition } from "workflow-model";
 
-/**
- * A task that passes its input through as output.
- */
-export const passthroughTask: TaskDefinition = {
-    name: "passthrough",
-    inputSchema: { type: "object" },
-    outputSchema: { type: "object" },
-    async execute(input) {
-        return { kind: "ok", output: input };
-    },
-};
-
-/**
- * A task that builds a string from a template and named values.
- * Input: { template: string, ...values }
- * Output: { result: string }
- *
- * Replaces `{key}` placeholders in the template with the corresponding
- * input values. Keys may use dot notation (`{a.b}`) or bracket notation
- * (`{items[0]}`) to reach nested fields and array elements.
- */
-export const stringTemplateTask: TaskDefinition<
-    Record<string, unknown>,
-    { result: string }
+export const intAdd: TaskDefinition<
+    { a: number; b: number },
+    { result: number }
 > = {
-    name: "string.template",
+    name: "int.add",
     inputSchema: {
         type: "object",
-        properties: {
-            template: { type: "string" },
-        },
-        required: ["template"],
+        required: ["a", "b"],
+        properties: { a: { type: "integer" }, b: { type: "integer" } },
     },
     outputSchema: {
         type: "object",
-        properties: {
-            result: { type: "string" },
-        },
         required: ["result"],
+        properties: { result: { type: "integer" } },
     },
     async execute(input) {
-        const template = input.template as string;
-        const result = template.replace(
-            /\{([^}]+)\}/g,
-            (_match, keyPath: string) => {
-                const val = resolveTemplatePath(input, keyPath);
-                return val !== undefined ? String(val) : `{${keyPath}}`;
-            },
-        );
-        return { kind: "ok", output: { result } };
+        return { kind: "ok", output: { result: input.a + input.b } };
     },
 };
 
-/**
- * A task that logs its input and returns it unchanged.
- * Useful for error handlers and debugging.
- */
-export const logTask: TaskDefinition = {
-    name: "log.error",
-    inputSchema: { type: "object" },
-    outputSchema: { type: "object" },
-    async execute(input, ctx) {
-        ctx.log("error", "Error handler invoked", input);
-        return { kind: "ok", output: input };
-    },
-};
-
-/**
- * A generic threshold-based branch task.
- * Input: { value: number, threshold?: number }
- * Returns branch "high" if value >= threshold (default 0.5), else "low".
- */
-export const thresholdBranchTask: TaskDefinition<
-    { value: number; threshold?: number },
-    { value: number }
+export const intLessThan: TaskDefinition<
+    { a: number; b: number },
+    { result: boolean }
 > = {
-    name: "threshold.branch",
+    name: "int.lessThan",
     inputSchema: {
         type: "object",
-        properties: {
-            value: { type: "number" },
-            threshold: { type: "number" },
-        },
-        required: ["value"],
+        required: ["a", "b"],
+        properties: { a: { type: "integer" }, b: { type: "integer" } },
     },
     outputSchema: {
         type: "object",
-        properties: {
-            value: { type: "number" },
-        },
+        required: ["result"],
+        properties: { result: { type: "boolean" } },
     },
-    branchLabels: ["high", "low"],
     async execute(input) {
-        const threshold = input.threshold ?? 0.5;
-        const branch = input.value >= threshold ? "high" : "low";
-        return { kind: "branch", branch, output: { value: input.value } };
+        return { kind: "ok", output: { result: input.a < input.b } };
     },
 };
 
-/**
- * Parse a template key path like `a.b`, `items[0]`, or `a[0].b` into
- * segments and traverse the object. Supports dot notation and bracket
- * notation for both object keys and array indices.
- */
-function resolveTemplatePath(
-    obj: Record<string, unknown>,
-    path: string,
-): unknown {
-    // Split on `.` and `[`, keeping bracket contents.
-    // "a.b[0].c" -> ["a", "b", "0", "c"]
-    const segments = path.split(/[.[\]]+/).filter((s) => s.length > 0);
-    let current: unknown = obj;
-    for (const seg of segments) {
-        if (current == null || typeof current !== "object") {
-            return undefined;
-        }
-        // Array index or object key
-        if (Array.isArray(current)) {
-            const idx = Number(seg);
-            if (Number.isNaN(idx)) {
-                return undefined;
-            }
-            current = current[idx];
-        } else {
-            current = (current as Record<string, unknown>)[seg];
-        }
-    }
-    return current;
-}
+export const listLength: TaskDefinition<
+    { list: unknown[] },
+    { length: number }
+> = {
+    name: "list.length",
+    inputSchema: {
+        type: "object",
+        required: ["list"],
+        properties: { list: { type: "array" } },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["length"],
+        properties: { length: { type: "integer" } },
+    },
+    async execute(input) {
+        return { kind: "ok", output: { length: input.list.length } };
+    },
+};
+
+export const listElementAt: TaskDefinition<
+    { list: unknown[]; index: number },
+    { element: unknown }
+> = {
+    name: "list.elementAt",
+    inputSchema: {
+        type: "object",
+        required: ["list", "index"],
+        properties: {
+            list: { type: "array" },
+            index: { type: "integer" },
+        },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["element"],
+        properties: { element: {} },
+    },
+    async execute(input) {
+        return { kind: "ok", output: { element: input.list[input.index] } };
+    },
+};
+
+export const listAppend: TaskDefinition<
+    { list: unknown[]; item: unknown },
+    { list: unknown[] }
+> = {
+    name: "list.append",
+    inputSchema: {
+        type: "object",
+        required: ["list", "item"],
+        properties: { list: { type: "array" }, item: {} },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["list"],
+        properties: { list: { type: "array" } },
+    },
+    async execute(input) {
+        return { kind: "ok", output: { list: [...input.list, input.item] } };
+    },
+};
+
+export const boolToLabel: TaskDefinition<
+    { value: boolean; ifTrue: string; ifFalse: string },
+    { label: string }
+> = {
+    name: "bool.toLabel",
+    inputSchema: {
+        type: "object",
+        required: ["value", "ifTrue", "ifFalse"],
+        properties: {
+            value: { type: "boolean" },
+            ifTrue: { type: "string" },
+            ifFalse: { type: "string" },
+        },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["label"],
+        properties: { label: { type: "string" } },
+    },
+    async execute(input) {
+        return {
+            kind: "ok",
+            output: { label: input.value ? input.ifTrue : input.ifFalse },
+        };
+    },
+};
+
+/** All standard-library tasks as an array, for bulk registration. */
+export const standardLibraryTasks: TaskDefinition[] = [
+    intAdd,
+    intLessThan,
+    listLength,
+    listElementAt,
+    listAppend,
+    boolToLabel,
+];

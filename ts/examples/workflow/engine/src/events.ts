@@ -3,6 +3,7 @@
 
 /**
  * Events emitted by the workflow engine during execution.
+ * Mirrors the observability contract in ir-v1.md section 5.6.
  */
 export type WorkflowEvent =
     | {
@@ -15,27 +16,40 @@ export type WorkflowEvent =
           type: "nodeStarted";
           runId: string;
           nodeId: string;
-          taskName: string;
-          /** 1-based visit count for this node in the current run. */
-          iteration: number;
+          scopePath: string[];
           timestamp: number;
       }
     | {
           type: "nodeCompleted";
           runId: string;
           nodeId: string;
-          taskName: string;
+          scopePath: string[];
           output: unknown;
-          /** 1-based visit count for this node in the current run. */
-          iteration: number;
           timestamp: number;
       }
     | {
           type: "nodeFailed";
           runId: string;
           nodeId: string;
-          taskName: string;
+          scopePath: string[];
           error: { message: string; data?: unknown };
+          timestamp: number;
+      }
+    | {
+          type: "loopIterationStarted";
+          runId: string;
+          nodeId: string;
+          scopePath: string[];
+          iteration: number;
+          timestamp: number;
+      }
+    | {
+          type: "loopExited";
+          runId: string;
+          nodeId: string;
+          scopePath: string[];
+          iteration: number;
+          output: unknown;
           timestamp: number;
       }
     | {
@@ -47,13 +61,7 @@ export type WorkflowEvent =
     | {
           type: "runFailed";
           runId: string;
-          nodeId: string;
           error: { message: string; data?: unknown };
-          timestamp: number;
-      }
-    | {
-          type: "runCancelled";
-          runId: string;
           timestamp: number;
       };
 

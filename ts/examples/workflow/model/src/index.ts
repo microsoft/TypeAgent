@@ -3,21 +3,20 @@
 
 export {
     JSONSchema,
-    InputMap,
+    Template,
+    TaskNode,
+    BranchNode,
+    LoopStateVar,
+    LoopNode,
     WorkflowNode,
-    WorkflowSpec,
-} from "./workflowSpec.js";
+    ConstantDef,
+    WorkflowIR,
+} from "./ir.js";
 
-export {
-    TaskResult,
-    SecretProvider,
-    TaskContext,
-    TaskDefinition,
-    WorkflowLogger,
-} from "./taskDefinition.js";
+export { TaskResult, TaskContext, TaskDefinition } from "./taskDefinition.js";
 
 export {
     ValidationError,
     ValidationResult,
-    validateWorkflowSpec,
+    validateWorkflowIR,
 } from "./validate.js";
