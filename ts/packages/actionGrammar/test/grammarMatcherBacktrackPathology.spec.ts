@@ -60,8 +60,8 @@ describe("Grammar Matcher - Backtrack Pathology", () => {
         const elapsedMs = Date.now() - t0;
         expect(matches).toEqual([]);
         // Pre-memoization this took ~12s.  With success memo
-        // landed it runs in well under a second; the bound is
-        // generous to absorb CI jitter and first-run JIT warmup.
+        // landed it runs in ~1-2s; the bound is generous enough
+        // to absorb CI jitter.
         expect(elapsedMs).toBeLessThan(3000);
     });
 });

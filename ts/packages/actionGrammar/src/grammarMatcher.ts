@@ -539,22 +539,24 @@ function copyValueIdChainWithDelta(
     if (chain === undefined) {
         return undefined;
     }
-    // Iterative copy preserves order without recursion-depth
-    // concerns.  Walks newest-first, builds a flat array, then
-    // re-cons's oldest-first onto `undefined`.
-    const nodes: ValueIdNode[] = [];
-    for (let n: ValueIdNode | undefined = chain; n !== undefined; n = n.prev) {
-        nodes.push(n);
-    }
+    // Single-pass iterative copy: walk newest-first, appending
+    // each node via a tail pointer so the output preserves the
+    // original order without a temporary array or recursion.
     let head: ValueIdNode | undefined;
-    for (let i = nodes.length - 1; i >= 0; i--) {
-        const n = nodes[i];
-        head = {
+    let tail: ValueIdNode | undefined;
+    for (let n: ValueIdNode | undefined = chain; n !== undefined; n = n.prev) {
+        const copy: ValueIdNode = {
             name: n.name,
             valueId: n.valueId + delta,
             wildcardTypeName: n.wildcardTypeName,
-            prev: head,
+            prev: undefined,
         };
+        if (tail === undefined) {
+            head = copy;
+        } else {
+            tail.prev = copy;
+        }
+        tail = copy;
     }
     return head;
 }
@@ -2156,6 +2158,10 @@ function matchStringPartWithWildcard(
             if (requiresValue(state, part)) {
                 addValue(state, part.variable, part.value.join(" "));
             }
+            // Always replaced (never mutated in place):
+            // `captureSuccessDelta` relies on pointer inequality
+            // with `marker.lastMatchedPartInfoAtEntry` to detect
+            // whether this field changed during the sub-rule.
             state.lastMatchedPartInfo = {
                 type: "string",
                 start: wildcardEnd,
@@ -2202,6 +2208,10 @@ function matchStringPartWithoutWildcard(
     if (requiresValue(state, part)) {
         addValue(state, part.variable, part.value.join(" "));
     }
+    // Always replaced (never mutated in place):
+    // `captureSuccessDelta` relies on pointer inequality
+    // with `marker.lastMatchedPartInfoAtEntry` to detect
+    // whether this field changed during the sub-rule.
     state.lastMatchedPartInfo = {
         type: "string",
         start: curr,
@@ -2385,6 +2395,8 @@ function matchVarNumberPartWithWildcard(
             const valueId = addValueId(state, part.variable);
             if (valueId !== undefined) {
                 addValueWithId(state, valueId, n, false);
+                // Always replaced (never mutated in place):
+                // `captureSuccessDelta` relies on pointer inequality.
                 state.lastMatchedPartInfo = {
                     type: "number",
                     start: wildcardEnd,
@@ -2439,6 +2451,8 @@ function matchVarNumberPartWithoutWildcard(
     const valueId = addValueId(state, part.variable);
     if (valueId !== undefined) {
         addValueWithId(state, valueId, n, false);
+        // Always replaced (never mutated in place):
+        // `captureSuccessDelta` relies on pointer inequality.
         state.lastMatchedPartInfo = {
             type: "number",
             start: curr,
@@ -3036,6 +3050,9 @@ function enterDispatchPart(
             : `${getStateName(state)}<dispatch>`;
         if (part.tailCall) {
             enterTailAlternation(state, part, all, namePrefix);
+            // Tail calls always succeed: they replace the current
+            // rule in place (no parent frame push, no memoization)
+            // and let the main loop re-enter matching.
             return true;
         }
         return enterRulesAlternation(state, part, all, namePrefix);
@@ -3105,6 +3122,9 @@ function enterDispatchPart(
         : `${getStateName(state)}<dispatch>`;
     if (part.tailCall) {
         enterTailAlternation(state, part, effective, namePrefix);
+        // Tail calls always succeed: they replace the current
+        // rule in place (no parent frame push, no memoization)
+        // and let the main loop re-enter matching.
         return true;
     }
     return enterRulesAlternation(state, part, effective, namePrefix);

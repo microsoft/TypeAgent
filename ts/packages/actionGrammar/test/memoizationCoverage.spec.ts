@@ -16,6 +16,10 @@
  *   7. noSuccessCache boundaries (repeat, pendingWildcard).
  *   8. Replay LIFO ordering with 3+ alternation members.
  *   9. Pending wildcard delta capture.
+ *  10. Pending wildcard delta capture (continued).
+ *  11. lastMatchedPartInfo preservation in deltas.
+ *  12. Policy + memoization cross-product parity.
+ *  13. Suppression with active memo frames.
  */
 
 import { loadGrammarRules } from "../src/grammarLoader.js";
@@ -664,4 +668,95 @@ describe("policy + memoization cross-product parity", () => {
             }, 5000);
         }
     }
+});
+
+// ---------------------------------------------------------------
+// 13. Suppression with active memo frames
+// ---------------------------------------------------------------
+
+describe("suppression preserves memo frames", () => {
+    // When a non-exhaustive policy suppresses backtrack frames
+    // after a successful match, memoMarker and memoReplay frames
+    // must survive suppression.  Dropping a memoMarker would
+    // prevent failure-cache population; dropping a memoReplay
+    // would lose cached alternative parses.
+
+    it("wildcardPolicy shortest with rule reuse", () => {
+        // <Inner> is referenced twice; the second entry may hit
+        // a memoReplay frame.  wildcardPolicy: shortest suppresses
+        // wildcard frames but must NOT suppress memo frames.
+        const g = `
+            <Inner> = $(x:string) -> x;
+            <Start> = $(w) <Inner> and <Inner> -> true;
+        `;
+        const grammar = loadGrammarRules("test.grammar", g);
+
+        const memoOn = match(grammar, "pre hello and world", {
+            wildcardPolicy: "shortest",
+        });
+        const memoOff = match(grammar, "pre hello and world", {
+            wildcardPolicy: "shortest",
+            memoization: false,
+        });
+
+        expect(memoOn).toStrictEqual(memoOff);
+    });
+
+    it("optionalPolicy preferTake with memoized sub-rule", () => {
+        const g = `
+            <Tag> = $(t:string) -> t;
+            <Start> = (hey)? <Tag> and <Tag> -> true;
+        `;
+        const grammar = loadGrammarRules("test.grammar", g);
+
+        const memoOn = match(grammar, "hey alpha and beta", {
+            optionalPolicy: "preferTake",
+        });
+        const memoOff = match(grammar, "hey alpha and beta", {
+            optionalPolicy: "preferTake",
+            memoization: false,
+        });
+
+        expect(memoOn).toStrictEqual(memoOff);
+    });
+
+    it("repeatPolicy greedy with memoized sub-rule", () => {
+        const g = `
+            <Item> = $(v:string) -> v;
+            <Start> = (go)+ <Item> and <Item> -> true;
+        `;
+        const grammar = loadGrammarRules("test.grammar", g);
+
+        const memoOn = match(grammar, "go go alpha and beta", {
+            repeatPolicy: "greedy",
+        });
+        const memoOff = match(grammar, "go go alpha and beta", {
+            repeatPolicy: "greedy",
+            memoization: false,
+        });
+
+        expect(memoOn).toStrictEqual(memoOff);
+    });
+
+    it("all suppression axes combined", () => {
+        const g = `
+            <R> = $(x:string) -> x;
+            <Start> = (please)? $(w) (<R>)+ end -> true;
+        `;
+        const grammar = loadGrammarRules("test.grammar", g);
+
+        const opts: GrammarMatchOptions = {
+            wildcardPolicy: "shortest",
+            optionalPolicy: "preferTake",
+            repeatPolicy: "greedy",
+        };
+
+        const memoOn = match(grammar, "please stuff alpha beta end", opts);
+        const memoOff = match(grammar, "please stuff alpha beta end", {
+            ...opts,
+            memoization: false,
+        });
+
+        expect(memoOn).toStrictEqual(memoOff);
+    });
 });
