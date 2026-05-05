@@ -1511,4 +1511,113 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(output).toContain("add feature to typechat");
         });
     });
+
+    describe("D4 commit-summary workflow", () => {
+        function loadD4(): WorkflowIR {
+            const __dirname = dirname(fileURLToPath(import.meta.url));
+            const path = resolve(
+                __dirname,
+                "../../../workflows/d4-commit-summary.json",
+            );
+            return JSON.parse(readFileSync(path, "utf8")) as WorkflowIR;
+        }
+
+        it("validates against all builtins", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir = loadD4();
+            const result = await eng.run(ir, { repoPath: "/tmp" });
+
+            if (!result.success) {
+                expect(result.error?.message).not.toContain(
+                    "Validation failed",
+                );
+            }
+        });
+
+        it("runs with mock shell.exec and mock llm.generate", async () => {
+            const mockShellExec: TaskDefinition = {
+                name: "shell.exec",
+                inputSchema: {
+                    type: "object",
+                    required: ["command"],
+                    properties: {
+                        command: { type: "string" },
+                        args: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        cwd: { type: "string" },
+                    },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["stdout", "stderr", "exitCode"],
+                    properties: {
+                        stdout: { type: "string" },
+                        stderr: { type: "string" },
+                        exitCode: { type: "integer" },
+                    },
+                },
+                async execute() {
+                    return {
+                        kind: "ok",
+                        output: {
+                            stdout: "diff --git a/foo.ts b/foo.ts\n+added line\n",
+                            stderr: "",
+                            exitCode: 0,
+                        },
+                    };
+                },
+            };
+
+            const mockLlmGenerate: TaskDefinition = {
+                name: "llm.generate",
+                inputSchema: {
+                    type: "object",
+                    required: ["prompt"],
+                    properties: { prompt: { type: "string" } },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["text"],
+                    properties: { text: { type: "string" } },
+                },
+                async execute(input: any) {
+                    // Verify the prompt contains the diff
+                    const prompt = input.prompt as string;
+                    expect(prompt).toContain("diff --git");
+                    expect(prompt).toContain("conventional commit");
+                    return {
+                        kind: "ok",
+                        output: {
+                            text: "feat(foo): add new line\n\nAdded a line to foo.ts.",
+                        },
+                    };
+                },
+            };
+
+            const reg = makeRegistry(
+                ...standardLibraryTasks,
+                mockShellExec,
+                mockLlmGenerate,
+                ...allBuiltinTasks.filter(
+                    (t) =>
+                        t.name !== "shell.exec" &&
+                        t.name !== "llm.generate" &&
+                        !standardLibraryTasks.some((s) => s.name === t.name),
+                ),
+            );
+            const eng = new WorkflowEngine(reg);
+
+            const ir = loadD4();
+            const result = await eng.run(ir, { repoPath: "/repos/myproject" });
+
+            expect(result.success).toBe(true);
+            const output = result.output as { message: string };
+            expect(output.message).toContain("feat(foo)");
+            expect(output.message).toContain("add new line");
+        });
+    });
 });

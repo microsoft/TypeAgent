@@ -893,6 +893,9 @@ importers:
 
   examples/workflow/engine:
     dependencies:
+      aiclient:
+        specifier: workspace:*
+        version: link:../../../packages/aiclient
       ajv:
         specifier: ^8.17.1
         version: 8.18.0
@@ -917,10 +920,6 @@ importers:
         version: 5.4.5
 
   examples/workflow/model:
-    dependencies:
-      ajv:
-        specifier: ^8.17.1
-        version: 8.18.0
     devDependencies:
       '@types/jest':
         specifier: ^29.5.7

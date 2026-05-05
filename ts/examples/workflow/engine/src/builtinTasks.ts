@@ -13,6 +13,7 @@
 
 import { execFile } from "node:child_process";
 import { TaskDefinition } from "workflow-model";
+import { openai } from "aiclient";
 
 export const intAdd: TaskDefinition<
     { a: number; b: number },
@@ -220,6 +221,37 @@ export const shellExec: TaskDefinition<
     },
 };
 
+export const llmGenerate: TaskDefinition<
+    { prompt: string; endpoint?: string },
+    { text: string }
+> = {
+    name: "llm.generate",
+    inputSchema: {
+        type: "object",
+        required: ["prompt"],
+        properties: {
+            prompt: { type: "string" },
+            endpoint: { type: "string" },
+        },
+    },
+    outputSchema: {
+        type: "object",
+        required: ["text"],
+        properties: { text: { type: "string" } },
+    },
+    async execute(input) {
+        const model = openai.createChatModel(input.endpoint);
+        const result = await model.complete(input.prompt);
+        if (!result.success) {
+            return {
+                kind: "fail",
+                error: { message: result.message },
+            };
+        }
+        return { kind: "ok", output: { text: result.data } };
+    },
+};
+
 // ---- Utility tasks ----
 
 export const textTemplate: TaskDefinition<
@@ -289,6 +321,7 @@ export const standardLibraryTasks: TaskDefinition[] = [
 export const allBuiltinTasks: TaskDefinition[] = [
     ...standardLibraryTasks,
     shellExec,
+    llmGenerate,
     textTemplate,
     stringJoin,
 ];

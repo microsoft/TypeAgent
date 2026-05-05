@@ -12,6 +12,7 @@ export {
     listAppend,
     boolToLabel,
     shellExec,
+    llmGenerate,
     textTemplate,
     stringJoin,
     standardLibraryTasks,
