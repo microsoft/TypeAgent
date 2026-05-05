@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { randomUUID } from "node:crypto";
+import AjvModule from "ajv";
 import {
     WorkflowIR,
     WorkflowNode,
@@ -17,6 +18,8 @@ import {
 } from "workflow-model";
 import { TaskRegistry } from "./taskRegistry.js";
 import { WorkflowEvent, WorkflowEventListener } from "./events.js";
+
+const AjvConstructor = (AjvModule as any).default ?? AjvModule;
 
 // ---- Scope context ----
 
@@ -204,6 +207,7 @@ export interface RunResult {
 
 export class WorkflowEngine {
     private listeners: WorkflowEventListener[] = [];
+    private ajv = new AjvConstructor({ strict: false });
 
     constructor(private readonly registry: TaskRegistry) {}
 
@@ -478,6 +482,17 @@ export class WorkflowEngine {
                     nodeId,
                     resolvedInput,
                 );
+            }
+
+            // Runtime output schema validation.
+            if (node.outputSchema) {
+                const validate = this.ajv.compile(node.outputSchema);
+                if (!validate(result.output)) {
+                    const msg = this.ajv.errorsText(validate.errors);
+                    throw new EngineError(
+                        `Output schema violation at "${nodeId}" (task "${node.task}"): ${msg}`,
+                    );
+                }
             }
 
             if (node.bind) {

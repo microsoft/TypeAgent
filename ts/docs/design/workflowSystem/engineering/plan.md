@@ -45,18 +45,18 @@ from a terminal and get a useful result.
 Implement real tasks as builtins registered via `registerAllTasks()`.
 No plugin mechanism; all tasks live in the engine package.
 
-| Task            | Implementation             | Notes                                                                       |
-| --------------- | -------------------------- | --------------------------------------------------------------------------- |
-| `shell.exec`    | `child_process.execFile`   | Returns stdout, stderr, exit; no sandboxing in v1 (see §9 security note)    |
-| `llm.generate`  | `aiclient`                 | Prompt + text in, text out; model config from `ts/.env` per repo convention |
-| `file.read`     | `fs.readFile`              | Path in, contents out                                                       |
-| `file.write`    | `fs.writeFile`             | Path + content in, path out                                                 |
-| `file.glob`     | `glob` or `fs` + pattern   | Pattern in, path list out                                                   |
-| `http.get`      | `fetch()`                  | URL in, body out                                                            |
-| `text.template` | Mustache-style interpolate | Template + vars in, string out                                              |
-| `json.parse`    | `JSON.parse`               | String in, object out                                                       |
-| `string.split`  | `String.split`             | String + delimiter in, list out                                             |
-| `string.join`   | `Array.join`               | List + delimiter in, string out                                             |
+| Task             | Implementation             | Notes                                                                       |
+| ---------------- | -------------------------- | --------------------------------------------------------------------------- |
+| `shell.exec`     | `child_process.execFile`   | Returns stdout, stderr, exit; no sandboxing in v1 (see §9 security note)    |
+| `llm.generate`   | `aiclient`                 | Prompt + text in, text out; model config from `ts/.env` per repo convention |
+| `file.read`      | `fs.readFile`              | Path in, contents out                                                       |
+| `file.write`     | `fs.writeFile`             | Path + content in, path out                                                 |
+| ~~`file.glob`~~  | ~~`glob` or `fs`~~         | Dropped: no workflow needs it; `shell.exec` covers the use case             |
+| `http.get`       | `fetch()`                  | URL in, body out                                                            |
+| `text.template`  | Mustache-style interpolate | Template + vars in, string out                                              |
+| ~~`json.parse`~~ | ~~`JSON.parse`~~           | Dropped: JSON flows natively through templates                              |
+| `string.split`   | `String.split`             | String + delimiter in, list out                                             |
+| `string.join`    | `Array.join`               | List + delimiter in, string out                                             |
 
 Plus the 6 existing stdlib tasks: `int.add`, `int.lessThan`,
 `list.length`, `list.elementAt`, `list.append`, `bool.toLabel`.
@@ -237,16 +237,16 @@ and which do not.
 
 #### Core structural choices
 
-| Choice                                       | Validated? | How                                                            | Notes                                                   |
-| -------------------------------------------- | ---------- | -------------------------------------------------------------- | ------------------------------------------------------- |
-| Three node kinds (task/branch/loop)          | Yes        | D1 (loop), D5 (branch), D4 (task)                              | All three exercised by real workflows                   |
-| Four namespaces (input/constant/scope/state) | Yes        | All workflows use input/constant/scope; D1 uses state          |                                                         |
-| `next` as explicit control edge              | Yes        | All workflows                                                  |                                                         |
-| Closed loop scopes                           | Yes        | D1 loop body cannot reference outer bindings                   |                                                         |
-| `onError` edge model                         | Partially  | D8 exercises recovery; A4 test covers placeholder substitution | No nested onError or loop-level onError tested          |
-| Per-node schemas (0003)                      | Yes        | Schema validation at load time + runtime (§7.3 item 1)         |                                                         |
-| Dominator-based reference validity           | **No**     | Deferred to post-v1                                            | Designed but not implemented                            |
-| Structural subtyping over JSON Schema        | Partially  | Runtime via ajv; static subtype checking at load time          | Depth of subtype checking depends on library evaluation |
+| Choice                                       | Validated? | How                                                            | Notes                                                            |
+| -------------------------------------------- | ---------- | -------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Three node kinds (task/branch/loop)          | Yes        | D1 (loop), D5 (branch), D4 (task)                              | All three exercised by real workflows                            |
+| Four namespaces (input/constant/scope/state) | Yes        | All workflows use input/constant/scope; D1 uses state          |                                                                  |
+| `next` as explicit control edge              | Yes        | All workflows                                                  |                                                                  |
+| Closed loop scopes                           | Yes        | D1 loop body cannot reference outer bindings                   |                                                                  |
+| `onError` edge model                         | Partially  | D8 exercises recovery; A4 test covers placeholder substitution | No nested onError or loop-level onError tested                   |
+| Per-node schemas (0003)                      | Yes        | Schema validation at load time + runtime (§7.3 item 1)         | Runtime via ajv; static path checking implemented                |
+| Dominator-based reference validity           | **No**     | Deferred to post-v1                                            | Designed but not implemented                                     |
+| Structural subtyping over JSON Schema        | Partially  | Static path checking + runtime output validation               | Full subtype depth (covariance) deferred; path existence checked |
 
 #### Decision records
 
@@ -302,6 +302,67 @@ V1 is done when all of the following are true:
 - Dominator-based static reference validity analysis.
 - Event stream consumed by anything (emitted but not persisted or
   displayed).
+
+## 8a. Exit assessment
+
+### Criterion 4: Builtin task library
+
+14 tasks implemented (8 new + 6 stdlib). Two tasks from the phase 2
+table were not built:
+
+- `file.glob`: no workflow needed it. File listing can be done via
+  `shell.exec` with `find` or `ls`.
+- `json.parse`: no workflow needed it. JSON data flows through
+  templates natively (the IR is JSON), so parsing is only needed for
+  string-encoded JSON from external sources, which none of the four
+  workflows encounter.
+
+Both are dropped from v1 scope. If a future workflow needs them, they
+are trivial to add.
+
+### Criterion 9: Stdlib surface area
+
+New pure tasks added beyond the original 6 stdlib: `text.template`,
+`string.join`, `string.split` (3 tasks). All three are genuine
+utility operations that would be one-liners with expressions. The
+count is exactly at the threshold (3). Decision 0006 (no expressions)
+holds: the stdlib approach works, though the threshold confirms that
+expressions would reduce verbosity. This is expected and is what the
+DSL layer addresses.
+
+### Criterion 10: Engine implementation ease
+
+**Friction points encountered:**
+
+1. **`exactOptionalPropertyTypes` interaction with `fetch()` headers.**
+   The monorepo's strict TS config means you cannot assign `undefined`
+   to an optional property. Workaround: conditional spread. This is a
+   TypeScript strictness issue, not an IR design problem.
+
+2. **Loop output resolves in body scope, not state.** The IR spec
+   says loop `output` resolves in the body scope at `@exit`. This is
+   correct but initially non-obvious: state reflects the _start_ of
+   the last iteration, while body bindings reflect the _end_. Once
+   understood, the engine code is straightforward. The spec's choice
+   is the right one.
+
+3. **No IR-level conditional expressions.** Several workflows need
+   "if X then do Y" patterns. The IR requires encoding this as
+   `bool.toLabel` + branch node, which is verbose but mechanical.
+   The engine handles it cleanly. This is a verbosity issue for
+   authors, not a complexity issue for the engine.
+
+4. **Template model worked without surprises.** Nested `$from`
+   references and literal pass-through compose naturally. The
+   recursive `resolveTemplate` is ~50 lines and handles all cases.
+   No `$literal` escape was needed by any real workflow.
+
+**Assessment:** The IR serves the engine implementor audience well.
+The engine is 520 lines (runner.ts) with no non-obvious logic. All
+IR features map directly to engine operations. The only complexity
+is in the loop construct, which is inherently complex in any
+representation. No cases where the engine must silently compensate
+for IR awkwardness.
 
 ## 9. What comes after
 

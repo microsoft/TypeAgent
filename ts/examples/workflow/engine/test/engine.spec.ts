@@ -2539,4 +2539,240 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(result.error?.message).toContain("approval not granted");
         });
     });
+
+    describe("schema validation", () => {
+        it("detects runtime output schema violation", async () => {
+            // A task that returns output not matching its declared schema.
+            const badTask: TaskDefinition = {
+                name: "bad.output",
+                inputSchema: { type: "object", properties: {} },
+                outputSchema: {
+                    type: "object",
+                    required: ["value"],
+                    properties: { value: { type: "integer" } },
+                },
+                async execute() {
+                    // Returns a string instead of the required integer.
+                    return { kind: "ok", output: { value: "not-an-integer" } };
+                },
+            };
+
+            const reg = makeRegistry(...standardLibraryTasks, badTask);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "schemaViolation",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "bad.output",
+                        inputSchema: { type: "object", properties: {} },
+                        outputSchema: {
+                            type: "object",
+                            required: ["value"],
+                            properties: { value: { type: "integer" } },
+                        },
+                        inputs: {},
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as any,
+            };
+
+            const result = await eng.run(ir, {});
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("Output schema violation");
+            expect(result.error?.message).toContain("integer");
+        });
+
+        it("passes when output conforms to schema", async () => {
+            const goodTask: TaskDefinition = {
+                name: "good.output",
+                inputSchema: { type: "object", properties: {} },
+                outputSchema: {
+                    type: "object",
+                    required: ["value"],
+                    properties: { value: { type: "integer" } },
+                },
+                async execute() {
+                    return { kind: "ok", output: { value: 42 } };
+                },
+            };
+
+            const reg = makeRegistry(...standardLibraryTasks, goodTask);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "schemaOk",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "good.output",
+                        inputSchema: { type: "object", properties: {} },
+                        outputSchema: {
+                            type: "object",
+                            required: ["value"],
+                            properties: { value: { type: "integer" } },
+                        },
+                        inputs: {},
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as any,
+            };
+
+            const result = await eng.run(ir, {});
+            expect(result.success).toBe(true);
+            expect((result.output as any).value).toBe(42);
+        });
+
+        it("static validator detects invalid scope path reference", async () => {
+            const { validateWorkflowIR } = await import("workflow-model");
+
+            // Node "consumer" references $from: "scope", name: "data",
+            // path: ["nonexistent"] - but the producer's outputSchema
+            // has no such property.
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "badRef",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    producer: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: { a: 1 as any, b: 2 as any },
+                        next: "consumer",
+                        bind: "data",
+                    },
+                    consumer: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: {
+                            a: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["nonexistent"],
+                            } as any,
+                            b: 1 as any,
+                        },
+                        bind: "final",
+                    },
+                },
+                entry: "producer",
+                output: { $from: "scope", name: "final" } as any,
+            };
+
+            const tasks = new Map(standardLibraryTasks.map((t) => [t.name, t]));
+            const validation = validateWorkflowIR(ir, tasks);
+            expect(validation.valid).toBe(false);
+            expect(validation.errors[0].message).toContain("nonexistent");
+            expect(validation.errors[0].message).toContain(
+                "not declared in producer",
+            );
+        });
+
+        it("static validator passes valid scope path reference", async () => {
+            const { validateWorkflowIR } = await import("workflow-model");
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "goodRef",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    producer: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: { a: 1 as any, b: 2 as any },
+                        next: "consumer",
+                        bind: "data",
+                    },
+                    consumer: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: {
+                            a: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["result"],
+                            } as any,
+                            b: 1 as any,
+                        },
+                        bind: "final",
+                    },
+                },
+                entry: "producer",
+                output: { $from: "scope", name: "final" } as any,
+            };
+
+            const tasks = new Map(standardLibraryTasks.map((t) => [t.name, t]));
+            const validation = validateWorkflowIR(ir, tasks);
+            expect(validation.valid).toBe(true);
+        });
+    });
 });
