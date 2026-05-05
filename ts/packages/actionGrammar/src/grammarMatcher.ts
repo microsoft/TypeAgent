@@ -1746,6 +1746,20 @@ function usesImplicitDefault(s: ImplicitDefaultCarrier): boolean {
     return s.value === undefined && s.parts.length === 1;
 }
 
+// True when matching should capture a value for this part: the state
+// is tracking values (valueIds !== null) AND either the part has an
+// explicit capture variable or the enclosing rule uses the
+// implicit-default (single-part, no value expression).
+function requiresValue(
+    state: ImplicitDefaultCarrier & Pick<PendingMatchState, "valueIds">,
+    part: { variable?: string | undefined },
+): boolean {
+    return (
+        state.valueIds !== null &&
+        (part.variable !== undefined || usesImplicitDefault(state))
+    );
+}
+
 export function nextNonSeparatorIndex(request: string, index: number) {
     if (request.length <= index) {
         return request.length;
@@ -2139,10 +2153,7 @@ function matchStringPartWithWildcard(
             // single-part child rule would bypass the default value
             // assignment and cause "No value assign to variable" at
             // finalizeNestedRule time.
-            if (
-                state.valueIds !== null &&
-                (part.variable !== undefined || usesImplicitDefault(state))
-            ) {
+            if (requiresValue(state, part)) {
                 addValue(state, part.variable, part.value.join(" "));
             }
             state.lastMatchedPartInfo = {
@@ -2188,14 +2199,7 @@ function matchStringPartWithoutWildcard(
 
     debugMatch(state, `Matched string ${part.value.join(" ")} to ${newIndex}`);
 
-    if (
-        state.valueIds !== null &&
-        (part.variable !== undefined || usesImplicitDefault(state))
-    ) {
-        // Explicit capture variable on the StringPart - write the joined
-        // matched tokens into that named slot.  Otherwise fall through to
-        // the implicit-default rule for single-part rules without a value
-        // expression.
+    if (requiresValue(state, part)) {
         addValue(state, part.variable, part.value.join(" "));
     }
     state.lastMatchedPartInfo = {
@@ -2720,6 +2724,108 @@ export function matchState(state: MatchState, request: string) {
 }
 
 /**
+ * Consult the memo cache for a `(rules, index, leading, ...)` key.
+ *
+ * Returns:
+ *  - `"failed"`: cached intrinsic failure; caller should return false.
+ *  - `"replayed"`: cached success deltas were replayed onto `state`;
+ *    caller should return true.
+ *  - `MemoMarkerBacktrack`: fresh marker pushed onto the backtracks
+ *    chain (miss path); caller continues with normal entry.
+ *  - `undefined`: memoization is disabled; caller continues with
+ *    normal entry (no marker).
+ */
+function memoLookup(
+    state: MatchState,
+    rules: ReadonlyArray<GrammarRule>,
+    childLeadingSpacingMode: CompiledSpacingMode,
+    pendingWildcardActive: boolean,
+    repeat: boolean,
+    requireValue: boolean,
+    isCarrier: boolean,
+): "failed" | "replayed" | MemoMarkerBacktrack | undefined {
+    if (!state.memoization) {
+        return undefined;
+    }
+    const innerCache = state.memoCache.get(rules);
+    const cached = innerCache?.get(
+        memoCacheKey(
+            state.index,
+            childLeadingSpacingMode,
+            pendingWildcardActive,
+            requireValue,
+            isCarrier,
+        ),
+    );
+    if (cached === "failed") {
+        debugMatchRaw(
+            `memoMarker: cache hit for rules@${state.index}|${childLeadingSpacingMode}|${pendingWildcardActive ? 1 : 0}|${requireValue ? 1 : 0}|${isCarrier ? 1 : 0} - short-circuit`,
+        );
+        return "failed";
+    }
+    if (cached !== undefined && !repeat && !pendingWildcardActive) {
+        // SUCCESS replay path.  Captured deltas are guaranteed
+        // sound for non-repeat entries with no active pending
+        // wildcard; markers under those conditions never store an
+        // array (see the store branch in `tryNextBacktrack`).
+        // Snapshot the live OUTER state so each replay frame can
+        // reset and re-apply its own delta on backtrack.  The
+        // first delta is applied live; deltas[1..N-1] are pushed
+        // in REVERSE so LIFO pop yields source order.
+        const baseSnapshot = forkMatchState(state);
+        // Push (N-1) replay frames first so the first delta we
+        // apply live executes against the same chain shape
+        // (`state.backtracks` already extended) the original code
+        // path produces (memoMarker + alternation cursor below
+        // current top).  In the replay world there is no marker
+        // and no cursor: only the replay frames.
+        let chain = state.backtracks;
+        for (let i = cached.length - 1; i >= 1; i--) {
+            chain = {
+                origin: "memoReplay",
+                snapshot: baseSnapshot,
+                delta: cached[i],
+                prev: chain,
+            };
+        }
+        state.backtracks = chain;
+        applyDelta(state, cached[0]);
+        debugMatchRaw(
+            `memoReplay: cache hit for rules@${state.index - cached[0].endOffset}|${childLeadingSpacingMode}|0 - replaying ${cached.length} delta(s)`,
+        );
+        return "replayed";
+    }
+    // Push the memo marker BEFORE the alternation cursor so the
+    // cursor sits on top.  Order on chain after this enter (top to
+    // bottom): [optional/wildcard/repeat frames pushed during body
+    // matching] -> alternation cursor (if any) -> memoMarker -> ...
+    // outer chain.  When all body frames drain and the cursor is
+    // exhausted, the memoMarker becomes head and `tryNextBacktrack`
+    // pops it, populating the failure cache if no member ever
+    // flipped its flag.
+    const marker: MemoMarkerBacktrack = {
+        origin: "memoMarker",
+        rules,
+        index: state.index,
+        leading: childLeadingSpacingMode,
+        pendingWildcardActive,
+        anyMemberFinalized: false,
+        valuesAtEntry: state.values,
+        valueIdsAtEntry: state.valueIds,
+        nextValueIdAtEntry: state.nextValueId,
+        lastMatchedPartInfoAtEntry: state.lastMatchedPartInfo,
+        carrier: isCarrier,
+        requireValue,
+        noSuccessCache:
+            repeat || pendingWildcardActive || state.valueIds === null,
+        successes: [],
+        prev: state.backtracks,
+    };
+    state.backtracks = marker;
+    return marker;
+}
+
+/**
  * Common entry path for non-tail `RulesPart` alternations (with or
  * without a `dispatch` index).  Sets up the parent frame, seeds the
  * live state with rule 0, and pushes a single compressed alternation
@@ -2731,18 +2837,6 @@ export function matchState(state: MatchState, request: string) {
  * `tailCall` is intentionally NOT handled here - tail entry skips
  * the parent-frame push and lives in `enterTailRulesPart`.
  *
- * Failure memoization: this helper is the SOLE non-tail entry
- * point for `RulesPart` alternations (the dispatched path also
- * funnels through here via `enterDispatchPart`).  At entry we
- * consult `state.memoCache` keyed by `(rules-array-identity,
- * input-index, leadingSpacingMode, pendingWildcardActive)`; on a
- * hit we return `false` immediately without setting up live state.
- * On a miss we push a `MemoMarkerBacktrack` sentinel onto the
- * backtracks chain BEFORE the alternation cursor and link it from
- * the freshly built `parent` so `matchState` can flip its
- * `anyMemberFinalized` flag at body completion.  Tail entries are
- * not memoized (see `enterTailRulesPart`).
- *
  * Returns `true` when live state was set up (caller continues
  * matching), `false` when the cache short-circuited the entry
  * (caller treats as a match failure).
@@ -2753,13 +2847,6 @@ function enterRulesAlternation(
     rules: ReadonlyArray<GrammarRule>,
     namePrefix: string,
 ): boolean {
-    // Failure-cache lookup before any state mutation.  Same key
-    // shape as the population path in `tryNextBacktrack`'s
-    // memoMarker branch.  `valueIds` is intentionally absent from
-    // the key: matching itself never reads the binding chain
-    // (only top-level value extraction does), so two entries
-    // differing only in outer bindings produce identical internal
-    // parses.
     const childLeadingSpacingMode = leadingSpacingMode(state);
     const pendingWildcardActive = state.pendingWildcard !== undefined;
     const repeat = !!part.repeat;
@@ -2768,87 +2855,26 @@ function enterRulesAlternation(
     // structurally different captured deltas (the no-track case
     // skips `addValueId`).
     const isCarrier = part.variable === undefined && usesImplicitDefault(state);
-    const requireValue =
-        state.valueIds !== null &&
-        (part.variable !== undefined || usesImplicitDefault(state));
-    let memoMarker: MemoMarkerBacktrack | undefined;
-    if (state.memoization) {
-        const innerCache = state.memoCache.get(rules);
-        const cached = innerCache?.get(
-            memoCacheKey(
-                state.index,
-                childLeadingSpacingMode,
-                pendingWildcardActive,
-                requireValue,
-                isCarrier,
-            ),
-        );
-        if (cached === "failed") {
-            debugMatchRaw(
-                `memoMarker: cache hit for rules@${state.index}|${childLeadingSpacingMode}|${pendingWildcardActive ? 1 : 0}|${requireValue ? 1 : 0}|${isCarrier ? 1 : 0} - short-circuit`,
-            );
-            return false;
-        }
-        if (cached !== undefined && !repeat && !pendingWildcardActive) {
-            // SUCCESS replay path.  Captured deltas are guaranteed
-            // sound for non-repeat entries with no active pending
-            // wildcard; markers under those conditions never store an
-            // array (see the store branch in `tryNextBacktrack`).
-            // Snapshot the live OUTER state so each replay frame can
-            // reset and re-apply its own delta on backtrack.  The
-            // first delta is applied live; deltas[1..N-1] are pushed
-            // in REVERSE so LIFO pop yields source order.
-            const baseSnapshot = forkMatchState(state);
-            // Push (N-1) replay frames first so the first delta we
-            // apply live executes against the same chain shape
-            // (`state.backtracks` already extended) the original code
-            // path produces (memoMarker + alternation cursor below
-            // current top).  In the replay world there is no marker
-            // and no cursor: only the replay frames.
-            let chain = state.backtracks;
-            for (let i = cached.length - 1; i >= 1; i--) {
-                chain = {
-                    origin: "memoReplay",
-                    snapshot: baseSnapshot,
-                    delta: cached[i],
-                    prev: chain,
-                };
-            }
-            state.backtracks = chain;
-            applyDelta(state, cached[0]);
-            debugMatchRaw(
-                `memoReplay: cache hit for rules@${state.index - cached[0].endOffset}|${childLeadingSpacingMode}|0 - replaying ${cached.length} delta(s)`,
-            );
-            return true;
-        }
-        // Push the memo marker BEFORE the alternation cursor so the
-        // cursor sits on top.  Order on chain after this enter (top to
-        // bottom): [optional/wildcard/repeat frames pushed during body
-        // matching] -> alternation cursor (if any) -> memoMarker -> ...
-        // outer chain.  When all body frames drain and the cursor is
-        // exhausted, the memoMarker becomes head and `tryNextBacktrack`
-        // pops it, populating the failure cache if no member ever
-        // flipped its flag.
-        memoMarker = {
-            origin: "memoMarker",
-            rules,
-            index: state.index,
-            leading: childLeadingSpacingMode,
-            pendingWildcardActive,
-            anyMemberFinalized: false,
-            valuesAtEntry: state.values,
-            valueIdsAtEntry: state.valueIds,
-            nextValueIdAtEntry: state.nextValueId,
-            lastMatchedPartInfoAtEntry: state.lastMatchedPartInfo,
-            carrier: isCarrier,
-            requireValue,
-            noSuccessCache:
-                repeat || pendingWildcardActive || state.valueIds === null,
-            successes: [],
-            prev: state.backtracks,
-        };
-        state.backtracks = memoMarker;
+    const requireValue = requiresValue(state, part);
+
+    const memo = memoLookup(
+        state,
+        rules,
+        childLeadingSpacingMode,
+        pendingWildcardActive,
+        repeat,
+        requireValue,
+        isCarrier,
+    );
+    if (memo === "failed") {
+        return false;
     }
+    if (memo === "replayed") {
+        return true;
+    }
+    // memo is either the MemoMarkerBacktrack (miss path) or
+    // undefined (memoization disabled).
+    const memoMarker: MemoMarkerBacktrack | undefined = memo;
 
     // Save the current state to be restored after finishing the nested rule.
     const parent: ParentMatchState = {
