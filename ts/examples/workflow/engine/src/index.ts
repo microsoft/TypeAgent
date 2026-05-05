@@ -11,5 +11,9 @@ export {
     listElementAt,
     listAppend,
     boolToLabel,
+    shellExec,
+    textTemplate,
+    stringJoin,
     standardLibraryTasks,
+    allBuiltinTasks,
 } from "./builtinTasks.js";

@@ -15,7 +15,11 @@ import {
     WorkflowEngine,
     WorkflowEvent,
     standardLibraryTasks,
+    allBuiltinTasks,
 } from "../src/index.js";
+import { readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // ---- Mock domain tasks ----
 
@@ -1065,6 +1069,446 @@ describe("WorkflowEngine (IR v1)", () => {
             });
             expect(result.success).toBe(false);
             expect(result.error?.message).toContain("not registered");
+        });
+    });
+
+    describe("text.template task", () => {
+        it("interpolates variables", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "templateTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    tmpl: {
+                        kind: "task",
+                        task: "text.template",
+                        inputSchema: {
+                            type: "object",
+                            required: ["template", "vars"],
+                            properties: {
+                                template: { type: "string" },
+                                vars: { type: "object" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["text"],
+                            properties: { text: { type: "string" } },
+                        },
+                        inputs: {
+                            template:
+                                "Hello {{name}}, you have {{count}} items",
+                            vars: {
+                                name: "Alice" as any,
+                                count: 3 as any,
+                            },
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "tmpl",
+                output: { $from: "scope", name: "result" } as any,
+            };
+
+            const result = await eng.run(ir, {});
+            expect(result.success).toBe(true);
+            expect(result.output).toEqual({
+                text: "Hello Alice, you have 3 items",
+            });
+        });
+
+        it("replaces multiple occurrences of the same variable", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "multiReplace",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    tmpl: {
+                        kind: "task",
+                        task: "text.template",
+                        inputSchema: {
+                            type: "object",
+                            required: ["template", "vars"],
+                            properties: {
+                                template: { type: "string" },
+                                vars: { type: "object" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["text"],
+                            properties: { text: { type: "string" } },
+                        },
+                        inputs: {
+                            template: "{{x}} + {{x}} = {{y}}",
+                            vars: {
+                                x: "2" as any,
+                                y: "4" as any,
+                            },
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "tmpl",
+                output: { $from: "scope", name: "result" } as any,
+            };
+
+            const result = await eng.run(ir, {});
+            expect(result.success).toBe(true);
+            expect(result.output).toEqual({ text: "2 + 2 = 4" });
+        });
+    });
+
+    describe("string.join task", () => {
+        it("joins a list with delimiter", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "joinTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    join: {
+                        kind: "task",
+                        task: "string.join",
+                        inputSchema: {
+                            type: "object",
+                            required: ["list", "delimiter"],
+                            properties: {
+                                list: {
+                                    type: "array",
+                                    items: { type: "string" },
+                                },
+                                delimiter: { type: "string" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["text"],
+                            properties: { text: { type: "string" } },
+                        },
+                        inputs: {
+                            list: ["alpha", "beta", "gamma"] as any,
+                            delimiter: ", ",
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "join",
+                output: { $from: "scope", name: "result" } as any,
+            };
+
+            const result = await eng.run(ir, {});
+            expect(result.success).toBe(true);
+            expect(result.output).toEqual({ text: "alpha, beta, gamma" });
+        });
+
+        it("handles empty list", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "joinEmpty",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    join: {
+                        kind: "task",
+                        task: "string.join",
+                        inputSchema: {
+                            type: "object",
+                            required: ["list", "delimiter"],
+                            properties: {
+                                list: {
+                                    type: "array",
+                                    items: { type: "string" },
+                                },
+                                delimiter: { type: "string" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["text"],
+                            properties: { text: { type: "string" } },
+                        },
+                        inputs: {
+                            list: [] as any,
+                            delimiter: "\n",
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "join",
+                output: { $from: "scope", name: "result" } as any,
+            };
+
+            const result = await eng.run(ir, {});
+            expect(result.success).toBe(true);
+            expect(result.output).toEqual({ text: "" });
+        });
+    });
+
+    describe("shell.exec task", () => {
+        it("runs a command and captures stdout", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "echoTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    echo: {
+                        kind: "task",
+                        task: "shell.exec",
+                        inputSchema: {
+                            type: "object",
+                            required: ["command"],
+                            properties: {
+                                command: { type: "string" },
+                                args: {
+                                    type: "array",
+                                    items: { type: "string" },
+                                },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["stdout", "stderr", "exitCode"],
+                            properties: {
+                                stdout: { type: "string" },
+                                stderr: { type: "string" },
+                                exitCode: { type: "integer" },
+                            },
+                        },
+                        inputs: {
+                            command: "echo",
+                            args: ["hello", "world"] as any,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "echo",
+                output: { $from: "scope", name: "result" } as any,
+            };
+
+            const result = await eng.run(ir, {});
+            expect(result.success).toBe(true);
+            const output = result.output as {
+                stdout: string;
+                stderr: string;
+                exitCode: number;
+            };
+            expect(output.stdout.trim()).toBe("hello world");
+            expect(output.exitCode).toBe(0);
+        });
+
+        it("returns non-zero exit code as ok", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "falseTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    fail: {
+                        kind: "task",
+                        task: "shell.exec",
+                        inputSchema: {
+                            type: "object",
+                            required: ["command"],
+                            properties: {
+                                command: { type: "string" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["stdout", "stderr", "exitCode"],
+                            properties: {
+                                stdout: { type: "string" },
+                                stderr: { type: "string" },
+                                exitCode: { type: "integer" },
+                            },
+                        },
+                        inputs: {
+                            command: "false",
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "fail",
+                output: { $from: "scope", name: "result" } as any,
+            };
+
+            const result = await eng.run(ir, {});
+            expect(result.success).toBe(true);
+            const output = result.output as {
+                stdout: string;
+                stderr: string;
+                exitCode: number;
+            };
+            expect(output.exitCode).not.toBe(0);
+        });
+
+        it("fails on command not found", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "notFoundTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    bad: {
+                        kind: "task",
+                        task: "shell.exec",
+                        inputSchema: {
+                            type: "object",
+                            required: ["command"],
+                            properties: {
+                                command: { type: "string" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["stdout", "stderr", "exitCode"],
+                            properties: {
+                                stdout: { type: "string" },
+                                stderr: { type: "string" },
+                                exitCode: { type: "integer" },
+                            },
+                        },
+                        inputs: {
+                            command: "this-command-does-not-exist-xyz",
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "bad",
+                output: { $from: "scope", name: "result" } as any,
+            };
+
+            const result = await eng.run(ir, {});
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("ENOENT");
+        });
+    });
+
+    describe("D1 standup-prep workflow", () => {
+        function loadD1(): WorkflowIR {
+            const __dirname = dirname(fileURLToPath(import.meta.url));
+            const path = resolve(
+                __dirname,
+                "../../../workflows/d1-standup-prep.json",
+            );
+            return JSON.parse(readFileSync(path, "utf8")) as WorkflowIR;
+        }
+
+        it("validates against all builtins", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir = loadD1();
+            // Run with dummy input to trigger validation
+            // (validation happens inside engine.run)
+            const result = await eng.run(ir, {
+                repos: ["/tmp"],
+                author: "test",
+            });
+
+            // Even if git log fails on /tmp, the workflow should at least
+            // pass validation. If validation fails, success is false and
+            // the error message contains "Validation failed".
+            if (!result.success) {
+                expect(result.error?.message).not.toContain(
+                    "Validation failed",
+                );
+            }
+        });
+
+        it("runs with mock shell.exec against two repos", async () => {
+            const mockShellExec: TaskDefinition = {
+                name: "shell.exec",
+                inputSchema: {
+                    type: "object",
+                    required: ["command"],
+                    properties: {
+                        command: { type: "string" },
+                        args: {
+                            type: "array",
+                            items: { type: "string" },
+                        },
+                        cwd: { type: "string" },
+                    },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["stdout", "stderr", "exitCode"],
+                    properties: {
+                        stdout: { type: "string" },
+                        stderr: { type: "string" },
+                        exitCode: { type: "integer" },
+                    },
+                },
+                async execute(input: any) {
+                    const cwd = input.cwd as string;
+                    const repo = cwd.split("/").pop();
+                    return {
+                        kind: "ok",
+                        output: {
+                            stdout: `abc1234 fix bug in ${repo}\ndef5678 add feature to ${repo}\n`,
+                            stderr: "",
+                            exitCode: 0,
+                        },
+                    };
+                },
+            };
+
+            const reg = makeRegistry(
+                ...standardLibraryTasks,
+                mockShellExec,
+                ...allBuiltinTasks.filter(
+                    (t) =>
+                        t.name !== "shell.exec" &&
+                        !standardLibraryTasks.some((s) => s.name === t.name),
+                ),
+            );
+            const eng = new WorkflowEngine(reg);
+
+            const ir = loadD1();
+            const result = await eng.run(ir, {
+                repos: ["/repos/typeagent", "/repos/typechat"],
+                author: "curtism",
+            });
+
+            expect(result.success).toBe(true);
+            const output = result.output as string;
+            expect(output).toContain("## /repos/typeagent");
+            expect(output).toContain("## /repos/typechat");
+            expect(output).toContain("fix bug in typeagent");
+            expect(output).toContain("add feature to typechat");
         });
     });
 });
