@@ -945,7 +945,7 @@ export class ChatPanel {
     /**
      * Toggle "demo running" mode. While running, the input ghost-hint
      * shown via `setInputHint` is preserved across input events so the
-     * Ctrl+→/Esc reminder stays visible at the pause point.
+     * Alt+→/Esc reminder stays visible at the pause point.
      */
     public setDemoRunning(running: boolean): void {
         this.isDemoRunning = running;
@@ -957,7 +957,7 @@ export class ChatPanel {
 
     /**
      * Show a host-supplied hint string in the input box's ghost span
-     * when the textbox is empty. Used to display "Ctrl+→ continue ·
+     * when the textbox is empty. Used to display "Alt+→ continue ·
      * Esc cancel" while the demo is paused. Pass `undefined` to clear.
      */
     public setInputHint(hint: string | undefined): void {
@@ -2085,7 +2085,7 @@ export class ChatPanel {
                 if (!this.isDemoPaused && !this.isDemoRunning) return;
                 if (
                     e.key === "ArrowRight" &&
-                    (e.ctrlKey || e.metaKey) &&
+                    (e.altKey || e.ctrlKey || e.metaKey) &&
                     this.isDemoPaused
                 ) {
                     e.preventDefault();

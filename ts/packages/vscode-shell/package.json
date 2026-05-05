@@ -131,7 +131,7 @@
       },
       {
         "command": "vscode-shell.demoContinue",
-        "key": "ctrl+right",
+        "key": "alt+right",
         "when": "vscode-shell.demoPaused"
       },
       {

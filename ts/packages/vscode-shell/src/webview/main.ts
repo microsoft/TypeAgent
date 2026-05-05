@@ -376,7 +376,7 @@ window.addEventListener("message", (event) => {
         case "demoState":
             // Reflect demo state in the connection ribbon. The chat-ui
             // chatPanel still installs its capture-phase keyhandler
-            // when paused (Esc cancels, Ctrl+→ continues) and a
+            // when paused (Esc cancels, Alt+→ continues) and a
             // dedicated input-ghost hint shows the controls.
             if (!msg.running) {
                 demoSuffix = undefined;
@@ -389,7 +389,7 @@ window.addEventListener("message", (event) => {
             chatPanel.setDemoPaused(msg.paused, msg.message);
             chatPanel.setDemoRunning(msg.running);
             chatPanel.setInputHint(
-                msg.paused ? "Ctrl+→ continue · Esc cancel" : undefined,
+                msg.paused ? "Alt+→ continue · Esc cancel" : undefined,
             );
             break;
         case "demoTypeAndSend":

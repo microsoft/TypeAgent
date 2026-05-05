@@ -219,7 +219,7 @@ function setDemoState(
                 "statusBarItem.warningBackground",
             );
         }
-        demoStatusItem.text = `$(debug-pause) Demo paused — Ctrl+→ continue, Esc cancel${
+        demoStatusItem.text = `$(debug-pause) Demo paused — Alt+→ continue, Esc cancel${
             message ? ` (${message})` : ""
         }`;
         demoStatusItem.show();
