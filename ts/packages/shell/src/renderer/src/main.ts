@@ -174,7 +174,14 @@ function registerClient(
             if (seq !== undefined) {
                 maxSeqSeen = Math.max(maxSeqSeen, seq);
             }
-            chatView.setActiveRequestId(requestId.requestId);
+            // Only treat the stop button + ghost-text + active-request state
+            // as ours when this shell actually originated the command. For
+            // mirrored requests from peer clients (e.g. vscode extension)
+            // the shell can't cancel; showing a stop button strands it
+            // because no commandComplete on this side ever clears it.
+            if (chatView.isLocalRequest(requestId)) {
+                chatView.setActiveRequestId(requestId.requestId);
+            }
             // For remote clients or replay, creates a new MessageGroup
             // keyed by UUID. For local clients, this is a no-op because
             // addRemoteUserMessage skips pending locals — they get promoted

@@ -206,6 +206,16 @@ export class ChatView {
         this.showStopButton(true);
     }
 
+    // Returns true if a command with this requestId was originated by this
+    // shell instance (still tracked under pendingLocalGroups by
+    // clientRequestId, awaiting lazy promotion on first display message).
+    // Used to suppress UI affordances (stop button) for commands mirrored
+    // from a peer client like the vscode extension.
+    public isLocalRequest(requestId: RequestId): boolean {
+        const localId = requestId.clientRequestId as string | undefined;
+        return !!localId && this.pendingLocalGroups.has(localId);
+    }
+
     private cancelCommand() {
         if (this.activeRequestId && this._dispatcher) {
             // Defensive try/catch — if the underlying dispatcher channel
