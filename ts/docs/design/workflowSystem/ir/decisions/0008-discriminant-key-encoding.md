@@ -137,3 +137,33 @@ Two edits to ir-v1.md:
 
 2. **§5.3 (pass 3, branch validation):** Add: "Reject branches where
    `selectorSchema` admits non-string values."
+
+---
+
+## 6. Coupling with decision 0006 (no expressions)
+
+This decision is downstream of
+[decision 0006](0006-no-expressions-in-ir.md). The reason `bool.toLabel`
+exists is that the IR has no expressions: a boolean comparison result
+cannot be used directly as a branch predicate, so it must be converted
+to a string discriminant via a standard-library task.
+
+If the IR ever gains an expression sublanguage (`$expr`, revisit
+trigger row 11), the natural move is to allow boolean-typed expressions
+directly in branch selectors - i.e., predicate branches (§8.3 Alt A).
+At that point:
+
+- `bool.toLabel` becomes unnecessary (the branch evaluates the
+  predicate itself).
+- `selectorSchema` would accept `{ "type": "boolean" }` in addition
+  to string-typed schemas.
+- `cases` could remain a string-keyed object (with `"true"`/`"false"`
+  as keys) or switch to value-target pairs (Alternative C from this
+  record). The encoding question resurfaces but is simpler when the
+  IR already has expression evaluation semantics.
+
+The two decisions share a dam: the IR's commitment to "tasks are the
+only computation surface" (P1 boundary). If that commitment is relaxed
+for expressions (0006 flips), string-only discriminants (0008) lose
+their rationale and should flip together. Revisit trigger row 11
+covers both.

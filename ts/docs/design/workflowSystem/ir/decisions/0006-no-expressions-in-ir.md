@@ -341,7 +341,14 @@ concerns and do not appear in this record.
   not depend on it. If predicate branches are later adopted (revisit
   trigger row 2), they could use `$expr` or they could use a
   restricted predicate form that is not a general expression
-  language.
+  language. **Coupling note:**
+  [decision 0008](0008-discriminant-key-encoding.md) (discriminants
+  must be strings) is downstream of this decision. `bool.toLabel`
+  exists because the IR has no expressions. If this decision flips,
+  0008 loses its rationale and should flip together: boolean
+  predicates in branches become natural, and `bool.toLabel`
+  disappears. The two decisions share the P1 boundary commitment
+  (tasks are the only computation surface).
 - **MapNode / foreach.** A foreach loop construct (post-v1) would
   eliminate much of the standard-library task machinery for list
   iteration. That is a separate concept (a new node kind) and a
