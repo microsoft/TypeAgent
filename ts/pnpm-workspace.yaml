@@ -4,6 +4,7 @@ packages:
   - packages/memory/*
   - packages/agents/*
   - packages/agents/agentUtils/*
+  - packages/agents/*/host/webview
   - packages/agentServer/*
   - packages/dispatcher/*
   - packages/utils/*
