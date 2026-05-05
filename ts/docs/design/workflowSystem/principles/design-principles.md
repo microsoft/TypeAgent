@@ -214,12 +214,13 @@ _Why this is genuinely ruled out:_ Unlike P1's "patterns ruled out" (where worka
 
 The IR's hierarchical structure should mirror the computational patterns. A loop should be represented as a loop construct, not as a pattern you have to recognize in a flat graph. A scope boundary in execution should be a scope boundary in the IR.
 
-The correspondence applies to **both axes** of structure:
+The correspondence applies to **three axes** of structure:
 
 - **Control-flow correspondence.** Loops are loops, branches are branches, sequences are sequences. The reader sees the pattern in the structure, not by analyzing topology.
 - **Data-publication correspondence.** A value that the IR exposes between nodes corresponds to a publication the author intended. Values that are internal to a producing step are not part of the IR's inter-node namespace. The reader can see, structurally, which values are shared and which are step-local; this is not inferred from downstream usage.
+- **Representation-surface correspondence.** At the IR's serialization surface (JSON keys, object shapes, field names), distinct behavioral rules have distinct surface forms, and identical rules have identical forms. A reader who encounters the same surface pattern in two places can rely on it meaning the same thing; a reader who encounters two different patterns can rely on them meaning different things. This axis is what the IR's §1.3.2 (uniformity / variance clause) and §10 (variance lens) operationalize: count behavioral rules, count surface forms, check they match.
 
-Testable: look at the IR structure, then look at the execution trace and the set of cross-node data uses. Do they correspond? If you have to "discover" a loop by analyzing a flat graph, or discover a value's role by scanning every potential consumer, the structure doesn't correspond to the computation.
+Testable: look at the IR structure, then look at the execution trace and the set of cross-node data uses. Do they correspond? If you have to "discover" a loop by analyzing a flat graph, or discover a value's role by scanning every potential consumer, the structure doesn't correspond to the computation. For the representation-surface axis: look at the IR's JSON surface and count behavioral rules and surface forms. If two surface forms obey one rule (collapse candidate) or one surface form obeys two rules in different contexts (split candidate), the surface doesn't correspond to the semantics.
 
 ### Scenarios it ENABLES
 
@@ -264,6 +265,20 @@ Testable: look at the IR structure, then look at the execution trace and the set
 - _Tradeoff:_ An extra structural declaration when sharing is intended. In return, the IR structure communicates "this step contributes these values to the surrounding scope; this step contributes none," mirroring the same distinction real programs make between locals and visible outputs.
 - _Variance test (see top of this file, and IR §1.3 / §10):_ "every node id is implicitly a name" makes one label (the node id) carry both CFG identity and DDG publication. Two behavioral rules under one label, so two concepts wearing one name. The hide-by-default `bind` design (IR §8.15, decision 0001) is the variance-correct alternative.
 
+**27b. Surface forms that carry two rules.**
+
+- _Intent:_ Use a single JSON key (`stateWrites`) on task nodes for both "this task writes state" and "writes are no-race by construction."
+- _Why P3 requires a different expression:_ The representation-surface axis of P3 says: one surface form should encode one behavioral rule. `stateWrites` carries two (write op + no-race guarantee). A reader seeing `stateWrites` on two nodes cannot tell whether the no-race property is structural or accidental without understanding the engine's evaluation order.
+- _Alternative:_ Separate the write mechanism (per-iteration `iterateState` in a loop's boundary declaration) from the no-race guarantee (structural: SSA within a loop frame, enforced by the validator). The surface forms match the rule count.
+- _Worked example:_ IR §8.5 (per-node `stateWrites`, rejected) vs. §8.17 (pure SSA per namespace). The §10 variance lens uses this as the split-direction example.
+
+**27c. Reservation surface and data expressibility.**
+
+- _Intent:_ Use a JSON object key (`$from`) as the discriminator for engine-recognized template holes. When user data happens to contain an object with the same key at the template root, the engine would misinterpret it.
+- _P3's representation-surface axis applies in both directions:_ The design must ensure that one surface form means one thing. If the engine recognizes `{"$from": ...}` as a reference, that same surface cannot also mean "literal data the author wanted to pass through." The question then becomes: add a concept (an escape like `$literal`) so every data value remains representable, or accept that a narrow class of data values is shadowed?
+- _Interaction with the minimization discipline:_ The escape concept closes the surface ambiguity (one form = one meaning everywhere), satisfying P3's third axis. But the minimization rule says: don't add the concept until a scenario forces it. This is the §1.3.1 vs. §1.3.2 tension, and the (a) vs. (b) sub-question in [decision 0007](../ir/decisions/0007-value-construction-in-references.md) is the worked example.
+- _Why this is distinct from 27b:_ 27b is about splitting (one form carrying two rules). 27c is about collision (one form claimed by both the engine and user data). Both are P3 representation-surface failures, but the fix direction differs: 27b splits forms; 27c adds an escape.
+
 ### Outside the boundary
 
 P3 governs IR-level structure. Task internals are opaque (see "Principles govern the boundary").
@@ -274,7 +289,7 @@ P3 governs IR-level structure. Task internals are opaque (see "Principles govern
 
 P3 does not rule out any computational capability. Every computation expressible with flat cycles is also expressible with a loop construct + DAG body. The principle constrains the _form of expression_, not the _range of computation_.
 
-The one thing P3 genuinely prevents is **structural ambiguity**: an IR where the reader cannot tell whether a pattern is a loop, a branch, or a linear sequence without analyzing the graph. With node type discriminants and explicit constructs, every node's role is self-describing.
+The one thing P3 genuinely prevents is **structural ambiguity**: an IR where the reader cannot tell whether a pattern is a loop, a branch, or a linear sequence without analyzing the graph (control-flow axis); where publication is inferred from topology rather than declared (data-publication axis); or where the same JSON surface form carries different meanings in different contexts (representation-surface axis). With node type discriminants, explicit constructs, declared publications, and surface-form/rule bijection, every element of the IR is self-describing.
 
 ### What this principle does NOT resolve alone
 

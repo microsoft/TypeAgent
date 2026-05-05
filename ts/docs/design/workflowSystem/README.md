@@ -10,7 +10,8 @@ If you're new here, read in this order:
 2. **[principles/principle-gaps.md](principles/principle-gaps.md)** - areas the principles permit but don't drive. Records gaps that have been closed and ones still open.
 3. **[ir/ir-v1.md](ir/ir-v1.md)** - the v1 IR. The single authoritative description of the workflow document format, validation rules, and execution semantics.
 4. **[ir/decisions/](ir/decisions/)** - per-decision records for the IR (one focused doc per significant choice).
-5. **[ir/post-v1/](ir/post-v1/)** - sketches of IR features deferred past v1.
+5. **[ir/validation/](ir/validation/)** - hand-written workflow scenarios that stress-test the IR against real shapes. Read at least one scenario before reviewing a `decisions/` record.
+6. **[ir/post-v1/](ir/post-v1/)** - sketches of IR features deferred past v1.
 
 ## Layout
 
@@ -23,6 +24,7 @@ docs/design/workflowSystem/
 ├── ir/                              the IR contract (component: ir)
 │   ├── ir-v1.md                     authoritative v1 IR
 │   ├── decisions/                     numbered design records (0001-, 0002-, ...)
+│   ├── validation/                    hand-written scenarios stress-testing the IR
 │   └── post-v1/                       deferred IR features
 ├── engineering/                       cross-component plan, milestones, packaging
 └── archive/                           pre-cleanroom drafts, preserved for context

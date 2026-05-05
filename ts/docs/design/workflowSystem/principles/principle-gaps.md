@@ -77,7 +77,7 @@ All five permitted both designs. None drove the choice. Hide-by-default was reac
 
 **Sharpening applied.** P3, P4, and P5 have been updated to state both axes explicitly:
 
-- **P3** now states correspondence on both control-flow shape and data publication (scenario 27a covers implicit publication of every node's output).
+- **P3** now states correspondence on three axes: control-flow shape, data publication, and representation-surface (scenario 27a covers implicit publication; scenarios 27b and 27c cover surface-form/rule bijection and reservation-surface collision respectively).
 - **P4** now states the boundary contract has both a control side and a data side, including intra-scope namespace contribution (scenario 35a covers refactors that silently expand a scope's contract).
 - **P5** now states predictability covers both "what runs when" and "what stays live" (scenario 42a covers implicit value lifetime).
 
@@ -121,6 +121,26 @@ With the sharpening in place, the IR/task drift check is now driven by P1 direct
 **Lesson (reinforces the bound-outputs lesson).** Two principle sharpenings now follow the same pattern: a decision converges by analysis without a clean principle drive, and the diagnosis is that a principle's scope was framed too narrowly (control-flow-biased in the bound-outputs case; intra-IR-biased here). The pattern is worth watching for in future decisions: when a principle "almost" applies, that's the signal to re-examine its scope rather than to file the decision under engineering judgement.
 
 **Related diagnostic (variance lens, IR §1.3 / §10).** Same shape: bare Option 1 would have let `inputSchema` mean "authoritative contract" in some IRs and "check elsewhere" in others - one label, context-dependent rule, two concepts wearing one name. The variance lens catches this at decision time; this case study shows how the same shape can also surface as a principle gap.
+
+---
+
+### Representation-surface correspondence (P3's third axis)
+
+**Status:** Resolved. P3 has been sharpened to add a third correspondence axis: **representation-surface correspondence** (scenarios 27b and 27c). The §1.3.2 uniformity / variance clause and the §10 variance lens now derive from this axis of P3 rather than standing as free-floating style choices.
+
+**The original gap.** P3 stated correspondence on two axes: control-flow (loops are loops) and data-publication (shared values are declared). The variance test (count behavioral rules, count surface forms, check they match) was applied as a style choice (IR §1.3) and a reviewer lens (§10), but it was not grounded in a principle. It worked well in practice (it drove the bound-outputs decision, the SSA decision, and the sugar removal), but when decision 0007 asked "should we reserve a `$`-prefix and add `$literal`?", the answer depended on whether the variance clause was weighted as a minimization concern (don't add concepts) or a uniformity concern (keep the bijection). Without a principle grounding, the two halves of §1.3 appeared to be co-equal style preferences, and the decision oscillated.
+
+**Why this was a principle gap.** The variance test is P3 applied to the serialization surface. P3 already says "distinct computational patterns have distinct structural forms." The representation-surface analog is: "distinct behavioral rules have distinct surface forms, and identical rules have identical forms." This is the same structural-correspondence property, just measured at the JSON-key level instead of the node-kind level. Stating it as a style choice rather than as a P3 axis made it appear optional, which made the §1.3.1/§1.3.2 tension look like a preference question rather than a principled trade.
+
+**Sharpening applied.** P3 now states correspondence on three axes:
+
+- Control-flow (unchanged).
+- Data-publication (unchanged, from the bound-outputs sharpening).
+- Representation-surface: the same JSON surface pattern means the same thing wherever it appears; different patterns mean different things.
+
+With this in place, §1.3.2 (uniformity) is "P3's representation-surface axis applied to the IR's JSON surface." The variance lens (§10) is the per-decision diagnostic for this axis. And the tension with §1.3.1 (minimization) is the familiar P3-vs.-minimization tension the design already knows how to handle: P3 generates pressure to add structure (close the surface ambiguity); minimization says wait until a scenario forces it. Decision 0007 (G-K1.a vs. G-K1.b) is the worked example.
+
+**Lesson (reinforces the previous two).** Three principle sharpenings now follow the same pattern: a principle's scope was framed too narrowly (control-flow only, then intra-IR only, now graph-level only). Each time, a decision that "almost" derived from a principle turned out to derive from an unstated axis of that principle. The pattern is established: when a decision converges by style choice or analysis without a principle drive, check whether a principle's scope needs widening, not whether a new style choice is needed.
 
 ---
 

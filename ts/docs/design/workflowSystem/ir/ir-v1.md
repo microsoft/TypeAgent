@@ -215,11 +215,18 @@ lives at a different layer.
 
 ### 1.3 Structural minimalism
 
-The schema introduces the **fewest concepts** that satisfy P1-P5. New node
-types, fields, and constructs only appear when there is a scenario in
-design-principles.md that none of the existing concepts can express without
-violating a principle. This is the discipline noted at the top of
-design-principles.md (the unnumbered minimization rule).
+§1.3 is two related but distinct sub-lenses, both bearing on what the
+IR's surface looks like. They are stated together because they share
+the "concept = behavioral rule" measurement, but they can point in
+opposite directions and a decision that invokes "§1.3" should say
+which sub-lens it is leaning on.
+
+**§1.3.1 Minimization.** The schema introduces the **fewest concepts**
+that satisfy P1-P5. New node types, fields, and constructs only appear
+when there is a scenario in design-principles.md that none of the
+existing concepts can express without violating a principle. This is
+the discipline noted at the top of design-principles.md (the
+unnumbered minimization rule).
 
 - Lens application: this one is principle-driven first - the minimization
   rule on top of P1-P5 already demands it. §1.1 reinforces rather than
@@ -237,23 +244,60 @@ design-principles.md (the unnumbered minimization rule).
   concepts wearing one name. The test for an extension is "does it
   add a behavioral rule existing concepts do not already cover?" not
   "does it add a name?"
-- Consistency (the same rule, run backward). Counting concepts as
-  behavioral rules also constrains the surface: **the same rule is
-  written the same way wherever it appears**. Two surface forms that
-  obey one rule are a minimization candidate (collapse them to one
-  form); one surface form that obeys two rules in different contexts
-  is a split candidate (give each rule its own concept). The
-  pre-revision loop `outputs` map vs. workflow `output` reference
-  (§8.10 Alt C) and the `bind: true` shorthand (§8.15 "Removed sugar")
-  are the worked examples of the first failure mode; per-node
-  `stateWrites` is the worked example of the second. The variance test
-  is symmetric: count behavioral rules, count surface forms, and check
-  they match. The §10 variance lens uses this test.
-- Concrete consequence: v1 has exactly three node kinds (`task`, `branch`,
-  `loop`) and one reference form. Error recovery is an `onError` edge to a
-  task node (the engine injects two input fields when dispatching via that
-  edge; see §3.8); it is not a separate node kind. Every additional concept
-  proposed during the design review will be measured against this rule.
+- Speculative-extension test: a concept proposed for "future uniformity"
+  with no current scenario that needs it fails §1.3.1. Future-proofing
+  is exactly the cost minimization tells you not to pay until forced.
+
+**§1.3.2 Uniformity (P3's representation-surface axis).** P3 states
+that IR structure corresponds to computational structure on three
+axes: control flow, data publication, and representation surface.
+The third axis says: **the same surface form means the same thing
+wherever it appears, and distinct behavioral rules have distinct
+surface forms.** Counting concepts as behavioral rules constrains
+the surface bijectively: two surface forms that obey one rule are a
+collapse candidate (merge them to one form); one surface form that
+obeys two rules in different contexts is a split candidate (give
+each rule its own form). The pre-revision loop `outputs` map vs.
+workflow `output` reference (§8.10 Alt C) and the `bind: true`
+shorthand (§8.15 "Removed sugar") are the worked examples of the
+collapse direction; per-node `stateWrites` is the worked example of
+the split direction. The variance test is symmetric: count behavioral
+rules, count surface forms, and check they match. The §10 variance
+lens uses this test.
+
+Because §1.3.2 is grounded in P3, it is a principle-level
+requirement, not a style preference. But it can conflict with
+§1.3.1: P3 (via §1.3.2) generates pressure to add concepts that
+close surface ambiguities or ensure future-stable bijections;
+minimization (§1.3.1) generates counter-pressure to defer those
+concepts until a scenario forces them. This is the same shape as
+every other P3-vs.-minimization tension in the design (MapNode
+deferred, expressions deferred, per-scope constants deferred).
+Decision 0007 (G-K1.a vs. G-K1.b) is the worked example for
+the representation-surface axis specifically.
+
+**Tension between §1.3.1 and §1.3.2.** When a single rule already
+covers a situation, both sub-lenses agree (collapse the surfaces).
+When extending the rule's _reservation surface_ to cover possible
+future rules of the same family, they disagree: §1.3.2 (P3) prefers
+the wider reservation (one rule the reader learns once and never
+relearns when family members are added); §1.3.1 (minimization) rejects
+the wider reservation (it is paying for concepts that do not yet
+exist). This is the characteristic P3-vs.-minimization tension. A
+decision that hits it should name both sub-lenses and explain which is
+weighted heavier and why - not silently invoke "§1.3" as if it
+delivered a single verdict. Decision 0007 (`$literal` and the
+`$`-prefix reservation) is the worked example.
+
+**Concrete consequence (both sub-lenses).** v1 has exactly three node
+kinds (`task`, `branch`, `loop`) and one template model for reference
+positions (§3.4, with `$from` and `$literal` as the two
+engine-recognized forms). Error
+recovery is an `onError` edge to a task node (the engine injects two
+input fields when dispatching via that edge; see §3.8); it is not a
+separate node kind. Every additional concept proposed during the
+design review is measured against §1.3.1 first; if it survives, the
+surface form is then checked against §1.3.2.
 
 ### 1.4 Boundary closure
 
@@ -276,18 +320,18 @@ inputs.
 
 ### 2.1 In scope for v1
 
-| Area                  | v1 covers                                                                                  |
-| --------------------- | ------------------------------------------------------------------------------------------ |
-| Node kinds            | `task`, `branch`, `loop`                                                                   |
-| Data references       | Static refs to: workflow inputs, declared constants, node outputs, loop state              |
-| Reference modality    | Required and optional references                                                           |
-| Type compatibility    | Structural subtyping over JSON Schema-described types                                      |
-| Control flow          | Explicit `next` per node; sentinel `@iterate` and `@exit` inside loop bodies               |
-| Branching             | Discriminant-based switch with exhaustive cases and required `default`                     |
-| Loops                 | Single-entry loop construct with declared state, declared boundary I/O, max-iteration cap  |
+| Area                  | v1 covers                                                                                                                                |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Node kinds            | `task`, `branch`, `loop`                                                                                                                 |
+| Data references       | Static refs to: workflow inputs, declared constants, node outputs, loop state                                                            |
+| Reference modality    | Required and optional references                                                                                                         |
+| Type compatibility    | Structural subtyping over JSON Schema-described types                                                                                    |
+| Control flow          | Explicit `next` per node; sentinel `@iterate` and `@exit` inside loop bodies                                                             |
+| Branching             | Discriminant-based switch with exhaustive cases and required `default`                                                                   |
+| Loops                 | Single-entry loop construct with declared state, declared boundary I/O, max-iteration cap                                                |
 | Error handling        | Per-node `onError` edge to a task node; engine injects `error`/`trigger` input fields (§3.8); uncaught errors propagate and fail the run |
-| Validation            | Static: dominator, type compatibility, scope closure, exhaustiveness, sentinel correctness |
-| Observability surface | `nodeStarted` / `nodeCompleted` / `nodeFailed` events per node, including loop iterations  |
+| Validation            | Static: dominator, type compatibility, scope closure, exhaustiveness, sentinel correctness                                               |
+| Observability surface | `nodeStarted` / `nodeCompleted` / `nodeFailed` events per node, including loop iterations                                                |
 
 ### 2.2 Out of scope for v1 (post-v1)
 
@@ -302,9 +346,9 @@ inputs.
 | Computed / dynamic reference targets   | P1 scenario 8: ruled out by design; expressed via branch + decision tree.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | External-state side channels           | P2 scenarios 16-17: deliberately invisible to the IR in v1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Cross-loop shared mutable state        | P4 scenario 34: forced into explicit boundary wiring; no global state.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Reusable recovery tasks across scopes  | P4 scenario 35: each scope owns its `onError` recovery tasks in v1. (Pre-revision drafts called these "handlers"; v1 collapsed the kind into `task` per §3.8 and §8.7.)                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Reusable recovery tasks across scopes  | P4 scenario 35: each scope owns its `onError` recovery tasks in v1. (Pre-revision drafts called these "handlers"; v1 collapsed the kind into `task` per §3.8 and §8.7.)                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Explicit `block` scope                 | A run-once scope kind (sibling of loop body) that can carry a single `onError` over a region of nodes. Closes the "multi-statement try" gap cheaply by reusing the existing scope contract. Sketch in [post-v1/block-scope.md](post-v1/block-scope.md).                                                                                                                                                                                                                                                                                                                                                           |
-| Edge-scoped `bind` reads               | A fifth `$from` namespace (`"edge"`) that resolves against the unique CFG predecessor, expressing one-step producer/consumer handoffs without widening visibility to the full scope. Read-side switch only; producer's `bind` is unchanged. Sketch in [post-v1/edge-scoped-bind.md](post-v1/edge-scoped-bind.md).                                                                                                                                                                                                                                                                                                |
+| Edge-scoped `bind` reads               | A fifth `$from` namespace (`"edge"`) that resolves against the unique CFG predecessor, expressing one-step producer/consumer handoffs without widening visibility to the full scope. Read-side switch only; producer's `bind` is unchanged. Sketch in [post-v1/edge-scoped-bind.md](post-v1/edge-scoped-bind.md).                                                                                                                                                                                                                                                                                                 |
 | Streaming / partial outputs from tasks | Tasks are "input in, output out" per the principles' boundary statement.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | User-interaction / suspend-resume      | Not mentioned in principles; out of v1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | Dynamic task registry                  | v1 assumes the registry is static across a single engine load (§5.7 MUST 7); the load-time drift check (§4.1 pass 3) rules out `TaskNotFound` and `TaskContractDrift` before execution begins. Allowing the registry to mutate under a running workflow opens a runtime failure class that v1 deliberately does not specify, since the failure-routing question (`onError`? whole-workflow abort? pinned task version?) is dangerous to get wrong and pulls in versioning and resume concerns also deferred from v1. Door is open: the static-registry decision is additive to revisit.                           |
@@ -425,12 +469,12 @@ dominance constraint applied per namespace.
 namespaces, one per `$from` discriminant. All four namespaces are
 scope-wide.
 
-| `$from`      | Declared at                                                             | Visible in                       | Frame (single-assignment lifetime)                                                             |
-| ------------ | ----------------------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `"input"`    | Workflow `inputSchema` typing the run input, or a loop's `inputs` block | The scope it belongs to          | Workflow input: the run. Loop `inputs`: evaluated once per loop activation, stable thereafter. |
-| `"constant"` | Workflow root `constants`                                               | Every scope                      | The run.                                                                                       |
-| `"scope"`    | A node's `bind` field publishes the node's output                       | The scope the node belongs to    | One execution of the binding node. In a loop body, re-bound each iteration.                    |
-| `"state"`    | The enclosing loop's `state` block                                      | That loop's body scope           | One iteration. Frame transition is `@iterate`, which evaluates `iterateState` (§3.7.1).        |
+| `$from`      | Declared at                                                             | Visible in                    | Frame (single-assignment lifetime)                                                             |
+| ------------ | ----------------------------------------------------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------- |
+| `"input"`    | Workflow `inputSchema` typing the run input, or a loop's `inputs` block | The scope it belongs to       | Workflow input: the run. Loop `inputs`: evaluated once per loop activation, stable thereafter. |
+| `"constant"` | Workflow root `constants`                                               | Every scope                   | The run.                                                                                       |
+| `"scope"`    | A node's `bind` field publishes the node's output                       | The scope the node belongs to | One execution of the binding node. In a loop body, re-bound each iteration.                    |
+| `"state"`    | The enclosing loop's `state` block                                      | That loop's body scope        | One iteration. Frame transition is `@iterate`, which evaluates `iterateState` (§3.7.1).        |
 
 A task node dispatched via an `onError` edge additionally receives two
 engine-injected input fields named `error` and `trigger` before its
@@ -599,40 +643,120 @@ Not every node kind produces a value worth binding:
 - `loop` nodes produce a value (the resolved `output` reference); `bind`
   works on the loop node like any other value-producing node.
 
-### 3.4 Reference objects
+### 3.4 Reference positions (template model)
 
-References are the only way data crosses node boundaries. There is exactly one
-reference form (minimalism):
+Every `inputs.<field>` and every `output` position in the IR holds a
+**JSON template**: an arbitrary JSON value that the engine evaluates by
+walking its structure, resolving engine-recognized forms, and returning
+the composed result.
+
+**Engine-recognized forms.** An object whose top-level key is
+`$`-prefixed is engine-recognized. v1 defines two recognized forms:
+
+1. **`$from` (reference).** Resolves a named value from a declared
+   namespace and optionally projects into it.
+
+   ```jsonc
+   {
+     "$from": "input" | "constant" | "scope" | "state",
+     "name":  "<name>",            // input field, constant name, scope variable, or state var
+     "path":  ["a", "b", 0, "c"],  // optional; omit (do not write []) when no projection is needed
+     "optional": true              // optional; include only when true (absent = required)
+   }
+   ```
+
+   - `$from: "input"` - read from the enclosing scope's declared input. On a
+     task node dispatched via an `onError` edge, the engine-injected `error`
+     and `trigger` fields are part of that node's `inputs` and are read with
+     `$from: "input"` like any other input field (§3.8).
+   - `$from: "constant"` - read a declared constant in the enclosing workflow.
+     (Constants are workflow-global; readable from any scope. They are values
+     declared in the IR, so this does not violate P4.)
+   - `$from: "scope"` - read a scope variable (a value bound by some node via
+     `bind`). The named bound value must exist in the enclosing scope.
+     Validated by dominance + type compatibility (P1).
+   - `$from: "state"` - read a loop-scoped state variable. Only legal inside a
+     loop body.
+
+   `optional: true` declares the reference may not be satisfied on every path
+   (P1 scenarios 4, 5, 7). When unsatisfied, the consumer receives JSON `null`.
+   The consumer's input schema must permit `null` in that position; the validator
+   checks this.
+
+   No other keys may appear as siblings of `$from` at the same object level.
+   `{ "$from": "scope", "name": "x", "extra": 1 }` is rejected by the
+   validator. Object templates and references are disjoint at any given
+   level: an object either _is_ a reference (top-level key is `$from`) or
+   it _is not_ (no `$from` key). Mixing is rejected. This keeps the
+   disambiguation rule strictly local.
+
+2. **`$literal` (escape).** Returns its argument verbatim without
+   template evaluation.
+
+   ```jsonc
+   { "$literal": <any JSON value> }
+   ```
+
+   `$literal` short-circuits template walking: its argument is returned
+   as-is, even if it contains `$from` subtrees or other `$`-prefixed keys.
+   This is the only way to pass a literal `{ "$from": ... }` value through
+   a template position. Nested `$literal` is also verbatim:
+   `{ "$literal": { "$literal": 1 } }` evaluates to `{ "$literal": 1 }`,
+   not `1`. There is no way to "unescape" inside a `$literal` body, by
+   design.
+
+**Reservation rule (P3 representation-surface axis, §1.3.2).** All
+`$`-prefixed object keys at the top level of a template subtree are
+reserved for the engine. v1 recognizes only `$from` and `$literal`;
+future IR extensions may add new `$X` forms without
+re-disambiguation. An object with an unrecognized `$`-prefixed
+top-level key is rejected by the validator (forward-compatible:
+old validators reject new forms rather than silently misinterpreting
+them).
+
+**Literal values.** Any JSON value that is not an engine-recognized
+object evaluates to itself:
+
+- Strings, numbers, booleans, `null`: evaluate to themselves.
+- Arrays: each element is evaluated as a template; the result is the
+  array of evaluated elements.
+- Objects without a `$`-prefixed top-level key: each property value
+  is evaluated as a template; the result is the object with evaluated
+  values and unchanged keys.
+
+**Examples.**
+
+A pure reference (the only form available before this decision):
+
+```jsonc
+{ "$from": "scope", "name": "summary" }
+```
+
+A literal string:
+
+```jsonc
+"hello"
+```
+
+An object template mixing literals and references:
 
 ```jsonc
 {
-  "$from": "input" | "constant" | "scope" | "state",
-  "name":  "<name>",            // input field, constant name, scope variable, or state var
-  "path":  ["a", "b", 0, "c"],  // optional; omit (do not write []) when no projection is needed
-  "optional": true              // optional; include only when true (absent = required)
+  "subject": { "$from": "scope", "name": "subject" },
+  "body": { "$from": "scope", "name": "draft" },
+  "priority": "normal",
 }
 ```
 
-- `$from: "input"` - read from the enclosing scope's declared input. On a
-  task node dispatched via an `onError` edge, the engine-injected `error`
-  and `trigger` fields are part of that node's `inputs` and are read with
-  `$from: "input"` like any other input field (§3.8).
-- `$from: "constant"` - read a declared constant in the enclosing workflow.
-  (Constants are workflow-global; readable from any scope. They are values
-  declared in the IR, so this does not violate P4.)
-- `$from: "scope"` - read a scope variable (a value bound by some node via
-  `bind`). The named bound value must exist in the enclosing scope.
-  Validated by dominance + type compatibility (P1).
-- `$from: "state"` - read a loop-scoped state variable. Only legal inside a
-  loop body.
+A literal value that happens to contain a `$from` key (escaped):
 
-`optional: true` declares the reference may not be satisfied on every path
-(P1 scenarios 4, 5, 7). When unsatisfied, the consumer receives JSON `null`.
-The consumer's input schema must permit `null` in that position; the validator
-checks this.
+```jsonc
+{ "$literal": { "$from": "scope", "name": "x" } }
+```
 
-There is no string-shorthand form for references in v1. Every reference is the
-object above. (Minimalism + P5: one form, no parsing rules to learn.)
+See [decisions/0007-value-construction-in-references.md](decisions/0007-value-construction-in-references.md)
+for the full decision record, alternatives considered, and lens
+analysis.
 
 #### 3.4.1 Path projection semantics
 
@@ -919,7 +1043,7 @@ trigger" model:
    `dominators(T) ∪ {T}`: every node that dominates T (including T's
    own predecessors) is referenceable from N, subject to the
    bind-to-share rule. T itself is treated as having executed for the
-   purpose of dominance, even though N runs *because* T failed; this is
+   purpose of dominance, even though N runs _because_ T failed; this is
    the P1 scenario 2 semantics.
 4. **No recursive recovery.** N MUST NOT itself declare `onError`.
    Recovery chains (recovery-of-recovery) are not a v1 mechanism: they
@@ -938,7 +1062,7 @@ every structural respect.
 
 **Recovery failure semantics.** When the recovery task N fails (its
 implementation throws, or its return value violates `outputSchema`), the
-failure propagates to the enclosing scope of the *trigger* T, exactly
+failure propagates to the enclosing scope of the _trigger_ T, exactly
 as if T had failed with no `onError`. Inside a loop body this means
 the recovery's failure fails the loop node; at top level it fails the
 workflow. The original triggering error is not recoverable from the
@@ -1031,9 +1155,11 @@ Scope    := { nodes: Map<Id, Node>, entry: Id }
 Workflow := { name, version, inputSchema, outputSchema, constants?, ...Scope, output }
 ```
 
-Three node kinds, one scope shape, one reference form, two sentinels, one
-bind switch, one `output` reference shape shared by every value-producing
-scope (workflow root, loop). This is the entire v1 surface. Error
+Three node kinds, one scope shape, one template model (§3.4: JSON
+templates with `$from` references and `$literal` escape), two sentinels,
+one bind switch, one `output` template shape shared by every
+value-producing scope (workflow root, loop). This is the entire v1
+surface. Error
 recovery is an `onError` edge to a task node (§3.8); it adds no node
 kind.
 
@@ -1075,11 +1201,16 @@ reference will resolve) for any execution path.
      their output so the operator knows pass 3 has not been
      performed.
      See §8.16.
-4. **Name resolution pass.** Within each scope: every reference's target name
-   exists; sentinels are only used inside loop bodies; `onError` targets a
-   `task` node in the same scope; `entry` names an existing node. `bind`, when
-   present, is a non-empty string (no boolean shorthand in v1; see §8.15).
-   `branch` nodes do not declare `bind`.
+4. **Name resolution pass.** Within each scope: walk every template
+   position (`inputs.<field>`, `output`, `iterateState[*]`,
+   `selector`). At each `$from` subtree (at any nesting depth within
+   the template), verify the target name exists. `$literal` subtrees
+   are skipped (no resolution inside them). Objects with unrecognized
+   `$`-prefixed top-level keys are rejected.
+   Additionally: sentinels are only used inside loop bodies; `onError`
+   targets a `task` node in the same scope; `entry` names an existing
+   node. `bind`, when present, is a non-empty string (no boolean
+   shorthand in v1; see §8.15). `branch` nodes do not declare `bind`.
    A node N that is the target of an `onError` edge from a trigger T:
    MUST NOT itself declare `onError`; MUST NOT be the target of any
    `next`, branch `cases` / `default`, or scope `entry` (the recovery
@@ -1091,7 +1222,8 @@ reference will resolve) for any execution path.
    variables. The only outer data visible in a body is via `$from: "input"`
    (loop boundary inputs), `$from: "state"` (loop state), and
    `$from: "constant"` (workflow constants).
-6. **Dominator pass (P1).** For every reference of the form
+6. **Dominator pass (P1).** Walk each template position; for every
+   `$from` subtree (at any nesting depth) of the form
    `$from: "scope", name: X` inside a node Y, and for the
    set of binders B(X) = { nodes in scope with `bind: X` }:
    (a) **Phi soundness:** no two binders in B(X) lie on the same path from
@@ -1104,7 +1236,7 @@ reference will resolve) for any execution path.
    consumer's schema must accept `null` at that field.
    When Y is the target of an `onError` edge from a trigger T,
    dominator semantics use `dominators(T) ∪ {T}` for Y's `$from:
-   "scope"` references; the engine-injected `error` and `trigger`
+"scope"` references; the engine-injected `error` and `trigger`
    input fields are part of Y's own `inputs` and do not participate in
    dominator reasoning.
 
@@ -1131,16 +1263,30 @@ reference will resolve) for any execution path.
    may bind the same name, and `iterateState` resolves to whichever
    binder ran on the path that reached `@iterate`.
 
-7. **Type compatibility pass (P1).** For every reference, the producer's
-   declared type is a structural subtype of the field type at the consumer's
-   `inputSchema`. When multiple binders contribute to the same name (phi
-   merge), every binder's `outputSchema` must be a structural subtype of the
-   consumer's expected type. `output`'s reference type is checked
-   against the workflow's `outputSchema`. Branch `selectorSchema` checks
-   against the reference type; `cases` keys must be valid values in
-   `selectorSchema`. Fast path: if all producer and consumer positions are
-   the same `"#/types/<typeName>"` reference, compatibility holds by
-   identity without structural walking.
+7. **Type compatibility pass (P1).** Compute each template position's
+   **resolved type** compositionally:
+
+   - Literal values (strings, numbers, booleans, `null`): their
+     JSON-Schema-derived type.
+   - `$from` subtrees: the producer's declared output type with
+     `path` projection applied.
+   - `$literal` subtrees: the JSON-Schema-derived type of the
+     argument (no template evaluation).
+   - Objects (non-`$`-prefixed): property-wise composition of each
+     value's resolved type.
+   - Arrays: element-wise composition.
+
+   The resolved type must be a structural subtype of the field type
+   at the consumer's `inputSchema`. When multiple binders contribute
+   to the same name (phi merge), every binder's `outputSchema` must
+   be a structural subtype of the consumer's expected type.
+   `output`'s resolved type is checked against the workflow's
+   `outputSchema`. Branch `selectorSchema` checks against the
+   selector's resolved type; `cases` keys must be valid values in
+   `selectorSchema`. Fast path: if all producer and consumer
+   positions are the same `"#/types/<typeName>"` reference,
+   compatibility holds by identity without structural walking.
+
 8. **Exhaustiveness pass.** Every branch has either an exhaustive `cases`
    over an enum-typed selector or a `default`. v1 requires `default`
    regardless.
@@ -1279,7 +1425,7 @@ dispatches R as the recovery task:
    per §3.8.1) and `trigger` (an object whose fields are T's resolved
    inputs) as input fields, then resolve R's other declared `inputs`
    references against R's scope using `dominators(T) ∪ {T}` for `$from:
-   "scope"` reads.
+"scope"` reads.
 2. Validate the assembled inputs against R's `inputSchema`.
 3. Execute R as an ordinary task (§5.2).
 4. On success, follow R's `next` (or terminate, if R is a top-level
@@ -1512,7 +1658,7 @@ an identity check.
       "inputSchema": {
         "type": "object",
         "properties": {
-          "error":   { "$ref": "#/types/Error" },
+          "error": { "$ref": "#/types/Error" },
           "trigger": {
             "type": "object",
             "properties": { "doc": { "type": "string" } },
@@ -1696,13 +1842,13 @@ reference them.
 
 ## 7. How the design satisfies each principle
 
-| Principle | Design feature(s) that satisfy it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P1        | **Intra-IR axis:** single reference form with named source; static dominator pass over an acyclic intra-scope CFG; structural type compatibility pass; `optional` flag for declared partial deps; finite `cases`+`default`; SSA-style phi soundness on shared bound names. **External-contract axis:** registry-gated IR/task drift pass (§4.1 pass 3) checks each task node's `inputSchema`/`outputSchema` against the registered task's contract using the §4.2 subtype relation; runtime output validation (§5.2) is the defense-in-depth layer when the registry is absent at validation time. |
-| P2        | Only four declared `$from` sources (input, constant, scope, state); error recovery dispatches a task via `onError` and injects `error` / `trigger` as ordinary input fields, not as additional `$from` discriminants; no ambient/global state; cross-iteration data is a declared `state` variable with declared writes; outputs flow via `output`; bound outputs make the data-flow contract explicit per node                                                                                                                                                                                                                                                                                                                       |
-| P3        | Distinct node `kind`s for `task`/`branch`/`loop`; error recovery is an `onError` edge to a task node, not a fourth kind; loop bodies are a structural sub-scope, not a flat cycle; iteration is `@iterate`, not a back-edge; pure cycles are rejected; `bind` mirrors "some steps publish, some don't" from real programs                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| P4        | Body scope closure (no cross-scope name reach); declared loop `inputs`/`output`/`state`; per-scope `onError` recovery tasks; localizable validation errors with scope paths; hide-by-default `bind` keeps internal computations out of the scope's contract                                                                                                                                                                                                                                                                                                                                       |
-| P5        | Required `kind` discriminant; required explicit `next` in loop bodies; explicit sentinels; required `default` in branches; one reference form (no shorthand/inference); declared `maxIterations`; explicit `bind` makes value lifetime statically predictable                                                                                                                                                                                                                                                                                                                                      |
+| Principle | Design feature(s) that satisfy it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| P1        | **Intra-IR axis:** template model with `$from` references and named source (§3.4); static dominator pass over an acyclic intra-scope CFG; compositional type compatibility pass (resolved template types); `optional` flag for declared partial deps; finite `cases`+`default`; SSA-style phi soundness on shared bound names. **External-contract axis:** registry-gated IR/task drift pass (§4.1 pass 3) checks each task node's `inputSchema`/`outputSchema` against the registered task's contract using the §4.2 subtype relation; runtime output validation (§5.2) is the defense-in-depth layer when the registry is absent at validation time. |
+| P2        | Only four declared `$from` sources (input, constant, scope, state); error recovery dispatches a task via `onError` and injects `error` / `trigger` as ordinary input fields, not as additional `$from` discriminants; no ambient/global state; cross-iteration data is a declared `state` variable with declared writes; outputs flow via `output`; bound outputs make the data-flow contract explicit per node                                                                                                                                                                                                                                        |
+| P3        | Distinct node `kind`s for `task`/`branch`/`loop`; error recovery is an `onError` edge to a task node, not a fourth kind; loop bodies are a structural sub-scope, not a flat cycle; iteration is `@iterate`, not a back-edge; pure cycles are rejected; `bind` mirrors "some steps publish, some don't" from real programs                                                                                                                                                                                                                                                                                                                              |
+| P4        | Body scope closure (no cross-scope name reach); declared loop `inputs`/`output`/`state`; per-scope `onError` recovery tasks; localizable validation errors with scope paths; hide-by-default `bind` keeps internal computations out of the scope's contract                                                                                                                                                                                                                                                                                                                                                                                            |
+| P5        | Required `kind` discriminant; required explicit `next` in loop bodies; explicit sentinels; required `default` in branches; template model with `$`-prefix reservation (no shorthand/inference; `$literal` escape for collisions); declared `maxIterations`; explicit `bind` makes value lifetime statically predictable                                                                                                                                                                                                                                                                                                                                |
 
 ---
 
@@ -1737,6 +1883,9 @@ Notes (post-v1):
 ### 8.2 Reference syntax: object form, no shorthand
 
 - **Chosen:** one explicit object form `{ "$from": ..., "name": ..., "path": ... }`.
+  Under the template model (§3.4, decision 0007), `$from` objects
+  appear at any nesting depth within a JSON template; the object-form
+  rationale applies unchanged.
 - Alt A: string form `"node:fetch.body"`. Rejected: needs a parser, hides
   source kind, harder to extend with `optional`.
 - Alt B: JSONPath/JMESPath. Rejected: too expressive (computed indirection
@@ -1838,7 +1987,7 @@ own design review against P5.
   Rejected: loses the ability to give the recovery its own `next`
   chain, its own `bind`, its own loop-body retry, and its own
   participation in the IR graph (visualization, observability events).
-  The collapse in Alt A's rejection is to a *task* node, not to an
+  The collapse in Alt A's rejection is to a _task_ node, not to an
   inline field.
 - Alt D: merge `onError` into a node-level trigger declaration on the
   recovery side (the recovery node names its triggers instead of each
@@ -2145,8 +2294,8 @@ Three lenses close the items previously flagged here:
   downstream consumers are door-kept): which direction of change is
   additive vs. breaking. Used to break ties when the audience lens is
   neutral.
-- **Variance lens (§1.3)**: keep surface variance equal to behavioral
-  variance. Two directions:
+- **Variance lens (§1.3.2 / P3 representation-surface axis)**: keep
+  surface variance equal to behavioral variance. Two directions:
   - _Split direction._ When two alternatives are audience- and
     staging-comparable but one introduces a dedicated rule (no-race,
     last-writer-wins, ordering, drift) the other does not need, reject
@@ -2172,7 +2321,7 @@ rationale lives in §8.
 | Reference form (§8.2)               | Closed: object form is parser-free for engine and analyzers; codegen has no preference between forms.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | State commit timing (§8.6)          | Closed by P4/P5 (lens-neutral): inter-iteration commit makes per-iteration reads independent of write order.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Pure SSA per namespace (§8.17)      | Closed: every reader population is a net win (validator gets textbook dominance + phi; humans get one-value-per-name locality; analyzers get standard SSA tooling). Codegen pays verbosity (§3.7.1 no-implicit-carry-forward, §3.3 phi coverage) and gets back splice safety and validator precision. Engine latitude (re-execute / memoize / per-frame snapshot / future parallelism) is preserved without being IR-observable, which is why §2.2 can defer parallelism without prescribing.                                                                                                                                |
-| Recovery-task reuse (§8.7, §3.8)     | Closed for v1: one-trigger recovery tasks keep dominator analysis trivial. Most "same recovery over several nodes" scenarios are addressed post-v1 by **block scope** (a single `onError` over a region of nodes within one scope; sketch in [post-v1/block-scope.md](post-v1/block-scope.md)). Cross-scope shared recoveries (same task reachable from triggers in different scopes) remain a separate question with its own trigger in [revisit-triggers.md](revisit-triggers.md) row 4. Codegen can also duplicate a logical recovery into per-trigger copies if neither mechanism is available.                                |
+| Recovery-task reuse (§8.7, §3.8)    | Closed for v1: one-trigger recovery tasks keep dominator analysis trivial. Most "same recovery over several nodes" scenarios are addressed post-v1 by **block scope** (a single `onError` over a region of nodes within one scope; sketch in [post-v1/block-scope.md](post-v1/block-scope.md)). Cross-scope shared recoveries (same task reachable from triggers in different scopes) remain a separate question with its own trigger in [revisit-triggers.md](revisit-triggers.md) row 4. Codegen can also duplicate a logical recovery into per-trigger copies if neither mechanism is available.                          |
 | Shared schemas (§8.13)              | Closed: validator identity-checks (§1.1 acceptable performance), codegen single emission, and reviewer locality (P4) all favor named `types`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | IR encoding (§8.14)                 | Closed: JSON serves engine parsing, the LLM-direct fallback, and the door-kept distribution role (§1.1).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Task schema source of truth (§8.16) | Closed for v1: IR self-containment serves both engine sufficiency and door-keeping; hybrid sugar (loader-filled omissions) belongs in the DSL. Reopening trigger in [revisit-triggers.md](revisit-triggers.md) row 6.                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -2190,10 +2339,11 @@ point"), see [revisit-triggers.md](revisit-triggers.md). Some entries
 appear in both this section and that index - here as the v1 closure
 under the lens, there as a longer-term trigger.
 
-### 10.1 Open under the consistency clause (\u00a71.3)
+### 10.1 Open under the consistency clause (\u00a71.3.2 / P3)
 
 Survey items surfaced after the variance lens was made
-bidirectional (\u00a71.3 "Consistency"). Each is one surface form
+bidirectional (\u00a71.3.2, derived from P3's representation-surface
+axis). Each is one surface form
 encoding what may be one rule, or vice versa. Listed for a future
 pass; none are blockers for v1.
 
