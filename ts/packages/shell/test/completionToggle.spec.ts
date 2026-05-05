@@ -42,14 +42,25 @@ async function waitForToggle(page: Page, timeout = 10000) {
     return toggle;
 }
 
+/**
+ * For @-prefixed input, completion starts in dropdown mode.
+ * Switch once so the test can validate inline mode behavior.
+ */
+async function switchCommandCompletionToInline(page: Page) {
+    const toggle = await waitForToggle(page);
+    await expect(toggle).toHaveText("▼");
+    await page.locator(toggleSelector).dispatchEvent("mousedown");
+    await waitForInlineCompletion(page);
+}
+
 test.describe("Completion Mode Toggle", () => {
     test("inline completion shows toggle on hover", async () => {
         await runTestCallback(async (mainWindow: Page) => {
             // Type a partial @ command to trigger inline completion
             await typeSlowly(mainWindow, "@con");
 
-            // Wait for inline ghost text to appear
-            await waitForInlineCompletion(mainWindow);
+            // @-prefixed input starts in dropdown mode; switch to inline.
+            await switchCommandCompletionToInline(mainWindow);
 
             // The toggle should be attached to .chat-input
             const toggle = mainWindow.locator(toggleSelector);
@@ -71,8 +82,8 @@ test.describe("Completion Mode Toggle", () => {
             // Type a partial @ command to trigger inline completion
             await typeSlowly(mainWindow, "@con");
 
-            // Wait for inline ghost text to appear
-            await waitForInlineCompletion(mainWindow);
+            // @-prefixed input starts in dropdown mode; switch to inline.
+            await switchCommandCompletionToInline(mainWindow);
 
             // Click the toggle via dispatchEvent to ensure mousedown fires
             await mainWindow.locator(toggleSelector).dispatchEvent("mousedown");
@@ -97,8 +108,8 @@ test.describe("Completion Mode Toggle", () => {
             // Type a partial @ command to trigger inline completion
             await typeSlowly(mainWindow, "@con");
 
-            // Wait for inline ghost text to appear
-            await waitForInlineCompletion(mainWindow);
+            // @-prefixed input starts in dropdown mode; switch to inline.
+            await switchCommandCompletionToInline(mainWindow);
 
             // Switch to menu mode via toggle
             await mainWindow.locator(toggleSelector).dispatchEvent("mousedown");
@@ -120,8 +131,8 @@ test.describe("Completion Mode Toggle", () => {
             // Type a partial @ command to trigger inline completion
             await typeSlowly(mainWindow, "@con");
 
-            // Wait for inline completion
-            await waitForInlineCompletion(mainWindow);
+            // @-prefixed input starts in dropdown mode; switch to inline.
+            await switchCommandCompletionToInline(mainWindow);
 
             // Read the ghost text content before switching
             const ghostText = await mainWindow
