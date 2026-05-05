@@ -1,0 +1,3 @@
+Built WebView2 content from ../../webview/dist gets copied here at build time.
+The VSIX includes everything in this directory via the csproj <Content> rule.
+This file ensures the directory exists before the first webview build.

@@ -1,0 +1,12 @@
+{
+  "emojiChar": "💻",
+  "description": "Visual Studio integration for editor, solution, build, and debug actions via the EnvDTE automation API",
+  "defaultEnabled": true,
+  "schema": {
+    "description": "Visual Studio agent actions: file ops, edit, solution build, and debugger control",
+    "originalSchemaFile": "./visualStudioSchema.ts",
+    "schemaFile": "../dist/visualStudioSchema.pas.json",
+    "grammarFile": "../dist/visualStudioSchema.ag.json",
+    "schemaType": "VisualStudioActions"
+  }
+}
