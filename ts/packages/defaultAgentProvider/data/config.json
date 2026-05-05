@@ -73,6 +73,9 @@
     },
     "github-cli": {
       "name": "github-cli-agent"
+    },
+    "windowsClock": {
+      "name": "windowsClock-agent"
     }
   },
   "mcpServers": {
@@ -93,7 +96,9 @@
   "explainers": {
     "v5": {
       "constructions": {
-        "data": ["./data/explainer/v5/data/player/basic.json"],
+        "data": [
+          "./data/explainer/v5/data/player/basic.json"
+        ],
         "file": "./data/explainer/v5/constructions.json"
       }
     }

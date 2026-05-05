@@ -1,0 +1,147 @@
+{
+  "version": 1,
+  "integrationName": "windowsClock",
+  "discoveredAt": "2026-05-05T00:16:31.624Z",
+  "source": "uiCapture",
+  "actions": [
+    {
+      "actionName": "navigateToTimerTab",
+      "description": "Switch to the Timer tab from another section.",
+      "parameters": [],
+      "playback": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Window[AutomationId=\"PaneRoot\"]/Pane[AutomationId=\"MenuItemsScrollViewer\"]/Group[AutomationId=\"MenuItemsHost\"]/ListItem[AutomationId=\"TimerButton\"]",
+          "verb": "select",
+          "expectedDeltaSummary": "Timer tab becomes active and content switches to the timer list."
+        }
+      ],
+      "preconditions": {
+        "neutralState": "alarmTab.list",
+        "description": "Clock app is open and focused, currently on another tab (e.g., Alarm)."
+      },
+      "postconditions": {
+        "description": "The Timer tab is selected and its list is displayed."
+      },
+      "destructive": false
+    },
+    {
+      "actionName": "renameTimer",
+      "description": "Rename an existing timer and save the changes.",
+      "parameters": [
+        {
+          "name": "name",
+          "type": "string",
+          "description": "The new name to assign to the timer.",
+          "examples": [
+            "Workout Timer"
+          ]
+        }
+      ],
+      "playback": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/AppBar[ClassName=\"ApplicationBar\"]/Button[AutomationId=\"EditTimersButton\"]",
+          "verb": "invoke",
+          "expectedDeltaSummary": "Enter edit mode for timers."
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/AppBar[ClassName=\"ApplicationBar\"]",
+          "verb": "expand",
+          "expectedDeltaSummary": "ApplicationBar expanded in edit mode."
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/Pane[AutomationId=\"TimerScrollViewer\"]/DataItem[AutomationId=\"TimerViewGrid\"]",
+          "verb": "toggle",
+          "expectedDeltaSummary": "Select the timer to edit."
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Window[Name=\"Popup\"][ClassName=\"Popup\"]/Pane[AutomationId=\"EditFlyout\"]/Pane[AutomationId=\"ContentScrollViewer\"]/Edit[Name=\"Timer name\"][ClassName=\"TextBox\"]",
+          "verb": "setValue",
+          "valueRef": "name",
+          "expectedDeltaSummary": "Update the timer name in the edit flyout."
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Window[Name=\"Popup\"][ClassName=\"Popup\"]/Pane[AutomationId=\"EditFlyout\"]/Button[AutomationId=\"PrimaryButton\"]",
+          "verb": "invoke",
+          "expectedDeltaSummary": "Save the timer name change."
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/AppBar[ClassName=\"ApplicationBar\"]/Button[AutomationId=\"DoneButton\"]",
+          "verb": "invoke",
+          "expectedDeltaSummary": "Exit edit mode and return to the timers list."
+        }
+      ],
+      "preconditions": {
+        "neutralState": "timerTab.paused",
+        "description": "The Clock app is open on the Timer tab with a timer visible and paused; no modal dialogs are active."
+      },
+      "postconditions": {
+        "description": "The selected timer shows the new name in the timers list and editing is complete."
+      },
+      "destructive": false
+    },
+    {
+      "actionName": "setTimerViewMode",
+      "description": "Expand the timer into its alternate/compact view.  [merged from: expandTimerView, restoreTimerView]",
+      "parameters": [
+        {
+          "name": "mode",
+          "type": "enum",
+          "description": "Distinguishes expandTimerView / restoreTimerView variants.",
+          "examples": [
+            "view",
+            "view"
+          ],
+          "enumValues": [
+            "compact",
+            "full"
+          ]
+        }
+      ],
+      "playback": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/Pane[AutomationId=\"TimerScrollViewer\"]/DataItem[AutomationId=\"TimerViewGrid\"]/Button[AutomationId=\"TimerExpandButton\"]",
+          "verb": "invoke",
+          "expectedDeltaSummary": "Timer view toggled (expanded/compact)."
+        }
+      ],
+      "preconditions": {
+        "neutralState": "timerTab.running",
+        "description": "Timer tab is open with the running timer view visible."
+      },
+      "postconditions": {
+        "description": "Timer view displays its expanded/compact alternate layout."
+      },
+      "destructive": false
+    },
+    {
+      "actionName": "startTimer",
+      "description": "Start or resume the timer from list or paused states.",
+      "parameters": [],
+      "playback": [
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Custom[AutomationId=\"NavView\"]/Pane[AutomationId=\"PART_Pane1ScrollViewer\"]/Pane[AutomationId=\"TimerScrollViewer\"]/DataItem[AutomationId=\"TimerViewGrid\"]/Button[AutomationId=\"AotButton\"]",
+          "verb": "invoke",
+          "expectedDeltaSummary": "Opens the Always on top mini view."
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Button[AutomationId=\"TimerPlayPauseButton\"]",
+          "verb": "invoke",
+          "expectedDeltaSummary": "Timer starts running."
+        },
+        {
+          "selector": "/Window[Name=\"Clock\"][ClassName=\"ApplicationFrameWindow\"]/Window[Name=\"Clock\"][ClassName=\"Windows.UI.Core.CoreWindow\"]/Button[Name=\"Back to full view\"][ClassName=\"Button\"]",
+          "verb": "invoke",
+          "expectedDeltaSummary": "Returns to the full app view."
+        }
+      ],
+      "preconditions": {
+        "neutralState": "timerTab.list",
+        "description": "Timer tab is in list view and idle (no modal dialogs; Always on top view closed)."
+      },
+      "postconditions": {
+        "description": "The timer is running and the full app view is visible."
+      },
+      "destructive": false
+    }
+  ]
+}

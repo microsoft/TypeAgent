@@ -1,0 +1,30 @@
+{
+  "name": "windowsClock-agent",
+  "version": "0.0.1",
+  "private": true,
+  "description": "windowsClock TypeAgent — UI Automation playback",
+  "type": "module",
+  "exports": {
+    "./agent/manifest": "./src/windowsClockManifest.json",
+    "./agent/handlers": "./dist/windowsClockActionHandler.js"
+  },
+  "scripts": {
+    "asc:main": "asc -i ./src/windowsClockSchema.ts -o ./dist/windowsClockSchema.pas.json -t WindowsClockAction",
+    "build": "concurrently npm:tsc npm:asc:*",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "@typeagent/agent-sdk": "workspace:*",
+    "onboarding-agent": "workspace:*"
+  },
+  "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
+    "concurrently": "^9.1.2",
+    "rimraf": "^6.0.1",
+    "typescript": "~5.4.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

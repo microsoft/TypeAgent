@@ -21,6 +21,12 @@ export type ScaffoldOptions = {
     emoji?: string;
     /** AUMID (UWP) or absolute exePath for app auto-launch. */
     appLaunch: { aumid?: string; exePath?: string };
+    /**
+     * Substring to match against window titles when probing for an
+     * already-running instance of the app (UWP apps can't be launched twice).
+     * Defaults to the integrationName.
+     */
+    appTitleMatch?: string;
 };
 
 export function scaffoldUiAgent(opts: ScaffoldOptions): void {
@@ -64,9 +70,10 @@ export function scaffoldUiAgent(opts: ScaffoldOptions): void {
     );
 
     // ActionHandler.
+    const appTitleMatch = opts.appTitleMatch ?? name;
     writeFileSync(
         path.join(opts.targetDir, "src", `${name}ActionHandler.ts`),
-        renderActionHandler(name, cap, opts.appLaunch),
+        renderActionHandler(name, cap, opts.appLaunch, appTitleMatch),
     );
 
     // package.json + tsconfigs.
@@ -93,9 +100,6 @@ function renderSchema(
     lines.push("// Copyright (c) Microsoft Corporation.");
     lines.push("// Licensed under the MIT License.");
     lines.push("");
-    lines.push(`// AUTO-GENERATED from data/discoveredActions.json by scaffoldUiAgent.`);
-    lines.push(`// Edits will be overwritten on the next scaffolder run.`);
-    lines.push("");
     lines.push(`export type ${cap}Action =`);
     for (let i = 0; i < actions.length; i++) {
         const last = i === actions.length - 1;
@@ -104,11 +108,14 @@ function renderSchema(
     lines.push("");
 
     for (const a of actions) {
-        lines.push(`/** ${a.description} */`);
+        // The action-schema-compiler doesn't accept /** ... */ blocks; use //.
+        for (const dl of a.description.split("\n")) {
+            lines.push(`// ${dl}`);
+        }
         lines.push(`export type ${actionTypeName(a)} = {`);
         lines.push(`    actionName: "${a.actionName}";`);
         if (a.parameters.length === 0) {
-            lines.push(`    parameters: Record<string, never>;`);
+            lines.push(`    parameters: {};`);
         } else {
             lines.push(`    parameters: {`);
             for (const p of a.parameters) {
@@ -173,10 +180,12 @@ function renderActionHandler(
     name: string,
     cap: string,
     appLaunch: ScaffoldOptions["appLaunch"],
+    appTitleMatch: string,
 ): string {
     const launchArg = appLaunch.aumid
         ? `{ aumid: ${JSON.stringify(appLaunch.aumid)} }`
         : `{ exePath: ${JSON.stringify(appLaunch.exePath ?? "")} }`;
+    const titleMatchLit = JSON.stringify(appTitleMatch);
     return `// Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
@@ -202,6 +211,7 @@ import { fileURLToPath } from "node:url";
 import { ${cap}Action } from "./${name}Schema.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const APP_TITLE_MATCH = ${titleMatchLit};
 
 type DiscoveredActionsFile = { actions: SynthesizedAction[] };
 
@@ -246,6 +256,20 @@ async function ensureAppRunning(state: AgentState): Promise<void> {
         }
         state.appPid = null;
         state.appMainWindow = null;
+    }
+    // The app may already be running from a prior invocation (each CLI / agent
+    // call gets a fresh AgentState). Probe app.list for an existing window
+    // matching APP_TITLE_MATCH before launching — UWP apps can't be launched
+    // twice and FlaUI returns "no main window" when they are.
+    const existing = await client.appList();
+    const match = existing.find((w) =>
+        w.title.toLowerCase().includes(APP_TITLE_MATCH.toLowerCase()),
+    );
+    if (match) {
+        state.appPid = match.pid;
+        state.appMainWindow = match.mainWindow;
+        await client.eventsIdle({ debounceMs: 600, maxWaitMs: 3000 });
+        return;
     }
     const launch = await client.appLaunch(${launchArg});
     state.appPid = launch.pid;

@@ -17,8 +17,8 @@ function log(msg: string): void {
 }
 
 function main(): void {
-    // Repo root: dist/uiCapture/test/scaffoldClockAgent.js → 6 ups.
-    const repoRoot = path.resolve(
+    // From dist/uiCapture/test/scaffoldClockAgent.js, six levels up is ts/.
+    const tsRoot = path.resolve(
         path.dirname(__filename),
         "../../../../../..",
     );
@@ -33,8 +33,7 @@ function main(): void {
         "discoveredActions.json",
     );
     const targetDir = path.join(
-        repoRoot,
-        "ts",
+        tsRoot,
         "packages",
         "agents",
         "windowsClock",
@@ -51,6 +50,7 @@ function main(): void {
             "Windows Clock agent — set alarms, start timers, run the stopwatch, and add world clocks via the built-in Windows Alarms & Clock app.",
         emoji: "⏰",
         appLaunch: { aumid: "Microsoft.WindowsAlarms_8wekyb3d8bbwe!App" },
+        appTitleMatch: "Clock",
     });
     log("DONE");
 }
