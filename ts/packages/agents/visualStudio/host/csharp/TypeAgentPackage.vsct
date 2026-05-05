@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <Extern href="stdidcmd.h" />
+  <Extern href="vsshlids.h" />
+
+  <Commands package="guidTypeAgentPackage">
+    <Groups>
+      <Group guid="guidTypeAgentPackageCmdSet" id="MyMenuGroup" priority="0x0600">
+        <Parent guid="guidSHLMainMenu" id="IDM_VS_MENU_VIEW" />
+      </Group>
+    </Groups>
+
+    <Buttons>
+      <Button guid="guidTypeAgentPackageCmdSet" id="ChatToolWindowCommandId" priority="0x0100" type="Button">
+        <Parent guid="guidTypeAgentPackageCmdSet" id="MyMenuGroup" />
+        <Strings>
+          <ButtonText>TypeAgent Chat</ButtonText>
+        </Strings>
+      </Button>
+    </Buttons>
+  </Commands>
+
+  <Symbols>
+    <GuidSymbol name="guidTypeAgentPackage" value="{b1a20f8c-7c53-4e2f-9c19-9f1e2a3d5f01}" />
+    <GuidSymbol name="guidTypeAgentPackageCmdSet" value="{c2a30f9d-8c64-4f3e-ad2a-af2f3b4e6f12}">
+      <IDSymbol name="MyMenuGroup" value="0x1020" />
+      <IDSymbol name="ChatToolWindowCommandId" value="0x0100" />
+    </GuidSymbol>
+  </Symbols>
+</CommandTable>

@@ -1,0 +1,394 @@
+[
+  {
+    "id": "gc-01",
+    "category": "grammar-competition",
+    "description": "Competition: 'ping' should route to powershell, not player",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "ping google.com",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "testConnection",
+          "matchedAgent": "powershell"
+        }
+      }
+    ]
+  },
+  {
+    "id": "gc-02",
+    "category": "grammar-competition",
+    "description": "Competition: file operations should stay in powershell",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "list files in downloads",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listFiles",
+          "matchedAgent": "powershell"
+        }
+      },
+      {
+        "text": "show files in documents",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listFiles",
+          "matchedAgent": "powershell"
+        }
+      }
+    ]
+  },
+  {
+    "id": "gc-03",
+    "category": "grammar-competition",
+    "description": "Competition: 'search' may conflict with browser - use grep instead",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "grep error in logs",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "findText",
+          "matchedAgent": "powershell"
+        }
+      },
+      {
+        "text": "find TODO in src",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "findText",
+          "matchedAgent": "powershell"
+        }
+      }
+    ]
+  },
+  {
+    "id": "gc-04",
+    "category": "grammar-competition",
+    "description": "Competition: process commands should not conflict with player",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "show running processes",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listProcesses",
+          "matchedAgent": "powershell"
+        }
+      },
+      {
+        "text": "kill notepad",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "stopProcess",
+          "matchedAgent": "powershell"
+        }
+      }
+    ]
+  },
+  {
+    "id": "gc-05",
+    "category": "grammar-competition",
+    "description": "Competition: 'start' may conflict with player - context matters",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "start notepad",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "startProcess",
+          "matchedAgent": "powershell"
+        }
+      },
+      {
+        "text": "launch calculator",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "startProcess",
+          "matchedAgent": "powershell"
+        }
+      },
+      {
+        "text": "run cmd",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "startProcess",
+          "matchedAgent": "powershell"
+        }
+      }
+    ]
+  },
+  {
+    "id": "gc-06",
+    "category": "grammar-competition",
+    "description": "Competition: system info should stay in powershell",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "show system information",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "systemInfo",
+          "matchedAgent": "powershell"
+        }
+      },
+      {
+        "text": "show disk usage",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "diskUsage",
+          "matchedAgent": "powershell"
+        }
+      },
+      {
+        "text": "show uptime",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "uptime",
+          "matchedAgent": "powershell"
+        }
+      }
+    ]
+  },
+  {
+    "id": "gc-07",
+    "category": "grammar-competition",
+    "description": "Competition: service commands are powershell-specific",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "list all services",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listServices",
+          "matchedAgent": "powershell"
+        }
+      },
+      {
+        "text": "restart service spooler",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "restartService",
+          "matchedAgent": "powershell"
+        }
+      }
+    ]
+  },
+  {
+    "id": "gc-08",
+    "category": "grammar-competition",
+    "description": "Competition: network commands should stay in powershell",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "ipconfig",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "ipConfig",
+          "matchedAgent": "powershell"
+        }
+      },
+      {
+        "text": "netstat",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "portListeners",
+          "matchedAgent": "powershell"
+        }
+      },
+      {
+        "text": "nslookup google.com",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "dnsLookup",
+          "matchedAgent": "powershell"
+        }
+      }
+    ]
+  },
+  {
+    "id": "gc-09",
+    "category": "grammar-competition",
+    "description": "Competition: zip/unzip should stay in powershell",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "zip logs",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "compress",
+          "matchedAgent": "powershell"
+        }
+      },
+      {
+        "text": "unzip backup.zip",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "expand",
+          "matchedAgent": "powershell"
+        }
+      }
+    ]
+  },
+  {
+    "id": "gc-10",
+    "category": "grammar-competition",
+    "description": "Competition: csv/json data operations should stay in powershell",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "read csv data.csv",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "readCsv",
+          "matchedAgent": "powershell"
+        }
+      },
+      {
+        "text": "convert data.csv to json",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "convertFormat",
+          "matchedAgent": "powershell"
+        }
+      }
+    ]
+  },
+  {
+    "id": "gc-11",
+    "category": "grammar-competition",
+    "description": "Competition: Unix-like aliases should route to powershell",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "ls",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listFiles",
+          "matchedAgent": "powershell"
+        }
+      },
+      {
+        "text": "cat readme.md",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "readFile",
+          "matchedAgent": "powershell"
+        }
+      },
+      {
+        "text": "rm temp.txt",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "deleteFile",
+          "matchedAgent": "powershell"
+        }
+      },
+      {
+        "text": "cp file.txt backup.txt",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "copyFile",
+          "matchedAgent": "powershell"
+        }
+      },
+      {
+        "text": "mv old.txt new.txt",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "moveFile",
+          "matchedAgent": "powershell"
+        }
+      },
+      {
+        "text": "ps",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "listProcesses",
+          "matchedAgent": "powershell"
+        }
+      },
+      {
+        "text": "df",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": "diskUsage",
+          "matchedAgent": "powershell"
+        }
+      }
+    ]
+  },
+  {
+    "id": "gc-neg-01",
+    "category": "grammar-competition",
+    "description": "Competition Negative: music commands should NOT match powershell",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "play some music",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": null,
+          "matchedAgent": null
+        }
+      },
+      {
+        "text": "play shake it off",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": null,
+          "matchedAgent": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "gc-neg-02",
+    "category": "grammar-competition",
+    "description": "Competition Negative: calendar commands should NOT match powershell",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "schedule a meeting for tomorrow",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": null,
+          "matchedAgent": null
+        }
+      },
+      {
+        "text": "what's on my calendar",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": null,
+          "matchedAgent": null
+        }
+      }
+    ]
+  },
+  {
+    "id": "gc-neg-03",
+    "category": "grammar-competition",
+    "description": "Competition Negative: email commands should NOT match powershell",
+    "setup": { "allAgents": true },
+    "utterances": [
+      {
+        "text": "send an email to john",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": null,
+          "matchedAgent": null
+        }
+      },
+      {
+        "text": "check my inbox",
+        "expected": {
+          "routedTo": "grammar",
+          "matchedFlow": null,
+          "matchedAgent": null
+        }
+      }
+    ]
+  }
+]

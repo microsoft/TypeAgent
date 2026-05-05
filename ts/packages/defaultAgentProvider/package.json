@@ -81,6 +81,7 @@
     "utility-typeagent": "workspace:*",
     "vampire-agent": "workspace:*",
     "video-agent": "workspace:*",
+    "visualstudio-agent": "workspace:*",
     "weather-agent": "workspace:*",
     "ws": "^8.17.1",
     "zod": "^4.1.13"

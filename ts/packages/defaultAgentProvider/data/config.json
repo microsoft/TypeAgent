@@ -77,6 +77,9 @@
     "vampire": {
       "name": "vampire-agent",
       "execMode": "dispatcher"
+    },
+    "visualStudio": {
+      "name": "visualstudio-agent"
     }
   },
   "mcpServers": {
