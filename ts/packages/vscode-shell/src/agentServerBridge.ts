@@ -593,6 +593,24 @@ export class AgentServerBridge {
     }
 
     dispose(): void {
+        // Synchronously clear timers and the static-map registration so
+        // they can't leak past dispose, even if the async disconnect()
+        // tail runs after the host has moved on.
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = undefined;
+        }
+        if (this.reconnectCountdown) {
+            clearInterval(this.reconnectCountdown);
+            this.reconnectCountdown = undefined;
+        }
+        if (this.session) {
+            AgentServerBridge.unregisterForSession(
+                this.session.sessionId,
+                this,
+            );
+        }
+
         // Best-effort delete the ephemeral session we created for this panel
         const toDelete = this.ephemeralSessionId;
         const conn = this.connection;
@@ -963,6 +981,7 @@ export class AgentServerBridge {
         // is queued for the webviews, we flush the buffer so live events
         // appear after the replayed prefix as expected.
         this.replayBuffer = [];
+        this.replayBufferOverflowed = false;
         let entries: Array<any>;
         try {
             entries = await session.dispatcher.getDisplayHistory();
@@ -1129,9 +1148,7 @@ export class AgentServerBridge {
                 // to a cancelTyping signal; release the matching demo
                 // runner await so the script's loop can see the cancel
                 // and exit cleanly instead of hanging on this requestId.
-                const resolve = this.demoCompletionResolvers.get(
-                    msg.requestId,
-                );
+                const resolve = this.demoCompletionResolvers.get(msg.requestId);
                 if (resolve) {
                     this.demoCompletionResolvers.delete(msg.requestId);
                     resolve();
@@ -1680,13 +1697,26 @@ export class AgentServerBridge {
             "notify",
             "clear",
         ]);
+    private static readonly REPLAY_BUFFER_MAX = 5000;
     private replayBuffer: BridgeToWebviewMessage[] | undefined;
+    private replayBufferOverflowed = false;
 
     private broadcastToWebviews(msg: BridgeToWebviewMessage): void {
         if (
             this.replayBuffer !== undefined &&
             AgentServerBridge.REPLAY_BUFFERED_TYPES.has(msg.type)
         ) {
+            if (
+                this.replayBuffer.length >= AgentServerBridge.REPLAY_BUFFER_MAX
+            ) {
+                if (!this.replayBufferOverflowed) {
+                    this.replayBufferOverflowed = true;
+                    console.warn(
+                        `[AgentServerBridge] replayBuffer hit cap (${AgentServerBridge.REPLAY_BUFFER_MAX}); dropping further events until replay flushes.`,
+                    );
+                }
+                return;
+            }
             this.replayBuffer.push(msg);
             return;
         }
