@@ -1393,8 +1393,13 @@ export class ChatPanel {
 
         // Reset state so the next live message starts a fresh bubble and
         // doesn't reuse a history bubble via the requestId map.
+        // Also clear userMessageById: clientRequestIds from prior sessions
+        // (e.g. the shell's cmd-N counter resets each launch) can collide
+        // with new live requests, causing hasUserMessage() to return a
+        // false positive and silently drop the live user-message bubble.
         this.currentAgentContainer = undefined;
         this.agentContainersByRequestId.clear();
+        this.userMessageById.clear();
         this.scrollToBottom();
     }
 
