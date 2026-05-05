@@ -54,13 +54,23 @@ import type { BenchmarkScenario } from "./harness/types.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function parseArgs(): BenchmarkOptions & { dryRun: boolean } {
+function parseArgs(): BenchmarkOptions & {
+    dryRun: boolean;
+    allAgents: boolean;
+    noSamples: boolean;
+} {
     const args = process.argv.slice(2);
-    const options: BenchmarkOptions & { dryRun: boolean } = {
+    const options: BenchmarkOptions & {
+        dryRun: boolean;
+        allAgents: boolean;
+        noSamples: boolean;
+    } = {
         scenarioDir: join(__dirname, "scenarios"),
         outputDir: join(__dirname, "results"),
         benchmarkDir: __dirname,
         dryRun: false,
+        allAgents: false,
+        noSamples: false,
     };
 
     for (let i = 0; i < args.length; i++) {
@@ -80,6 +90,12 @@ function parseArgs(): BenchmarkOptions & { dryRun: boolean } {
             case "--dry-run":
                 options.dryRun = true;
                 break;
+            case "--all-agents":
+                options.allAgents = true;
+                break;
+            case "--no-samples":
+                options.noSamples = true;
+                break;
         }
     }
 
@@ -88,6 +104,8 @@ function parseArgs(): BenchmarkOptions & { dryRun: boolean } {
 
 async function createLiveDispatcher(
     persistDir: string,
+    allAgents: boolean = false,
+    noSamples: boolean = false,
 ): Promise<DispatcherAdapter> {
     // Resolve dispatcher and provider via relative paths to avoid cyclic
     // workspace dependencies (powershell -> defaultAgentProvider -> powershell)
@@ -130,9 +148,31 @@ async function createLiveDispatcher(
             nodeProvidersPath.replace(/\\/g, "/")
     );
 
+    // When noSamples is true, set env var to prevent sample flow seeding
+    // during agent initialization. This allows namespace schema grammars
+    // to be tested without competition from sample flows.
+    if (noSamples) {
+        process.env.TYPEAGENT_NO_SAMPLES = "1";
+    }
+
     const dispatcher = await createDispatcher("powershell-benchmark", {
         appAgentProviders: providers,
-        agents: { actions: true, commands: true },
+        agents: allAgents
+            ? { actions: true, commands: true }
+            : {
+                  schemas: [
+                      "powershell",
+                      "powershell.powershell-files",
+                      "powershell.powershell-processes",
+                      "powershell.powershell-system",
+                      "powershell.powershell-services",
+                      "powershell.powershell-network",
+                      "powershell.powershell-data",
+                      "powershell.powershell-archives",
+                  ],
+                  actions: true,
+                  commands: ["dispatcher"],
+              },
         execution: { history: false },
         collectCommandResult: true,
         persistDir,
@@ -261,6 +301,14 @@ async function main() {
     if (options.noLlmJudge) {
         console.log("LLM judge: disabled");
     }
+    if (options.allAgents) {
+        console.log("Agent mode: ALL agents (competition testing)");
+    } else {
+        console.log("Agent mode: PowerShell only (isolation testing)");
+    }
+    if (options.noSamples) {
+        console.log("Sample flows: disabled (namespace schemas only)");
+    }
 
     // Validate scenario files exist
     const scenarioFiles = [
@@ -333,7 +381,11 @@ async function main() {
     if (existsSync(scriptsDir)) {
         try {
             const seedResult = await seedViaImport(scriptsDir, persistDir, () =>
-                createLiveDispatcher(persistDir),
+                createLiveDispatcher(
+                    persistDir,
+                    options.allAgents,
+                    options.noSamples,
+                ),
             );
             flowNameMap = seedResult.flowNameMap;
             if (seedResult.failed > 0) {
@@ -350,7 +402,11 @@ async function main() {
     console.log("\nCreating dispatcher for benchmark run...");
     let dispatcher: DispatcherAdapter;
     try {
-        dispatcher = await createLiveDispatcher(persistDir);
+        dispatcher = await createLiveDispatcher(
+            persistDir,
+            options.allAgents,
+            options.noSamples,
+        );
     } catch (err) {
         console.error(`Failed to create dispatcher: ${err}`);
         console.log(

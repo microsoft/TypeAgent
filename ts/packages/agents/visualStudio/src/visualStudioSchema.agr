@@ -1,0 +1,415 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
+<AddBreakpoint> = add a breakpoint at line $(line:word) in $(file:wildcard) -> {
+  actionName: "addBreakpoint",
+  parameters: {
+    file,
+    line
+  }
+}
+| set a breakpoint in the file $(file:wildcard) at line $(line:word) -> {
+  actionName: "addBreakpoint",
+  parameters: {
+    file,
+    line
+  }
+}
+| add a breakpoint on line $(line:word) of $(file:wildcard) with the condition $(condition:wildcard) -> {
+  actionName: "addBreakpoint",
+  parameters: {
+    file,
+    line,
+    condition
+  }
+}
+| need a breakpoint at line $(line:word) in $(file:wildcard), but only if $(condition:wildcard) is true -> {
+  actionName: "addBreakpoint",
+  parameters: {
+    file,
+    line,
+    condition
+  }
+};
+
+<RemoveBreakpoint> = remove the breakpoint with ID $(breakpointId:word) -> {
+  actionName: "removeBreakpoint",
+  parameters: {
+    breakpointId
+  }
+}
+| delete the breakpoint identified by $(breakpointId:word) -> {
+  actionName: "removeBreakpoint",
+  parameters: {
+    breakpointId
+  }
+}
+| get rid of the breakpoint $(breakpointId:word) -> {
+  actionName: "removeBreakpoint",
+  parameters: {
+    breakpointId
+  }
+}
+| remove the breakpoint with the ID $(breakpointId:word) -> {
+  actionName: "removeBreakpoint",
+  parameters: {
+    breakpointId
+  }
+};
+
+<FindInFiles> = search for $(searchTerm:wildcard) in all the files with $(fileTypes:wildcard) extensions -> {
+  actionName: "findInFiles",
+  parameters: {
+    searchTerm,
+    fileTypes
+  }
+}
+| find $(searchTerm:wildcard) in the solution files of type $(fileTypes:wildcard) -> {
+  actionName: "findInFiles",
+  parameters: {
+    searchTerm,
+    fileTypes
+  }
+}
+| locate $(searchTerm:wildcard) in files that are $(fileTypes:wildcard) -> {
+  actionName: "findInFiles",
+  parameters: {
+    searchTerm,
+    fileTypes
+  }
+}
+| search for $(searchTerm:wildcard) in the solution's $(fileTypes:wildcard) files -> {
+  actionName: "findInFiles",
+  parameters: {
+    searchTerm,
+    fileTypes
+  }
+};
+
+<ExecuteCommand> = execute the command named $(commandName:wildcard) with these arguments $(commandArgs:wildcard) -> {
+  actionName: "executeCommand",
+  parameters: {
+    commandName,
+    commandArgs
+  }
+}
+| execute the $(commandName:wildcard) command in Visual Studio -> {
+  actionName: "executeCommand",
+  parameters: {
+    commandName
+  }
+}
+| run the $(commandName:wildcard) command with the specified parameters -> {
+  actionName: "executeCommand",
+  parameters: {
+    commandName
+  }
+};
+
+<OpenFile> = open the file located at $(filePath:wildcard) in Visual Studio -> {
+  actionName: "openFile",
+  parameters: {
+    filePath
+  }
+}
+| open the file at $(filePath:wildcard) -> {
+  actionName: "openFile",
+  parameters: {
+    filePath
+  }
+};
+
+<Break> = pause the process right now -> {
+  actionName: "break",
+  parameters: {}
+}
+| break the execution immediately -> {
+  actionName: "break",
+  parameters: {}
+}
+| stop the current process for debugging -> {
+  actionName: "break",
+  parameters: {}
+}
+| halt the process instantly -> {
+  actionName: "break",
+  parameters: {}
+};
+
+<Go> = run the program from here -> {
+  actionName: "go",
+  parameters: {}
+}
+| start executing the code from this point -> {
+  actionName: "go",
+  parameters: {}
+}
+| go ahead and run the program from the current line -> {
+  actionName: "go",
+  parameters: {}
+}
+| begin execution from the current statement -> {
+  actionName: "go",
+  parameters: {}
+};
+
+<StepInto> = step into the next function call -> {
+  actionName: "stepInto",
+  parameters: {}
+}
+| step into the next function -> {
+  actionName: "stepInto",
+  parameters: {}
+}
+| step into the next function call -> {
+  actionName: "stepInto",
+  parameters: {}
+}
+| step into the next function -> {
+  actionName: "stepInto",
+  parameters: {}
+};
+
+<StepOut> = step out of the current function -> {
+  actionName: "stepOut",
+  parameters: {}
+}
+| step out of this function -> {
+  actionName: "stepOut",
+  parameters: {}
+}
+| step out of the current function -> {
+  actionName: "stepOut",
+  parameters: {}
+}
+| step out of the function -> {
+  actionName: "stepOut",
+  parameters: {}
+};
+
+<StepOver> = step over the next function call -> {
+  actionName: "stepOver",
+  parameters: {}
+}
+| step over the next function call -> {
+  actionName: "stepOver",
+  parameters: {}
+}
+| step over the next function call -> {
+  actionName: "stepOver",
+  parameters: {}
+}
+| step over the next function call -> {
+  actionName: "stepOver",
+  parameters: {}
+};
+
+<Stop> = stop the debugging process -> {
+  actionName: "stop",
+  parameters: {}
+}
+| terminate all attached processes -> {
+  actionName: "stop",
+  parameters: {}
+}
+| stop debugging and detach from everything -> {
+  actionName: "stop",
+  parameters: {}
+}
+| end the current debugging session -> {
+  actionName: "stop",
+  parameters: {}
+};
+
+<Build> = start building the solution -> {
+  actionName: "build",
+  parameters: {}
+}
+| build the active solution configuration -> {
+  actionName: "build",
+  parameters: {}
+}
+| initiate the build process for the current solution -> {
+  actionName: "build",
+  parameters: {}
+}
+| begin building the solution -> {
+  actionName: "build",
+  parameters: {}
+};
+
+<Clean> = clean the solution -> {
+  actionName: "clean",
+  parameters: {}
+}
+| delete all the build files for the projects -> {
+  actionName: "clean",
+  parameters: {}
+}
+| clean up the compiler generated files -> {
+  actionName: "clean",
+  parameters: {}
+}
+| clean the marked projects -> {
+  actionName: "clean",
+  parameters: {}
+};
+
+<Debug> = start debugging the solution -> {
+  actionName: "debug",
+  parameters: {}
+}
+| begin debugging the project -> {
+  actionName: "debug",
+  parameters: {}
+}
+| debug the solution -> {
+  actionName: "debug",
+  parameters: {}
+}
+| start the debug process for the solution -> {
+  actionName: "debug",
+  parameters: {}
+};
+
+<Run> = run the current solution -> {
+  actionName: "run",
+  parameters: {}
+}
+| execute the active solution configuration -> {
+  actionName: "run",
+  parameters: {}
+}
+| start running the solution -> {
+  actionName: "run",
+  parameters: {}
+}
+| run the active configuration -> {
+  actionName: "run",
+  parameters: {}
+};
+
+<CloseAll> = close all open files -> {
+  actionName: "closeAll",
+  parameters: {}
+}
+| shut all the documents -> {
+  actionName: "closeAll",
+  parameters: {}
+}
+| close everything that's open and save any changes -> {
+  actionName: "closeAll",
+  parameters: {}
+}
+| close all the open documents -> {
+  actionName: "closeAll",
+  parameters: {}
+};
+
+<SaveAll> = save all my open files -> {
+  actionName: "saveAll",
+  parameters: {}
+}
+| save all documents currently open -> {
+  actionName: "saveAll",
+  parameters: {}
+}
+| save everything I'm working on -> {
+  actionName: "saveAll",
+  parameters: {}
+}
+| save all the files -> {
+  actionName: "saveAll",
+  parameters: {}
+};
+
+<Redo> = redo the last change I undid -> {
+  actionName: "redo",
+  parameters: {}
+}
+| redo the previous action -> {
+  actionName: "redo",
+  parameters: {}
+}
+| redo the last thing I reversed -> {
+  actionName: "redo",
+  parameters: {}
+}
+| reapply the last undone action -> {
+  actionName: "redo",
+  parameters: {}
+};
+
+<Undo> = undo my last change -> {
+  actionName: "undo",
+  parameters: {}
+}
+| reverse the last action I did -> {
+  actionName: "undo",
+  parameters: {}
+}
+| undo the previous edit -> {
+  actionName: "undo",
+  parameters: {}
+}
+| undo the last thing I did -> {
+  actionName: "undo",
+  parameters: {}
+};
+
+<FindText> = search for the text $(text:wildcard) from here to the end of the document -> {
+  actionName: "findText",
+  parameters: {
+    text
+  }
+}
+| find the word $(text:wildcard) starting from the current cursor position -> {
+  actionName: "findText",
+  parameters: {
+    text
+  }
+}
+| look for $(text:wildcard) in the rest of the document -> {
+  actionName: "findText",
+  parameters: {
+    text
+  }
+}
+| search for $(text:wildcard) from this point onwards -> {
+  actionName: "findText",
+  parameters: {
+    text
+  }
+};
+
+<GotoLine> = go to line $(line:word) and select it -> {
+  actionName: "gotoLine",
+  parameters: {
+    line,
+    select: true
+  }
+}
+| move to line $(line:word), but don't select it -> {
+  actionName: "gotoLine",
+  parameters: {
+    line,
+    select: false
+  }
+}
+| jump to line $(line:word) and highlight it -> {
+  actionName: "gotoLine",
+  parameters: {
+    line,
+    select: true
+  }
+}
+| navigate to line $(line:word) without selecting it -> {
+  actionName: "gotoLine",
+  parameters: {
+    line,
+    select: false
+  }
+};
+
+import { VisualStudioActions } from "./visualStudioSchema.ts";
+<Start> : VisualStudioActions = <AddBreakpoint> | <RemoveBreakpoint> | <FindInFiles> | <ExecuteCommand> | <OpenFile> | <Break> | <Go> | <StepInto> | <StepOut> | <StepOver> | <Stop> | <Build> | <Clean> | <Debug> | <Run> | <CloseAll> | <SaveAll> | <Redo> | <Undo> | <FindText> | <GotoLine>;

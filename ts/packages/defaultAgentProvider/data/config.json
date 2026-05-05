@@ -76,6 +76,9 @@
     },
     "windowsClock": {
       "name": "windowsClock-agent"
+    },
+    "visualStudio": {
+      "name": "visualstudio-agent"
     }
   },
   "mcpServers": {

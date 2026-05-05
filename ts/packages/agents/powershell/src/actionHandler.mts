@@ -988,7 +988,14 @@ export function instantiate(): AppAgent {
             agentContext.store = store;
             _agentStore = store;
 
-            await seedSampleFlows(store);
+            // Skip sample seeding if TYPEAGENT_NO_SAMPLES env var is set
+            if (!process.env.TYPEAGENT_NO_SAMPLES) {
+                await seedSampleFlows(store);
+            } else {
+                debug(
+                    "Sample seeding disabled by TYPEAGENT_NO_SAMPLES env var",
+                );
+            }
             // Dynamic grammar rules are written to grammar/dynamic.agr by the store.
             // The dispatcher reads this file after updateAgentContext completes
             // and registers the rules in its own grammar system.
