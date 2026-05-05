@@ -166,6 +166,11 @@ export async function createConversationManager(
 
     const conversations = new Map<string, ConversationRecord>();
 
+    // Single-flight lock for "auto-create the default conversation". Two
+    // concurrent first-connects could both observe "no conversations exist"
+    // and race; this serializes them so only one create happens.
+    let defaultCreateP: Promise<string> | undefined;
+
     // Load persisted metadata
     await loadMetadata();
 
@@ -354,6 +359,23 @@ export async function createConversationManager(
         }
     }
 
+    /**
+     * Throw if `name` collides (case-insensitive) with another existing
+     * conversation. `selfId` is excluded from the check so renaming a
+     * conversation to its current name is a no-op rather than an error.
+     */
+    function ensureNameAvailable(name: string, selfId?: string): void {
+        const norm = name.trim().toLowerCase();
+        for (const [id, record] of conversations) {
+            if (id === selfId) continue;
+            if (record.name.trim().toLowerCase() === norm) {
+                throw new Error(
+                    `A conversation named "${record.name}" already exists. Pick a different name.`,
+                );
+            }
+        }
+    }
+
     // Sweep orphaned ephemeral conversations left behind by unclean CLI exits
     {
         const toSweep: string[] = [];
@@ -389,6 +411,7 @@ export async function createConversationManager(
     const manager: ConversationManager = {
         async createConversation(name: string): Promise<ConversationInfo> {
             validateConversationName(name);
+            ensureNameAvailable(name);
             const conversationId = randomUUID();
             const createdAt = new Date().toISOString();
             const record: ConversationRecord = {
@@ -430,9 +453,23 @@ export async function createConversationManager(
             if (resolved !== undefined) {
                 return resolved;
             }
-            // No conversations exist — auto-create a default
-            const info = await manager.createConversation("default");
-            return info.conversationId;
+            // No conversations exist — auto-create a default. Serialize so two
+            // concurrent first-connects don't both try to create "default" and
+            // race the duplicate-name check.
+            if (defaultCreateP === undefined) {
+                defaultCreateP = (async () => {
+                    // Re-check inside the critical section in case another caller
+                    // raced us between the early check above and acquiring the lock.
+                    const existing =
+                        getDefaultConversationId() ?? getAnyConversationId();
+                    if (existing !== undefined) return existing;
+                    const info = await manager.createConversation("default");
+                    return info.conversationId;
+                })().finally(() => {
+                    defaultCreateP = undefined;
+                });
+            }
+            return defaultCreateP;
         },
 
         async prewarmMostRecentConversation(): Promise<void> {
@@ -557,6 +594,7 @@ export async function createConversationManager(
             if (record === undefined) {
                 throw new Error(`Conversation not found: ${conversationId}`);
             }
+            ensureNameAvailable(newName, conversationId);
             record.name = newName;
             await saveMetadata();
             debugConversation(
