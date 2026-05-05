@@ -105,35 +105,26 @@ export async function createConversationManager(
                 `Migrated on-disk directory "server-sessions" → "conversations"`,
             );
         } catch (e: any) {
-            debugConversationErr(
-                "Failed to migrate server-sessions dir:",
-                e,
-            );
+            debugConversationErr("Failed to migrate server-sessions dir:", e);
         }
     } else if (fs.existsSync(oldConversationsDir)) {
         // Both directories exist — earlier builds raced and pre-created
         // the destination. Move stragglers across so users don't lose history.
         try {
-            for (const entry of await fs.promises.readdir(
-                oldConversationsDir,
-                { withFileTypes: true },
-            )) {
+            for (const entry of await fs.promises.readdir(oldConversationsDir, {
+                withFileTypes: true,
+            })) {
                 const src = path.join(oldConversationsDir, entry.name);
                 const dst = path.join(conversationsDir, entry.name);
                 if (fs.existsSync(dst)) continue;
                 try {
                     await fs.promises.rename(src, dst);
                 } catch (e: any) {
-                    debugConversationErr(
-                        `Failed to migrate ${entry.name}:`,
-                        e,
-                    );
+                    debugConversationErr(`Failed to migrate ${entry.name}:`, e);
                 }
             }
             // Best-effort cleanup; will fail silently if non-empty.
-            await fs.promises
-                .rmdir(oldConversationsDir)
-                .catch(() => undefined);
+            await fs.promises.rmdir(oldConversationsDir).catch(() => undefined);
             debugConversation(
                 `Merged stragglers from "server-sessions" → "conversations"`,
             );
