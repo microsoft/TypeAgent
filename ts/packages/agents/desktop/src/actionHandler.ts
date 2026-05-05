@@ -16,6 +16,10 @@ import {
     createYesNoChoiceResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import {
+    displayStatus,
+    displaySuccess,
+} from "@typeagent/agent-sdk/helpers/display";
+import {
     AutoShellMissingError,
     buildAutoShell,
     disableDesktopActionContext,
@@ -34,10 +38,16 @@ export function instantiate(): AppAgent {
             response: boolean | number[],
             context: ActionContext<DesktopActionContext>,
         ) {
-            return context.sessionContext.agentContext.choiceManager.handleChoice(
-                choiceId,
-                response,
-            );
+            const state = context.sessionContext.agentContext;
+            state.pendingChoiceContext = context;
+            try {
+                return await state.choiceManager.handleChoice(
+                    choiceId,
+                    response,
+                );
+            } finally {
+                state.pendingChoiceContext = null;
+            }
         },
     };
 }
@@ -50,6 +60,7 @@ async function initializeDesktopContext(): Promise<DesktopActionContext> {
         refreshPromise: undefined,
         abortRefresh: undefined,
         choiceManager: new ChoiceManager(),
+        pendingChoiceContext: null,
     };
 }
 
@@ -102,15 +113,42 @@ function offerAutoShellBuild(
                     "autoShell build skipped — action cancelled.",
                 );
             }
+            const ctx = state.pendingChoiceContext ?? context;
             try {
-                await buildAutoShell();
+                await displayStatus(
+                    "Building desktop automation helper (dotnet build -c Release)...",
+                    ctx,
+                );
+                let lastUpdate = 0;
+                await buildAutoShell({
+                    onProgress: (chunk) => {
+                        const now = Date.now();
+                        if (now - lastUpdate < 1000) return;
+                        lastUpdate = now;
+                        const last = chunk
+                            .split(/\r?\n/)
+                            .map((l) => l.trim())
+                            .filter(Boolean)
+                            .pop();
+                        if (last) {
+                            void displayStatus(
+                                `Building desktop helper: ${last.slice(0, 100)}`,
+                                ctx,
+                            );
+                        }
+                    },
+                });
             } catch (buildError) {
                 return createActionResultFromError(
                     `autoShell build failed: ${buildError instanceof Error ? buildError.message : String(buildError)}`,
                 );
             }
+            await displaySuccess(
+                "Desktop helper built. Running your action...",
+                ctx,
+            );
             try {
-                return await runAction(action, context);
+                return await runAction(action, ctx);
             } catch (e) {
                 return createActionResultFromError(
                     e instanceof Error ? e.message : String(e),

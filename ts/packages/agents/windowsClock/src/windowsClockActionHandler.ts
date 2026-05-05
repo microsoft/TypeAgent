@@ -15,6 +15,10 @@ import {
     createYesNoChoiceResult,
 } from "@typeagent/agent-sdk/helpers/action";
 import {
+    displayStatus,
+    displaySuccess,
+} from "@typeagent/agent-sdk/helpers/display";
+import {
     buildHelperBinary,
     executePlayback,
     HelperBinaryMissingError,
@@ -53,6 +57,7 @@ type AgentState = {
     appPid: number | null;
     appMainWindow: string | null;
     choiceManager: ChoiceManager;
+    pendingChoiceContext: ActionContext<AgentState> | null;
 };
 
 async function ensureClient(state: AgentState): Promise<HelperClient> {
@@ -179,11 +184,43 @@ function offerHelperBuild(
                     "Helper build skipped — action cancelled.",
                 );
             }
+            const ctx = state.pendingChoiceContext;
             try {
-                await buildHelperBinary();
+                if (ctx) {
+                    await displayStatus(
+                        "Building UI Automation helper (dotnet build -c Release)...",
+                        ctx,
+                    );
+                }
+                let lastUpdate = 0;
+                await buildHelperBinary({
+                    onProgress: (chunk) => {
+                        if (!ctx) return;
+                        const now = Date.now();
+                        if (now - lastUpdate < 1000) return;
+                        lastUpdate = now;
+                        const last = chunk
+                            .split(/\r?\n/)
+                            .map((l) => l.trim())
+                            .filter(Boolean)
+                            .pop();
+                        if (last) {
+                            void displayStatus(
+                                `Building UI Automation helper: ${last.slice(0, 100)}`,
+                                ctx,
+                            );
+                        }
+                    },
+                });
             } catch (buildError) {
                 return createActionResultFromError(
                     `Helper build failed: ${buildError instanceof Error ? buildError.message : String(buildError)}`,
+                );
+            }
+            if (ctx) {
+                await displaySuccess(
+                    "UI Automation helper built. Running your action...",
+                    ctx,
                 );
             }
             try {
@@ -205,6 +242,7 @@ export function instantiate(): AppAgent {
                 appPid: null,
                 appMainWindow: null,
                 choiceManager: new ChoiceManager(),
+                pendingChoiceContext: null,
             } as AgentState;
         },
         async updateAgentContext(
@@ -243,10 +281,16 @@ export function instantiate(): AppAgent {
             response: boolean | number[],
             context: ActionContext<AgentState>,
         ) {
-            return context.sessionContext.agentContext.choiceManager.handleChoice(
-                choiceId,
-                response,
-            );
+            const state = context.sessionContext.agentContext;
+            state.pendingChoiceContext = context;
+            try {
+                return await state.choiceManager.handleChoice(
+                    choiceId,
+                    response,
+                );
+            } finally {
+                state.pendingChoiceContext = null;
+            }
         },
         async closeAgentContext(context: SessionContext<AgentState>) {
             const state = context.agentContext;

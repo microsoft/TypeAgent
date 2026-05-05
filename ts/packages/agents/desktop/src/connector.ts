@@ -4,7 +4,7 @@
 import child_process from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ProgramNameIndex, loadProgramNameIndex } from "./programNameIndex.js";
-import { Storage } from "@typeagent/agent-sdk";
+import { ActionContext, Storage } from "@typeagent/agent-sdk";
 import { ChoiceManager } from "@typeagent/agent-sdk/helpers/action";
 import registerDebug from "debug";
 import { AllDesktopActions } from "./allActionsSchema.js";
@@ -25,6 +25,7 @@ export type DesktopActionContext = {
     refreshPromise: Promise<void> | undefined;
     abortRefresh: AbortController | undefined;
     choiceManager: ChoiceManager;
+    pendingChoiceContext: ActionContext<DesktopActionContext> | null;
 };
 
 interface ActionResult {
