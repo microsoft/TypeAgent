@@ -6,14 +6,69 @@ import * as os from "os";
 import { connectAgentServer } from "@typeagent/agent-server-client";
 import type {
     AgentServerConnection,
-    SessionDispatcher,
+    ConversationDispatcher,
+    ConversationInfo,
+    DispatcherConnectOptions,
 } from "@typeagent/agent-server-client";
 import type { ClientIO, Dispatcher } from "@typeagent/dispatcher-rpc/types";
 import type { IAgentMessage, RequestId } from "@typeagent/dispatcher-types";
 import type { DisplayAppendMode, TypeAgentAction } from "@typeagent/agent-sdk";
 import type { TemplateEditConfig } from "@typeagent/dispatcher-types";
 import type { PendingInteractionRequest } from "@typeagent/dispatcher-types";
-import type { SessionInfo } from "@typeagent/agent-server-protocol";
+
+// The agent-server client API was renamed `*Session` -> `*Conversation` in
+// PR #2289 (post-merge). Rather than rename every call site in the bridge
+// (and every webview message field), expose a thin compatibility shim that
+// preserves the old `*Session` shape.
+type SessionInfo = ConversationInfo & { sessionId: string };
+type SessionDispatcher = {
+    dispatcher: Dispatcher;
+    sessionId: string;
+    name: string;
+};
+type LegacyConnectOptions = Omit<DispatcherConnectOptions, "conversationId"> & {
+    sessionId?: string;
+};
+type LegacyAgentServerConnection = {
+    joinSession(
+        clientIO: ClientIO,
+        options?: LegacyConnectOptions,
+    ): Promise<SessionDispatcher>;
+    leaveSession(sessionId: string): Promise<void>;
+    createSession(name: string): Promise<SessionInfo>;
+    listSessions(name?: string): Promise<SessionInfo[]>;
+    renameSession(sessionId: string, newName: string): Promise<void>;
+    deleteSession(sessionId: string): Promise<void>;
+    shutdown(): Promise<void>;
+    close(): Promise<void>;
+};
+function adaptInfo(c: ConversationInfo): SessionInfo {
+    return { ...c, sessionId: c.conversationId };
+}
+function wrapLegacy(c: AgentServerConnection): LegacyAgentServerConnection {
+    return {
+        async joinSession(io, opts) {
+            const { sessionId, ...rest } = opts ?? {};
+            const r = await c.joinConversation(io, {
+                ...rest,
+                conversationId: sessionId,
+            });
+            return {
+                dispatcher: r.dispatcher,
+                sessionId: r.conversationId,
+                name: r.name,
+            };
+        },
+        leaveSession: (id) => c.leaveConversation(id),
+        createSession: async (n) => adaptInfo(await c.createConversation(n)),
+        listSessions: async (n) =>
+            (await c.listConversations(n)).map(adaptInfo),
+        renameSession: (id, n) => c.renameConversation(id, n),
+        deleteSession: (id) => c.deleteConversation(id),
+        shutdown: () => c.shutdown(),
+        close: () => c.close(),
+    };
+}
 
 /**
  * Coerce a RequestId (server-side `{requestId, clientRequestId}` shape) or
@@ -192,7 +247,7 @@ export class AgentServerBridge {
         }
     }
 
-    private connection: AgentServerConnection | undefined;
+    private connection: LegacyAgentServerConnection | undefined;
     /** In-flight connect promise — prevents parallel connect() races. */
     private connectInFlight: Promise<void> | undefined;
     /** In-flight session-join promise — serializes joinSpecificSession calls. */
@@ -389,24 +444,29 @@ export class AgentServerBridge {
         );
 
         try {
-            this.connection = await connectAgentServer(serverUrl, () => {
-                // onDisconnect callback — ignore during intentional reconnects
-                if (this.isSwitching) {
-                    return;
-                }
-                this.isConnected = false;
-                if (this.session) {
-                    AgentServerBridge.unregisterForSession(
-                        this.session.sessionId,
-                        this,
-                    );
-                }
-                this.session = undefined;
-                this.updateStatusBar(false);
-                this.broadcastToWebviews({ type: "status", connected: false });
-                this.onStatusChanged?.();
-                this.scheduleReconnect();
-            });
+            this.connection = wrapLegacy(
+                await connectAgentServer(serverUrl, () => {
+                    // onDisconnect callback — ignore during intentional reconnects
+                    if (this.isSwitching) {
+                        return;
+                    }
+                    this.isConnected = false;
+                    if (this.session) {
+                        AgentServerBridge.unregisterForSession(
+                            this.session.sessionId,
+                            this,
+                        );
+                    }
+                    this.session = undefined;
+                    this.updateStatusBar(false);
+                    this.broadcastToWebviews({
+                        type: "status",
+                        connected: false,
+                    });
+                    this.onStatusChanged?.();
+                    this.scheduleReconnect();
+                }),
+            );
             // Capture locally so subsequent awaits aren't affected by
             // any future reassignment of this.connection.
             const connection = this.connection;
@@ -1450,6 +1510,7 @@ export class AgentServerBridge {
                     });
                 }
             },
+            shutdown: () => {},
         };
     }
 
