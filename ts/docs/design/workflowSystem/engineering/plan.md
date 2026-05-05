@@ -365,11 +365,16 @@ DSL layer addresses.
    understood, the engine code is straightforward. The spec's choice
    is the right one.
 
-3. **No IR-level conditional expressions.** Several workflows need
-   "if X then do Y" patterns. The IR requires encoding this as
-   `bool.toLabel` + branch node, which is verbose but mechanical.
-   The engine handles it cleanly. This is a verbosity issue for
-   authors, not a complexity issue for the engine.
+3. **Boolean branching ceremony (resolved).** The original IR
+   required `bool.toLabel` + branch node for boolean decisions (3
+   nodes total: comparison, label conversion, branch). The 0008 fix
+   (`String()` coercion in the engine) eliminated `bool.toLabel`,
+   reducing this to 2 nodes (comparison + branch). We evaluated
+   folding branch into task entirely (conditional `next`), but branch
+   earns its place: P3 (structural legibility via `kind` discriminant),
+   validator/visualizer can enumerate branch points by kind, and
+   string-valued multi-way dispatch still needs the same mechanism.
+   The remaining 1-node overhead per decision is paid by codegen.
 
 4. **Template model worked without surprises.** Nested `$from`
    references and literal pass-through compose naturally. The
