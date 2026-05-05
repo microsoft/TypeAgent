@@ -9,8 +9,23 @@
  * recognition dependencies.
  */
 
+import DOMPurify from "dompurify";
 import { DisplayAppendMode, DisplayContent } from "@typeagent/agent-sdk";
 import { setContent } from "./setContent.js";
+
+// Restrictive sanitize config used at .innerHTML sinks below. The HTML
+// passed in is built from values that, while in practice come from
+// trusted dispatcher metadata (timing labels, JSON action data,
+// per-color SVG fills), is treated by CodeQL as "library input". Running
+// the final string through DOMPurify gives us defence-in-depth and
+// satisfies js/xss / js/html-constructed-from-input.
+const SANITIZE_CONFIG = {
+    ALLOWED_TAGS: ["div", "span", "b", "i", "br", "pre", "svg", "path"],
+    ALLOWED_ATTR: ["class", "xmlns", "width", "height", "viewBox", "fill", "d"],
+};
+function sanitize(html: string): string {
+    return DOMPurify.sanitize(html, SANITIZE_CONFIG) as string;
+}
 import {
     PlatformAdapter,
     ChatSettingsView,
@@ -349,7 +364,19 @@ const ROADRUNNER_SVG_PATH =
 function iconRoadrunner(fill: string): HTMLElement {
     const wrapper = document.createElement("i");
     wrapper.className = "chat-message-explained-icon";
-    wrapper.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 567.896 567.896"><path fill="${fill}" d="${ROADRUNNER_SVG_PATH}"/></svg>`;
+    // Build the SVG via DOM nodes instead of innerHTML so the per-call
+    // `fill` color cannot be construed as an XSS sink.
+    const SVG_NS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("xmlns", SVG_NS);
+    svg.setAttribute("width", "20");
+    svg.setAttribute("height", "20");
+    svg.setAttribute("viewBox", "0 0 567.896 567.896");
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("fill", fill);
+    path.setAttribute("d", ROADRUNNER_SVG_PATH);
+    svg.appendChild(path);
+    wrapper.appendChild(svg);
     return wrapper;
 }
 
@@ -1070,12 +1097,13 @@ export class ChatPanel {
                 );
             }
         }
-        metricsDiv.innerHTML =
+        metricsDiv.innerHTML = sanitize(
             `<div class="metrics-details">` +
-            `<div>${markLines.join("<br>")}</div>` +
-            `<div></div>` +
-            `<div>${mainLines.join("<br>")}</div>` +
-            `</div>`;
+                `<div>${markLines.join("<br>")}</div>` +
+                `<div></div>` +
+                `<div>${mainLines.join("<br>")}</div>` +
+                `</div>`,
+        );
         // Mark the container as having metrics so the hover-push handler
         // (attached in addUserMessage) actually fires for user bubbles.
         container.classList.add("chat-message-has-metrics");
@@ -1121,65 +1149,55 @@ export class ChatPanel {
         requestId?: string,
     ) {
         // "temporary" mode = transient status (e.g. dispatcher's
-        // "Executing action X" indicator). Route to a dedicated status
-        // container so it doesn't stamp the main agent bubble with the
-        // status emitter's source and doesn't linger after the real
-        // response arrives.
-        if (appendMode === "temporary") {
-            // Reuse the existing status container if present — recreating
-            // it on every status update causes visible flicker when an
-            // agent (e.g. reasoning) streams many sub-step messages
-            // ("Tool: foo", "Tool: bar", ...) in rapid succession.
-            if (!this.statusContainer) {
-                this.statusContainer = this.createAgentContainer(
-                    source ?? "",
-                    sourceIcon ?? "",
-                );
-            }
-            this.statusContainer.setMessage(content, source, undefined);
+        // "Executing action X" indicator, reasoning's streaming "Thinking…"
+        // chunks). Route into the per-request bubble itself: the bubble
+        // starts as a status indicator and "upgrades" in place when the
+        // real reply arrives. AgentMessageContainer.setMessage already
+        // handles this — temporary content is appended as a last-child
+        // div tagged via lastAppendMode and flushed before the next
+        // non-temporary append. This avoids a separate status bubble
+        // appearing alongside the real reply (which looked like a duplicate).
+        //
+        // The free-standing `statusContainer` is kept only as a fallback
+        // for host-driven `showStatus()` calls that have no request context.
+        if (
+            appendMode === "temporary" &&
+            (requestId || this.currentAgentContainer)
+        ) {
+            const tempContainer = this.getOrCreateAgentContainer(
+                source,
+                sourceIcon,
+                requestId,
+            );
+            tempContainer.setMessage(content, source, "temporary");
             this.scrollToBottom();
             return;
         }
 
-        // Remove lingering status message when a real response arrives
+        if (appendMode === "temporary") {
+            // No request context — fall back to a floating, visually-
+            // distinct status bubble (e.g. used by host-driven showStatus).
+            if (!this.statusContainer) {
+                this.statusContainer = this.createAgentContainer("", "");
+                this.statusContainer.markAsStatusBubble();
+            }
+            this.statusContainer.setMessage(content, undefined, undefined);
+            this.scrollToBottom();
+            return;
+        }
+
+        // Remove any lingering free-standing status bubble when a real
+        // response arrives.
         if (this.statusContainer) {
             this.statusContainer.remove();
             this.statusContainer = undefined;
         }
 
-        const icon = sourceIcon ?? this.iconForSource(source);
-
-        let container: AgentMessageContainer;
-        if (requestId && this.agentContainersByRequestId.has(requestId)) {
-            container = this.agentContainersByRequestId.get(requestId)!;
-        } else if (!appendMode || !this.currentAgentContainer) {
-            container = this.createAgentContainer(source ?? "assistant", icon);
-            this.currentAgentContainer = container;
-            if (requestId) {
-                this.agentContainersByRequestId.set(requestId, container);
-                // Capture the elapsed time from request send to first agent
-                // bubble for this request — drives the "First Message"
-                // metric line on the agent metrics tooltip.
-                if (!this.firstMessageMsByRequestId.has(requestId)) {
-                    const start = this.requestStartByRequestId.get(requestId);
-                    if (start !== undefined) {
-                        this.firstMessageMsByRequestId.set(
-                            requestId,
-                            Date.now() - start,
-                        );
-                    }
-                }
-            }
-            // Apply any action metadata that arrived via setDisplayInfo
-            // before the first render — the dispatcher fires it before
-            // the agent's first setDisplay/appendDisplay.
-            if (this.pendingDisplayInfo?.action !== undefined) {
-                container.setActionData(this.pendingDisplayInfo.action);
-            }
-            this.pendingDisplayInfo = undefined;
-        } else {
-            container = this.currentAgentContainer;
-        }
+        const container = this.getOrCreateAgentContainer(
+            source,
+            sourceIcon,
+            requestId,
+        );
 
         container.setMessage(content, source, appendMode);
 
@@ -1213,6 +1231,9 @@ export class ChatPanel {
         this.currentAgentContainer = container;
         if (requestId) {
             this.agentContainersByRequestId.set(requestId, container);
+            // Capture the elapsed time from request send to first agent
+            // bubble for this request — drives the "First Message"
+            // metric line on the agent metrics tooltip.
             if (!this.firstMessageMsByRequestId.has(requestId)) {
                 const start = this.requestStartByRequestId.get(requestId);
                 if (start !== undefined) {
@@ -1223,6 +1244,14 @@ export class ChatPanel {
                 }
             }
         }
+        // Apply any action metadata that arrived via setDisplayInfo
+        // before the first render — the dispatcher fires it before
+        // the agent's first setDisplay/appendDisplay (including the
+        // "Executing action ..." temporary status emitted via displayStatus).
+        if (this.pendingDisplayInfo?.action !== undefined) {
+            container.setActionData(this.pendingDisplayInfo.action);
+        }
+        this.pendingDisplayInfo = undefined;
         return container;
     }
 
@@ -2269,12 +2298,13 @@ class AgentMessageContainer {
                 );
             }
         }
-        this.metricsDiv.innerHTML =
+        this.metricsDiv.innerHTML = sanitize(
             `<div class="metrics-details">` +
-            `<div>${leftLines.join("<br>")}</div>` +
-            `<div></div>` +
-            `<div>${mainLines.join("<br>")}</div>` +
-            `</div>`;
+                `<div>${leftLines.join("<br>")}</div>` +
+                `<div></div>` +
+                `<div>${mainLines.join("<br>")}</div>` +
+                `</div>`,
+        );
         // Flag the container so the chat-level selector that pushes
         // visually-below bubbles down on hover can target it without
         // relying on a nested `:has()` chain (which proved unreliable in
@@ -2354,7 +2384,7 @@ class AgentMessageContainer {
         // Render the JSON below the message in the collapsible details
         // area, instead of swapping out the message body. The agent name
         // becomes a click affordance to toggle the details panel.
-        this.detailsDiv.innerHTML = html;
+        this.detailsDiv.innerHTML = sanitize(html);
         this.actionDataHtml = html;
         if (label) {
             this.nameSpan.textContent = label;
@@ -2432,6 +2462,17 @@ class AgentMessageContainer {
         if (icon) {
             this.iconDiv.textContent = icon;
         }
+    }
+
+    /**
+     * Mark this container as a transient status indicator (used for
+     * "Executing action ...", reasoning's streaming "Thinking…" chunks,
+     * etc.). Adds a CSS class that styles the bubble as a small italicized
+     * indicator with no agent label/avatar/border — so the user can't
+     * mistake it for a duplicate of the real reply bubble.
+     */
+    public markAsStatusBubble() {
+        this.div.classList.add("chat-message-status-bubble");
     }
 
     /** Mark this container as a dimmed history message. */

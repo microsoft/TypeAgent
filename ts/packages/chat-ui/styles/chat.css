@@ -346,6 +346,31 @@
   color: grey;
 }
 
+/* =========================================================================
+   Status (transient) Bubble
+   ========================================================================= */
+
+/* Used for transient indicators emitted via `appendDisplay(..., "temporary")`
+   such as the dispatcher's "Executing action ..." line and reasoning's
+   streaming "Thinking…" chunks. We strip the agent-bubble chrome so the
+   user can't mistake the status indicator for a duplicate of the real
+   reply bubble that follows. */
+.chat-message-status-bubble .chat-timestamp-agent,
+.chat-message-status-bubble .agent-icon,
+.chat-message-status-bubble .chat-message-metrics {
+  display: none;
+}
+.chat-message-status-bubble .chat-message-agent {
+  background-color: transparent;
+  box-shadow: none;
+  font-style: italic;
+  color: grey;
+}
+.chat-message-status-bubble .chat-message-content {
+  box-shadow: none;
+  padding: 2px 15px 2px 15px;
+}
+
 .chat-message-kind-warning {
   font-style: italic;
   color: rgb(146, 146, 0);
@@ -721,7 +746,9 @@ table.table-message td {
   line-height: 0;
 }
 
-.chat-message-explained[data-expl]:hover::after {
+.chat-message-explained[data-expl]:has(
+    .chat-message-explained-icon:hover
+  )::after {
   content: attr(data-expl);
   position: absolute;
   text-align: right;

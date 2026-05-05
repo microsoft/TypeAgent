@@ -285,8 +285,18 @@ export async function createSharedDispatcher(
         const origAppendDisplay = orig.appendDisplay.bind(orig);
         orig.appendDisplay = (message, mode, ...rest) => {
             origAppendDisplay(message, mode, ...rest);
-            log.logAppendDisplay(message, mode);
-            log.saveQueued();
+            // Don't persist transient status messages (mode === "temporary").
+            // They're meant to be ephemeral indicators (e.g. "Executing
+            // action ...", reasoning's "Thinking..." stream). Persisting them
+            // causes:
+            //   - replayed bubbles for late-joining peers / reconnects
+            //   - DisplayLog growth proportional to streaming token count
+            //   - apparent "duplicate" bubbles when a stale temporary
+            //     re-appears alongside the real reply
+            if (mode !== "temporary") {
+                log.logAppendDisplay(message, mode);
+                log.saveQueued();
+            }
         };
 
         const origSetDisplayInfo = orig.setDisplayInfo.bind(orig);
