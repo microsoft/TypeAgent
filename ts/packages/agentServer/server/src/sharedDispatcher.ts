@@ -277,15 +277,23 @@ export async function createSharedDispatcher(
         const origSetDisplay = orig.setDisplay.bind(orig);
         orig.setDisplay = (message) => {
             origSetDisplay(message);
-            log.logSetDisplay(message);
-            log.saveQueued();
+            // Toast and inline kinds are ephemeral (visual notifications, not
+            // chat history). Skip logging so they don't replay on reconnect —
+            // matches notify's default-not-persisted behavior. Bubble (or
+            // absent kind = a normal request response) always logs.
+            if (message.kind !== "toast" && message.kind !== "inline") {
+                log.logSetDisplay(message);
+                log.saveQueued();
+            }
         };
 
         const origAppendDisplay = orig.appendDisplay.bind(orig);
         orig.appendDisplay = (message, mode, ...rest) => {
             origAppendDisplay(message, mode, ...rest);
-            log.logAppendDisplay(message, mode);
-            log.saveQueued();
+            if (message.kind !== "toast" && message.kind !== "inline") {
+                log.logAppendDisplay(message, mode);
+                log.saveQueued();
+            }
         };
 
         // Notifications are ephemeral by default — only log when the producer

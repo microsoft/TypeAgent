@@ -142,12 +142,34 @@ export class ChatPanel {
 
     private readonly stopButton: HTMLButtonElement;
     private readonly ghostSpan: HTMLSpanElement;
-    private currentAgentContainer: AgentMessageContainer | undefined;
+    // Per-thread agent message containers. A thread is keyed by either the
+    // user-generated requestId (user-driven thread) or the dispatcher's
+    // synthetic clientRequestId starting with "agent-" (agent-initiated
+    // thread). Decoupling them fixes the bug where an agent-initiated message
+    // arriving mid-conversation would glomm onto the previous user request's
+    // bubble. Toast and inline rows do NOT participate in this map.
+    private threadContainers = new Map<string, AgentMessageContainer>();
+    // The threadId of the most-recent user request. Methods that take an
+    // optional threadId (addAgentMessage, replaceAgentMessage, setDisplayInfo,
+    // completeRequest) default to this when no explicit threadId is supplied.
+    private currentUserThreadId: string | undefined;
+    // Counter for ad-hoc thread ids — used as a last-resort fallback when a
+    // caller invokes a thread-bearing method with no threadId AND no current
+    // user thread (e.g. agent-initiated message arriving before any user
+    // input via an embedder that hasn't been updated to pass threadId yet).
+    private nextAdHocThreadId = 0;
+    // Per-thread setDisplayInfo metadata stashed when it arrives before the
+    // first setDisplay/appendDisplay for the thread; consumed by
+    // ensureThreadContainer when it creates the container.
+    private pendingThreadDisplayInfo = new Map<
+        string,
+        { source: string; sourceIcon?: string; action?: unknown }
+    >();
     private statusContainer: AgentMessageContainer | undefined;
     private historyAgentContainer: AgentMessageContainer | undefined;
-    private pendingDisplayInfo:
-        | { source: string; sourceIcon?: string; action?: unknown }
-        | undefined;
+    // Floating overlay surface for showToast() — fixed-positioned above the
+    // chat in rootElement, lazily created on first toast.
+    private toastStack: HTMLDivElement | undefined;
     private commandHistory: string[] = [];
     private historyIndex = -1;
     private activeRequestId?: string;
@@ -556,49 +578,55 @@ export class ChatPanel {
             this.userMessageById.set(requestId, container);
         }
 
-        // Reset current agent container for the new request
-        this.currentAgentContainer = undefined;
+        // The new user request becomes the default thread for subsequent
+        // setDisplay/appendDisplay calls that omit a threadId. Old threads
+        // (agent-initiated reminders, prior user requests) stay alive in
+        // threadContainers and continue to receive their own follow-up
+        // messages addressed by their threadId.
+        this.currentUserThreadId = requestId;
     }
 
     /**
-     * Replace the current agent message content (reuses existing container).
-     * If no container exists, creates one.
+     * Replace an agent thread's message content (reuses existing container).
+     * If no container exists for the thread, creates one. `threadId` defaults
+     * to the current user-driven thread.
      */
     public replaceAgentMessage(
         content: DisplayContent,
         source?: string,
         sourceIcon?: string,
+        threadId?: string,
     ) {
         if (this.statusContainer) {
             this.statusContainer.remove();
             this.statusContainer = undefined;
         }
-
-        if (!this.currentAgentContainer) {
-            this.currentAgentContainer = this.createAgentContainer(
-                source ?? "assistant",
-                sourceIcon ?? "🤖",
-            );
-        }
-        this.currentAgentContainer.setMessage(content, source, undefined);
+        const tid = this.resolveThreadId(threadId);
+        const container = this.ensureThreadContainer(tid, source, sourceIcon);
+        container.setMessage(content, source, undefined);
         this.scrollToBottom();
     }
 
     /**
-     * Display or append an agent message.
-     * Call with appendMode to add to the current agent message.
+     * Display or append an agent message in the given thread.
+     * Call with `appendMode` to add to the existing thread bubble; `threadId`
+     * defaults to the current user-driven thread. `appendMode === "temporary"`
+     * uses a single shared status container regardless of thread.
      */
     public addAgentMessage(
         content: DisplayContent,
         source?: string,
         sourceIcon?: string,
         appendMode?: DisplayAppendMode,
+        threadId?: string,
     ) {
         // "temporary" mode = transient status (e.g. dispatcher's
         // "Executing action X" indicator). Route to a dedicated status
         // container so it doesn't stamp the main agent bubble with the
         // status emitter's source and doesn't linger after the real
-        // response arrives.
+        // response arrives. There is one global status container — it's
+        // the user-visible "current activity" indicator and is not
+        // per-thread.
         if (appendMode === "temporary") {
             if (this.statusContainer) {
                 this.statusContainer.remove();
@@ -618,44 +646,46 @@ export class ChatPanel {
             this.statusContainer = undefined;
         }
 
-        if (!this.currentAgentContainer || !appendMode) {
-            this.currentAgentContainer = this.createAgentContainer(
-                source ?? "assistant",
-                sourceIcon ?? "🤖",
-            );
-            // Apply any action metadata that arrived via setDisplayInfo
-            // before the first render — the dispatcher fires it before
-            // the agent's first setDisplay/appendDisplay.
-            if (this.pendingDisplayInfo?.action !== undefined) {
-                this.currentAgentContainer.setActionData(
-                    this.pendingDisplayInfo.action,
-                );
-            }
-            this.pendingDisplayInfo = undefined;
-        }
+        const tid = this.resolveThreadId(threadId);
+        const existing = this.threadContainers.get(tid);
+        // For appendMode the caller wants to extend the existing bubble; for
+        // a fresh setDisplay (no appendMode), start a new bubble even if a
+        // prior container exists for this thread (matches the legacy
+        // "no append mode = new container" behavior).
+        const container =
+            existing && appendMode
+                ? existing
+                : this.ensureThreadContainer(
+                      tid,
+                      source,
+                      sourceIcon,
+                      /*forceNew*/ !appendMode,
+                  );
 
-        this.currentAgentContainer.setMessage(content, source, appendMode);
-
+        container.setMessage(content, source, appendMode);
         this.scrollToBottom();
     }
 
-    /** Update the source/agent label on the current agent message. */
+    /** Update the source/agent label on a thread's bubble. */
     public setDisplayInfo(
         source: string,
         sourceIcon?: string,
         action?: unknown,
+        threadId?: string,
     ) {
-        if (this.currentAgentContainer) {
-            this.currentAgentContainer.updateSource(source, sourceIcon);
+        const tid = this.resolveThreadId(threadId);
+        const container = this.threadContainers.get(tid);
+        if (container) {
+            container.updateSource(source, sourceIcon);
             if (action !== undefined) {
-                this.currentAgentContainer.setActionData(action);
+                container.setActionData(action);
             }
             return;
         }
         // No container yet — stash so the next one gets the action JSON
         // attached (the dispatcher fires setDisplayInfo before the
-        // agent's first setDisplay/appendDisplay).
-        this.pendingDisplayInfo = { source, sourceIcon, action };
+        // agent's first setDisplay/appendDisplay for this thread).
+        this.pendingThreadDisplayInfo.set(tid, { source, sourceIcon, action });
     }
 
     /** Clear all messages. */
@@ -663,8 +693,14 @@ export class ChatPanel {
         while (this.messageDiv.children.length > 1) {
             this.messageDiv.removeChild(this.messageDiv.lastChild!);
         }
-        this.currentAgentContainer = undefined;
+        this.threadContainers.clear();
+        this.pendingThreadDisplayInfo.clear();
+        this.currentUserThreadId = undefined;
         this.userMessageById.clear();
+        // Drop any active toasts as well — clear() means "reset the chat".
+        if (this.toastStack) {
+            this.toastStack.replaceChildren();
+        }
     }
 
     /**
@@ -735,24 +771,38 @@ export class ChatPanel {
      * and token usage. Also resets the current agent container so the
      * next request starts a fresh bubble.
      */
-    public completeRequest(result?: {
-        actionPhase?: PhaseTiming;
-        totalDuration?: number;
-        tokenUsage?: CompletionUsageStats;
-    }) {
+    public completeRequest(
+        result?: {
+            actionPhase?: PhaseTiming;
+            totalDuration?: number;
+            tokenUsage?: CompletionUsageStats;
+        },
+        threadId?: string,
+    ) {
         if (this.statusContainer) {
             this.statusContainer.remove();
             this.statusContainer = undefined;
         }
-        if (result && this.currentAgentContainer) {
-            this.currentAgentContainer.updateMetrics(
-                "Action",
-                result.actionPhase,
-                result.totalDuration,
-                result.tokenUsage,
-            );
+        const tid = threadId ?? this.currentUserThreadId;
+        if (tid !== undefined) {
+            const container = this.threadContainers.get(tid);
+            if (result && container) {
+                container.updateMetrics(
+                    "Action",
+                    result.actionPhase,
+                    result.totalDuration,
+                    result.tokenUsage,
+                );
+            }
+            // Drop the thread from the map so a subsequent call addressed
+            // to the same threadId starts a fresh bubble. The DOM nodes
+            // remain in the chat scroll.
+            this.threadContainers.delete(tid);
+            this.pendingThreadDisplayInfo.delete(tid);
+            if (tid === this.currentUserThreadId) {
+                this.currentUserThreadId = undefined;
+            }
         }
-        this.currentAgentContainer = undefined;
     }
 
     /** Show a status message (temporary, removed when the next real message arrives). */
@@ -1063,6 +1113,150 @@ export class ChatPanel {
         return container;
     }
 
+    // Resolve a threadId for a thread-bearing call. Caller-supplied threadId
+    // wins; otherwise default to the current user-driven thread; otherwise
+    // mint an ad-hoc id so a misconfigured embedder still produces sensible
+    // (if uncorrelated) output instead of crashing.
+    private resolveThreadId(threadId?: string): string {
+        if (threadId !== undefined) return threadId;
+        if (this.currentUserThreadId !== undefined) {
+            return this.currentUserThreadId;
+        }
+        const id = `ad-hoc-${this.nextAdHocThreadId++}`;
+        return id;
+    }
+
+    // Get-or-create a thread's agent container. With `forceNew`, an existing
+    // container is dropped from the map (its DOM stays in the scroll) and a
+    // fresh one is created — this mirrors the legacy "no append mode means
+    // start a fresh bubble" behavior.
+    private ensureThreadContainer(
+        threadId: string,
+        source?: string,
+        sourceIcon?: string,
+        forceNew = false,
+    ): AgentMessageContainer {
+        if (!forceNew) {
+            const existing = this.threadContainers.get(threadId);
+            if (existing) return existing;
+        }
+        const container = this.createAgentContainer(
+            source ?? "assistant",
+            sourceIcon ?? "🤖",
+        );
+        // Apply any setDisplayInfo metadata that arrived before this thread's
+        // first setDisplay/appendDisplay (the dispatcher fires setDisplayInfo
+        // first).
+        const pending = this.pendingThreadDisplayInfo.get(threadId);
+        if (pending?.action !== undefined) {
+            container.setActionData(pending.action);
+        }
+        this.pendingThreadDisplayInfo.delete(threadId);
+        this.threadContainers.set(threadId, container);
+        return container;
+    }
+
+    /**
+     * Show a floating toast overlay (auto-dismisses after ~5s, click to
+     * dismiss). Lives outside the chat scroll. Toasts do NOT participate in
+     * the thread map — each call is fire-and-forget.
+     */
+    public showToast(
+        content: DisplayContent,
+        source?: string,
+        _sourceIcon?: string,
+    ) {
+        if (!this.toastStack) {
+            const stack = document.createElement("div");
+            stack.className = "chat-toast-stack";
+            stack.style.cssText =
+                "position: absolute; top: 12px; right: 12px; z-index: 1000; " +
+                "display: flex; flex-direction: column; gap: 8px; " +
+                "pointer-events: none; max-width: 320px;";
+            // Append to messageDiv's parent (the chat-panel-wrapper) so the
+            // overlay is bounded to the panel rather than the whole document.
+            (this.messageDiv.parentElement ?? this.rootElement).appendChild(
+                stack,
+            );
+            this.toastStack = stack;
+        }
+
+        const toast = document.createElement("div");
+        toast.className = "chat-toast";
+        toast.style.cssText =
+            "background: rgba(40,42,54,0.96); color: #f8f8f2; " +
+            "padding: 10px 14px; border-radius: 6px; " +
+            "box-shadow: 0 4px 12px rgba(0,0,0,0.25); " +
+            "pointer-events: auto; cursor: pointer; " +
+            "font-size: 13px; line-height: 1.4; " +
+            "transition: opacity 0.3s ease;";
+
+        if (source) {
+            const header = document.createElement("div");
+            header.style.cssText =
+                "font-size: 11px; opacity: 0.65; margin-bottom: 4px;";
+            header.textContent = source;
+            toast.appendChild(header);
+        }
+
+        const body = document.createElement("div");
+        setContent(
+            body,
+            content,
+            this.settingsView,
+            "agent",
+            this.platformAdapter,
+        );
+        toast.appendChild(body);
+
+        let dismissed = false;
+        const dismiss = () => {
+            if (dismissed) return;
+            dismissed = true;
+            toast.style.opacity = "0";
+            window.setTimeout(() => toast.remove(), 300);
+        };
+        toast.addEventListener("click", dismiss);
+        window.setTimeout(dismiss, 5000);
+
+        this.toastStack.appendChild(toast);
+    }
+
+    /**
+     * Show a compact inline row in the chat scroll (no bubble chrome,
+     * single line, dim styling). Persists in scroll history. Does NOT
+     * participate in the thread map — fire-and-forget.
+     */
+    public showInline(content: DisplayContent, source?: string) {
+        const sentinel = this.messageDiv.firstElementChild!;
+        const row = document.createElement("div");
+        row.className = "chat-message-inline";
+        row.style.cssText =
+            "padding: 4px 12px; font-size: 12px; color: #888; " +
+            "border-left: 2px solid #aaa; margin: 4px 12px; " +
+            "display: flex; gap: 6px; align-items: baseline;";
+
+        if (source) {
+            const sourceSpan = document.createElement("span");
+            sourceSpan.style.cssText = "font-weight: 600; flex-shrink: 0;";
+            sourceSpan.textContent = `${source}:`;
+            row.appendChild(sourceSpan);
+        }
+
+        const body = document.createElement("span");
+        setContent(
+            body,
+            content,
+            this.settingsView,
+            "agent",
+            this.platformAdapter,
+        );
+        row.appendChild(body);
+
+        sentinel.before(row);
+        this.scrollToBottom();
+    }
+
     private createTimestamp(
         type: "agent" | "user",
         name: string,
@@ -1090,7 +1284,11 @@ export class ChatPanel {
     public addFollowUpButtons(
         buttons: { label: string; command: string; displayText?: string }[],
     ) {
-        if (!this.currentAgentContainer || buttons.length === 0) return;
+        if (buttons.length === 0) return;
+        const tid = this.currentUserThreadId;
+        const container =
+            tid !== undefined ? this.threadContainers.get(tid) : undefined;
+        if (!container) return;
 
         const buttonDiv = document.createElement("div");
         buttonDiv.className = "chat-followup-buttons";
@@ -1106,7 +1304,7 @@ export class ChatPanel {
             buttonDiv.appendChild(el);
         }
 
-        this.currentAgentContainer.appendElement(buttonDiv);
+        container.appendElement(buttonDiv);
         this.scrollToBottom();
     }
 

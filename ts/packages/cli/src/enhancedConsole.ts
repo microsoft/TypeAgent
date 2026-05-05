@@ -574,6 +574,47 @@ export function createEnhancedClientIO(
         lastAppendMode = appendMode;
     }
 
+    // Route a setDisplay/appendDisplay message based on its render kind.
+    //   - kind: "toast"  → toast banner (ephemeral, source-prefixed)
+    //   - kind: "inline" → compact one-line entry (source-prefixed)
+    //   - kind: "bubble" / absent → existing displayContent path; agent-initiated
+    //     bubbles (clientRequestId starts with "agent-") get a "[<source>]" prefix
+    //     so they're visually distinct from request-bound output.
+    function renderAgentMessage(
+        message: IAgentMessage,
+        mode?: DisplayAppendMode,
+    ): void {
+        const kind = message.kind;
+        if (kind === "toast") {
+            displayToastNotification(
+                message.message,
+                message.source,
+                Date.now(),
+            );
+            return;
+        }
+        if (kind === "inline") {
+            displayInlineNotification(
+                message.message,
+                message.source,
+                Date.now(),
+            );
+            return;
+        }
+        const clientId = message.requestId.clientRequestId as
+            | string
+            | undefined;
+        if (clientId?.startsWith("agent-")) {
+            const header = chalk.dim(`[${message.source}]`);
+            if (currentSpinner?.isActive()) {
+                currentSpinner.writeAbove(header);
+            } else {
+                displayContent(header);
+            }
+        }
+        displayContent(message.message, mode);
+    }
+
     function displayInlineNotification(
         data: string | DisplayContent,
         source: string,
@@ -673,10 +714,10 @@ export function createEnhancedClientIO(
             // Ignored
         },
         setDisplay(message: IAgentMessage): void {
-            displayContent(message.message);
+            renderAgentMessage(message);
         },
         appendDisplay(message: IAgentMessage, mode: DisplayAppendMode): void {
-            displayContent(message.message, mode);
+            renderAgentMessage(message, mode);
         },
         appendDiagnosticData(_requestId: RequestId, _data: any) {
             // Ignored
