@@ -1078,10 +1078,24 @@ const notifications = new Array();
 // Set from saved snapshot and updated as live entries arrive.
 let maxSeqSeen: number = -1;
 
+// IdGenerator produces clientRequestIds for commands originated from
+// this shell renderer. The prefix is a per-launch random suffix so ids
+// are globally unique across shell launches: a fresh launch otherwise
+// resets the counter to 0 and collides with prior-session ids that
+// linger in the agent-server's DisplayLog (and in any peer client's
+// userMessageById / agentContainersByRequestId maps), which can cause
+// silently-dropped mirror bubbles in connected peers.
 export class IdGenerator {
     private count = 0;
+    private readonly prefix: string;
+    constructor() {
+        this.prefix =
+            typeof crypto !== "undefined" && crypto.randomUUID
+                ? crypto.randomUUID().slice(0, 8)
+                : Math.random().toString(36).slice(2, 10);
+    }
     public genId() {
-        return `cmd-${this.count++}`;
+        return `cmd-${this.prefix}-${this.count++}`;
     }
 }
 

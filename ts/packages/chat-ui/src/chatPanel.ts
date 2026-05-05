@@ -459,6 +459,10 @@ export class ChatPanel {
     // current line instead of typing it out before we honor the cancel.
     private demoTypingCancelled = false;
     private inputHint?: string;
+    // Tracks the hint string most recently rendered into the ghost span
+    // so setInputHint(undefined) (or a hint change) can identify and
+    // clear the prior ghost without disturbing a completion preview.
+    private lastAppliedInputHint?: string;
     private demoKeyHandler?: (e: KeyboardEvent) => void;
     private avatarMap: Record<string, string> = { ...DEFAULT_AVATAR_MAP };
 
@@ -969,13 +973,26 @@ export class ChatPanel {
         const hasCompletionGhost =
             this.completions.length > 0 ||
             (this.partialCompletion !== undefined &&
+                this.ghostSpan.textContent !== this.lastAppliedInputHint &&
                 this.ghostSpan.textContent !== this.inputHint &&
                 (this.ghostSpan.textContent ?? "").length > 0);
         if (this.inputHint && !hasText && !hasCompletionGhost) {
             this.ghostSpan.textContent = this.inputHint;
-        } else if (this.ghostSpan.textContent === this.inputHint) {
-            // Clear stale hint without disturbing a completion preview.
+            this.lastAppliedInputHint = this.inputHint;
+        } else if (
+            this.lastAppliedInputHint !== undefined &&
+            this.ghostSpan.textContent === this.lastAppliedInputHint
+        ) {
+            // Clear the previously-rendered hint when it should no longer
+            // be shown (hint cleared, hint changed to a value that doesn't
+            // currently apply, or the input is no longer empty). Comparing
+            // against `lastAppliedInputHint` (not the current `inputHint`)
+            // is essential — by the time we get here the caller may have
+            // already set `inputHint = undefined`, so a comparison against
+            // `inputHint` would never match and the stale text would
+            // linger in the ghost span.
             this.ghostSpan.textContent = "";
+            this.lastAppliedInputHint = undefined;
         }
     }
 
@@ -2045,6 +2062,20 @@ export class ChatPanel {
     public setDemoPaused(paused: boolean, _message?: string): void {
         this.isDemoPaused = paused;
         this.refreshDemoKeyHandler();
+        // When pausing, ensure the chat input has focus so the
+        // window-level demoKeyHandler reliably receives Ctrl+Right /
+        // Esc. VS Code's `vscode-shell.chatView.focus` reveals the
+        // webview view but doesn't always land focus inside the
+        // contenteditable, so without this nudge the key events can
+        // be swallowed by the surrounding VS Code UI before the
+        // capture-phase handler runs.
+        if (paused) {
+            try {
+                this.textInput.focus();
+            } catch {
+                // best-effort
+            }
+        }
     }
 
     private refreshDemoKeyHandler(): void {
