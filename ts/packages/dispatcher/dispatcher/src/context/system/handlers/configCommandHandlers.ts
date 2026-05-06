@@ -2090,8 +2090,13 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                     db: getToggleHandlerTable(
                         "logging",
                         async (context, enable) => {
+                            // Honor the toggle: previously hardcoded to
+                            // false regardless of `enable`, which made
+                            // `@config log db on` a no-op and blocked
+                            // every collision-rollout experiment from
+                            // uploading to Cosmos.
                             context.sessionContext.agentContext.dblogging =
-                                false;
+                                enable;
                         },
                     ),
                 },
