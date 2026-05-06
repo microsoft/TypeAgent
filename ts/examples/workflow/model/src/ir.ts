@@ -83,6 +83,7 @@ export interface ConstantDef {
 export interface WorkflowIR {
     kind: "workflow";
     name: string;
+    description?: string;
     version: string;
     inputSchema: JSONSchema;
     outputSchema: JSONSchema;

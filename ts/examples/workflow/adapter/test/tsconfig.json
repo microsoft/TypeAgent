@@ -1,0 +1,15 @@
+{
+  "extends": "../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": ".",
+    "outDir": "../dist/test",
+    "types": ["node", "jest"]
+  },
+  "include": ["./**/*"],
+  "references": [
+    { "path": "../src" },
+    { "path": "../../model/src" },
+    { "path": "../../engine/src" }
+  ]
+}

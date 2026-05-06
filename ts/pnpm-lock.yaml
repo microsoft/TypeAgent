@@ -891,6 +891,40 @@ importers:
         specifier: ^5.2.0
         version: 5.2.1(debug@4.4.1)(webpack-cli@5.1.4)(webpack@5.105.0)
 
+  examples/workflow/adapter:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../../packages/agentSdk
+      workflow-engine:
+        specifier: workspace:*
+        version: link:../engine
+      workflow-model:
+        specifier: workspace:*
+        version: link:../model
+    devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../../packages/actionSchemaCompiler
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
+      prettier:
+        specifier: ^3.5.3
+        version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
   examples/workflow/cli:
     dependencies:
       workflow-engine:

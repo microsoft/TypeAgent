@@ -1,0 +1,12 @@
+{
+  "extends": "../../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "../dist"
+  },
+  "references": [
+    { "path": "../../model/src" },
+    { "path": "../../engine/src" },
+    { "path": "../../../../packages/agentSdk/src" }
+  ]
+}
