@@ -712,9 +712,11 @@ describe("WorkflowEngine (IR v1)", () => {
             const events = collectEvents(engine);
 
             const result = await engine.run(ir, {
-                repos: ["typeagent", "typechat"],
-                maxEmails: 5,
-                maxCommits: 10,
+                input: {
+                    repos: ["typeagent", "typechat"],
+                    maxEmails: 5,
+                    maxCommits: 10,
+                },
             });
 
             expect(result.success).toBe(true);
@@ -735,9 +737,11 @@ describe("WorkflowEngine (IR v1)", () => {
             const events = collectEvents(engine);
 
             const result = await engine.run(ir, {
-                repos: ["a", "b", "c"],
-                maxEmails: 1,
-                maxCommits: 1,
+                input: {
+                    repos: ["a", "b", "c"],
+                    maxEmails: 1,
+                    maxCommits: 1,
+                },
             });
 
             expect(result.success).toBe(true);
@@ -758,9 +762,11 @@ describe("WorkflowEngine (IR v1)", () => {
             const ir = makeA4IR();
 
             const result = await engine.run(ir, {
-                repos: ["only-one"],
-                maxEmails: 1,
-                maxCommits: 1,
+                input: {
+                    repos: ["only-one"],
+                    maxEmails: 1,
+                    maxCommits: 1,
+                },
             });
 
             expect(result.success).toBe(true);
@@ -771,9 +777,11 @@ describe("WorkflowEngine (IR v1)", () => {
             const ir = makeA4IR();
 
             const result = await engine.run(ir, {
-                repos: [],
-                maxEmails: 1,
-                maxCommits: 1,
+                input: {
+                    repos: [],
+                    maxEmails: 1,
+                    maxCommits: 1,
+                },
             });
 
             // With empty repos, the loop body runs once with index 0,
@@ -805,9 +813,11 @@ describe("WorkflowEngine (IR v1)", () => {
             const events = collectEvents(eng);
 
             const result = await eng.run(makeA4IR(), {
-                repos: ["r1"],
-                maxEmails: 1,
-                maxCommits: 1,
+                input: {
+                    repos: ["r1"],
+                    maxEmails: 1,
+                    maxCommits: 1,
+                },
             });
 
             expect(result.success).toBe(true);
@@ -829,9 +839,11 @@ describe("WorkflowEngine (IR v1)", () => {
             // The stepIndex node has { b: 1 } as a literal integer.
             // If the workflow runs successfully, these all resolved correctly.
             const result = await engine.run(makeA4IR(), {
-                repos: ["r"],
-                maxEmails: 1,
-                maxCommits: 1,
+                input: {
+                    repos: ["r"],
+                    maxEmails: 1,
+                    maxCommits: 1,
+                },
             });
             expect(result.success).toBe(true);
         });
@@ -879,7 +891,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "sum" } as any,
             };
 
-            const result = await engine.run(ir, { a: 3, b: 7 });
+            const result = await engine.run(ir, { input: { a: 3, b: 7 } });
             expect(result.success).toBe(true);
             expect(result.output).toEqual({ result: 10 });
         });
@@ -923,7 +935,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "result" } as any,
             };
 
-            const result = await eng.run(ir, {});
+            const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
             expect(result.output).toEqual({ label: "yes" });
         });
@@ -989,7 +1001,7 @@ describe("WorkflowEngine (IR v1)", () => {
             };
 
             const events = collectEvents(engine);
-            const result = await engine.run(ir, {});
+            const result = await engine.run(ir, { input: {} });
             expect(result.success).toBe(true);
             expect(result.output).toEqual({ result: 0 }); // "no" branch
 
@@ -1006,7 +1018,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const ir = makeA4IR();
             ir.entry = "nonexistent";
 
-            const result = await engine.run(ir, {});
+            const result = await engine.run(ir, { input: {} });
             expect(result.success).toBe(false);
             expect(result.error?.message).toContain("nonexistent");
         });
@@ -1016,9 +1028,11 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(minimalRegistry);
 
             const result = await eng.run(makeA4IR(), {
-                repos: [],
-                maxEmails: 1,
-                maxCommits: 1,
+                input: {
+                    repos: [],
+                    maxEmails: 1,
+                    maxCommits: 1,
+                },
             });
             expect(result.success).toBe(false);
             expect(result.error?.message).toContain("not registered");
@@ -1068,7 +1082,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "result" } as any,
             };
 
-            const result = await eng.run(ir, {});
+            const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
             expect(result.output).toEqual({
                 text: "Hello Alice, you have 3 items",
@@ -1116,7 +1130,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "result" } as any,
             };
 
-            const result = await eng.run(ir, {});
+            const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
             expect(result.output).toEqual({ text: "2 + 2 = 4" });
         });
@@ -1164,7 +1178,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "result" } as any,
             };
 
-            const result = await eng.run(ir, {});
+            const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
             expect(result.output).toEqual({ text: "alpha, beta, gamma" });
         });
@@ -1210,7 +1224,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "result" } as any,
             };
 
-            const result = await eng.run(ir, {});
+            const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
             expect(result.output).toEqual({ text: "" });
         });
@@ -1461,8 +1475,10 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const ir = loadD1();
             const result = await eng.run(ir, {
-                repos: ["/repos/typeagent", "/repos/typechat"],
-                author: "curtism",
+                input: {
+                    repos: ["/repos/typeagent", "/repos/typechat"],
+                    author: "curtism",
+                },
             });
 
             expect(result.success).toBe(true);
@@ -1577,7 +1593,9 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
 
             const ir = loadD4();
-            const result = await eng.run(ir, { repoPath: "/repos/myproject" });
+            const result = await eng.run(ir, {
+                input: { repoPath: "/repos/myproject" },
+            });
 
             expect(result.success).toBe(true);
             const output = result.output as { message: string };
@@ -1630,7 +1648,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "result" } as any,
             };
 
-            const result = await eng.run(ir, {});
+            const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
             expect(result.output).toEqual({
                 list: ["foo.ts", "bar.ts", "baz.ts"],
@@ -1680,7 +1698,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "result" } as any,
             };
 
-            const result = await eng.run(ir, {});
+            const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
             expect(result.output).toEqual({ list: [] });
         });
@@ -1810,7 +1828,9 @@ describe("WorkflowEngine (IR v1)", () => {
             const eng = new WorkflowEngine(reg);
 
             const ir = loadD5();
-            const result = await eng.run(ir, { repoPath: "/repos/project" });
+            const result = await eng.run(ir, {
+                input: { repoPath: "/repos/project" },
+            });
 
             expect(result.success).toBe(true);
             const output = result.output as { guide: string };
@@ -2132,8 +2152,10 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const ir = loadD8();
             const result = await eng.run(ir, {
-                url: "https://example.com/typeagent",
-                outputPath: outputFile,
+                input: {
+                    url: "https://example.com/typeagent",
+                    outputPath: outputFile,
+                },
             });
 
             expect(result.success).toBe(true);
@@ -2241,8 +2263,10 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const ir = loadD8();
             const result = await eng.run(ir, {
-                url: "https://flaky.example.com",
-                outputPath: "/tmp/retry-test.md",
+                input: {
+                    url: "https://flaky.example.com",
+                    outputPath: "/tmp/retry-test.md",
+                },
             });
 
             expect(result.success).toBe(true);
@@ -2467,18 +2491,17 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "result" } as any,
             };
 
-            const result = await eng.run(ir, { a: 1, b: 2 });
+            const result = await eng.run(ir, { input: { a: 1, b: 2 } });
             expect(result.success).toBe(true);
             expect((result.output as any).result).toBe(30);
         });
 
-        it("denies side-effecting tasks with legacy (ir, input) signature", async () => {
+        it("denies side-effecting tasks without explicit policy", async () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
             const ir = sideEffectWorkflow("file.read");
-            // Legacy call with plain input - should still deny
-            const result = await eng.run(ir, {});
+            const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
             expect(result.error?.message).toContain("approval not granted");
         });
@@ -2528,7 +2551,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "result" } as any,
             };
 
-            const result = await eng.run(ir, {});
+            const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
             expect(result.error?.message).toContain("Output schema violation");
             expect(result.error?.message).toContain("integer");
@@ -2575,7 +2598,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 output: { $from: "scope", name: "result" } as any,
             };
 
-            const result = await eng.run(ir, {});
+            const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(true);
             expect((result.output as any).value).toBe(42);
         });

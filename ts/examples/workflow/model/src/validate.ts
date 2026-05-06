@@ -40,7 +40,7 @@ export function validateWorkflowIR(
         });
     }
 
-    validateScope(ir.nodes, "nodes", tasks, errors);
+    validateScope(ir.nodes, "nodes", tasks, errors, false);
 
     // Static schema compatibility for the top-level scope.
     validateSchemaCompat(ir.nodes, "nodes", errors);
@@ -53,6 +53,7 @@ function validateScope(
     prefix: string,
     tasks: ReadonlyMap<string, TaskDefinition> | undefined,
     errors: ValidationError[],
+    insideLoop: boolean,
 ): void {
     const nodeIds = new Set(Object.keys(nodes));
 
@@ -80,20 +81,28 @@ function validateScope(
             }
         } else if (node.kind === "branch") {
             for (const [label, target] of Object.entries(node.cases)) {
-                if (target !== "@iterate" && target !== "@exit") {
-                    if (!nodeIds.has(target)) {
+                if (target === "@iterate" || target === "@exit") {
+                    if (!insideLoop) {
                         errors.push({
                             path: `${path}.cases.${label}`,
-                            message: `Target "${target}" does not exist.`,
+                            message: `Sentinel "${target}" is only valid inside a loop body.`,
                         });
                     }
+                } else if (!nodeIds.has(target)) {
+                    errors.push({
+                        path: `${path}.cases.${label}`,
+                        message: `Target "${target}" does not exist.`,
+                    });
                 }
             }
-            if (
-                node.default !== "@iterate" &&
-                node.default !== "@exit" &&
-                !nodeIds.has(node.default)
-            ) {
+            if (node.default === "@iterate" || node.default === "@exit") {
+                if (!insideLoop) {
+                    errors.push({
+                        path: `${path}.default`,
+                        message: `Sentinel "${node.default}" is only valid inside a loop body.`,
+                    });
+                }
+            } else if (!nodeIds.has(node.default)) {
                 errors.push({
                     path: `${path}.default`,
                     message: `Default target "${node.default}" does not exist.`,
@@ -106,7 +115,13 @@ function validateScope(
                     message: `Body entry "${node.body.entry}" does not exist.`,
                 });
             }
-            validateScope(node.body.nodes, `${path}.body.nodes`, tasks, errors);
+            validateScope(
+                node.body.nodes,
+                `${path}.body.nodes`,
+                tasks,
+                errors,
+                true,
+            );
             validateSchemaCompat(node.body.nodes, `${path}.body.nodes`, errors);
             if (node.next && !nodeIds.has(node.next)) {
                 errors.push({
@@ -257,6 +272,46 @@ function validateSchemaCompat(
             inputs = node.inputs;
         } else if (node.kind === "loop") {
             inputs = node.inputs;
+
+            // Also check iterateState and output templates.
+            for (const [stateName, stateTemplate] of Object.entries(
+                node.iterateState,
+            )) {
+                const stateRefs = collectScopeRefs(
+                    stateTemplate,
+                    `${path}.iterateState.${stateName}`,
+                );
+                for (const ref of stateRefs) {
+                    // iterateState refs resolve in the body scope
+                    const bodyBindings = buildBindingMap(node.body.nodes);
+                    const producerSchema = bodyBindings.get(ref.name);
+                    if (!producerSchema) continue;
+                    const err = checkSchemaCompat(
+                        producerSchema,
+                        ref.path,
+                        `${ref.templatePath} ($from "scope", name "${ref.name}")`,
+                    );
+                    if (err) {
+                        errors.push({ path: ref.templatePath, message: err });
+                    }
+                }
+            }
+
+            const outputRefs = collectScopeRefs(node.output, `${path}.output`);
+            for (const ref of outputRefs) {
+                // output refs resolve in the body scope
+                const bodyBindings = buildBindingMap(node.body.nodes);
+                const producerSchema = bodyBindings.get(ref.name);
+                if (!producerSchema) continue;
+                const err = checkSchemaCompat(
+                    producerSchema,
+                    ref.path,
+                    `${ref.templatePath} ($from "scope", name "${ref.name}")`,
+                );
+                if (err) {
+                    errors.push({ path: ref.templatePath, message: err });
+                }
+            }
         }
 
         if (!inputs) continue;

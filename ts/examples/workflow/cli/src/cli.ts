@@ -5,7 +5,12 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
-import { WorkflowIR, TaskPolicy, ApprovalFn } from "workflow-model";
+import {
+    WorkflowIR,
+    TaskPolicy,
+    ApprovalFn,
+    validateWorkflowIR,
+} from "workflow-model";
 import {
     TaskRegistry,
     WorkflowEngine,
@@ -147,26 +152,17 @@ async function cmdRun(
 
 async function cmdValidate(file: string): Promise<void> {
     const ir = loadIR(file);
-    const engine = makeEngine();
-
-    // Dry-run with empty input to trigger validation only.
-    // Side-effecting tasks are denied since we only care about structure.
-    const denyPolicy: TaskPolicy = {};
+    const reg = new TaskRegistry();
     for (const task of allBuiltinTasks) {
-        if (task.sideEffects) {
-            denyPolicy[task.name] = "deny";
-        }
+        reg.register(task);
     }
-    const result = await engine.run(ir, { input: {}, policy: denyPolicy });
-    if (result.success) {
+    const result = validateWorkflowIR(ir, reg.all());
+    if (result.valid) {
         console.log("Valid.");
-    } else if (result.error?.message?.includes("not registered")) {
-        console.error(`Validation failed: ${result.error.message}`);
-        process.exit(1);
     } else {
-        // Workflow is structurally valid but failed at runtime
-        // (expected with empty input or denied tasks). That's fine.
-        console.log("Valid (runtime error with empty input is expected).");
+        const msgs = result.errors.map((e) => `  ${e.path}: ${e.message}`);
+        console.error(`Validation failed:\n${msgs.join("\n")}`);
+        process.exit(1);
     }
 }
 

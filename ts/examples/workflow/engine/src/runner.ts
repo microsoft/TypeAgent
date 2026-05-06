@@ -208,8 +208,27 @@ export interface RunResult {
 export class WorkflowEngine {
     private listeners: WorkflowEventListener[] = [];
     private ajv = new AjvConstructor({ strict: false });
+    private validatorCache = new Map<
+        string,
+        ReturnType<typeof this.ajv.compile>
+    >();
 
     constructor(private readonly registry: TaskRegistry) {}
+
+    /**
+     * Get or create a cached JSON schema validator.
+     * Keyed by JSON.stringify of the schema to handle structurally
+     * identical schemas from parsed JSON (no reference identity).
+     */
+    private getValidator(schema: Record<string, unknown>) {
+        const key = JSON.stringify(schema);
+        let v = this.validatorCache.get(key);
+        if (!v) {
+            v = this.ajv.compile(schema);
+            this.validatorCache.set(key, v);
+        }
+        return v;
+    }
 
     on(listener: WorkflowEventListener): void {
         this.listeners.push(listener);
@@ -226,32 +245,11 @@ export class WorkflowEngine {
         }
     }
 
-    async run(
-        ir: WorkflowIR,
-        inputOrOptions?: Record<string, unknown> | RunOptions,
-        signal?: AbortSignal,
-    ): Promise<RunResult> {
-        // Normalize arguments: support both (ir, input, signal) and (ir, RunOptions)
-        let input: Record<string, unknown> | undefined;
-        let policy: TaskPolicy | undefined;
-        let approve: ApprovalFn | undefined;
-        let abortSignalArg: AbortSignal | undefined = signal;
-
-        if (
-            inputOrOptions &&
-            typeof inputOrOptions === "object" &&
-            ("input" in inputOrOptions ||
-                "policy" in inputOrOptions ||
-                "approve" in inputOrOptions)
-        ) {
-            const opts = inputOrOptions as RunOptions;
-            input = opts.input;
-            policy = opts.policy;
-            approve = opts.approve;
-            abortSignalArg = opts.signal ?? signal;
-        } else {
-            input = inputOrOptions as Record<string, unknown> | undefined;
-        }
+    async run(ir: WorkflowIR, options?: RunOptions): Promise<RunResult> {
+        const input = options?.input;
+        const policy = options?.policy;
+        const approve = options?.approve;
+        const abortSignalArg = options?.signal;
 
         // Validate
         const validation = validateWorkflowIR(ir, this.registry.all());
@@ -268,6 +266,21 @@ export class WorkflowEngine {
 
         const runId = `run-${randomUUID()}`;
         const abortSignal = abortSignalArg ?? new AbortController().signal;
+
+        // Validate workflow input against inputSchema.
+        if (ir.inputSchema && input) {
+            const validate = this.getValidator(ir.inputSchema);
+            if (!validate(input)) {
+                const msg = this.ajv.errorsText(validate.errors);
+                return {
+                    runId: "",
+                    success: false,
+                    error: {
+                        message: `Input schema violation: ${msg}`,
+                    },
+                };
+            }
+        }
 
         // Build constants
         const constants = new Map<string, unknown>();
@@ -389,9 +402,26 @@ export class WorkflowEngine {
                     );
                     break;
 
-                case "branch":
+                case "branch": {
+                    const branchNodeId = currentId;
+                    this.emit({
+                        type: "nodeStarted",
+                        runId,
+                        nodeId: branchNodeId,
+                        scopePath: [...scopePath],
+                        timestamp: Date.now(),
+                    });
                     currentId = this.executeBranch(node, activeScope);
+                    this.emit({
+                        type: "nodeCompleted",
+                        runId,
+                        nodeId: branchNodeId,
+                        scopePath: [...scopePath],
+                        output: currentId,
+                        timestamp: Date.now(),
+                    });
                     break;
+                }
 
                 case "loop":
                     currentId = await this.executeLoop(
@@ -401,6 +431,9 @@ export class WorkflowEngine {
                         scopePath,
                         runId,
                         signal,
+                        (err, trigger) => {
+                            pendingError = { error: err, trigger };
+                        },
                         policy,
                         approve,
                     );
@@ -486,7 +519,7 @@ export class WorkflowEngine {
 
             // Runtime output schema validation.
             if (node.outputSchema) {
-                const validate = this.ajv.compile(node.outputSchema);
+                const validate = this.getValidator(node.outputSchema);
                 if (!validate(result.output)) {
                     const msg = this.ajv.errorsText(validate.errors);
                     throw new EngineError(
@@ -564,6 +597,10 @@ export class WorkflowEngine {
         scopePath: string[],
         runId: string,
         signal: AbortSignal,
+        onErrorDispatch: (
+            error: Record<string, unknown>,
+            trigger: unknown,
+        ) => void,
         policy?: TaskPolicy,
         approve?: ApprovalFn,
     ): Promise<string | undefined> {
@@ -692,13 +729,8 @@ export class WorkflowEngine {
                     timestamp: Date.now(),
                 });
 
-                // For loop onError, we need to set up the pending error
-                // on the outer scope. We handle this by throwing a special
-                // error that the outer executeScope can catch... but the
-                // current design doesn't support that cleanly.
-                // For the stub: just throw. Loop onError is not exercised
-                // by the A4 test.
-                throw err;
+                onErrorDispatch(errorObj, loopInput);
+                return node.onError;
             }
             throw err;
         }

@@ -243,7 +243,8 @@ export const llmGenerate: TaskDefinition<
         required: ["text"],
         properties: { text: { type: "string" } },
     },
-    async execute(input) {
+    async execute(input, ctx) {
+        ctx?.signal?.throwIfAborted();
         const model = openai.createChatModel(input.endpoint);
         const result = await model.complete(input.prompt);
         if (!result.success) {
