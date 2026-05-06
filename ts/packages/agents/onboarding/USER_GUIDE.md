@@ -530,3 +530,11 @@ AI: I'll kick off the Jira onboarding. Let me start by discovering the API surfa
 **Test failures drive improvement.** A 70% pass rate on first run is typical. Two rounds of `proposeRepair` → `runTests` usually gets to 90%+. The LLM is good at diagnosing pattern mismatches.
 
 **Re-use grows over time.** The second integration you onboard will reuse the doc crawler, phrase generator, and schema generator — only the integration-specific configuration changes.
+
+---
+
+## Experimental: UI Automation onboarding
+
+For Windows desktop apps without a public API, there is an **experimental** UI-crawling path that drives the app autonomously via Microsoft's UI Automation framework and synthesizes a `discoveredActions.json` with replayable playback recipes. It is not wired into the natural-language flow above and is not yet stable — surface, prompts, and on-disk artifact shapes may change.
+
+If you want to evaluate it, see [`src/uiCapture/README.md`](./src/uiCapture/README.md) for the pipeline overview and the smoke tests used to drive it end-to-end.

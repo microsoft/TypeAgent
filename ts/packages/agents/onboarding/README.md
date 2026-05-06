@@ -65,6 +65,12 @@ This spawns the binary with `--help` (falling back to `-h`), parses subcommands,
 
 When the scaffolder detects CLI-sourced actions, it auto-generates a working handler with `buildArgs()` and `runCli()` functions instead of a stub.
 
+### UI Automation crawling (experimental)
+
+For Windows desktop apps that have no documented API surface, an **experimental** UI-driven crawler can discover actions by autonomously driving the app via Microsoft's UI Automation framework. It produces the same `discoveredActions.json` shape as the API-based crawlers, plus per-action playback recipes that can be replayed at runtime.
+
+This path is not yet wired into the standard `startOnboarding` flow — surface, helper RPC, and synthesis prompts are still changing. See [`src/uiCapture/README.md`](./src/uiCapture/README.md) for status, pipeline overview, and how to run it.
+
 ## Workspace layout
 
 ```
