@@ -8,6 +8,16 @@ export type { CollisionStrategy } from "./session.js";
 
 const debugCollision = registerDebug("typeagent:dispatcher:collision");
 
+/**
+ * Minimal Logger shape we depend on — matches `Logger.logEvent` from
+ * `packages/telemetry/src/logger/logger.ts` without importing the type
+ * (avoids a cross-package import cycle and keeps the host stub trivial
+ * for tests).
+ */
+export type CollisionLogger = {
+    logEvent(eventName: string, entry: Record<string, unknown>): void;
+};
+
 export type CollisionEventKind =
     | "static"
     | "grammarMatch"
@@ -101,6 +111,13 @@ export type CollisionTelemetryHost = {
      * module to the RequestId type; the emit stringifies it.
      */
     currentRequestId?: unknown;
+    /**
+     * Optional — when present and `collision.telemetry.emit` is true,
+     * each emitted event is forwarded as `logEvent("collision", event)`.
+     * Reaches the existing dispatcher sinks (debug log + Cosmos when
+     * `@config log db on`).
+     */
+    logger?: CollisionLogger | undefined;
     session: {
         /**
          * Optional — when present the emit fills `sessionId` automatically
@@ -179,6 +196,25 @@ export function emitCollisionEvent(
                 0,
                 host.collisionEvents.length - RING_BUFFER_SIZE,
             );
+        }
+        // Forward to the dispatcher logger when present.  The DB sink
+        // self-gates on `dblogging`, so events only reach Cosmos when the
+        // tester has run `@config log db on`; the debug sink always
+        // captures locally.  Wrapped so a sink misbehaving never disrupts
+        // the colliding request.
+        if (host.logger) {
+            try {
+                host.logger.logEvent(
+                    "collision",
+                    stamped as unknown as Record<string, unknown>,
+                );
+            } catch (err) {
+                debugCollision(
+                    `logger.logEvent threw — collision event captured locally only: ${
+                        err instanceof Error ? err.message : String(err)
+                    }`,
+                );
+            }
         }
     }
 }
