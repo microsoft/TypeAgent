@@ -189,15 +189,28 @@ async function handleLlmTransform(
     model: string = "claude-haiku-4-5-20251001",
     signal?: AbortSignal,
 ) {
+    const abortController = new AbortController();
     const fullPrompt = `${prompt}\n\n${input}`;
-    const queryInstance = query({ prompt: fullPrompt, options: { model } });
+    const queryInstance = query({
+        prompt: fullPrompt,
+        options: { model, abortController },
+    });
+    const onAbort = () => {
+        abortController.abort(signal?.reason);
+        queryInstance.return();
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
     let responseText = "";
-    for await (const message of queryInstance) {
-        signal?.throwIfAborted();
-        if (message.type === "result" && message.subtype === "success") {
-            responseText = (message as any).result || "";
-            break;
+    try {
+        for await (const message of queryInstance) {
+            if (message.type === "result" && message.subtype === "success") {
+                responseText = (message as any).result || "";
+                break;
+            }
         }
+        console.error(`[UTILITY-LLM] loop exited normally`);
+    } finally {
+        signal?.removeEventListener("abort", onAbort);
     }
 
     if (parseJson) {
@@ -242,11 +255,13 @@ async function handleClaudeTask(
     maxTurns: number = 10,
     signal?: AbortSignal,
 ) {
+    const abortController = new AbortController();
     const queryInstance = query({
         prompt: goal,
         options: {
             model,
             maxTurns,
+            abortController,
             permissionMode: "acceptEdits",
             canUseTool: async () => ({ behavior: "allow" as const }),
             allowedTools: ["WebSearch", "WebFetch"],
@@ -259,13 +274,21 @@ async function handleClaudeTask(
             },
         },
     });
+    const onAbort = () => {
+        abortController.abort(signal?.reason);
+        queryInstance.return();
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
     let responseText = "";
-    for await (const message of queryInstance) {
-        signal?.throwIfAborted();
-        if (message.type === "result" && message.subtype === "success") {
-            responseText = (message as any).result || "";
-            break;
+    try {
+        for await (const message of queryInstance) {
+            if (message.type === "result" && message.subtype === "success") {
+                responseText = (message as any).result || "";
+                break;
+            }
         }
+    } finally {
+        signal?.removeEventListener("abort", onAbort);
     }
 
     if (parseJson) {

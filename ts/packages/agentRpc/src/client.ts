@@ -472,12 +472,20 @@ export async function createAgentRpcClient(
             action: TypeAgentAction,
             context: ActionContext<ShimContext>,
         ) {
-            return withActionContextAsync(context, (contextParams) =>
-                rpc.invoke("executeAction", {
+            return withActionContextAsync(context, (contextParams) => {
+                const signal = context.abortSignal;
+                if (signal) {
+                    const onAbort = () =>
+                        rpc.send("cancelAction", {
+                            actionContextId: contextParams.actionContextId,
+                        });
+                    signal.addEventListener("abort", onAbort, { once: true });
+                }
+                return rpc.invoke("executeAction", {
                     ...contextParams,
                     action,
-                }),
-            );
+                });
+            });
         },
         validateWildcardMatch(
             action: AppAction,
