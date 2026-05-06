@@ -1588,6 +1588,227 @@ function strategiesFor(point: CollisionPoint): readonly string[] {
     return point === "static" ? STATIC_STRATEGIES : RUNTIME_STRATEGIES;
 }
 
+// ---- HTML rendering helpers for `@config collision` ----
+//
+// Inline `style="…"` everywhere because the shell sanitizer strips
+// <style> blocks (same constraint as the grammar collision renderer in
+// grammarCommandHandlers.ts).  Color palette is consistent across both
+// reports so badges read the same.
+
+function escapeHtml(s: unknown): string {
+    const str = typeof s === "string" ? s : String(s);
+    return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
+function statusPill(on: boolean, label?: string): string {
+    const text = label ?? (on ? "on" : "off");
+    const bg = on ? "#dfd" : "#eee";
+    const fg = on ? "#070" : "#888";
+    return (
+        `<span style="display:inline-block;padding:1px 8px;border-radius:10px;` +
+        `font-size:11px;font-weight:600;color:${fg};background:${bg};">${escapeHtml(text)}</span>`
+    );
+}
+
+function strategyPill(
+    strategy: string,
+    isDefault: boolean,
+    risky: boolean,
+): string {
+    const bg = isDefault ? "#eee" : risky ? "#fee" : "#e8f0ff";
+    const fg = isDefault ? "#888" : risky ? "#c44" : "#36c";
+    return (
+        `<span style="display:inline-block;padding:1px 8px;border-radius:10px;` +
+        `font-family:monospace;font-size:11px;font-weight:600;color:${fg};background:${bg};">${escapeHtml(strategy)}</span>`
+    );
+}
+
+function pointDescription(point: CollisionPoint): string {
+    switch (point) {
+        case "static":
+            return "duplicate actionName at agent registration";
+        case "grammarMatch":
+            return "multiple validated cache matches at runtime";
+        case "llmSelect":
+            return "ambiguous embedding-pick during LLM translation";
+        case "fuzzy":
+            return "semantic action overlap (fuzzy)";
+    }
+}
+
+function renderCollisionShowHTML(cfg: {
+    static: { detect: boolean; strategy: string };
+    grammarMatch: {
+        detect: boolean;
+        strategy: string;
+        classifier: string;
+    };
+    llmSelect: {
+        detect: boolean;
+        strategy: string;
+        topN: number;
+        scoreDeltaThreshold: number;
+    };
+    fuzzy: {
+        detect: boolean;
+        strategy: string;
+        staticEnabled: boolean;
+        runtimeEnabled: boolean;
+        scorer: string;
+        similarityThreshold: number;
+    };
+    priorityOrder: string;
+    multipleActionBehavior: string;
+    telemetry: { emit: boolean; debugLog: boolean };
+}): string {
+    const C_MUTED = "#777";
+    const C_LABEL = "#555";
+
+    const cellStyle = "padding:6px 10px;border-bottom:1px solid #f0f0f0;";
+    const headStyle =
+        "padding:6px 10px;border-bottom:1px solid #ddd;text-align:left;font-weight:600;color:#555;";
+    const monoCell = `${cellStyle}font-family:monospace;font-size:11px;color:${C_MUTED};`;
+
+    const rows: { point: CollisionPoint; row: string }[] = [];
+
+    // Per-point rows
+    const staticIsDefault = cfg.static.strategy === "warn";
+    const staticRisky = cfg.static.strategy === "error";
+    rows.push({
+        point: "static",
+        row: `
+            <td style="${cellStyle}"><b>static</b><div style="color:${C_MUTED};font-size:11px;">${escapeHtml(pointDescription("static"))}</div></td>
+            <td style="${cellStyle}">${statusPill(cfg.static.detect)}</td>
+            <td style="${cellStyle}">${strategyPill(cfg.static.strategy, staticIsDefault, staticRisky)}</td>
+            <td style="${monoCell}"><span style="color:${C_MUTED};">—</span></td>`,
+    });
+
+    const gmDefault = cfg.grammarMatch.strategy === "first-match";
+    const gmRisky = cfg.grammarMatch.strategy === "user-clarify";
+    rows.push({
+        point: "grammarMatch",
+        row: `
+            <td style="${cellStyle}"><b>grammarMatch</b><div style="color:${C_MUTED};font-size:11px;">${escapeHtml(pointDescription("grammarMatch"))}</div></td>
+            <td style="${cellStyle}">${statusPill(cfg.grammarMatch.detect)}</td>
+            <td style="${cellStyle}">${strategyPill(cfg.grammarMatch.strategy, gmDefault, gmRisky)}</td>
+            <td style="${monoCell}">classifier=${escapeHtml(cfg.grammarMatch.classifier)}</td>`,
+    });
+
+    const lsDefault = cfg.llmSelect.strategy === "first-match";
+    const lsRisky = cfg.llmSelect.strategy === "user-clarify";
+    rows.push({
+        point: "llmSelect",
+        row: `
+            <td style="${cellStyle}"><b>llmSelect</b><div style="color:${C_MUTED};font-size:11px;">${escapeHtml(pointDescription("llmSelect"))}</div></td>
+            <td style="${cellStyle}">${statusPill(cfg.llmSelect.detect)}</td>
+            <td style="${cellStyle}">${strategyPill(cfg.llmSelect.strategy, lsDefault, lsRisky)}</td>
+            <td style="${monoCell}">topN=${cfg.llmSelect.topN}, scoreDelta=${cfg.llmSelect.scoreDeltaThreshold}</td>`,
+    });
+
+    const fzDefault = cfg.fuzzy.strategy === "first-match";
+    const fzRisky = cfg.fuzzy.strategy === "user-clarify";
+    const scorerLabel =
+        cfg.fuzzy.scorer === "placeholder"
+            ? `<span style="color:#c80;" title="returns 0 for all pairs — fuzzy is inert until a real scorer ships">${escapeHtml(cfg.fuzzy.scorer)}</span>`
+            : escapeHtml(cfg.fuzzy.scorer);
+    rows.push({
+        point: "fuzzy",
+        row: `
+            <td style="${cellStyle}"><b>fuzzy</b><div style="color:${C_MUTED};font-size:11px;">${escapeHtml(pointDescription("fuzzy"))}</div></td>
+            <td style="${cellStyle}">${statusPill(cfg.fuzzy.detect)}</td>
+            <td style="${cellStyle}">${strategyPill(cfg.fuzzy.strategy, fzDefault, fzRisky)}</td>
+            <td style="${monoCell}">scorer=${scorerLabel}, static=${statusPill(cfg.fuzzy.staticEnabled)}, runtime=${statusPill(cfg.fuzzy.runtimeEnabled)}, threshold=${cfg.fuzzy.similarityThreshold}</td>`,
+    });
+
+    const tableRows = rows
+        .map((r) => `<tr>${r.row}</tr>`)
+        .join("");
+
+    const priorityVal = cfg.priorityOrder
+        ? `<code style="background:#f5f5f5;padding:1px 6px;border-radius:3px;">"${escapeHtml(cfg.priorityOrder)}"</code>`
+        : `<span style="color:#999;font-style:italic;">(empty — falls back to agent registration order)</span>`;
+
+    const mabRisky = cfg.multipleActionBehavior !== "downgrade-to-priority";
+    const mabVal = `<code style="background:${mabRisky ? "#fee" : "#f5f5f5"};color:${mabRisky ? "#c44" : "#555"};padding:1px 6px;border-radius:3px;">${escapeHtml(cfg.multipleActionBehavior)}</code>`;
+
+    const settings = `
+        <div style="margin-top:14px;font-size:12px;color:${C_LABEL};line-height:1.7;">
+            <div><span style="color:${C_MUTED};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;margin-right:6px;">priorityOrder</span>${priorityVal}</div>
+            <div><span style="color:${C_MUTED};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;margin-right:6px;">multipleActionBehavior</span>${mabVal}</div>
+            <div style="margin-top:6px;">
+                <span style="color:${C_MUTED};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;margin-right:6px;">telemetry</span>
+                emit ${statusPill(cfg.telemetry.emit)}
+                debugLog ${statusPill(cfg.telemetry.debugLog)}
+            </div>
+        </div>`;
+
+    const anyOn =
+        cfg.static.detect ||
+        cfg.grammarMatch.detect ||
+        cfg.llmSelect.detect ||
+        cfg.fuzzy.detect;
+    const summary = anyOn
+        ? `<div style="font-size:11px;color:${C_MUTED};margin-bottom:10px;">Detection is <b style="color:#070;">active</b> on at least one point. Telemetry is captured when emit=on; remote upload requires <code>@config log db on</code>.</div>`
+        : `<div style="font-size:11px;color:${C_MUTED};margin-bottom:10px;">All detection points are <b>off</b> — runtime behavior is byte-identical to legacy first-match. Opt in with <code>@config collision &lt;point&gt; detect on</code>.</div>`;
+
+    return (
+        `<div style="font-family:system-ui,sans-serif;font-size:13px;padding:8px;max-width:880px;">` +
+        `<h3 style="margin:0 0 4px;font-size:14px;">Collision detection config</h3>` +
+        summary +
+        `<table style="border-collapse:collapse;width:100%;font-size:12px;">` +
+        `<thead><tr style="background:#fafafa;">` +
+        `<th style="${headStyle}">Detection point</th>` +
+        `<th style="${headStyle}">Detect</th>` +
+        `<th style="${headStyle}">Strategy</th>` +
+        `<th style="${headStyle}">Extras</th>` +
+        `</tr></thead><tbody>${tableRows}</tbody></table>` +
+        settings +
+        `</div>`
+    );
+}
+
+function renderCollisionShowText(cfg: {
+    static: { detect: boolean; strategy: string };
+    grammarMatch: {
+        detect: boolean;
+        strategy: string;
+        classifier: string;
+    };
+    llmSelect: {
+        detect: boolean;
+        strategy: string;
+        topN: number;
+        scoreDeltaThreshold: number;
+    };
+    fuzzy: {
+        detect: boolean;
+        strategy: string;
+        staticEnabled: boolean;
+        runtimeEnabled: boolean;
+        scorer: string;
+        similarityThreshold: number;
+    };
+    priorityOrder: string;
+    multipleActionBehavior: string;
+    telemetry: { emit: boolean; debugLog: boolean };
+}): string[] {
+    const onOff = (b: boolean) => (b ? "on" : "off");
+    return [
+        "collision config:",
+        `  static:       detect=${onOff(cfg.static.detect)} strategy=${cfg.static.strategy}`,
+        `  grammarMatch: detect=${onOff(cfg.grammarMatch.detect)} strategy=${cfg.grammarMatch.strategy} classifier=${cfg.grammarMatch.classifier}`,
+        `  llmSelect:    detect=${onOff(cfg.llmSelect.detect)} strategy=${cfg.llmSelect.strategy} topN=${cfg.llmSelect.topN} scoreDelta=${cfg.llmSelect.scoreDeltaThreshold}`,
+        `  fuzzy:        detect=${onOff(cfg.fuzzy.detect)} strategy=${cfg.fuzzy.strategy} static=${onOff(cfg.fuzzy.staticEnabled)} runtime=${onOff(cfg.fuzzy.runtimeEnabled)} scorer=${cfg.fuzzy.scorer} threshold=${cfg.fuzzy.similarityThreshold}`,
+        `  priorityOrder: ${cfg.priorityOrder ? `"${cfg.priorityOrder}"` : "(empty)"}`,
+        `  multipleActionBehavior: ${cfg.multipleActionBehavior}`,
+        `  telemetry: emit=${onOff(cfg.telemetry.emit)} debugLog=${onOff(cfg.telemetry.debugLog)}`,
+    ];
+}
+
 class CollisionShowCommandHandler implements CommandHandler {
     public readonly description =
         "Show the current collision detection config";
@@ -1596,18 +1817,13 @@ class CollisionShowCommandHandler implements CommandHandler {
     public async run(context: ActionContext<CommandHandlerContext>) {
         const cfg = context.sessionContext.agentContext.session.getConfig()
             .collision;
-        const onOff = (b: boolean) => (b ? "on" : "off");
-        const lines = [
-            "collision config:",
-            `  static:       detect=${onOff(cfg.static.detect)} strategy=${cfg.static.strategy}`,
-            `  grammarMatch: detect=${onOff(cfg.grammarMatch.detect)} strategy=${cfg.grammarMatch.strategy} classifier=${cfg.grammarMatch.classifier}`,
-            `  llmSelect:    detect=${onOff(cfg.llmSelect.detect)} strategy=${cfg.llmSelect.strategy} topN=${cfg.llmSelect.topN} scoreDeltaThreshold=${cfg.llmSelect.scoreDeltaThreshold}`,
-            `  fuzzy:        detect=${onOff(cfg.fuzzy.detect)} strategy=${cfg.fuzzy.strategy} staticEnabled=${onOff(cfg.fuzzy.staticEnabled)} runtimeEnabled=${onOff(cfg.fuzzy.runtimeEnabled)} scorer=${cfg.fuzzy.scorer}`,
-            `  priorityOrder: ${cfg.priorityOrder ? `"${cfg.priorityOrder}"` : "(empty)"}`,
-            `  multipleActionBehavior: ${cfg.multipleActionBehavior}`,
-            `  telemetry: emit=${onOff(cfg.telemetry.emit)} debugLog=${onOff(cfg.telemetry.debugLog)}`,
-        ];
-        displayResult(lines.join("\n"), context);
+        const html = renderCollisionShowHTML(cfg);
+        const text = renderCollisionShowText(cfg);
+        context.actionIO.appendDisplay({
+            type: "html",
+            content: html,
+            alternates: [{ type: "text", content: text }],
+        });
     }
 }
 
