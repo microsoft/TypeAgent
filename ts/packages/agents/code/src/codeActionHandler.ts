@@ -291,36 +291,39 @@ export async function getActiveFileFromVSCode(
     });
 }
 
+import { VSCodeConversationActions } from "./vscode/vscodeConversationActionsSchema.js";
+
 async function executeConversationAction(
-    action: AppAction,
+    action: VSCodeConversationActions,
     context: ActionContext<CodeActionContext>,
 ) {
-    const params = (action as any).parameters ?? {};
     context.actionIO.takeAction("vscode-shell-action" as any, {
         actionName: action.actionName,
-        parameters: params,
+        parameters: action.parameters,
     });
     switch (action.actionName) {
         case "newConversation":
             return createActionResult(
-                params.name
-                    ? `Created new conversation "${params.name}".`
+                action.parameters.name
+                    ? `Created new conversation "${action.parameters.name}".`
                     : "Creating a new conversation.",
             );
         case "renameConversation":
             return createActionResult(
-                `Renamed current conversation to "${params.newName}".`,
+                `Renamed current conversation to "${action.parameters.newName}".`,
             );
         case "switchConversation":
             return createActionResult(
-                params.name
-                    ? `Switched to conversation "${params.name}".`
+                action.parameters.name
+                    ? `Switched to conversation "${action.parameters.name}".`
                     : "Switching conversation.",
             );
-        default:
-            return createActionResultFromError(
-                `Unknown conversation action: ${action.actionName}`,
+        default: {
+            const _exhaustive: never = action;
+            throw new Error(
+                `Unhandled conversation action: ${(_exhaustive as VSCodeConversationActions).actionName}`,
             );
+        }
     }
 }
 
@@ -338,7 +341,10 @@ async function executeCodeAction(
     // via takeAction. All other code sub-schemas are forwarded to the Coda
     // VS Code extension over the WebSocket bridge below.
     if (action.schemaName === "code-vscode-shell") {
-        return executeConversationAction(action, context);
+        return executeConversationAction(
+            action as VSCodeConversationActions,
+            context,
+        );
     }
 
     const agentContext = context.sessionContext.agentContext;
