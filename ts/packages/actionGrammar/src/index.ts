@@ -6,6 +6,8 @@ export type {
     Grammar,
     GrammarRule,
     GrammarPart,
+    RulesPart,
+    DispatchModeBucket,
     CompiledSpacingMode,
 } from "./grammarTypes.js";
 export { grammarFromJson } from "./grammarDeserializer.js";
@@ -104,6 +106,25 @@ export {
     type FirstTokenIndex,
 } from "./nfaInterpreter.js";
 export { compileGrammarToNFA, normalizeGrammar } from "./nfaCompiler.js";
+export { findGrammarOverlap } from "./nfaIntersection.js";
+export type {
+    GrammarOverlap,
+    FindOverlapOptions,
+} from "./nfaIntersection.js";
+export {
+    scanGrammarCollisions,
+    formatRulePartsText,
+    collectTopLevelRules,
+    stripTailCalls,
+} from "./grammarCollisionScanner.js";
+export type {
+    SchemaInput,
+    SchemaScanInfo,
+    SchemaSkip,
+    CollisionRecord,
+    CollisionScanResult,
+    ScanOptions,
+} from "./grammarCollisionScanner.js";
 export { enrichGrammarWithCheckedVariables } from "./grammarMetadata.js";
 
 // Environment-based slot system

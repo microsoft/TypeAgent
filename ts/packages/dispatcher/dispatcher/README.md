@@ -176,23 +176,24 @@ Use the `@const <args>` command at the prompt to control the construction store.
 
 ### Grammar
 
-Grammar commands let you inspect runtime-learned rules and scan static `.agr` files for cross-agent collisions.
+Grammar commands let you inspect runtime-learned rules and scan loaded `.agr` files for cross-agent collisions.
 
-| Command                                     | Description                                                                                                                                                                                                                 |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@grammar` _(or)_ `@grammar list [<agent>]` | List grammar rules learned at runtime by the dispatcher. Optionally filter by agent name. Default subcommand. Shows risk icons (munch / completion).                                                                        |
-| `@grammar show <id>`                        | Show a single learned rule's pattern, anchor words, and risk analysis.                                                                                                                                                      |
-| `@grammar delete <id>`                      | Delete a learned rule by ID. Rebuilds the in-memory NFA for the affected schema.                                                                                                                                            |
-| `@grammar clear [<agent>]`                  | Clear all learned rules. Optionally scope to one agent.                                                                                                                                                                     |
-| `@grammar collisions`                       | Scan **all loaded agent `.agr` grammars** for cross-agent collisions — rules whose anchor words (literal terminals before the first wildcard) overlap. Streams per-schema status as it runs, then renders a grouped report. |
+| Command                                     | Description                                                                                                                                          |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@grammar` _(or)_ `@grammar list [<agent>]` | List grammar rules learned at runtime by the dispatcher. Optionally filter by agent name. Default subcommand. Shows risk icons (munch / completion). |
+| `@grammar show <id>`                        | Show a single learned rule's pattern, anchor words, and risk analysis.                                                                               |
+| `@grammar delete <id>`                      | Delete a learned rule by ID. Rebuilds the in-memory NFA for the affected schema.                                                                     |
+| `@grammar clear [<agent>]`                  | Clear all learned rules. Optionally scope to one agent.                                                                                              |
+| `@grammar collisions [--json <path>]`       | NFA-product-construction collision detector across all loaded agent grammars. Reports concrete witness inputs that both grammars accept, plus the action interpretation each grammar produces. With `--json <path>`, also writes a structured report for offline post-processing. |
 
 **About the collision scanner:**
 
-- Walks every loaded schema's compiled grammar (top-level alternatives plus first-token dispatch buckets) and extracts an **anchor**: the leading sequence of literal tokens before any unconstrained capture. Optional/repeat parts are skipped because they may not appear at runtime.
-- Groups rules by anchor signature; reports any group with more than one distinct schema.
-- Flags **wildcard-terminated** anchors as high-risk: those are the rules that will accept anything matching the prefix (e.g. `play <wildcard>` matched by both `player` and `vampire`).
-- Anchorless rules (those starting with a nested rule reference or phrase set) are skipped to avoid noise.
-- This is anchor-based, not full language-equivalence — it catches the common case (shared literal prefix) but won't surface overlap that begins mid-pattern after different prefixes. Full NFA-intersection analysis is a follow-up.
+- Compiles every loaded schema's grammar to an NFA, then for each cross-agent pair builds the joint product NFA (`findGrammarOverlap` in [`action-grammar`](../../actionGrammar/src/nfaIntersection.ts)) and BFSes from start-pair to any accept-pair. The path's accumulated tokens are a concrete **witness** — proof of overlap, not just a heuristic guess.
+- For each detected overlap, also runs the witness through each grammar's AST matcher (`matchGrammar`) and shows what the runtime dispatcher would interpret it as. This makes the report actionable when the rule pattern is opaque (e.g. a top-level rule that's just a single dispatching `<rules>` reference).
+- Witnesses on **typed wildcards with no concrete sample** (custom entity validators whose accepted language we can't enumerate) come back with synthetic `<TypeName>` placeholders and are flagged for manual review.
+- Grammars optimized with `tailFactoring` (RulesPart `tailCall: true`) are auto-stripped before NFA compile — language acceptance is preserved; only the optimizer's bindings-flow shortcut is lost (the AST matcher is used for the action-value preview, which understands `tailCall` natively, so previews stay accurate).
+- Skip reasons (no grammar / wrong format / parse error / compile error) are surfaced in a collapsible breakdown with per-reason counts and sample schema names, so the question "why was X skipped?" is self-answering.
+- `--json <path>` writes a `CollisionScanResult` keyed by canonical `"schemaA|schemaB"` (alphabetical) — same engine and JSON shape as the standalone [`analyze-grammar-collisions` CLI](../../actionGrammar/README.md#cli-analyze-grammar-collisions). Use it to gate CI on grammar collisions, diff across changes, or post-process for tuning.
 
 For testing, enable the [vampire agent](../../agents/vampire) — its actions and grammar rules are engineered to collide deliberately, so `@grammar collisions` will produce a non-empty report once it's loaded.
 
@@ -315,7 +316,7 @@ For deliberate, repeatable collisions during evaluation, enable the [vampire tes
 - **Real `ActionEmbeddingScorer` implementation** — the fuzzy detection point is fully wired but the only shipped scorer (`PlaceholderScorer`) returns 0 for all pairs. Selecting `scorer: "actionEmbedding"` today logs a "not implemented; falling back to placeholder" warning. Reusing the embedding model already loaded by `semanticSearchActionSchema` is the natural follow-up.
 - **Runtime fuzzy detection hook** — `fuzzy.runtimeEnabled` is in the config but the call site in `matchCollision.ts` (post-resolver fuzzy candidate scan) is not yet wired up. Static fuzzy scanning is wired.
 - **`pause-and-prompt` for `MultipleAction`** — requires batch-executor pause/resume support. Today this strategy auto-degrades to `downgrade-to-priority`.
-- **Runtime collision-events command** — `@grammar collisions` already covers the static-scan side (cross-agent `.agr` overlap). The runtime side — `lastStaticCollisions` (post-load) and the `collisionEvents` ring buffer (per-request) — is still programmatic-only and needs a command surface.
+- **Runtime collision-events command** — `@grammar collisions` covers the static-scan side (cross-agent grammar overlap, with concrete witnesses via NFA product construction). The runtime side — `lastStaticCollisions` (post-load) and the `collisionEvents` ring buffer (per-request) — is still programmatic-only and needs a command surface.
 - **Threshold calibration** — `fuzzy.similarityThreshold: 0.85` is a placeholder. Once a real scorer lands, calibrate against a labeled set of agent-action pairs.
 - **On-disk fuzzy matrix cache** — once fuzzy scoring is non-trivial, cache the static pairwise matrix in the agent cache directory so it doesn't re-run on every dispatcher boot.
 - **Clarify-loop bias** — when the user picks an agent in response to a `ClarifyMultipleAgentMatches`, the same collision can repeat on the next round-trip. Mitigation: temporarily set `lastActionSchemaName` to the user's pick to bias re-translation. Deferred until/unless it bites in evaluation.

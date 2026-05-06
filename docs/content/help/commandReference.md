@@ -686,11 +686,26 @@ Usage: `@grammar clear [<agent>]`
 
 ## @grammar collisions - Scan all loaded agent grammars for cross-agent collisions
 
-Usage: `@grammar collisions`
+Usage: `@grammar collisions [--json <path>]`
 
-Walks every loaded schema's compiled grammar (top-level alternatives plus first-token dispatch buckets) and groups rules by their **anchor** — the leading sequence of literal tokens before the first unconstrained capture (wildcard or string-typed variable). Any anchor shared by two or more distinct schemas is reported as a collision group. High-risk groups (anchors that terminate at a wildcard, e.g. `play <wildcard>` matched by both `player` and `vampire`) are flagged in red. Streams per-schema status updates as it runs, then renders a grouped report.
+### Flags:
 
-This is the proactive companion to runtime collision detection — see [Action Collision Detection](../../../ts/packages/dispatcher/dispatcher/README.md#action-collision-detection) in the dispatcher README. Anchor-based, not full language-equivalence: catches the common case (shared literal prefix) but won't surface overlap that begins mid-pattern after different prefixes.
+- `--json <path>` - (optional) Write the structured scan result to this path as JSON, in addition to rendering the report.
+
+Compiles every loaded schema's grammar to an NFA and runs a **product-construction intersection** across every cross-agent pair to find concrete inputs that both grammars accept. Each collision card shows:
+
+- The two colliding schemas (badged with consistent colors)
+- The **witness** — a concrete token sequence both grammars accept
+- The colliding rule on each side (syntax-highlighted: literals green, wildcards blue/red, phrase sets teal, nested rules indigo)
+- A **`Matches as`** line per side — runs the witness through each grammar's AST matcher and shows the resulting action object (`actionName({param: "value", …})`). Solves the case where a top-level rule renders as an opaque `<rules>` placeholder: the action interpretation pinpoints which inner alternative actually fired.
+
+Witnesses containing synthetic `<TypeName>` placeholders (because at least one wildcard requires a custom entity type whose accepted strings can't be enumerated by the scanner) are flagged red and require manual review.
+
+Schemas whose grammars don't compile are listed in a collapsible "Why N schema(s) were skipped" breakdown with per-reason counts (no grammar / wrong format / parse error / compile error) and a sample of schema names. Grammars that carry optimizer `tailCall` markers (the NFA compiler refuses these — they're an AST-only optimization) are auto-stripped before NFA compile so they participate in the scan, with the count surfaced in the breakdown.
+
+The `--json <path>` flag writes a `CollisionScanResult` to disk for offline post-processing — same engine and shape as the standalone [`analyze-grammar-collisions` CLI](../../../ts/packages/actionGrammar/README.md#cli-analyze-grammar-collisions). The JSON is keyed by canonical `"schemaA|schemaB"` (alphabetical) so it's stable across runs and easy to diff in CI.
+
+This is the proactive companion to runtime collision detection — see [Action Collision Detection](../../../ts/packages/dispatcher/dispatcher/README.md#action-collision-detection) in the dispatcher README.
 
 ## @history list - List history
 

@@ -641,8 +641,9 @@ The big ones:
 - `pause-and-prompt` behavior for `MultipleAction` (auto-degrades today).
 - Fuzzy threshold calibration once a real scorer lands.
 - Surface the runtime `collisionEvents` ring buffer through a command
-  (`@grammar collisions` covers the static-scan side; the runtime side is
-  still programmatic-only).
+  (`@grammar collisions` covers the static-scan side via NFA product
+  construction with concrete witnesses; the runtime side is still
+  programmatic-only).
 
 ---
 
@@ -666,7 +667,7 @@ Handles `@`-prefixed system commands. The full set is registered in
 | `@display`      | Tweak how output is rendered.                                                                                                                  |
 | `@env`          | Inspect environment variables and config-relevant runtime values.                                                                              |
 | `@exit`         | Exit the program.                                                                                                                              |
-| `@grammar`      | Manage runtime-learned grammar rules (list/show/delete/clear) and scan static `.agr` files for cross-agent collisions (`@grammar collisions`). |
+| `@grammar`      | Manage runtime-learned grammar rules (list/show/delete/clear) and scan loaded grammars for cross-agent collisions (`@grammar collisions [--json <path>]`, NFA product-construction with concrete witnesses).      |
 | `@help`         | Inline help for any command.                                                                                                                   |
 | `@history`      | Chat history management — list/clear/delete/save/insert + entity inspection.                                                                   |
 | `@index`        | Image / memory indexing controls.                                                                                                              |
