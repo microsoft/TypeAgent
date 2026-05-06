@@ -2741,5 +2741,326 @@ describe("WorkflowEngine (IR v1)", () => {
             const validation = validateWorkflowIR(ir, tasks);
             expect(validation.valid).toBe(true);
         });
+
+        it("static validator detects invalid path in loop iterateState", async () => {
+            const { validateWorkflowIR } = await import("workflow-model");
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "badLoopState",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    loop: {
+                        kind: "loop",
+                        inputs: {},
+                        inputSchema: { type: "object" },
+                        state: {
+                            i: {
+                                schema: { type: "integer" },
+                                initial: 0 as any,
+                            },
+                        },
+                        body: {
+                            entry: "step",
+                            nodes: {
+                                step: {
+                                    kind: "task",
+                                    task: "int.add",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["a", "b"],
+                                        properties: {
+                                            a: { type: "integer" },
+                                            b: { type: "integer" },
+                                        },
+                                    },
+                                    outputSchema: {
+                                        type: "object",
+                                        required: ["result"],
+                                        properties: {
+                                            result: { type: "integer" },
+                                        },
+                                    },
+                                    inputs: { a: 1 as any, b: 1 as any },
+                                    next: "done",
+                                    bind: "stepped",
+                                },
+                                done: {
+                                    kind: "branch",
+                                    selector: true as any,
+                                    selectorSchema: { type: "boolean" },
+                                    cases: { false: "@iterate", true: "@exit" },
+                                    default: "@exit",
+                                },
+                            },
+                        },
+                        iterateState: {
+                            i: {
+                                $from: "scope",
+                                name: "stepped",
+                                path: ["nonexistent"],
+                            } as any,
+                        },
+                        output: 0 as any,
+                        outputSchema: { type: "integer" },
+                        maxIterations: 1,
+                        bind: "result",
+                    },
+                },
+                entry: "loop",
+                output: { $from: "scope", name: "result" } as any,
+            };
+
+            const tasks = new Map(standardLibraryTasks.map((t) => [t.name, t]));
+            const validation = validateWorkflowIR(ir, tasks);
+            expect(validation.valid).toBe(false);
+            expect(validation.errors[0].message).toContain("nonexistent");
+        });
+    });
+
+    describe("input schema validation", () => {
+        it("rejects input that violates workflow inputSchema", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "typedInput",
+                version: "1",
+                inputSchema: {
+                    type: "object",
+                    required: ["count"],
+                    properties: { count: { type: "integer" } },
+                },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: {
+                            a: { $from: "input", name: "count" } as any,
+                            b: 1 as any,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as any,
+            };
+
+            // String where integer is required
+            const result = await eng.run(ir, {
+                input: { count: "not a number" },
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("Input schema violation");
+        });
+    });
+
+    describe("sentinel validation", () => {
+        it("rejects @iterate in top-level branch node", async () => {
+            const { validateWorkflowIR } = await import("workflow-model");
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "badSentinel",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    decide: {
+                        kind: "branch",
+                        selector: true as any,
+                        selectorSchema: { type: "boolean" },
+                        cases: { true: "@iterate", false: "@exit" },
+                        default: "@exit",
+                    },
+                },
+                entry: "decide",
+                output: null as any,
+            };
+
+            const tasks = new Map(standardLibraryTasks.map((t) => [t.name, t]));
+            const validation = validateWorkflowIR(ir, tasks);
+            expect(validation.valid).toBe(false);
+            expect(validation.errors.length).toBeGreaterThanOrEqual(2);
+            expect(validation.errors[0].message).toContain(
+                "only valid inside a loop body",
+            );
+        });
+    });
+
+    describe("branch node events", () => {
+        it("emits nodeStarted and nodeCompleted for branch nodes", async () => {
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "branchEvents",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    decide: {
+                        kind: "branch",
+                        selector: false as any,
+                        selectorSchema: { type: "boolean" },
+                        cases: { true: "onTrue", false: "onFalse" },
+                        default: "onFalse",
+                    },
+                    onTrue: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: { a: 1 as any, b: 1 as any },
+                        bind: "answer",
+                    },
+                    onFalse: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: { a: 0 as any, b: 0 as any },
+                        bind: "answer",
+                    },
+                },
+                entry: "decide",
+                output: { $from: "scope", name: "answer" } as any,
+            };
+
+            const events = collectEvents(engine);
+            const result = await engine.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+
+            const branchStarted = events.find(
+                (e) =>
+                    e.type === "nodeStarted" && (e as any).nodeId === "decide",
+            );
+            const branchCompleted = events.find(
+                (e) =>
+                    e.type === "nodeCompleted" &&
+                    (e as any).nodeId === "decide",
+            );
+            expect(branchStarted).toBeDefined();
+            expect(branchCompleted).toBeDefined();
+        });
+    });
+
+    describe("loop onError dispatch", () => {
+        it("dispatches to error handler when loop body fails", async () => {
+            const failTask: TaskDefinition = {
+                name: "test.fail",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return {
+                        kind: "fail",
+                        error: { message: "intentional failure" },
+                    };
+                },
+            };
+
+            const reg = makeRegistry(...standardLibraryTasks, failTask);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "loopOnError",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    badLoop: {
+                        kind: "loop",
+                        inputs: {},
+                        inputSchema: { type: "object" },
+                        state: {
+                            i: {
+                                schema: { type: "integer" },
+                                initial: 0 as any,
+                            },
+                        },
+                        body: {
+                            entry: "willFail",
+                            nodes: {
+                                willFail: {
+                                    kind: "task",
+                                    task: "test.fail",
+                                    inputSchema: { type: "object" },
+                                    outputSchema: { type: "object" },
+                                    inputs: {},
+                                },
+                            },
+                        },
+                        iterateState: {},
+                        output: null as any,
+                        outputSchema: { type: "null" },
+                        maxIterations: 1,
+                        onError: "recover",
+                    },
+                    recover: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: { a: 99 as any, b: 1 as any },
+                        bind: "recovered",
+                    },
+                },
+                entry: "badLoop",
+                output: { $from: "scope", name: "recovered" } as any,
+            };
+
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            expect((result.output as any).result).toBe(100);
+        });
     });
 });
