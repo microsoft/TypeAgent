@@ -1,7 +1,8 @@
 # Post-v1: `foreach` loop
 
 Status: **Post-v1 sketch.** Listed in [../ir-v1.md](../ir-v1.md) §2.2.
-Motivated by [A4 G2](../validation/a4-morning-brief.md).
+Motivated by the morning-brief validation scenario (A4 G2: verbose
+index/step/bounds pattern for list iteration).
 
 ## 1. Motivation
 

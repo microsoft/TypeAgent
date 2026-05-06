@@ -142,51 +142,12 @@ With this in place, §1.3.2 (uniformity) is "P3's representation-surface axis ap
 
 **Lesson (reinforces the previous two).** Three principle sharpenings now follow the same pattern: a principle's scope was framed too narrowly (control-flow only, then intra-IR only, now graph-level only). Each time, a decision that "almost" derived from a principle turned out to derive from an unstated axis of that principle. The pattern is established: when a decision converges by style choice or analysis without a principle drive, check whether a principle's scope needs widening, not whether a new style choice is needed.
 
+
 ---
 
 ## Deployment and Evolution
 
-### No incremental migration
-
-If a task's output schema changes, P1 catches the incompatibility at validation time. But the only resolution is to update all downstream consumers simultaneously. There's no mechanism for expressing schema evolution, adapter nodes, or version negotiation.
-
-You deploy the whole IR atomically or not at all.
-
-**Question:** Is incremental migration an IR concern?
-
-- For single-IR workflows: probably not. The IR is the unit of deployment. Atomic updates are standard.
-- For sub-workflow composition (future): becomes critical. If workflow A calls sub-workflow B, and B's interface changes, A needs to handle the version mismatch. The sub-workflow boundary is exactly where versioning matters.
-- Assessment: deferred until sub-workflow composition. May need a principle or design constraint at that point.
-
-### No safe-change analysis
-
-Adding a node, changing a branch, modifying a schema: is this change backward-compatible with running instances? The principles say nothing about what changes are safe. P2's impact analysis tells you what's affected, but not whether the change breaks in-flight executions.
-
-**Question:** Is this an IR concern or an operational concern?
-
-- Structural diff (what changed between v1 and v2) is analyzable from the IR. P2 and P3 provide the structure for this.
-- Whether a running instance can survive the change depends on runtime state (which node is it currently executing?). This is operational.
-- Assessment: the principles enable the analysis. The decision framework is operational.
-
-### No IR identity across versions
-
-If you restructure a workflow (rename nodes, split a task into two), there's no concept of correspondence between v1 and v2. For runtime migration (pause on v1, resume on v2), you'd need a mapping between old and new nodes.
-
-**Question:** Is this an IR concern?
-
-- Migration mapping is inherently external to either IR version. It's a separate artifact.
-- The principles ensure each version is internally consistent. Cross-version consistency is a different problem.
-- Assessment: not a principle gap. Migration tooling, not IR design.
-
-### P4 composability is validation-only
-
-P4 says parts can be validated and tested independently. But it doesn't say parts can be deployed or versioned independently. Two loops in the same workflow can't be updated separately.
-
-**Question:** Should composability extend to deployment?
-
-- This is the sub-workflow question. Sub-workflows would give deployment boundaries. Within a single workflow, the IR is atomic.
-- P4's boundary declarations (inputs, outputs) are the foundation for deployment boundaries. If sub-workflows are added, P4 already provides the interface contract.
-- Assessment: P4 is positioned correctly. Sub-workflow composition extends it to deployment.
+Deferred from v1. Key areas (incremental migration, safe-change analysis, IR identity across versions, deployment-scoped composability, node identity stability, checkpoint/resume) are all either "not an IR concern" (operational/tooling) or "becomes relevant with sub-workflow composition." The v1 design decisions have been verified to not block future solutions: everything needed (version fields, checkpoint persistence, side-effect declarations, MapNode) is additive.
 
 ---
 
@@ -200,7 +161,7 @@ P4 says parts can be validated and tested independently. But it doesn't say part
 | Intermediate state visibility | No (task metadata)          | Resolved     | Optional task capability declaration. Not workflow data flow.                                                                                                          |
 | Replay/checkpoint             | No (task metadata + engine) | Resolved     | Side-effect/idempotency declarations are additive. Engine persists state.                                                                                              |
 | Loop iteration identity       | No (engine mechanism)       | Resolved     | Engine exposes iteration count. Consistent with P2.                                                                                                                    |
-| Error diagnostic constraints  | Yes (mechanism)             | Resolved     | Optional references mechanism in the [IR](../ir/ir-v1.md) (\u00a73.4).                                                                                                 |
+| Error diagnostic constraints  | Yes (mechanism)             | Resolved     | Optional references mechanism in the [IR](../ir/ir-v1.md) (§3.4).                                                                                                     |
 | Incremental migration         | Yes                         | **Deferred** | Becomes relevant with sub-workflow composition.                                                                                                                        |
 | Safe-change analysis          | No (operational)            | Resolved     | Principles enable structural diff. Runtime survival is operational.                                                                                                    |
 | IR identity across versions   | No (tooling)                | Resolved     | Migration mapping is external tooling.                                                                                                                                 |
@@ -208,58 +169,6 @@ P4 says parts can be validated and tested independently. But it doesn't say part
 
 ### Open questions
 
-1. **Parallel iteration:** Deferred from v1. When added, P3 drives the MapNode decision. Validate that P1-P5 are sufficient (no new principle needed).
-2. **Sub-workflow evolution:** When sub-workflows are added, does P4's boundary contract need strengthening for versioning? Or does the existing input/output boundary suffice?
-3. **Task contract extensions:** Side-effect annotations, idempotency markers, progress declarations are all additive task boundary metadata. If these grow complex, they may warrant a separate design doc with its own concerns distinct from P1-P5.
-4. **Data-flow direction in the principles.** **Closed.** P3, P4, and P5 were originally control-flow-biased. They have been sharpened to state both axes explicitly (control-flow and data-flow / publication / lifetime). The bound-outputs decision is the case study; see "Intra-scope name visibility" above. Future data-flow decisions should now be principle-driven. If a future decision in this family again converges only from "weak readings" of multiple principles, that signals another axis to sharpen.
-5. **Boundary direction in P1.** **Closed.** P1 was originally framed entirely around node-to-node references inside the IR. It has been sharpened to be bi-axial (intra-IR references + external-contract seams). The IR/task drift decision is the case study; see "IR/task contract drift" above. Future seams the IR adds (sub-workflow calls, capability declarations, external-system descriptors) inherit P1's external-contract axis automatically.
-
----
-
-## v1 scope: deployment and evolution deferred
-
-Deployment and evolution are deferred from v1. This section records the rationale and verifies that v1 design decisions don't block future solutions.
-
-### User scenarios and v1 impact
-
-| Scenario                  | Description                                                                     | v1 impact  | Rationale                                                                                                                                                                                  |
-| ------------------------- | ------------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Schema change during dev  | Developer changes a task's output schema, fixes downstream consumers, redeploys | None       | Atomic updates are natural during development                                                                                                                                              |
-| Long-running interruption | Infrastructure restart mid-execution of a multi-hour workflow                   | Low-Medium | Engine can implement checkpoint/resume independently. P2+P3 provide enough structure (data traceability, node identity). Painful for multi-hour workflows but solvable without IR changes. |
-| Bug fix to live workflow  | Fix a task bug while instances are running on the old IR                        | Low        | v1 is single-user/development. No concurrent versions.                                                                                                                                     |
-| Composition evolution     | Sub-workflow B's interface changes, caller A needs updating                     | None       | Sub-workflows aren't v1                                                                                                                                                                    |
-| Loop state durability     | 50-iteration loop fails on iteration 47, all accumulated loopVar state lost     | Medium     | Core use case pain. But engine can persist loopVars without IR support - all state is JSON Schema-typed and serializable.                                                                  |
-
-### Forward compatibility check
-
-The question: will v1 design decisions block adding deployment/evolution support later?
-
-| v1 decision area                     | Additive later? | Risk   | Notes                                                                                                                                                                                                                                                                                                       |
-| ------------------------------------ | --------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| IR version field                     | Yes             | None   | Adding a `version` field later is trivially additive                                                                                                                                                                                                                                                        |
-| Checkpoint/resume                    | Yes             | None   | Engine can persist node outputs and loopVars without IR changes. Everything is typed and serializable.                                                                                                                                                                                                      |
-| Side-effect/idempotency declarations | Yes             | None   | Optional fields on task declarations. No existing IR would break.                                                                                                                                                                                                                                           |
-| MapNode                              | Yes             | None   | New node type. Existing LoopNodes remain valid.                                                                                                                                                                                                                                                             |
-| Scope boundary mechanism             | **Verify**      | Low    | Loop boundaries must generalize to sub-workflows. Current design (declared inputs + declared outputs + loop-specific extensions) is clean: sub-workflows would be "inputs + outputs" without loopVars/sentinels/maxIterations. Core isolation model (body can't reference outer nodes) applies identically. |
-| Node identity                        | **Decide now**  | Medium | See open question in [archive/design-decisions.md](../archive/design-decisions.md) (node identity).                                                                                                                                                                                                         |
-
-### Node identity risk
-
-Nodes are identified by name (string key in the `nodes` map). If the engine builds on "node name = stable identity" for checkpoint keys, metrics, or log correlation, renaming a node in a future IR version breaks the correspondence. The engine's checkpoint would say "node `fetchData` completed" but the updated IR renamed it to `getData`.
-
-Adding a separate stable `id` field later is technically additive, but if the engine already persists checkpoints keyed by node name, migrating to `id`-based keys is messy.
-
-**v1 decision needed:** Are node names stable identifiers? Even a brief recorded decision ("names are IDs for v1, we'll add stable IDs when we add versioning") prevents accidental assumptions from hardening into unmigrateable conventions. See [archive/design-decisions.md](../archive/design-decisions.md).
-
-### Drives vs. permits
-
-The principles' relationship to deployment/evolution is "permits, not drives":
-
-| Capability              | Drives? | Permits?     | Why                                                                    |
-| ----------------------- | ------- | ------------ | ---------------------------------------------------------------------- |
-| Checkpoint/resume       | No      | Yes          | P2+P3 provide the structure that enables it, but don't require it      |
-| IR versioning           | No      | Yes          | Nothing prevents adding it; nothing pushes toward it                   |
-| Durability of loopVars  | No      | Yes          | P2 guarantees traceability, not durability                             |
-| Sub-workflow versioning | No      | Yes (future) | P4's boundary contract is the foundation, but doesn't address versions |
-
-A design team following only P1-P5 would produce a correct, traceable, structured, composable, predictable IR - that is also impossible to checkpoint, resume, or evolve. For v1, this is acceptable because: (a) v1 workflows are short-lived and single-user, (b) the engine can add persistence independently, and (c) the v1 design decisions are verified to not block future solutions.
+1. **Parallel iteration:** Deferred from v1. When added, P3 drives the MapNode decision.
+2. **Sub-workflow evolution:** When sub-workflows are added, does P4's boundary contract need strengthening for versioning?
+3. **Task contract extensions:** Side-effect annotations, idempotency markers, progress declarations are all additive task boundary metadata.

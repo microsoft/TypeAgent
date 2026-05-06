@@ -143,143 +143,20 @@ output. (See §7 "refactor semantics" for the discussion of this.)
 Authors who want this pattern keep using `$from: "scope"` with the
 SSA-style phi merge (§3.3).
 
-## 6. The five design choices
+## 6. Key design rules (summary)
 
-### 6.1 Read-side switch, not write-side
+- **Read-side switch, not write-side.** Consumer picks `scope` vs `edge`; producer's `bind` is unchanged. No third `bind` form.
+- **In-degree-1 restriction.** `$from: "edge"` is legal only on nodes with exactly one CFG predecessor. Rejected on join points, `body.entry`, and handler nodes.
+- **Handlers excluded.** Handler's predecessor failed, so its output is unavailable. Handlers use `$from: "error"` and `$from: "trigger"`.
+- **Cross-scope rule.** Resolves within consumer's scope only, like every other reference.
 
-The producer is unchanged. A consumer picks `scope` vs `edge` based on
-what it wants to declare about its dependency. This means the same
-producer can serve both an edge-scoped consumer (its successor) and
-scope-scoped consumers (downstream readers) without changing its `bind`.
+Does not change: liveness rules, phi merge, dominator pass, producer's `bind` form, or refactor semantics (inserting a node re-targets `$from: "edge"` to the new predecessor).
 
-- **Pro:** producers don't need to predict their consumers' visibility
-  preferences. A library task can be reused in both patterns.
-- **Pro:** no third `bind` form; minimal grammar growth.
-- **Con:** the producer can't enforce "I only want one reader." A
-  malicious or accidental scope-scoped reader can still see the value.
-  This is acceptable: hiding from accidents is the goal; the producer's
-  `bind` already says "I'm publishing this."
+Does not buy: producer-enforced one-reader semantics, a replacement for block scope (different granularity), or dynamic edge selection.
 
-The opposite framing (write-side switch: `bind: { to: "successor" }`)
-was rejected because it puts visibility control on the wrong side and
-adds the third `bind` form that §8.15 explicitly avoided.
+## 7. Open questions
 
-### 6.2 In-degree-1 restriction
-
-`$from: "edge"` is legal only on nodes whose CFG in-degree (within their
-scope) is exactly 1. The validator rejects it on:
-
-- Branch join points (multiple `next`/`cases` edges arrive).
-- Loop `body.entry` (entered from loop init AND from `@iterate`).
-- Handler nodes (entered only via `onError`; see 6.3).
-- Any node reachable from more than one upstream `next`.
-
-The error is local and explainable: "edge-scoped reference requires a
-unique predecessor; this node has N." Authors who want the pattern at a
-join point use `$from: "scope"` (with phi merge if needed).
-
-This rule is the one new validator check. It runs in pass 4 (name
-resolution) or pass 6 (dominator), both of which already iterate the
-CFG.
-
-### 6.3 Handlers and `onError`
-
-A handler's CFG predecessor is its triggering node `T`, but `T` failed
-by definition - its output value is not available. `$from: "edge"` on a
-handler is therefore rejected by the validator. Handlers continue to
-use `$from: "error"` (the failure value) and `$from: "trigger"` (T's
-inputs); these already cover the handler's needs without overloading
-edge.
-
-### 6.4 Loop body interactions
-
-Inside a loop body, edge-scope works exactly like in the workflow scope,
-subject to the in-degree-1 rule. `body.entry` cannot use `$from: "edge"`
-(in-degree > 1 because `@iterate` re-enters it). Other body nodes with
-unique predecessors can use it freely.
-
-A node whose `next` is `@iterate` or `@exit` does not change its own
-ability to use `$from: "edge"`; the sentinel is on the outgoing side.
-
-### 6.5 Cross-scope rule (block scope, sub-workflow)
-
-`$from: "edge"` resolves within the consumer's scope only, like every
-other reference. A block or sub-workflow's first body node has no
-predecessor in its own scope (its predecessor is the block / call node
-in the outer scope), so `$from: "edge"` is illegal there. The data
-must enter via the scope's declared `inputs`, exactly as today.
-
-## 7. What this does NOT change
-
-- **Liveness rules.** The SHOULD "free after last reader" already
-  collapses to "free at successor's completion" for any value whose
-  only reader is the successor. Edge-scope makes that fact statically
-  obvious without changing the rule.
-- **Phi merge.** Edge-scoped reads are not in `B(X)`. The §6.2 diamond
-  pattern (multiple branch arms binding the same scope name) keeps
-  working unchanged.
-- **Dominator pass.** Edge-scope adds a one-step lookup, not a
-  dominance query. The pass 6 algorithm is the same.
-- **Producer's `bind`.** Still `"<name>" | null`. Still publishes
-  to the scope namespace. Edge-scope is a parallel read mechanism, not
-  a replacement.
-- **Refactor semantics.** Inserting a node between producer and
-  consumer changes the predecessor that `$from: "edge"` resolves to.
-  This is intentional - it makes "I am reading the value handed to me"
-  the literal meaning. If the new intermediate node binds a
-  type-compatible value, the workflow keeps validating; if not, the
-  type-compatibility pass flags it. Authors who want refactor-stable
-  references use `$from: "scope"` with an explicit name.
-
-## 8. What this does NOT buy
-
-- Not **producer-enforced one-reader semantics.** A scope-scoped reader
-  elsewhere in the scope can still reach the producer's bound output. A
-  truly private value still requires "fold the consumer into the producer"
-  or (post-v1) a block scope that contains both.
-- Not **a replacement for block scope.** Blocks give region-grain
-  visibility (multiple producers and consumers, all hidden from outside).
-  Edge-scope gives one-step-grain visibility. They solve different
-  shapes; both are useful.
-- Not **dynamic edge selection.** The predecessor is whatever the CFG
-  says it is, statically. There is no "choose your predecessor at
-  runtime" form (P1 scenario 8 still applies).
-
-## 9. Why record this now
-
-Two near-term design conversations are influenced by knowing this
-exists in the post-v1 backlog:
-
-- **Bound-outputs review** (§8.15) currently has Alts A-C covering full
-  hide/share polarity choices. Adding "edge-scoped read" as Alt D - and
-  pointing at this file - keeps the §8.15 discussion shaped correctly:
-  the bind-vs-no-bind axis is settled, and the orthogonal
-  read-granularity axis has a concrete post-v1 proposal.
-- **DSL design.** A `let x = f() in g(x)` lowering with `x` not escaping
-  `g` has a clean target (`f` binds, `g` reads `$from: "edge"`). DSL
-  designers can rely on this being the planned lowering rather than
-  inventing their own escape-analysis convention.
-
-## 10. Open questions
-
-- **Naming.** `"edge"` is the most accurate (it names the CFG construct
-  it resolves over), but `"prev"` or `"predecessor"` may read more
-  naturally. The name is a bikeshed, not a design issue.
-- **Producer-side opt-out.** Should a producer be able to declare "I am
-  bound but my value is only consumable via `$from: "edge"`" (a
-  write-side hint that scope-scoped reads of this name are illegal)?
-  This is the "private bind" idea. Probably no: it splits `bind` into
-  two flavors and reintroduces the third-form complexity that §6.1
-  rejected. If the use case proves out, it's an additive future change.
-- **Interaction with effect-ordering `next` edges.** Once §3.2.2's v1
-  limitation closes (post-v1 side-effect declarations), a `next` edge
-  may exist purely to sequence side effects, with no data flow. An
-  edge-scoped consumer on such a node would still be valid (it reads
-  the producer's bound output, regardless of why the edge exists), but
-  the validator may want to warn when an edge that exists only for
-  effect-ordering carries an edge-scoped data read - the read suggests
-  the edge is doing double duty and might benefit from being split.
-  Defer to whichever proposal lands first.
-- **Tooling display.** Visualizers should probably draw edge-scoped
-  reads as part of the CFG arrow (since they ride the same edge),
-  rather than as a separate DDG arrow. Cosmetic.
+- Naming: `"edge"` vs `"prev"` vs `"predecessor"`.
+- Producer-side opt-out ("private bind"): probably no, reintroduces third-form complexity.
+- Interaction with effect-ordering `next` edges (defer to whichever proposal lands first).
+- Tooling display: draw edge-scoped reads as part of the CFG arrow.
