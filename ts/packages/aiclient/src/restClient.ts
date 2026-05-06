@@ -225,7 +225,10 @@ export async function* readResponseStream(
             }
         } finally {
             signal?.removeEventListener("abort", onAbort);
-            reader.cancel();
+            // Only cancel if the abort handler hasn't already done so.
+            if (!signal?.aborted) {
+                reader.cancel();
+            }
         }
     }
 }

@@ -515,6 +515,15 @@ export async function createAgentRpcClient(
                             actionContextId: contextParams.actionContextId,
                         });
                     signal.addEventListener("abort", onAbort, { once: true });
+                    return raceWithSignal(
+                        rpc.invoke("executeAction", {
+                            ...contextParams,
+                            action,
+                        }),
+                        signal,
+                    ).finally(() => {
+                        signal.removeEventListener("abort", onAbort);
+                    });
                 }
                 return raceWithSignal(
                     rpc.invoke("executeAction", {

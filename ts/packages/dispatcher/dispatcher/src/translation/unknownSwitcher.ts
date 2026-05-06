@@ -155,18 +155,33 @@ export async function selectFromPartitions(
     );
     // Start all translations in parallel.
     const promises = partitions.map(({ translator }) =>
-        translator.translate(request, signal).catch(
-            (err): Result<AssistantSelection> => ({
-                success: false,
-                message: err instanceof Error ? err.message : String(err),
+        translator
+            .translate(request, signal)
+            .catch((err): Result<AssistantSelection> => {
+                // Let AbortError propagate so callers see cancellation rather
+                // than a generic failure result. Non-abort errors are converted
+                // to a failure result so a single bad partition doesn't block
+                // the others from being checked.
+                if (
+                    err instanceof Error &&
+                    (err.name === "AbortError" ||
+                        (err as DOMException).name === "AbortError")
+                ) {
+                    throw err;
+                }
+                return {
+                    success: false,
+                    message: err instanceof Error ? err.message : String(err),
+                };
             }),
-        ),
     );
     // Await results in partition order; return as soon as outcome is decided.
     for (const promise of promises) {
-        // Check for cancellation before awaiting each partition result
+        // Check for cancellation before and after awaiting each partition result
+        // so an abort that fires mid-await is caught promptly.
         signal?.throwIfAborted();
         const result = await promise;
+        signal?.throwIfAborted();
         if (!result.success) {
             return result;
         }
