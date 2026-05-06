@@ -89,6 +89,9 @@ export async function createConversationManager(
 ): Promise<ConversationManager> {
     const conversationsDir = path.join(baseDir, CONVERSATIONS_DIR);
 
+    // TODO: deprecate and remove this on-disk migration once enough time has
+    // passed that no production install still has a "server-sessions/"
+    // directory hanging around.
     // Migrate old on-disk layout: "server-sessions/" → "conversations/".
     // IMPORTANT: do this BEFORE creating the destination — otherwise
     // `fs.rename` fails with EPERM/EEXIST on Windows when the target

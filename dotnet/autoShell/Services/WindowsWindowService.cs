@@ -21,6 +21,7 @@ internal class WindowsWindowService : IWindowService
     private const uint WM_SYSCOMMAND = 0x112;
     private const uint SC_MAXIMIZE = 0xF030;
     private const uint SC_MINIMIZE = 0xF020;
+    private const uint SW_RESTORE = 9;
 
     private struct RECT
     {
@@ -30,57 +31,55 @@ internal class WindowsWindowService : IWindowService
         public int Bottom;
     }
 
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport(NativeDlls.User32, SetLastError = true)]
+    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
     [DllImport(NativeDlls.User32)]
-    private static extern bool GetWindowRect(IntPtr hWnd, ref RECT rect);
+    private static extern bool BringWindowToTop(IntPtr hWnd);
+
+    [DllImport(NativeDlls.User32)]
+    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport(NativeDlls.User32)]
+    private static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpClassName, string lpWindowName);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
 
     [DllImport(NativeDlls.User32)]
     private static extern IntPtr GetDesktopWindow();
 
     [DllImport(NativeDlls.User32)]
-    private static extern bool SetForegroundWindow(IntPtr hWnd);
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport(NativeDlls.User32)]
+    private static extern bool GetWindowRect(IntPtr hWnd, ref RECT rect);
+
+    [DllImport(NativeDlls.User32)]
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+    [DllImport(NativeDlls.User32)]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport(NativeDlls.User32)]
+    private static extern bool IsIconic(IntPtr hWnd);
+
+    [DllImport(NativeDlls.User32)]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
 
     [DllImport(NativeDlls.User32, EntryPoint = "SendMessage", SetLastError = true)]
     private static extern IntPtr SendMessage(IntPtr hWnd, uint msg, uint wParam, IntPtr lParam);
+
+    [DllImport(NativeDlls.User32)]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
 
     [DllImport(NativeDlls.User32)]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
 
     [DllImport(NativeDlls.User32)]
     private static extern bool ShowWindow(IntPtr hWnd, uint nCmdShow);
-
-    [DllImport(NativeDlls.User32)]
-    private static extern bool IsIconic(IntPtr hWnd);
-
-    [DllImport(NativeDlls.User32)]
-    private static extern bool BringWindowToTop(IntPtr hWnd);
-
-    [DllImport(NativeDlls.User32)]
-    private static extern IntPtr GetForegroundWindow();
-
-    [DllImport("kernel32.dll")]
-    private static extern uint GetCurrentThreadId();
-
-    [DllImport(NativeDlls.User32, SetLastError = true)]
-    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
-
-    private const uint SW_RESTORE = 9;
-
-    [DllImport(NativeDlls.User32)]
-    private static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpClassName, string lpWindowName);
-
-    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-
-    [DllImport(NativeDlls.User32)]
-    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-
-    [DllImport(NativeDlls.User32)]
-    private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
-
-    [DllImport(NativeDlls.User32)]
-    private static extern bool IsWindowVisible(IntPtr hWnd);
-
-    [DllImport(NativeDlls.User32)]
-    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 
     #endregion
 

@@ -116,8 +116,8 @@ export type CodeLanguage =
 export type NewFileAction = {
     actionName: "newFile";
     parameters: {
-        fileName: string; // If no filename is provided, "Untitled" is used
-        language: CodeLanguage; // plaintext, html, python, javaScript, typeScript, markdown etc.
+        fileName: string | "untitled"; // If no filename is provided, "untitled" is used
+        language: CodeLanguage;
         // Content of the new file based on language and user input, default is "Hello, World!".
         // For "Create a markdown file with a list of top ten AI papers and links" → fill with a
         // list of papers and arxiv links. For "Create a python file with code to merge two arrays

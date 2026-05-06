@@ -89,6 +89,9 @@ async function updateCodeContext(
         agentContext.enabled.add(schemaName);
 
         if (!sharedWebSocketServer) {
+            // TODO: stop hardcoding the port. The dispatcher should hand each
+            // agent a free port at initialize time so multiple TypeAgent
+            // installs / sessions on one host can't collide on 8082.
             const port = parseInt(process.env["CODE_WEBSOCKET_PORT"] || "8082");
             sharedWebSocketServer = new CodeAgentWebSocketServer(port);
 

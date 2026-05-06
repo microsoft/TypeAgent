@@ -13,9 +13,10 @@ export type EditorCodeActions =
     | EditorActionSaveCurrentFile
     | EditorActionSaveAllFiles;
 
-// DEPRECATED in favor of the main code agent's `newFile` action. Do NOT use this for new
-// "create a file" / "make a new file" requests — those go to `newFile` in the main code schema.
-// Kept only for legacy editor-tooling integrations that need the extended folder/untitled options.
+// @deprecated Superseded by the main code agent's `newFile` action. Do NOT use
+// this for new "create a file" / "make a new file" requests — those go to
+// `newFile` in the main code schema. Kept only for legacy editor-tooling
+// integrations that need the extended folder/untitled options.
 export type EditorActionCreateFile = {
     actionName: "createFile";
     parameters: {

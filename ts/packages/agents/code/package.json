@@ -24,7 +24,7 @@
     "asc:editor": "asc -i ./src/vscode/editorCodeActionsSchema.ts -o ./dist/editorSchema.pas.json -t EditorCodeActions",
     "asc:extension": "asc -i ./src/vscode/extensionsActionsSchema.ts -o ./dist/extensionSchema.pas.json -t CodeWorkbenchExtensionActions",
     "asc:general": "asc -i ./src/vscode/generalActionsSchema.ts -o ./dist/generalSchema.pas.json -t CodeGeneralActions",
-    "asc:vscode-shell": "asc -i ./src/vscode/vscodeShellActionsSchema.ts -o ./dist/vscodeShellSchema.pas.json -t VscodeShellActions",
+    "asc:vscode-shell": "asc -i ./src/vscode/vscodeConversationActionsSchema.ts -o ./dist/vscodeShellSchema.pas.json -t VSCodeConversationActions",
     "asc:workbench": "asc -i ./src/vscode/workbenchCommandActionsSchema.ts -o ./dist/workbenchSchema.pas.json -t CodeWorkbenchActions",
     "build": "concurrently npm:tsc npm:asc:all",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
@@ -150,7 +150,7 @@
         ],
         "files": {
           "inputGlobs": [
-            "src/vscode/vscodeShellActionsSchema.ts"
+            "src/vscode/vscodeConversationActionsSchema.ts"
           ],
           "outputGlobs": [
             "dist/vscodeShellSchema.pas.json"

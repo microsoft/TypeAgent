@@ -151,7 +151,14 @@ export type ChangeThemeModeAction = {
 export type ApplyThemeAction = {
     actionName: "ApplyTheme";
     parameters: {
-        filePath: string; // The Windows theme name or .theme file path to apply (use "previous" to revert). Never a VS Code editor theme like "Monokai".
+        // The Windows theme name or .theme file path to apply (use
+        // "previous" to revert).
+        filePath: string;
+        // Optional theme name parroted by the LLM when the user mentions a
+        // specific theme; never read by the action — exists only to give the
+        // model a slot for the name so it doesn't squeeze a VS Code editor
+        // theme into `filePath`.
+        themeName?: string;
     };
 };
 
