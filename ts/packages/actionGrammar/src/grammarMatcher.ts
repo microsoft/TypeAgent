@@ -191,6 +191,17 @@ type ParentMatchState = {
     repeatStartIndex?: number | undefined;
     spacingMode: CompiledSpacingMode; // parent rule's spacingMode, restored in MatchState on return from nested rule
     leadingSpacingMode: CompiledSpacingMode; // parent rule's leadingSpacingMode, restored on return from nested rule
+
+    // Failure-memoization marker for the rule entry that pushed
+    // THIS parent frame.  `matchState` sets
+    // `marker.anyMemberFinalized = true` when this rule's body
+    // reaches `parts.length`, signaling that the entry produced
+    // an internal parse and is therefore NOT an intrinsic failure
+    // (regardless of whether outer continuation accepts the
+    // resulting value).  Set in `enterRulesAlternation`; absent
+    // for tail-call entries (which do not push a parent and are
+    // not memoized).  See `MemoMarkerBacktrack`.
+    memoMarker?: MemoMarkerBacktrack | undefined;
 };
 
 // A wildcard slot awaiting its capture value.  Used on MatchState.pendingWildcard
@@ -263,6 +274,21 @@ export type GrammarMatchOptions = {
 
     /** See {@link RepeatPolicy}.  Defaults to `"exhaustive"`. */
     repeatPolicy?: RepeatPolicy;
+
+    /**
+     * Per-call sub-rule memoization ("packrat"-style).  Defaults
+     * to `true`.  Controls BOTH failure caching (intrinsic
+     * failures short-circuit re-entry) and success caching (each
+     * sub-rule entry's externally-observable mutation delta is
+     * captured on first completion and replayed on subsequent
+     * entries with the same `(rules, index, leadingMode,
+     * pendingWildcardActive, requireValue, isCarrier)` key).
+     * When `false`, no memo marker is pushed at all - the
+     * matcher behaves exactly as it did before memoization was
+     * added.  Use for benchmarking, debugging, or pinning
+     * behavior to the pre-memoization matcher.
+     */
+    memoization?: boolean;
 };
 
 // Origin tag carried on each Backtrack frame.  Used by
@@ -287,7 +313,28 @@ export type BacktrackOrigin =
     | "wildcard"
     | "optional"
     | "alternation"
-    | "repeat";
+    | "repeat"
+    // Sentinel frame for failure memoization.  Pushed by `enter*`
+    // rule-entry helpers BEFORE the alternation cursor; carries
+    // the cache key and an `anyMemberFinalized` flag flipped by
+    // `matchState` when any alternative's body completes.  When
+    // this frame surfaces in `tryNextBacktrack` (i.e. the entire
+    // sub-rule entry has been exhausted with no remaining frames
+    // above it), if the flag is still false, the entry is
+    // recorded as an intrinsic failure in `state.memoCache` so
+    // a future entry with the same context can short-circuit.
+    // Never restored as a parse path; always skipped past.
+    | "memoMarker"
+    // Replay cursor for SUCCESS memoization.  Pushed by
+    // `memoLookup` on a cache HIT with a captured
+    // `SuccessDelta[]`: the live state applies `deltas[0]`
+    // immediately and pushes a single cursor frame that holds the
+    // entire delta array plus an advancing index.  On each
+    // `tryNextBacktrack` pop the cursor restores the base snapshot
+    // and applies the next delta; once the cursor reaches the end
+    // of the array the frame unlinks.  Identical to the
+    // `alternation` cursor pattern but for replay deltas.
+    | "memoReplay";
 
 // Persistent linked-list of unexplored DFS branches (most recent
 // push at head).  Each frame snapshots a sibling parse path or a
@@ -345,7 +392,532 @@ type AlternationBacktrack = {
     readonly prev: Backtrack | undefined;
 };
 
-type Backtrack = SingleBacktrack | AlternationBacktrack;
+type Backtrack =
+    | SingleBacktrack
+    | AlternationBacktrack
+    | MemoMarkerBacktrack
+    | MemoReplayBacktrack;
+
+// Per-call memoization cache for sub-rule entries.  Outer key is
+// the rule-list array identity (so any sub-rule with the same set
+// of alternatives shares the cache).  Inner key encodes the rest
+// of the matcher state that affects the sub-rule's *internal*
+// matching outcome: input position, the leading-spacing-mode that
+// governs the boundary at entry, whether a wildcard is pending
+// (which switches the first `StringPart` between sticky and global
+// scan), whether the outer is tracking values (`requireValue`),
+// and whether the entry is an implicit-default carrier.
+//
+// Soundness:
+//   - `"failed"` is recorded only when no alternative of the rule
+//     list ever reached body-completion under the entry context.
+//     Always sound to short-circuit re-entry to `false`.
+//   - `SuccessDelta[]` is recorded only when `noSuccessCache` is
+//     false on the marker (i.e. NOT a repeat entry, no active
+//     pending wildcard, and the outer was tracking values).
+//     Replay is sound under those same conditions.
+// See the `memoMarker` frame in `tryNextBacktrack`.
+//
+// `valueIds` is intentionally NOT in the key: matching itself
+// never reads the binding chain (only value extraction at
+// top-level finalize does), so two entries that differ only in
+// outer bindings produce identical internal parses.
+//
+// Cache value:
+//   - `"failed"` = no member ever finalized for this entry context;
+//      future entries with the same context short-circuit
+//      `enterRulesAlternation` to false.
+//   - `SuccessDelta[]` = one entry per member completion, in source
+//      order.  Replayed via `applyDelta` + `MemoReplayBacktrack`
+//      frames.
+type MemoCache = Map<
+    ReadonlyArray<GrammarRule>,
+    Map<number, SuccessDelta[] | "failed">
+>;
+
+// Externally-observable mutation delta produced by ONE successful
+// member-body completion of a sub-rule entry.  All `valueId`
+// numbers are stored RELATIVE to `MemoMarkerBacktrack.nextValueIdAtEntry`
+// so the same delta replays correctly under any outer state whose
+// next-id counter differs from the one seen at capture time.
+//
+// `endOffset = state.index - marker.index`.
+// `valueIdsAdvance = state.nextValueId - marker.nextValueIdAtEntry`.
+//
+// The chain prefixes are flat arrays in NEWEST-FIRST order (matching
+// the linked-list head-first walk).  Replay re-cons's them onto the
+// live state's current chain heads, rebasing each `valueId` by
+// `+ liveState.nextValueIdAtReplay`.  Nested `MatchedValue` objects
+// (`{ node, valueIds }`) reference inner `ValueIdNode` chains whose
+// ids also live in the same numbering space; replay must rebase
+// those too.
+// Success delta: stores chain-head pointers into the immutable
+// cons-lists rather than copying into flat arrays.  Capture is
+// O(1) pointer saves; replay walks the chain segment at apply
+// time, rebasing valueIds by (replayBase - captureBase).
+type SuccessDelta = {
+    endOffset: number;
+    valueIdsAdvance: number;
+    spacingModeAtExit: CompiledSpacingMode;
+    leadingSpacingModeAtExit: CompiledSpacingMode;
+    // Chain segment added by this sub-rule entry.  Replay walks
+    // from valuesHead (newest) stopping at valuesStop (exclusive,
+    // the pre-entry head).  Both are immutable cons-list pointers.
+    valuesHead: MatchedValueEntry | undefined;
+    valuesStop: MatchedValueEntry | undefined;
+    // ValueIds chain segment (non-carrier path).  Same walk
+    // convention.  Both null when carrier mode or not tracking.
+    valueIdsHead: ValueIdNode | undefined | null;
+    valueIdsStop: ValueIdNode | undefined | null;
+    // nextValueId at the original capture.  Replay rebases all
+    // valueIds in the chain segments by (replayBase - captureBase).
+    captureBase: number;
+    pendingWildcardOffset?: number | undefined;
+    pendingWildcardRelValueId?: number | undefined;
+    // Last-matched-part info as observed at sub-rule exit.  `start`
+    // and `valueId` are stored RELATIVE (`absolute - marker.index`
+    // and `absolute - marker.nextValueIdAtEntry` respectively) so
+    // they replay correctly from any new entry context.
+    // `undefined` means no part was matched during the sub-rule's
+    // execution (i.e. the field's pre-entry value should be
+    // preserved by replay).
+    lastMatchedPartInfo?:
+        | {
+              readonly type: "string";
+              readonly relStart: number;
+              readonly part: StringPart;
+              readonly afterWildcard: boolean;
+              readonly matchedSpacingMode: CompiledSpacingMode;
+          }
+        | {
+              readonly type: "number";
+              readonly relStart: number;
+              readonly relValueId: number;
+              readonly afterWildcard: boolean;
+              readonly matchedSpacingMode: CompiledSpacingMode;
+          }
+        | undefined;
+    // True when sub-rule exit's `lastMatchedPartInfo` was
+    // intentionally undefined (vs. "no change from pre-entry"),
+    // distinguishing the two cases for replay.
+    lastMatchedPartInfoCleared: boolean;
+    // Implicit-default-carrier replacement.  Set ONLY when the
+    // sub-rule entry was an impl-default carrier (parent has no
+    // variable AND `usesImplicitDefault(parent)`): in that case
+    // `finalizeNestedRule` does NOT restore state.value /
+    // state.valueIds from parent.  The CHILD's value / chain
+    // bubble up.  Replay must mirror that by overriding both
+    // fields on the live state instead of leaving them at
+    // outer-pre-entry.  `valueIdsHead` is the chain head at exit
+    // (walk to undefined to rebuild the full carrier chain).
+    carrier?:
+        | {
+              valueAtExit: CompiledValueNode | undefined;
+              valueIdsHead: ValueIdNode | undefined;
+          }
+        | undefined;
+};
+
+// Compute a numeric key that captures all delta fields influencing
+// suffix matching after a memoReplay restore.  Two deltas with the
+// same suffix-state key will follow identical code paths through the
+// remainder of the grammar, so a failure for one implies failure for
+// all.
+//
+// Layout (fits in ~36 bits, well within MAX_SAFE_INTEGER):
+//   bits 0..15  = endOffset (up to 65535 chars)
+//   bits 16..17 = spacingModeAtExit index (0..3)
+//   bits 18..19 = leadingSpacingModeAtExit index (0..3)
+//   bits 20..35 = pendingWildcardOffset + 1 (0 = undefined sentinel)
+const spacingModeIdx: Record<"required" | "optional" | "none", number> = {
+    required: 1,
+    optional: 2,
+    none: 3,
+};
+function suffixStateKey(delta: SuccessDelta): number {
+    const sIdx =
+        delta.spacingModeAtExit === undefined
+            ? 0
+            : spacingModeIdx[delta.spacingModeAtExit];
+    const lIdx =
+        delta.leadingSpacingModeAtExit === undefined
+            ? 0
+            : spacingModeIdx[delta.leadingSpacingModeAtExit];
+    const pwo =
+        delta.pendingWildcardOffset === undefined
+            ? 0
+            : delta.pendingWildcardOffset + 1;
+    return delta.endOffset | (sIdx << 16) | (lIdx << 18) | (pwo << 20);
+}
+
+// Encode (leading, pendingWildcard, requireValue, carrier) into the
+// low 5 bits using `suffixSpacingIdx` for the leading mode:
+//   bits 4..3 = leading (0..3, same encoding as suffixSpacingIdx)
+//   bit 2    = pendingWildcard
+//   bit 1    = requireValue
+//   bit 0    = carrier
+// Then `(index << 5) | flagBits`.
+//
+// Overflow: `index` is bounded by `request.length`.  V8 caps string
+// length at ~2^28; shifting by 5 gives ~2^33, well within
+// Number.MAX_SAFE_INTEGER (2^53 - 1).  No guard needed.
+function memoCacheKey(
+    index: number,
+    leading: CompiledSpacingMode,
+    pendingWildcard: boolean,
+    requireValue: boolean,
+    carrier: boolean,
+): number {
+    const leadingIdx = leading === undefined ? 0 : spacingModeIdx[leading];
+    return (
+        (index << 5) |
+        (leadingIdx << 3) |
+        (pendingWildcard ? 4 : 0) |
+        (requireValue ? 2 : 0) |
+        (carrier ? 1 : 0)
+    );
+}
+
+// Deep-copy a `ValueIdNode` chain (terminating at `undefined` or
+// at the chain's natural end) with each `valueId` rebased by
+// `delta`.  Used during replay (`delta = replayBase - captureBase`)
+// to materialize an absolute chain in the new numbering, and for
+// carrier valueIds chain reconstruction.
+function copyValueIdChainWithDelta(
+    chain: ValueIdNode | undefined,
+    delta: number,
+): ValueIdNode | undefined {
+    if (chain === undefined) {
+        return undefined;
+    }
+    // Single-pass iterative copy: walk newest-first, appending
+    // each node via a tail pointer so the output preserves the
+    // original order without a temporary array or recursion.
+    let head: ValueIdNode | undefined;
+    let tail: ValueIdNode | undefined;
+    for (let n: ValueIdNode | undefined = chain; n !== undefined; n = n.prev) {
+        const copy: ValueIdNode = {
+            name: n.name,
+            valueId: n.valueId + delta,
+            wildcardTypeName: n.wildcardTypeName,
+            prev: undefined,
+        };
+        if (tail === undefined) {
+            head = copy;
+        } else {
+            tail.prev = copy;
+        }
+        tail = copy;
+    }
+    return head;
+}
+
+// Rebase the inner `valueIds` chain of a nested-rule
+// `MatchedValue` (`{ node, valueIds }`).  Scalar values pass
+// through unchanged.
+function rebaseMatchedValue(value: MatchedValue, delta: number): MatchedValue {
+    if (typeof value === "object" && value !== null && "node" in value) {
+        return {
+            node: value.node,
+            valueIds: copyValueIdChainWithDelta(value.valueIds, delta),
+        };
+    }
+    return value;
+}
+
+// Capture the externally-observable delta of a successful
+// sub-rule entry.  Stores chain-head pointers into the immutable
+// cons-lists (zero chain-walking, zero array allocation, zero
+// deep-copy).  Rebasing is deferred to `applyDelta` at replay
+// time.
+function captureSuccessDelta(
+    state: MatchState,
+    marker: MemoMarkerBacktrack,
+): SuccessDelta {
+    const base = marker.nextValueIdAtEntry;
+    let pendingWildcardOffset: number | undefined;
+    let pendingWildcardRelValueId: number | undefined;
+    if (state.pendingWildcard !== undefined) {
+        pendingWildcardOffset = state.pendingWildcard.start - marker.index;
+        pendingWildcardRelValueId =
+            state.pendingWildcard.valueId === undefined
+                ? undefined
+                : state.pendingWildcard.valueId - base;
+    }
+    let lastMatchedPartInfo: SuccessDelta["lastMatchedPartInfo"];
+    let lastMatchedPartInfoCleared = false;
+    const liveLast = state.lastMatchedPartInfo;
+    if (liveLast !== marker.lastMatchedPartInfoAtEntry) {
+        if (liveLast === undefined) {
+            lastMatchedPartInfoCleared = true;
+        } else if (liveLast.type === "string") {
+            lastMatchedPartInfo = {
+                type: "string",
+                relStart: liveLast.start - marker.index,
+                part: liveLast.part,
+                afterWildcard: liveLast.afterWildcard,
+                matchedSpacingMode: liveLast.matchedSpacingMode,
+            };
+        } else {
+            lastMatchedPartInfo = {
+                type: "number",
+                relStart: liveLast.start - marker.index,
+                relValueId: liveLast.valueId - base,
+                afterWildcard: liveLast.afterWildcard,
+                matchedSpacingMode: liveLast.matchedSpacingMode,
+            };
+        }
+    }
+    let carrier: SuccessDelta["carrier"];
+    if (marker.carrier) {
+        carrier = {
+            valueAtExit: state.value,
+            valueIdsHead:
+                state.valueIds === null
+                    ? undefined
+                    : (state.valueIds as ValueIdNode | undefined),
+        };
+    }
+    return {
+        endOffset: state.index - marker.index,
+        valueIdsAdvance: state.nextValueId - base,
+        spacingModeAtExit: state.spacingMode,
+        leadingSpacingModeAtExit: state.leadingSpacingMode,
+        valuesHead: state.values,
+        valuesStop: marker.valuesAtEntry,
+        valueIdsHead: marker.carrier ? null : state.valueIds,
+        valueIdsStop: marker.carrier ? null : marker.valueIdsAtEntry,
+        captureBase: base,
+        pendingWildcardOffset,
+        pendingWildcardRelValueId,
+        lastMatchedPartInfo,
+        lastMatchedPartInfoCleared,
+        carrier,
+    };
+}
+
+// Replay path counterpart to `captureSuccessDelta`: mutate the
+// live state to mirror the externally-observable effect of the
+// original sub-rule entry that produced `delta`.  The live state
+// at call time MUST be the OUTER pre-entry state (i.e.
+// `enterRulesAlternation` has NOT yet mutated it for the child
+// rule).  After this call returns, the state matches what would
+// have been observed AFTER `enterRulesAlternation` -> body match
+// -> `finalizeNestedRule` had run live.
+function applyDelta(state: MatchState, delta: SuccessDelta) {
+    const entryIndex = state.index;
+    const entryBase = state.nextValueId;
+    state.index = entryIndex + delta.endOffset;
+    state.nextValueId = entryBase + delta.valueIdsAdvance;
+    state.spacingMode = delta.spacingModeAtExit;
+    state.leadingSpacingMode = delta.leadingSpacingModeAtExit;
+    state.partIndex = state.partIndex + 1;
+    const rebaseDelta = entryBase - delta.captureBase;
+    // Walk the values chain segment (newest to oldest) and copy
+    // with rebased valueIds.  Single pass: build the new segment
+    // in walk order (newest-first) and attach its tail to the
+    // current state.values (the pre-entry head).
+    if (delta.valuesHead !== delta.valuesStop) {
+        let newHead: MatchedValueEntry | undefined;
+        let tail: MatchedValueEntry | undefined;
+        for (
+            let v: MatchedValueEntry | undefined = delta.valuesHead;
+            v !== delta.valuesStop;
+            v = v!.prev
+        ) {
+            const copy: MatchedValueEntry = {
+                valueId: v!.valueId + rebaseDelta,
+                value: rebaseMatchedValue(v!.value, rebaseDelta),
+                wildcard: v!.wildcard,
+                prev: undefined,
+            };
+            if (tail !== undefined) {
+                tail.prev = copy;
+            } else {
+                newHead = copy;
+            }
+            tail = copy;
+        }
+        tail!.prev = state.values;
+        state.values = newHead!;
+    }
+    if (delta.carrier !== undefined) {
+        // Implicit-default carrier: replace state.value and
+        // state.valueIds outright.  Walk the carrier's chain head
+        // to undefined, copying with rebased IDs.
+        state.value = delta.carrier.valueAtExit;
+        state.valueIds = copyValueIdChainWithDelta(
+            delta.carrier.valueIdsHead,
+            rebaseDelta,
+        );
+    } else if (
+        delta.valueIdsHead !== null &&
+        delta.valueIdsStop !== null &&
+        delta.valueIdsHead !== delta.valueIdsStop
+    ) {
+        // Walk valueIds chain segment (non-carrier), copy with
+        // rebased IDs, attach tail to state.valueIds.
+        let newIdHead: ValueIdNode | undefined;
+        let idTail: ValueIdNode | undefined;
+        for (
+            let id: ValueIdNode | undefined = delta.valueIdsHead as
+                | ValueIdNode
+                | undefined;
+            id !== (delta.valueIdsStop as ValueIdNode | undefined);
+            id = id!.prev
+        ) {
+            const copy: ValueIdNode = {
+                name: id!.name,
+                valueId: id!.valueId + rebaseDelta,
+                wildcardTypeName: id!.wildcardTypeName,
+                prev: undefined,
+            };
+            if (idTail !== undefined) {
+                idTail.prev = copy;
+            } else {
+                newIdHead = copy;
+            }
+            idTail = copy;
+        }
+        idTail!.prev = state.valueIds as ValueIdNode | undefined;
+        state.valueIds = newIdHead;
+    }
+    if (delta.pendingWildcardOffset !== undefined) {
+        state.pendingWildcard = {
+            start: entryIndex + delta.pendingWildcardOffset,
+            valueId:
+                delta.pendingWildcardRelValueId === undefined
+                    ? undefined
+                    : entryBase + delta.pendingWildcardRelValueId,
+        };
+    } else {
+        state.pendingWildcard = undefined;
+    }
+    if (delta.lastMatchedPartInfo !== undefined) {
+        const info = delta.lastMatchedPartInfo;
+        if (info.type === "string") {
+            state.lastMatchedPartInfo = {
+                type: "string",
+                start: entryIndex + info.relStart,
+                part: info.part,
+                afterWildcard: info.afterWildcard,
+                matchedSpacingMode: info.matchedSpacingMode,
+            };
+        } else {
+            state.lastMatchedPartInfo = {
+                type: "number",
+                start: entryIndex + info.relStart,
+                valueId: entryBase + info.relValueId,
+                afterWildcard: info.afterWildcard,
+                matchedSpacingMode: info.matchedSpacingMode,
+            };
+        }
+    } else if (delta.lastMatchedPartInfoCleared) {
+        state.lastMatchedPartInfo = undefined;
+    }
+    // suppressOptionalFork: not relevant on replay (single-use
+    // flag consumed by matchState immediately after the optional
+    // fork block; never set across sub-rule exits in normal flow).
+    state.suppressOptionalFork = undefined;
+}
+
+// Sentinel frame pushed by `enter*` rule-entry helpers immediately
+// before the alternation cursor.  Holds the rule list and the
+// composed cache key (split here so the entry helpers don't have
+// to allocate the inner string until population time).  The
+// `anyMemberFinalized` flag is mutated to `true` by `matchState`
+// when any alternative's body reaches `parts.length` (which is
+// the matcher's signal that the sub-rule produced an internal
+// parse, regardless of whether outer continuation accepts it).
+//
+// Single-owner contract: lives on the live state's `backtracks`
+// chain; only the live state observes its mutation.
+type MemoMarkerBacktrack = {
+    readonly origin: "memoMarker";
+    readonly rules: ReadonlyArray<GrammarRule>;
+    readonly index: number;
+    readonly leading: CompiledSpacingMode;
+    readonly pendingWildcardActive: boolean;
+    anyMemberFinalized: boolean;
+    // Snapshot of value-tracking state at the moment this marker
+    // was pushed (i.e. just before entering the sub-rule body).
+    // Used by `captureSuccessDelta` to compute the chain segments
+    // that this entry added (walks the live chain heads down until
+    // pointer-equality with these references) and to rebase
+    // captured `valueId`s to relative.  All three are immutable
+    // once the marker is pushed.
+    readonly valuesAtEntry: MatchedValueEntry | undefined;
+    readonly valueIdsAtEntry: ValueIdNode | undefined | null;
+    readonly nextValueIdAtEntry: number;
+    // Pre-entry `lastMatchedPartInfo` snapshot.  Captured for the
+    // replay path so a delta whose own `lastMatchedPartInfo` is
+    // unchanged-from-pre-entry can be replayed without wiping the
+    // outer's value.
+    readonly lastMatchedPartInfoAtEntry: MatchState["lastMatchedPartInfo"];
+    // True when this sub-rule entry is an implicit-default
+    // carrier: `part.variable === undefined && usesImplicitDefault(outerStateAtEntry)`.
+    // Determines whether captureSuccessDelta records a
+    // `carrier`-mode replacement (full state.value / state.valueIds)
+    // vs. the default outer-extension prefix capture.  See
+    // `SuccessDelta.carrier`.
+    readonly carrier: boolean;
+    // True when the sub-rule body must track values internally
+    // (`state.valueIds === undefined` at entry rather than `null`).
+    // Differing values of `requireValue` produce different
+    // captured deltas (the no-track case skips inner `addValueId`
+    // calls), so this is part of the cache key.  Equivalent to
+    // `state.valueIds !== null && (part.variable !== undefined ||
+    // usesImplicitDefault(outerStateAtEntry))`.
+    readonly requireValue: boolean;
+    // True when this marker should NOT capture/store success
+    // deltas (failure caching still works).  Set when the
+    // sub-rule entry is a repeat (whose finalize pushes a
+    // CONTINUE backtrack frame whose effect we cannot capture in
+    // a single delta), when `pendingWildcardActive` is true at
+    // entry (the captured wildcard substring depends on the
+    // wildcard's start position, which is NOT in the cache key),
+    // or when the outer wasn't tracking values (`state.valueIds === null`)
+    // at entry (the cache key doesn't distinguish null from
+    // not-null tracking, so a captured carrier-mode replacement
+    // could be replayed against a tracking outer or vice versa).
+    readonly noSuccessCache: boolean;
+    // Per-member success deltas, appended in source order as each
+    // alternative reaches body completion.  Empty when no member
+    // ever finalized (in which case the failure-cache stores
+    // `"failed"`).  Captured for observation in Phase 1; replay
+    // is wired in Phase 2.
+    readonly successes: SuccessDelta[];
+    readonly prev: Backtrack | undefined;
+};
+
+// Replay cursor for SUCCESS memoization.  See the `"memoReplay"`
+// entry on `BacktrackOrigin`.  A single cursor frame replaces the
+// previous N-1 per-delta linked-list frames: it holds the full
+// `SuccessDelta[]` array and an advancing `cursor` index (starts
+// at 1; delta 0 was applied live).  On each `tryNextBacktrack`
+// pop the cursor `Object.assign`s `snapshot` (the pre-entry outer
+// state) and invokes `applyDelta(deltas[cursor])`.  The frame
+// stays at the chain head until all deltas have been consumed;
+// new frames pushed during the restored delta's suffix sit on top
+// and resolve before the next cursor advance.
+type MemoReplayBacktrack = {
+    readonly origin: "memoReplay";
+    readonly snapshot: SnapshotState;
+    readonly deltas: SuccessDelta[];
+    // Mutable cursor advanced by `tryNextBacktrack` on each
+    // restore.  Starts at 1 (delta 0 is the live alternative);
+    // the frame unlinks once `cursor` reaches `deltas.length`.
+    cursor: number;
+    // Suffix-failure pruning: when the outer continuation fails
+    // after replaying a delta, that delta's suffix-state key is
+    // added here.  Subsequent deltas with the same key are
+    // skipped: the suffix depends only on input position and
+    // spacing/wildcard modes (not captured values), so it will
+    // fail identically.  Lossless: only provably-doomed
+    // branches are pruned.
+    readonly failedSuffixKeys: Set<number>;
+    readonly prev: Backtrack | undefined;
+};
 
 // Strict variant of `PendingMatchState` used as the snapshot payload
 // inside `Backtrack`.  The `-?` mapped modifier forces every
@@ -472,6 +1044,27 @@ export type MatchState = PendingMatchState & {
     wildcardPolicy: WildcardPolicy;
     optionalPolicy: OptionalPolicy;
     repeatPolicy: RepeatPolicy;
+
+    // When false, `enterRulesAlternation` skips the memo marker
+    // push entirely - no failure caching, no success capture, no
+    // replay.  See `memoization` on `GrammarMatchOptions`.
+    memoization: boolean;
+
+    // Tracks the most recently replayed batch's failedSuffixKeys
+    // set and the suffix-state key that was just applied.  After
+    // `matchState` returns false, `matchGrammar` uses these to
+    // record the failed key so `tryNextBacktrack` can skip
+    // sibling replay frames with the same suffix state.
+    lastReplayBatch?: Set<number> | undefined;
+    lastReplaySuffixKey?: number | undefined;
+
+    // Per-call memoization cache for sub-rule entries.  Allocated
+    // once at `initialMatchState` time and reused across every
+    // sub-rule entry within a single `matchGrammar` /
+    // `matchGrammarCompletion` call.  Same lifecycle as the
+    // policy fields - not snapshotted, persists across
+    // `tryNextBacktrack` restores.  See `MemoCache`.
+    memoCache: MemoCache;
 };
 
 // Explicit per-field copy of `state`.  Single source of truth
@@ -634,43 +1227,128 @@ function pushAlternation(
 //       // ...process attempt...
 //   } while (tryNextBacktrack(state));
 export function tryNextBacktrack(state: MatchState): boolean {
-    const frame = state.backtracks;
-    if (frame === undefined) {
-        return false;
-    }
-    if (frame.origin === "alternation") {
-        // Cursor frame: restore the shared base, then overlay the
-        // next per-rule fields read directly from `rules[cursor]`.
-        // The frame stays at the head of the chain until all
-        // alternatives have been consumed; new frames pushed during
-        // the restored alternative's matching sit on top of (and
-        // resolve before) this cursor.
-        const i = frame.cursor;
-        const rule = frame.rules[i];
-        Object.assign(state, frame.base);
-        state.name = `${frame.namePrefix}[${i}]`;
-        state.parts = rule.parts;
-        state.value = rule.value;
-        state.spacingMode = rule.spacingMode;
-        frame.cursor = i + 1;
-        if (frame.cursor >= frame.rules.length) {
-            // All alternatives restored - unlink the cursor.
-            state.backtracks = frame.prev;
+    while (true) {
+        const frame = state.backtracks;
+        if (frame === undefined) {
+            return false;
         }
-        debugMatch(state, `Restoring local backtrack (alternation)`);
+        if (frame.origin === "alternation") {
+            // Cursor frame: restore the shared base, then overlay the
+            // next per-rule fields read directly from `rules[cursor]`.
+            // The frame stays at the head of the chain until all
+            // alternatives have been consumed; new frames pushed during
+            // the restored alternative's matching sit on top of (and
+            // resolve before) this cursor.
+            const i = frame.cursor;
+            const rule = frame.rules[i];
+            Object.assign(state, frame.base);
+            state.name = `${frame.namePrefix}[${i}]`;
+            state.parts = rule.parts;
+            state.value = rule.value;
+            state.spacingMode = rule.spacingMode;
+            frame.cursor = i + 1;
+            if (frame.cursor >= frame.rules.length) {
+                // All alternatives restored - unlink the cursor.
+                state.backtracks = frame.prev;
+            }
+            debugMatch(state, `Restoring local backtrack (alternation)`);
+            return true;
+        }
+        if (frame.origin === "memoMarker") {
+            // Sub-rule entry exhausted: every alternative's
+            // backtrack-stack has been drained.  Persist what we
+            // observed for this entry context:
+            //   - intrinsic failure (`"failed"`) when no member
+            //     ever reached body completion;
+            //   - the per-member success deltas otherwise (only
+            //     when `noSuccessCache` is false; otherwise we
+            //     leave the cache empty so future entries
+            //     re-execute, since success replay is unsound for
+            //     repeat / pending-wildcard entries).
+            let inner = state.memoCache.get(frame.rules);
+            const key = memoCacheKey(
+                frame.index,
+                frame.leading,
+                frame.pendingWildcardActive,
+                frame.requireValue,
+                frame.carrier,
+            );
+            if (!frame.anyMemberFinalized) {
+                if (inner === undefined) {
+                    inner = new Map();
+                    state.memoCache.set(frame.rules, inner);
+                }
+                inner.set(key, "failed");
+                debugMatchRaw(
+                    `memoMarker: cached intrinsic failure for rules@${key}`,
+                );
+            } else if (!frame.noSuccessCache && frame.successes.length > 0) {
+                if (inner === undefined) {
+                    inner = new Map();
+                    state.memoCache.set(frame.rules, inner);
+                }
+                if (!inner.has(key)) {
+                    // Only store on first observation; re-entries
+                    // produce identical internal parses by the
+                    // soundness condition documented on
+                    // `MemoCache`.
+                    inner.set(key, frame.successes);
+                    debugMatchRaw(
+                        `memoMarker: cached ${frame.successes.length} success delta(s) for rules@${key}`,
+                    );
+                }
+            }
+            state.backtracks = frame.prev;
+            continue;
+        }
+        if (frame.origin === "memoReplay") {
+            // Cursor frame: scan forward through the delta array,
+            // skipping deltas whose suffix-state key is already
+            // recorded as failed.
+            const { deltas, failedSuffixKeys } = frame;
+            let i = frame.cursor;
+            while (
+                i < deltas.length &&
+                failedSuffixKeys.has(suffixStateKey(deltas[i]))
+            ) {
+                i++;
+            }
+            if (i >= deltas.length) {
+                // All remaining deltas exhausted or skipped.
+                state.backtracks = frame.prev;
+                continue;
+            }
+            const delta = deltas[i];
+            frame.cursor = i + 1;
+            // Restore the OUTER pre-entry snapshot, then re-impose
+            // the captured exit state via `applyDelta`.  The
+            // snapshot omits `backtracks`; the cursor frame stays
+            // at head until fully consumed.  New frames pushed
+            // during this delta's suffix sit on top and resolve
+            // before the next cursor advance.
+            Object.assign(state, frame.snapshot);
+            if (frame.cursor >= deltas.length) {
+                // Last delta: unlink the cursor frame.
+                state.backtracks = frame.prev;
+            }
+            applyDelta(state, delta);
+            state.lastReplayBatch = failedSuffixKeys;
+            state.lastReplaySuffixKey = suffixStateKey(delta);
+            debugMatch(state, `Restoring memoReplay cursor [${i}]`);
+            return true;
+        }
+        // The snapshot omits `backtracks`, so Object.assign won't
+        // overwrite it - explicitly advance the head pointer to `prev`.
+        Object.assign(state, frame.snapshot);
+        state.backtracks = frame.prev;
+        debugMatch(
+            state,
+            frame.origin === "wildcard"
+                ? `Extending wildcard from frame`
+                : `Restoring local backtrack (${frame.origin})`,
+        );
         return true;
     }
-    // The snapshot omits `backtracks`, so Object.assign won't
-    // overwrite it - explicitly advance the head pointer to `prev`.
-    Object.assign(state, frame.snapshot);
-    state.backtracks = frame.prev;
-    debugMatch(
-        state,
-        frame.origin === "wildcard"
-            ? `Extending wildcard from frame`
-            : `Restoring local backtrack (${frame.origin})`,
-    );
-    return true;
 }
 
 // After a successful match, drop ALL backtrack frames in the chain
@@ -707,6 +1385,22 @@ export function suppressBacktracksAfterSuccess(state: MatchState) {
             case "repeat":
                 return repeatSuppress;
             case "alternation":
+                return false;
+            case "memoMarker":
+                // Sentinel must always survive suppression: it is the
+                // signal that a sub-rule entry is exhausted, and
+                // dropping it would prevent failure-cache population
+                // (and on a subsequent restore, would orphan its
+                // anyMemberFinalized state).
+                return false;
+            case "memoReplay":
+                // Replay frames represent alternative cached parses
+                // for a sub-rule entry, equivalent in role to
+                // alternation cursor entries.  Suppression is
+                // axis-driven; replay is not an axis.  The original
+                // execution that captured these deltas already
+                // honored the active policies, so the captured set
+                // accurately reflects the parses the caller wanted.
                 return false;
         }
     };
@@ -1114,6 +1808,20 @@ function usesImplicitDefault(s: ImplicitDefaultCarrier): boolean {
     return s.value === undefined && s.parts.length === 1;
 }
 
+// True when matching should capture a value for this part: the state
+// is tracking values (valueIds !== null) AND either the part has an
+// explicit capture variable or the enclosing rule uses the
+// implicit-default (single-part, no value expression).
+function requiresValue(
+    state: ImplicitDefaultCarrier & Pick<PendingMatchState, "valueIds">,
+    part: { variable?: string | undefined },
+): boolean {
+    return (
+        state.valueIds !== null &&
+        (part.variable !== undefined || usesImplicitDefault(state))
+    );
+}
+
 export function nextNonSeparatorIndex(request: string, index: number) {
     if (request.length <= index) {
         return request.length;
@@ -1507,12 +2215,13 @@ function matchStringPartWithWildcard(
             // single-part child rule would bypass the default value
             // assignment and cause "No value assign to variable" at
             // finalizeNestedRule time.
-            if (
-                state.valueIds !== null &&
-                (part.variable !== undefined || usesImplicitDefault(state))
-            ) {
+            if (requiresValue(state, part)) {
                 addValue(state, part.variable, part.value.join(" "));
             }
+            // Always replaced (never mutated in place):
+            // `captureSuccessDelta` relies on pointer inequality
+            // with `marker.lastMatchedPartInfoAtEntry` to detect
+            // whether this field changed during the sub-rule.
             state.lastMatchedPartInfo = {
                 type: "string",
                 start: wildcardEnd,
@@ -1556,16 +2265,13 @@ function matchStringPartWithoutWildcard(
 
     debugMatch(state, `Matched string ${part.value.join(" ")} to ${newIndex}`);
 
-    if (
-        state.valueIds !== null &&
-        (part.variable !== undefined || usesImplicitDefault(state))
-    ) {
-        // Explicit capture variable on the StringPart - write the joined
-        // matched tokens into that named slot.  Otherwise fall through to
-        // the implicit-default rule for single-part rules without a value
-        // expression.
+    if (requiresValue(state, part)) {
         addValue(state, part.variable, part.value.join(" "));
     }
+    // Always replaced (never mutated in place):
+    // `captureSuccessDelta` relies on pointer inequality
+    // with `marker.lastMatchedPartInfoAtEntry` to detect
+    // whether this field changed during the sub-rule.
     state.lastMatchedPartInfo = {
         type: "string",
         start: curr,
@@ -1749,6 +2455,8 @@ function matchVarNumberPartWithWildcard(
             const valueId = addValueId(state, part.variable);
             if (valueId !== undefined) {
                 addValueWithId(state, valueId, n, false);
+                // Always replaced (never mutated in place):
+                // `captureSuccessDelta` relies on pointer inequality.
                 state.lastMatchedPartInfo = {
                     type: "number",
                     start: wildcardEnd,
@@ -1803,6 +2511,8 @@ function matchVarNumberPartWithoutWildcard(
     const valueId = addValueId(state, part.variable);
     if (valueId !== undefined) {
         addValueWithId(state, valueId, n, false);
+        // Always replaced (never mutated in place):
+        // `captureSuccessDelta` relies on pointer inequality.
         state.lastMatchedPartInfo = {
             type: "number",
             start: curr,
@@ -1936,9 +2646,32 @@ export function matchState(state: MatchState, request: string) {
     while (true) {
         const { parts, partIndex } = state;
         if (partIndex >= parts.length) {
+            // A sub-rule body has reached its end: flag the
+            // failure-cache MemoMarker for this entry (if any) so
+            // exhaustion does NOT later record an intrinsic
+            // failure.  The marker is linked from `state.parent`,
+            // which still points at the parent set up by the
+            // entry that's about to be unwound by
+            // `finalizeNestedRule`.  Tail-call entries are not
+            // memoized (no marker, see `enterRulesAlternation`).
+            const parentMemo = state.parent?.memoMarker;
+            if (parentMemo !== undefined) {
+                parentMemo.anyMemberFinalized = true;
+            }
             if (!finalizeNestedRule(state)) {
                 // Finish matching this state.
                 return true;
+            }
+            // Capture the externally-observable delta that this
+            // member-body completion (plus the
+            // `finalizeNestedRule` value-add) just produced.  The
+            // marker reference is stable; `state.parent` changed,
+            // but `parentMemo` still points at the right marker.
+            // Skipped for repeat / pendingWildcard-active entries
+            // (see `noSuccessCache`); failure caching is unaffected.
+            if (parentMemo !== undefined && !parentMemo.noSuccessCache) {
+                const delta = captureSuccessDelta(state, parentMemo);
+                parentMemo.successes.push(delta);
             }
 
             // Check the trailing boundary after the nested rule using the
@@ -2045,18 +2778,132 @@ export function matchState(state: MatchState, request: string) {
                 const namePrefix = part.name
                     ? `<${part.name}>`
                     : getStateName(state);
-                enterRulesAlternation(
-                    state,
-                    part,
-                    part.alternatives,
-                    namePrefix,
-                );
+                if (
+                    !enterRulesAlternation(
+                        state,
+                        part,
+                        part.alternatives,
+                        namePrefix,
+                    )
+                ) {
+                    return false;
+                }
                 // continue the loop (without incrementing partIndex)
                 continue;
             }
         }
         state.partIndex++;
     }
+}
+
+/**
+ * Consult the memo cache for a `(rules, index, leading, ...)` key.
+ *
+ * Returns:
+ *  - `"failed"`: cached intrinsic failure; caller should return false.
+ *  - `"replayed"`: cached success deltas were replayed onto `state`;
+ *    caller should return true.
+ *  - `MemoMarkerBacktrack`: fresh marker pushed onto the backtracks
+ *    chain (miss path); caller continues with normal entry.
+ *  - `undefined`: memoization is disabled; caller continues with
+ *    normal entry (no marker).
+ */
+function memoLookup(
+    state: MatchState,
+    rules: ReadonlyArray<GrammarRule>,
+    childLeadingSpacingMode: CompiledSpacingMode,
+    pendingWildcardActive: boolean,
+    repeat: boolean,
+    requireValue: boolean,
+    isCarrier: boolean,
+): "failed" | "replayed" | MemoMarkerBacktrack | undefined {
+    if (!state.memoization) {
+        return undefined;
+    }
+    const innerCache = state.memoCache.get(rules);
+    const cached = innerCache?.get(
+        memoCacheKey(
+            state.index,
+            childLeadingSpacingMode,
+            pendingWildcardActive,
+            requireValue,
+            isCarrier,
+        ),
+    );
+    if (cached === "failed") {
+        debugMatchRaw(
+            `memoMarker: cache hit for rules@${state.index}|${childLeadingSpacingMode}|${pendingWildcardActive ? 1 : 0}|${requireValue ? 1 : 0}|${isCarrier ? 1 : 0} - short-circuit`,
+        );
+        return "failed";
+    }
+    if (cached !== undefined && !repeat && !pendingWildcardActive) {
+        // SUCCESS replay path.  Captured deltas are guaranteed
+        // sound for non-repeat entries with no active pending
+        // wildcard; markers under those conditions never store an
+        // array (see the store branch in `tryNextBacktrack`).
+        // Snapshot the live OUTER state so each replay frame can
+        // reset and re-apply its own delta on backtrack.  The
+        // first delta is applied live; deltas[1..N-1] are pushed
+        // in REVERSE so LIFO pop yields source order.
+        const baseSnapshot = forkMatchState(state);
+        // Shared set for suffix-failure pruning: when the outer
+        // continuation fails after replaying a delta with a given
+        // endOffset, that offset is recorded here and sibling
+        // replay frames with the same offset are skipped.
+        const failedSuffixKeys = new Set<number>();
+        // Push a single replay cursor frame covering deltas[1..N-1].
+        // Delta 0 is applied live below; the cursor advances
+        // forward through the remaining deltas on each
+        // `tryNextBacktrack` pop (same pattern as the alternation
+        // cursor).  One frame instead of N-1 saves ~80 bytes per
+        // delta in the pathological case.
+        if (cached.length > 1) {
+            state.backtracks = {
+                origin: "memoReplay",
+                snapshot: baseSnapshot,
+                deltas: cached,
+                cursor: 1,
+                failedSuffixKeys,
+                prev: state.backtracks,
+            };
+        }
+        applyDelta(state, cached[0]);
+        state.lastReplayBatch = failedSuffixKeys;
+        state.lastReplaySuffixKey = suffixStateKey(cached[0]);
+        debugMatchRaw(
+            `memoReplay: cache hit for rules@${state.index - cached[0].endOffset}|${childLeadingSpacingMode}|0 - replaying ${cached.length} delta(s)`,
+        );
+        return "replayed";
+    }
+    // Push the memo marker BEFORE the alternation cursor so the
+    // cursor sits on top.  Order on chain after this enter (top to
+    // bottom): [optional/wildcard/repeat frames pushed during body
+    // matching] -> alternation cursor (if any) -> memoMarker -> ...
+    // outer chain.  When all body frames drain and the cursor is
+    // exhausted, the memoMarker becomes head and `tryNextBacktrack`
+    // pops it, populating the failure cache if no member ever
+    // flipped its flag.
+    const noSuccessCache =
+        repeat || pendingWildcardActive || state.valueIds === null;
+    const marker: MemoMarkerBacktrack = {
+        origin: "memoMarker",
+        rules,
+        index: state.index,
+        leading: childLeadingSpacingMode,
+        pendingWildcardActive,
+        anyMemberFinalized: false,
+        valuesAtEntry: state.values,
+        valueIdsAtEntry: state.valueIds,
+        nextValueIdAtEntry: state.nextValueId,
+        lastMatchedPartInfoAtEntry: state.lastMatchedPartInfo,
+        carrier: isCarrier,
+        requireValue,
+        noSuccessCache,
+        successes: [],
+        prev: state.backtracks,
+    };
+    state.backtracks = marker;
+    return marker;
 }
 
 /**
@@ -2070,16 +2917,46 @@ export function matchState(state: MatchState, request: string) {
  *
  * `tailCall` is intentionally NOT handled here - tail entry skips
  * the parent-frame push and lives in `enterTailRulesPart`.
+ *
+ * Returns `true` when live state was set up (caller continues
+ * matching), `false` when the cache short-circuited the entry
+ * (caller treats as a match failure).
  */
 function enterRulesAlternation(
     state: MatchState,
     part: RulesPart,
     rules: ReadonlyArray<GrammarRule>,
     namePrefix: string,
-): void {
-    const repeat = !!part.repeat;
-    // Compute before saving parent frame (reads current-rule context).
+): boolean {
     const childLeadingSpacingMode = leadingSpacingMode(state);
+    const pendingWildcardActive = state.pendingWildcard !== undefined;
+    const repeat = !!part.repeat;
+    // Same logic used below to set the child rule's valueIds.
+    // Captured in the cache key because differing values produce
+    // structurally different captured deltas (the no-track case
+    // skips `addValueId`).
+    const isCarrier = part.variable === undefined && usesImplicitDefault(state);
+    const requireValue = requiresValue(state, part);
+
+    const memo = memoLookup(
+        state,
+        rules,
+        childLeadingSpacingMode,
+        pendingWildcardActive,
+        repeat,
+        requireValue,
+        isCarrier,
+    );
+    if (memo === "failed") {
+        return false;
+    }
+    if (memo === "replayed") {
+        return true;
+    }
+    // memo is either the MemoMarkerBacktrack (miss path) or
+    // undefined (memoization disabled).
+    const memoMarker: MemoMarkerBacktrack | undefined = memo;
+
     // Save the current state to be restored after finishing the nested rule.
     const parent: ParentMatchState = {
         name: state.name,
@@ -2098,14 +2975,13 @@ function enterRulesAlternation(
         repeatStartIndex: repeat ? state.index : undefined,
         spacingMode: state.spacingMode,
         leadingSpacingMode: state.leadingSpacingMode,
+        memoMarker,
     };
 
     // The nested rule needs to track values if the current rule is tracking value AND
     // - the current part has variable
     // - the current rule has not explicit value and only has one part (default)
-    const requireValue =
-        state.valueIds !== null &&
-        (part.variable !== undefined || usesImplicitDefault(state));
+    // Note: `requireValue` was computed above for the cache key.
 
     // Update the current state to consider the first nested rule.
     state.name = `${namePrefix}[0]`;
@@ -2128,6 +3004,7 @@ function enterRulesAlternation(
         const base = forkMatchState(state);
         pushAlternation(state, base, rules, namePrefix);
     }
+    return true;
 }
 
 /**
@@ -2240,10 +3117,12 @@ function enterDispatchPart(
             : `${getStateName(state)}<dispatch>`;
         if (part.tailCall) {
             enterTailAlternation(state, part, all, namePrefix);
-        } else {
-            enterRulesAlternation(state, part, all, namePrefix);
+            // Tail calls always succeed: they replace the current
+            // rule in place (no parent frame push, no memoization)
+            // and let the main loop re-enter matching.
+            return true;
         }
-        return true;
+        return enterRulesAlternation(state, part, all, namePrefix);
     }
     // Two spacing modes govern peek independently:
     //   - leading-separator handling at `state.index` follows the
@@ -2310,10 +3189,12 @@ function enterDispatchPart(
         : `${getStateName(state)}<dispatch>`;
     if (part.tailCall) {
         enterTailAlternation(state, part, effective, namePrefix);
-    } else {
-        enterRulesAlternation(state, part, effective, namePrefix);
+        // Tail calls always succeed: they replace the current
+        // rule in place (no parent frame push, no memoization)
+        // and let the main loop re-enter matching.
+        return true;
     }
-    return true;
+    return enterRulesAlternation(state, part, effective, namePrefix);
 }
 
 // Build the initial live MatchState for `matchGrammar` /
@@ -2354,6 +3235,7 @@ export function initialMatchState(
     const wildcardPolicy = options?.wildcardPolicy ?? "exhaustive";
     const optionalPolicy = options?.optionalPolicy ?? "exhaustive";
     const repeatPolicy = options?.repeatPolicy ?? "exhaustive";
+    const memoization = options?.memoization ?? true;
 
     // Compute the effective top-level alternation.  When
     // `grammar.dispatch` is set, peek the first input token under
@@ -2435,6 +3317,12 @@ export function initialMatchState(
         wildcardPolicy,
         optionalPolicy,
         repeatPolicy,
+        memoization,
+        // Per-call memoization cache: empty at start, populated
+        // as sub-rule entries complete (with intrinsic-failure or
+        // success-delta records).  See `MemoCache` and the
+        // memoMarker branch in `tryNextBacktrack`.
+        memoCache: new Map(),
     };
     // Top-level alternation: push a single compressed cursor frame
     // covering effective[1..N-1].  The cursor advances forward
@@ -2481,7 +3369,26 @@ export function matchGrammar(
     // the live state's parts left-to-right; on success collect the
     // result and prune any per-policy first-success frames; then
     // pop the most-recently-pushed unexplored sibling and resume.
-    do {
+    //
+    // Suffix-failure pruning for memoReplay batches: after each
+    // match cycle, if the cycle was a memoReplay that produced no
+    // new results, its endOffset is recorded as failed on the
+    // batch's shared set.  Future replay frames in the same batch
+    // with the same endOffset are skipped in `tryNextBacktrack`.
+    // This is lossless: the suffix depends only on input position,
+    // not captured values, so a position that fails the suffix
+    // once will fail for every value-variant at that position.
+    let resultCountAtCycleStart = 0;
+    for (;;) {
+        // Snapshot replay tracking for this cycle (set by
+        // memoLookup on initial entry or tryNextBacktrack on
+        // replay restore).
+        const cycleReplayBatch = state.lastReplayBatch;
+        const cycleReplaySuffixKey = state.lastReplaySuffixKey;
+        state.lastReplayBatch = undefined;
+        state.lastReplaySuffixKey = undefined;
+        resultCountAtCycleStart = results.length;
+
         debugMatch(state, `resume state`);
         if (
             matchState(state, request) &&
@@ -2489,7 +3396,20 @@ export function matchGrammar(
         ) {
             suppressBacktracksAfterSuccess(state);
         }
-    } while (tryNextBacktrack(state));
+
+        // Record suffix failure BEFORE tryNextBacktrack so the
+        // skip check inside tryNextBacktrack sees it immediately.
+        if (
+            cycleReplayBatch !== undefined &&
+            results.length === resultCountAtCycleStart
+        ) {
+            cycleReplayBatch.add(cycleReplaySuffixKey!);
+        }
+
+        if (!tryNextBacktrack(state)) {
+            break;
+        }
+    }
 
     return results;
 }
