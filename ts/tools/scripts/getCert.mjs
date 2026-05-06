@@ -90,19 +90,27 @@ function vaultUrl(vault) {
 // for this whole flow anyway.
 // ---------------------------------------------------------------------------
 
-function runPowerShell(script, { ignoreExitCode = false } = {}) {
-    const result = spawnSync(
-        "powershell.exe",
-        [
-            "-NoProfile",
-            "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            script,
-        ],
-        { encoding: "utf8" },
-    );
+function runPowerShell(
+    script,
+    { ignoreExitCode = false, interactive = false } = {},
+) {
+    const args = [
+        "-NoProfile",
+        // Interactive mode preserves the parent's stdin/stdout/stderr so any
+        // OS-level prompt (e.g. trust-this-CA dialog when importing into
+        // Cert:\...\Root) can be answered. Non-interactive blocks them with
+        // "UI is not allowed in this operation." Most ops are fine
+        // non-interactive; trust-store imports are not.
+        ...(interactive ? [] : ["-NonInteractive"]),
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        script,
+    ];
+    const result = spawnSync("powershell.exe", args, {
+        encoding: "utf8",
+        stdio: interactive ? "inherit" : "pipe",
+    });
     if (result.error) throw result.error;
     if (!ignoreExitCode && result.status !== 0) {
         throw new Error(
@@ -238,28 +246,50 @@ async function install() {
     const secretClient = new SecretClient(vaultUrl(certVaultName), credential);
     const password = (await secretClient.getSecret(passwordSecretName)).value;
 
-    console.log("\nImporting into CurrentUser\\My…");
+    // Cert:\CurrentUser\My — needs the private key (we sign with this), so
+    // import the PFX with its password. -Exportable keeps the key extractable
+    // for signtool flows that prefer a fresh PFX export.
+    console.log("\nImporting into CurrentUser\\My (private key)…");
     runPowerShell(`
         $pwd = ConvertTo-SecureString -String '${escapePsString(password)}' -AsPlainText -Force
         Import-PfxCertificate -FilePath '${escapePsString(localPfxPath)}' -Password $pwd -CertStoreLocation Cert:\\CurrentUser\\My -Exportable | Out-Null
     `);
 
-    console.log("Importing into CurrentUser\\TrustedPeople…");
+    // For trust stores (TrustedPeople and Root), we only need the public
+    // cert. Microsoft's recommended pattern: export a .cer alongside the PFX
+    // and Import-Certificate that. This is more secure (no private key in
+    // trust stores) and avoids extra prompts on trusted-store imports.
+    const cerPath = path.join(
+        path.dirname(localPfxPath),
+        path.basename(localPfxPath, ".pfx") + ".cer",
+    );
+    console.log(`Exporting public cert to ${chalk.cyanBright(cerPath)}…`);
     runPowerShell(`
-        $pwd = ConvertTo-SecureString -String '${escapePsString(password)}' -AsPlainText -Force
-        Import-PfxCertificate -FilePath '${escapePsString(localPfxPath)}' -Password $pwd -CertStoreLocation Cert:\\CurrentUser\\TrustedPeople | Out-Null
+        $cert = Get-Item Cert:\\CurrentUser\\My\\${escapePsString(thumbprint)}
+        Export-Certificate -Cert $cert -FilePath '${escapePsString(cerPath)}' -Type CERT -Force | Out-Null
+    `);
+
+    console.log("Importing into CurrentUser\\TrustedPeople (public)…");
+    runPowerShell(`
+        Import-Certificate -FilePath '${escapePsString(cerPath)}' -CertStoreLocation Cert:\\CurrentUser\\TrustedPeople | Out-Null
     `);
 
     if (paramTrustedRoot) {
+        // Importing a self-signed cert into Root triggers a Windows
+        // confirmation prompt ("Are you sure you want to install this
+        // certificate?"). Run interactively so the prompt can be answered;
+        // -NonInteractive throws "UI is not allowed in this operation."
         console.log(
             chalk.yellow(
-                "Importing into CurrentUser\\Root (will prompt for confirmation)…",
+                "\nImporting into CurrentUser\\Root (Windows will prompt for confirmation; click Yes)…",
             ),
         );
-        runPowerShell(`
-            $pwd = ConvertTo-SecureString -String '${escapePsString(password)}' -AsPlainText -Force
-            Import-PfxCertificate -FilePath '${escapePsString(localPfxPath)}' -Password $pwd -CertStoreLocation Cert:\\CurrentUser\\Root | Out-Null
-        `);
+        runPowerShell(
+            `
+            Import-Certificate -FilePath '${escapePsString(cerPath)}' -CertStoreLocation Cert:\\CurrentUser\\Root | Out-Null
+            `,
+            { interactive: true },
+        );
     }
 
     console.log(
