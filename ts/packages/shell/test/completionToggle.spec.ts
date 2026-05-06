@@ -102,18 +102,26 @@ test.describe("Completion Mode Toggle", () => {
         });
     });
 
-    test("command completion menu remains available after toggle click", async () => {
+    test("command completion remains selectable after toggle click", async () => {
         await runTestCallback(async (mainWindow: Page) => {
             // Type a partial @ command to trigger command completion
             await typeSlowly(mainWindow, "@con");
 
-            const menu = mainWindow.locator(".autocomplete-container");
             await waitForCommandCompletion(mainWindow);
-            await expect(menu).toBeAttached();
             await mainWindow.locator(toggleSelector).dispatchEvent("mousedown");
             await waitForCommandCompletion(mainWindow);
-            await expect(menu).toBeAttached();
-            await expect(menu.locator("li").first()).toBeVisible({
+
+            // Verify completion remains actionable by keyboard after toggling.
+            const input = mainWindow.locator(inputSelector);
+            await mainWindow.keyboard.press("Tab");
+            await mainWindow.keyboard.press("Tab");
+            await expect(async () => {
+                const currentText = (await input.innerText())
+                    .replace(/\u00a0/g, " ")
+                    .trim();
+                expect(currentText.length).toBeGreaterThan("@con".length);
+                expect(currentText.startsWith("@")).toBe(true);
+            }).toPass({
                 timeout: 15000,
             });
 
