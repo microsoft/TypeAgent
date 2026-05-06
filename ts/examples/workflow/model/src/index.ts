@@ -19,6 +19,7 @@ export {
     TaskDefinition,
     TaskPolicyMode,
     TaskPolicy,
+    ApprovalResult,
     ApprovalFn,
 } from "./taskDefinition.js";
 

@@ -126,7 +126,7 @@ async function executeWorkflowAction(
                     `Workflow wants to run **${taskName}**. Allow?`,
                     ["Allow", "Deny"],
                 );
-                return choice === 0;
+                return choice === 0 ? { kind: "approved" } : { kind: "denied" };
             },
         };
         if (context.abortSignal) {
@@ -182,10 +182,22 @@ export function instantiate(): AppAgent {
         ) {
             if (!agentContext) return;
             if (enable) {
-                agentContext.workflows = await discoverWorkflows(
+                const result = await discoverWorkflows(
                     agentContext.workflowDir,
                     agentContext.registry.all(),
                 );
+                agentContext.workflows = result.workflows;
+                for (const err of result.errors) {
+                    const detail =
+                        typeof err.errors === "string"
+                            ? err.errors
+                            : err.errors
+                                  .map((e) => `${e.path}: ${e.message}`)
+                                  .join("; ");
+                    console.warn(
+                        `Workflow load error (${err.file}): ${detail}`,
+                    );
+                }
                 await context.reloadAgentSchema();
             }
         },

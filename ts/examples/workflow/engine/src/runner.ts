@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 import { randomUUID } from "node:crypto";
+import Debug from "debug";
 import AjvModule from "ajv";
 import {
     WorkflowIR,
@@ -18,6 +19,8 @@ import {
 } from "workflow-model";
 import { TaskRegistry } from "./taskRegistry.js";
 import { WorkflowEvent, WorkflowEventListener } from "./events.js";
+
+const debug = Debug("typeagent:workflow:engine");
 
 const AjvConstructor = (AjvModule as any).default ?? AjvModule;
 
@@ -190,10 +193,16 @@ export interface RunOptions {
     policy?: TaskPolicy;
     /**
      * Callback for tasks whose policy is "prompt".
-     * Called with (taskName, resolvedInputs); return true to allow.
+     * Called with (taskName, resolvedInputs); return an ApprovalResult.
      * If not provided, "prompt" is treated as "deny".
      */
     approve?: ApprovalFn;
+    /**
+     * Maximum time in milliseconds a single task execution may take.
+     * When exceeded, the task is aborted via AbortSignal.
+     * If not set, tasks run until completion or workflow-level cancellation.
+     */
+    taskTimeoutMs?: number;
 }
 
 export interface RunResult {
@@ -250,6 +259,7 @@ export class WorkflowEngine {
         const policy = options?.policy;
         const approve = options?.approve;
         const abortSignalArg = options?.signal;
+        const taskTimeoutMs = options?.taskTimeoutMs;
 
         // Validate
         const validation = validateWorkflowIR(ir, this.registry.all());
@@ -267,6 +277,8 @@ export class WorkflowEngine {
         const runId = `run-${randomUUID()}`;
         const abortSignal = abortSignalArg ?? new AbortController().signal;
 
+        debug("run %s started (workflow: %s)", runId, ir.name);
+
         // Validate workflow input against inputSchema.
         if (ir.inputSchema && input) {
             const validate = this.getValidator(ir.inputSchema);
@@ -282,9 +294,22 @@ export class WorkflowEngine {
             }
         }
 
-        // Build constants
+        // Build constants, validating each against its declared schema.
         const constants = new Map<string, unknown>();
         for (const [name, def] of Object.entries(ir.constants ?? {})) {
+            if (def.schema) {
+                const validate = this.getValidator(def.schema);
+                if (!validate(def.value)) {
+                    const msg = this.ajv.errorsText(validate.errors);
+                    return {
+                        runId,
+                        success: false,
+                        error: {
+                            message: `Constant "${name}" schema violation: ${msg}`,
+                        },
+                    };
+                }
+            }
             constants.set(name, def.value);
         }
 
@@ -313,9 +338,12 @@ export class WorkflowEngine {
                 abortSignal,
                 policy,
                 approve,
+                taskTimeoutMs,
             );
 
             const output = resolveTemplate(ir.output, scope);
+
+            debug("run %s completed", runId);
 
             this.emit({
                 type: "runCompleted",
@@ -349,6 +377,7 @@ export class WorkflowEngine {
         signal: AbortSignal,
         policy?: TaskPolicy,
         approve?: ApprovalFn,
+        taskTimeoutMs?: number,
     ): Promise<ScopeExit> {
         let currentId: string | undefined = entryId;
         let pendingError:
@@ -399,6 +428,7 @@ export class WorkflowEngine {
                         },
                         policy,
                         approve,
+                        taskTimeoutMs,
                     );
                     break;
 
@@ -436,6 +466,7 @@ export class WorkflowEngine {
                         },
                         policy,
                         approve,
+                        taskTimeoutMs,
                     );
                     break;
             }
@@ -458,6 +489,7 @@ export class WorkflowEngine {
         ) => void,
         policy?: TaskPolicy,
         approveFn?: ApprovalFn,
+        taskTimeoutMs?: number,
     ): Promise<string | undefined> {
         this.emit({
             type: "nodeStarted",
@@ -488,25 +520,63 @@ export class WorkflowEngine {
                     );
                 }
                 if (mode === "prompt") {
-                    const allowed = approveFn
+                    const decision = approveFn
                         ? await approveFn(task.name, resolvedInput)
-                        : false;
-                    if (!allowed) {
+                        : { kind: "denied" as const };
+                    if (decision.kind !== "approved") {
                         throw new EngineError(
-                            `Task "${task.name}" denied: approval not granted`,
+                            `Task "${task.name}" denied: approval ${decision.kind}`,
                         );
                     }
                 }
+            }
+
+            debug("task %s (%s) executing", nodeId, node.task);
+
+            // Build per-task signal with optional timeout.
+            let taskSignal = signal;
+            let taskAbortController: AbortController | undefined;
+            if (taskTimeoutMs !== undefined) {
+                taskAbortController = new AbortController();
+                // Propagate parent signal
+                if (signal.aborted) {
+                    taskAbortController.abort(signal.reason);
+                } else {
+                    signal.addEventListener(
+                        "abort",
+                        () => taskAbortController!.abort(signal.reason),
+                        { once: true },
+                    );
+                }
+                taskSignal = taskAbortController.signal;
             }
 
             const ctx: TaskContext = {
                 runId,
                 nodeId,
                 scopePath: [...scopePath],
-                signal,
+                signal: taskSignal,
             };
 
-            const result: TaskResult = await task.execute(resolvedInput, ctx);
+            let result: TaskResult;
+            if (taskTimeoutMs !== undefined) {
+                const timeout = new Promise<never>((_, reject) => {
+                    setTimeout(() => {
+                        taskAbortController!.abort("Task timed out");
+                        reject(
+                            new EngineError(
+                                `Task "${node.task}" at "${nodeId}" timed out after ${taskTimeoutMs}ms`,
+                            ),
+                        );
+                    }, taskTimeoutMs);
+                });
+                result = await Promise.race([
+                    task.execute(resolvedInput, ctx),
+                    timeout,
+                ]);
+            } else {
+                result = await task.execute(resolvedInput, ctx);
+            }
 
             if (result.kind === "fail") {
                 throw new TaskFailure(
@@ -587,7 +657,14 @@ export class WorkflowEngine {
     ): string {
         const raw = resolveTemplate(node.selector, scope);
         const selector = String(raw);
-        return node.cases[selector] ?? node.default;
+        const next = node.cases[selector] ?? node.default;
+        if (!next) {
+            throw new EngineError(
+                `Branch selector resolved to "${selector}" but no matching case or default exists`,
+            );
+        }
+        debug("branch selector=%s -> %s", selector, next);
+        return next;
     }
 
     private async executeLoop(
@@ -603,6 +680,7 @@ export class WorkflowEngine {
         ) => void,
         policy?: TaskPolicy,
         approve?: ApprovalFn,
+        taskTimeoutMs?: number,
     ): Promise<string | undefined> {
         this.emit({
             type: "nodeStarted",
@@ -659,6 +737,7 @@ export class WorkflowEngine {
                     signal,
                     policy,
                     approve,
+                    taskTimeoutMs,
                 );
 
                 if (exit.kind === "terminal") {

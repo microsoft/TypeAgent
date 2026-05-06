@@ -13,7 +13,8 @@
 
 import { execFile } from "node:child_process";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, resolve, relative } from "node:path";
+import { homedir, tmpdir } from "node:os";
 import { TaskDefinition } from "workflow-model";
 import { openai } from "aiclient";
 
@@ -150,7 +151,12 @@ export const boolToLabel: TaskDefinition<
 // ---- IO tasks ----
 
 export const shellExec: TaskDefinition<
-    { command: string; args?: string[]; cwd?: string },
+    {
+        command: string;
+        args?: string[];
+        cwd?: string;
+        maxBuffer?: number;
+    },
     { stdout: string; stderr: string; exitCode: number }
 > = {
     name: "shell.exec",
@@ -162,6 +168,10 @@ export const shellExec: TaskDefinition<
             command: { type: "string" },
             args: { type: "array", items: { type: "string" } },
             cwd: { type: "string" },
+            maxBuffer: {
+                type: "integer",
+                description: "Max stdout+stderr in bytes (default 1MB)",
+            },
         },
     },
     outputSchema: {
@@ -175,13 +185,14 @@ export const shellExec: TaskDefinition<
     },
     async execute(input, ctx) {
         const { command, args = [], cwd } = input;
+        const maxBuffer = input.maxBuffer ?? 1024 * 1024; // 1MB default
         return new Promise((resolve) => {
             execFile(
                 command,
                 args,
                 {
                     cwd,
-                    maxBuffer: 10 * 1024 * 1024,
+                    maxBuffer,
                     encoding: "utf8",
                     signal: ctx.signal,
                 },
@@ -339,7 +350,11 @@ export const stringSplit: TaskDefinition<
 };
 
 export const httpGet: TaskDefinition<
-    { url: string; headers?: Record<string, string> },
+    {
+        url: string;
+        headers?: Record<string, string>;
+        maxResponseBytes?: number;
+    },
     { body: string; status: number }
 > = {
     name: "http.get",
@@ -350,6 +365,11 @@ export const httpGet: TaskDefinition<
         properties: {
             url: { type: "string" },
             headers: { type: "object" },
+            maxResponseBytes: {
+                type: "integer",
+                description:
+                    "Max response body size in bytes (default 10MB). Responses larger than this are truncated.",
+            },
         },
     },
     outputSchema: {
@@ -361,12 +381,35 @@ export const httpGet: TaskDefinition<
         },
     },
     async execute(input, ctx) {
+        const maxBytes = input.maxResponseBytes ?? 10 * 1024 * 1024; // 10MB
         try {
             const resp = await fetch(input.url, {
                 ...(input.headers ? { headers: input.headers } : {}),
                 signal: ctx.signal,
             });
-            const body = await resp.text();
+            // Stream the body to enforce the size limit.
+            const reader = resp.body?.getReader();
+            if (!reader) {
+                const body = await resp.text();
+                return { kind: "ok", output: { body, status: resp.status } };
+            }
+            const chunks: Uint8Array[] = [];
+            let totalBytes = 0;
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                totalBytes += value.byteLength;
+                if (totalBytes > maxBytes) {
+                    reader.cancel();
+                    break;
+                }
+                chunks.push(value);
+            }
+            const decoder = new TextDecoder();
+            const body =
+                chunks
+                    .map((c) => decoder.decode(c, { stream: true }))
+                    .join("") + decoder.decode();
             return {
                 kind: "ok",
                 output: { body, status: resp.status },
@@ -381,6 +424,24 @@ export const httpGet: TaskDefinition<
         }
     },
 };
+
+// ---- File path safety ----
+
+/** Allowed roots for file operations. Confines access to cwd, home, or tmpdir. */
+function validateFilePath(filePath: string): string {
+    const resolved = resolve(filePath);
+    const allowedRoots = [process.cwd(), homedir(), tmpdir()];
+    const isAllowed = allowedRoots.some((root) => {
+        const rel = relative(root, resolved);
+        return !rel.startsWith("..") && !rel.startsWith("/");
+    });
+    if (!isAllowed) {
+        throw new Error(
+            `Path "${filePath}" is outside allowed directories (cwd, home, or tmpdir)`,
+        );
+    }
+    return resolved;
+}
 
 export const fileRead: TaskDefinition<{ path: string }, { content: string }> = {
     name: "file.read",
@@ -397,7 +458,8 @@ export const fileRead: TaskDefinition<{ path: string }, { content: string }> = {
     },
     async execute(input) {
         try {
-            const content = await readFile(input.path, "utf8");
+            const safePath = validateFilePath(input.path);
+            const content = await readFile(safePath, "utf8");
             return { kind: "ok", output: { content } };
         } catch (err) {
             return {
@@ -431,9 +493,10 @@ export const fileWrite: TaskDefinition<
     },
     async execute(input) {
         try {
-            await mkdir(dirname(input.path), { recursive: true });
-            await writeFile(input.path, input.content, "utf8");
-            return { kind: "ok", output: { path: input.path } };
+            const safePath = validateFilePath(input.path);
+            await mkdir(dirname(safePath), { recursive: true });
+            await writeFile(safePath, input.content, "utf8");
+            return { kind: "ok", output: { path: safePath } };
         } catch (err) {
             return {
                 kind: "fail",

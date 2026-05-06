@@ -9,6 +9,7 @@ import {
     WorkflowIR,
     TaskPolicy,
     ApprovalFn,
+    ApprovalResult,
     validateWorkflowIR,
 } from "workflow-model";
 import {
@@ -106,11 +107,12 @@ async function cmdRun(
             }
         }
     } else {
-        // Interactive approval via readline
+        // Interactive approval via readline (30s timeout)
+        const APPROVAL_TIMEOUT_MS = 30_000;
         approve = async (
             taskName: string,
             inputs: unknown,
-        ): Promise<boolean> => {
+        ): Promise<ApprovalResult> => {
             const summary = JSON.stringify(inputs, null, 2)
                 .split("\n")
                 .slice(0, 10)
@@ -120,13 +122,23 @@ async function cmdRun(
                 output: process.stderr,
             });
             return new Promise((resolve) => {
+                const timer = setTimeout(() => {
+                    rl.close();
+                    console.error(
+                        `[timeout] Approval for "${taskName}" timed out after ${APPROVAL_TIMEOUT_MS / 1000}s`,
+                    );
+                    resolve({ kind: "timed-out" });
+                }, APPROVAL_TIMEOUT_MS);
                 rl.question(
                     `\n[approve] Task "${taskName}" wants to execute with:\n${summary}\nAllow? (y/N) `,
                     (answer) => {
+                        clearTimeout(timer);
                         rl.close();
-                        resolve(
+                        const yes =
                             answer.trim().toLowerCase() === "y" ||
-                                answer.trim().toLowerCase() === "yes",
+                            answer.trim().toLowerCase() === "yes";
+                        resolve(
+                            yes ? { kind: "approved" } : { kind: "denied" },
                         );
                     },
                 );
@@ -143,8 +155,11 @@ async function cmdRun(
     if (result.success) {
         console.log(JSON.stringify(result.output, null, 2));
     } else {
+        const prefix = result.error?.message?.startsWith("Validation failed")
+            ? "[validation]"
+            : "[runtime]";
         console.error(
-            `Workflow failed: ${result.error?.message ?? "unknown error"}`,
+            `${prefix} Workflow failed: ${result.error?.message ?? "unknown error"}`,
         );
         process.exit(1);
     }
@@ -161,7 +176,7 @@ async function cmdValidate(file: string): Promise<void> {
         console.log("Valid.");
     } else {
         const msgs = result.errors.map((e) => `  ${e.path}: ${e.message}`);
-        console.error(`Validation failed:\n${msgs.join("\n")}`);
+        console.error(`[validation] Validation failed:\n${msgs.join("\n")}`);
         process.exit(1);
     }
 }

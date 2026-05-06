@@ -958,10 +958,16 @@ importers:
       ajv:
         specifier: ^8.17.1
         version: 8.18.0
+      debug:
+        specifier: ^4.3.4
+        version: 4.4.3(supports-color@8.1.1)
       workflow-model:
         specifier: workspace:*
         version: link:../model
     devDependencies:
+      '@types/debug':
+        specifier: ^4.1.12
+        version: 4.1.12
       '@types/jest':
         specifier: ^29.5.7
         version: 29.5.14

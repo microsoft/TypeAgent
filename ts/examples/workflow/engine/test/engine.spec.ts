@@ -9,7 +9,12 @@
  * sentinels, branch nodes, and all six standard-library tasks.
  */
 
-import { WorkflowIR, TaskDefinition, TaskPolicy } from "workflow-model";
+import {
+    WorkflowIR,
+    TaskDefinition,
+    TaskPolicy,
+    Template,
+} from "workflow-model";
 import {
     TaskRegistry,
     WorkflowEngine,
@@ -385,7 +390,7 @@ function makeA4IR(): WorkflowIR {
                     i: { schema: { type: "integer" }, initial: 0 },
                     sections: {
                         schema: { type: "array" },
-                        initial: [] as any,
+                        initial: [] as Template,
                     },
                 },
                 body: {
@@ -619,12 +624,12 @@ function makeA4IR(): WorkflowIR {
                         $from: "scope",
                         name: "stepped",
                         path: ["result"],
-                    } as any,
+                    } as Template,
                     sections: {
                         $from: "scope",
                         name: "appended",
                         path: ["list"],
-                    } as any,
+                    } as Template,
                 },
                 // NOTE: output reads from scope (body binding), not state.
                 // At @exit, state reflects the beginning of the last iteration
@@ -634,7 +639,7 @@ function makeA4IR(): WorkflowIR {
                     $from: "scope",
                     name: "appended",
                     path: ["list"],
-                } as any,
+                } as Template,
                 outputSchema: { type: "array" },
                 maxIterations: 1000,
                 next: "compose",
@@ -675,7 +680,7 @@ function makeA4IR(): WorkflowIR {
             },
         },
         entry: "fetchCalendar",
-        output: { $from: "scope", name: "result", path: ["brief"] } as any,
+        output: { $from: "scope", name: "result", path: ["brief"] } as Template,
     };
 }
 
@@ -881,14 +886,14 @@ describe("WorkflowEngine (IR v1)", () => {
                             properties: { result: { type: "integer" } },
                         },
                         inputs: {
-                            a: { $from: "input", name: "a" } as any,
-                            b: { $from: "input", name: "b" } as any,
+                            a: { $from: "input", name: "a" } as Template,
+                            b: { $from: "input", name: "b" } as Template,
                         },
                         bind: "sum",
                     },
                 },
                 entry: "add",
-                output: { $from: "scope", name: "sum" } as any,
+                output: { $from: "scope", name: "sum" } as Template,
             };
 
             const result = await engine.run(ir, { input: { a: 3, b: 7 } });
@@ -924,7 +929,7 @@ describe("WorkflowEngine (IR v1)", () => {
                             properties: { label: { type: "string" } },
                         },
                         inputs: {
-                            value: true as any,
+                            value: true as Template,
                             ifTrue: "yes",
                             ifFalse: "no",
                         },
@@ -932,7 +937,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 entry: "label",
-                output: { $from: "scope", name: "result" } as any,
+                output: { $from: "scope", name: "result" } as Template,
             };
 
             const result = await eng.run(ir, { input: {} });
@@ -952,7 +957,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     decide: {
                         kind: "branch",
-                        selector: false as any,
+                        selector: false as Template,
                         selectorSchema: { type: "boolean" },
                         cases: { true: "onYes", false: "onNo" },
                         default: "onNo",
@@ -973,7 +978,7 @@ describe("WorkflowEngine (IR v1)", () => {
                             required: ["result"],
                             properties: { result: { type: "integer" } },
                         },
-                        inputs: { a: 1 as any, b: 1 as any },
+                        inputs: { a: 1 as Template, b: 1 as Template },
                         bind: "answer",
                     },
                     onNo: {
@@ -992,12 +997,12 @@ describe("WorkflowEngine (IR v1)", () => {
                             required: ["result"],
                             properties: { result: { type: "integer" } },
                         },
-                        inputs: { a: 0 as any, b: 0 as any },
+                        inputs: { a: 0 as Template, b: 0 as Template },
                         bind: "answer",
                     },
                 },
                 entry: "decide",
-                output: { $from: "scope", name: "answer" } as any,
+                output: { $from: "scope", name: "answer" } as Template,
             };
 
             const events = collectEvents(engine);
@@ -1071,15 +1076,15 @@ describe("WorkflowEngine (IR v1)", () => {
                             template:
                                 "Hello {{name}}, you have {{count}} items",
                             vars: {
-                                name: "Alice" as any,
-                                count: 3 as any,
+                                name: "Alice" as Template,
+                                count: 3 as Template,
                             },
                         },
                         bind: "result",
                     },
                 },
                 entry: "tmpl",
-                output: { $from: "scope", name: "result" } as any,
+                output: { $from: "scope", name: "result" } as Template,
             };
 
             const result = await eng.run(ir, { input: {} });
@@ -1119,15 +1124,15 @@ describe("WorkflowEngine (IR v1)", () => {
                         inputs: {
                             template: "{{x}} + {{x}} = {{y}}",
                             vars: {
-                                x: "2" as any,
-                                y: "4" as any,
+                                x: "2" as Template,
+                                y: "4" as Template,
                             },
                         },
                         bind: "result",
                     },
                 },
                 entry: "tmpl",
-                output: { $from: "scope", name: "result" } as any,
+                output: { $from: "scope", name: "result" } as Template,
             };
 
             const result = await eng.run(ir, { input: {} });
@@ -1168,14 +1173,14 @@ describe("WorkflowEngine (IR v1)", () => {
                             properties: { text: { type: "string" } },
                         },
                         inputs: {
-                            list: ["alpha", "beta", "gamma"] as any,
+                            list: ["alpha", "beta", "gamma"] as Template,
                             delimiter: ", ",
                         },
                         bind: "result",
                     },
                 },
                 entry: "join",
-                output: { $from: "scope", name: "result" } as any,
+                output: { $from: "scope", name: "result" } as Template,
             };
 
             const result = await eng.run(ir, { input: {} });
@@ -1214,14 +1219,14 @@ describe("WorkflowEngine (IR v1)", () => {
                             properties: { text: { type: "string" } },
                         },
                         inputs: {
-                            list: [] as any,
+                            list: [] as Template,
                             delimiter: "\n",
                         },
                         bind: "result",
                     },
                 },
                 entry: "join",
-                output: { $from: "scope", name: "result" } as any,
+                output: { $from: "scope", name: "result" } as Template,
             };
 
             const result = await eng.run(ir, { input: {} });
@@ -1267,13 +1272,13 @@ describe("WorkflowEngine (IR v1)", () => {
                         },
                         inputs: {
                             command: "echo",
-                            args: ["hello", "world"] as any,
+                            args: ["hello", "world"] as Template,
                         },
                         bind: "result",
                     },
                 },
                 entry: "echo",
-                output: { $from: "scope", name: "result" } as any,
+                output: { $from: "scope", name: "result" } as Template,
             };
 
             const result = await eng.run(ir, {
@@ -1327,7 +1332,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 entry: "fail",
-                output: { $from: "scope", name: "result" } as any,
+                output: { $from: "scope", name: "result" } as Template,
             };
 
             const result = await eng.run(ir, {
@@ -1380,7 +1385,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 entry: "bad",
-                output: { $from: "scope", name: "result" } as any,
+                output: { $from: "scope", name: "result" } as Template,
             };
 
             const result = await eng.run(ir, {
@@ -1638,14 +1643,14 @@ describe("WorkflowEngine (IR v1)", () => {
                             },
                         },
                         inputs: {
-                            text: "foo.ts\nbar.ts\nbaz.ts\n" as any,
+                            text: "foo.ts\nbar.ts\nbaz.ts\n" as Template,
                             delimiter: "\n",
                         },
                         bind: "result",
                     },
                 },
                 entry: "split",
-                output: { $from: "scope", name: "result" } as any,
+                output: { $from: "scope", name: "result" } as Template,
             };
 
             const result = await eng.run(ir, { input: {} });
@@ -1688,14 +1693,14 @@ describe("WorkflowEngine (IR v1)", () => {
                             },
                         },
                         inputs: {
-                            text: "" as any,
+                            text: "" as Template,
                             delimiter: "\n",
                         },
                         bind: "result",
                     },
                 },
                 entry: "split",
-                output: { $from: "scope", name: "result" } as any,
+                output: { $from: "scope", name: "result" } as Template,
             };
 
             const result = await eng.run(ir, { input: {} });
@@ -1913,12 +1918,12 @@ describe("WorkflowEngine (IR v1)", () => {
                                 status: { type: "integer" },
                             },
                         },
-                        inputs: { url: "https://example.com" as any },
+                        inputs: { url: "https://example.com" as Template },
                         bind: "result",
                     },
                 },
                 entry: "fetch",
-                output: { $from: "scope", name: "result" } as any,
+                output: { $from: "scope", name: "result" } as Template,
             };
 
             const result = await eng.run(ir, {
@@ -1971,14 +1976,14 @@ describe("WorkflowEngine (IR v1)", () => {
                             properties: { path: { type: "string" } },
                         },
                         inputs: {
-                            path: testFile as any,
-                            content: "hello from workflow" as any,
+                            path: testFile as Template,
+                            content: "hello from workflow" as Template,
                         },
                         bind: "result",
                     },
                 },
                 entry: "write",
-                output: { $from: "scope", name: "result" } as any,
+                output: { $from: "scope", name: "result" } as Template,
             };
 
             const writeResult = await eng.run(writeIr, {
@@ -2011,12 +2016,12 @@ describe("WorkflowEngine (IR v1)", () => {
                                 content: { type: "string" },
                             },
                         },
-                        inputs: { path: testFile as any },
+                        inputs: { path: testFile as Template },
                         bind: "result",
                     },
                 },
                 entry: "read",
-                output: { $from: "scope", name: "result" } as any,
+                output: { $from: "scope", name: "result" } as Template,
             };
 
             const readResult = await eng.run(readIr, {
@@ -2310,12 +2315,12 @@ describe("WorkflowEngine (IR v1)", () => {
                                 content: { type: "string" },
                             },
                         },
-                        inputs: { path: "/etc/shadow" as any },
+                        inputs: { path: "/etc/shadow" as Template },
                         bind: "result",
                     },
                 },
                 entry: "step",
-                output: { $from: "scope", name: "result" } as any,
+                output: { $from: "scope", name: "result" } as Template,
             };
         }
 
@@ -2348,10 +2353,10 @@ describe("WorkflowEngine (IR v1)", () => {
 
             const result = await eng.run(ir, opts);
             expect(result.success).toBe(false);
-            expect(result.error?.message).toContain("approval not granted");
+            expect(result.error?.message).toContain("approval denied");
         });
 
-        it("allows when approve fn returns true", async () => {
+        it("allows when approve fn returns approved", async () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
@@ -2361,7 +2366,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 input: {},
                 approve: async (name) => {
                     approvedTasks.push(name);
-                    return true;
+                    return { kind: "approved" };
                 },
             };
 
@@ -2371,19 +2376,19 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(approvedTasks).toEqual(["file.read"]);
         });
 
-        it("denies when approve fn returns false", async () => {
+        it("denies when approve fn returns denied", async () => {
             const reg = makeRegistry(...allBuiltinTasks);
             const eng = new WorkflowEngine(reg);
 
             const ir = sideEffectWorkflow("file.read");
             const opts: RunOptions = {
                 input: {},
-                approve: async () => false,
+                approve: async () => ({ kind: "denied" }),
             };
 
             const result = await eng.run(ir, opts);
             expect(result.success).toBe(false);
-            expect(result.error?.message).toContain("approval not granted");
+            expect(result.error?.message).toContain("approval denied");
         });
 
         it("allows side-effecting task when policy is 'allow'", async () => {
@@ -2397,14 +2402,12 @@ describe("WorkflowEngine (IR v1)", () => {
             };
 
             const result = await eng.run(ir, opts);
-            // Policy check passed; fails because /etc/shadow isn't readable
-            // (unless running as root, which tests shouldn't).
+            // Policy check passed; fails because /etc/shadow is outside
+            // allowed directories (path traversal protection).
             // The key assertion: it did NOT fail with a policy denial.
             if (!result.success) {
                 expect(result.error?.message).not.toContain("denied by policy");
-                expect(result.error?.message).not.toContain(
-                    "approval not granted",
-                );
+                expect(result.error?.message).not.toContain("approval denied");
             }
         });
 
@@ -2438,12 +2441,12 @@ describe("WorkflowEngine (IR v1)", () => {
                                 result: { type: "integer" },
                             },
                         },
-                        inputs: { a: 2 as any, b: 3 as any },
+                        inputs: { a: 2 as Template, b: 3 as Template },
                         bind: "result",
                     },
                 },
                 entry: "add",
-                output: { $from: "scope", name: "result" } as any,
+                output: { $from: "scope", name: "result" } as Template,
             };
 
             // No policy, no approve fn: pure tasks should still work
@@ -2483,12 +2486,12 @@ describe("WorkflowEngine (IR v1)", () => {
                                 result: { type: "integer" },
                             },
                         },
-                        inputs: { a: 10 as any, b: 20 as any },
+                        inputs: { a: 10 as Template, b: 20 as Template },
                         bind: "result",
                     },
                 },
                 entry: "add",
-                output: { $from: "scope", name: "result" } as any,
+                output: { $from: "scope", name: "result" } as Template,
             };
 
             const result = await eng.run(ir, { input: { a: 1, b: 2 } });
@@ -2503,7 +2506,7 @@ describe("WorkflowEngine (IR v1)", () => {
             const ir = sideEffectWorkflow("file.read");
             const result = await eng.run(ir, { input: {} });
             expect(result.success).toBe(false);
-            expect(result.error?.message).toContain("approval not granted");
+            expect(result.error?.message).toContain("approval denied");
         });
     });
 
@@ -2548,7 +2551,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 entry: "step",
-                output: { $from: "scope", name: "result" } as any,
+                output: { $from: "scope", name: "result" } as Template,
             };
 
             const result = await eng.run(ir, { input: {} });
@@ -2595,7 +2598,7 @@ describe("WorkflowEngine (IR v1)", () => {
                     },
                 },
                 entry: "step",
-                output: { $from: "scope", name: "result" } as any,
+                output: { $from: "scope", name: "result" } as Template,
             };
 
             const result = await eng.run(ir, { input: {} });
@@ -2632,7 +2635,7 @@ describe("WorkflowEngine (IR v1)", () => {
                             required: ["result"],
                             properties: { result: { type: "integer" } },
                         },
-                        inputs: { a: 1 as any, b: 2 as any },
+                        inputs: { a: 1 as Template, b: 2 as Template },
                         next: "consumer",
                         bind: "data",
                     },
@@ -2657,14 +2660,14 @@ describe("WorkflowEngine (IR v1)", () => {
                                 $from: "scope",
                                 name: "data",
                                 path: ["nonexistent"],
-                            } as any,
-                            b: 1 as any,
+                            } as Template,
+                            b: 1 as Template,
                         },
                         bind: "final",
                     },
                 },
                 entry: "producer",
-                output: { $from: "scope", name: "final" } as any,
+                output: { $from: "scope", name: "final" } as Template,
             };
 
             const tasks = new Map(standardLibraryTasks.map((t) => [t.name, t]));
@@ -2702,7 +2705,7 @@ describe("WorkflowEngine (IR v1)", () => {
                             required: ["result"],
                             properties: { result: { type: "integer" } },
                         },
-                        inputs: { a: 1 as any, b: 2 as any },
+                        inputs: { a: 1 as Template, b: 2 as Template },
                         next: "consumer",
                         bind: "data",
                     },
@@ -2727,14 +2730,14 @@ describe("WorkflowEngine (IR v1)", () => {
                                 $from: "scope",
                                 name: "data",
                                 path: ["result"],
-                            } as any,
-                            b: 1 as any,
+                            } as Template,
+                            b: 1 as Template,
                         },
                         bind: "final",
                     },
                 },
                 entry: "producer",
-                output: { $from: "scope", name: "final" } as any,
+                output: { $from: "scope", name: "final" } as Template,
             };
 
             const tasks = new Map(standardLibraryTasks.map((t) => [t.name, t]));
@@ -2759,7 +2762,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         state: {
                             i: {
                                 schema: { type: "integer" },
-                                initial: 0 as any,
+                                initial: 0 as Template,
                             },
                         },
                         body: {
@@ -2783,13 +2786,16 @@ describe("WorkflowEngine (IR v1)", () => {
                                             result: { type: "integer" },
                                         },
                                     },
-                                    inputs: { a: 1 as any, b: 1 as any },
+                                    inputs: {
+                                        a: 1 as Template,
+                                        b: 1 as Template,
+                                    },
                                     next: "done",
                                     bind: "stepped",
                                 },
                                 done: {
                                     kind: "branch",
-                                    selector: true as any,
+                                    selector: true as Template,
                                     selectorSchema: { type: "boolean" },
                                     cases: { false: "@iterate", true: "@exit" },
                                     default: "@exit",
@@ -2801,16 +2807,16 @@ describe("WorkflowEngine (IR v1)", () => {
                                 $from: "scope",
                                 name: "stepped",
                                 path: ["nonexistent"],
-                            } as any,
+                            } as Template,
                         },
-                        output: 0 as any,
+                        output: 0 as Template,
                         outputSchema: { type: "integer" },
                         maxIterations: 1,
                         bind: "result",
                     },
                 },
                 entry: "loop",
-                output: { $from: "scope", name: "result" } as any,
+                output: { $from: "scope", name: "result" } as Template,
             };
 
             const tasks = new Map(standardLibraryTasks.map((t) => [t.name, t]));
@@ -2853,14 +2859,14 @@ describe("WorkflowEngine (IR v1)", () => {
                             properties: { result: { type: "integer" } },
                         },
                         inputs: {
-                            a: { $from: "input", name: "count" } as any,
-                            b: 1 as any,
+                            a: { $from: "input", name: "count" } as Template,
+                            b: 1 as Template,
                         },
                         bind: "result",
                     },
                 },
                 entry: "step",
-                output: { $from: "scope", name: "result" } as any,
+                output: { $from: "scope", name: "result" } as Template,
             };
 
             // String where integer is required
@@ -2885,14 +2891,14 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     decide: {
                         kind: "branch",
-                        selector: true as any,
+                        selector: true as Template,
                         selectorSchema: { type: "boolean" },
                         cases: { true: "@iterate", false: "@exit" },
                         default: "@exit",
                     },
                 },
                 entry: "decide",
-                output: null as any,
+                output: null as Template,
             };
 
             const tasks = new Map(standardLibraryTasks.map((t) => [t.name, t]));
@@ -2916,7 +2922,7 @@ describe("WorkflowEngine (IR v1)", () => {
                 nodes: {
                     decide: {
                         kind: "branch",
-                        selector: false as any,
+                        selector: false as Template,
                         selectorSchema: { type: "boolean" },
                         cases: { true: "onTrue", false: "onFalse" },
                         default: "onFalse",
@@ -2937,7 +2943,7 @@ describe("WorkflowEngine (IR v1)", () => {
                             required: ["result"],
                             properties: { result: { type: "integer" } },
                         },
-                        inputs: { a: 1 as any, b: 1 as any },
+                        inputs: { a: 1 as Template, b: 1 as Template },
                         bind: "answer",
                     },
                     onFalse: {
@@ -2956,12 +2962,12 @@ describe("WorkflowEngine (IR v1)", () => {
                             required: ["result"],
                             properties: { result: { type: "integer" } },
                         },
-                        inputs: { a: 0 as any, b: 0 as any },
+                        inputs: { a: 0 as Template, b: 0 as Template },
                         bind: "answer",
                     },
                 },
                 entry: "decide",
-                output: { $from: "scope", name: "answer" } as any,
+                output: { $from: "scope", name: "answer" } as Template,
             };
 
             const events = collectEvents(engine);
@@ -3013,7 +3019,7 @@ describe("WorkflowEngine (IR v1)", () => {
                         state: {
                             i: {
                                 schema: { type: "integer" },
-                                initial: 0 as any,
+                                initial: 0 as Template,
                             },
                         },
                         body: {
@@ -3029,7 +3035,7 @@ describe("WorkflowEngine (IR v1)", () => {
                             },
                         },
                         iterateState: {},
-                        output: null as any,
+                        output: null as Template,
                         outputSchema: { type: "null" },
                         maxIterations: 1,
                         onError: "recover",
@@ -3050,12 +3056,12 @@ describe("WorkflowEngine (IR v1)", () => {
                             required: ["result"],
                             properties: { result: { type: "integer" } },
                         },
-                        inputs: { a: 99 as any, b: 1 as any },
+                        inputs: { a: 99 as Template, b: 1 as Template },
                         bind: "recovered",
                     },
                 },
                 entry: "badLoop",
-                output: { $from: "scope", name: "recovered" } as any,
+                output: { $from: "scope", name: "recovered" } as Template,
             };
 
             const result = await eng.run(ir, { input: {} });

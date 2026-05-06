@@ -71,10 +71,22 @@ export type TaskPolicyMode = "allow" | "prompt" | "deny";
 export type TaskPolicy = Record<string, TaskPolicyMode>;
 
 /**
+ * Result of an approval decision.
+ *
+ * - "approved": caller explicitly allowed the task.
+ * - "denied": caller explicitly rejected the task.
+ * - "timed-out": approval request expired before a decision was made.
+ */
+export type ApprovalResult =
+    | { kind: "approved" }
+    | { kind: "denied" }
+    | { kind: "timed-out" };
+
+/**
  * Callback invoked when a task with sideEffects=true is about to execute
- * and its policy is "prompt". Return true to allow, false to deny.
+ * and its policy is "prompt". Return an ApprovalResult.
  */
 export type ApprovalFn = (
     taskName: string,
     inputs: unknown,
-) => Promise<boolean>;
+) => Promise<ApprovalResult>;
