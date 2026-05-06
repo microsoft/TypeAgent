@@ -1545,6 +1545,228 @@ const configExecutionCommandHandlers: CommandHandlerTable = {
     },
 };
 
+// ---------------------------------------------------------------------------
+// `@config collision …` — runtime config surface for action-collision detection.
+//
+// Why this exists: the collision detection subsystem ships off-by-default,
+// and the soft-rollout plan (`docs/architecture/collision-rollout.md`)
+// requires testers to opt in per detection point without hand-editing the
+// session JSON.  This handler is the M1 milestone: the shell-level toggle
+// that drives every Phase 1/2 experiment.  All flips route through
+// `changeContextConfig`, which calls `session.updateSettings` — that
+// already persists to `data.json` and re-applies in-memory, so settings
+// survive shell restart.
+//
+// Coverage scope: detect on/off, strategy, priorityOrder, telemetry
+// emit/debugLog.  Calibration knobs (classifier, topN, threshold, scorer,
+// similarityThreshold) are intentionally not exposed here — they're
+// long-tail tuning, not opt-in toggles, and the same JSON file accepts
+// hand edits.  We can add focused subcommands for those if a phase-2
+// experiment ends up needing repeated changes.
+// ---------------------------------------------------------------------------
+
+type CollisionPoint = "static" | "grammarMatch" | "llmSelect" | "fuzzy";
+
+const COLLISION_POINTS: readonly CollisionPoint[] = [
+    "static",
+    "grammarMatch",
+    "llmSelect",
+    "fuzzy",
+];
+
+// Strategy enums per detection point.  `static` uses warn/error;
+// the three runtime points share the four-way `CollisionStrategy` enum.
+const STATIC_STRATEGIES = ["warn", "error"] as const;
+const RUNTIME_STRATEGIES = [
+    "first-match",
+    "score-rank",
+    "priority",
+    "user-clarify",
+] as const;
+
+function strategiesFor(point: CollisionPoint): readonly string[] {
+    return point === "static" ? STATIC_STRATEGIES : RUNTIME_STRATEGIES;
+}
+
+class CollisionShowCommandHandler implements CommandHandler {
+    public readonly description =
+        "Show the current collision detection config";
+    public readonly parameters = {} as const;
+
+    public async run(context: ActionContext<CommandHandlerContext>) {
+        const cfg = context.sessionContext.agentContext.session.getConfig()
+            .collision;
+        const onOff = (b: boolean) => (b ? "on" : "off");
+        const lines = [
+            "collision config:",
+            `  static:       detect=${onOff(cfg.static.detect)} strategy=${cfg.static.strategy}`,
+            `  grammarMatch: detect=${onOff(cfg.grammarMatch.detect)} strategy=${cfg.grammarMatch.strategy} classifier=${cfg.grammarMatch.classifier}`,
+            `  llmSelect:    detect=${onOff(cfg.llmSelect.detect)} strategy=${cfg.llmSelect.strategy} topN=${cfg.llmSelect.topN} scoreDeltaThreshold=${cfg.llmSelect.scoreDeltaThreshold}`,
+            `  fuzzy:        detect=${onOff(cfg.fuzzy.detect)} strategy=${cfg.fuzzy.strategy} staticEnabled=${onOff(cfg.fuzzy.staticEnabled)} runtimeEnabled=${onOff(cfg.fuzzy.runtimeEnabled)} scorer=${cfg.fuzzy.scorer}`,
+            `  priorityOrder: ${cfg.priorityOrder ? `"${cfg.priorityOrder}"` : "(empty)"}`,
+            `  multipleActionBehavior: ${cfg.multipleActionBehavior}`,
+            `  telemetry: emit=${onOff(cfg.telemetry.emit)} debugLog=${onOff(cfg.telemetry.debugLog)}`,
+        ];
+        displayResult(lines.join("\n"), context);
+    }
+}
+
+class CollisionStrategyCommandHandler implements CommandHandler {
+    public readonly description: string;
+    public readonly parameters = {
+        args: {
+            strategy: {
+                description: "strategy name",
+                type: "string",
+            },
+        },
+    } as const;
+
+    constructor(
+        private point: CollisionPoint,
+        private allowed: readonly string[],
+    ) {
+        this.description = `Set ${point} resolution strategy (one of: ${allowed.join(", ")})`;
+    }
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const strategy = params.args.strategy;
+        if (!this.allowed.includes(strategy)) {
+            displayWarn(
+                `Unknown strategy "${strategy}" for ${this.point}. Allowed: ${this.allowed.join(", ")}.`,
+                context,
+            );
+            return;
+        }
+        // Nested partial works because SessionOptions is DeepPartialUndefinedAndNull.
+        const options: SessionOptions = {
+            collision: { [this.point]: { strategy } },
+        } as SessionOptions;
+        await changeContextConfig(options, context);
+        displayResult(
+            `${this.point}.strategy = ${strategy}`,
+            context,
+        );
+    }
+}
+
+class CollisionPriorityCommandHandler implements CommandHandler {
+    public readonly description =
+        "Set priorityOrder (comma-separated agent names) used by the `priority` resolution strategy. Empty argument shows the current value.";
+    public readonly parameters = {
+        args: {
+            order: {
+                description:
+                    'Comma-separated agent names, e.g. "list,player,calendar". Use the empty string "" to clear.',
+                type: "string",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const cfg = context.sessionContext.agentContext.session.getConfig()
+            .collision;
+        if (params.args.order === undefined) {
+            displayResult(
+                `priorityOrder: ${cfg.priorityOrder ? `"${cfg.priorityOrder}"` : "(empty)"}`,
+                context,
+            );
+            return;
+        }
+        const order = params.args.order.trim();
+        await changeContextConfig(
+            { collision: { priorityOrder: order } } as SessionOptions,
+            context,
+        );
+        displayResult(
+            `priorityOrder = ${order ? `"${order}"` : "(empty)"}`,
+            context,
+        );
+    }
+}
+
+function getCollisionPointHandlers(
+    point: CollisionPoint,
+): CommandHandlerTable {
+    const allowedStrategies = strategiesFor(point);
+    return {
+        description: `Configure ${point} collision detection`,
+        commands: {
+            detect: getToggleHandlerTable(
+                `${point} collision detection`,
+                async (context, enable) => {
+                    await changeContextConfig(
+                        {
+                            collision: {
+                                [point]: { detect: enable },
+                            },
+                        } as SessionOptions,
+                        context,
+                    );
+                },
+            ),
+            strategy: new CollisionStrategyCommandHandler(
+                point,
+                allowedStrategies,
+            ),
+        },
+    };
+}
+
+function getCollisionCommandHandlers(): CommandHandlerTable {
+    const pointHandlers: Record<string, CommandHandlerTable> = {};
+    for (const point of COLLISION_POINTS) {
+        pointHandlers[point] = getCollisionPointHandlers(point);
+    }
+    return {
+        description: "Configure action collision detection",
+        defaultSubCommand: "show",
+        commands: {
+            show: new CollisionShowCommandHandler(),
+            ...pointHandlers,
+            priority: new CollisionPriorityCommandHandler(),
+            telemetry: {
+                description: "Configure collision telemetry",
+                commands: {
+                    emit: getToggleHandlerTable(
+                        "collision telemetry ring buffer",
+                        async (context, enable) => {
+                            await changeContextConfig(
+                                {
+                                    collision: {
+                                        telemetry: { emit: enable },
+                                    },
+                                } as SessionOptions,
+                                context,
+                            );
+                        },
+                    ),
+                    debugLog: getToggleHandlerTable(
+                        "collision telemetry debug log",
+                        async (context, enable) => {
+                            await changeContextConfig(
+                                {
+                                    collision: {
+                                        telemetry: { debugLog: enable },
+                                    },
+                                } as SessionOptions,
+                                context,
+                            );
+                        },
+                    ),
+                },
+            },
+        },
+    };
+}
+
 export function getConfigCommandHandlers(): CommandHandlerTable {
     return {
         description: "Configuration commands",
@@ -1596,6 +1818,8 @@ export function getConfigCommandHandlers(): CommandHandlerTable {
                     ),
                 },
             },
+
+            collision: getCollisionCommandHandlers(),
 
             ports: new ConfigPortsCommandHandler(),
         },
