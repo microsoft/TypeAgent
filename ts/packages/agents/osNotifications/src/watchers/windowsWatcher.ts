@@ -206,10 +206,26 @@ function resolveHelperProjectDir(): string | undefined {
     return undefined;
 }
 
-// Spawns `dotnet publish` to build the C# helper. Output is published in-place
-// (same directory as the .csproj) so resolveHelperPath() picks it up next time.
-// onProgress is invoked with each stdout/stderr line as the build runs — pipe
-// it to actionIO.appendDisplay for live progress in chat.
+// Hard-coded subject the dev cert is issued to. Must match
+// identity/AppxManifest.xml's <Identity Publisher="..."> exactly.
+// Kept as a constant rather than read from somewhere else because it's
+// the contract between the manifest and the cert; changing one without
+// the other silently breaks signature validation.
+const SIGNING_CERT_SUBJECT = "CN=dev.typeagent.microsoft.com";
+const CODE_SIGNING_EKU = "1.3.6.1.5.5.7.3.3";
+const IDENTITY_PACKAGE_NAME = "TypeAgent.OsNotificationListener";
+const IDENTITY_DIR = "identity";
+const MSIX_FILE = "TypeAgent.OsNotificationListener.msix";
+
+// Full build pipeline for the WinAppSDK sparse-packaged helper:
+//   dotnet clean + publish -> writes exe under publish/
+//   makeappx pack identity/ -> writes signed MSIX
+//   signtool sign -> embeds the dev-cert signature
+//   Add-AppxPackage -ExternalLocation publish/ -> grants exe package identity
+//
+// onProgress streams every command's stdout/stderr to chat (typically piped
+// to actionIO.appendDisplay). Errors include the last several lines of output
+// since the live progress is rendered in "inline" mode that scrolls offscreen.
 export async function buildWindowsHelper(opts: {
     onProgress?: (line: string) => void;
 }): Promise<void> {
@@ -219,30 +235,213 @@ export async function buildWindowsHelper(opts: {
             "OS notification helper source (OsNotificationListener.csproj) not found. The agent's package may be incomplete.",
         );
     }
-    // Run `dotnet clean` first so stale obj/ contents (e.g. from a prior
-    // failed attempt) don't surface confusing "no Main found" / cache errors.
-    // Failures here are non-fatal — the publish below will surface a real
-    // error if the project is genuinely broken.
-    await runDotnet(["clean", "-c", "Release"], projDir, opts).catch(() => {});
-    // Publish into a subdir, NOT the project dir itself. `-o .` from inside
-    // the project directory produces CS5001 "no Main found" from the C#
-    // compiler — apparently publishing in-place perturbs the SDK's source-file
-    // enumeration. resolveHelperPath() knows to look here.
     const publishDir = path.join(projDir, HELPER_PUBLISH_SUBDIR);
-    await runDotnet(
+    const identityDir = path.join(projDir, IDENTITY_DIR);
+    const msixPath = path.join(projDir, MSIX_FILE);
+
+    // 1. Clean + publish — produces the exe (with embedded app.manifest
+    // pointing at the identity package). `-o publish/` instead of `-o .`
+    // because publishing into the project dir trips a known CS5001
+    // "no Main found" error in the SDK source-file enumeration.
+    await runProcess("dotnet", ["clean", "-c", "Release"], projDir, opts).catch(
+        () => {},
+    );
+    await runProcess(
+        "dotnet",
         ["publish", "-c", "Release", "-r", "win-x64", "-o", publishDir],
         projDir,
         opts,
     );
+
+    // 2. Locate Windows SDK tools. Cached lookups would be nice if this
+    // ran often, but it runs once per agent build so the cost is fine.
+    const sdk = findWindowsSdkBin();
+    opts.onProgress?.(`[setup] using SDK at ${sdk.dir}`);
+
+    // 3. Locate the dev cert and grab its thumbprint. Subject is stable
+    // across `getCert renew` invocations, so this still works after key
+    // rotation.
+    const thumbprint = findSigningCertThumbprint();
+    opts.onProgress?.(`[setup] signing with ${thumbprint}`);
+
+    // 4. Pack identity manifest -> .msix. The /nv flag skips MakeAppx's
+    // payload-file path validation; the identity package only contains the
+    // manifest + placeholder logo, so payload validation is meaningless.
+    await runProcess(
+        sdk.makeappx,
+        ["pack", "/o", "/d", identityDir, "/nv", "/p", msixPath],
+        projDir,
+        opts,
+    );
+
+    // 5. Sign the MSIX with the dev cert (selected by SHA1 thumbprint
+    // from CurrentUser\My).
+    await runProcess(
+        sdk.signtool,
+        ["sign", "/sha1", thumbprint, "/fd", "SHA256", msixPath],
+        projDir,
+        opts,
+    );
+
+    // 6. Register the sparse package so the exe at publishDir has package
+    // identity at runtime. Re-registration is idempotent — Add-AppxPackage
+    // accepts re-registering the same version when -ExternalLocation matches,
+    // which is what we want during dev (rebuilds replace any prior version).
+    await registerSparsePackage(msixPath, publishDir, opts);
 }
 
-function runDotnet(
+// Searches well-known locations for makeappx.exe and signtool.exe. Returns
+// the directory containing both. Throws with actionable guidance if not
+// found (typically means the Windows 10/11 SDK isn't installed).
+function findWindowsSdkBin(): {
+    dir: string;
+    makeappx: string;
+    signtool: string;
+} {
+    const kitsRoots = [
+        "C:\\Program Files (x86)\\Windows Kits\\10\\bin",
+        "C:\\Program Files\\Windows Kits\\10\\bin",
+    ];
+    // SDK install layout: <bin>\<version>\x64\{makeappx,signtool}.exe
+    // We pick the highest-numbered version directory that has both tools.
+    const fs = require("node:fs") as typeof import("node:fs");
+    let best: { dir: string; version: string } | undefined;
+    for (const root of kitsRoots) {
+        if (!existsSync(root)) continue;
+        for (const versionDir of fs
+            .readdirSync(root)
+            .filter((n: string) => /^10\.\d+\.\d+\.\d+$/.test(n))
+            .sort((a: string, b: string) => compareVersions(b, a)) /* desc */) {
+            const candidate = path.join(root, versionDir, "x64");
+            if (
+                existsSync(path.join(candidate, "makeappx.exe")) &&
+                existsSync(path.join(candidate, "signtool.exe"))
+            ) {
+                if (!best || compareVersions(versionDir, best.version) > 0) {
+                    best = { dir: candidate, version: versionDir };
+                }
+            }
+        }
+    }
+    if (!best) {
+        throw new Error(
+            "Windows 10/11 SDK not found. Install via the Visual Studio Installer (Workloads → Desktop development with C++ → Windows SDK), or any 'Windows SDK' package from https://developer.microsoft.com/windows/downloads/windows-sdk/. Looking for makeappx.exe and signtool.exe under Program Files\\Windows Kits\\10\\bin\\<ver>\\x64.",
+        );
+    }
+    return {
+        dir: best.dir,
+        makeappx: path.join(best.dir, "makeappx.exe"),
+        signtool: path.join(best.dir, "signtool.exe"),
+    };
+}
+
+function compareVersions(a: string, b: string): number {
+    const ap = a.split(".").map(Number);
+    const bp = b.split(".").map(Number);
+    for (let i = 0; i < Math.max(ap.length, bp.length); i++) {
+        const d = (ap[i] ?? 0) - (bp[i] ?? 0);
+        if (d !== 0) return d;
+    }
+    return 0;
+}
+
+// Queries CurrentUser\My for a code-signing cert with the expected Subject.
+// Returns the SHA1 thumbprint suitable for `signtool sign /sha1 <thumb>`.
+// Throws with guidance pointing at getCert.mjs if no usable cert is found.
+function findSigningCertThumbprint(): string {
+    const ps = `
+        $cert = Get-ChildItem Cert:\\CurrentUser\\My |
+            Where-Object {
+                $_.Subject -eq '${SIGNING_CERT_SUBJECT}' -and
+                $_.HasPrivateKey -and
+                ($_.EnhancedKeyUsageList | ForEach-Object { $_.ObjectId }) -contains '${CODE_SIGNING_EKU}'
+            } |
+            Sort-Object NotAfter -Descending |
+            Select-Object -First 1
+        if ($null -eq $cert) {
+            Write-Output 'NOT_FOUND'
+        } else {
+            Write-Output $cert.Thumbprint
+        }
+    `;
+    const out = runPowerShellSync(ps).trim();
+    if (out === "NOT_FOUND" || out.length === 0) {
+        throw new Error(
+            "Dev signing cert not found in CurrentUser\\My. Run:\n" +
+                "  node tools/scripts/getCert.mjs install --trusted-root\n" +
+                "If the cert exists but lacks Code Signing EKU, also run:\n" +
+                "  node tools/scripts/getCert.mjs renew\n" +
+                "  node tools/scripts/getCert.mjs install --trusted-root\n" +
+                `Looking for cert with Subject '${SIGNING_CERT_SUBJECT}' and EKU ${CODE_SIGNING_EKU}.`,
+        );
+    }
+    return out;
+}
+
+// Registers the identity package against an external exe location. Idempotent —
+// if the same package is already registered, Add-AppxPackage replaces it.
+async function registerSparsePackage(
+    msixPath: string,
+    externalLocation: string,
+    opts: { onProgress?: (line: string) => void },
+): Promise<void> {
+    // Both paths embedded as PowerShell single-quoted literals; escape '
+    // by doubling per PowerShell's quoting rules.
+    const esc = (s: string) => s.replace(/'/g, "''");
+    const ps = `
+        # Remove any prior registration so re-registering is clean.
+        Get-AppxPackage -Name '${IDENTITY_PACKAGE_NAME}' -ErrorAction SilentlyContinue |
+            Remove-AppxPackage -ErrorAction SilentlyContinue
+        Add-AppxPackage -Path '${esc(msixPath)}' -ExternalLocation '${esc(externalLocation)}'
+        $pkg = Get-AppxPackage -Name '${IDENTITY_PACKAGE_NAME}' -ErrorAction SilentlyContinue
+        if (-not $pkg) {
+            Write-Error 'Add-AppxPackage completed but the package is not registered.'
+            exit 1
+        }
+        Write-Output "Registered: $($pkg.PackageFullName) at $($pkg.InstallLocation)"
+    `;
+    try {
+        await runProcess(
+            "powershell.exe",
+            [
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                ps,
+            ],
+            path.dirname(msixPath),
+            opts,
+        );
+    } catch (e: any) {
+        const msg = e?.message ?? String(e);
+        if (msg.includes("0x800B0109")) {
+            throw new Error(
+                "Add-AppxPackage failed with CERT_E_UNTRUSTEDROOT — the dev cert isn't trusted at the LocalMachine scope. " +
+                    "From an elevated PowerShell, run:\n" +
+                    '  $cer = "$env:USERPROFILE\\.typeagent\\TypeAgent-Development-Certificate.cer"\n' +
+                    "  Import-Certificate -FilePath $cer -CertStoreLocation Cert:\\LocalMachine\\Root\n" +
+                    "  Import-Certificate -FilePath $cer -CertStoreLocation Cert:\\LocalMachine\\TrustedPeople\n" +
+                    "Then retry. (One-time per machine; cert renewals via getCert renew keep the same Subject so this stays valid.)",
+            );
+        }
+        throw e;
+    }
+}
+
+// Generic process runner. Streams stdout+stderr to opts.onProgress
+// line-by-line, captures the same into a transcript, and on non-zero
+// exit rejects with an Error containing the last 12 lines of output.
+function runProcess(
+    cmd: string,
     args: string[],
     cwd: string,
     opts: { onProgress?: (line: string) => void },
 ): Promise<void> {
+    const label = path.basename(cmd, path.extname(cmd));
     return new Promise<void>((resolve, reject) => {
-        const child = spawn("dotnet", args, {
+        const child = spawn(cmd, args, {
             cwd,
             windowsHide: true,
             stdio: ["ignore", "pipe", "pipe"],
@@ -251,9 +450,8 @@ function runDotnet(
 
         // Per-stream line buffer so onProgress sees one full line at a time
         // even when chunks split mid-line. We also capture all stdout+stderr
-        // lines into a transcript so we can surface the actual dotnet error
-        // when the build exits non-zero (the live progress is rendered in
-        // "temporary" appendMode so it disappears).
+        // lines into a transcript so we can surface the actual error when
+        // the process exits non-zero.
         const buffers = { stdout: "", stderr: "" };
         const transcript: string[] = [];
         const onChunk = (chunk: string, stream: "stdout" | "stderr") => {
@@ -263,7 +461,7 @@ function runDotnet(
                 const line = buffers[stream].slice(0, nl).replace(/\r$/, "");
                 buffers[stream] = buffers[stream].slice(nl + 1);
                 if (line.length > 0) {
-                    const tagged = `[${stream}] ${line}`;
+                    const tagged = `[${label}] ${line}`;
                     transcript.push(tagged);
                     opts.onProgress?.(tagged);
                 }
@@ -275,13 +473,9 @@ function runDotnet(
         child.stderr!.on("data", (c: string) => onChunk(c, "stderr"));
 
         child.on("error", (e) => {
-            // Most common error here is "dotnet not found on PATH" — surface
-            // it specifically so the user knows what to install.
             if ((e as NodeJS.ErrnoException).code === "ENOENT") {
                 reject(
-                    new Error(
-                        "`dotnet` command not found. Install the .NET 8 SDK and ensure dotnet is on PATH.",
-                    ),
+                    new Error(`\`${cmd}\` not found. ${cmdNotFoundHelp(cmd)}`),
                 );
             } else {
                 reject(e);
@@ -292,15 +486,10 @@ function runDotnet(
                 resolve();
                 return;
             }
-            // Flush any final un-newlined remnants so the transcript is
-            // complete (dotnet sometimes prints summaries without trailing \n).
             for (const stream of ["stdout", "stderr"] as const) {
                 const tail = buffers[stream].trim();
-                if (tail.length > 0) transcript.push(`[${stream}] ${tail}`);
+                if (tail.length > 0) transcript.push(`[${label}] ${tail}`);
             }
-            // Show the last few lines — that's where the dotnet error usually
-            // lives ("Build FAILED.", missing SDK message, etc.). Cap at 12
-            // so the chat error doesn't become a wall of text.
             const tailLines = transcript.slice(-12);
             const tailText =
                 tailLines.length > 0
@@ -308,9 +497,51 @@ function runDotnet(
                     : "";
             reject(
                 new Error(
-                    `dotnet publish exited with code=${code} signal=${signal}${tailText}`,
+                    `${label} exited with code=${code} signal=${signal}${tailText}`,
                 ),
             );
         });
     });
+}
+
+function cmdNotFoundHelp(cmd: string): string {
+    if (cmd === "dotnet") {
+        return "Install the .NET 8 SDK and ensure dotnet is on PATH.";
+    }
+    if (cmd === "powershell.exe") {
+        return "PowerShell is missing — that's deeply unusual on Windows. Check %SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\.";
+    }
+    if (path.basename(cmd).toLowerCase() === "makeappx.exe") {
+        return "Install the Windows 10/11 SDK via the Visual Studio Installer.";
+    }
+    if (path.basename(cmd).toLowerCase() === "signtool.exe") {
+        return "Install the Windows 10/11 SDK via the Visual Studio Installer.";
+    }
+    return "";
+}
+
+// Synchronous PowerShell helper for the cert lookup — we only need the
+// thumbprint string, no streaming. Throws on non-zero exit.
+function runPowerShellSync(script: string): string {
+    const { spawnSync } =
+        require("node:child_process") as typeof import("node:child_process");
+    const result = spawnSync(
+        "powershell.exe",
+        [
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            script,
+        ],
+        { encoding: "utf8" },
+    );
+    if (result.error) throw result.error;
+    if (result.status !== 0) {
+        throw new Error(
+            `PowerShell exited with code ${result.status}: ${result.stderr || result.stdout}`,
+        );
+    }
+    return result.stdout ?? "";
 }
