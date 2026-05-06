@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Side-by-side (fusion) manifest embedded into OsNotificationListener.exe.
+
+  The <msix> element is what links this binary to the registered identity
+  package (AppxManifest.xml in the identity/ subdir). At runtime, when
+  the exe is launched and the identity package is registered with
+  ExternalLocation pointing at the exe's directory, Windows recognizes
+  the exe as part of that package and grants it package identity.
+
+  packageName, publisher, and applicationId MUST match the corresponding
+  fields in identity/AppxManifest.xml.
+-->
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+    <assemblyIdentity version="1.0.0.0" name="OsNotificationListener" />
+    <msix
+        xmlns="urn:schemas-microsoft-com:msix.v1"
+        publisher="CN=dev.typeagent.microsoft.com"
+        packageName="TypeAgent.OsNotificationListener"
+        applicationId="OsNotificationListener" />
+</assembly>

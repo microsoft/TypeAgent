@@ -7,5 +7,11 @@
     <AssemblyName>OsNotificationListener</AssemblyName>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
+    <!-- Embed our side-by-side manifest into the exe. The <msix> element
+         in app.manifest links this binary to the identity package
+         registered against the exe's install dir, granting it package
+         identity at runtime (and access to the userNotificationListener
+         restricted capability via UserNotificationListener.NotificationChanged). -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 </Project>

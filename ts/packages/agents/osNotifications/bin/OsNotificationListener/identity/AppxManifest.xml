@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Identity (sparse) package manifest for the OS notifications helper.
+
+  The exe itself stays at <pkg>/bin/OsNotificationListener/publish/. This
+  manifest only declares identity + capabilities — when registered against
+  the publish/ directory via `Add-AppxPackage -ExternalLocation`, the exe
+  inherits package identity at runtime, which unlocks the
+  userNotificationListener restricted capability and thus
+  UserNotificationListener.NotificationChanged events.
+
+  Publisher MUST match the signing cert's Subject exactly:
+    CN=dev.typeagent.microsoft.com  (TypeAgent dev cert in Key Vault)
+-->
+<Package
+    IgnorableNamespaces="uap uap10 rescap"
+    xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+    xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+    xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+    xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities">
+
+    <Identity
+        Name="TypeAgent.OsNotificationListener"
+        Publisher="CN=dev.typeagent.microsoft.com"
+        Version="1.0.0.0"
+        ProcessorArchitecture="neutral" />
+
+    <Properties>
+        <DisplayName>TypeAgent OS Notification Listener</DisplayName>
+        <PublisherDisplayName>TypeAgent (Dev)</PublisherDisplayName>
+        <Logo>Assets\logo.png</Logo>
+        <uap10:AllowExternalContent>true</uap10:AllowExternalContent>
+    </Properties>
+
+    <Resources>
+        <Resource Language="en-us" />
+    </Resources>
+
+    <Dependencies>
+        <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+    </Dependencies>
+
+    <Capabilities>
+        <!-- runFullTrust + unvirtualizedResources are required for any Win32
+             exe registered as a packaged app. userNotificationListener is
+             the restricted capability that gates UserNotificationListener
+             API access (including the NotificationChanged event). -->
+        <rescap:Capability Name="runFullTrust" />
+        <rescap:Capability Name="unvirtualizedResources" />
+        <rescap:Capability Name="userNotificationListener" />
+    </Capabilities>
+
+    <Applications>
+        <Application
+            Id="OsNotificationListener"
+            Executable="OsNotificationListener.exe"
+            uap10:TrustLevel="mediumIL"
+            uap10:RuntimeBehavior="win32App">
+            <!-- AppListEntry="none" hides this from the Start menu / installed
+                 apps list — it's a background helper, not a user-facing app. -->
+            <uap:VisualElements
+                AppListEntry="none"
+                DisplayName="OS Notification Listener"
+                Description="Forwards Windows action-center notifications to the TypeAgent dispatcher."
+                BackgroundColor="transparent"
+                Square150x150Logo="Assets\logo.png"
+                Square44x44Logo="Assets\logo.png" />
+        </Application>
+    </Applications>
+</Package>

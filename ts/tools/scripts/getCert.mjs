@@ -11,9 +11,15 @@
 //   pull     — fetch cert from Key Vault, generate/store PFX password,
 //              re-encrypt PFX with that password, save to local PFX path.
 //   install  — pull + Import-PfxCertificate into CurrentUser\My and
-//              CurrentUser\TrustedPeople. --trusted-root also installs
-//              into CurrentUser\Root for self-signed cert trust (one-time
-//              UAC/confirm prompt).
+//              Import-Certificate into CurrentUser\TrustedPeople. With
+//              --trusted-root, also installs the public cert into
+//              CurrentUser\Root for self-signed cert trust (one-time UAC
+//              prompt).
+//   renew    — Create a NEW VERSION of the cert in Key Vault with the
+//              right policy for code signing (EKU = 1.3.6.1.5.5.7.3.3).
+//              Use this once if the existing cert was created without
+//              the Code Signing EKU (signtool will reject it otherwise).
+//              Old versions stay in vault history.
 //   status   — show whether cert / password exist in vault, whether PFX is
 //              on disk, and whether the cert is in the relevant local stores.
 //
@@ -236,6 +242,61 @@ function generatePassword() {
 }
 
 // ---------------------------------------------------------------------------
+// Renew: create a new version of the cert with the right policy for code
+// signing. Use once when the original cert was created with the wrong EKU
+// (signtool rejects certs without Code Signing 1.3.6.1.5.5.7.3.3).
+// ---------------------------------------------------------------------------
+
+async function renew() {
+    const credential = await getCredential();
+    const certClient = new CertificateClient(
+        vaultUrl(certVaultName),
+        credential,
+    );
+
+    // Self-signed cert with Code Signing EKU. Subject must remain stable
+    // across versions so the existing identity-package manifest (which
+    // pins Publisher="CN=...") keeps working.
+    const subject = "CN=dev.typeagent.microsoft.com";
+    console.log(
+        `Creating new version of ${chalk.cyanBright(certName)} in vault ${chalk.cyanBright(certVaultName)}…`,
+    );
+    console.log(`  Subject: ${subject}`);
+    console.log(`  EKU:     1.3.6.1.5.5.7.3.3 (Code Signing)`);
+
+    const policy = {
+        issuerName: "Self",
+        subject,
+        keyType: "RSA",
+        keySize: 2048,
+        contentType: "application/x-pkcs12",
+        validityInMonths: 24,
+        // The two flags that fix the EKU: enhancedKeyUsage + (implicitly)
+        // strip the default cert/web auth EKU by setting only what we want.
+        enhancedKeyUsage: ["1.3.6.1.5.5.7.3.3"],
+        keyUsage: ["digitalSignature"],
+        exportable: true,
+        reuseKey: false,
+    };
+
+    const poller = await certClient.beginCreateCertificate(certName, policy);
+    console.log("  (waiting for certificate creation to complete…)");
+    const newCert = await poller.pollUntilDone();
+    console.log(
+        `${chalk.green("Created.")} Thumbprint: ${chalk.cyanBright(
+            Buffer.from(newCert.properties.x509Thumbprint)
+                .toString("hex")
+                .toUpperCase(),
+        )}`,
+    );
+    console.log(
+        chalk.gray(
+            "Re-run `getCert install` to refresh the local PFX + cert stores with the new version.",
+        ),
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Install: pull + import into local cert store.
 // ---------------------------------------------------------------------------
 
@@ -405,6 +466,8 @@ Usage:
 Commands:
   pull        Fetch cert from Key Vault, password-protect locally.
   install     Pull + import into CurrentUser cert stores.
+  renew       Create a new cert version with Code Signing EKU
+              (use once if the cert was created with the wrong EKU).
   status      Show vault / local / cert-store state.
   help        Show this help.
 
@@ -422,7 +485,7 @@ Config (ts/tools/scripts/getKeys.config.json under "cert"):
 `);
 }
 
-const commands = ["pull", "install", "status", "help"];
+const commands = ["pull", "install", "renew", "status", "help"];
 
 (async () => {
     const command = process.argv[2];
@@ -454,6 +517,9 @@ const commands = ["pull", "install", "status", "help"];
             break;
         case "install":
             await install();
+            break;
+        case "renew":
+            await renew();
             break;
         case "status":
             await status();
