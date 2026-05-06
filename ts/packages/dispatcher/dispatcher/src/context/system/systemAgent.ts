@@ -40,6 +40,7 @@ import { getConstructionCommandHandlers } from "./handlers/constructionCommandHa
 import { DebugCommandHandler } from "./handlers/debugCommandHandlers.js";
 import { getSessionCommandHandlers } from "./handlers/sessionCommandHandlers.js";
 import { getConversationCommandHandlers } from "./handlers/conversationCommandHandlers.js";
+import { getCollisionCommandHandlers } from "./handlers/collisionCommandHandlers.js";
 import { getGrammarCommandHandlers } from "./handlers/grammarCommandHandlers.js";
 import { getHistoryCommandHandlers } from "./handlers/historyCommandHandler.js";
 import { TraceCommandHandler } from "./handlers/traceCommandHandler.js";
@@ -66,6 +67,7 @@ export const systemHandlers: CommandHandlerTable = {
         action: new ActionCommandHandler(),
         session: getSessionCommandHandlers(),
         conversation: getConversationCommandHandlers(),
+        collision: getCollisionCommandHandlers(),
         grammar: getGrammarCommandHandlers(),
         history: getHistoryCommandHandlers(),
         memory: getMemoryCommandHandlers(),
