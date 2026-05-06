@@ -279,14 +279,6 @@ export class DisplayLog {
         tokenUsage?: import("@typeagent/dispatcher-types").CompletionUsageStats,
     ): number {
         const seq = this.nextSeq++;
-        let safeMetrics: RequestMetrics | undefined;
-        if (metrics !== undefined) {
-            try {
-                safeMetrics = JSON.parse(JSON.stringify(metrics));
-            } catch {
-                safeMetrics = undefined;
-            }
-        }
         const entry: import("@typeagent/dispatcher-types").CommandResultEntry =
             {
                 type: "command-result",
@@ -294,11 +286,10 @@ export class DisplayLog {
                 timestamp: Date.now(),
                 requestId,
             };
-        if (safeMetrics !== undefined) {
-            entry.metrics = safeMetrics;
+        if (metrics !== undefined) {
+            entry.metrics = metrics;
         }
         if (tokenUsage !== undefined) {
-            // Plain JSON object — no need to deep-clone like metrics.
             entry.tokenUsage = { ...tokenUsage };
         }
         this.entries.push(entry);
