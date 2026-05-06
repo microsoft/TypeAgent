@@ -153,7 +153,13 @@ export function printAligned(header: string[], rows: string[][]): void {
         row.map((c, i) => padStart(c ?? "", widths[i])).join(" | ");
     console.log(fmt(header));
     console.log(sep);
-    for (const row of rows) console.log(fmt(row));
+    for (const row of rows) {
+        if (row.every((c) => c === "---")) {
+            console.log(sep);
+        } else {
+            console.log(fmt(row));
+        }
+    }
     console.log();
 }
 
