@@ -66,16 +66,40 @@ export interface TypeChatJsonTranslatorWithStreaming<T extends object>
         attachments?: CachedImageWithDetails[] | undefined,
         cb?: IncrementalJsonValueCallBack,
         usageCallback?: CompleteUsageStatsCallback,
+        signal?: AbortSignal,
+    ) => Promise<Result<T>>;
+}
+
+/**
+ * Variant of TypeChatJsonTranslator that exposes an optional AbortSignal on
+ * translate() so callers can cancel the in-flight LLM request. The signal is
+ * smuggled to model.complete via a ModelParamSection in the prompt array.
+ */
+export interface TypeChatJsonTranslatorWithSignal<T extends object>
+    extends TypeChatJsonTranslator<T> {
+    translate: (
+        request: string,
+        promptPreamble?: string | PromptSection[],
+        signal?: AbortSignal,
     ) => Promise<Result<T>>;
 }
 
 // This rely on the fact that the prompt preamble based to typechat are copied to the final prompt.
 // Add a internal section so we can pass information from the caller to the model.complete function.
+//
+// TECH DEBT: This is an intentional workaround for TypeChat's limited translate()
+// signature, which only accepts (request, promptPreamble). We smuggle additional
+// parameters (parser, usageCallback, signal) through the prompt array using a
+// synthetic section with role: "model". This works because TypeChat copies prompt
+// sections to the final prompt without inspecting "model" role entries, and our
+// model.complete wrapper strips them before the actual API call. This coupling is
+// fragile and should be replaced if TypeChat adds extensible translate() options.
 type ModelParamSection = {
     role: "model";
     content: {
         parser: IncrementalJsonParser | undefined;
         usageCallback: CompleteUsageStatsCallback | undefined;
+        signal: AbortSignal | undefined;
     };
 };
 
@@ -83,8 +107,13 @@ function addModelParamSection(
     promptPreamble?: string | PromptSection[],
     cb?: IncrementalJsonValueCallBack,
     usageCallback?: CompleteUsageStatsCallback,
+    signal?: AbortSignal,
 ) {
-    if (cb === undefined && usageCallback === undefined) {
+    if (
+        cb === undefined &&
+        usageCallback === undefined &&
+        signal === undefined
+    ) {
         return promptPreamble;
     }
     const prompts: (PromptSection | ModelParamSection)[] =
@@ -103,6 +132,7 @@ function addModelParamSection(
         content: {
             parser,
             usageCallback,
+            signal,
         },
     });
 
@@ -125,6 +155,7 @@ function getModelParams(
     return {
         parser: internal[0].content.parser,
         usageCallback: internal[0].content.usageCallback,
+        signal: internal[0].content.signal,
         actualPrompt: newPrompt as PromptSection[],
     };
 }
@@ -149,17 +180,24 @@ export function enableJsonTranslatorStreaming<T extends object>(
                 promptLogger?.logModelRequest,
             );
         }
-        const { parser, usageCallback, actualPrompt } = modelParams;
+        const { parser, usageCallback, signal, actualPrompt } = modelParams;
         if (parser === undefined) {
             return originalComplete(
                 actualPrompt,
                 usageCallback,
                 undefined,
                 promptLogger?.logModelRequest,
+                signal,
             );
         }
         const chunks = [];
-        const result = await model.completeStream(actualPrompt, usageCallback);
+        const result = await model.completeStream(
+            actualPrompt,
+            usageCallback,
+            undefined,
+            undefined,
+            signal,
+        );
         if (!result.success) {
             return result;
         }
@@ -180,11 +218,12 @@ export function enableJsonTranslatorStreaming<T extends object>(
         attachments?: CachedImageWithDetails[],
         cb?: IncrementalJsonValueCallBack,
         usageCallback?: CompleteUsageStatsCallback,
+        signal?: AbortSignal,
     ) => {
         await attachAttachments(attachments, promptPreamble);
         return originalTranslate(
             request,
-            addModelParamSection(promptPreamble, cb, usageCallback),
+            addModelParamSection(promptPreamble, cb, usageCallback, signal),
         );
     };
 
@@ -236,7 +275,7 @@ export function createJsonTranslatorFromSchemaDef<T extends object>(
     typeName: string,
     schemas: string | TranslatorSchemaDef[],
     options?: JsonTranslatorOptions<T>,
-) {
+): TypeChatJsonTranslatorWithSignal<T> {
     const schema = Array.isArray(schemas)
         ? composeTranslatorSchemas(typeName, schemas)
         : schemas;
@@ -262,7 +301,7 @@ export function createJsonTranslatorWithValidator<T extends object>(
     name: string,
     validator: TypeAgentJsonValidator<T>,
     options?: JsonTranslatorOptions<T>,
-) {
+): TypeChatJsonTranslatorWithSignal<T> {
     const model = ai.createChatModel(
         options?.model,
         {
@@ -281,17 +320,28 @@ export function createJsonTranslatorWithValidator<T extends object>(
     model.complete = async (
         prompt: string | PromptSection[],
         usageCallback?: CompleteUsageStatsCallback,
+        jsonSchemaOverride?: CompletionJsonSchema,
+        logFnOverride?: (msg: any) => void,
+        signal?: AbortSignal,
     ) => {
-        debugPrompt(prompt);
-        const jsonSchema = validator.getJsonSchema?.();
+        // Extract the smuggled signal (and any other model params) from the
+        // prompt sections so callers of translator.translate(request, preamble, signal)
+        // can propagate cancellation all the way down to the HTTP request.
+        const modelParams = getModelParams(prompt);
+        const actualPrompt = modelParams?.actualPrompt ?? prompt;
+        const actualUsageCallback = modelParams?.usageCallback ?? usageCallback;
+        const actualSignal = modelParams?.signal ?? signal;
+        debugPrompt(actualPrompt);
+        const jsonSchema = jsonSchemaOverride ?? validator.getJsonSchema?.();
         if (jsonSchema !== undefined) {
             debugJsonSchema(jsonSchema);
         }
         return originalComplete(
-            prompt,
-            usageCallback,
+            actualPrompt,
+            actualUsageCallback,
             jsonSchema,
-            options?.promptLogger?.logModelRequest,
+            logFnOverride ?? options?.promptLogger?.logModelRequest,
+            actualSignal,
         );
     };
 
@@ -300,13 +350,28 @@ export function createJsonTranslatorWithValidator<T extends object>(
         model.completeStream = async (
             prompt: string | PromptSection[],
             usageCallback?: CompleteUsageStatsCallback,
+            jsonSchemaOverride?: CompletionJsonSchema,
+            logFnOverride?: (msg: any) => void,
+            signal?: AbortSignal,
         ) => {
-            debugPrompt(prompt);
-            const jsonSchema = validator.getJsonSchema?.();
+            const modelParams = getModelParams(prompt);
+            const actualPrompt = modelParams?.actualPrompt ?? prompt;
+            const actualUsageCallback =
+                modelParams?.usageCallback ?? usageCallback;
+            const actualSignal = modelParams?.signal ?? signal;
+            debugPrompt(actualPrompt);
+            const jsonSchema =
+                jsonSchemaOverride ?? validator.getJsonSchema?.();
             if (jsonSchema !== undefined) {
                 debugJsonSchema(jsonSchema);
             }
-            return originalCompleteStream(prompt, usageCallback, jsonSchema);
+            return originalCompleteStream(
+                actualPrompt,
+                actualUsageCallback,
+                jsonSchema,
+                logFnOverride,
+                actualSignal,
+            );
         };
     }
 
@@ -363,23 +428,38 @@ export function createJsonTranslatorWithValidator<T extends object>(
         translator.translate = async (
             request: string,
             promptPreamble?: string | PromptSection[],
+            signal?: AbortSignal,
         ) => {
             patchStreamCallback(promptPreamble);
-            const result = await innerFn(request, promptPreamble);
+            const result = await innerFn(
+                request,
+                addModelParamSection(
+                    promptPreamble,
+                    undefined,
+                    undefined,
+                    signal,
+                ),
+            );
             debugResult(result);
             return result;
         };
-        return translator;
+        return translator as TypeChatJsonTranslatorWithSignal<T>;
     }
 
     translator.translate = async (
         request: string,
         promptPreamble?: string | PromptSection[],
+        signal?: AbortSignal,
     ) => {
         patchStreamCallback(promptPreamble);
         const result = await innerFn(
             request,
-            toPromptSections(instructions, promptPreamble),
+            addModelParamSection(
+                toPromptSections(instructions, promptPreamble),
+                undefined,
+                undefined,
+                signal,
+            ),
         );
         debugResult(result);
         return result;
@@ -394,7 +474,7 @@ export function createJsonTranslatorWithValidator<T extends object>(
             `Based on all available information in our chat history including images previously provided, the following is the latest user request translated into a JSON object with 2 spaces of indentation and no properties with the value undefined:\n`
         );
     };
-    return translator;
+    return translator as TypeChatJsonTranslatorWithSignal<T>;
 }
 
 /**

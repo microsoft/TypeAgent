@@ -56,6 +56,7 @@ import {
     PromptRenderer,
 } from "./debugInterceptor.js";
 import { stopAgentServer } from "@typeagent/agent-server-client";
+import { randomUUID } from "crypto";
 
 // Track current processing state
 let currentSpinner: EnhancedSpinner | null = null;
@@ -236,6 +237,9 @@ let terminalLayout: TerminalLayout | null = null;
 
 // Track the active request for cancellation support
 let currentRequestId: string | undefined;
+// Client-assigned ID for the current request; available immediately before
+// processCommand() returns, so we can cancel before setUserRequest() arrives.
+let currentClientRequestId: string | undefined;
 let isProcessing = false;
 let lastCtrlCTime = 0;
 
@@ -969,7 +973,7 @@ export function createEnhancedClientIO(
                             chalk.gray("[answered by another client]"),
                         );
                     } else {
-                        displayContent(chalk.yellow("Cancelled!"));
+                        displayContent(chalk.yellow("⚠  Cancelled"));
                     }
 
                     if (wasSpinning) {
@@ -1688,7 +1692,7 @@ function initializeEnhancedConsole(
     dispatcherRef?: { current?: Dispatcher },
 ) {
     process.on("SIGINT", () => {
-        if (isProcessing && dispatcherRef?.current && currentRequestId) {
+        if (isProcessing && dispatcherRef?.current) {
             const now = Date.now();
             if (now - lastCtrlCTime < 1000) {
                 // Double Ctrl+C — force exit
@@ -1699,7 +1703,13 @@ function initializeEnhancedConsole(
                 process.exit(0);
             }
             lastCtrlCTime = now;
-            dispatcherRef.current.cancelCommand(currentRequestId);
+            if (currentRequestId) {
+                dispatcherRef.current.cancelCommand(currentRequestId);
+            } else if (currentClientRequestId) {
+                dispatcherRef.current.cancelCommandByClientId(
+                    currentClientRequestId,
+                );
+            }
             return;
         }
         if (currentSpinner) {
@@ -1840,16 +1850,21 @@ function startExecutionKeyListener(
         // stdin encoding may be set to utf8 by questionWithCompletion,
         // so data can be a string. Use charCodeAt for consistent handling.
         const code = typeof data === "string" ? data.charCodeAt(0) : data[0];
-        if (data.length === 1 && code === 0x1b && currentRequestId) {
+        if (data.length === 1 && code === 0x1b) {
             // Escape key — cancel current command
-            dispatcher.cancelCommand(currentRequestId);
+            if (currentRequestId) {
+                dispatcher.cancelCommand(currentRequestId);
+            } else if (isProcessing && currentClientRequestId) {
+                // setUserRequest not yet received — cancel by client-assigned ID
+                dispatcher.cancelCommandByClientId(currentClientRequestId);
+            }
         } else if (data.length === 1 && code === 4) {
             // Ctrl+D — toggle debug panel expand/collapse
             const panel = getDebugPanel();
             if (panel && panel.lineCount > 0) {
                 panel.toggle();
             }
-        } else if (data.length === 1 && code === 3 && currentRequestId) {
+        } else if (data.length === 1 && code === 3) {
             // Ctrl+C during raw mode — cancel or double-press exit
             const now = Date.now();
             if (now - lastCtrlCTime < 1000) {
@@ -1860,7 +1875,11 @@ function startExecutionKeyListener(
                 process.exit(0);
             }
             lastCtrlCTime = now;
-            dispatcher.cancelCommand(currentRequestId);
+            if (currentRequestId) {
+                dispatcher.cancelCommand(currentRequestId);
+            } else if (isProcessing && currentClientRequestId) {
+                dispatcher.cancelCommandByClientId(currentClientRequestId);
+            }
         }
     };
 
@@ -1880,7 +1899,11 @@ function startExecutionKeyListener(
  */
 export async function processCommandsEnhanced<T>(
     interactivePrompt: string | ((context: T) => string | Promise<string>),
-    processCommand: (request: string, context: T) => Promise<any>,
+    processCommand: (
+        request: string,
+        context: T,
+        clientRequestId: string,
+    ) => Promise<any>,
     context: T,
     inputs?: string[],
     completionController?: CompletionController,
@@ -1963,7 +1986,7 @@ export async function processCommandsEnhanced<T>(
         if (isSlashCommand(request)) {
             try {
                 const slashResult = await handleSlashCommand(request, (cmd) =>
-                    processCommand(cmd, context),
+                    processCommand(cmd, context, randomUUID()),
                 );
                 if (slashResult.exit) {
                     break;
@@ -1992,14 +2015,20 @@ export async function processCommandsEnhanced<T>(
 
             isProcessing = true;
             currentRequestId = undefined;
+            currentClientRequestId = randomUUID();
             const stopKeyListener =
                 startExecutionKeyListener(dispatcherForCancel);
             let result: any;
             try {
-                result = await processCommand(request, context);
+                result = await processCommand(
+                    request,
+                    context,
+                    currentClientRequestId,
+                );
             } finally {
                 stopKeyListener();
                 isProcessing = false;
+                currentClientRequestId = undefined;
             }
 
             // Stop live panel rendering but keep the buffer for post-command review
@@ -2017,7 +2046,7 @@ export async function processCommandsEnhanced<T>(
             }
 
             if (result?.cancelled) {
-                stopSpinner("warn", "Cancelled");
+                stopSpinner("warn", " Cancelled");
             } else {
                 stopSpinner("success", "Complete");
             }

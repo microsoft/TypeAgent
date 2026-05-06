@@ -64,5 +64,8 @@ export function createDispatcherRpcClient(
         cancelCommand(...args) {
             return rpc.send("cancelCommand", ...args);
         },
+        cancelCommandByClientId(...args) {
+            return rpc.send("cancelCommandByClientId", ...args);
+        },
     };
 }

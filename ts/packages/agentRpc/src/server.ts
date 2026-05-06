@@ -132,10 +132,14 @@ export function createAgentRpcServer(
             if (agent.executeAction === undefined) {
                 throw new Error("Invalid invocation of executeAction");
             }
-            return agent.executeAction(
-                param.action,
-                getActionContextShim(param),
-            );
+            const shim = getActionContextShim(param);
+            try {
+                return await agent.executeAction(param.action, shim);
+            } finally {
+                if (param.actionContextId !== undefined) {
+                    actionAbortControllers.delete(param.actionContextId);
+                }
+            }
         },
         async validateWildcardMatch(param): Promise<any> {
             if (agent.validateWildcardMatch === undefined) {
@@ -264,6 +268,8 @@ export function createAgentRpcServer(
         },
     };
 
+    const actionAbortControllers = new Map<number, AbortController>();
+
     const agentCallHandlers: AgentCallFunctions = {
         async streamPartialAction(
             param: Partial<ContextParams> & {
@@ -283,6 +289,9 @@ export function createAgentRpcServer(
                 param.delta,
                 getActionContextShim(param),
             );
+        },
+        cancelAction(param: { actionContextId: number }): void {
+            actionAbortControllers.get(param.actionContextId)?.abort();
         },
     };
 
@@ -600,6 +609,18 @@ export function createAgentRpcServer(
                 "Invalid action context param: missing actionContextId",
             );
         }
+        // Reuse the controller already registered for this actionContextId if
+        // one exists. Multiple RPC entry points (executeAction,
+        // streamPartialAction, executeCommand, handleChoice) can build a shim
+        // for the same id, and overwriting the controller would orphan the
+        // signal handed to the in-flight executeAction — cancelAction would
+        // then abort the wrong one. The owning call (executeAction) is
+        // responsible for deleting the entry when it completes.
+        let abortController = actionAbortControllers.get(actionContextId);
+        if (abortController === undefined) {
+            abortController = new AbortController();
+            actionAbortControllers.set(actionContextId, abortController);
+        }
         const sessionContext = getSessionContextShim(param);
         const actionIO: ActionIO = {
             setDisplay(content: DisplayContent): void {
@@ -634,6 +655,9 @@ export function createAgentRpcServer(
             streamingContext: undefined,
             activityContext: param.activityContext,
             isFromReasoningLoop: param.isFromReasoningLoop ?? false,
+            get abortSignal() {
+                return abortController.signal;
+            },
             get sessionContext() {
                 return sessionContext;
             },
@@ -672,6 +696,6 @@ export function createAgentRpcServer(
 
 export type AgentInterfaceFunctionName =
     | keyof AgentInvokeFunctions
-    | keyof AgentCallFunctions;
+    | Exclude<keyof AgentCallFunctions, "cancelAction">;
 
 export type AgentControlMessage = "exit";

@@ -67,6 +67,9 @@ function makeStubDispatcher(overrides: Partial<Dispatcher> = {}): Dispatcher & {
         cancelCommand(...args) {
             calls.push({ method: "cancelCommand", args });
         },
+        cancelCommandByClientId(...args) {
+            calls.push({ method: "cancelCommandByClientId", args });
+        },
         async respondToInteraction(...args) {
             calls.push({ method: "respondToInteraction", args });
         },

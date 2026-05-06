@@ -4,6 +4,7 @@
 import type {
     ActionContext,
     AppAgent,
+    SessionContext,
     TypeAgentAction,
 } from "@typeagent/agent-sdk";
 import {
@@ -27,24 +28,57 @@ import type { UtilityAction } from "./utilitySchema.mjs";
 
 (puppeteer as any).use(StealthPlugin());
 
-export type UtilityAgentContext = {};
+export type UtilityAgentContext = {
+    // Lazily-launched browser instance. Held here so closeAgentContext() can
+    // shut it down when the agent is disabled, preventing orphaned Chrome processes.
+    browserPromise: Promise<Browser> | null;
+};
 
 async function initializeUtilityContext(): Promise<UtilityAgentContext> {
-    getBrowser().catch(() => {}); // pre-warm: launch Chrome in background, ignore startup errors
-    return {};
+    const agentContext: UtilityAgentContext = { browserPromise: null };
+    // Pre-warm: launch Chrome in background, ignore startup errors.
+    getBrowser(agentContext).catch(() => {});
+    return agentContext;
+}
+
+async function closeUtilityContext(
+    context: SessionContext<UtilityAgentContext>,
+): Promise<void> {
+    const agentContext = context.agentContext;
+    if (agentContext.browserPromise !== null) {
+        const browserPromise = agentContext.browserPromise;
+        // Clear immediately so any concurrent getBrowser() call starts fresh.
+        agentContext.browserPromise = null;
+        try {
+            const browser = await browserPromise;
+            await browser.close();
+        } catch {
+            // Browser may have already crashed or been closed — ignore.
+        }
+    }
 }
 
 async function executeUtilityAction(
     action: TypeAgentAction<UtilityAction>,
-    _context: ActionContext<UtilityAgentContext>,
+    context: ActionContext<UtilityAgentContext>,
 ) {
     const a = action as UtilityAction;
+    const signal = context.abortSignal;
+    const agentContext = context.sessionContext.agentContext;
     try {
         switch (a.actionName) {
             case "webSearch":
-                return await handleWebSearch(a.parameters.query);
+                return await handleWebSearch(
+                    a.parameters.query,
+                    agentContext,
+                    signal,
+                );
             case "webFetch":
-                return await handleWebFetch(a.parameters.url);
+                return await handleWebFetch(
+                    a.parameters.url,
+                    agentContext,
+                    signal,
+                );
             case "readFile":
                 return await handleReadFile(a.parameters.path);
             case "writeFile":
@@ -59,6 +93,7 @@ async function executeUtilityAction(
                     a.parameters.parseJson,
                     a.parameters.htmlOutput,
                     a.parameters.model,
+                    signal,
                 );
             case "claudeTask":
                 return await handleClaudeTask(
@@ -66,6 +101,7 @@ async function executeUtilityAction(
                     a.parameters.parseJson,
                     a.parameters.model,
                     a.parameters.maxTurns,
+                    signal,
                 );
             default:
                 return createActionResultFromError(
@@ -73,41 +109,55 @@ async function executeUtilityAction(
                 );
         }
     } catch (error) {
+        if (
+            signal?.aborted ||
+            (error instanceof Error && error.name === "AbortError")
+        ) {
+            throw error; // let the dispatcher handle it as a cancellation
+        }
         return createActionResultFromError(
             `Utility action failed: ${error instanceof Error ? error.message : String(error)}`,
         );
     }
 }
 
-// Singleton browser — launched once, reused across calls
-let _browserPromise: Promise<Browser> | null = null;
+// Singleton browser — launched once per agent context, reused across calls.
+// Owned by UtilityAgentContext so closeAgentContext() can shut it down cleanly.
 
-function getBrowser(): Promise<Browser> {
-    if (!_browserPromise) {
+function getBrowser(agentContext: UtilityAgentContext): Promise<Browser> {
+    if (!agentContext.browserPromise) {
         const p = (puppeteer as any).launch({
             headless: true,
             args: ["--no-sandbox", "--disable-setuid-sandbox"],
         }) as Promise<Browser>;
 
-        _browserPromise = p.then((browser) => {
+        agentContext.browserPromise = p.then((browser) => {
             browser.on("disconnected", () => {
-                _browserPromise = null;
+                agentContext.browserPromise = null;
             });
             return browser;
         });
 
-        _browserPromise.catch(() => {
-            _browserPromise = null;
+        agentContext.browserPromise.catch(() => {
+            agentContext.browserPromise = null;
         });
     }
-    return _browserPromise;
+    return agentContext.browserPromise;
 }
 
 const MAX_PAGE_CHARS = 50_000;
 
-async function getPageContent(url: string): Promise<string> {
-    const browser = await getBrowser();
+async function getPageContent(
+    url: string,
+    agentContext: UtilityAgentContext,
+    signal?: AbortSignal,
+): Promise<string> {
+    const browser = await getBrowser(agentContext);
     const page = await browser.newPage();
+    // Cancel the navigation if the abort signal fires — Puppeteer doesn't
+    // accept AbortSignal directly, so close the page to interrupt goto().
+    const onAbort = () => page.close().catch(() => {});
+    signal?.addEventListener("abort", onAbort, { once: true });
     try {
         await page.goto(url, {
             waitUntil: "networkidle2",
@@ -130,20 +180,29 @@ async function getPageContent(url: string): Promise<string> {
                   `\n\n[Content truncated at ${MAX_PAGE_CHARS} characters]`
             : text;
     } finally {
+        signal?.removeEventListener("abort", onAbort);
         await page.close();
     }
 }
 
-async function handleWebSearch(searchQuery: string) {
+async function handleWebSearch(
+    searchQuery: string,
+    agentContext: UtilityAgentContext,
+    signal?: AbortSignal,
+) {
     const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(searchQuery)}`;
-    const html = await getPageContent(url);
+    const html = await getPageContent(url, agentContext, signal);
     return createActionResultFromTextDisplay(
         `Search results for "${searchQuery}":\n\n${html}`,
         `Search results for "${searchQuery}":\n\n${html}`,
     );
 }
 
-async function handleWebFetch(url: string) {
+async function handleWebFetch(
+    url: string,
+    agentContext: UtilityAgentContext,
+    signal?: AbortSignal,
+) {
     // Normalize bare domain/path (no scheme) to https://
     // Also replace spaces with hyphens in the path (genre slugs etc.)
     const withScheme =
@@ -151,7 +210,7 @@ async function handleWebFetch(url: string) {
             ? url
             : `https://${url}`;
     const normalized = withScheme.replace(/ /g, "-");
-    const html = await getPageContent(normalized);
+    const html = await getPageContent(normalized, agentContext, signal);
     return createActionResultFromTextDisplay(
         `Content from ${normalized}:\n\n${html}`,
         `Content from ${normalized}:\n\n${html}`,
@@ -174,15 +233,29 @@ async function handleLlmTransform(
     parseJson?: boolean,
     htmlOutput?: boolean,
     model: string = "claude-haiku-4-5-20251001",
+    signal?: AbortSignal,
 ) {
+    const abortController = new AbortController();
     const fullPrompt = `${prompt}\n\n${input}`;
-    const queryInstance = query({ prompt: fullPrompt, options: { model } });
+    const queryInstance = query({
+        prompt: fullPrompt,
+        options: { model, abortController },
+    });
+    const onAbort = () => {
+        abortController.abort(signal?.reason);
+        queryInstance.return();
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
     let responseText = "";
-    for await (const message of queryInstance) {
-        if (message.type === "result" && message.subtype === "success") {
-            responseText = (message as any).result || "";
-            break;
+    try {
+        for await (const message of queryInstance) {
+            if (message.type === "result" && message.subtype === "success") {
+                responseText = (message as any).result || "";
+                break;
+            }
         }
+    } finally {
+        signal?.removeEventListener("abort", onAbort);
     }
 
     if (parseJson) {
@@ -225,12 +298,15 @@ async function handleClaudeTask(
     parseJson?: boolean,
     model: string = "claude-haiku-4-5-20251001",
     maxTurns: number = 10,
+    signal?: AbortSignal,
 ) {
+    const abortController = new AbortController();
     const queryInstance = query({
         prompt: goal,
         options: {
             model,
             maxTurns,
+            abortController,
             permissionMode: "acceptEdits",
             canUseTool: async () => ({ behavior: "allow" as const }),
             allowedTools: ["WebSearch", "WebFetch"],
@@ -243,12 +319,21 @@ async function handleClaudeTask(
             },
         },
     });
+    const onAbort = () => {
+        abortController.abort(signal?.reason);
+        queryInstance.return();
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
     let responseText = "";
-    for await (const message of queryInstance) {
-        if (message.type === "result" && message.subtype === "success") {
-            responseText = (message as any).result || "";
-            break;
+    try {
+        for await (const message of queryInstance) {
+            if (message.type === "result" && message.subtype === "success") {
+                responseText = (message as any).result || "";
+                break;
+            }
         }
+    } finally {
+        signal?.removeEventListener("abort", onAbort);
     }
 
     if (parseJson) {
@@ -276,6 +361,7 @@ async function handleClaudeTask(
 export function instantiate(): AppAgent {
     return {
         initializeAgentContext: initializeUtilityContext,
+        closeAgentContext: closeUtilityContext,
         executeAction: executeUtilityAction,
     };
 }

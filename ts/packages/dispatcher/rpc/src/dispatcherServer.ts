@@ -17,6 +17,9 @@ export function createDispatcherRpcServer(
         cancelCommand(...args) {
             dispatcher.cancelCommand(...args);
         },
+        cancelCommandByClientId(...args) {
+            dispatcher.cancelCommandByClientId(...args);
+        },
         cancelInteraction(...args) {
             dispatcher.cancelInteraction(...args);
         },

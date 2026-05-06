@@ -449,6 +449,7 @@ async function translateWithTranslator(
             attachments,
             onProperty,
             usageCallback,
+            systemContext.currentAbortSignal,
         );
 
         if (!response.success) {
@@ -491,7 +492,10 @@ async function findAssistantForRequest(
         systemContext.promptLogger,
     );
 
-    const result = await selectTranslator.translate(request);
+    const result = await selectTranslator.translate(
+        request,
+        systemContext.currentAbortSignal,
+    );
     if (!result.success) {
         displayWarn(`Failed to switch assistant: ${result.message}`, context);
         return undefined;
@@ -515,6 +519,7 @@ async function getNextTranslation(
     context: ActionContext<CommandHandlerContext>,
     forceSearch: boolean,
 ): Promise<NextTranslation | undefined> {
+    context.sessionContext.agentContext.currentAbortSignal?.throwIfAborted();
     let request: string;
     if (isAdditionalActionLookupAction(action)) {
         if (!forceSearch) {
@@ -553,6 +558,7 @@ async function finalizeAction(
     let currentTranslator = translator;
     let currentSchemaName: string = schemaName;
     while (true) {
+        context.sessionContext.agentContext.currentAbortSignal?.throwIfAborted();
         const forceSearch = currentAction !== action; // force search if we have switched once
         const nextTranslation = await getNextTranslation(
             currentAction,
@@ -653,6 +659,7 @@ async function finalizeMultipleActions(
     const requests = action.parameters.requests;
     const actions: ExecutableAction[] = [];
     for (const request of requests) {
+        context.sessionContext.agentContext.currentAbortSignal?.throwIfAborted();
         if (isPendingRequest(request)) {
             actions.push(createPendingRequestAction(request));
             continue;

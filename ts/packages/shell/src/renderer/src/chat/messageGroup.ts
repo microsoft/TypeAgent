@@ -107,10 +107,16 @@ export class MessageGroup {
     private requestCompleted(result: CommandResult | undefined) {
         this.updateMetrics(result?.metrics);
         if (result?.cancelled) {
-            this.addStatusMessage(
-                { message: "⚠ Cancelled", source: "shell" },
-                false,
-            );
+            const lastAgentMessage = this.getLastAgentMessage();
+            if (lastAgentMessage !== undefined) {
+                lastAgentMessage.setMessage("⚠  Cancelled", "shell", "block");
+                this.chatView.updateScroll();
+            } else {
+                this.addStatusMessage(
+                    { message: "⚠  Cancelled", source: "shell" },
+                    false,
+                );
+            }
         } else if (this.statusMessage === undefined) {
             this.addStatusMessage(
                 { message: "Command completed", source: "shell" },
