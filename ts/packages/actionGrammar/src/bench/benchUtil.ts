@@ -116,6 +116,14 @@ export function colorSpeedup(speedup: number): string {
     return text;
 }
 
+/** Color-code a coefficient of variation: red if >25%, yellow if >15%. */
+export function colorCV(cv: number): string {
+    const text = `±${cv.toFixed(0)}%`;
+    if (cv > 25) return chalk.red(text);
+    if (cv > 15) return chalk.yellow(text);
+    return chalk.dim(text);
+}
+
 export function timeMs(fn: () => void, iterations: number): number {
     const start = performance.now();
     for (let i = 0; i < iterations; i++) fn();
@@ -145,7 +153,13 @@ export function printAligned(header: string[], rows: string[][]): void {
         row.map((c, i) => padStart(c ?? "", widths[i])).join(" | ");
     console.log(fmt(header));
     console.log(sep);
-    for (const row of rows) console.log(fmt(row));
+    for (const row of rows) {
+        if (row.every((c) => c === "---")) {
+            console.log(sep);
+        } else {
+            console.log(fmt(row));
+        }
+    }
     console.log();
 }
 

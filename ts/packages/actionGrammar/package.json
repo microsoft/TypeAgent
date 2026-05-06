@@ -30,7 +30,7 @@
   ],
   "scripts": {
     "bench": "npm run bench:synthetic && npm run bench:real && npm run bench:dfa",
-    "bench:dfa": "node ./dist/bench/dfaBenchmark.js",
+    "bench:dfa": "node --expose-gc ./dist/bench/dfaBenchmark.js",
     "bench:real": "node ./dist/bench/grammarOptimizerBenchmark.js",
     "bench:synthetic": "node ./dist/bench/grammarOptimizerSyntheticBenchmark.js",
     "build": "npm run tsc",
