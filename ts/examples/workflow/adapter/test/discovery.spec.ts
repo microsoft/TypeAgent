@@ -54,7 +54,11 @@ describe("discoverWorkflows", () => {
     });
 
     afterEach(() => {
-        rmSync(dir, { recursive: true, force: true });
+        try {
+            rmSync(dir, { recursive: true, force: true });
+        } catch {
+            // Temp dirs will be cleaned by OS eventually.
+        }
     });
 
     it("returns empty result for non-existent directory", async () => {
@@ -180,9 +184,17 @@ describe("discoverWorkflows", () => {
             join(sub, "nested.json"),
             validWorkflowJson("nested", "noop"),
         );
+        const deeper = join(sub, "deeper");
+        mkdirSync(deeper);
+        writeFileSync(
+            join(deeper, "deep.json"),
+            validWorkflowJson("deep", "noop"),
+        );
 
         const result = await discoverWorkflows(dir, taskMap("noop"));
         expect(result.workflows.size).toBe(0);
+        expect(result.workflows.has("nested")).toBe(false);
+        expect(result.workflows.has("deep")).toBe(false);
     });
 
     it("uses workflow name as map key (not filename)", async () => {

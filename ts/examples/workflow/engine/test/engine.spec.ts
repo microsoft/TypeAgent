@@ -789,11 +789,16 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
             });
 
-            // With empty repos, the loop body runs once with index 0,
-            // list.elementAt returns undefined, and fetchRepo may fail.
-            // The exact behavior depends on how list.elementAt handles
-            // out-of-range. For now, just verify it doesn't crash the engine.
+            // With empty repos the loop body attempts index 0 on an
+            // empty list, causing list.elementAt to return undefined and
+            // downstream tasks to fail. The engine should not crash; it
+            // may succeed with degraded output or fail gracefully.
             expect(result).toBeDefined();
+            if (result.success) {
+                expect(result.output).toBeDefined();
+            } else {
+                expect(result.error?.message).toBeDefined();
+            }
         });
     });
 
@@ -1455,7 +1460,10 @@ describe("WorkflowEngine (IR v1)", () => {
                 },
                 async execute(input: any) {
                     const cwd = input.cwd as string;
-                    const repo = cwd.split("/").pop();
+                    const repo = cwd
+                        .replace(/[\\/]+$/, "")
+                        .split(/[\\/]/)
+                        .pop();
                     return {
                         kind: "ok",
                         output: {
@@ -2275,6 +2283,8 @@ describe("WorkflowEngine (IR v1)", () => {
             });
 
             expect(result.success).toBe(true);
+            // The D8 workflow itself contains a retry loop; this verifies
+            // the loop correctly retries when the first http.get fails.
             expect(fetchAttempts).toBe(2);
             const output = result.output as {
                 path: string;
@@ -3134,7 +3144,9 @@ describe("WorkflowEngine (IR v1)", () => {
 
             expect(result.success).toBe(false);
             expect(result.error?.message).toContain("timed out");
-            expect(elapsed).toBeLessThan(2000);
+            // Should abort close to the 50ms timeout, not wait for the
+            // full 5s task. Use 500ms as the upper bound to allow CI slack.
+            expect(elapsed).toBeLessThan(500);
         });
 
         it("does not interfere when task completes before timeout", async () => {

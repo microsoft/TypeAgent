@@ -348,8 +348,12 @@ describe("validateWorkflowIR", () => {
         });
         const result = validateWorkflowIR(ir, taskMap("other"));
         expect(result.valid).toBe(false);
-        // Should report at least: missing entry, unregistered task, broken next
+        // Should report: missing entry, unregistered task, broken next
         expect(result.errors.length).toBeGreaterThanOrEqual(3);
+        const msgs = result.errors.map((e) => e.message);
+        expect(msgs.some((m) => m.includes("missing"))).toBe(true);
+        expect(msgs.some((m) => m.includes("not registered"))).toBe(true);
+        expect(msgs.some((m) => m.includes("ghost"))).toBe(true);
     });
 
     it("includes path in error messages", () => {
