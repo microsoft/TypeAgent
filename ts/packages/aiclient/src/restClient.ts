@@ -213,7 +213,7 @@ export async function* readResponseStream(
             const utf8Decoder = new TextDecoder("utf-8");
             const options = { stream: true };
             while (true) {
-                if (signal?.aborted) throw signal.reason;
+                if (signal?.aborted) throw toAbortError(signal.reason);
                 const { done, value } = await reader.read();
                 if (done) {
                     break;
@@ -350,16 +350,19 @@ export async function fetchWithRetry(
             // wait at least as long as the Retry-After header, plus a back-off factor that increases with each retry
             // plus a random delay to avoid thundering herd
             const signal = options?.signal;
+            if (signal?.aborted) {
+                throw toAbortError(signal.reason);
+            }
             await new Promise<void>((resolve, reject) => {
-                const id = setTimeout(resolve, totalWait);
-                signal?.addEventListener(
-                    "abort",
-                    () => {
-                        clearTimeout(id);
-                        reject(signal.reason);
-                    },
-                    { once: true },
-                );
+                const onAbort = () => {
+                    clearTimeout(id);
+                    reject(toAbortError(signal!.reason));
+                };
+                const id = setTimeout(() => {
+                    signal?.removeEventListener("abort", onAbort);
+                    resolve();
+                }, totalWait);
+                signal?.addEventListener("abort", onAbort, { once: true });
             });
 
             retryCount++;
@@ -509,6 +512,19 @@ function sleep(ms: number): Promise<void> {
 
 function isAbortError(e: unknown): e is Error {
     return e instanceof Error && e.name === "AbortError";
+}
+
+/**
+ * Normalize an arbitrary abort reason into a real AbortError. `AbortSignal.reason`
+ * is whatever was passed to `controller.abort(reason)` — it may be a string,
+ * a plain object, or any non-Error value. Upstream code keys off `name === "AbortError"`,
+ * so coerce anything that isn't already an AbortError into a DOMException.
+ */
+function toAbortError(reason: unknown): Error {
+    if (isAbortError(reason)) {
+        return reason;
+    }
+    return new DOMException("The operation was aborted.", "AbortError");
 }
 
 // ---------------------------------------------------------------------------

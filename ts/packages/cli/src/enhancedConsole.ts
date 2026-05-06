@@ -973,7 +973,7 @@ export function createEnhancedClientIO(
                             chalk.gray("[answered by another client]"),
                         );
                     } else {
-                        displayContent(chalk.yellow("Cancelled!"));
+                        displayContent(chalk.yellow("⚠  Cancelled"));
                     }
 
                     if (wasSpinning) {
@@ -2046,7 +2046,7 @@ export async function processCommandsEnhanced<T>(
             }
 
             if (result?.cancelled) {
-                stopSpinner("warn", "Cancelled");
+                stopSpinner("warn", " Cancelled");
             } else {
                 stopSpinner("success", "Complete");
             }
