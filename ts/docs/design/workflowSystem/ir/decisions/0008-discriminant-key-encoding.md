@@ -24,10 +24,9 @@ Cross-references:
   alternatives).
 - [../../principles/design-principles.md](../../principles/design-principles.md)
   P3 (structural correspondence), P5 (predictability).
-- Scenario evidence:
-  [../validation/b1-wire-apis.md](../validation/b1-wire-apis.md) S1;
-  [../validation/a4-morning-brief.md](../validation/a4-morning-brief.md)
-  (uses `bool.toLabel` as the conversion task).
+- Scenario evidence: summarize-url workflow (S1: boolean exit-code
+  check needs explicit conversion); morning-brief workflow (uses
+  `bool.toLabel` as the conversion task).
 
 ---
 

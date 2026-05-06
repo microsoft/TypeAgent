@@ -24,8 +24,8 @@ Cross-references:
   state), §5.4 step 4 (execution semantics).
 - [../../principles/design-principles.md](../../principles/design-principles.md)
   P2 (traceability), P5 (predictability).
-- Scenario evidence:
-  [../validation/b1-wire-apis.md](../validation/b1-wire-apis.md) S2.
+- Scenario evidence: summarize-url workflow (S2: loop body's final
+  `bind` name needed in `output` at `@exit`).
 
 ---
 

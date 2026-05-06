@@ -6,8 +6,8 @@ Revisit trigger in [../revisit-triggers.md](../revisit-triggers.md) row 10.
 
 Related:
 
-- [../validation/a4-morning-brief.md](../validation/a4-morning-brief.md) §4.1 S1 (no inline literals)
-- [../validation/b1-wire-apis.md](../validation/b1-wire-apis.md) §4.1 S3 (no object construction)
+- Morning-brief scenario friction S1 (no inline literals: 6 constants for single-use values)
+- Summarize-url scenario friction S3 (no object construction: required an `assemble` task)
 - [0001-bound-outputs.md](0001-bound-outputs.md) (this decision is about the _consumer_ side; 0001 was about the _producer_ side)
 - [../ir-v1.md](../ir-v1.md) §1.2 (no sugar), §1.3.1 (minimization), §1.3.2 (uniformity / variance), §3.4 (reference objects)
 
@@ -225,8 +225,9 @@ This is a real cost. It does not appear free.
 
 ### A. Status quo: constants for literals, assembler tasks for objects
 
-The default. Costs documented in [../validation/a4-morning-brief.md](../validation/a4-morning-brief.md)
-§4.1 S1 and [../validation/b1-wire-apis.md](../validation/b1-wire-apis.md) §4.1 S3.
+The default. Costs documented in morning-brief scenario §4.1 S1
+(6 constants for single-use literals) and summarize-url scenario
+§4.1 S3 (assembler task exists only for aggregation).
 
 The most decisive datum is the count: A4 needed 6 constants for
 single-use literals, growing with the number of distinct literals.

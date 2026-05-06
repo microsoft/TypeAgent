@@ -30,4 +30,3 @@ template.
 ## Related
 
 - [../principles/](../principles/) - the principles the IR is derived from.
-- [../archive/](../archive/) - earlier drafts that drove this IR.

@@ -30,10 +30,10 @@ Cross-references:
   K8 (explicit carve-out: templates do not introduce expressions).
 - [../../principles/design-principles.md](../../principles/design-principles.md)
   P1 (tasks as boundary), P5 (surprise surface).
-- Scenario evidence:
-  [../validation/a4-morning-brief.md](../validation/a4-morning-brief.md)
-  S2, G3;
-  [../validation/b1-wire-apis.md](../validation/b1-wire-apis.md) G1.
+- Scenario evidence: morning-brief workflow (S2: verbose
+  int-arithmetic nodes for index stepping; G3: no way to express
+  parallel fetches); summarize-url workflow (G1: no inline string
+  concatenation forces a template task).
 
 ---
 
