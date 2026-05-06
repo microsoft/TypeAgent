@@ -113,15 +113,15 @@ test.describe("Completion Mode Toggle", () => {
 
             // Verify completion remains actionable by keyboard after toggling.
             const input = mainWindow.locator(inputSelector);
-            await mainWindow.keyboard.press("Tab");
-            await mainWindow.keyboard.press("Tab");
+            // In dropdown mode, first Tab selects an item and second Tab accepts it.
+            for (let i = 0; i < 2; i++) {
+                await mainWindow.keyboard.press("Tab");
+            }
             await expect(async () => {
                 const normalizedText = (await input.textContent())
                     ?.replace(/\u00a0/g, " ")
                     .trim();
-                expect(normalizedText).toBeTruthy();
-                expect(normalizedText.length).toBeGreaterThan("@con".length);
-                expect(normalizedText.startsWith("@")).toBe(true);
+                expect(normalizedText ?? "").toMatch(/^@.{4,}$/);
             }).toPass({
                 timeout: 15000,
             });
