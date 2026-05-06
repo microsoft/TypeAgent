@@ -252,6 +252,13 @@ export type CollisionConfig = {
     telemetry: {
         emit: boolean;
         debugLog: boolean;
+        // Tester-set tag for grouping events into an experiment window
+        // (e.g. "E1.2-2026-05-12").  Auto-copied into every emitted
+        // CollisionEvent so Cosmos queries can slice by experiment without
+        // joining other tables.  Empty string is the unset sentinel
+        // (mirrors `priorityOrder` — the dispatcher config layer rejects
+        // `undefined`-valued fields).
+        experimentId: string;
     };
 };
 
@@ -386,6 +393,7 @@ const defaultSessionConfig: SessionConfig = {
         telemetry: {
             emit: false,
             debugLog: true,
+            experimentId: "",
         },
     },
 };

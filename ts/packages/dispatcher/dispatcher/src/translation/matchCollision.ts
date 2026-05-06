@@ -32,9 +32,32 @@ function getPrimary(match: MatchResult): {
     };
 }
 
-function toCandidate(match: MatchResult): CollisionCandidate {
+/**
+ * Build a `CollisionCandidate` from a cache `MatchResult`, propagating
+ * the heuristic counters (matchedCount / nonOptionalCount /
+ * wildcardCharCount) and the agent priority rank.  Telemetry analysis
+ * uses these fields to reconstruct alternative rankings (e.g.
+ * counterfactual `score-rank` outcomes) without re-running the matcher.
+ */
+function toCandidate(
+    match: MatchResult,
+    ctx?: CommandHandlerContext,
+): CollisionCandidate {
     const { schemaName, actionName } = getPrimary(match);
-    return { schemaName, actionName };
+    const candidate: CollisionCandidate = {
+        schemaName,
+        actionName,
+        matchedCount: match.matchedCount,
+        nonOptionalCount: match.nonOptionalCount,
+        wildcardCharCount: match.wildcardCharCount,
+    };
+    if (ctx && schemaName) {
+        candidate.priorityRank = getAgentPriority(
+            getAppAgentName(schemaName),
+            ctx,
+        );
+    }
+    return candidate;
 }
 
 /**
@@ -185,7 +208,7 @@ export function resolveGrammarCollision(
             break;
         }
         case "user-clarify": {
-            const candidates = validated.map(toCandidate);
+            const candidates = validated.map((m) => toCandidate(m, ctx));
             const clarify = buildClarifyMultipleAgentMatches(
                 request,
                 candidates,
@@ -197,6 +220,11 @@ export function resolveGrammarCollision(
                     kind: "grammarMatch",
                     request,
                     candidates,
+                    // first-match would have picked validated[0] (cache's
+                    // heuristic-sorted top); record it for divergence
+                    // analysis even when the user is clarifying.
+                    firstMatchCandidate: toCandidate(validated[0], ctx),
+                    classifier: cfg.grammarMatch.classifier,
                     strategy,
                     elapsedMs: performance.now() - startedAt,
                     note: downgraded ? "downgraded-from-clarify" : undefined,
@@ -216,8 +244,10 @@ export function resolveGrammarCollision(
         {
             kind: "grammarMatch",
             request,
-            candidates: validated.map(toCandidate),
-            chosen: toCandidate(chosen),
+            candidates: validated.map((m) => toCandidate(m, ctx)),
+            chosen: toCandidate(chosen, ctx),
+            firstMatchCandidate: toCandidate(validated[0], ctx),
+            classifier: cfg.grammarMatch.classifier,
             strategy: downgraded ? "downgraded" : strategy,
             elapsedMs: performance.now() - startedAt,
             note: downgraded

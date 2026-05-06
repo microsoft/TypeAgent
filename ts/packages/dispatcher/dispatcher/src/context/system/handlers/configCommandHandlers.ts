@@ -1663,7 +1663,11 @@ function renderCollisionShowHTML(cfg: {
     };
     priorityOrder: string;
     multipleActionBehavior: string;
-    telemetry: { emit: boolean; debugLog: boolean };
+    telemetry: {
+        emit: boolean;
+        debugLog: boolean;
+        experimentId?: string | undefined;
+    };
 }): string {
     const C_MUTED = "#777";
     const C_LABEL = "#555";
@@ -1743,6 +1747,11 @@ function renderCollisionShowHTML(cfg: {
                 <span style="color:${C_MUTED};font-size:11px;text-transform:uppercase;letter-spacing:0.04em;margin-right:6px;">telemetry</span>
                 emit ${statusPill(cfg.telemetry.emit)}
                 debugLog ${statusPill(cfg.telemetry.debugLog)}
+                ${
+                    cfg.telemetry.experimentId
+                        ? `experimentId <code style="background:#e8f0ff;color:#36c;padding:1px 6px;border-radius:3px;">"${escapeHtml(cfg.telemetry.experimentId)}"</code>`
+                        : ""
+                }
             </div>
         </div>`;
 
@@ -1794,9 +1803,16 @@ function renderCollisionShowText(cfg: {
     };
     priorityOrder: string;
     multipleActionBehavior: string;
-    telemetry: { emit: boolean; debugLog: boolean };
+    telemetry: {
+        emit: boolean;
+        debugLog: boolean;
+        experimentId?: string | undefined;
+    };
 }): string[] {
     const onOff = (b: boolean) => (b ? "on" : "off");
+    const expId = cfg.telemetry.experimentId
+        ? ` experimentId="${cfg.telemetry.experimentId}"`
+        : "";
     return [
         "collision config:",
         `  static:       detect=${onOff(cfg.static.detect)} strategy=${cfg.static.strategy}`,
@@ -1805,7 +1821,7 @@ function renderCollisionShowText(cfg: {
         `  fuzzy:        detect=${onOff(cfg.fuzzy.detect)} strategy=${cfg.fuzzy.strategy} static=${onOff(cfg.fuzzy.staticEnabled)} runtime=${onOff(cfg.fuzzy.runtimeEnabled)} scorer=${cfg.fuzzy.scorer} threshold=${cfg.fuzzy.similarityThreshold}`,
         `  priorityOrder: ${cfg.priorityOrder ? `"${cfg.priorityOrder}"` : "(empty)"}`,
         `  multipleActionBehavior: ${cfg.multipleActionBehavior}`,
-        `  telemetry: emit=${onOff(cfg.telemetry.emit)} debugLog=${onOff(cfg.telemetry.debugLog)}`,
+        `  telemetry: emit=${onOff(cfg.telemetry.emit)} debugLog=${onOff(cfg.telemetry.debugLog)}${expId}`,
     ];
 }
 
@@ -1864,6 +1880,50 @@ class CollisionStrategyCommandHandler implements CommandHandler {
         await changeContextConfig(options, context);
         displayResult(
             `${this.point}.strategy = ${strategy}`,
+            context,
+        );
+    }
+}
+
+class CollisionExperimentIdCommandHandler implements CommandHandler {
+    public readonly description =
+        "Set the experimentId tag attached to every emitted collision event. Empty string clears it.";
+    public readonly parameters = {
+        args: {
+            id: {
+                description:
+                    'Experiment tag, e.g. "E1.2-2026-05-12". Empty string "" clears.',
+                type: "string",
+                optional: true,
+            },
+        },
+    } as const;
+
+    public async run(
+        context: ActionContext<CommandHandlerContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ) {
+        const cfg = context.sessionContext.agentContext.session.getConfig()
+            .collision;
+        if (params.args.id === undefined) {
+            const cur = cfg.telemetry.experimentId;
+            displayResult(
+                `experimentId: ${cur ? `"${cur}"` : "(empty)"}`,
+                context,
+            );
+            return;
+        }
+        const id = params.args.id.trim();
+        await changeContextConfig(
+            {
+                collision: {
+                    telemetry: { experimentId: id },
+                },
+            } as SessionOptions,
+            context,
+        );
+        displayResult(
+            `experimentId = ${id ? `"${id}"` : "(empty)"}`,
             context,
         );
     }
@@ -1977,6 +2037,8 @@ function getCollisionCommandHandlers(): CommandHandlerTable {
                             );
                         },
                     ),
+                    experimentId:
+                        new CollisionExperimentIdCommandHandler(),
                 },
             },
         },

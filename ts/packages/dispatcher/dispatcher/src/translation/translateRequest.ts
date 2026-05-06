@@ -396,6 +396,10 @@ function applyLlmSelectStrategy(
                     kind: "llmSelect",
                     request,
                     candidates: cluster,
+                    // first-match would have picked cluster[0] (cluster is
+                    // pre-sorted by embedding score); record it for
+                    // divergence analysis.
+                    firstMatchCandidate: cluster[0],
                     strategy,
                     elapsedMs: performance.now() - startedAt,
                 },
@@ -412,6 +416,7 @@ function applyLlmSelectStrategy(
             request,
             candidates: cluster,
             chosen,
+            firstMatchCandidate: cluster[0],
             strategy,
             elapsedMs: performance.now() - startedAt,
         },
