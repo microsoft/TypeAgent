@@ -60,29 +60,33 @@ const wildcardTrimRegExp = new RegExp(
 // Decimal digits are not part of any word-space script, but two adjacent
 // digit characters must still be separated: "123456" is a different token from
 // "123 456", so concatenating two digit segments without a separator is ambiguous.
-const digitRe = /[0-9]/;
 
 // In auto mode (undefined), a separator is required between two segments only
 // if both adjacent characters belong to a word-boundary script. This allows users
 // to omit separators when the scripts differ (e.g. Latin followed by CJK),
 // while still requiring them when both sides use word spaces
 // (e.g. Latin followed by Latin).
-function isWordBoundaryScript(c: string): boolean {
-    // Fast path: all ASCII characters are handled here without the regex.
-    // ASCII letters are Latin-script (boundary required).
-    // ASCII digits, punctuation, and space return false
-    // (digits are handled separately by digitRe, punctuation/space never need a boundary).
-    const code = c.charCodeAt(0);
-    if (code < 128) {
-        return (code >= 65 && code <= 90) || (code >= 97 && code <= 122); // A-Z, a-z
-    }
-    return wordBoundaryScriptRe.test(c);
-}
 export function needsSeparatorInAutoMode(a: string, b: string): boolean {
-    if (digitRe.test(a) && digitRe.test(b)) {
+    const codeA = a.charCodeAt(0);
+    const codeB = b.charCodeAt(0);
+    // Fast digit check: two adjacent digits require a separator.
+    // Avoids the regex call in digitRe.test() for the common
+    // non-digit path.
+    if (codeA >= 48 && codeA <= 57 && codeB >= 48 && codeB <= 57) {
         return true;
     }
-    return isWordBoundaryScript(a) && isWordBoundaryScript(b);
+    // Inline the isWordBoundaryScript check to avoid redundant
+    // charCodeAt calls (the function also starts with charCodeAt).
+    const wbA =
+        codeA < 128
+            ? (codeA >= 65 && codeA <= 90) || (codeA >= 97 && codeA <= 122)
+            : wordBoundaryScriptRe.test(a);
+    if (!wbA) return false;
+    const wbB =
+        codeB < 128
+            ? (codeB >= 65 && codeB <= 90) || (codeB >= 97 && codeB <= 122)
+            : wordBoundaryScriptRe.test(b);
+    return wbB;
 }
 export function requiresSeparator(
     a: string,
@@ -1279,9 +1283,11 @@ export function tryNextBacktrack(state: MatchState): boolean {
                     state.memoCache.set(frame.rules, inner);
                 }
                 inner.set(key, "failed");
-                debugMatchRaw(
-                    `memoMarker: cached intrinsic failure for rules@${key}`,
-                );
+                if (debugMatchRaw.enabled) {
+                    debugMatchRaw(
+                        `memoMarker: cached intrinsic failure for rules@${key}`,
+                    );
+                }
             } else if (!frame.noSuccessCache && frame.successes.length > 0) {
                 if (inner === undefined) {
                     inner = new Map();
@@ -1293,9 +1299,11 @@ export function tryNextBacktrack(state: MatchState): boolean {
                     // soundness condition documented on
                     // `MemoCache`.
                     inner.set(key, frame.successes);
-                    debugMatchRaw(
-                        `memoMarker: cached ${frame.successes.length} success delta(s) for rules@${key}`,
-                    );
+                    if (debugMatchRaw.enabled) {
+                        debugMatchRaw(
+                            `memoMarker: cached ${frame.successes.length} success delta(s) for rules@${key}`,
+                        );
+                    }
                 }
             }
             state.backtracks = frame.prev;
@@ -1827,10 +1835,10 @@ export function nextNonSeparatorIndex(request: string, index: number) {
         return request.length;
     }
 
-    // Detect trailing separators
+    // Skip leading separators using test() + lastIndex to avoid
+    // allocating the match result array that exec() would produce.
     separatorRegExp.lastIndex = index;
-    const match = separatorRegExp.exec(request);
-    return match === null ? index : index + match[0].length;
+    return separatorRegExp.test(request) ? separatorRegExp.lastIndex : index;
 }
 
 // Sticky-anchored regex for scanning a contiguous run of non-separator
@@ -2040,10 +2048,12 @@ function finalizeMatch(
     if (!finalizeState(state, request)) {
         return false;
     }
-    debugMatch(
-        state,
-        `Matched at end of input. Matched ids: ${JSON.stringify(state.valueIds)}, values: ${JSON.stringify(state.values)}'`,
-    );
+    if (debugMatchRaw.enabled) {
+        debugMatch(
+            state,
+            `Matched at end of input. Matched ids: ${JSON.stringify(state.valueIds)}, values: ${JSON.stringify(state.values)}'`,
+        );
+    }
 
     const wildcardPropertyNames: string[] = [];
     const matchResult: GrammarMatchResult = {
@@ -2198,10 +2208,12 @@ function matchStringPartWithWildcard(
         const wildcardEnd = match.index;
         const newIndex = wildcardEnd + match[0].length;
         if (!isBoundarySatisfied(request, newIndex, state.spacingMode)) {
-            debugMatch(
-                state,
-                `Rejected non-separated matched string '${part.value.join(" ")}' at ${wildcardEnd}`,
-            );
+            if (debugMatchRaw.enabled) {
+                debugMatch(
+                    state,
+                    `Rejected non-separated matched string '${part.value.join(" ")}' at ${wildcardEnd}`,
+                );
+            }
             continue;
         }
 
@@ -2229,16 +2241,20 @@ function matchStringPartWithWildcard(
                 afterWildcard: true,
                 matchedSpacingMode: state.spacingMode,
             };
-            debugMatch(
-                state,
-                `Matched string '${part.value.join(" ")}' at ${wildcardEnd}`,
-            );
+            if (debugMatchRaw.enabled) {
+                debugMatch(
+                    state,
+                    `Matched string '${part.value.join(" ")}' at ${wildcardEnd}`,
+                );
+            }
             return true;
         }
-        debugMatch(
-            state,
-            `Rejected matched string '${part.value.join(" ")}' at ${wildcardEnd} with empty wildcard`,
-        );
+        if (debugMatchRaw.enabled) {
+            debugMatch(
+                state,
+                `Rejected matched string '${part.value.join(" ")}' at ${wildcardEnd} with empty wildcard`,
+            );
+        }
     }
 }
 
@@ -2250,20 +2266,26 @@ function matchStringPartWithoutWildcard(
 ) {
     const curr = state.index;
     regExp.lastIndex = curr;
-    const match = regExp.exec(request);
-    if (match === null) {
+    if (!regExp.test(request)) {
         return false;
     }
-    const newIndex = match.index + match[0].length;
+    const newIndex = regExp.lastIndex;
     if (!isBoundarySatisfied(request, newIndex, state.spacingMode)) {
-        debugMatch(
-            state,
-            `Rejected non-separated matched string ${part.value.join(" ")}`,
-        );
+        if (debugMatchRaw.enabled) {
+            debugMatch(
+                state,
+                `Rejected non-separated matched string ${part.value.join(" ")}`,
+            );
+        }
         return false;
     }
 
-    debugMatch(state, `Matched string ${part.value.join(" ")} to ${newIndex}`);
+    if (debugMatchRaw.enabled) {
+        debugMatch(
+            state,
+            `Matched string ${part.value.join(" ")} to ${newIndex}`,
+        );
+    }
 
     if (requiresValue(state, part)) {
         addValue(state, part.variable, part.value.join(" "));
@@ -2398,10 +2420,12 @@ function getStringPartRegExp(
 }
 
 function matchStringPart(request: string, state: MatchState, part: StringPart) {
-    debugMatch(
-        state,
-        `Checking string expr "${part.value.join(" ")}" with${state.pendingWildcard ? "" : "out"} wildcard`,
-    );
+    if (debugMatchRaw.enabled) {
+        debugMatch(
+            state,
+            `Checking string expr "${part.value.join(" ")}" with${state.pendingWildcard ? "" : "out"} wildcard`,
+        );
+    }
     const leadingIsNone = leadingSpacingMode(state) === "none";
     const entry = getStringPartRegExp(part, state.spacingMode, leadingIsNone);
     return state.pendingWildcard !== undefined
@@ -2439,18 +2463,22 @@ function matchVarNumberPartWithWildcard(
         const newIndex = wildcardEnd + match[0].length;
 
         if (!isBoundarySatisfied(request, newIndex, state.spacingMode)) {
-            debugMatch(
-                state,
-                `Rejected non-separated matched number at ${wildcardEnd}`,
-            );
+            if (debugMatchRaw.enabled) {
+                debugMatch(
+                    state,
+                    `Rejected non-separated matched number at ${wildcardEnd}`,
+                );
+            }
             continue;
         }
 
         if (captureWildcard(state, request, wildcardEnd, newIndex)) {
-            debugMatch(
-                state,
-                `Matched number at ${wildcardEnd} to ${newIndex}`,
-            );
+            if (debugMatchRaw.enabled) {
+                debugMatch(
+                    state,
+                    `Matched number at ${wildcardEnd} to ${newIndex}`,
+                );
+            }
 
             const valueId = addValueId(state, part.variable);
             if (valueId !== undefined) {
@@ -2467,10 +2495,12 @@ function matchVarNumberPartWithWildcard(
             }
             return true;
         }
-        debugMatch(
-            state,
-            `Rejected match number at ${wildcardEnd} to ${newIndex} with empty wildcard`,
-        );
+        if (debugMatchRaw.enabled) {
+            debugMatch(
+                state,
+                `Rejected match number at ${wildcardEnd} to ${newIndex} with empty wildcard`,
+            );
+        }
     }
 }
 
@@ -2502,11 +2532,15 @@ function matchVarNumberPartWithoutWildcard(
     const newIndex = curr + m[0].length;
 
     if (!isBoundarySatisfied(request, newIndex, state.spacingMode)) {
-        debugMatch(state, `Rejected non-separated matched number`);
+        if (debugMatchRaw.enabled) {
+            debugMatch(state, `Rejected non-separated matched number`);
+        }
         return false;
     }
 
-    debugMatch(state, `Matched number to ${newIndex}`);
+    if (debugMatchRaw.enabled) {
+        debugMatch(state, `Matched number to ${newIndex}`);
+    }
 
     const valueId = addValueId(state, part.variable);
     if (valueId !== undefined) {
@@ -2530,10 +2564,12 @@ function matchVarNumberPart(
     state: MatchState,
     part: VarNumberPart,
 ) {
-    debugMatch(
-        state,
-        `Checking number expr at with${state.pendingWildcard ? "" : "out"} wildcard`,
-    );
+    if (debugMatchRaw.enabled) {
+        debugMatch(
+            state,
+            `Checking number expr at with${state.pendingWildcard ? "" : "out"} wildcard`,
+        );
+    }
     return state.pendingWildcard !== undefined
         ? matchVarNumberPartWithWildcard(request, state, part)
         : matchVarNumberPartWithoutWildcard(request, state, part);
@@ -2694,10 +2730,12 @@ export function matchState(state: MatchState, request: string) {
         }
 
         const part = parts[partIndex];
-        debugMatch(
-            state,
-            `matching type=${JSON.stringify(part.type)} pendingWildcard=${JSON.stringify(state.pendingWildcard)}`,
-        );
+        if (debugMatchRaw.enabled) {
+            debugMatch(
+                state,
+                `matching type=${JSON.stringify(part.type)} pendingWildcard=${JSON.stringify(state.pendingWildcard)}`,
+            );
+        }
 
         // Consume the single-use suppression flag exactly once per
         // part iteration: read it into a local and clear immediately.
@@ -2771,10 +2809,12 @@ export function matchState(state: MatchState, request: string) {
                     // continue the loop (without incrementing partIndex)
                     continue;
                 }
-                debugMatch(
-                    state,
-                    `expanding ${part.alternatives.length} rules`,
-                );
+                if (debugMatchRaw.enabled) {
+                    debugMatch(
+                        state,
+                        `expanding ${part.alternatives.length} rules`,
+                    );
+                }
                 const namePrefix = part.name
                     ? `<${part.name}>`
                     : getStateName(state);
@@ -2831,9 +2871,11 @@ function memoLookup(
         ),
     );
     if (cached === "failed") {
-        debugMatchRaw(
-            `memoMarker: cache hit for rules@${state.index}|${childLeadingSpacingMode}|${pendingWildcardActive ? 1 : 0}|${requireValue ? 1 : 0}|${isCarrier ? 1 : 0} - short-circuit`,
-        );
+        if (debugMatchRaw.enabled) {
+            debugMatchRaw(
+                `memoMarker: cache hit for rules@${state.index}|${childLeadingSpacingMode}|${pendingWildcardActive ? 1 : 0}|${requireValue ? 1 : 0}|${isCarrier ? 1 : 0} - short-circuit`,
+            );
+        }
         return "failed";
     }
     if (cached !== undefined && !repeat && !pendingWildcardActive) {
@@ -2870,9 +2912,11 @@ function memoLookup(
         applyDelta(state, cached[0]);
         state.lastReplayBatch = failedSuffixKeys;
         state.lastReplaySuffixKey = suffixStateKey(cached[0]);
-        debugMatchRaw(
-            `memoReplay: cache hit for rules@${state.index - cached[0].endOffset}|${childLeadingSpacingMode}|0 - replaying ${cached.length} delta(s)`,
-        );
+        if (debugMatchRaw.enabled) {
+            debugMatchRaw(
+                `memoReplay: cache hit for rules@${state.index - cached[0].endOffset}|${childLeadingSpacingMode}|0 - replaying ${cached.length} delta(s)`,
+            );
+        }
         return "replayed";
     }
     // Push the memo marker BEFORE the alternation cursor so the
@@ -3338,6 +3382,7 @@ export function initialMatchState(
 }
 
 function debugMatch(state: MatchState, msg: string) {
+    if (!debugMatchRaw.enabled) return;
     if (state.nestedLevel < 0) {
         throw new Error(
             `Internal error: nestedLevel went negative (${state.nestedLevel}) at "${msg}"`,
