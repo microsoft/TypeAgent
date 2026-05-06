@@ -268,10 +268,20 @@ export async function handleBaseEditorActions(
         action.actionName ?? action.fullActionName.split(".").at(-1);
 
     switch (actionName) {
-        case "newFile": {
+        case "newCodeFile":
+        case "newMarkdownFile":
+        case "newTextFile": {
             const fileName: string | undefined = actionData.fileName;
             const content: string = actionData.content ?? "";
-            const language: string | undefined = actionData.language;
+            // For markdown/text the schema declares the language implicitly
+            // via the action name; for newCodeFile the LLM picks from the
+            // CodeFileLanguage enum and passes it through `language`.
+            const language: string | undefined =
+                actionName === "newMarkdownFile"
+                    ? "markdown"
+                    : actionName === "newTextFile"
+                      ? "plaintext"
+                      : actionData.language;
 
             const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
             const hasRealName =
