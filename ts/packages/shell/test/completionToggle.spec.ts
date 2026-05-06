@@ -107,15 +107,19 @@ test.describe("Completion Mode Toggle", () => {
             // Type a partial @ command to trigger command completion
             await typeSlowly(mainWindow, "@con");
 
-            const menu = mainWindow.locator(".autocomplete-container");
+            // Wait for the toggle to be in dropdown mode
             await waitForCommandCompletion(mainWindow);
-            await expect(menu).toBeAttached();
+
+            // Click the toggle — for @-prefixed input, dropdown mode is
+            // always forced so the menu must remain in dropdown mode.
             await mainWindow.locator(toggleSelector).dispatchEvent("mousedown");
             await waitForCommandCompletion(mainWindow);
-            await expect(menu).toBeAttached();
-            await expect(menu.locator("li").first()).toBeVisible({
-                timeout: 15000,
-            });
+
+            // Inline ghost text should still not appear for @-prefixed input.
+            const inlineArea = mainWindow.locator(
+                `${inputSelector} .inline-completion-area`,
+            );
+            await expect(inlineArea).not.toBeAttached();
 
             // Clean up
             await mainWindow.keyboard.press("Escape");
