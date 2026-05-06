@@ -24,72 +24,50 @@ async function typeSlowly(page: Page, text: string) {
 }
 
 /**
- * Waits for the inline completion ghost text to appear.
+ * Waits for command completion to be active (dropdown mode).
  */
-async function waitForInlineCompletion(page: Page, timeout = 10000) {
-    return page
-        .locator(`${inputSelector} .inline-completion-area`)
-        .waitFor({ state: "attached", timeout });
-}
-
-/**
- * Waits for the completion toggle to become visible.
- * The toggle is always a direct child of .chat-input regardless of mode.
- */
-async function waitForToggle(page: Page, timeout = 10000) {
+async function waitForCommandCompletion(page: Page, timeout = 15000) {
     const toggle = page.locator(toggleSelector);
     await toggle.waitFor({ state: "visible", timeout });
+    await expect(toggle).toHaveText("▼", { timeout });
+    await expect(toggle).toHaveClass(/completion-toggle-collapse/, { timeout });
     return toggle;
 }
 
-/**
- * For @-prefixed input, completion starts in dropdown mode.
- * Switch once so the test can validate inline mode behavior.
- */
-async function switchCommandCompletionToInline(page: Page) {
-    const toggle = await waitForToggle(page);
-    await expect(toggle).toHaveText("▼");
-    await page.locator(toggleSelector).dispatchEvent("mousedown");
-    await waitForInlineCompletion(page);
-}
-
 test.describe("Completion Mode Toggle", () => {
-    test("inline completion shows toggle on hover", async () => {
+    test("command completion shows dropdown toggle for @ input", async () => {
         await runTestCallback(async (mainWindow: Page) => {
-            // Type a partial @ command to trigger inline completion
+            // Type a partial @ command to trigger command completion
             await typeSlowly(mainWindow, "@con");
 
-            // @-prefixed input starts in dropdown mode; switch to inline.
-            await switchCommandCompletionToInline(mainWindow);
+            // @-prefixed input remains in dropdown mode.
+            const toggle = await waitForCommandCompletion(mainWindow);
 
             // The toggle should be attached to .chat-input
-            const toggle = mainWindow.locator(toggleSelector);
             await expect(toggle).toBeAttached();
 
-            // Toggle should have the expand arrow (▲)
-            await expect(toggle).toHaveText("▲");
-
-            // Toggle should have the expand class
-            await expect(toggle).toHaveClass(/completion-toggle-expand/);
+            // Inline ghost text should not appear for @-prefixed input.
+            const inlineArea = mainWindow.locator(
+                `${inputSelector} .inline-completion-area`,
+            );
+            await expect(inlineArea).not.toBeAttached();
 
             // Clear input for clean shutdown
             await mainWindow.keyboard.press("Escape");
         });
     });
 
-    test("clicking inline toggle switches to menu mode", async () => {
+    test("clicking command toggle keeps dropdown mode", async () => {
         await runTestCallback(async (mainWindow: Page) => {
-            // Type a partial @ command to trigger inline completion
+            // Type a partial @ command to trigger command completion
             await typeSlowly(mainWindow, "@con");
 
-            // @-prefixed input starts in dropdown mode; switch to inline.
-            await switchCommandCompletionToInline(mainWindow);
+            await waitForCommandCompletion(mainWindow);
 
-            // Click the toggle via dispatchEvent to ensure mousedown fires
+            // Clicking the toggle should keep command completion in dropdown mode.
             await mainWindow.locator(toggleSelector).dispatchEvent("mousedown");
 
-            // The toggle should now show collapse arrow (▼)
-            const toggle = await waitForToggle(mainWindow);
+            const toggle = await waitForCommandCompletion(mainWindow);
             await expect(toggle).toHaveText("▼");
 
             // Inline ghost text should be gone
@@ -103,58 +81,41 @@ test.describe("Completion Mode Toggle", () => {
         });
     });
 
-    test("clicking menu toggle switches back to inline", async () => {
+    test("repeated command toggle clicks keep dropdown mode", async () => {
         await runTestCallback(async (mainWindow: Page) => {
-            // Type a partial @ command to trigger inline completion
+            // Type a partial @ command to trigger command completion
             await typeSlowly(mainWindow, "@con");
 
-            // @-prefixed input starts in dropdown mode; switch to inline.
-            await switchCommandCompletionToInline(mainWindow);
-
-            // Switch to menu mode via toggle
+            await waitForCommandCompletion(mainWindow);
             await mainWindow.locator(toggleSelector).dispatchEvent("mousedown");
-            await waitForToggle(mainWindow);
-
-            // Click the toggle to switch back to inline
             await mainWindow.locator(toggleSelector).dispatchEvent("mousedown");
 
-            // Inline ghost text should reappear
-            await waitForInlineCompletion(mainWindow);
+            await waitForCommandCompletion(mainWindow);
+
+            const inlineArea = mainWindow.locator(
+                `${inputSelector} .inline-completion-area`,
+            );
+            await expect(inlineArea).not.toBeAttached();
 
             // Clean up
             await mainWindow.keyboard.press("Escape");
         });
     });
 
-    test("toggle preserves completion items across mode switch", async () => {
+    test("command completion menu remains available after toggle click", async () => {
         await runTestCallback(async (mainWindow: Page) => {
-            // Type a partial @ command to trigger inline completion
+            // Type a partial @ command to trigger command completion
             await typeSlowly(mainWindow, "@con");
 
-            // @-prefixed input starts in dropdown mode; switch to inline.
-            await switchCommandCompletionToInline(mainWindow);
-
-            // Read the ghost text content before switching
-            const ghostText = await mainWindow
-                .locator(`${inputSelector} .inline-ghost`)
-                .textContent();
-            expect(ghostText).toBeTruthy();
-
-            // Switch to menu mode
+            const menu = mainWindow.locator(".autocomplete-container");
+            await waitForCommandCompletion(mainWindow);
+            await expect(menu).toBeAttached();
             await mainWindow.locator(toggleSelector).dispatchEvent("mousedown");
-            await waitForToggle(mainWindow);
-
-            // Switch back to inline
-            await mainWindow.locator(toggleSelector).dispatchEvent("mousedown");
-
-            // Wait for inline completion to reappear
-            await waitForInlineCompletion(mainWindow);
-
-            // Ghost text should still be present after round-trip
-            const ghostTextAfter = await mainWindow
-                .locator(`${inputSelector} .inline-ghost`)
-                .textContent();
-            expect(ghostTextAfter).toBeTruthy();
+            await waitForCommandCompletion(mainWindow);
+            await expect(menu).toBeAttached();
+            await expect(menu.locator("li").first()).toBeVisible({
+                timeout: 15000,
+            });
 
             // Clean up
             await mainWindow.keyboard.press("Escape");
