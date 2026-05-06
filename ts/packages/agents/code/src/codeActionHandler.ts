@@ -291,6 +291,39 @@ export async function getActiveFileFromVSCode(
     });
 }
 
+async function executeConversationAction(
+    action: AppAction,
+    context: ActionContext<CodeActionContext>,
+) {
+    const params = (action as any).parameters ?? {};
+    context.actionIO.takeAction("vscode-shell-action" as any, {
+        actionName: action.actionName,
+        parameters: params,
+    });
+    switch (action.actionName) {
+        case "newConversation":
+            return createActionResult(
+                params.name
+                    ? `Created new conversation "${params.name}".`
+                    : "Creating a new conversation.",
+            );
+        case "renameConversation":
+            return createActionResult(
+                `Renamed current conversation to "${params.newName}".`,
+            );
+        case "switchConversation":
+            return createActionResult(
+                params.name
+                    ? `Switched to conversation "${params.name}".`
+                    : "Switching conversation.",
+            );
+        default:
+            return createActionResultFromError(
+                `Unknown conversation action: ${action.actionName}`,
+            );
+    }
+}
+
 async function executeCodeAction(
     action: AppAction,
     context: ActionContext<CodeActionContext>,
@@ -300,30 +333,12 @@ async function executeCodeAction(
         return undefined;
     }
 
-    // TypeAgent Shell conversation-management actions are routed back to
-    // the originating extension webview via takeAction (which targets the
-    // requesting client only). They do NOT use the Coda WebSocket bridge.
-    if (
-        action.actionName === "newConversation" ||
-        action.actionName === "renameConversation" ||
-        action.actionName === "switchConversation"
-    ) {
-        const params = (action as any).parameters ?? {};
-        context.actionIO.takeAction("vscode-shell-action" as any, {
-            actionName: action.actionName,
-            parameters: params,
-        });
-        const summary =
-            action.actionName === "newConversation"
-                ? params.name
-                    ? `Created new conversation "${params.name}".`
-                    : "Creating a new conversation."
-                : action.actionName === "renameConversation"
-                  ? `Renamed current conversation to "${params.newName}".`
-                  : params.name
-                    ? `Switched to conversation "${params.name}".`
-                    : "Switching conversation.";
-        return createActionResult(summary);
+    // Conversation-management actions (code-vscode-shell sub-schema) are
+    // handled locally and routed back to the originating extension webview
+    // via takeAction. All other code sub-schemas are forwarded to the Coda
+    // VS Code extension over the WebSocket bridge below.
+    if (action.schemaName === "code-vscode-shell") {
+        return executeConversationAction(action, context);
     }
 
     const agentContext = context.sessionContext.agentContext;
