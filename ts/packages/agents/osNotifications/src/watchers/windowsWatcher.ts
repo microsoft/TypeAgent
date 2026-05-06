@@ -1,8 +1,8 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { existsSync, readdirSync } from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import registerDebug from "debug";
@@ -304,12 +304,10 @@ function findWindowsSdkBin(): {
     ];
     // SDK install layout: <bin>\<version>\x64\{makeappx,signtool}.exe
     // We pick the highest-numbered version directory that has both tools.
-    const fs = require("node:fs") as typeof import("node:fs");
     let best: { dir: string; version: string } | undefined;
     for (const root of kitsRoots) {
         if (!existsSync(root)) continue;
-        for (const versionDir of fs
-            .readdirSync(root)
+        for (const versionDir of readdirSync(root)
             .filter((n: string) => /^10\.\d+\.\d+\.\d+$/.test(n))
             .sort((a: string, b: string) => compareVersions(b, a)) /* desc */) {
             const candidate = path.join(root, versionDir, "x64");
@@ -523,8 +521,6 @@ function cmdNotFoundHelp(cmd: string): string {
 // Synchronous PowerShell helper for the cert lookup — we only need the
 // thumbprint string, no streaming. Throws on non-zero exit.
 function runPowerShellSync(script: string): string {
-    const { spawnSync } =
-        require("node:child_process") as typeof import("node:child_process");
     const result = spawnSync(
         "powershell.exe",
         [
