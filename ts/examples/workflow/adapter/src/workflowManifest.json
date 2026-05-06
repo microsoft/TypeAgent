@@ -1,6 +1,7 @@
 {
   "emojiChar": "🔄",
   "description": "Run automated developer workflows via chat",
+  "defaultEnabled": false,
   "schema": {
     "description": "Workflow agent: each discovered workflow is a distinct action with typed parameters",
     "originalSchemaFile": "./workflowSchema.ts",
