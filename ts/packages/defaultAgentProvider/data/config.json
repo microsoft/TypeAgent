@@ -76,7 +76,8 @@
       "name": "onboarding-agent"
     },
     "osNotifications": {
-      "name": "os-notifications-agent"
+      "name": "os-notifications-agent",
+      "execMode": "dispatcher"
     },
     "timer": {
       "name": "timer-agent"

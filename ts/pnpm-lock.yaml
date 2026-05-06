@@ -2305,9 +2305,18 @@ importers:
         specifier: ^4.4.0
         version: 4.4.3(supports-color@8.1.1)
     devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
       '@types/debug':
         specifier: ^4.1.12
         version: 4.1.12
+      action-grammar-compiler:
+        specifier: workspace:*
+        version: link:../../actionGrammarCompiler
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
       copyfiles:
         specifier: ^2.4.1
         version: 2.4.1

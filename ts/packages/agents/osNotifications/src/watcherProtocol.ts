@@ -17,6 +17,12 @@ export type OsNotificationAdded = {
     body: string;
     // Epoch ms.
     timestamp: number;
+    // True if this event was emitted in response to syncNow(), i.e. it
+    // reflects current action-center state rather than a live "newly
+    // arrived" notification. The agent uses this to bypass the
+    // "drop pre-enable notifications" timestamp gate. Optional / absent
+    // for live events.
+    fromSync?: boolean;
 };
 
 export type OsNotificationRemoved = {
@@ -42,6 +48,13 @@ export type OsNotificationEvent =
 // when the agent is disabled or context is torn down.
 export interface OsNotificationWatcher {
     stop(): Promise<void>;
+
+    // Triggers a one-shot enumeration of currently-present notifications.
+    // Each notification is delivered to the listener as an "added" event with
+    // fromSync: true. Implementations that don't support enumeration (Linux
+    // dbus eavesdrop, macOS, no-op) should throw with a clear, user-facing
+    // message — the agent's command handler surfaces it via actionIO.
+    syncNow(): Promise<void>;
 }
 
 export type OsNotificationListener = (event: OsNotificationEvent) => void;

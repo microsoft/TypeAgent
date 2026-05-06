@@ -10,7 +10,7 @@ The agent is **off by default** and must be enabled explicitly:
 
 ## Lifecycle
 
-Because this agent has no schema, no actions, and no commands, it relies on the `startBackgroundTasks` / `stopBackgroundTasks` lifecycle hooks rather than `updateAgentContext` (which is only called when an action is enabled — see [`appAgentManager.setState()`](../../dispatcher/dispatcher/src/context/appAgentManager.ts) for the reasoning).
+The watcher lives in `startBackgroundTasks` / `stopBackgroundTasks` rather than `updateAgentContext`. Even though the agent now has actions (and so `updateAgentContext` would fire when actions are enabled), the watcher is conceptually a session-scoped background task — exactly what `startBackgroundTasks` is for, per the SDK comment.
 
 ```
 @config agent enable osNotifications
@@ -23,7 +23,7 @@ Because this agent has no schema, no actions, and no commands, it relies on the 
 [ensureSessionContext]
         │
         ▼
-initializeAgentContext()        ← returns empty agent context
+initializeAgentContext()        ← returns empty agent context (with ChoiceManager)
         │
         ▼
 startBackgroundTasks(ctx)       ← watcher starts, attached to ctx.agentContext
@@ -63,6 +63,40 @@ closeAgentContext(ctx)          ← (not implemented — no extra cleanup needed
 ```
 
 The agent uses `sessionContext.notify(...)` with no `persist` flag, so notifications never enter the `displayLog.json`. Lifecycle is bounded by the OS notification center: when the OS reports a notification has been dismissed, the agent emits an `osDismiss` event and the chat bubble is removed from the DOM.
+
+## Diagnostic actions and commands
+
+Two diagnostic operations exposed both as actions (natural-language) and as `@osNotifications` subcommands. Both forms drive the same code path — the action handler is the source of truth, the commands are thin wrappers.
+
+| Action                | NL examples                                                                     | Command                       | What it does                                                                                                                          |
+| --------------------- | ------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `syncOsNotifications` | "sync os notifications", "show my notifications", "replay system notifications" | `@osNotifications sync`       | Re-emits currently-present notifications through the agent pipeline (filters, rate limit, dismiss tracking apply).                    |
+| `testOsNotification`  | "test notification saying hi", "send me a test notification with foo"           | `@osNotifications test "msg"` | Synthesizes an `OsNotificationAdded` event and feeds it into `onWatcherEvent` — verifies the agent end-to-end with no real OS source. |
+
+### Sync and the in-chat build prompt
+
+`syncOsNotifications` is Windows-only (Linux's freedesktop spec doesn't expose existing notifications, only new ones — the action surfaces a clear warning instead).
+
+If the Windows helper exe (`OsNotificationListener.exe`) hasn't been built yet, the action returns an `ActionResultSuccess` with `pendingChoice` (via [`createYesNoChoiceResult`](../../agentSdk/src/helpers/actionHelpers.ts)). The dispatcher renders that as an inline yes/no card in the chat (same machinery the desktop agent's autoShell flow uses, see PR #2294):
+
+```
+Yes  →  buildAndRetrySync()
+        ├─ actionIO.appendDisplay("Building OsNotificationListener…")
+        ├─ buildWindowsHelper({ onProgress: line => actionIO.appendDisplay(line, "temporary") })
+        │     spawns `dotnet publish -c Release -r win-x64 -o <projDir>`, streams stdout/stderr live
+        ├─ stop and re-create the watcher so it picks up the freshly-built exe
+        └─ retry watcher.syncNow() → "Build complete and sync requested." (or specific error)
+
+No   →  "Build skipped — sync cancelled."
+```
+
+The yes/no flow is wired via the standard `ChoiceManager` + `handleChoice` pattern. `ChoiceManager` lives on `AgentContext`; `handleChoice` on the AppAgent delegates lookups back to it.
+
+### Commands sharing the action code path
+
+`@osNotifications sync` and `@osNotifications test` live alongside the actions because some users prefer explicit command invocation over conversational form. Each command builds the corresponding `TypeAgentAction` object, calls the same `performSync` / `performTest` helper the action handler uses, and emits the resulting `ActionResult` through a small `emitActionResultFromCommand` helper.
+
+That helper has one localized hack: command handlers return `Promise<void>` and the dispatcher's command pipeline doesn't process `pendingChoice` natively (action pipeline only — see [`actionHandlers.ts:200-237`](../../dispatcher/dispatcher/src/execute/actionHandlers.ts#L200-L237)). So the helper uses the `_systemContext` escape hatch to manually register the choice route and call `clientIO.requestChoice` for command invocations. The yes/no card looks identical regardless of how the action was invoked. If the SDK ever exposes a public "command can produce pendingChoice" API, drop the helper.
 
 ## Configuration
 
@@ -147,23 +181,27 @@ The freedesktop `Notify` method returns a u32 id, but eavesdropping doesn't see 
 
 - **Prebuilt Windows binary.** The C# helper exe is shipped as source, not a prebuilt binary — every checkout needs `dotnet publish` to make Windows work. CI should produce and bundle the `.exe` alongside the agent's `dist/`.
 
+- **Drop the `_systemContext` escape hatch.** `emitActionResultFromCommand` reaches into `(sessionContext as any)._systemContext` to wire `pendingChoice` for command invocations. If the SDK exposes a public way for command handlers to produce action-result-shaped responses (or to dispatch a follow-up action through the regular pipeline), this helper can become a one-liner.
+
 ## Files
 
 ```
 src/
-  osNotificationsManifest.json     # agent metadata, defaultEnabled: false
-  osNotificationsConfig.ts         # config types + defaults
-  osNotificationsActionHandler.ts  # AppAgent — filter, rate limit, dismiss
-  watcherProtocol.ts               # added / removed / error wire types
+  osNotificationsManifest.json     # agent metadata, defaultEnabled: false, schema ref
+  osNotificationsSchema.ts         # action types: SyncOsNotifications, TestOsNotification
+  osNotificationsSchema.agr        # NL grammar — "sync os notifications" / "test notification …"
+  osNotificationsConfig.ts         # render config + defaults
+  osNotificationsActionHandler.ts  # AppAgent: actions, commands, watcher lifecycle
+  watcherProtocol.ts               # added / removed / error wire types (+ fromSync flag)
   watchers/
     index.ts                       # platform dispatcher
-    windowsWatcher.ts              # spawns the C# helper, parses JSON-per-line
+    windowsWatcher.ts              # spawns the C# helper; buildWindowsHelper(); HelperNotBuiltError
     linuxWatcher.ts                # in-process dbus-next eavesdrop
     noopWatcher.ts                 # macOS / unsupported platforms
 
 bin/
   OsNotificationListener/          # C# helper source (Windows only)
-    Program.cs
+    Program.cs                     # subscribes to UserNotificationListener; reads "sync" stdin commands
     OsNotificationListener.csproj
     README.md
 ```

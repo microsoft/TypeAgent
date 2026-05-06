@@ -32,7 +32,12 @@ export async function startLinuxWatcher(
             kind: "error",
             message: `dbus-next is not installed; install the os-notifications-agent package's optional Linux deps. (${e.message ?? e})`,
         });
-        return { async stop() {} };
+        return {
+            async stop() {},
+            async syncNow() {
+                throw new Error("dbus-next is not installed.");
+            },
+        };
     }
 
     const bus = dbus.sessionBus();
@@ -131,6 +136,15 @@ export async function startLinuxWatcher(
     bus.on("message", onMessage);
 
     return {
+        // D-Bus eavesdropping observes notifications as they cross the bus —
+        // there is no way to enumerate notifications already in the
+        // freedesktop notification daemon. Sync is fundamentally unsupported
+        // on Linux.
+        async syncNow(): Promise<void> {
+            throw new Error(
+                "Sync is not supported on Linux: the freedesktop notification spec does not expose existing notifications, only new ones as they arrive on the bus.",
+            );
+        },
         async stop() {
             bus.off?.("message", onMessage);
             try {

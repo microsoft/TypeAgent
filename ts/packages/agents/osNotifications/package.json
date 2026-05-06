@@ -17,7 +17,9 @@
     "./agent/handlers": "./dist/osNotificationsActionHandler.js"
   },
   "scripts": {
-    "build": "npm run tsc",
+    "agc": "agc -i ./src/osNotificationsSchema.agr -o ./dist/osNotificationsSchema.ag.json",
+    "asc": "asc -i ./src/osNotificationsSchema.ts -o ./dist/osNotificationsSchema.pas.json -t OsNotificationsActions",
+    "build": "concurrently npm:tsc npm:asc npm:agc",
     "postbuild": "copyfiles -u 1 \"bin/**/*\" dist",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
@@ -30,7 +32,10 @@
     "debug": "^4.4.0"
   },
   "devDependencies": {
+    "@typeagent/action-schema-compiler": "workspace:*",
     "@types/debug": "^4.1.12",
+    "action-grammar-compiler": "workspace:*",
+    "concurrently": "^9.1.2",
     "copyfiles": "^2.4.1",
     "prettier": "^3.5.3",
     "rimraf": "^6.0.1",

@@ -100,6 +100,12 @@ body {
     color: #999;
   }
 
+  .chat-message-agent.notification .chat-message-content {
+    background-color: rgba(167, 139, 250, 0.07);
+    border-left-color: #7c3aed;
+    color: #c4b5fd;
+  }
+
   details.reasoning-thinking {
     border-color: #3a3a50;
   }
@@ -753,6 +759,22 @@ body {
   font-size: 0.85em;
   color: #666;
   padding: 2px 0;
+}
+
+/* Notification messages — agent-initiated toast/inline (via
+ * SessionContext.beginAgentThread) and OS-forwarded notifications (via the
+ * osNotifications agent). Rendered with a muted background and a left accent
+ * stripe so they read as system/ephemeral rather than as a normal agent reply.
+ * The class is applied to the message-container div by ChatView's
+ * addNotificationMessage path. */
+.chat-message-agent.notification {
+  .chat-message-content {
+    background-color: rgba(120, 144, 156, 0.08);
+    border-left: 3px solid #78909c;
+    box-shadow: none;
+    font-size: 0.92em;
+    padding: 6px 12px 6px 13px;
+  }
 }
 
 /* Collapsible thinking block for reasoning engine */

@@ -2,22 +2,48 @@
 // Licensed under the MIT License.
 
 import {
+    ActionContext,
+    ActionResult,
+    ActionResultSuccess,
     AppAgent,
     AppAgentEvent,
     DisplayContent,
+    ParsedCommandParams,
     SessionContext,
+    TypeAgentAction,
 } from "@typeagent/agent-sdk";
+import {
+    ChoiceManager,
+    createActionResultFromError,
+    createActionResultFromTextDisplay,
+    createYesNoChoiceResult,
+} from "@typeagent/agent-sdk/helpers/action";
+import {
+    CommandHandler,
+    CommandHandlerNoParams,
+    CommandHandlerTable,
+    getCommandInterface,
+} from "@typeagent/agent-sdk/helpers/command";
 import registerDebug from "debug";
 import {
     OsNotificationsConfig,
     defaultOsNotificationsConfig,
 } from "./osNotificationsConfig.js";
 import {
+    OsNotificationsActions,
+    SyncOsNotificationsAction,
+    TestOsNotificationAction,
+} from "./osNotificationsSchema.js";
+import {
     OsNotificationAdded,
     OsNotificationEvent,
     OsNotificationWatcher,
 } from "./watcherProtocol.js";
 import { startWatcher } from "./watchers/index.js";
+import {
+    HelperNotBuiltError,
+    buildWindowsHelper,
+} from "./watchers/windowsWatcher.js";
 
 const debug = registerDebug("typeagent:osNotifications");
 
@@ -26,6 +52,8 @@ const debug = registerDebug("typeagent:osNotifications");
 // on some platforms; the user asked for "new only", so we anchor on the
 // agent-enable timestamp. Slightly fuzzy to tolerate clock skew.
 const NEW_ONLY_GRACE_MS = 2_000;
+
+const AGENT_NAME = "osNotifications";
 
 type AgentContext = {
     config: OsNotificationsConfig;
@@ -38,10 +66,292 @@ type AgentContext = {
     recentEmits: number[];
     // Latch so we only surface a watcher error to the user once per session.
     errorReported: boolean;
+    // Manages yes/no choice callbacks (build prompt, etc.). Required for the
+    // createYesNoChoiceResult / handleChoice pattern from autoShell.
+    choiceManager: ChoiceManager;
 };
+
+// ============================================================================
+// Action handlers — invoked via natural language ("sync os notifications" /
+// "test notification with X"). Return ActionResult; the dispatcher renders
+// the displayContent and wires pendingChoice into the in-chat yes/no card.
+// ============================================================================
+
+async function executeOsNotificationsAction(
+    action: TypeAgentAction<OsNotificationsActions>,
+    actionContext: ActionContext<AgentContext>,
+): Promise<ActionResult | undefined> {
+    switch (action.actionName) {
+        case "syncOsNotifications":
+            return performSync(action, actionContext);
+        case "testOsNotification":
+            return performTest(action, actionContext);
+    }
+}
+
+async function performSync(
+    _action: SyncOsNotificationsAction,
+    actionContext: ActionContext<AgentContext>,
+): Promise<ActionResult> {
+    const ctx = actionContext.sessionContext.agentContext;
+    if (ctx.watcher === undefined) {
+        return createActionResultFromError(
+            "Watcher is not running. Make sure the agent is enabled.",
+        );
+    }
+    try {
+        await ctx.watcher.syncNow();
+        return createActionResultFromTextDisplay(
+            "Sync requested. Existing notifications will be forwarded as toasts shortly.",
+        );
+    } catch (e: any) {
+        // Windows-specific: helper exe hasn't been built yet. Offer to
+        // build it now via an in-chat yes/no card. Pattern matches the
+        // desktop agent's autoShell build flow (PR #2294).
+        if (e instanceof HelperNotBuiltError) {
+            return offerHelperBuild(actionContext);
+        }
+        return createActionResultFromError(`Sync failed: ${e?.message ?? e}`);
+    }
+}
+
+async function performTest(
+    action: TestOsNotificationAction,
+    actionContext: ActionContext<AgentContext>,
+): Promise<ActionResult> {
+    const sessionContext = actionContext.sessionContext;
+    // Synthesize an OsNotificationAdded event and feed it into the same
+    // path live events use. Unique id + current timestamp so it isn't
+    // dropped by the dedup check or the new-only gate.
+    const synthetic: OsNotificationAdded = {
+        kind: "added",
+        id: `test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        app: action.parameters.app ?? "test",
+        title: action.parameters.title ?? "Test",
+        body: action.parameters.message,
+        timestamp: Date.now(),
+    };
+    onWatcherEvent(synthetic, sessionContext);
+    return createActionResultFromTextDisplay(
+        `Injected test notification "${action.parameters.message}".`,
+    );
+}
+
+// Returns an ActionResultSuccess with pendingChoice — the dispatcher will
+// register the route and call clientIO.requestChoice to render the in-chat
+// yes/no card. handleChoice routes the response back through ChoiceManager
+// to the callback below, which performs the build and retries the sync.
+function offerHelperBuild(
+    actionContext: ActionContext<AgentContext>,
+): ActionResultSuccess {
+    const ctx = actionContext.sessionContext.agentContext;
+    return createYesNoChoiceResult(
+        ctx.choiceManager,
+        "The OS notification helper exe (OsNotificationListener.exe) hasn't been built yet. Build it now? This runs `dotnet publish` and may take 30–60 seconds the first time.",
+        async (confirmed: boolean) => {
+            if (!confirmed) {
+                return createActionResultFromTextDisplay(
+                    "Build skipped — sync cancelled.",
+                );
+            }
+            return buildAndRetrySync(actionContext);
+        },
+    );
+}
+
+// Run after the user chooses "Yes" on the build prompt. Lives in
+// handleChoice's callback path, so it runs in a fresh ActionContext (the
+// dispatcher creates one when responding to a choice). Display goes via
+// actionIO.appendDisplay; the final ActionResult is what the dispatcher
+// renders as the closing message.
+async function buildAndRetrySync(
+    actionContext: ActionContext<AgentContext>,
+): Promise<ActionResult> {
+    const sessionContext = actionContext.sessionContext;
+    const ctx = sessionContext.agentContext;
+
+    actionContext.actionIO.appendDisplay(
+        {
+            type: "text",
+            content: "Building OsNotificationListener…",
+            kind: "status",
+        },
+        "block",
+    );
+    try {
+        await buildWindowsHelper({
+            onProgress: (line) => {
+                actionContext.actionIO.appendDisplay(
+                    { type: "text", content: line, kind: "status" },
+                    "temporary",
+                );
+            },
+        });
+    } catch (e: any) {
+        return createActionResultFromError(`Build failed: ${e?.message ?? e}`);
+    }
+
+    // Restart the watcher so the freshly-built exe is picked up. The current
+    // watcher is the no-helper stub; stopping it is a no-op, but we tear it
+    // down anyway for symmetry with the live-watcher case.
+    debug("rebuilt helper; restarting watcher");
+    const oldWatcher = ctx.watcher;
+    ctx.watcher = undefined;
+    if (oldWatcher) await oldWatcher.stop();
+    ctx.watcher = await startWatcher(process.platform, (evt) =>
+        onWatcherEvent(evt, sessionContext),
+    );
+
+    try {
+        await ctx.watcher.syncNow();
+        return createActionResultFromTextDisplay(
+            "Build complete and sync requested. Existing notifications will be forwarded shortly.",
+        );
+    } catch (e: any) {
+        return createActionResultFromError(
+            `Build succeeded but sync still failed: ${e?.message ?? e}`,
+        );
+    }
+}
+
+// ============================================================================
+// Command handlers — the @osNotifications command surface. Each command
+// constructs the corresponding action object and invokes the same action
+// handler the NL pipeline uses, then emits the result. A small escape-hatch
+// helper wires pendingChoice (which only the action-result pipeline supports
+// natively) so the in-chat yes/no card renders for command invocations too.
+// ============================================================================
+
+class OsNotificationsSyncCommandHandler implements CommandHandlerNoParams {
+    public readonly description =
+        "Re-emit currently-present OS notifications through the agent pipeline. Windows only — Linux/macOS do not expose existing notifications.";
+    public async run(
+        actionContext: ActionContext<AgentContext>,
+    ): Promise<void> {
+        const action: SyncOsNotificationsAction = {
+            actionName: "syncOsNotifications",
+            parameters: {},
+        };
+        const result = await performSync(action, actionContext);
+        emitActionResultFromCommand(actionContext, result);
+    }
+}
+
+class OsNotificationsTestCommandHandler implements CommandHandler {
+    public readonly description =
+        "Inject a synthetic notification through the agent pipeline (filters, rate limit, dismiss tracking) — useful for verifying the agent end-to-end without an OS notification source.";
+    public readonly parameters = {
+        args: {
+            message: {
+                description: "Notification body text",
+                implicitQuotes: true,
+            },
+        },
+        flags: {
+            app: {
+                description:
+                    "App name to attach to the synthetic notification (matched against allowList/blockList)",
+                default: "test",
+            },
+            title: {
+                description: "Notification title (defaults to 'Test')",
+                default: "Test",
+            },
+        },
+    } as const;
+
+    public async run(
+        actionContext: ActionContext<AgentContext>,
+        params: ParsedCommandParams<typeof this.parameters>,
+    ): Promise<void> {
+        const action: TestOsNotificationAction = {
+            actionName: "testOsNotification",
+            parameters: {
+                message: params.args.message,
+                app: params.flags.app as string,
+                title: params.flags.title as string,
+            },
+        };
+        const result = await performTest(action, actionContext);
+        emitActionResultFromCommand(actionContext, result);
+    }
+}
+
+const commandHandlers: CommandHandlerTable = {
+    description: "OS notifications agent commands",
+    commands: {
+        sync: new OsNotificationsSyncCommandHandler(),
+        test: new OsNotificationsTestCommandHandler(),
+    },
+};
+
+// Bridges ActionResult into a command handler's void-returning world. The
+// dispatcher's command pipeline doesn't process ActionResult fields the way
+// its action pipeline does (see actionHandlers.ts:200-237), so we manually
+// (a) push displayContent through actionIO and (b) wire pendingChoice via
+// the systemContext escape hatch so the in-chat yes/no card renders.
+//
+// This is the smallest hack that lets `@osNotifications sync` and the NL
+// "sync notifications" form share one ActionResult-returning code path.
+// If/when the SDK gains a public "command can produce pendingChoice" API,
+// drop this helper.
+function emitActionResultFromCommand(
+    actionContext: ActionContext<AgentContext>,
+    result: ActionResult,
+): void {
+    if ("error" in result && result.error !== undefined) {
+        actionContext.actionIO.appendDisplay(
+            { type: "text", content: result.error, kind: "error" },
+            "block",
+        );
+        return;
+    }
+
+    const success = result as ActionResultSuccess;
+    if (success.displayContent !== undefined) {
+        actionContext.actionIO.appendDisplay(success.displayContent, "block");
+    }
+
+    if (success.pendingChoice !== undefined) {
+        const sysCtx = (actionContext.sessionContext as any)._systemContext;
+        if (
+            sysCtx === undefined ||
+            sysCtx.pendingChoiceRoutes === undefined ||
+            sysCtx.clientIO === undefined ||
+            sysCtx.currentRequestId === undefined
+        ) {
+            actionContext.actionIO.appendDisplay(
+                {
+                    type: "text",
+                    content:
+                        '(In-chat prompt unavailable from this command path; try the natural-language form, e.g. "sync os notifications".)',
+                    kind: "warning",
+                },
+                "block",
+            );
+            return;
+        }
+        const pc = success.pendingChoice;
+        sysCtx.pendingChoiceRoutes.set(pc.choiceId, {
+            agentName: AGENT_NAME,
+            requestId: sysCtx.currentRequestId,
+            actionIndex: 0,
+        });
+        sysCtx.clientIO.requestChoice(
+            sysCtx.currentRequestId,
+            pc.choiceId,
+            pc.type,
+            pc.message,
+            pc.type === "multiChoice" ? pc.choices : [],
+            AGENT_NAME,
+        );
+    }
+}
 
 export function instantiate(): AppAgent {
     return {
+        ...getCommandInterface(commandHandlers),
+
         // Sets up empty agent context. Returns synchronously — no I/O here.
         // Watcher startup is deferred to startBackgroundTasks so the dispatcher
         // can fully populate the SessionContext (in particular, sessionContext
@@ -55,16 +365,15 @@ export function instantiate(): AppAgent {
                 activeIds: new Set(),
                 recentEmits: [],
                 errorReported: false,
+                choiceManager: new ChoiceManager(),
             };
         },
 
         // Spins up the per-OS watcher. Called by appAgentManager once per
         // session, immediately after initializeAgentContext succeeds. This
-        // is the right hook for our use case because the agent has no schema
-        // and no actions, so updateAgentContext(true,...) is never called —
-        // see appAgentManager.setState(). startBackgroundTasks fires from
-        // ensureSessionContext, which the commands enable path triggers via
-        // setState when the user runs @config agent enable osNotifications.
+        // is the right hook for our use case because the agent has no
+        // updateAgentContext path that fires on enable — see
+        // appAgentManager.setState() and our README.
         async startBackgroundTasks(
             context: SessionContext<AgentContext>,
         ): Promise<void> {
@@ -96,11 +405,17 @@ export function instantiate(): AppAgent {
             if (w) await w.stop();
         },
 
-        // Agent has no actions — it's emit-only.
-        async executeAction(): Promise<undefined> {
-            throw new Error(
-                "osNotifications has no actions; this agent only forwards OS-level notifications.",
-            );
+        executeAction: executeOsNotificationsAction,
+
+        // Routes user yes/no responses (from createYesNoChoiceResult) back
+        // to the registered ChoiceManager callback. The callback returns a
+        // new ActionResult which the dispatcher renders. The AppAgent
+        // signature types context as ActionContext<unknown>; cast to our
+        // agent context to access choiceManager.
+        handleChoice: async (choiceId, response, context) => {
+            const ctx = (context as ActionContext<AgentContext>).sessionContext
+                .agentContext;
+            return ctx.choiceManager.handleChoice(choiceId, response);
         },
     };
 }
@@ -143,7 +458,26 @@ function onWatcherEvent(
     }
 
     // kind === "added"
-    if (evt.timestamp + NEW_ONLY_GRACE_MS < ctx.enabledAt) {
+
+    // Dedup before any other check — covers two cases:
+    //   1. The platform watcher re-emits an event we already forwarded
+    //      (e.g. a sync after a notification we already saw live).
+    //   2. A user-triggered sync re-enumerates everything currently in the
+    //      action center while the live subscription is also running.
+    // Without this, multiple bubbles pile up for the same OS notification.
+    if (ctx.activeIds.has(evt.id)) {
+        debug("dedup: already forwarded id=%s", evt.id);
+        return;
+    }
+
+    // The "new only" gate drops events older than the agent-enable timestamp,
+    // since some platforms surface currently-present notifications on
+    // subscription startup. fromSync events are explicit user requests to
+    // see existing notifications, so they bypass this gate.
+    if (
+        evt.fromSync !== true &&
+        evt.timestamp + NEW_ONLY_GRACE_MS < ctx.enabledAt
+    ) {
         debug("dropping pre-enable notification id=%s", evt.id);
         return;
     }

@@ -23,5 +23,8 @@ export function startNoopWatcher(
         async stop() {
             // Nothing to clean up.
         },
+        async syncNow(): Promise<void> {
+            throw new Error(reason);
+        },
     };
 }

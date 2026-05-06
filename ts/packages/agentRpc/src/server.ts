@@ -167,9 +167,7 @@ export function createAgentRpcServer(
         },
         async startBackgroundTasks(param): Promise<void> {
             if (agent.startBackgroundTasks === undefined) {
-                throw new Error(
-                    "Invalid invocation of startBackgroundTasks",
-                );
+                throw new Error("Invalid invocation of startBackgroundTasks");
             }
             await agent.startBackgroundTasks(getSessionContextShim(param));
         },

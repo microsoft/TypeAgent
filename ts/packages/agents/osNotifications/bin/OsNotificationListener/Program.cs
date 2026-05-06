@@ -62,7 +62,7 @@ internal static class Program
                         var n = await sender.GetNotificationAsync(e.UserNotificationId);
                         if (n != null)
                         {
-                            EmitAdded(n);
+                            EmitAdded(n, fromSync: false);
                         }
                     }
                     else if (e.ChangeKind == UserNotificationChangedKind.Removed)
@@ -87,17 +87,41 @@ internal static class Program
         }
 
         // Block until stdin closes (parent process death) or Ctrl-C.
+        // The same stdin loop also drives commands from the parent — currently
+        // just "sync" to enumerate the current action center.
         var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         Console.CancelKeyPress += (_, args) =>
         {
             args.Cancel = true;
             done.TrySetResult(true);
         };
-        _ = Task.Run(() =>
+        _ = Task.Run(async () =>
         {
             try
             {
-                while (Console.In.ReadLine() != null) { /* drain */ }
+                string? line;
+                while ((line = Console.In.ReadLine()) != null)
+                {
+                    var cmd = line.Trim();
+                    if (cmd.Length == 0) continue;
+                    if (cmd == "sync")
+                    {
+                        try
+                        {
+                            var current = await listener.GetNotificationsAsync(NotificationKinds.Toast);
+                            foreach (var n in current)
+                            {
+                                EmitAdded(n, fromSync: true);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Emit(new { kind = "error", message = $"sync failed: {ex.Message}" });
+                        }
+                    }
+                    // Unknown commands are silently ignored — the loop also
+                    // doubles as a parent-process-death detector via stdin EOF.
+                }
             }
             catch { /* ignore */ }
             done.TrySetResult(true);
@@ -107,7 +131,7 @@ internal static class Program
         return 0;
     }
 
-    private static void EmitAdded(UserNotification n)
+    private static void EmitAdded(UserNotification n, bool fromSync)
     {
         string app = n.AppInfo?.DisplayInfo?.DisplayName ?? "";
         string title = "";
@@ -143,7 +167,8 @@ internal static class Program
             app,
             title,
             body,
-            timestamp = ts
+            timestamp = ts,
+            fromSync
         });
     }
 
