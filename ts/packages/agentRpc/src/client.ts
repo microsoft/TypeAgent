@@ -32,6 +32,41 @@ import { ChannelProvider } from "./common.js";
 import { getObjectProperty, uint8ArrayToBase64 } from "@typeagent/common-utils";
 import { AgentInterfaceFunctionName } from "./server.js";
 
+/**
+ * Race a promise against an AbortSignal. If the signal fires before the
+ * promise settles, throw an AbortError immediately (the underlying work
+ * continues in the background — the caller does not wait for it).
+ */
+function raceWithSignal<T>(
+    promise: Promise<T>,
+    signal: AbortSignal | undefined,
+): Promise<T> {
+    if (!signal) {
+        return promise;
+    }
+    return new Promise<T>((resolve, reject) => {
+        const onAbort = () =>
+            reject(
+                signal.reason ??
+                    new DOMException(
+                        "The operation was aborted.",
+                        "AbortError",
+                    ),
+            );
+        signal.addEventListener("abort", onAbort, { once: true });
+        promise.then(
+            (v) => {
+                signal.removeEventListener("abort", onAbort);
+                resolve(v);
+            },
+            (e) => {
+                signal.removeEventListener("abort", onAbort);
+                reject(e);
+            },
+        );
+    });
+}
+
 type ShimContext =
     | {
           contextId: number;
@@ -481,10 +516,13 @@ export async function createAgentRpcClient(
                         });
                     signal.addEventListener("abort", onAbort, { once: true });
                 }
-                return rpc.invoke("executeAction", {
-                    ...contextParams,
-                    action,
-                });
+                return raceWithSignal(
+                    rpc.invoke("executeAction", {
+                        ...contextParams,
+                        action,
+                    }),
+                    signal,
+                );
             });
         },
         validateWildcardMatch(
