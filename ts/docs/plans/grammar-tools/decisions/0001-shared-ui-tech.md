@@ -1,9 +1,7 @@
 # ADR 0001 - Shared UI tech
 
-Status: **Open**. Resolve before: **Track D start** (chunk 04 scaffold,
-step D.0). Until decided, Track D cannot begin and Tracks C / G / H
-that consume the shared bundle remain blocked on D.
-Blocks: 04, and transitively 03 / 05 / 06.
+Status: **Accepted (option A: Lit)** - 2026-05-05.
+Blocks: 04, and transitively 03 / 05 / 06. Decision unblocks Track D.
 
 ## Context
 
@@ -86,10 +84,41 @@ style isolation in Lit interacts with VS Code theme CSS variables).
 
 ## Decision
 
-_Pending._ See "Decision process" above for how we get there.
+**Option A: Lit web components.**
+
+Rationale:
+
+1. **Works in all three hosts with zero adapter code.** Custom elements
+   are a web standard; hosts mount `<grammar-debug-panel>` as a tag.
+   No per-host mount/destroy/update boilerplate.
+2. **Shadow DOM gives style isolation for free.** VS Code webview
+   styles cannot leak into component internals; CSS custom properties
+   (`--vscode-*`) pierce shadow DOM for theming.
+3. **~7 KB runtime.** Smallest option that still provides a reactive
+   component model. Vanilla is 0 KB but lacks declarative re-render
+   for D.1/D.2's frequent interactive updates.
+4. **Repo precedent is "no framework."** Lit is the smallest step up
+   from vanilla while still giving declarative templates, reactive
+   properties, and scoped styles. React (~40 KB) is overkill for 6
+   components and would be the first framework dependency in the repo.
+5. **No JSX toolchain needed.** Tagged template literals (`html\`...\``);
+   Vite handles the build with no additional plugins.
+6. **Future graph viz stays independent.** If NFA/DFA visualization
+   comes later, it can use D3 (already in the repo) or live in a
+   separate package without forcing the rest of the UI into a
+   different framework.
+
+Theming: CSS custom properties following VS Code's `--vscode-*`
+convention. A `theme-defaults.css` ships for browser/shell hosts.
+See chunk 04 theming strategy section.
 
 ## Consequences
 
 Locks the dependency stack of chunk 04 and influences how chunks 03,
 05, and 06 host the bundle. Also locks the theming approach for the
 shared widgets.
+
+- `lit` added as a dependency of `grammar-tools-ui`.
+- Components are custom elements registered with `@customElement()`.
+- Vite library mode bundles the ESM output.
+- No impact on `grammar-tools-core` (remains framework-free, no DOM).

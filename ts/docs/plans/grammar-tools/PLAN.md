@@ -373,7 +373,7 @@ on them.
 
 | ADR  | Topic                                    | Status                                                                    |
 | ---- | ---------------------------------------- | ------------------------------------------------------------------------- |
-| 0001 | Shared UI tech (Lit vs React vs vanilla) | [Open - resolve before Track D](./decisions/0001-shared-ui-tech.md)       |
+| 0001 | Shared UI tech (Lit vs React vs vanilla) | [Accepted (Lit)](./decisions/0001-shared-ui-tech.md)                      |
 | 0002 | Match trace hook strategy                | [Accepted (option A)](./decisions/0002-trace-hook.md)                     |
 | 0003 | Live grammar snapshot transport          | [Accepted](./decisions/0003-grammar-snapshot.md)                          |
 | 0004 | Monaco LSP transport                     | [Open - resolve before Track G](./decisions/0004-monaco-lsp-transport.md) |

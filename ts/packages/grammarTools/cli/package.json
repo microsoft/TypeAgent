@@ -1,0 +1,30 @@
+{
+  "name": "grammar-studio",
+  "version": "0.0.1",
+  "private": true,
+  "description": "CLI tool for grammar exploration, completion preview, and trace visualization.",
+  "homepage": "https://github.com/microsoft/TypeAgent#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/TypeAgent.git",
+    "directory": "ts/packages/grammarTools/cli"
+  },
+  "license": "MIT",
+  "author": "Microsoft",
+  "type": "module",
+  "bin": {
+    "grammar-studio": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "npm run tsc",
+    "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
+    "tsc": "tsc -b"
+  },
+  "dependencies": {
+    "grammar-tools-core": "workspace:*"
+  },
+  "devDependencies": {
+    "rimraf": "^5.0.5",
+    "typescript": "~5.4.5"
+  }
+}

@@ -30,6 +30,7 @@ export { matchGrammar, needsSeparatorInAutoMode } from "./grammarMatcher.js";
 export type {
     GrammarMatchResult,
     GrammarMatchOptions,
+    SeparatorMode,
 } from "./grammarMatcher.js";
 
 export {
