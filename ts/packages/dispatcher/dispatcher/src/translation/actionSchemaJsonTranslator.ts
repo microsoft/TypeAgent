@@ -109,35 +109,9 @@ export function createActionSchemaJsonValidator<T extends TranslatedAction>(
                 if (value.actionName === undefined) {
                     return error("Missing actionName property");
                 }
-                let actionSchema = actionSchemaGroup.actionSchemas.get(
+                const actionSchema = actionSchemaGroup.actionSchemas.get(
                     value.actionName,
                 );
-                if (
-                    actionSchema === undefined &&
-                    typeof value.actionName === "string" &&
-                    value.actionName.includes(".")
-                ) {
-                    // Tolerate LLM hallucinations where the model emits a
-                    // dotted, schema-qualified actionName like
-                    // "code.code-editor.createFile" instead of the bare
-                    // "createFile". Try the last segment as a fallback.
-                    const bareName = value.actionName
-                        .split(".")
-                        .pop() as string;
-                    const candidate =
-                        actionSchemaGroup.actionSchemas.get(bareName);
-                    if (candidate !== undefined) {
-                        value.actionName = bareName;
-                        actionSchema = candidate;
-                    } else {
-                        const injected = injectedSchemaNameMap?.get(bareName);
-                        if (injected !== undefined) {
-                            value.actionName = bareName;
-                            value.schemaName = injected;
-                            return success(value);
-                        }
-                    }
-                }
                 if (actionSchema === undefined) {
                     // Check whether this action belongs to an injected sub-schema
                     // that the LLM saw in its prompt but that lives outside the
@@ -150,12 +124,7 @@ export function createActionSchemaJsonValidator<T extends TranslatedAction>(
                         value.schemaName = injectedSchemaName;
                         return success(value);
                     }
-                    const validNames = Array.from(
-                        actionSchemaGroup.actionSchemas.keys(),
-                    ).slice(0, 30);
-                    return error(
-                        `Unknown action name: "${value.actionName}". The actionName must be one of the action types defined in the schema (e.g. "newFile", "createFile"), NOT a schema/agent name (e.g. "code", "code-editor"). Available actions in this schema include: ${validNames.join(", ")}.`,
-                    );
+                    return error(`Unknown action name: ${value.actionName}`);
                 }
 
                 if (schemaValidate) {
