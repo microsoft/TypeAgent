@@ -203,20 +203,29 @@ export async function getBlob(
  */
 export async function* readResponseStream(
     response: Response,
+    signal?: AbortSignal,
 ): AsyncIterableIterator<string> {
     const reader = response.body?.getReader();
     if (reader) {
-        const utf8Decoder = new TextDecoder("utf-8");
-        const options = { stream: true };
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-                break;
+        const onAbort = () => reader.cancel();
+        signal?.addEventListener("abort", onAbort, { once: true });
+        try {
+            const utf8Decoder = new TextDecoder("utf-8");
+            const options = { stream: true };
+            while (true) {
+                if (signal?.aborted) throw signal.reason;
+                const { done, value } = await reader.read();
+                if (done) {
+                    break;
+                }
+                const text = utf8Decoder.decode(value, options);
+                if (text.length > 0) {
+                    yield text;
+                }
             }
-            const text = utf8Decoder.decode(value, options);
-            if (text.length > 0) {
-                yield text;
-            }
+        } finally {
+            signal?.removeEventListener("abort", onAbort);
+            reader.cancel();
         }
     }
 }

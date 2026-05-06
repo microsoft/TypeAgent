@@ -11,9 +11,11 @@ export type ServerEvent = {
 
 export async function* readServerEventStream(
     response: Response,
+    signal?: AbortSignal,
 ): AsyncIterableIterator<ServerEvent> {
-    const textStream = readResponseStream(response);
+    const textStream = readResponseStream(response, signal);
     for await (const message of readMessages(textStream)) {
+        if (signal?.aborted) break;
         yield readEvent(message);
     }
 }

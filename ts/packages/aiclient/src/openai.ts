@@ -661,7 +661,11 @@ function createAzureOpenAIChatModel(
         return {
             success: true,
             data: (async function* () {
-                for await (const evt of readServerEventStream(result.data)) {
+                for await (const evt of readServerEventStream(
+                    result.data,
+                    signal,
+                )) {
+                    if (signal?.aborted) break;
                     if (evt.data === "[DONE]") {
                         try {
                             if (settings.enableModelRequestLogging && logFn) {
