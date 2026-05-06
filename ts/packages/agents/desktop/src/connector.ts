@@ -4,7 +4,8 @@
 import child_process from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ProgramNameIndex, loadProgramNameIndex } from "./programNameIndex.js";
-import { Storage } from "@typeagent/agent-sdk";
+import { ActionContext, Storage } from "@typeagent/agent-sdk";
+import { ChoiceManager } from "@typeagent/agent-sdk/helpers/action";
 import registerDebug from "debug";
 import { AllDesktopActions } from "./allActionsSchema.js";
 import fs from "node:fs";
@@ -23,6 +24,8 @@ export type DesktopActionContext = {
     backupProgramNameTable: string[] | undefined;
     refreshPromise: Promise<void> | undefined;
     abortRefresh: AbortController | undefined;
+    choiceManager: ChoiceManager;
+    pendingChoiceContext: ActionContext<DesktopActionContext> | null;
 };
 
 interface ActionResult {
@@ -40,13 +43,83 @@ const pendingRequests = new Map<
 // Buffer for incomplete lines from stdout
 let stdoutBuffer = "";
 
-const autoShellPath = resolveAutoShellPath();
+const AUTOSHELL_SLN_RELATIVE = "dotnet/autoShell/autoShell.sln";
 
-function resolveAutoShellPath(): URL {
+function resolveAutoShellSln(): string {
+    return path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "../../../../..",
+        AUTOSHELL_SLN_RELATIVE,
+    );
+}
+
+/**
+ * Thrown when the autoShell.exe helper is missing. Callers can catch this
+ * to offer to build the helper interactively instead of surfacing a raw
+ * spawn error.
+ */
+export class AutoShellMissingError extends Error {
+    readonly binaryPath: string;
+    readonly slnPath: string;
+
+    constructor(binaryPath: string, slnPath: string) {
+        super(
+            `autoShell binary not found at ${binaryPath}. ` +
+                `Build it via: dotnet build -c Release ${slnPath}`,
+        );
+        this.name = "AutoShellMissingError";
+        this.binaryPath = binaryPath;
+        this.slnPath = slnPath;
+    }
+}
+
+/**
+ * Builds the autoShell .NET helper via `dotnet build -c Release`.
+ * Resolves on success; rejects with stderr output on failure.
+ */
+export async function buildAutoShell(
+    opts: { onProgress?: (line: string) => void } = {},
+): Promise<void> {
+    const slnPath = resolveAutoShellSln();
+    if (!fs.existsSync(slnPath)) {
+        throw new Error(`autoShell solution not found at ${slnPath}`);
+    }
+    return new Promise((resolve, reject) => {
+        const child = child_process.spawn(
+            "dotnet",
+            ["build", "-c", "Release", slnPath],
+            {
+                stdio: ["ignore", "pipe", "pipe"],
+                windowsHide: true,
+            },
+        );
+        const stderrChunks: string[] = [];
+        child.stdout!.on("data", (data: Buffer) => {
+            opts.onProgress?.(data.toString());
+        });
+        child.stderr!.on("data", (data: Buffer) => {
+            stderrChunks.push(data.toString());
+        });
+        child.on("error", reject);
+        child.on("exit", (code) => {
+            if (code === 0) {
+                resolve();
+            } else {
+                reject(
+                    new Error(
+                        `dotnet build exited with code ${code}: ${stderrChunks.join("").trim()}`,
+                    ),
+                );
+            }
+        });
+    });
+}
+
+function resolveAutoShellPath(): string {
     // Allow override via environment variable
     const envPath = process.env.AUTOSHELL_PATH;
     if (envPath) {
-        return new URL(`file://${path.resolve(envPath)}`);
+        return path.resolve(envPath);
     }
 
     // Search relative to the compiled JS output (dist/)
@@ -57,15 +130,13 @@ function resolveAutoShellPath(): URL {
     for (const config of ["Debug", "Release"]) {
         const candidate = path.join(baseDir, config, "autoShell.exe");
         if (fs.existsSync(candidate)) {
-            return new URL(`file://${candidate}`);
+            return candidate;
         }
     }
 
-    // Fallback to Debug path (will fail at spawn time with a clear error)
-    return new URL(
-        "../../../../../dotnet/autoShell/bin/Debug/autoShell.exe",
-        import.meta.url,
-    );
+    // No build present — return the Debug path so callers can report it via
+    // AutoShellMissingError without performing another fs lookup.
+    return path.join(baseDir, "Debug", "autoShell.exe");
 }
 
 // Load known action names from .pas.json schema files for runtime validation.
@@ -110,8 +181,12 @@ function loadKnownActionNames(): Set<string> {
 }
 
 async function spawnAutomationProcess() {
+    const binaryPath = resolveAutoShellPath();
+    if (!fs.existsSync(binaryPath)) {
+        throw new AutoShellMissingError(binaryPath, resolveAutoShellSln());
+    }
     return new Promise<child_process.ChildProcess>((resolve, reject) => {
-        const child = child_process.spawn(fileURLToPath(autoShellPath));
+        const child = child_process.spawn(binaryPath);
         child.on("error", (err) => {
             reject(err);
         });
@@ -500,7 +575,17 @@ export async function setupDesktopActionContext(
     agentContext: DesktopActionContext,
     storage?: Storage,
 ) {
-    await ensureAutomationProcess(agentContext);
+    try {
+        await ensureAutomationProcess(agentContext);
+    } catch (e) {
+        if (e instanceof AutoShellMissingError) {
+            // Defer reporting — the next executeAction will surface the
+            // typed error and prompt the user to build the helper.
+            debug(`autoShell missing during setup: ${e.message}`);
+            return;
+        }
+        throw e;
+    }
     return ensureProgramNameIndex(agentContext, storage);
 }
 
@@ -532,7 +617,17 @@ async function refreshInstalledApps(
     agentContext.abortRefresh = abortRefresh;
     debug("Refreshing installed apps");
 
-    const desktopProcess = await ensureAutomationProcess(agentContext);
+    let desktopProcess: child_process.ChildProcess;
+    try {
+        desktopProcess = await ensureAutomationProcess(agentContext);
+    } catch (e) {
+        if (e instanceof AutoShellMissingError) {
+            debug(`autoShell missing during refresh: ${e.message}`);
+            agentContext.abortRefresh = undefined;
+            return;
+        }
+        throw e;
+    }
     const programs = await fetchInstalledApps(desktopProcess);
     if (programs) {
         for (const element of programs) {

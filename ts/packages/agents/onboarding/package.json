@@ -14,7 +14,8 @@
   "type": "module",
   "exports": {
     "./agent/manifest": "./src/onboardingManifest.json",
-    "./agent/handlers": "./dist/onboardingActionHandler.js"
+    "./agent/handlers": "./dist/onboardingActionHandler.js",
+    "./uiCapture": "./dist/uiCapture/index.js"
   },
   "scripts": {
     "agc:discovery": "agc -i ./src/discovery/discoverySchema.agr -o ./dist/discoverySchema.ag.json",
@@ -34,7 +35,7 @@
     "asc:schemagen": "asc -i ./src/schemaGen/schemaGenSchema.ts -o ./dist/schemaGenSchema.pas.json -t SchemaGenActions",
     "asc:testing": "asc -i ./src/testing/testingSchema.ts -o ./dist/testingSchema.pas.json -t TestingActions",
     "build": "concurrently npm:tsc npm:asc:* npm:agc:*",
-    "postbuild": "copyfiles -u 1 \"src/**/discoveryLlmSchema.ts\" dist",
+    "postbuild": "copyfiles -u 1 \"src/**/discoveryLlmSchema.ts\" \"src/**/exploreLlmSchema.ts\" \"src/**/synthesisLlmSchema.ts\" \"src/**/reconLlmSchema.ts\" \"src/**/iterativeReconLlmSchema.ts\" dist",
     "clean": "rimraf --glob dist *.tsbuildinfo *.done.build.log",
     "prettier": "prettier --check . --ignore-path ../../../.prettierignore",
     "prettier:fix": "prettier --write . --ignore-path ../../../.prettierignore",
