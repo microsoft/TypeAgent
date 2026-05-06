@@ -268,4 +268,14 @@ export interface Dispatcher {
      * @param requestId the requestId string of the command to cancel
      */
     cancelCommand(requestId: string): void;
+
+    /**
+     * Cancel an in-flight command using the client-assigned id that was passed
+     * as the second argument to processCommand().  This is the early-cancel
+     * path: the client can call this immediately after processCommand() returns
+     * without waiting for setUserRequest() to deliver the server-assigned UUID.
+     *
+     * @param clientRequestId the same value passed to processCommand() as clientRequestId
+     */
+    cancelCommandByClientId(clientRequestId: unknown): void;
 }

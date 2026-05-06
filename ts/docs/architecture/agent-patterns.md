@@ -54,10 +54,23 @@ export function instantiate(): AppAgent {
 }
 ```
 
+Agents that allocate expensive resources (browser instances, network
+connections, child processes) on `initializeAgentContext` should also implement
+`closeAgentContext` to release them when the agent is disabled or the session
+ends. The dispatcher calls `closeAgentContext` automatically; omitting it leaks
+the resource for the lifetime of the process.
+
+```typescript
+// Example: agent that holds a long-lived resource
+export function instantiate(): AppAgent {
+  return { initializeAgentContext, closeAgentContext, executeAction };
+}
+```
+
+**Examples:** `weather`, `photo`, `list`, `image`, `video`, `utility`
+
 **When to choose:** any integration with a well-defined, enumerable set of
 actions — REST APIs, CLI tools, file operations, data queries.
-
-**Examples:** `weather`, `photo`, `list`, `image`, `video`
 
 ---
 

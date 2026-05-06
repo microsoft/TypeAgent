@@ -260,6 +260,7 @@ export type TypeAgentTranslator<T = TranslatedAction> = {
         attachments?: CachedImageWithDetails[],
         cb?: IncrementalJsonValueCallBack,
         usageCallback?: CompleteUsageStatsCallback,
+        signal?: AbortSignal,
     ): Promise<Result<T>>;
     checkTranslate(request: string): Promise<Result<T>>;
     getSchemaName(actionName: string): string | undefined;
@@ -442,6 +443,7 @@ function createTypeAgentTranslator<
             attachments?: CachedImageWithDetails[],
             cb?: IncrementalJsonValueCallBack,
             usageCallback?: CompleteUsageStatsCallback,
+            signal?: AbortSignal,
         ) => {
             // Expand the request prompt up front with the history and attachments
             const requestPrompt = createTypeAgentRequestPrompt(
@@ -460,6 +462,7 @@ function createTypeAgentTranslator<
                 attachments,
                 cb,
                 usageCallback,
+                signal,
             );
         },
         // No streaming, no history, no attachments.

@@ -2619,15 +2619,24 @@ importers:
         specifier: ^2.11.2
         version: 2.11.2(puppeteer-extra@3.3.6(puppeteer-core@24.37.5)(puppeteer@24.37.5(typescript@5.4.5)))
     devDependencies:
+      '@jest/globals':
+        specifier: ^29.7.0
+        version: 29.7.0
       '@typeagent/action-schema-compiler':
         specifier: workspace:*
         version: link:../../actionSchemaCompiler
+      '@types/jest':
+        specifier: ^29.5.7
+        version: 29.5.14
       action-grammar-compiler:
         specifier: workspace:*
         version: link:../../actionGrammarCompiler
       concurrently:
         specifier: ^9.1.2
         version: 9.1.2
+      jest:
+        specifier: ^29.7.0
+        version: 29.7.0(@types/node@25.5.2)(ts-node@10.9.2(@types/node@25.5.2)(typescript@5.4.5))
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
@@ -2743,6 +2752,28 @@ importers:
       prettier:
         specifier: ^3.5.3
         version: 3.5.3
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.0.1
+      typescript:
+        specifier: ~5.4.5
+        version: 5.4.5
+
+  packages/agents/windowsClock:
+    dependencies:
+      '@typeagent/agent-sdk':
+        specifier: workspace:*
+        version: link:../../agentSdk
+      onboarding-agent:
+        specifier: workspace:*
+        version: link:../onboarding
+    devDependencies:
+      '@typeagent/action-schema-compiler':
+        specifier: workspace:*
+        version: link:../../actionSchemaCompiler
+      concurrently:
+        specifier: ^9.1.2
+        version: 9.1.2
       rimraf:
         specifier: ^6.0.1
         version: 6.0.1
@@ -3507,6 +3538,9 @@ importers:
       weather-agent:
         specifier: workspace:*
         version: link:../agents/weather
+      windowsclock-agent:
+        specifier: workspace:*
+        version: link:../agents/windowsClock
       ws:
         specifier: ^8.17.1
         version: 8.18.2
@@ -4921,7 +4955,7 @@ importers:
         version: 4.4.3(supports-color@8.1.1)
       dompurify:
         specifier: ^3.4.1
-        version: 3.4.1
+        version: 3.4.2
       isomorphic-ws:
         specifier: ^5.0.0
         version: 5.0.0(ws@8.19.0)
@@ -10083,8 +10117,8 @@ packages:
   dompurify@3.4.0:
     resolution: {integrity: sha512-nolgK9JcaUXMSmW+j1yaSvaEaoXYHwWyGJlkoCTghc97KgGDDSnpoU/PlEnw63Ah+TGKFOyY+X5LnxaWbCSfXg==}
 
-  dompurify@3.4.1:
-    resolution: {integrity: sha512-JahakDAIg1gyOm7dlgWSDjV4n7Ip2PKR55NIT6jrMfIgLFgWo81vdr1/QGqWtFNRqXP9UV71oVePtjqS2ebnPw==}
+  dompurify@3.4.2:
+    resolution: {integrity: sha512-lHeS9SA/IKeIFFyYciHBr2n0v1VMPlSj843HdLOwjb2OxNwdq9Xykxqhk+FE42MzAdHvInbAolSE4mhahPpjXA==}
 
   domutils@2.8.0:
     resolution: {integrity: sha512-w96Cjofp72M5IIhpjgobBimYEfoPjx1Vx0BSX9P30WBdZW2WIKU0T1Bd0kz2eNZ9ikjKgHbEyKx8BB6H1L3h3A==}
@@ -18063,7 +18097,7 @@ snapshots:
       '@types/lodash.debounce': 4.0.9
       '@types/lodash.throttle': 4.1.9
       clsx: 2.1.1
-      dompurify: 3.4.1
+      dompurify: 3.4.2
       lodash.debounce: 4.0.8
       lodash.throttle: 4.1.1
       nanoid: 5.1.5
@@ -19925,7 +19959,7 @@ snapshots:
   '@types/node-fetch@2.6.12':
     dependencies:
       '@types/node': 20.19.25
-      form-data: 4.0.5
+      form-data: 4.0.4
 
   '@types/node-forge@1.3.11':
     dependencies:
@@ -20154,7 +20188,7 @@ snapshots:
       cheerio: 1.1.0
       cockatiel: 3.2.1
       commander: 12.1.0
-      form-data: 4.0.5
+      form-data: 4.0.4
       glob: 11.1.0
       hosted-git-info: 4.1.0
       jsonc-parser: 3.2.1
@@ -22020,7 +22054,7 @@ snapshots:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
-  dompurify@3.4.1:
+  dompurify@3.4.2:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -24439,7 +24473,7 @@ snapshots:
       decimal.js: 10.5.0
       domexception: 4.0.0
       escodegen: 2.1.0
-      form-data: 4.0.5
+      form-data: 4.0.4
       html-encoding-sniffer: 3.0.0
       http-proxy-agent: 7.0.2
       https-proxy-agent: 5.0.1

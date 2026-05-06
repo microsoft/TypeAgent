@@ -231,13 +231,12 @@ export type IssueListAction = {
 export type IssueViewAction = {
     actionName: "issueView";
     parameters: {
-        // The issue number. Omit only when the user has clearly referenced an issue via entity
-        // resolution ("that issue", "the issue we just opened") and the dispatcher will substitute
-        // it. Never invent a number.
+        // The issue number. Omit when the user references an issue via entity
+        // resolution ("that issue", "the issue we just opened") — the dispatcher
+        // will substitute it.
         number?: number;
 
         // OWNER/REPO slug (e.g. "microsoft/TypeAgent"). Omit unless the user names the repo.
-        // Never use placeholders like "example/repo".
         repo?: string;
     };
 };
@@ -312,13 +311,12 @@ export type PrListAction = {
 export type PrViewAction = {
     actionName: "prView";
     parameters: {
-        // The pull request number. Omit only when the user has clearly referenced a PR via
-        // entity resolution ("that PR", "the PR we just opened") and the dispatcher will
-        // substitute it. Never invent a number.
+        // The pull request number. Omit when the user references a PR via entity
+        // resolution ("that PR", "the PR we just opened") — the dispatcher will
+        // substitute it.
         number?: number;
 
         // OWNER/REPO slug (e.g. "microsoft/TypeAgent"). Omit unless the user names the repo.
-        // Never use placeholders like "example/repo".
         repo?: string;
     };
 };
