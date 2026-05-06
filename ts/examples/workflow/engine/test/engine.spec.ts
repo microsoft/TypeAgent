@@ -3186,4 +3186,458 @@ describe("WorkflowEngine (IR v1)", () => {
             expect((result.output as any).result).toBe(3);
         });
     });
+
+    describe("path traversal protection", () => {
+        it("rejects file.read for path outside allowed directories", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "pathTraversalRead",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    read: {
+                        kind: "task",
+                        task: "file.read",
+                        inputSchema: {
+                            type: "object",
+                            required: ["path"],
+                            properties: { path: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["content"],
+                            properties: {
+                                content: { type: "string" },
+                            },
+                        },
+                        inputs: {
+                            path: "/etc/passwd" as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "read",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain(
+                "outside allowed directories",
+            );
+        });
+
+        it("rejects file.write for path outside allowed directories", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "pathTraversalWrite",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    write: {
+                        kind: "task",
+                        task: "file.write",
+                        inputSchema: {
+                            type: "object",
+                            required: ["path", "content"],
+                            properties: {
+                                path: { type: "string" },
+                                content: { type: "string" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["path"],
+                            properties: { path: { type: "string" } },
+                        },
+                        inputs: {
+                            path: "/etc/evil.txt" as Template,
+                            content: "pwned" as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "write",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain(
+                "outside allowed directories",
+            );
+        });
+
+        it("allows file.read for path under tmpdir", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            // Write a file to tmpdir first so we can read it
+            const testPath = resolve(
+                tmpdir(),
+                `workflow-pathtest-${Date.now()}.txt`,
+            );
+            const { writeFileSync } = await import("node:fs");
+            writeFileSync(testPath, "safe-content", "utf8");
+
+            try {
+                const ir: WorkflowIR = {
+                    kind: "workflow",
+                    name: "allowedRead",
+                    version: "1",
+                    inputSchema: { type: "object" },
+                    outputSchema: { type: "object" },
+                    nodes: {
+                        read: {
+                            kind: "task",
+                            task: "file.read",
+                            inputSchema: {
+                                type: "object",
+                                required: ["path"],
+                                properties: { path: { type: "string" } },
+                            },
+                            outputSchema: {
+                                type: "object",
+                                required: ["content"],
+                                properties: {
+                                    content: { type: "string" },
+                                },
+                            },
+                            inputs: { path: testPath as Template },
+                            bind: "result",
+                        },
+                    },
+                    entry: "read",
+                    output: { $from: "scope", name: "result" } as Template,
+                };
+
+                const result = await eng.run(ir, {
+                    input: {},
+                    policy: allowAllPolicy,
+                });
+                expect(result.success).toBe(true);
+                expect((result.output as any).content).toBe("safe-content");
+            } finally {
+                unlinkSync(testPath);
+            }
+        });
+    });
+
+    describe("http.get maxResponseBytes", () => {
+        it("truncates response body exceeding maxResponseBytes", async () => {
+            // Build a large body string
+            const bigBody = "X".repeat(500);
+
+            const mockHttpGet: TaskDefinition = {
+                name: "http.get",
+                inputSchema: {
+                    type: "object",
+                    required: ["url"],
+                    properties: {
+                        url: { type: "string" },
+                        maxResponseBytes: { type: "integer" },
+                    },
+                },
+                outputSchema: {
+                    type: "object",
+                    required: ["body", "status"],
+                    properties: {
+                        body: { type: "string" },
+                        status: { type: "integer" },
+                    },
+                },
+                async execute(input: any) {
+                    // Simulate the streaming truncation logic:
+                    // if maxResponseBytes is set, truncate.
+                    const maxBytes = input.maxResponseBytes ?? 10 * 1024 * 1024;
+                    const truncated = bigBody.slice(0, maxBytes);
+                    return {
+                        kind: "ok" as const,
+                        output: { body: truncated, status: 200 },
+                    };
+                },
+            };
+
+            const reg = makeRegistry(...standardLibraryTasks, mockHttpGet);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "httpTruncateTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    fetch: {
+                        kind: "task",
+                        task: "http.get",
+                        inputSchema: {
+                            type: "object",
+                            required: ["url"],
+                            properties: {
+                                url: { type: "string" },
+                                maxResponseBytes: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["body", "status"],
+                            properties: {
+                                body: { type: "string" },
+                                status: { type: "integer" },
+                            },
+                        },
+                        inputs: {
+                            url: "https://example.com/big" as Template,
+                            maxResponseBytes: 100 as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "fetch",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+            });
+            expect(result.success).toBe(true);
+            const output = result.output as { body: string; status: number };
+            expect(output.body.length).toBeLessThanOrEqual(100);
+            expect(output.status).toBe(200);
+        });
+    });
+
+    describe("branch without matching case or default", () => {
+        it("fails when selector resolves to unmatched case with no default", async () => {
+            const reg = makeRegistry(...standardLibraryTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "branchNoDefault",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    decide: {
+                        kind: "branch",
+                        selector: "unknown" as Template,
+                        selectorSchema: { type: "string" },
+                        cases: {
+                            yes: "onYes",
+                            no: "onNo",
+                        },
+                    } as any, // no default field
+                    onYes: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: { a: 1 as Template, b: 1 as Template },
+                        bind: "answer",
+                    },
+                    onNo: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: { a: 0 as Template, b: 0 as Template },
+                        bind: "answer",
+                    },
+                },
+                entry: "decide",
+                output: { $from: "scope", name: "answer" } as Template,
+            };
+
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toBeDefined();
+        });
+    });
+
+    describe("constant schema validation", () => {
+        it("rejects constant that violates its declared schema", async () => {
+            const reg = makeRegistry(...standardLibraryTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "badConstant",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                constants: {
+                    limit: {
+                        schema: { type: "integer" },
+                        value: "not-a-number", // violates integer schema
+                    },
+                },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: { a: 1 as Template, b: 2 as Template },
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("Constant");
+            expect(result.error?.message).toContain("limit");
+            expect(result.error?.message).toContain("schema violation");
+        });
+
+        it("passes when constant matches its declared schema", async () => {
+            const reg = makeRegistry(...standardLibraryTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "goodConstant",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                constants: {
+                    offset: {
+                        schema: { type: "integer" },
+                        value: 42,
+                    },
+                },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: {
+                            a: {
+                                $from: "constant",
+                                name: "offset",
+                            } as Template,
+                            b: 8 as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            expect((result.output as any).result).toBe(50);
+        });
+    });
+
+    describe("approval timed-out kind", () => {
+        it("denies when approve fn returns timed-out", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "approvalTimeout",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "file.read",
+                        inputSchema: {
+                            type: "object",
+                            required: ["path"],
+                            properties: { path: { type: "string" } },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["content"],
+                            properties: {
+                                content: { type: "string" },
+                            },
+                        },
+                        inputs: {
+                            path: "/some/file.txt" as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                approve: async () => ({ kind: "timed-out" }),
+            });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("timed-out");
+        });
+    });
 });
