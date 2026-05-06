@@ -205,11 +205,6 @@ export async function executeAction(
 
     // Display the action result.
     if (result.error !== undefined) {
-        // If the command was cancelled while executing, suppress any error
-        // that came from the aborted work (e.g. partial JSON from a cut-off stream).
-        if (systemContext.currentAbortSignal?.aborted) {
-            throw new DOMException("The operation was aborted.", "AbortError");
-        }
         if (!("fallbackToReasoning" in result) || !result.fallbackToReasoning) {
             displayError(result.error, actionContext);
         }

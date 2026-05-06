@@ -158,12 +158,7 @@ export async function selectFromPartitions(
     // Await results in partition order; return as soon as outcome is decided.
     for (const promise of promises) {
         // Check for cancellation before awaiting each partition result
-        if (signal?.aborted) {
-            throw (
-                signal.reason ??
-                new DOMException("The operation was aborted.", "AbortError")
-            );
-        }
+        signal?.throwIfAborted();
         const result = await promise;
         if (!result.success) {
             return result;

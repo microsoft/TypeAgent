@@ -120,12 +120,15 @@ async function getPageContent(
 ): Promise<string> {
     const browser = await getBrowser();
     const page = await browser.newPage();
+    // Cancel the navigation if the abort signal fires — Puppeteer doesn't
+    // accept AbortSignal directly, so close the page to interrupt goto().
+    const onAbort = () => page.close().catch(() => {});
+    signal?.addEventListener("abort", onAbort, { once: true });
     try {
         await page.goto(url, {
             waitUntil: "networkidle2",
             timeout: 30_000,
-            signal,
-        } as any);
+        });
         const rawHtml = await page.content();
         const reducer = await createNodeHtmlReducer();
         reducer.removeScripts = true;
@@ -143,6 +146,7 @@ async function getPageContent(
                   `\n\n[Content truncated at ${MAX_PAGE_CHARS} characters]`
             : text;
     } finally {
+        signal?.removeEventListener("abort", onAbort);
         await page.close();
     }
 }
@@ -208,7 +212,6 @@ async function handleLlmTransform(
                 break;
             }
         }
-        console.error(`[UTILITY-LLM] loop exited normally`);
     } finally {
         signal?.removeEventListener("abort", onAbort);
     }
