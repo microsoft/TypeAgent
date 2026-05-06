@@ -306,9 +306,12 @@ export function createJsonTranslatorWithValidator<T extends object>(
     model.complete = async (
         prompt: string | PromptSection[],
         usageCallback?: CompleteUsageStatsCallback,
+        jsonSchemaOverride?: CompletionJsonSchema,
+        logFnOverride?: (msg: any) => void,
+        signal?: AbortSignal,
     ) => {
         debugPrompt(prompt);
-        const jsonSchema = validator.getJsonSchema?.();
+        const jsonSchema = jsonSchemaOverride ?? validator.getJsonSchema?.();
         if (jsonSchema !== undefined) {
             debugJsonSchema(jsonSchema);
         }
@@ -316,7 +319,8 @@ export function createJsonTranslatorWithValidator<T extends object>(
             prompt,
             usageCallback,
             jsonSchema,
-            options?.promptLogger?.logModelRequest,
+            logFnOverride ?? options?.promptLogger?.logModelRequest,
+            signal,
         );
     };
 
@@ -325,14 +329,18 @@ export function createJsonTranslatorWithValidator<T extends object>(
         model.completeStream = async (
             prompt: string | PromptSection[],
             usageCallback?: CompleteUsageStatsCallback,
+            jsonSchemaOverride?: CompletionJsonSchema,
+            logFnOverride?: (msg: any) => void,
+            signal?: AbortSignal,
         ) => {
             const modelParams = getModelParams(prompt);
             const actualPrompt = modelParams?.actualPrompt ?? prompt;
             const actualUsageCallback =
                 modelParams?.usageCallback ?? usageCallback;
-            const signal = modelParams?.signal;
+            const actualSignal = modelParams?.signal ?? signal;
             debugPrompt(actualPrompt);
-            const jsonSchema = validator.getJsonSchema?.();
+            const jsonSchema =
+                jsonSchemaOverride ?? validator.getJsonSchema?.();
             if (jsonSchema !== undefined) {
                 debugJsonSchema(jsonSchema);
             }
@@ -340,8 +348,8 @@ export function createJsonTranslatorWithValidator<T extends object>(
                 actualPrompt,
                 actualUsageCallback,
                 jsonSchema,
-                undefined,
-                signal,
+                logFnOverride,
+                actualSignal,
             );
         };
     }

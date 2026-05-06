@@ -507,8 +507,8 @@ function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function isAbortError(e: unknown): e is DOMException {
-    return e instanceof Error && isAbortError(e);
+function isAbortError(e: unknown): e is Error {
+    return e instanceof Error && e.name === "AbortError";
 }
 
 // ---------------------------------------------------------------------------

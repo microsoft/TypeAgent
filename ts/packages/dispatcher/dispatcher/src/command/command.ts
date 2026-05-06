@@ -352,8 +352,8 @@ export async function processCommandNoLock(
             attachments,
         );
     } catch (e: any) {
-        if (e.name === "AbortError") {
-            throw e;
+        if (e.name === "AbortError" || context.currentAbortSignal?.aborted) {
+            throw new DOMException("The operation was aborted.", "AbortError");
         }
         context.clientIO.appendDisplay(
             makeClientIOMessage(
@@ -442,31 +442,46 @@ export async function processCommand(
     attachments?: string[],
     options?: ProcessCommandOptions,
 ): Promise<CommandResult | undefined> {
-    // Process one command at at time.
-    return context.commandLock(async () => {
-        const abortController = new AbortController();
-        const requestIdStr = requestId.requestId;
-        context.activeRequests.set(requestIdStr, abortController);
-        beginProcessCommand(
-            requestId,
-            context,
-            options,
-            abortController.signal,
+    // Create the AbortController *before* acquiring the lock so that a
+    // cancelCommandByClientId() call that arrives while we are queued can
+    // already abort the controller that will drive this command.
+    const abortController = new AbortController();
+    if (requestId.clientRequestId !== undefined) {
+        context.activeRequestsByClientId.set(
+            requestId.clientRequestId,
+            abortController,
         );
-        context.clientIO.setUserRequest(requestId, originalInput);
-        try {
-            await processCommandNoLock(originalInput, context, attachments);
-        } catch (e: any) {
-            if (e.name === "AbortError") {
-                ensureCommandResult(context).cancelled = true;
-            } else {
-                throw e;
+    }
+    try {
+        // Process one command at a time.
+        return await context.commandLock(async () => {
+            const requestIdStr = requestId.requestId;
+            context.activeRequests.set(requestIdStr, abortController);
+            beginProcessCommand(
+                requestId,
+                context,
+                options,
+                abortController.signal,
+            );
+            context.clientIO.setUserRequest(requestId, originalInput);
+            try {
+                await processCommandNoLock(originalInput, context, attachments);
+            } catch (e: any) {
+                if (e.name === "AbortError") {
+                    ensureCommandResult(context).cancelled = true;
+                } else {
+                    throw e;
+                }
+            } finally {
+                context.activeRequests.delete(requestIdStr);
+                return endProcessCommand(requestId, context);
             }
-        } finally {
-            context.activeRequests.delete(requestIdStr);
-            return endProcessCommand(requestId, context);
+        });
+    } finally {
+        if (requestId.clientRequestId !== undefined) {
+            context.activeRequestsByClientId.delete(requestId.clientRequestId);
         }
-    });
+    }
 }
 
 export const enum unicodeChar {
