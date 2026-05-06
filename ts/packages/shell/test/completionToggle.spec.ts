@@ -114,7 +114,12 @@ test.describe("Completion Mode Toggle", () => {
             // Verify completion remains actionable by keyboard after toggling.
             const input = mainWindow.locator(inputSelector);
             // In dropdown mode, first Tab selects an item and second Tab accepts it.
-            for (let i = 0; i < 2; i++) {
+            const tabPressesToAcceptCompletion = 2;
+            for (
+                let tabPressCount = 0;
+                tabPressCount < tabPressesToAcceptCompletion;
+                tabPressCount++
+            ) {
                 await mainWindow.keyboard.press("Tab");
             }
             await expect(async () => {
