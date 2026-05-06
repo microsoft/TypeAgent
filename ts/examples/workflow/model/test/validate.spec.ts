@@ -92,4 +92,282 @@ describe("validateWorkflowIR", () => {
         const result = validateWorkflowIR(ir);
         expect(result.valid).toBe(false);
     });
+
+    it("rejects broken onError target", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: { type: "object" },
+                    outputSchema: { type: "object" },
+                    inputs: {},
+                    onError: "ghost",
+                    bind: "out",
+                },
+            },
+        });
+        const result = validateWorkflowIR(ir, taskMap("noop"));
+        expect(result.valid).toBe(false);
+        expect(result.errors[0].message).toContain("ghost");
+    });
+
+    it("rejects branch case pointing to non-existent node", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "branch",
+                    selector: true,
+                    selectorSchema: { type: "boolean" },
+                    cases: { true: "missing", false: "start" },
+                    default: "start",
+                } as any,
+            },
+        });
+        const result = validateWorkflowIR(ir);
+        expect(result.valid).toBe(false);
+        expect(result.errors.some((e) => e.message.includes("missing"))).toBe(
+            true,
+        );
+    });
+
+    it("rejects branch default pointing to non-existent node", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "branch",
+                    selector: true,
+                    selectorSchema: { type: "boolean" },
+                    cases: { true: "start" },
+                    default: "nowhere",
+                } as any,
+            },
+        });
+        const result = validateWorkflowIR(ir);
+        expect(result.valid).toBe(false);
+        expect(result.errors.some((e) => e.message.includes("nowhere"))).toBe(
+            true,
+        );
+    });
+
+    it("rejects loop with missing body entry", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "loop",
+                    inputs: {},
+                    inputSchema: { type: "object" },
+                    state: {
+                        i: {
+                            schema: { type: "integer" },
+                            initial: 0,
+                        },
+                    },
+                    body: {
+                        entry: "missing",
+                        nodes: {
+                            step: {
+                                kind: "task",
+                                task: "noop",
+                                inputSchema: { type: "object" },
+                                outputSchema: { type: "object" },
+                                inputs: {},
+                            },
+                        },
+                    },
+                    iterateState: {},
+                    output: { $from: "state", name: "i" },
+                    outputSchema: { type: "integer" },
+                    maxIterations: 10,
+                    bind: "out",
+                } as any,
+            },
+        });
+        const result = validateWorkflowIR(ir, taskMap("noop"));
+        expect(result.valid).toBe(false);
+        expect(result.errors.some((e) => e.message.includes("missing"))).toBe(
+            true,
+        );
+    });
+
+    it("rejects loop body node with broken next target", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "loop",
+                    inputs: {},
+                    inputSchema: { type: "object" },
+                    state: {
+                        i: {
+                            schema: { type: "integer" },
+                            initial: 0,
+                        },
+                    },
+                    body: {
+                        entry: "step",
+                        nodes: {
+                            step: {
+                                kind: "task",
+                                task: "noop",
+                                inputSchema: { type: "object" },
+                                outputSchema: { type: "object" },
+                                inputs: {},
+                                next: "ghost",
+                            },
+                        },
+                    },
+                    iterateState: {},
+                    output: { $from: "state", name: "i" },
+                    outputSchema: { type: "integer" },
+                    maxIterations: 10,
+                    bind: "out",
+                } as any,
+            },
+        });
+        const result = validateWorkflowIR(ir, taskMap("noop"));
+        expect(result.valid).toBe(false);
+        expect(result.errors.some((e) => e.message.includes("ghost"))).toBe(
+            true,
+        );
+    });
+
+    it("allows sentinel @iterate and @exit inside loop body branch", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "loop",
+                    inputs: {},
+                    inputSchema: { type: "object" },
+                    state: {
+                        i: {
+                            schema: { type: "integer" },
+                            initial: 0,
+                        },
+                    },
+                    body: {
+                        entry: "decide",
+                        nodes: {
+                            decide: {
+                                kind: "branch",
+                                selector: true,
+                                selectorSchema: { type: "boolean" },
+                                cases: {
+                                    true: "@exit",
+                                    false: "@iterate",
+                                },
+                                default: "@iterate",
+                            } as any,
+                        },
+                    },
+                    iterateState: {},
+                    output: { $from: "state", name: "i" },
+                    outputSchema: { type: "integer" },
+                    maxIterations: 10,
+                    bind: "out",
+                } as any,
+            },
+        });
+        const result = validateWorkflowIR(ir);
+        expect(result.valid).toBe(true);
+    });
+
+    it("rejects sentinel @iterate outside loop body", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "branch",
+                    selector: true,
+                    selectorSchema: { type: "boolean" },
+                    cases: { true: "@iterate" },
+                    default: "start",
+                } as any,
+            },
+        });
+        const result = validateWorkflowIR(ir);
+        expect(result.valid).toBe(false);
+        expect(result.errors.some((e) => e.message.includes("@iterate"))).toBe(
+            true,
+        );
+    });
+
+    it("rejects loop next pointing to non-existent node", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "loop",
+                    inputs: {},
+                    inputSchema: { type: "object" },
+                    state: {
+                        i: {
+                            schema: { type: "integer" },
+                            initial: 0,
+                        },
+                    },
+                    body: {
+                        entry: "step",
+                        nodes: {
+                            step: {
+                                kind: "branch",
+                                selector: true,
+                                selectorSchema: { type: "boolean" },
+                                cases: { true: "@exit" },
+                                default: "@iterate",
+                            } as any,
+                        },
+                    },
+                    iterateState: {},
+                    output: { $from: "state", name: "i" },
+                    outputSchema: { type: "integer" },
+                    maxIterations: 10,
+                    next: "nowhere",
+                    bind: "out",
+                } as any,
+            },
+        });
+        const result = validateWorkflowIR(ir);
+        expect(result.valid).toBe(false);
+        expect(result.errors.some((e) => e.message.includes("nowhere"))).toBe(
+            true,
+        );
+    });
+
+    it("reports multiple errors at once", () => {
+        const ir = makeMinimalIR({
+            entry: "missing",
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "unregistered",
+                    inputSchema: { type: "object" },
+                    outputSchema: { type: "object" },
+                    inputs: {},
+                    next: "ghost",
+                    bind: "out",
+                },
+            },
+        });
+        const result = validateWorkflowIR(ir, taskMap("other"));
+        expect(result.valid).toBe(false);
+        // Should report at least: missing entry, unregistered task, broken next
+        expect(result.errors.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it("includes path in error messages", () => {
+        const ir = makeMinimalIR({
+            nodes: {
+                start: {
+                    kind: "task",
+                    task: "noop",
+                    inputSchema: { type: "object" },
+                    outputSchema: { type: "object" },
+                    inputs: {},
+                    next: "ghost",
+                    bind: "out",
+                },
+            },
+        });
+        const result = validateWorkflowIR(ir, taskMap("noop"));
+        expect(result.valid).toBe(false);
+        expect(result.errors[0].path).toContain("nodes.start");
+    });
 });

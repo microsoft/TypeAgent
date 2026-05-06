@@ -3640,4 +3640,1042 @@ describe("WorkflowEngine (IR v1)", () => {
             expect(result.error?.message).toContain("timed-out");
         });
     });
+
+    describe("workflow-level AbortSignal", () => {
+        it("cancels a running workflow via signal", async () => {
+            const slowTask: TaskDefinition = {
+                name: "test.slow",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute(_input, ctx) {
+                    return new Promise((resolve, reject) => {
+                        const timer = setTimeout(
+                            () =>
+                                resolve({
+                                    kind: "ok",
+                                    output: { done: true },
+                                }),
+                            5000,
+                        );
+                        ctx.signal.addEventListener(
+                            "abort",
+                            () => {
+                                clearTimeout(timer);
+                                reject(new Error("aborted"));
+                            },
+                            { once: true },
+                        );
+                    });
+                },
+            };
+
+            const reg = makeRegistry(...standardLibraryTasks, slowTask);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "abortTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.slow",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const ac = new AbortController();
+            setTimeout(() => ac.abort(), 50);
+
+            const result = await eng.run(ir, {
+                input: {},
+                signal: ac.signal,
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it("cancels during loop iteration", async () => {
+            const counterTask: TaskDefinition = {
+                name: "test.counter",
+                inputSchema: { type: "object" },
+                outputSchema: {
+                    type: "object",
+                    required: ["value"],
+                    properties: { value: { type: "integer" } },
+                },
+                async execute(input: any) {
+                    // Simulate a bit of work
+                    await new Promise((r) => setTimeout(r, 30));
+                    return {
+                        kind: "ok" as const,
+                        output: { value: (input.n ?? 0) + 1 },
+                    };
+                },
+            };
+
+            const reg = makeRegistry(...standardLibraryTasks, counterTask);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "loopAbortTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    loop: {
+                        kind: "loop",
+                        inputs: {},
+                        inputSchema: { type: "object" },
+                        state: {
+                            count: {
+                                schema: { type: "integer" },
+                                initial: 0 as Template,
+                            },
+                        },
+                        body: {
+                            entry: "inc",
+                            nodes: {
+                                inc: {
+                                    kind: "task",
+                                    task: "test.counter",
+                                    inputSchema: {
+                                        type: "object",
+                                        properties: {
+                                            n: { type: "integer" },
+                                        },
+                                    },
+                                    outputSchema: {
+                                        type: "object",
+                                        required: ["value"],
+                                        properties: {
+                                            value: { type: "integer" },
+                                        },
+                                    },
+                                    inputs: {
+                                        n: {
+                                            $from: "state",
+                                            name: "count",
+                                        } as Template,
+                                    },
+                                    bind: "incResult",
+                                    next: "check",
+                                },
+                                check: {
+                                    kind: "branch",
+                                    selector: false as Template,
+                                    selectorSchema: { type: "boolean" },
+                                    cases: { true: "@exit" },
+                                    default: "@iterate",
+                                },
+                            },
+                        },
+                        iterateState: {
+                            count: {
+                                $from: "scope",
+                                name: "incResult",
+                                path: ["value"],
+                            } as Template,
+                        },
+                        output: {
+                            $from: "state",
+                            name: "count",
+                        } as Template,
+                        outputSchema: { type: "integer" },
+                        maxIterations: 1000,
+                        bind: "result",
+                    },
+                },
+                entry: "loop",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const ac = new AbortController();
+            setTimeout(() => ac.abort(), 100);
+
+            const result = await eng.run(ir, {
+                input: {},
+                signal: ac.signal,
+            });
+            expect(result.success).toBe(false);
+        });
+    });
+
+    describe("loop edge cases", () => {
+        it("fails when maxIterations is exceeded", async () => {
+            const reg = makeRegistry(...standardLibraryTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "maxIterTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    loop: {
+                        kind: "loop",
+                        inputs: {},
+                        inputSchema: { type: "object" },
+                        state: {
+                            i: {
+                                schema: { type: "integer" },
+                                initial: 0 as Template,
+                            },
+                        },
+                        body: {
+                            entry: "add",
+                            nodes: {
+                                add: {
+                                    kind: "task",
+                                    task: "int.add",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["a", "b"],
+                                        properties: {
+                                            a: { type: "integer" },
+                                            b: { type: "integer" },
+                                        },
+                                    },
+                                    outputSchema: {
+                                        type: "object",
+                                        required: ["result"],
+                                        properties: {
+                                            result: { type: "integer" },
+                                        },
+                                    },
+                                    inputs: {
+                                        a: {
+                                            $from: "state",
+                                            name: "i",
+                                        } as Template,
+                                        b: 1 as Template,
+                                    },
+                                    bind: "next",
+                                    next: "cont",
+                                },
+                                cont: {
+                                    kind: "branch",
+                                    selector: false as Template,
+                                    selectorSchema: { type: "boolean" },
+                                    cases: { true: "@exit" },
+                                    default: "@iterate",
+                                },
+                            },
+                        },
+                        iterateState: {
+                            i: {
+                                $from: "scope",
+                                name: "next",
+                                path: ["result"],
+                            } as Template,
+                        },
+                        output: {
+                            $from: "state",
+                            name: "i",
+                        } as Template,
+                        outputSchema: { type: "integer" },
+                        maxIterations: 3,
+                        bind: "result",
+                    },
+                },
+                entry: "loop",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain(
+                "LoopMaxIterationsExceeded",
+            );
+        });
+
+        it("accesses constants inside loop bodies", async () => {
+            const reg = makeRegistry(...standardLibraryTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "loopConstantTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                constants: {
+                    step: {
+                        schema: { type: "integer" },
+                        value: 10,
+                    },
+                },
+                nodes: {
+                    loop: {
+                        kind: "loop",
+                        inputs: {},
+                        inputSchema: { type: "object" },
+                        state: {
+                            total: {
+                                schema: { type: "integer" },
+                                initial: 0 as Template,
+                            },
+                            iter: {
+                                schema: { type: "integer" },
+                                initial: 0 as Template,
+                            },
+                        },
+                        body: {
+                            entry: "addStep",
+                            nodes: {
+                                addStep: {
+                                    kind: "task",
+                                    task: "int.add",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["a", "b"],
+                                        properties: {
+                                            a: { type: "integer" },
+                                            b: { type: "integer" },
+                                        },
+                                    },
+                                    outputSchema: {
+                                        type: "object",
+                                        required: ["result"],
+                                        properties: {
+                                            result: { type: "integer" },
+                                        },
+                                    },
+                                    inputs: {
+                                        a: {
+                                            $from: "state",
+                                            name: "total",
+                                        } as Template,
+                                        b: {
+                                            $from: "constant",
+                                            name: "step",
+                                        } as Template,
+                                    },
+                                    bind: "sum",
+                                    next: "incIter",
+                                },
+                                incIter: {
+                                    kind: "task",
+                                    task: "int.add",
+                                    inputSchema: {
+                                        type: "object",
+                                        required: ["a", "b"],
+                                        properties: {
+                                            a: { type: "integer" },
+                                            b: { type: "integer" },
+                                        },
+                                    },
+                                    outputSchema: {
+                                        type: "object",
+                                        required: ["result"],
+                                        properties: {
+                                            result: { type: "integer" },
+                                        },
+                                    },
+                                    inputs: {
+                                        a: {
+                                            $from: "state",
+                                            name: "iter",
+                                        } as Template,
+                                        b: 1 as Template,
+                                    },
+                                    bind: "nextIter",
+                                    next: "check",
+                                },
+                                check: {
+                                    kind: "branch",
+                                    selector: {
+                                        $from: "scope",
+                                        name: "nextIter",
+                                        path: ["result"],
+                                    } as Template,
+                                    selectorSchema: { type: "integer" },
+                                    cases: { 2: "@exit" },
+                                    default: "@iterate",
+                                },
+                            },
+                        },
+                        iterateState: {
+                            total: {
+                                $from: "scope",
+                                name: "sum",
+                                path: ["result"],
+                            } as Template,
+                            iter: {
+                                $from: "scope",
+                                name: "nextIter",
+                                path: ["result"],
+                            } as Template,
+                        },
+                        output: {
+                            $from: "scope",
+                            name: "sum",
+                            path: ["result"],
+                        } as Template,
+                        outputSchema: { type: "integer" },
+                        maxIterations: 10,
+                        bind: "result",
+                    },
+                },
+                entry: "loop",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            // 2 iterations * step(10) = 20
+            expect(result.output).toBe(20);
+        });
+    });
+
+    describe("event emission", () => {
+        it("emits nodeFailed when a task fails with onError", async () => {
+            const failTask: TaskDefinition = {
+                name: "test.fail",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return {
+                        kind: "fail" as const,
+                        error: { message: "deliberate failure" },
+                    };
+                },
+            };
+            const noopTask: TaskDefinition = {
+                name: "test.noop",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return { kind: "ok" as const, output: { recovered: true } };
+                },
+            };
+
+            const reg = makeRegistry(
+                ...standardLibraryTasks,
+                failTask,
+                noopTask,
+            );
+            const eng = new WorkflowEngine(reg);
+            const events = collectEvents(eng);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "nodeFailedTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.fail",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        onError: "recover",
+                        bind: "r",
+                    },
+                    recover: {
+                        kind: "task",
+                        task: "test.noop",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "r",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "r" } as Template,
+            };
+
+            await eng.run(ir, { input: {} });
+
+            const failed = events.filter((e) => e.type === "nodeFailed");
+            expect(failed).toHaveLength(1);
+            expect((failed[0] as any).nodeId).toBe("step");
+            expect((failed[0] as any).error.message).toContain(
+                "deliberate failure",
+            );
+        });
+
+        it("emits runFailed when workflow fails", async () => {
+            const failTask: TaskDefinition = {
+                name: "test.fail",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return {
+                        kind: "fail" as const,
+                        error: { message: "boom" },
+                    };
+                },
+            };
+
+            const reg = makeRegistry(...standardLibraryTasks, failTask);
+            const eng = new WorkflowEngine(reg);
+            const events = collectEvents(eng);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "runFailedTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.fail",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "r",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "r" } as Template,
+            };
+
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(false);
+
+            const runFailed = events.filter((e) => e.type === "runFailed");
+            expect(runFailed).toHaveLength(1);
+            expect((runFailed[0] as any).error.message).toContain("boom");
+        });
+
+        it("emits runStarted and runCompleted in order", async () => {
+            const events = collectEvents(engine);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "eventOrderTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: { a: 1 as Template, b: 2 as Template },
+                        bind: "r",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "r" } as Template,
+            };
+
+            await engine.run(ir, { input: {} });
+
+            expect(events[0].type).toBe("runStarted");
+            expect(events[events.length - 1].type).toBe("runCompleted");
+
+            // Timestamps are monotonically non-decreasing
+            for (let i = 1; i < events.length; i++) {
+                expect(events[i].timestamp).toBeGreaterThanOrEqual(
+                    events[i - 1].timestamp,
+                );
+            }
+        });
+    });
+
+    describe("listener management", () => {
+        it("off() removes a listener so it no longer fires", async () => {
+            const reg = makeRegistry(...standardLibraryTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const events1: WorkflowEvent[] = [];
+            const events2: WorkflowEvent[] = [];
+            const listener1 = (e: WorkflowEvent) => events1.push(e);
+            const listener2 = (e: WorkflowEvent) => events2.push(e);
+
+            eng.on(listener1);
+            eng.on(listener2);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "offTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: { a: 1 as Template, b: 2 as Template },
+                        bind: "r",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "r" } as Template,
+            };
+
+            // Both get events from first run
+            await eng.run(ir, { input: {} });
+            expect(events1.length).toBeGreaterThan(0);
+            expect(events2.length).toBeGreaterThan(0);
+
+            const count1 = events1.length;
+            const count2 = events2.length;
+
+            // Remove listener1
+            eng.off(listener1);
+            await eng.run(ir, { input: {} });
+
+            // listener1 should NOT have grown; listener2 should have
+            expect(events1.length).toBe(count1);
+            expect(events2.length).toBeGreaterThan(count2);
+        });
+    });
+
+    describe("binding overwrites", () => {
+        it("later task overrides an earlier binding with the same name", async () => {
+            const reg = makeRegistry(...standardLibraryTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "bindOverwrite",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    first: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: { a: 1 as Template, b: 2 as Template },
+                        bind: "answer",
+                        next: "second",
+                    },
+                    second: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: { a: 10 as Template, b: 20 as Template },
+                        bind: "answer",
+                    },
+                },
+                entry: "first",
+                output: { $from: "scope", name: "answer" } as Template,
+            };
+
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            // Second task's output (30) should override first (3)
+            expect((result.output as any).result).toBe(30);
+        });
+    });
+
+    describe("error recovery chains", () => {
+        it("handles onError handler itself failing (propagates)", async () => {
+            const failTask: TaskDefinition = {
+                name: "test.fail",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return {
+                        kind: "fail" as const,
+                        error: { message: "original failure" },
+                    };
+                },
+            };
+            const failRecovery: TaskDefinition = {
+                name: "test.failRecovery",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute() {
+                    return {
+                        kind: "fail" as const,
+                        error: { message: "recovery also failed" },
+                    };
+                },
+            };
+
+            const reg = makeRegistry(
+                ...standardLibraryTasks,
+                failTask,
+                failRecovery,
+            );
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "cascadeError",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.fail",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        onError: "recover",
+                        bind: "r",
+                    },
+                    recover: {
+                        kind: "task",
+                        task: "test.failRecovery",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "r",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "r" } as Template,
+            };
+
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("recovery also failed");
+        });
+    });
+
+    describe("optional template references", () => {
+        it("returns null for optional $from reference to missing binding", async () => {
+            const echoTask: TaskDefinition = {
+                name: "test.echo",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute(input: any) {
+                    return {
+                        kind: "ok" as const,
+                        output: { value: input.value ?? "default" },
+                    };
+                },
+            };
+
+            const reg = makeRegistry(...standardLibraryTasks, echoTask);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "optionalRef",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.echo",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            value: {
+                                $from: "scope",
+                                name: "nonexistent",
+                                optional: true,
+                            } as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            // null falls through to default in echo task
+            expect((result.output as any).value).toBe("default");
+        });
+
+        it("returns null for optional path projection on null", async () => {
+            const echoTask: TaskDefinition = {
+                name: "test.echo",
+                inputSchema: { type: "object" },
+                outputSchema: {
+                    type: "object",
+                    properties: {
+                        nested: {
+                            type: ["object", "null"],
+                            properties: {
+                                deep: { type: "string" },
+                            },
+                        },
+                    },
+                },
+                async execute(input: any) {
+                    return {
+                        kind: "ok" as const,
+                        output: { nested: input.nested ?? null },
+                    };
+                },
+            };
+
+            const reg = makeRegistry(...standardLibraryTasks, echoTask);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "optionalPath",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    first: {
+                        kind: "task",
+                        task: "test.echo",
+                        inputSchema: { type: "object" },
+                        outputSchema: {
+                            type: "object",
+                            properties: {
+                                nested: {
+                                    type: ["object", "null"],
+                                    properties: {
+                                        deep: { type: "string" },
+                                    },
+                                },
+                            },
+                        },
+                        inputs: { nested: null as Template },
+                        bind: "data",
+                        next: "second",
+                    },
+                    second: {
+                        kind: "task",
+                        task: "test.echo",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            nested: {
+                                $from: "scope",
+                                name: "data",
+                                path: ["nested", "deep"],
+                                optional: true,
+                            } as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "first",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            // data.nested is null, so optional path returns null
+            expect((result.output as any).nested).toBeNull();
+        });
+    });
+
+    describe("shell.exec edge cases", () => {
+        it("uses cwd parameter", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "cwdTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "shell.exec",
+                        inputSchema: {
+                            type: "object",
+                            required: ["command"],
+                            properties: {
+                                command: { type: "string" },
+                                cwd: { type: "string" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["stdout", "stderr", "exitCode"],
+                            properties: {
+                                stdout: { type: "string" },
+                                stderr: { type: "string" },
+                                exitCode: { type: "integer" },
+                            },
+                        },
+                        inputs: {
+                            command: "pwd" as Template,
+                            cwd: tmpdir() as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+            });
+            expect(result.success).toBe(true);
+            const stdout = (result.output as any).stdout.trim();
+            // realpath to handle symlinks like /tmp -> /private/tmp
+            const { realpathSync } = await import("node:fs");
+            expect(stdout).toBe(realpathSync(tmpdir()));
+        });
+
+        it("captures stderr output", async () => {
+            const reg = makeRegistry(...allBuiltinTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "stderrTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "shell.exec",
+                        inputSchema: {
+                            type: "object",
+                            required: ["command", "args"],
+                            properties: {
+                                command: { type: "string" },
+                                args: {
+                                    type: "array",
+                                    items: { type: "string" },
+                                },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["stdout", "stderr", "exitCode"],
+                            properties: {
+                                stdout: { type: "string" },
+                                stderr: { type: "string" },
+                                exitCode: { type: "integer" },
+                            },
+                        },
+                        inputs: {
+                            command: "bash" as Template,
+                            args: ["-c", "echo errormsg >&2"] as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                policy: allowAllPolicy,
+            });
+            expect(result.success).toBe(true);
+            expect((result.output as any).stderr).toContain("errormsg");
+        });
+    });
+
+    describe("$literal template escape", () => {
+        it("passes $literal content verbatim without resolving", async () => {
+            const echoTask: TaskDefinition = {
+                name: "test.echo",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute(input: any) {
+                    return { kind: "ok" as const, output: input };
+                },
+            };
+
+            const reg = makeRegistry(...standardLibraryTasks, echoTask);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "literalTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.echo",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {
+                            data: {
+                                $literal: {
+                                    $from: "scope",
+                                    name: "shouldNotResolve",
+                                },
+                            } as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: { $from: "scope", name: "result" } as Template,
+            };
+
+            const result = await eng.run(ir, { input: {} });
+            expect(result.success).toBe(true);
+            const data = (result.output as any).data;
+            // $literal content is passed through verbatim as plain object
+            expect(data).toEqual({
+                $from: "scope",
+                name: "shouldNotResolve",
+            });
+        });
+    });
 });
