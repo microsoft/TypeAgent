@@ -443,10 +443,7 @@ async function fetchWithTimeout(
     if (externalSignal) {
         if (externalSignal.aborted) {
             clearTimeout(id);
-            throw (
-                externalSignal.reason ??
-                new DOMException("The operation was aborted.", "AbortError")
-            );
+            throw toAbortError(externalSignal.reason);
         }
         onExternalAbort = () => controller.abort(externalSignal.reason);
         externalSignal.addEventListener("abort", onExternalAbort);
@@ -618,10 +615,7 @@ async function fetchWithPool(
 
         // Respect caller-provided abort signal
         if (options?.signal?.aborted) {
-            throw (
-                options.signal.reason ??
-                new DOMException("The operation was aborted.", "AbortError")
-            );
+            throw toAbortError(options.signal.reason);
         }
 
         const budgetLeft = overallBudgetMs - elapsed;

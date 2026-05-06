@@ -609,8 +609,18 @@ export function createAgentRpcServer(
                 "Invalid action context param: missing actionContextId",
             );
         }
-        const abortController = new AbortController();
-        actionAbortControllers.set(actionContextId, abortController);
+        // Reuse the controller already registered for this actionContextId if
+        // one exists. Multiple RPC entry points (executeAction,
+        // streamPartialAction, executeCommand, handleChoice) can build a shim
+        // for the same id, and overwriting the controller would orphan the
+        // signal handed to the in-flight executeAction — cancelAction would
+        // then abort the wrong one. The owning call (executeAction) is
+        // responsible for deleting the entry when it completes.
+        let abortController = actionAbortControllers.get(actionContextId);
+        if (abortController === undefined) {
+            abortController = new AbortController();
+            actionAbortControllers.set(actionContextId, abortController);
+        }
         const sessionContext = getSessionContextShim(param);
         const actionIO: ActionIO = {
             setDisplay(content: DisplayContent): void {
