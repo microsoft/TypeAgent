@@ -451,23 +451,27 @@ type MemoCache = Map<
 // (`{ node, valueIds }`) reference inner `ValueIdNode` chains whose
 // ids also live in the same numbering space; replay must rebase
 // those too.
-type SuccessDeltaValueEntry = {
-    relValueId: number;
-    value: MatchedValue;
-    wildcard: boolean;
-};
-type SuccessDeltaValueIdEntry = {
-    name: string | undefined;
-    relValueId: number;
-    wildcardTypeName: string | undefined;
-};
+// Success delta: stores chain-head pointers into the immutable
+// cons-lists rather than copying into flat arrays.  Capture is
+// O(1) pointer saves; replay walks the chain segment at apply
+// time, rebasing valueIds by (replayBase - captureBase).
 type SuccessDelta = {
     endOffset: number;
     valueIdsAdvance: number;
     spacingModeAtExit: CompiledSpacingMode;
     leadingSpacingModeAtExit: CompiledSpacingMode;
-    valuesPrefix: SuccessDeltaValueEntry[];
-    valueIdsPrefix: SuccessDeltaValueIdEntry[];
+    // Chain segment added by this sub-rule entry.  Replay walks
+    // from valuesHead (newest) stopping at valuesStop (exclusive,
+    // the pre-entry head).  Both are immutable cons-list pointers.
+    valuesHead: MatchedValueEntry | undefined;
+    valuesStop: MatchedValueEntry | undefined;
+    // ValueIds chain segment (non-carrier path).  Same walk
+    // convention.  Both null when carrier mode or not tracking.
+    valueIdsHead: ValueIdNode | undefined | null;
+    valueIdsStop: ValueIdNode | undefined | null;
+    // nextValueId at the original capture.  Replay rebases all
+    // valueIds in the chain segments by (replayBase - captureBase).
+    captureBase: number;
     pendingWildcardOffset?: number | undefined;
     pendingWildcardRelValueId?: number | undefined;
     // Last-matched-part info as observed at sub-rule exit.  `start`
@@ -504,13 +508,12 @@ type SuccessDelta = {
     // state.valueIds from parent.  The CHILD's value / chain
     // bubble up.  Replay must mirror that by overriding both
     // fields on the live state instead of leaving them at
-    // outer-pre-entry.  `valueIdsAtExit` is a flat array stored
-    // newest-first with relative IDs (rebuilt as a chain rooted at
-    // `undefined` on replay).
+    // outer-pre-entry.  `valueIdsHead` is the chain head at exit
+    // (walk to undefined to rebuild the full carrier chain).
     carrier?:
         | {
               valueAtExit: CompiledValueNode | undefined;
-              valueIdsAtExit: SuccessDeltaValueIdEntry[];
+              valueIdsHead: ValueIdNode | undefined;
           }
         | undefined;
 };
@@ -577,10 +580,9 @@ function memoCacheKey(
 
 // Deep-copy a `ValueIdNode` chain (terminating at `undefined` or
 // at the chain's natural end) with each `valueId` rebased by
-// `delta`.  Used during success-delta capture (`delta = -base`)
-// to convert chain entries to relative IDs and during replay
-// (`delta = +newBase`) to materialize an absolute chain in the
-// new numbering.
+// `delta`.  Used during replay (`delta = replayBase - captureBase`)
+// to materialize an absolute chain in the new numbering, and for
+// carrier valueIds chain reconstruction.
 function copyValueIdChainWithDelta(
     chain: ValueIdNode | undefined,
     delta: number,
@@ -623,86 +625,16 @@ function rebaseMatchedValue(value: MatchedValue, delta: number): MatchedValue {
     return value;
 }
 
-// Walk the live state's value-tracking chains down to the
-// references captured on `marker` (pointer equality on the
-// linked-list `prev` pointers) and produce a flat NEWEST-FIRST
-// array of the entries added between marker push and now.
-// Rebases each entry's `valueId` to relative
-// (`absolute - marker.nextValueIdAtEntry`) so the captured
-// delta is independent of the live `nextValueId` counter and
-// can replay under any outer state.  Inner `valueIds` chains
-// inside nested-rule `MatchedValue`s are deep-copied with the
-// same relative numbering.
-//
-// Defensive bound: we know the chain segment is finite (the
-// matcher just finished a single sub-rule entry) but a runaway
-// loop here would silently corrupt the cache.  The walk simply
-// stops on `undefined`; pointer mismatch with `valuesAtEntry`
-// would indicate a structural invariant violation that we want
-// to surface elsewhere, not paper over here.
+// Capture the externally-observable delta of a successful
+// sub-rule entry.  Stores chain-head pointers into the immutable
+// cons-lists (zero chain-walking, zero array allocation, zero
+// deep-copy).  Rebasing is deferred to `applyDelta` at replay
+// time.
 function captureSuccessDelta(
     state: MatchState,
     marker: MemoMarkerBacktrack,
 ): SuccessDelta {
     const base = marker.nextValueIdAtEntry;
-    const negBase = -base;
-    const valuesPrefix: SuccessDeltaValueEntry[] = [];
-    let v: MatchedValueEntry | undefined = state.values;
-    while (v !== undefined && v !== marker.valuesAtEntry) {
-        valuesPrefix.push({
-            relValueId: v.valueId - base,
-            value: rebaseMatchedValue(v.value, negBase),
-            wildcard: v.wildcard,
-        });
-        v = v.prev;
-    }
-    const valueIdsPrefix: SuccessDeltaValueIdEntry[] = [];
-    let carrier: SuccessDelta["carrier"];
-    if (marker.carrier) {
-        // Implicit-default carrier: state.value and state.valueIds
-        // bubbled up from the child unchanged.  Record the full
-        // exit state.valueIds chain (rooted at undefined in the
-        // original execution) as a flat newest-first array with
-        // relative IDs.  state.value is a CompiledValueNode (no
-        // rebasing needed - static grammar reference).
-        const carrierIds: SuccessDeltaValueIdEntry[] = [];
-        if (state.valueIds !== null) {
-            for (
-                let id: ValueIdNode | undefined = state.valueIds;
-                id !== undefined;
-                id = id.prev
-            ) {
-                carrierIds.push({
-                    name: id.name,
-                    relValueId: id.valueId - base,
-                    wildcardTypeName: id.wildcardTypeName,
-                });
-            }
-        }
-        carrier = {
-            valueAtExit: state.value,
-            valueIdsAtExit: carrierIds,
-        };
-    } else if (
-        // After `finalizeNestedRule`, `state.valueIds` is restored to
-        // the OUTER chain (with at most one new node added by the
-        // parent-variable assignment).  When the outer chain is
-        // `null` (parent not tracking values), there is no prefix to
-        // capture.
-        state.valueIds !== null &&
-        marker.valueIdsAtEntry !== null &&
-        state.valueIds !== marker.valueIdsAtEntry
-    ) {
-        let id: ValueIdNode | undefined = state.valueIds;
-        while (id !== undefined && id !== marker.valueIdsAtEntry) {
-            valueIdsPrefix.push({
-                name: id.name,
-                relValueId: id.valueId - base,
-                wildcardTypeName: id.wildcardTypeName,
-            });
-            id = id.prev;
-        }
-    }
     let pendingWildcardOffset: number | undefined;
     let pendingWildcardRelValueId: number | undefined;
     if (state.pendingWildcard !== undefined) {
@@ -712,11 +644,6 @@ function captureSuccessDelta(
                 ? undefined
                 : state.pendingWildcard.valueId - base;
     }
-    // `lastMatchedPartInfo`: capture only when it changed
-    // (pointer inequality from the pre-entry snapshot).  When
-    // unchanged, replay leaves the outer's value alone; when the
-    // sub-rule actively cleared it (set to undefined), record
-    // that intent via `lastMatchedPartInfoCleared`.
     let lastMatchedPartInfo: SuccessDelta["lastMatchedPartInfo"];
     let lastMatchedPartInfoCleared = false;
     const liveLast = state.lastMatchedPartInfo;
@@ -741,13 +668,26 @@ function captureSuccessDelta(
             };
         }
     }
+    let carrier: SuccessDelta["carrier"];
+    if (marker.carrier) {
+        carrier = {
+            valueAtExit: state.value,
+            valueIdsHead:
+                state.valueIds === null
+                    ? undefined
+                    : (state.valueIds as ValueIdNode | undefined),
+        };
+    }
     return {
         endOffset: state.index - marker.index,
         valueIdsAdvance: state.nextValueId - base,
         spacingModeAtExit: state.spacingMode,
         leadingSpacingModeAtExit: state.leadingSpacingMode,
-        valuesPrefix,
-        valueIdsPrefix,
+        valuesHead: state.values,
+        valuesStop: marker.valuesAtEntry,
+        valueIdsHead: marker.carrier ? null : state.valueIds,
+        valueIdsStop: marker.carrier ? null : marker.valueIdsAtEntry,
+        captureBase: base,
         pendingWildcardOffset,
         pendingWildcardRelValueId,
         lastMatchedPartInfo,
@@ -772,52 +712,75 @@ function applyDelta(state: MatchState, delta: SuccessDelta) {
     state.spacingMode = delta.spacingModeAtExit;
     state.leadingSpacingMode = delta.leadingSpacingModeAtExit;
     state.partIndex = state.partIndex + 1;
-    // Cons valuesPrefix onto current values, oldest-first.
-    let values = state.values;
-    for (let i = delta.valuesPrefix.length - 1; i >= 0; i--) {
-        const e = delta.valuesPrefix[i];
-        values = {
-            valueId: entryBase + e.relValueId,
-            value: rebaseMatchedValue(e.value, entryBase),
-            wildcard: e.wildcard,
-            prev: values,
-        };
+    const rebaseDelta = entryBase - delta.captureBase;
+    // Walk the values chain segment (newest to oldest) and copy
+    // with rebased valueIds.  Single pass: build the new segment
+    // in walk order (newest-first) and attach its tail to the
+    // current state.values (the pre-entry head).
+    if (delta.valuesHead !== delta.valuesStop) {
+        let newHead: MatchedValueEntry | undefined;
+        let tail: MatchedValueEntry | undefined;
+        for (
+            let v: MatchedValueEntry | undefined = delta.valuesHead;
+            v !== delta.valuesStop;
+            v = v!.prev
+        ) {
+            const copy: MatchedValueEntry = {
+                valueId: v!.valueId + rebaseDelta,
+                value: rebaseMatchedValue(v!.value, rebaseDelta),
+                wildcard: v!.wildcard,
+                prev: undefined,
+            };
+            if (tail !== undefined) {
+                tail.prev = copy;
+            } else {
+                newHead = copy;
+            }
+            tail = copy;
+        }
+        tail!.prev = state.values;
+        state.values = newHead!;
     }
-    state.values = values;
     if (delta.carrier !== undefined) {
         // Implicit-default carrier: replace state.value and
-        // state.valueIds outright (mirroring `finalizeNestedRule`'s
-        // skip of the parent-restore block).  `valueIdsAtExit` is
-        // newest-first; rebuild as a chain rooted at undefined
-        // with absolute IDs.
+        // state.valueIds outright.  Walk the carrier's chain head
+        // to undefined, copying with rebased IDs.
         state.value = delta.carrier.valueAtExit;
-        let cids: ValueIdNode | undefined;
-        const arr = delta.carrier.valueIdsAtExit;
-        for (let i = arr.length - 1; i >= 0; i--) {
-            const e = arr[i];
-            cids = {
-                name: e.name,
-                valueId: entryBase + e.relValueId,
-                wildcardTypeName: e.wildcardTypeName,
-                prev: cids,
+        state.valueIds = copyValueIdChainWithDelta(
+            delta.carrier.valueIdsHead,
+            rebaseDelta,
+        );
+    } else if (
+        delta.valueIdsHead !== null &&
+        delta.valueIdsStop !== null &&
+        delta.valueIdsHead !== delta.valueIdsStop
+    ) {
+        // Walk valueIds chain segment (non-carrier), copy with
+        // rebased IDs, attach tail to state.valueIds.
+        let newIdHead: ValueIdNode | undefined;
+        let idTail: ValueIdNode | undefined;
+        for (
+            let id: ValueIdNode | undefined = delta.valueIdsHead as
+                | ValueIdNode
+                | undefined;
+            id !== (delta.valueIdsStop as ValueIdNode | undefined);
+            id = id!.prev
+        ) {
+            const copy: ValueIdNode = {
+                name: id!.name,
+                valueId: id!.valueId + rebaseDelta,
+                wildcardTypeName: id!.wildcardTypeName,
+                prev: undefined,
             };
+            if (idTail !== undefined) {
+                idTail.prev = copy;
+            } else {
+                newIdHead = copy;
+            }
+            idTail = copy;
         }
-        state.valueIds = cids;
-    } else if (state.valueIds !== null && delta.valueIdsPrefix.length > 0) {
-        // Cons valueIdsPrefix onto current valueIds (only when the
-        // outer was tracking - mirroring `finalizeNestedRule`'s own
-        // guard).
-        let ids: ValueIdNode | undefined = state.valueIds;
-        for (let i = delta.valueIdsPrefix.length - 1; i >= 0; i--) {
-            const e = delta.valueIdsPrefix[i];
-            ids = {
-                name: e.name,
-                valueId: entryBase + e.relValueId,
-                wildcardTypeName: e.wildcardTypeName,
-                prev: ids,
-            };
-        }
-        state.valueIds = ids;
+        idTail!.prev = state.valueIds as ValueIdNode | undefined;
+        state.valueIds = newIdHead;
     }
     if (delta.pendingWildcardOffset !== undefined) {
         state.pendingWildcard = {
