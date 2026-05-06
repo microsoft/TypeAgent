@@ -400,6 +400,16 @@ Once this plan is complete, the natural next steps are:
   can be invoked via chat.
 - **Pluggable tasks**: extract task registration into a discovery
   mechanism so tasks can ship as separate packages.
+- **Configurable file-access policy**: v1 hardcodes allowed roots
+  (cwd, home, tmpdir) in `validateFilePath`. Post-v1: make this a
+  `RunOptions` parameter so callers can restrict or widen the sandbox
+  (e.g., confine to a project directory, or allow explicit paths from
+  a trusted workflow manifest).
+- **Configurable workflow discovery**: v1 discovers workflows from a
+  single directory relative to the built adapter. Post-v1: support
+  user-specified directories, per-workspace workflow roots, or a
+  registry so workflows can ship as separate packages or be loaded
+  from `~/.typeagent/workflows/`.
 - **Run viewer**: visualize execution traces from the event stream.
 - **Authoring DSL**: a text surface that compiles to IR (16-23x
   compression per B1 analysis).
