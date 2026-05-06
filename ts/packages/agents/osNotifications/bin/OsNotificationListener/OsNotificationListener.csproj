@@ -7,8 +7,5 @@
     <AssemblyName>OsNotificationListener</AssemblyName>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>false</SelfContained>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
   </PropertyGroup>
 </Project>

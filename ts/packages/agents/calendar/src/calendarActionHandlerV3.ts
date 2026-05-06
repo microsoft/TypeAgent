@@ -1107,8 +1107,8 @@ export function instantiate(): AppAgent {
         handleChoice: (
             choiceId: string,
             response: boolean | number[],
-            _context: ActionContext<CalendarActionContext>,
-        ) => handler.choiceManager.handleChoice(choiceId, response),
+            context: ActionContext<CalendarActionContext>,
+        ) => handler.choiceManager.handleChoice(choiceId, response, context),
         ...getCommandInterface(handlers),
     };
 }

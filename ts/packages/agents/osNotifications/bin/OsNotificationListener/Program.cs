@@ -2,13 +2,14 @@
 // Licensed under the MIT License.
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Windows.ApplicationModel.Background;
 using Windows.UI.Notifications;
 using Windows.UI.Notifications.Management;
 
@@ -17,14 +18,24 @@ namespace TypeAgent.OsNotificationListener;
 // Reads Windows action-center notifications via UserNotificationListener and
 // streams them to stdout as one JSON object per line, matching the
 // OsNotificationEvent shape from watcherProtocol.ts:
-//   { kind: "added", id, app, title, body, timestamp }
+//   { kind: "added", id, app, title, body, timestamp, fromSync }
 //   { kind: "removed", id }
 //   { kind: "error", message }
 //
-// Stays alive while stdin is open. Closing stdin (the parent process exiting)
-// triggers a graceful shutdown.
+// We try `NotificationChanged += ...` first — it's the realtime API and works
+// for packaged/UWP apps. It throws for unpackaged desktop apps, in which case
+// we fall back to polling via `GetNotificationsAsync` and diffing against the
+// previously-seen id set. Polling cadence is 3 seconds — a balance between
+// responsiveness and CPU/RPC overhead.
+//
+// Stays alive while stdin is open; exits when the parent (Node-side
+// windowsWatcher.ts) closes its end of the pipe. Stdin also doubles as a
+// command channel: the line "sync" enumerates current notifications and
+// emits them with fromSync:true.
 internal static class Program
 {
+    private const int PollIntervalMs = 3000;
+
     private static readonly object StdoutLock = new();
 
     public static async Task<int> Main()
@@ -39,62 +50,173 @@ internal static class Program
         }
         catch (Exception e)
         {
-            Emit(new { kind = "error", message = $"RequestAccessAsync threw: {e.Message}" });
+            Emit(new
+            {
+                kind = "error",
+                message = $"RequestAccessAsync threw: {Describe(e)}",
+            });
             return 1;
         }
 
         if (access != UserNotificationListenerAccessStatus.Allowed)
         {
-            Emit(new { kind = "error", message = $"UserNotificationListener access denied: {access}" });
+            Emit(new
+            {
+                kind = "error",
+                message = $"UserNotificationListener access denied: {access}",
+            });
             return 2;
         }
 
-        // Subscribe to changes — Added/Removed events fire as the action
-        // center gains and loses notifications.
+        // ---------------------------------------------------------------
+        // Live change detection. Try NotificationChanged event first; if the
+        // OS rejects the subscription (typical for unpackaged desktop apps),
+        // fall back to polling. The "fallback" path also runs at startup for
+        // unpackaged apps so we still detect new notifications going forward.
+        // ---------------------------------------------------------------
+        bool eventsRegistered = false;
         try
         {
-            listener.NotificationChanged += async (sender, e) =>
+            listener.NotificationChanged += (sender, e) =>
             {
                 try
                 {
                     if (e.ChangeKind == UserNotificationChangedKind.Added)
                     {
-                        var n = await sender.GetNotificationAsync(e.UserNotificationId);
-                        if (n != null)
-                        {
-                            EmitAdded(n, fromSync: false);
-                        }
+                        var n = sender.GetNotification(e.UserNotificationId);
+                        if (n != null) EmitAdded(n, fromSync: false);
                     }
                     else if (e.ChangeKind == UserNotificationChangedKind.Removed)
                     {
                         Emit(new
                         {
                             kind = "removed",
-                            id = e.UserNotificationId.ToString(CultureInfo.InvariantCulture)
+                            id = e.UserNotificationId.ToString(CultureInfo.InvariantCulture),
                         });
                     }
                 }
                 catch (Exception ex)
                 {
-                    Emit(new { kind = "error", message = $"NotificationChanged handler: {ex.Message}" });
+                    Emit(new
+                    {
+                        kind = "error",
+                        message = $"NotificationChanged handler: {Describe(ex)}",
+                    });
                 }
             };
+            eventsRegistered = true;
         }
-        catch (Exception e)
+        catch
         {
-            Emit(new { kind = "error", message = $"Failed to subscribe to NotificationChanged: {e.Message}" });
-            return 3;
+            // Subscription rejected — fall through to polling below.
+            // Don't surface as error; this is the normal path for
+            // unpackaged desktop apps.
         }
 
-        // Block until stdin closes (parent process death) or Ctrl-C.
-        // The same stdin loop also drives commands from the parent — currently
-        // just "sync" to enumerate the current action center.
+        var stop = new CancellationTokenSource();
         var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         Console.CancelKeyPress += (_, args) =>
         {
             args.Cancel = true;
+            stop.Cancel();
             done.TrySetResult(true);
         };
+
+        // Tracks notification ids we've already emitted "added" for, so the
+        // polling loop only fires on truly new arrivals (and so the live
+        // event handler's emits aren't duplicated by the next poll). Shared
+        // between the event handler and the polling loop via locking.
+        var seenIds = new HashSet<string>();
+        var seenLock = new object();
+
+        // Initial population: read currently-present notifications WITHOUT
+        // emitting. This is the live-mode behavior — only NEW notifications
+        // (arrivals after startup) are forwarded as live "added" events. The
+        // explicit "sync" command from stdin will emit all current
+        // notifications with fromSync:true regardless.
+        try
+        {
+            var initial = await listener.GetNotificationsAsync(NotificationKinds.Toast);
+            lock (seenLock)
+            {
+                foreach (var n in initial)
+                {
+                    seenIds.Add(n.Id.ToString(CultureInfo.InvariantCulture));
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Emit(new
+            {
+                kind = "error",
+                message = $"Initial GetNotificationsAsync failed: {Describe(e)}",
+            });
+            // Keep going — we may still receive events / process sync.
+        }
+
+        // Polling task. Skipped if event subscription succeeded (no need to
+        // poll). The diff against seenIds detects both added and removed.
+        if (!eventsRegistered)
+        {
+            _ = Task.Run(async () =>
+            {
+                while (!stop.IsCancellationRequested)
+                {
+                    try
+                    {
+                        await Task.Delay(PollIntervalMs, stop.Token);
+                    }
+                    catch (OperationCanceledException) { break; }
+
+                    try
+                    {
+                        var current = await listener.GetNotificationsAsync(NotificationKinds.Toast);
+                        var currentIds = current
+                            .Select(n => n.Id.ToString(CultureInfo.InvariantCulture))
+                            .ToHashSet();
+
+                        // Detect removals.
+                        List<string> removed;
+                        lock (seenLock)
+                        {
+                            removed = seenIds.Except(currentIds).ToList();
+                            foreach (var id in removed) seenIds.Remove(id);
+                        }
+                        foreach (var id in removed)
+                        {
+                            Emit(new { kind = "removed", id });
+                        }
+
+                        // Detect additions.
+                        foreach (var n in current)
+                        {
+                            var id = n.Id.ToString(CultureInfo.InvariantCulture);
+                            bool isNew;
+                            lock (seenLock)
+                            {
+                                isNew = seenIds.Add(id);
+                            }
+                            if (isNew) EmitAdded(n, fromSync: false);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Don't spam — emit and continue. If the API is
+                        // permanently broken we'll just keep retrying with no
+                        // events fired, which is the right "fail-safe" mode.
+                        Emit(new
+                        {
+                            kind = "error",
+                            message = $"Polling iteration failed: {Describe(ex)}",
+                        });
+                    }
+                }
+            });
+        }
+
+        // Stdin loop: drives commands from the parent (currently just "sync")
+        // and detects parent-process death via EOF.
         _ = Task.Run(async () =>
         {
             try
@@ -112,23 +234,44 @@ internal static class Program
                             foreach (var n in current)
                             {
                                 EmitAdded(n, fromSync: true);
+                                // Track so the polling diff doesn't re-emit
+                                // these as live "added" on the next tick.
+                                lock (seenLock)
+                                {
+                                    seenIds.Add(n.Id.ToString(CultureInfo.InvariantCulture));
+                                }
                             }
                         }
                         catch (Exception ex)
                         {
-                            Emit(new { kind = "error", message = $"sync failed: {ex.Message}" });
+                            Emit(new
+                            {
+                                kind = "error",
+                                message = $"sync failed: {Describe(ex)}",
+                            });
                         }
                     }
-                    // Unknown commands are silently ignored — the loop also
-                    // doubles as a parent-process-death detector via stdin EOF.
+                    // Unknown commands are silently ignored.
                 }
             }
-            catch { /* ignore */ }
+            catch { /* swallow — EOF on stdin signals parent exit */ }
+            stop.Cancel();
             done.TrySetResult(true);
         });
 
         await done.Task;
         return 0;
+    }
+
+    // Some WinRT exceptions surface with empty Message (the helpful info is
+    // in HResult). Build a human-readable string that always has *something*.
+    private static string Describe(Exception e)
+    {
+        var msg = (e.Message ?? "").Trim();
+        var hr = $"0x{e.HResult:X8}";
+        return msg.Length > 0
+            ? $"{e.GetType().Name}: {msg} (HRESULT {hr})"
+            : $"{e.GetType().Name} (HRESULT {hr})";
     }
 
     private static void EmitAdded(UserNotification n, bool fromSync)
@@ -168,7 +311,7 @@ internal static class Program
             title,
             body,
             timestamp = ts,
-            fromSync
+            fromSync,
         });
     }
 
@@ -179,8 +322,8 @@ internal static class Program
 
     private static void Emit(object obj)
     {
-        // Single-line JSON, newline-terminated, mutex'd so concurrent
-        // NotificationChanged events don't interleave bytes.
+        // Single-line JSON, newline-terminated, mutex'd so concurrent emits
+        // don't interleave bytes.
         string json = JsonSerializer.Serialize(obj, JsonOpts);
         lock (StdoutLock)
         {

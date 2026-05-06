@@ -157,29 +157,34 @@ export function startWindowsWatcher(
     };
 }
 
+// Subdirectory of the C# project where `dotnet publish -o` drops the helper
+// exe. We deliberately use a subdir (not the project dir itself, via "-o ."):
+// `dotnet publish -o .` from the project directory triggers a CS5001
+// (no Main found) error from the C# compiler, apparently because publishing
+// in-place perturbs the SDK's source-file enumeration. A subdir avoids the
+// issue entirely. See: buildWindowsHelper().
+const HELPER_PUBLISH_SUBDIR = "publish";
+const HELPER_EXE_NAME = "OsNotificationListener.exe";
+
 function resolveHelperPath(): string | undefined {
     // After build, postbuild copies bin/** -> dist/bin/**, and this module is
     // in dist/watchers/. Resolve relative to import.meta.url.
     const here = path.dirname(fileURLToPath(import.meta.url));
-    const candidates = [
-        path.resolve(
-            here,
-            "..",
-            "bin",
-            "OsNotificationListener",
-            "OsNotificationListener.exe",
-        ),
-        path.resolve(
-            here,
-            "..",
-            "..",
-            "bin",
-            "OsNotificationListener",
-            "OsNotificationListener.exe",
-        ),
+    const projDirCandidates = [
+        path.resolve(here, "..", "bin", "OsNotificationListener"),
+        path.resolve(here, "..", "..", "bin", "OsNotificationListener"),
     ];
-    for (const c of candidates) {
-        if (existsSync(c)) return c;
+    for (const projDir of projDirCandidates) {
+        // Preferred location — what buildWindowsHelper produces.
+        const inPublish = path.join(
+            projDir,
+            HELPER_PUBLISH_SUBDIR,
+            HELPER_EXE_NAME,
+        );
+        if (existsSync(inPublish)) return inPublish;
+        // Legacy / hand-built location: directly in the project dir.
+        const inRoot = path.join(projDir, HELPER_EXE_NAME);
+        if (existsSync(inRoot)) return inRoot;
     }
     return undefined;
 }
@@ -214,26 +219,43 @@ export async function buildWindowsHelper(opts: {
             "OS notification helper source (OsNotificationListener.csproj) not found. The agent's package may be incomplete.",
         );
     }
+    // Run `dotnet clean` first so stale obj/ contents (e.g. from a prior
+    // failed attempt) don't surface confusing "no Main found" / cache errors.
+    // Failures here are non-fatal — the publish below will surface a real
+    // error if the project is genuinely broken.
+    await runDotnet(["clean", "-c", "Release"], projDir, opts).catch(() => {});
+    // Publish into a subdir, NOT the project dir itself. `-o .` from inside
+    // the project directory produces CS5001 "no Main found" from the C#
+    // compiler — apparently publishing in-place perturbs the SDK's source-file
+    // enumeration. resolveHelperPath() knows to look here.
+    const publishDir = path.join(projDir, HELPER_PUBLISH_SUBDIR);
+    await runDotnet(
+        ["publish", "-c", "Release", "-r", "win-x64", "-o", publishDir],
+        projDir,
+        opts,
+    );
+}
+
+function runDotnet(
+    args: string[],
+    cwd: string,
+    opts: { onProgress?: (line: string) => void },
+): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-        const args = [
-            "publish",
-            "-c",
-            "Release",
-            "-r",
-            "win-x64",
-            "-o",
-            projDir,
-        ];
         const child = spawn("dotnet", args, {
-            cwd: projDir,
+            cwd,
             windowsHide: true,
             stdio: ["ignore", "pipe", "pipe"],
             shell: false,
         });
 
         // Per-stream line buffer so onProgress sees one full line at a time
-        // even when chunks split mid-line.
+        // even when chunks split mid-line. We also capture all stdout+stderr
+        // lines into a transcript so we can surface the actual dotnet error
+        // when the build exits non-zero (the live progress is rendered in
+        // "temporary" appendMode so it disappears).
         const buffers = { stdout: "", stderr: "" };
+        const transcript: string[] = [];
         const onChunk = (chunk: string, stream: "stdout" | "stderr") => {
             buffers[stream] += chunk;
             let nl: number;
@@ -241,7 +263,9 @@ export async function buildWindowsHelper(opts: {
                 const line = buffers[stream].slice(0, nl).replace(/\r$/, "");
                 buffers[stream] = buffers[stream].slice(nl + 1);
                 if (line.length > 0) {
-                    opts.onProgress?.(`[${stream}] ${line}`);
+                    const tagged = `[${stream}] ${line}`;
+                    transcript.push(tagged);
+                    opts.onProgress?.(tagged);
                 }
             }
         };
@@ -264,13 +288,29 @@ export async function buildWindowsHelper(opts: {
             }
         });
         child.on("exit", (code, signal) => {
-            if (code === 0) resolve();
-            else
-                reject(
-                    new Error(
-                        `dotnet publish exited with code=${code} signal=${signal}`,
-                    ),
-                );
+            if (code === 0) {
+                resolve();
+                return;
+            }
+            // Flush any final un-newlined remnants so the transcript is
+            // complete (dotnet sometimes prints summaries without trailing \n).
+            for (const stream of ["stdout", "stderr"] as const) {
+                const tail = buffers[stream].trim();
+                if (tail.length > 0) transcript.push(`[${stream}] ${tail}`);
+            }
+            // Show the last few lines — that's where the dotnet error usually
+            // lives ("Build FAILED.", missing SDK message, etc.). Cap at 12
+            // so the chat error doesn't become a wall of text.
+            const tailLines = transcript.slice(-12);
+            const tailText =
+                tailLines.length > 0
+                    ? `\nLast output:\n${tailLines.join("\n")}`
+                    : "";
+            reject(
+                new Error(
+                    `dotnet publish exited with code=${code} signal=${signal}${tailText}`,
+                ),
+            );
         });
     });
 }

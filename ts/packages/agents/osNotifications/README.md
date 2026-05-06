@@ -94,9 +94,9 @@ The yes/no flow is wired via the standard `ChoiceManager` + `handleChoice` patte
 
 ### Commands sharing the action code path
 
-`@osNotifications sync` and `@osNotifications test` live alongside the actions because some users prefer explicit command invocation over conversational form. Each command builds the corresponding `TypeAgentAction` object, calls the same `performSync` / `performTest` helper the action handler uses, and emits the resulting `ActionResult` through a small `emitActionResultFromCommand` helper.
+`@osNotifications sync` and `@osNotifications test` live alongside the actions because some users prefer explicit command invocation over conversational form. Each command builds the corresponding `TypeAgentAction` object and `return`s the result of the same `performSync` / `performTest` helper the action handler uses.
 
-That helper has one localized hack: command handlers return `Promise<void>` and the dispatcher's command pipeline doesn't process `pendingChoice` natively (action pipeline only — see [`actionHandlers.ts:200-237`](../../dispatcher/dispatcher/src/execute/actionHandlers.ts#L200-L237)). So the helper uses the `_systemContext` escape hatch to manually register the choice route and call `clientIO.requestChoice` for command invocations. The yes/no card looks identical regardless of how the action was invoked. If the SDK ever exposes a public "command can produce pendingChoice" API, drop the helper.
+This works because command handlers can now opt in to returning an `ActionResult` (signature: `Promise<ActionResult | undefined | void>`). The dispatcher's command pipeline runs the same post-execution processing as the action pipeline — display content, `pendingChoice` (in-chat yes/no card), `dynamicDisplayId` — so command and NL invocations render identically. Returning `void` keeps the legacy "use `actionIO` directly" pattern; both are supported.
 
 ## Configuration
 
@@ -180,8 +180,6 @@ The freedesktop `Notify` method returns a u32 id, but eavesdropping doesn't see 
 - **Reconciliation with `beginAgentThread`.** A parallel work-in-progress feature adds `beginAgentThread()` — an agent-initiated UI message API with its own `bubble | toast | inline` `kind` field. There's overlap with this agent's render-mode config. Worth a design pass once both have landed.
 
 - **Prebuilt Windows binary.** The C# helper exe is shipped as source, not a prebuilt binary — every checkout needs `dotnet publish` to make Windows work. CI should produce and bundle the `.exe` alongside the agent's `dist/`.
-
-- **Drop the `_systemContext` escape hatch.** `emitActionResultFromCommand` reaches into `(sessionContext as any)._systemContext` to wire `pendingChoice` for command invocations. If the SDK exposes a public way for command handlers to produce action-result-shaped responses (or to dispatch a follow-up action through the regular pipeline), this helper can become a one-liner.
 
 ## Files
 

@@ -221,7 +221,7 @@ export type AgentInvokeFunctions = {
             commands: string[];
             params: ParsedCommandParams<ParameterDefinitions> | undefined;
         },
-    ): Promise<void>;
+    ): Promise<ActionResult | undefined>;
     resolveEntity(
         param: Partial<ContextParams> & {
             type: string;

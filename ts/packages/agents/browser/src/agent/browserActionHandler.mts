@@ -297,7 +297,7 @@ export function instantiate(): AppAgent {
             if (!choiceManager) {
                 throw new Error("Choice manager not initialized");
             }
-            return choiceManager.handleChoice(choiceId, response);
+            return choiceManager.handleChoice(choiceId, response, context);
         },
         ...getCommandInterface(handlers),
     };
@@ -1597,6 +1597,7 @@ async function executeBrowserAction(
                             await agentContext.choiceManager.handleChoice(
                                 choiceId,
                                 selectedIndices,
+                                context,
                             );
                         agentContext.pendingInferChoiceId = undefined;
                         return result;

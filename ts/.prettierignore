@@ -36,3 +36,8 @@ examples/websiteAliases/cache
 
 # VS Studio Files
 .vs/**
+
+# .NET build output for the OS notifications agent's C# helper
+packages/agents/osNotifications/bin/**/obj/**
+packages/agents/osNotifications/bin/**/bin/**
+packages/agents/osNotifications/bin/**/publish/**

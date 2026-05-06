@@ -7,6 +7,7 @@ import {
     ActionResultSuccess,
     ActionResultSuccessNoDisplay,
 } from "../action.js";
+import { ActionContext } from "../agentInterface.js";
 import { DisplayMessageKind } from "../display.js";
 import { Entity } from "../memory.js";
 import { ChoiceManager } from "./choiceManager.js";
@@ -123,14 +124,22 @@ export function createActionResultFromMarkdownDisplay(
     };
 }
 
+// The onResponse callback receives the LIVE ActionContext the dispatcher
+// creates when handling the user's choice. Use that context (not the one
+// captured in the enclosing scope) when calling actionContext.actionIO.*
+// inside the callback — the original ActionContext is closed/stale by the
+// time the user responds.
 export function createYesNoChoiceResult(
     choiceManager: ChoiceManager,
     message: string,
-    onResponse: (confirmed: boolean) => Promise<ActionResult | undefined>,
+    onResponse: (
+        confirmed: boolean,
+        actionContext: ActionContext<unknown>,
+    ) => Promise<ActionResult | undefined>,
     displayHtml?: string,
 ): ActionResultSuccess {
-    const choiceId = choiceManager.registerChoice((response) =>
-        onResponse(response as boolean),
+    const choiceId = choiceManager.registerChoice((response, actionContext) =>
+        onResponse(response as boolean, actionContext),
     );
     return {
         entities: [],
@@ -147,11 +156,12 @@ export function createMultiChoiceResult(
     choices: string[],
     onResponse: (
         selectedIndices: number[],
+        actionContext: ActionContext<unknown>,
     ) => Promise<ActionResult | undefined>,
     displayHtml?: string,
 ): ActionResultSuccess {
-    const choiceId = choiceManager.registerChoice((response) =>
-        onResponse(response as number[]),
+    const choiceId = choiceManager.registerChoice((response, actionContext) =>
+        onResponse(response as number[], actionContext),
     );
     return {
         entities: [],

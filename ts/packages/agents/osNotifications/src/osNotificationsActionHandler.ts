@@ -53,8 +53,6 @@ const debug = registerDebug("typeagent:osNotifications");
 // agent-enable timestamp. Slightly fuzzy to tolerate clock skew.
 const NEW_ONLY_GRACE_MS = 2_000;
 
-const AGENT_NAME = "osNotifications";
-
 type AgentContext = {
     config: OsNotificationsConfig;
     watcher: OsNotificationWatcher | undefined;
@@ -139,8 +137,15 @@ async function performTest(
 
 // Returns an ActionResultSuccess with pendingChoice — the dispatcher will
 // register the route and call clientIO.requestChoice to render the in-chat
-// yes/no card. handleChoice routes the response back through ChoiceManager
-// to the callback below, which performs the build and retries the sync.
+// yes/no card. handleChoice routes the response back through ChoiceManager,
+// which invokes the callback with the LIVE ActionContext the dispatcher
+// creates for the response.
+//
+// IMPORTANT: the callback uses `liveActionContext`, NOT the `actionContext`
+// captured from this enclosing scope. By the time the user clicks Yes/No, the
+// original ActionContext has been closed by the agent-rpc client (its
+// `actionContextId` is out of scope), so any actionIO call on it would error
+// with "Invalid contextId N used out of scope".
 function offerHelperBuild(
     actionContext: ActionContext<AgentContext>,
 ): ActionResultSuccess {
@@ -148,13 +153,15 @@ function offerHelperBuild(
     return createYesNoChoiceResult(
         ctx.choiceManager,
         "The OS notification helper exe (OsNotificationListener.exe) hasn't been built yet. Build it now? This runs `dotnet publish` and may take 30–60 seconds the first time.",
-        async (confirmed: boolean) => {
+        async (confirmed, liveActionContext) => {
             if (!confirmed) {
                 return createActionResultFromTextDisplay(
                     "Build skipped — sync cancelled.",
                 );
             }
-            return buildAndRetrySync(actionContext);
+            return buildAndRetrySync(
+                liveActionContext as ActionContext<AgentContext>,
+            );
         },
     );
 }
@@ -180,10 +187,14 @@ async function buildAndRetrySync(
     );
     try {
         await buildWindowsHelper({
+            // "inline" so each line stays visible as the build runs — handy
+            // for diagnosing failures and for seeing that dotnet is making
+            // progress on long restores. The transcript can get long; if
+            // that's noisy in practice, switch back to "temporary".
             onProgress: (line) => {
                 actionContext.actionIO.appendDisplay(
                     { type: "text", content: line, kind: "status" },
-                    "temporary",
+                    "inline",
                 );
             },
         });
@@ -216,10 +227,11 @@ async function buildAndRetrySync(
 
 // ============================================================================
 // Command handlers — the @osNotifications command surface. Each command
-// constructs the corresponding action object and invokes the same action
-// handler the NL pipeline uses, then emits the result. A small escape-hatch
-// helper wires pendingChoice (which only the action-result pipeline supports
-// natively) so the in-chat yes/no card renders for command invocations too.
+// constructs the corresponding action object and returns the result of the
+// same per-action helper the NL pipeline uses. The dispatcher's command
+// pipeline runs the same post-execution processing as the action pipeline
+// (display content, pendingChoice / yes-no card), so commands and NL
+// invocations render identically.
 // ============================================================================
 
 class OsNotificationsSyncCommandHandler implements CommandHandlerNoParams {
@@ -227,13 +239,12 @@ class OsNotificationsSyncCommandHandler implements CommandHandlerNoParams {
         "Re-emit currently-present OS notifications through the agent pipeline. Windows only — Linux/macOS do not expose existing notifications.";
     public async run(
         actionContext: ActionContext<AgentContext>,
-    ): Promise<void> {
+    ): Promise<ActionResult> {
         const action: SyncOsNotificationsAction = {
             actionName: "syncOsNotifications",
             parameters: {},
         };
-        const result = await performSync(action, actionContext);
-        emitActionResultFromCommand(actionContext, result);
+        return performSync(action, actionContext);
     }
 }
 
@@ -263,7 +274,7 @@ class OsNotificationsTestCommandHandler implements CommandHandler {
     public async run(
         actionContext: ActionContext<AgentContext>,
         params: ParsedCommandParams<typeof this.parameters>,
-    ): Promise<void> {
+    ): Promise<ActionResult> {
         const action: TestOsNotificationAction = {
             actionName: "testOsNotification",
             parameters: {
@@ -272,8 +283,7 @@ class OsNotificationsTestCommandHandler implements CommandHandler {
                 title: params.flags.title as string,
             },
         };
-        const result = await performTest(action, actionContext);
-        emitActionResultFromCommand(actionContext, result);
+        return performTest(action, actionContext);
     }
 }
 
@@ -284,69 +294,6 @@ const commandHandlers: CommandHandlerTable = {
         test: new OsNotificationsTestCommandHandler(),
     },
 };
-
-// Bridges ActionResult into a command handler's void-returning world. The
-// dispatcher's command pipeline doesn't process ActionResult fields the way
-// its action pipeline does (see actionHandlers.ts:200-237), so we manually
-// (a) push displayContent through actionIO and (b) wire pendingChoice via
-// the systemContext escape hatch so the in-chat yes/no card renders.
-//
-// This is the smallest hack that lets `@osNotifications sync` and the NL
-// "sync notifications" form share one ActionResult-returning code path.
-// If/when the SDK gains a public "command can produce pendingChoice" API,
-// drop this helper.
-function emitActionResultFromCommand(
-    actionContext: ActionContext<AgentContext>,
-    result: ActionResult,
-): void {
-    if ("error" in result && result.error !== undefined) {
-        actionContext.actionIO.appendDisplay(
-            { type: "text", content: result.error, kind: "error" },
-            "block",
-        );
-        return;
-    }
-
-    const success = result as ActionResultSuccess;
-    if (success.displayContent !== undefined) {
-        actionContext.actionIO.appendDisplay(success.displayContent, "block");
-    }
-
-    if (success.pendingChoice !== undefined) {
-        const sysCtx = (actionContext.sessionContext as any)._systemContext;
-        if (
-            sysCtx === undefined ||
-            sysCtx.pendingChoiceRoutes === undefined ||
-            sysCtx.clientIO === undefined ||
-            sysCtx.currentRequestId === undefined
-        ) {
-            actionContext.actionIO.appendDisplay(
-                {
-                    type: "text",
-                    content:
-                        '(In-chat prompt unavailable from this command path; try the natural-language form, e.g. "sync os notifications".)',
-                    kind: "warning",
-                },
-                "block",
-            );
-            return;
-        }
-        const pc = success.pendingChoice;
-        sysCtx.pendingChoiceRoutes.set(pc.choiceId, {
-            agentName: AGENT_NAME,
-            requestId: sysCtx.currentRequestId,
-            actionIndex: 0,
-        });
-        sysCtx.clientIO.requestChoice(
-            sysCtx.currentRequestId,
-            pc.choiceId,
-            pc.type,
-            pc.message,
-            pc.type === "multiChoice" ? pc.choices : [],
-            AGENT_NAME,
-        );
-    }
-}
 
 export function instantiate(): AppAgent {
     return {
@@ -415,7 +362,7 @@ export function instantiate(): AppAgent {
         handleChoice: async (choiceId, response, context) => {
             const ctx = (context as ActionContext<AgentContext>).sessionContext
                 .agentContext;
-            return ctx.choiceManager.handleChoice(choiceId, response);
+            return ctx.choiceManager.handleChoice(choiceId, response, context);
         },
     };
 }
@@ -485,7 +432,11 @@ function onWatcherEvent(
         debug("dropping by app filter id=%s app=%s", evt.id, evt.app);
         return;
     }
-    if (!withinRateLimit(ctx)) {
+    // Rate limit applies to live notification floods (a misbehaving app
+    // could spam dozens of notifications/minute). Explicit user-initiated
+    // sync is a one-shot — bypass the limiter so all currently-present
+    // notifications come through.
+    if (evt.fromSync !== true && !withinRateLimit(ctx)) {
         debug("dropping by rate limit id=%s", evt.id);
         return;
     }

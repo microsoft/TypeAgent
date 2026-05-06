@@ -198,46 +198,73 @@ export async function executeAction(
     }
 
     // Display the action result.
+    emitActionResult(
+        result,
+        actionContext,
+        systemContext,
+        requestId,
+        appAgentName,
+        actionIndex,
+        schemaName,
+    );
+
+    closeActionContext();
+    return result;
+}
+
+// Post-execution processing for an ActionResult: error / displayContent /
+// dynamicDisplayId / pendingChoice. Shared between the action and command
+// pipelines so commands that opt in to returning ActionResult get the same
+// rendering — including the in-chat yes/no card via createYesNoChoiceResult.
+//
+// `actionIndex` and `schemaName` are action-shaped concepts. For commands
+// invoking this helper, callers pass `actionIndex: 0` and
+// `schemaName: appAgentName` as placeholders. Choice routing keys on
+// `choiceId`, not actionIndex; schemaName is only used as the source label
+// on the choice card.
+function emitActionResult(
+    result: ActionResult,
+    actionContext: ActionContext<unknown>,
+    systemContext: CommandHandlerContext,
+    requestId: ReturnType<typeof getRequestId>,
+    appAgentName: string,
+    actionIndex: number,
+    schemaName: string,
+): void {
     if (result.error !== undefined) {
         if (!("fallbackToReasoning" in result) || !result.fallbackToReasoning) {
             displayError(result.error, actionContext);
         }
-    } else {
-        if (result.displayContent !== undefined) {
-            actionContext.actionIO.appendDisplay(
-                result.displayContent,
-                "block",
-            );
-        }
-        if (result.dynamicDisplayId !== undefined) {
-            systemContext.clientIO.setDynamicDisplay(
-                requestId,
-                schemaName,
-                actionIndex,
-                result.dynamicDisplayId,
-                result.dynamicDisplayNextRefreshMs!,
-            );
-        }
-        if (result.pendingChoice !== undefined) {
-            const pc = result.pendingChoice;
-            systemContext.pendingChoiceRoutes.set(pc.choiceId, {
-                agentName: appAgentName,
-                requestId,
-                actionIndex,
-            });
-            systemContext.clientIO.requestChoice(
-                requestId,
-                pc.choiceId,
-                pc.type,
-                pc.message,
-                pc.type === "multiChoice" ? pc.choices : [],
-                schemaName,
-            );
-        }
+        return;
     }
-
-    closeActionContext();
-    return result;
+    if (result.displayContent !== undefined) {
+        actionContext.actionIO.appendDisplay(result.displayContent, "block");
+    }
+    if (result.dynamicDisplayId !== undefined) {
+        systemContext.clientIO.setDynamicDisplay(
+            requestId,
+            schemaName,
+            actionIndex,
+            result.dynamicDisplayId,
+            result.dynamicDisplayNextRefreshMs!,
+        );
+    }
+    if (result.pendingChoice !== undefined) {
+        const pc = result.pendingChoice;
+        systemContext.pendingChoiceRoutes.set(pc.choiceId, {
+            agentName: appAgentName,
+            requestId,
+            actionIndex,
+        });
+        systemContext.clientIO.requestChoice(
+            requestId,
+            pc.choiceId,
+            pc.type,
+            pc.message,
+            pc.type === "multiChoice" ? pc.choices : [],
+            schemaName,
+        );
+    }
 }
 
 async function canExecute(
@@ -624,12 +651,30 @@ export async function executeCommand(
         );
 
         try {
-            return await appAgent.executeCommand(
+            // Command handlers MAY return an ActionResult — when they do,
+            // we run the same post-processing the action pipeline uses
+            // (display content / pendingChoice / dynamicDisplayId). Returning
+            // void / undefined keeps the legacy "use actionIO directly"
+            // pattern. For commands actionIndex=0 and schemaName=appAgentName
+            // are placeholders — see emitActionResult().
+            const result = await appAgent.executeCommand(
                 commands,
                 params,
                 actionContext,
                 attachments,
             );
+            if (result !== undefined) {
+                emitActionResult(
+                    result,
+                    actionContext,
+                    context,
+                    getRequestId(context),
+                    appAgentName,
+                    0,
+                    appAgentName,
+                );
+            }
+            return;
         } catch (e: any) {
             if (e.name === "AbortError") {
                 throw e;
