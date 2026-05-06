@@ -36,15 +36,16 @@ async function initializeUtilityContext(): Promise<UtilityAgentContext> {
 
 async function executeUtilityAction(
     action: TypeAgentAction<UtilityAction>,
-    _context: ActionContext<UtilityAgentContext>,
+    context: ActionContext<UtilityAgentContext>,
 ) {
     const a = action as UtilityAction;
+    const signal = context.abortSignal;
     try {
         switch (a.actionName) {
             case "webSearch":
-                return await handleWebSearch(a.parameters.query);
+                return await handleWebSearch(a.parameters.query, signal);
             case "webFetch":
-                return await handleWebFetch(a.parameters.url);
+                return await handleWebFetch(a.parameters.url, signal);
             case "readFile":
                 return await handleReadFile(a.parameters.path);
             case "writeFile":
@@ -59,6 +60,7 @@ async function executeUtilityAction(
                     a.parameters.parseJson,
                     a.parameters.htmlOutput,
                     a.parameters.model,
+                    signal,
                 );
             case "claudeTask":
                 return await handleClaudeTask(
@@ -66,6 +68,7 @@ async function executeUtilityAction(
                     a.parameters.parseJson,
                     a.parameters.model,
                     a.parameters.maxTurns,
+                    signal,
                 );
             default:
                 return createActionResultFromError(
@@ -73,6 +76,12 @@ async function executeUtilityAction(
                 );
         }
     } catch (error) {
+        if (
+            signal?.aborted ||
+            (error instanceof Error && error.name === "AbortError")
+        ) {
+            throw error; // let the dispatcher handle it as a cancellation
+        }
         return createActionResultFromError(
             `Utility action failed: ${error instanceof Error ? error.message : String(error)}`,
         );
@@ -105,14 +114,18 @@ function getBrowser(): Promise<Browser> {
 
 const MAX_PAGE_CHARS = 50_000;
 
-async function getPageContent(url: string): Promise<string> {
+async function getPageContent(
+    url: string,
+    signal?: AbortSignal,
+): Promise<string> {
     const browser = await getBrowser();
     const page = await browser.newPage();
     try {
         await page.goto(url, {
             waitUntil: "networkidle2",
             timeout: 30_000,
-        });
+            signal,
+        } as any);
         const rawHtml = await page.content();
         const reducer = await createNodeHtmlReducer();
         reducer.removeScripts = true;
@@ -134,16 +147,16 @@ async function getPageContent(url: string): Promise<string> {
     }
 }
 
-async function handleWebSearch(searchQuery: string) {
+async function handleWebSearch(searchQuery: string, signal?: AbortSignal) {
     const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(searchQuery)}`;
-    const html = await getPageContent(url);
+    const html = await getPageContent(url, signal);
     return createActionResultFromTextDisplay(
         `Search results for "${searchQuery}":\n\n${html}`,
         `Search results for "${searchQuery}":\n\n${html}`,
     );
 }
 
-async function handleWebFetch(url: string) {
+async function handleWebFetch(url: string, signal?: AbortSignal) {
     // Normalize bare domain/path (no scheme) to https://
     // Also replace spaces with hyphens in the path (genre slugs etc.)
     const withScheme =
@@ -151,7 +164,7 @@ async function handleWebFetch(url: string) {
             ? url
             : `https://${url}`;
     const normalized = withScheme.replace(/ /g, "-");
-    const html = await getPageContent(normalized);
+    const html = await getPageContent(normalized, signal);
     return createActionResultFromTextDisplay(
         `Content from ${normalized}:\n\n${html}`,
         `Content from ${normalized}:\n\n${html}`,
@@ -174,11 +187,13 @@ async function handleLlmTransform(
     parseJson?: boolean,
     htmlOutput?: boolean,
     model: string = "claude-haiku-4-5-20251001",
+    signal?: AbortSignal,
 ) {
     const fullPrompt = `${prompt}\n\n${input}`;
     const queryInstance = query({ prompt: fullPrompt, options: { model } });
     let responseText = "";
     for await (const message of queryInstance) {
+        signal?.throwIfAborted();
         if (message.type === "result" && message.subtype === "success") {
             responseText = (message as any).result || "";
             break;
@@ -225,6 +240,7 @@ async function handleClaudeTask(
     parseJson?: boolean,
     model: string = "claude-haiku-4-5-20251001",
     maxTurns: number = 10,
+    signal?: AbortSignal,
 ) {
     const queryInstance = query({
         prompt: goal,
@@ -245,6 +261,7 @@ async function handleClaudeTask(
     });
     let responseText = "";
     for await (const message of queryInstance) {
+        signal?.throwIfAborted();
         if (message.type === "result" && message.subtype === "success") {
             responseText = (message as any).result || "";
             break;
