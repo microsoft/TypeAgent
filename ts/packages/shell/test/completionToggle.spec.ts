@@ -116,11 +116,12 @@ test.describe("Completion Mode Toggle", () => {
             await mainWindow.keyboard.press("Tab");
             await mainWindow.keyboard.press("Tab");
             await expect(async () => {
-                const currentText = (await input.innerText())
-                    .replace(/\u00a0/g, " ")
+                const normalizedText = (await input.textContent())
+                    ?.replace(/\u00a0/g, " ")
                     .trim();
-                expect(currentText.length).toBeGreaterThan("@con".length);
-                expect(currentText.startsWith("@")).toBe(true);
+                expect(normalizedText).toBeTruthy();
+                expect(normalizedText.length).toBeGreaterThan("@con".length);
+                expect(normalizedText.startsWith("@")).toBe(true);
             }).toPass({
                 timeout: 15000,
             });
