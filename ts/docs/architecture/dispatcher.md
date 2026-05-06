@@ -491,6 +491,12 @@ Embeddings are cached to disk and loaded at startup.
 
 ## Action collision detection
 
+> **Soft-rollout plan:** the staged experiment plan
+> ([`collision-rollout.md`](./collision-rollout.md)) is the canonical
+> record of which detection points / strategies are being tested, how
+> testers opt in, what telemetry shape we capture, and the Cosmos query
+> reference. Update it as experiments run.
+
 When two or more agents can plausibly handle the same input, the
 dispatcher needs a policy for picking a winner. Before this subsystem,
 the pipeline silently took the first validated match — invisible

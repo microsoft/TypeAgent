@@ -219,6 +219,8 @@ By default agents runs out of proc in their own process. This is to ensure that 
 
 When two or more agents can plausibly handle the same user input, the dispatcher needs a policy for picking a winner. The default ("first-match") preserves legacy behavior — silently take the first validated match — but the dispatcher also supports detecting collisions across four points and applying one of four configurable resolution strategies. This subsystem is **off by default**; opt in per detection point via session config.
 
+> **Soft-rollout plan:** see [`collision-rollout.md`](../../../docs/architecture/collision-rollout.md) for the staged experiment plan (observability first, then strategy A/B), tester opt-in protocol, telemetry pipeline, and Cosmos query reference. That document is the canonical record for any experiment touching this subsystem — update it as experiments run.
+
 ### Detection points
 
 | Point              | When it fires                                                                                                                      | Source                                                                                                                                                            |
