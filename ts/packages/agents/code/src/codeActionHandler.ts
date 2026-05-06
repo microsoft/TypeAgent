@@ -350,6 +350,28 @@ async function executeCodeAction(
     const agentContext = context.sessionContext.agentContext;
     const webSocketServer = agentContext.webSocketServer;
 
+    // Map the LLM-facing action name to the wire protocol name expected by
+    // the Coda VS Code extension. The schema splits file creation into
+    // newCodeFile / newMarkdownFile / newTextFile (Rob's "shape the schema
+    // into the form the LLM wants to produce" guidance) but Coda still
+    // implements a single "newFile" handler that takes a `language` string.
+    let wireActionName = action.actionName;
+    let wireParams: any = action.parameters;
+    if (
+        action.actionName === "newCodeFile" ||
+        action.actionName === "newMarkdownFile" ||
+        action.actionName === "newTextFile"
+    ) {
+        wireActionName = "newFile";
+        const language =
+            action.actionName === "newMarkdownFile"
+                ? "markdown"
+                : action.actionName === "newTextFile"
+                  ? "plaintext"
+                  : (action.parameters as any).language;
+        wireParams = { ...(action.parameters as any), language };
+    }
+
     if (webSocketServer && webSocketServer.isConnected()) {
         try {
             const isExtensionAlive =
@@ -384,8 +406,8 @@ async function executeCodeAction(
                 webSocketServer.broadcast(
                     JSON.stringify({
                         id: callId,
-                        method: `code/${action.actionName}`,
-                        params: action.parameters,
+                        method: `code/${wireActionName}`,
+                        params: wireParams,
                     }),
                 );
             });

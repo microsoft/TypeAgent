@@ -4,7 +4,7 @@
 import { CodeActions } from "./codeActionsSchema.ts";
 
 // Start rule - all available actions
-<Start> : CodeActions = <changeColorScheme> | <changeColorSchemeTo> | <splitEditor> | <splitEditorSimple> | <changeEditorLayout> | <newFile> | <launchVSCode>;
+<Start> : CodeActions = <changeColorScheme> | <changeColorSchemeTo> | <splitEditor> | <splitEditorSimple> | <changeEditorLayout> | <newCodeFile> | <newMarkdownFile> | <newTextFile> | <launchVSCode>;
 
 // Main action rules
 <changeColorScheme> = <Polite> ('change' | 'switch' | 'set') ('to' | 'the')? $(theme:string) ('color scheme' | 'theme') -> { actionName: "changeColorScheme", parameters: { theme: theme } };
@@ -19,7 +19,11 @@ import { CodeActions } from "./codeActionsSchema.ts";
 
 <changeEditorLayout> = <Polite> ('change' | 'switch' | 'set' | 'go back') ('to' | 'the'? 'editor' 'to')? ('a'? | 'up')? $(columnCount:string) ('column' | 'pane') ('layout' | 'view' | 'mode')? -> { actionName: "changeEditorLayout", parameters: { columnCount: columnCount } };
 
-<newFile> = <Polite> ('create' | 'make') ('a'? 'new')? $(language:string)? 'file' ('called' | 'named')? $(fileName:string) ('with' | 'and' 'add')? $(content:string)? -> { actionName: "newFile", parameters: { fileName: fileName, language: language, content: content } };
+<newCodeFile> = <Polite> ('create' | 'make') ('a'? 'new')? $(language:string) 'file' ('called' | 'named')? $(fileName:string) ('with' | 'and' 'add')? $(content:string)? -> { actionName: "newCodeFile", parameters: { fileName: fileName, language: language, content: content } };
+
+<newMarkdownFile> = <Polite> ('create' | 'make') ('a'? 'new')? ('markdown' | 'md') 'file' ('called' | 'named')? $(fileName:string) ('with' | 'and' 'add')? $(content:string)? -> { actionName: "newMarkdownFile", parameters: { fileName: fileName, content: content } };
+
+<newTextFile> = <Polite> ('create' | 'make') ('a'? 'new')? ('text' | 'txt' | 'plain') 'file' ('called' | 'named')? $(fileName:string) ('with' | 'and' 'add')? $(content:string)? -> { actionName: "newTextFile", parameters: { fileName: fileName, content: content } };
 
 <launchVSCode> = <Polite> ('launch' | 'open' | 'start') ('vs code' | 'vscode' | 'code') ('in' $(mode:string) 'mode')? ('at' | 'with' | 'for')? $(path:string)? -> { actionName: "launchVSCode", parameters: { path: path } };
 

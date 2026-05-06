@@ -5,7 +5,9 @@ export type CodeActions =
     | ChangeColorThemeAction
     | SplitEditorAction
     | ChangeEditorLayoutAction
-    | NewFileAction;
+    | NewCodeFileAction
+    | NewMarkdownFileAction
+    | NewTextFileAction;
 
 export type CodeActivity = LaunchVSCodeAction;
 
@@ -87,41 +89,59 @@ export type ChangeEditorLayoutAction = {
     };
 };
 
-export type CodeLanguage =
-    | "plaintext"
+export type CodeFileLanguage =
     | "html"
+    | "css"
+    | "json"
     | "python"
     | "javaScript"
-    | "typeScript"
-    | "markdown";
+    | "typeScript";
 
-// ACTION: Create a new file in the editor.
-// USE THIS for any "create a new <lang> file called X with <content>", "make a new file",
-// "new typescript/python/markdown file" — for both untitled scratch files and named files.
-// This is the SINGLE canonical action for creating files. Do NOT emit a schema name like
-// "code-editor" or "code-general" as the actionName — always use "newFile" exactly.
-// Distinct from opening or finding an existing file in the workspace.
+// Create a new code file (Python, JavaScript, TypeScript, HTML, CSS, JSON, etc.) in the editor.
 //
-// EXAMPLES (always route these to newFile):
-//   "create a new typescript file called scratch.ts with a hello world function"
-//     → { actionName: "newFile", parameters: { fileName: "scratch.ts", language: "typeScript",
-//          content: "function helloWorld() { console.log('Hello, World!'); }\n" } }
-//   "make a new python file"
-//     → { actionName: "newFile", parameters: { fileName: "Untitled", language: "python", content: "" } }
-//   "new markdown file called notes.md"
-//     → { actionName: "newFile", parameters: { fileName: "notes.md", language: "markdown", content: "" } }
-//
-// DO NOT route file-creation requests to dispatcher.reasoning, dispatcher.unknown,
-// dispatcher.clarify, or any code-editor/code-general sub-schema. Always pick newFile here.
-export type NewFileAction = {
-    actionName: "newFile";
+// Example:
+// User: create a new typescript file called scratch.ts with a hello world function
+// Agent: { actionName: "newCodeFile", parameters: { fileName: "scratch.ts",
+//          language: "typeScript", content: "function helloWorld() { console.log('Hello, World!'); }\n" } }
+export type NewCodeFileAction = {
+    actionName: "newCodeFile";
     parameters: {
-        fileName: string | "untitled"; // If no filename is provided, "untitled" is used
-        language: CodeLanguage;
-        // Content of the new file based on language and user input, default is "Hello, World!".
-        // For "Create a markdown file with a list of top ten AI papers and links" → fill with a
-        // list of papers and arxiv links. For "Create a python file with code to merge two arrays
-        // of strings" → fill with the python function to merge the arrays.
+        // The file name; if omitted or empty, "untitled" is used.
+        fileName: string | "untitled";
+        // The programming language of the file.
+        language: CodeFileLanguage;
+        // Initial file content; empty string for an empty scratch file.
+        content: string;
+    };
+};
+
+// Create a new Markdown (.md) file in the editor.
+//
+// Example:
+// User: create a markdown file with a list of top ten AI papers
+// Agent: { actionName: "newMarkdownFile", parameters: { fileName: "papers.md",
+//          content: "# Top 10 AI Papers\n..." } }
+export type NewMarkdownFileAction = {
+    actionName: "newMarkdownFile";
+    parameters: {
+        // The file name; if omitted or empty, "untitled" is used.
+        fileName: string | "untitled";
+        // Initial Markdown content; empty string for an empty scratch file.
+        content: string;
+    };
+};
+
+// Create a new plain text (.txt) file in the editor.
+//
+// Example:
+// User: make a new text file called notes
+// Agent: { actionName: "newTextFile", parameters: { fileName: "notes.txt", content: "" } }
+export type NewTextFileAction = {
+    actionName: "newTextFile";
+    parameters: {
+        // The file name; if omitted or empty, "untitled" is used.
+        fileName: string | "untitled";
+        // Initial text content; empty string for an empty scratch file.
         content: string;
     };
 };
