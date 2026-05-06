@@ -3646,6 +3646,9 @@ importers:
       windowsclock-agent:
         specifier: workspace:*
         version: link:../agents/windowsClock
+      workflow-agent:
+        specifier: workspace:*
+        version: link:../../examples/workflow/adapter
       ws:
         specifier: ^8.17.1
         version: 8.18.2
