@@ -62,7 +62,7 @@ P1-P5 govern IR design. These neighboring areas are not governed by the principl
 - [../ir/ir-v1.md](../ir/ir-v1.md) - the v1 IR, derived from these principles.
 - [principle-gaps.md](principle-gaps.md) - analysis of areas the principles permit but don't drive (deployment/evolution, debugging, performance). Includes v1 scope decisions and forward compatibility checks.
 - [../ir/decisions/](../ir/decisions/) - per-decision records driven by these principles.
-- [../archive/](../archive/) - earlier design exploration (plan.md, loops-dataflow-controlflow.md, design-decisions.md), preserved for context.
+- Earlier design exploration (plan, loops/dataflow/controlflow analysis, initial design decisions) was folded into the current docs and removed.
 
 ## Principles
 

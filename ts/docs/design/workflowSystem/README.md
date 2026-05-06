@@ -60,4 +60,4 @@ Each doc under `ir/`, `engineering/`, and any future component folder carries a 
 
 ## See also
 
-- [archive/README.md](archive/README.md) - what's in the archive and what superseded each archived doc.
+Earlier design exploration (plan, loops/dataflow/controlflow analysis, initial design decisions) was folded into the current docs and removed.

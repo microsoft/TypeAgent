@@ -9,4 +9,4 @@ package layout, build plan, milestones, integration with the TypeAgent
 dispatcher, test strategy.
 
 The earlier engineering plan (goals, non-goals, package layout, milestones,
-task plugin API sketch) lives in [../archive/plan.md](../archive/plan.md).
+task plugin API sketch) was folded into [plan.md](plan.md) and removed.
