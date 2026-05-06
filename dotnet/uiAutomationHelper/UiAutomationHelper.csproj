@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>UiAutomationHelper</RootNamespace>
+    <AssemblyName>UiAutomationHelper</AssemblyName>
+    <Version>0.1.0</Version>
+    <OutputPath>bin\$(Configuration)</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <NoWarn>$(NoWarn);SYSLIB1054;CA1508;CA1859</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="test/**" />
+    <None Remove="test/**" />
+    <EmbeddedResource Remove="test/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="FlaUI.Core" Version="4.0.0" />
+    <PackageReference Include="FlaUI.UIA3" Version="4.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="UiAutomationHelper.Tests" />
+  </ItemGroup>
+</Project>

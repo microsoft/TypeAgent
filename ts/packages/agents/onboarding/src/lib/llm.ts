@@ -47,3 +47,31 @@ export function getPackagingModel(endpoint?: string): ChatModel {
         "onboarding:packaging",
     ]);
 }
+
+export function getExploreModel(endpoint?: string): ChatModel {
+    // Default to GPT-5 — exploration benefits from reasoning when picking
+    // the next frontier action and recognizing modal vs. neutral states.
+    return openai.createChatModel(endpoint ?? "GPT_5", undefined, undefined, [
+        "onboarding:explore",
+    ]);
+}
+
+export function getSynthesisModel(endpoint?: string): ChatModel {
+    // Synthesis (neutral classification, chunk clustering, per-cluster
+    // action emission, validation) is structural reasoning over a large
+    // graph — a reasoning model produces dramatically better aggregation.
+    return openai.createChatModel(endpoint ?? "GPT_5", undefined, undefined, [
+        "onboarding:synthesis",
+    ]);
+}
+
+export function getReconModel(endpoint?: string): ChatModel {
+    // Reconnaissance is vision-driven (sends screenshots) so we must use a
+    // multimodal-capable deployment. GPT-v is the dedicated vision endpoint
+    // in this Azure config. (GPT-5 deployments here returned "API version
+    // not supported" for image_url content; GPT-4o uses a /v1/ URL shape
+    // that aiclient doesn't construct correctly.)
+    return openai.createChatModel(endpoint ?? "GPT_v", undefined, undefined, [
+        "onboarding:recon",
+    ]);
+}

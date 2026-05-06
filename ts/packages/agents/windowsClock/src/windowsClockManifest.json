@@ -1,0 +1,12 @@
+{
+  "emojiChar": "⏰",
+  "description": "Windows Clock agent — set alarms, start timers, run the stopwatch, and add world clocks via the built-in Windows Alarms & Clock app.",
+  "schema": {
+    "description": "Windows Clock agent — set alarms, start timers, run the stopwatch, and add world clocks via the built-in Windows Alarms & Clock app.",
+    "originalSchemaFile": "./windowsClockSchema.ts",
+    "schemaFile": "../dist/windowsClockSchema.pas.json",
+    "schemaType": {
+      "action": "WindowsClockAction"
+    }
+  }
+}

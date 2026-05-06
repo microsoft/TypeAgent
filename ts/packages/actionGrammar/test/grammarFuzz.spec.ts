@@ -247,12 +247,9 @@ fuzzDescribe("Fuzz: separator chars embedded in literals", {
 // generated grammars; the `promoteTailOnly` variant in the default
 // optimizer-variant set then runs the pass in isolation.
 //
-// TEMPORARILY DISABLED: this configuration produces grammars whose
-// truncated near-match input triggers catastrophic backtracking in
-// `matchGrammar` (~12s per input).  Re-enable once packrat
-// memoization (or equivalent matcher pruning) lands.  See
-// `grammarMatcherBacktrackPathology.spec.ts` for the regression case.
-/*
+// Re-enabled after success memoization landed; see
+// `grammarMatcherBacktrackPathology.spec.ts` for the regression case
+// it used to trigger.
 fuzzDescribe("Fuzz: tail-call promote shapes (optimizer equivalence)", {
     seed: 0xf022c,
     count: 40,
@@ -275,4 +272,94 @@ fuzzDescribe("Fuzz: tail-call promote shapes (optimizer equivalence)", {
     // wrapper bindings are also exercised through the serializer.
     validations: ["optimizer", "roundtrip-text"],
 });
-*/
+
+// ── Memoization parity ────────────────────────────────────────────────
+//
+// Validate that `matchGrammar` produces identical results with
+// memoization enabled (default) and disabled.  Catches memo cache
+// correctness regressions (stale deltas, cache key collisions,
+// rebasing errors) that hand-written tests may miss through random
+// grammar shape diversity.
+
+// Broad coverage: mixed feature set exercising wildcards, values,
+// optionals, repeats, and rule references.
+fuzzDescribe("Fuzz: memo parity (broad features)", {
+    seed: 0xf0230,
+    count: 40,
+    features: {
+        partKinds: { literal: 1, ruleRef: 1, wildcard: 1, number: 1 },
+        values: { attachProb: 0.5 },
+        groups: { optionalProb: 0.2, repeatProb: 0.2 },
+    },
+    validations: ["memo-parity"],
+});
+
+// Rule-ref reuse: same sub-rule referenced from multiple places,
+// which is the primary trigger for memo replay (success delta
+// capture on first entry, replay on subsequent entries with the
+// same cache key).  `ruleRefReuseProb: 0.4` biases the generator
+// toward re-using existing rule names instead of always creating
+// new forward references.
+fuzzDescribe("Fuzz: memo parity (ruleRef reuse)", {
+    seed: 0xf0231,
+    count: 40,
+    features: {
+        partKinds: { literal: 1, ruleRef: 2 },
+        values: { attachProb: 0.5 },
+        shapes: { ruleRefReuseProb: 0.4 },
+    },
+    validations: ["memo-parity"],
+});
+
+// Nested rule captures `$(x:<Inner>)` with carrier mode (implicit
+// default): single-part rules used as bound sub-rule references.
+// Exercises carrier delta capture/replay and valueId rebasing.
+fuzzDescribe("Fuzz: memo parity (nested + carrier)", {
+    seed: 0xf0232,
+    count: 30,
+    features: {
+        partKinds: { literal: 1, nestedRuleRef: 2, wildcard: 1 },
+        values: { attachProb: 0.5 },
+        shapes: { ruleRefReuseProb: 0.3 },
+    },
+    validations: ["memo-parity"],
+});
+
+// Policy cross-product: memo ON vs OFF with each non-default policy
+// setting.  Catches interactions between memoization and the
+// first-success commitment logic (preferTake/preferSkip/greedy/
+// nonGreedy suppress sibling forks, which affects which cache
+// entries are populated and replayed).
+fuzzDescribe("Fuzz: memo parity (policy cross-product)", {
+    seed: 0xf0233,
+    count: 30,
+    features: {
+        partKinds: { literal: 1, ruleRef: 1, wildcard: 1 },
+        values: { attachProb: 0.5 },
+        groups: { optionalProb: 0.3, repeatProb: 0.2 },
+        shapes: { ruleRefReuseProb: 0.3 },
+    },
+    validations: ["memo-parity"],
+    memoPolicySets: [
+        {},
+        { wildcardPolicy: "shortest" },
+        { optionalPolicy: "preferTake" },
+        { optionalPolicy: "preferSkip" },
+        { repeatPolicy: "greedy" },
+        { repeatPolicy: "nonGreedy" },
+    ],
+});
+
+// Spacing modes + memo: different leading-spacing modes affect the
+// memo cache key.  Exercises cache key discrimination for the
+// `leadingSpacingMode` factor.
+fuzzDescribe("Fuzz: memo parity (spacing modes)", {
+    seed: 0xf0234,
+    count: 30,
+    features: {
+        partKinds: { literal: 1, ruleRef: 1 },
+        spacing: { altProb: 0.4, ruleProb: 0.4 },
+        shapes: { ruleRefReuseProb: 0.3 },
+    },
+    validations: ["memo-parity"],
+});
