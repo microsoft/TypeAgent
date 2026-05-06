@@ -1,12 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+import * as fs from "node:fs";
+import * as path from "node:path";
 import registerDebug from "debug";
 import type { CollisionStrategy } from "./session.js";
 
 export type { CollisionStrategy } from "./session.js";
 
 const debugCollision = registerDebug("typeagent:dispatcher:collision");
+
+/** Filename appended within a session directory for collision events. */
+export const COLLISION_EVENTS_FILE = "collision-events.jsonl";
 
 /**
  * Minimal Logger shape we depend on — matches `Logger.logEvent` from
@@ -216,6 +221,36 @@ export function emitCollisionEvent(
                 );
             }
         }
+        // Append to the per-session JSONL so events survive shell exit
+        // even when the Cosmos sink is off (e.g. a tester without DB
+        // credentials).  The ring buffer alone caps at RING_BUFFER_SIZE
+        // and is in-memory only.
+        if (sessionDir) {
+            appendCollisionToFile(sessionDir, stamped);
+        }
+    }
+}
+
+/**
+ * Append one collision event as a JSONL line to
+ * `<sessionDir>/collision-events.jsonl`.  Sync I/O — the volume is low
+ * (one call per detected collision) and matches the synchronous emit
+ * call shape.  All errors are swallowed and logged via the debug
+ * channel so a filesystem hiccup never crashes the colliding request.
+ */
+function appendCollisionToFile(
+    sessionDir: string,
+    event: CollisionEvent,
+): void {
+    try {
+        const filePath = path.join(sessionDir, COLLISION_EVENTS_FILE);
+        fs.appendFileSync(filePath, JSON.stringify(event) + "\n", "utf8");
+    } catch (err) {
+        debugCollision(
+            `appendCollisionToFile failed — event captured in memory only: ${
+                err instanceof Error ? err.message : String(err)
+            }`,
+        );
     }
 }
 
