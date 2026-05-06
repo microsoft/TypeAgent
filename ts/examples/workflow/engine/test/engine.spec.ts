@@ -3069,4 +3069,121 @@ describe("WorkflowEngine (IR v1)", () => {
             expect((result.output as any).result).toBe(100);
         });
     });
+
+    describe("task timeout", () => {
+        it("aborts a task that exceeds taskTimeoutMs", async () => {
+            const slowTask: TaskDefinition = {
+                name: "test.slow",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                async execute(_input, ctx) {
+                    // Wait longer than the timeout
+                    return new Promise((resolve, reject) => {
+                        const timer = setTimeout(
+                            () =>
+                                resolve({
+                                    kind: "ok",
+                                    output: { done: true },
+                                }),
+                            5000,
+                        );
+                        ctx.signal.addEventListener(
+                            "abort",
+                            () => {
+                                clearTimeout(timer);
+                                reject(new Error("aborted"));
+                            },
+                            { once: true },
+                        );
+                    });
+                },
+            };
+
+            const reg = makeRegistry(...standardLibraryTasks, slowTask);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "timeoutTest",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    step: {
+                        kind: "task",
+                        task: "test.slow",
+                        inputSchema: { type: "object" },
+                        outputSchema: { type: "object" },
+                        inputs: {},
+                        bind: "result",
+                    },
+                },
+                entry: "step",
+                output: {
+                    $from: "scope",
+                    name: "result",
+                } as Template,
+            };
+
+            const start = Date.now();
+            const result = await eng.run(ir, {
+                input: {},
+                taskTimeoutMs: 50,
+            });
+            const elapsed = Date.now() - start;
+
+            expect(result.success).toBe(false);
+            expect(result.error?.message).toContain("timed out");
+            expect(elapsed).toBeLessThan(2000);
+        });
+
+        it("does not interfere when task completes before timeout", async () => {
+            const reg = makeRegistry(...standardLibraryTasks);
+            const eng = new WorkflowEngine(reg);
+
+            const ir: WorkflowIR = {
+                kind: "workflow",
+                name: "fastTask",
+                version: "1",
+                inputSchema: { type: "object" },
+                outputSchema: { type: "object" },
+                nodes: {
+                    add: {
+                        kind: "task",
+                        task: "int.add",
+                        inputSchema: {
+                            type: "object",
+                            required: ["a", "b"],
+                            properties: {
+                                a: { type: "integer" },
+                                b: { type: "integer" },
+                            },
+                        },
+                        outputSchema: {
+                            type: "object",
+                            required: ["result"],
+                            properties: { result: { type: "integer" } },
+                        },
+                        inputs: {
+                            a: 1 as Template,
+                            b: 2 as Template,
+                        },
+                        bind: "result",
+                    },
+                },
+                entry: "add",
+                output: {
+                    $from: "scope",
+                    name: "result",
+                } as Template,
+            };
+
+            const result = await eng.run(ir, {
+                input: {},
+                taskTimeoutMs: 5000,
+            });
+            expect(result.success).toBe(true);
+            expect((result.output as any).result).toBe(3);
+        });
+    });
 });

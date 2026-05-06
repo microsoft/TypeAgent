@@ -560,8 +560,9 @@ export class WorkflowEngine {
 
             let result: TaskResult;
             if (taskTimeoutMs !== undefined) {
+                let timeoutId: ReturnType<typeof setTimeout>;
                 const timeout = new Promise<never>((_, reject) => {
-                    setTimeout(() => {
+                    timeoutId = setTimeout(() => {
                         taskAbortController!.abort("Task timed out");
                         reject(
                             new EngineError(
@@ -573,7 +574,7 @@ export class WorkflowEngine {
                 result = await Promise.race([
                     task.execute(resolvedInput, ctx),
                     timeout,
-                ]);
+                ]).finally(() => clearTimeout(timeoutId));
             } else {
                 result = await task.execute(resolvedInput, ctx);
             }

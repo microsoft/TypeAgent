@@ -158,8 +158,11 @@ async function cmdRun(
         const prefix = result.error?.message?.startsWith("Validation failed")
             ? "[validation]"
             : "[runtime]";
+        const location = result.error?.nodeId
+            ? ` (node: ${result.error.nodeId})`
+            : "";
         console.error(
-            `${prefix} Workflow failed: ${result.error?.message ?? "unknown error"}`,
+            `${prefix} Workflow failed${location}: ${result.error?.message ?? "unknown error"}`,
         );
         process.exit(1);
     }
