@@ -63,7 +63,7 @@
     "code-vscode-shell": {
       "defaultEnabled": false,
       "schema": {
-        "description": "Manage TypeAgent Shell conversations (chat tabs in the TypeAgent VS Code Shell extension): create a new conversation, rename the current conversation, or switch to an existing conversation by name. Trigger keywords: 'conversation', 'chat', 'chat tab', 'new conversation', 'rename conversation', 'switch conversation'. Does NOT handle files, windows, browser tabs, editor tabs, programs, or onboarding.",
+        "description": "Manage TypeAgent Shell conversations (chat tabs in the TypeAgent VS Code Shell extension): create a new conversation, rename the current conversation, or switch to an existing conversation by name.",
         "originalSchemaFile": "./vscode/vscodeConversationActionsSchema.ts",
         "schemaFile": "../dist/vscodeShellSchema.pas.json",
         "schemaType": "VSCodeConversationActions"

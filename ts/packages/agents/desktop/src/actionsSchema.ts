@@ -76,11 +76,10 @@ export type MinimizeWindowAction = {
 };
 
 // Sets focus to a program window on a Windows Desktop.
-// USE THIS for any of: "switch to <app>", "bring <app> to the foreground",
-// "focus on <app>", "go to <app>", "open <app>" when the app is already running.
-// The argument is an APPLICATION/WINDOW name (e.g. "Code", "Visual Studio Code",
-// "Chrome", "Outlook"), NOT a song or device. Window-focus requests are NEVER
-// music playback — do NOT route to player playTrack/selectDevice for these.
+//
+// Example:
+// User: switch to Chrome
+// Agent: { actionName: "SwitchTo", parameters: { name: "Chrome" } }
 export type SwitchToWindowAction = {
     actionName: "SwitchTo";
     parameters: {
