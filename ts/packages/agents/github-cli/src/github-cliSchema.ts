@@ -220,12 +220,14 @@ export type IssueListAction = {
 };
 
 // View / open a specific GitHub issue by number.
-// USE THIS for: "show issue 2222", "view issue #42 in microsoft/TypeAgent", "open issue 2267".
-// DO NOT USE for recall/conversation queries like "remind me which issue we were just looking at",
-// "what issue was that", or "which issue did we open" — those are conversation-history questions
-// and should be routed to dispatcher lookup/reasoning, not to a fresh `gh issue view` call.
-// Only invoke when the user supplies (or has just referenced via "that issue" entity resolution)
-// a real issue number. Never fabricate a placeholder number or repo.
+//
+// Example:
+// User: show issue 2222
+// Agent: { actionName: "issueView", parameters: { number: 2222 } }
+//
+// Example:
+// User: view issue #42 in microsoft/TypeAgent
+// Agent: { actionName: "issueView", parameters: { number: 42, repo: "microsoft/TypeAgent" } }
 export type IssueViewAction = {
     actionName: "issueView";
     parameters: {
@@ -299,12 +301,14 @@ export type PrListAction = {
 };
 
 // View / open a specific GitHub pull request by number.
-// USE THIS for: "show PR 2196", "view pull request #42", "open PR 2196 in microsoft/TypeAgent".
-// DO NOT USE for recall/conversation queries like "remind me which PR we were just looking at",
-// "what PR was that", or "which PR did we open" — those are conversation-history questions and
-// should be routed to dispatcher lookup/reasoning, not to a fresh `gh pr view` call.
-// Only invoke when the user supplies (or has just referenced via "that PR" entity resolution)
-// a real PR number. Never fabricate a placeholder number or repo.
+//
+// Example:
+// User: show PR 2196
+// Agent: { actionName: "prView", parameters: { number: 2196 } }
+//
+// Example:
+// User: view pull request #42 in microsoft/TypeAgent
+// Agent: { actionName: "prView", parameters: { number: 42, repo: "microsoft/TypeAgent" } }
 export type PrViewAction = {
     actionName: "prView";
     parameters: {

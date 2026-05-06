@@ -6,15 +6,16 @@ export type VSCodeConversationActions =
     | RenameConversationAction
     | SwitchConversationAction;
 
-// Create a brand-new TypeAgent Shell conversation (a new chat tab in
-// the TypeAgent Shell VSCode extension) and switch the current tab to
-// it. Use ONLY for managing TypeAgent Shell conversation tabs — do NOT
-// use for opening files, launching programs, web browsing, onboarding
-// scaffolds, or anything outside the TypeAgent Shell chat itself.
+// Create a brand-new TypeAgent Shell conversation (a new chat tab in the
+// TypeAgent Shell VS Code extension) and switch the current tab to it.
 //
-// Trigger phrases include: "new conversation", "create a conversation",
-// "start a new chat", "open a new chat", "make a new conversation
-// named X", "new TypeAgent conversation".
+// Example:
+// User: start a new conversation
+// Agent: { actionName: "newConversation", parameters: {} }
+//
+// Example:
+// User: new conversation called "design review"
+// Agent: { actionName: "newConversation", parameters: { name: "design review" } }
 export type NewConversationAction = {
     actionName: "newConversation";
     parameters: {
@@ -25,12 +26,11 @@ export type NewConversationAction = {
 };
 
 // Rename the TypeAgent Shell conversation that is currently active in
-// this chat tab. Use ONLY for renaming the current TypeAgent Shell
-// conversation — do NOT use for renaming files, variables, etc.
+// this chat tab.
 //
-// Trigger phrases include: "rename this conversation", "rename the
-// current conversation", "change the conversation name to X", "call
-// this conversation X", "rename this chat".
+// Example:
+// User: rename this conversation to "vscode shell PR"
+// Agent: { actionName: "renameConversation", parameters: { newName: "vscode shell PR" } }
 export type RenameConversationAction = {
     actionName: "renameConversation";
     parameters: {
@@ -40,13 +40,15 @@ export type RenameConversationAction = {
 };
 
 // Switch the current TypeAgent Shell chat tab to a different existing
-// conversation, identified by its display name. Use ONLY for switching
-// between TypeAgent Shell conversations — do NOT use for switching
-// browser tabs, editor tabs, windows, or workspaces.
+// conversation, identified by its display name.
 //
-// Trigger phrases include: "switch to conversation X", "open the X
-// conversation", "go to the X chat", "switch conversation to X",
-// "switch chat".
+// Example:
+// User: switch to the "design review" conversation
+// Agent: { actionName: "switchConversation", parameters: { name: "design review" } }
+//
+// Example:
+// User: switch conversation
+// Agent: { actionName: "switchConversation", parameters: {} }
 export type SwitchConversationAction = {
     actionName: "switchConversation";
     parameters: {

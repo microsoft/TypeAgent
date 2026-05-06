@@ -33,16 +33,11 @@ export type ColorTheme =
     | "Abyss"
     | "Default High Contrast Light";
 
-// ACTION: Change the VS Code editor's color theme (NOT a system / Windows desktop theme).
-// USE THIS for any request about an EDITOR / IDE / "code" / "vscode" / syntax color theme,
-// e.g. "change my vscode color theme to Monokai", "set the editor theme to Solarized Dark",
-// "switch theme to Dark+", "use the Monokai theme in vscode".
-// USE THIS even when the user just says "change my color theme to <name>" — by default
-// the user is talking about the editor they are looking at, NOT a Windows desktop theme.
-// The recognized names are common VS Code theme names: "Light+", "Dark+", "Monokai",
-// "Monokai Dimmed", "Solarized Dark", "Solarized Light", "Quiet Light", "Red", "Tomorrow Night Blue",
-// "Kimbie Dark", "Abyss", "Default High Contrast Light", etc.
-// DO NOT route these to a desktop / Windows personalization "ApplyTheme" action.
+// Change the VS Code editor's color theme.
+//
+// Example:
+// User: change my vscode color theme to Monokai
+// Agent: { actionName: "changeColorScheme", parameters: { theme: "Monokai" } }
 export type ChangeColorThemeAction = {
     actionName: "changeColorScheme";
     parameters: {
@@ -54,26 +49,24 @@ export type ChangeColorThemeAction = {
 export type SplitDirection = "right" | "left" | "up" | "down";
 export type EditorPosition = "first" | "last" | "active";
 
-// ACTION: Split an editor window into multiple panes showing the same file or different files side-by-side.
-// This creates a new editor pane (split view) for working with multiple files simultaneously.
-// USE THIS for: "split editor", "split the editor with X", "duplicate this editor to the right", "split X"
+// Split an editor window into multiple panes showing the same file or different files side-by-side.
 //
-// Examples:
-// - "split editor to the right" → splits active editor
-// - "split the first editor" → splits leftmost editor
-// - "split app.tsx to the left" → finds editor showing app.tsx and splits it
-// - "split the last editor down" → splits rightmost editor downward
-// - "split the editor with utils.ts" → finds editor showing utils.ts and splits it
+// Example:
+// User: split editor to the right
+// Agent: { actionName: "splitEditor", parameters: { direction: "right" } }
+//
+// Example:
+// User: split the editor with utils.ts
+// Agent: { actionName: "splitEditor", parameters: { fileName: "utils.ts" } }
 export type SplitEditorAction = {
     actionName: "splitEditor";
     parameters: {
         // Direction to split: "right", "left", "up", "down". Only include if user specifies direction.
         direction?: SplitDirection;
-        // Which editor to split by position. Use "first" for leftmost editor, "last" for rightmost, "active" for current editor, or a number (0-based index).
+        // Which editor to split by position: "first" (leftmost), "last" (rightmost), "active" (current),
+        // or a 0-based index.
         editorPosition?: EditorPosition | number;
         // Which editor to split by file name. Extract the file name or pattern from user request.
-        // Examples: "app.tsx", "main.py", "utils", "codeActionHandler"
-        // Use this when user says "split X" or "split the editor with X" where X is a file name.
         fileName?: string;
     };
 };

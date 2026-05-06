@@ -139,14 +139,12 @@ export type ChangeThemeModeAction = {
     };
 };
 
-// ACTION: Apply a Windows DESKTOP theme (a .theme file or a named Windows personalization theme
-// like "Captured Motion", "Glow", "Sunrise") — these affect the WINDOWS WALLPAPER / SOUNDS /
-// CURSORS / WINDOW CHROME, not editor syntax colors.
-// USE THIS only when the user explicitly references the WINDOWS DESKTOP, WALLPAPER, SYSTEM, or
-// PERSONALIZATION theme, e.g. "change my windows theme to Glow", "apply the Sunrise wallpaper theme".
-// DO NOT USE for VS Code / editor / IDE color themes (e.g. "Monokai", "Solarized Dark", "Dark+",
-// "Light+") — those are editor color themes and must be handled by the code agent's
-// `changeColorScheme` action, NOT by ApplyTheme.
+// Apply a Windows desktop theme by name (e.g. "Captured Motion", "Glow", "Sunrise") or .theme
+// file path. Affects the Windows wallpaper / sounds / cursors / window chrome.
+//
+// Example:
+// User: change my windows theme to Glow
+// Agent: { actionName: "ApplyTheme", parameters: { filePath: "Glow", themeName: "Glow" } }
 export type ApplyThemeAction = {
     actionName: "ApplyTheme";
     parameters: {
