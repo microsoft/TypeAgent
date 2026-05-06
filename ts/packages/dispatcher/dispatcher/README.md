@@ -286,24 +286,59 @@ collision: {
 
 ### Telemetry & evaluation surface
 
-When `telemetry.emit` is true, every detected collision is appended to a 50-entry ring buffer on `CommandHandlerContext.collisionEvents`. Each event records the candidate set, chosen winner (if any), strategy, and elapsed time. This is the **A/B evaluation surface** — toggle the strategy in session config and inspect the buffer to compare outcomes on the same input.
+When `telemetry.emit` is true, every detected collision lands in **three places**:
 
-`DEBUG=typeagent:dispatcher:collision` enables a log line per event when `telemetry.debugLog` is true (on by default).
+1. **In-memory ring buffer** on `CommandHandlerContext.collisionEvents` (cap 50). Surfaced via `@collision events`.
+2. **Per-session JSONL** at `<sessionDir>/collision-events.jsonl` — one line per event, survives shell exit. Always written when emit is on; no DB credentials needed.
+3. **Existing logger pipeline** (Cosmos `telemetrydb / dispatcherlogs`, `eventName: "collision"`) — gated separately by `@config log db on`. The DB sink self-disables on auth errors so a stale credential won't spam retries.
+
+Each event carries `kind` (detection point), `strategy`, `candidates[]` (with per-candidate `matchedCount` / `nonOptionalCount` / `wildcardCharCount` / `priorityRank`), `chosen`, `firstMatchCandidate` (counterfactual — what `first-match` would have picked, lets every Cosmos query measure strategy divergence in one row), `classifier` (for grammarMatch), `requestId`, `experimentId` (set via `@config collision telemetry experimentId`), `sessionId`, `elapsedMs`, `note`.
+
+`DEBUG=typeagent:dispatcher:collision` enables a one-line log per event when `telemetry.debugLog` is true (on by default).
+
+### Shell-level config (M1 / M5)
+
+Runtime opt-in via `@config collision …` and ring-buffer inspection via `@collision events`:
+
+| Command                                                     | Effect                                                                                                |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `@config collision`                                         | Render the current collision config as an HTML status table.                                          |
+| `@config collision <point> detect [on\|off]`                | Toggle a detection point (`static` / `grammarMatch` / `llmSelect` / `fuzzy`). Persisted to `data.json`.    |
+| `@config collision <point> strategy <name>`                 | Set the resolution strategy (`first-match` / `score-rank` / `priority` / `user-clarify`; static uses `warn` / `error`). |
+| `@config collision priority [<list>]`                       | Set / show the comma-separated `priorityOrder` used by the `priority` strategy.                       |
+| `@config collision telemetry emit [on\|off]`                | Toggle the ring-buffer + JSONL capture.                                                                |
+| `@config collision telemetry debugLog [on\|off]`            | Toggle the `typeagent:dispatcher:collision` debug log.                                                |
+| `@config collision telemetry experimentId [<id>]`           | Stamp every emitted event with this tag. Use to slice Cosmos queries per experiment.                  |
+| `@collision events [-n <N>] [-k <kind>]`                    | Show recent events from the in-memory ring buffer with kind / strategy badges and a ⚡ marker on rows where the chosen candidate diverged from `first-match`. |
+| `@config log db [on\|off]`                                  | Toggle DocumentDB upload (gates remote sink — independent of the per-session local capture).          |
+
+Calibration knobs (`classifier` / `topN` / `scoreDeltaThreshold` / `scorer` / `similarityThreshold`) are intentionally not exposed via `@config collision` — they're long-tail tuning, not opt-in toggles, and the same `data.json` accepts hand edits when needed.
 
 ### Usage example
 
-The collision config block lives under `dispatcher` in session settings; today it's mutated programmatically via `session.updateSettings`. To exercise grammar-match detection with user clarification:
+For deliberate, repeatable collisions during evaluation, enable the [vampire test agent](../../agents/vampire) (default-disabled) — it ships actions and grammar rules engineered to collide with player, list, and calendar. A typical Phase 1 observability experiment looks like:
+
+```
+@config agent vampire                              # enable the test agent
+@config log db on                                  # remote upload (Cosmos)
+@config collision telemetry emit on                # capture events
+@config collision telemetry experimentId E1.2-2026-05-12
+@config collision grammarMatch detect on           # opt in to detection
+                                                   # ...drive the system normally...
+@collision events -k grammarMatch -n 25            # inspect what fired
+@config collision grammarMatch detect off          # rollback (one step)
+```
+
+Programmatic equivalent (used by tests and tools):
 
 ```ts
 session.updateSettings({
   collision: {
-    grammarMatch: { detect: true, strategy: "user-clarify" },
-    telemetry: { emit: true, debugLog: true },
+    grammarMatch: { detect: true, strategy: "first-match" },
+    telemetry: { emit: true, debugLog: true, experimentId: "E1.2-2026-05-12" },
   },
 });
 ```
-
-For deliberate, repeatable collisions during evaluation, enable the [vampire test agent](../../agents/vampire) (default-disabled) — it ships actions and grammar rules engineered to collide with player, list, and calendar.
 
 ### MultipleAction interaction
 
@@ -318,7 +353,7 @@ For deliberate, repeatable collisions during evaluation, enable the [vampire tes
 - **Real `ActionEmbeddingScorer` implementation** — the fuzzy detection point is fully wired but the only shipped scorer (`PlaceholderScorer`) returns 0 for all pairs. Selecting `scorer: "actionEmbedding"` today logs a "not implemented; falling back to placeholder" warning. Reusing the embedding model already loaded by `semanticSearchActionSchema` is the natural follow-up.
 - **Runtime fuzzy detection hook** — `fuzzy.runtimeEnabled` is in the config but the call site in `matchCollision.ts` (post-resolver fuzzy candidate scan) is not yet wired up. Static fuzzy scanning is wired.
 - **`pause-and-prompt` for `MultipleAction`** — requires batch-executor pause/resume support. Today this strategy auto-degrades to `downgrade-to-priority`.
-- **Runtime collision-events command** — `@grammar collisions` covers the static-scan side (cross-agent grammar overlap, with concrete witnesses via NFA product construction). The runtime side — `lastStaticCollisions` (post-load) and the `collisionEvents` ring buffer (per-request) — is still programmatic-only and needs a command surface.
+- ~~**Runtime collision-events command** — `@grammar collisions` covers the static-scan side (cross-agent grammar overlap, with concrete witnesses via NFA product construction). The runtime side — `lastStaticCollisions` (post-load) and the `collisionEvents` ring buffer (per-request) — is still programmatic-only and needs a command surface.~~ Done (M5): `@collision events` surfaces the per-event ring buffer; events also persist to `<sessionDir>/collision-events.jsonl` and (when `dblogging` is on) to Cosmos. The `lastStaticCollisions` post-load snapshot is still programmatic-only.
 - **Threshold calibration** — `fuzzy.similarityThreshold: 0.85` is a placeholder. Once a real scorer lands, calibrate against a labeled set of agent-action pairs.
 - **On-disk fuzzy matrix cache** — once fuzzy scoring is non-trivial, cache the static pairwise matrix in the agent cache directory so it doesn't re-run on every dispatcher boot.
 - **Clarify-loop bias** — when the user picks an agent in response to a `ClarifyMultipleAgentMatches`, the same collision can repeat on the next round-trip. Mitigation: temporarily set `lastActionSchemaName` to the user's pick to bias re-translation. Deferred until/unless it bites in evaluation.

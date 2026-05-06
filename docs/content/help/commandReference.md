@@ -413,9 +413,68 @@ Usage: `@config dev off`
 
 Usage: `@config log db on`
 
+Enables remote upload of dispatcher telemetry (commands, translations, collision events emitted by `@config collision`) to the existing Cosmos `telemetrydb / dispatcherlogs` collection. Requires a `COSMOSDB_CONNECTION_STRING` environment variable. The DB sink self-disables on auth errors so a stale credential won't spam retries.
+
 ## @config log db off - Turn off logging
 
 Usage: `@config log db off`
+
+## @config collision - Show / configure action collision detection
+
+Usage: `@config collision`
+
+Default subcommand renders a status table showing each detection point's `detect` toggle, current strategy, calibration knobs (classifier / topN / threshold / scorer), the priority order, multipleActionBehavior, and telemetry settings. The system ships off by default; opt in per-point during a soft-rollout experiment ([`collision-rollout.md`](../../../ts/docs/architecture/collision-rollout.md) is the playbook).
+
+## @config collision &lt;point&gt; detect on|off - Toggle a detection point
+
+Usage: `@config collision <point> detect on`, `@config collision <point> detect off`
+
+`<point>` is one of `static`, `grammarMatch`, `llmSelect`, `fuzzy`. Persists to the session JSON via `session.updateSettings` and re-applies in-memory immediately — no restart needed.
+
+## @config collision &lt;point&gt; strategy &lt;name&gt; - Set the resolution strategy
+
+Usage: `@config collision <point> strategy <name>`
+
+Allowed names depend on the point:
+- `static`: `warn`, `error`
+- `grammarMatch` / `llmSelect` / `fuzzy`: `first-match`, `score-rank`, `priority`, `user-clarify`
+
+`first-match` preserves legacy behavior (no actual re-ranking). `score-rank` re-orders by cache match metadata (matchedCount / nonOptionalCount / wildcardCharCount) with priority as a tiebreaker. `priority` sorts purely by `priorityOrder` (or registration order when unset). `user-clarify` synthesizes a clarification action listing all candidates so the user picks.
+
+## @config collision priority [&lt;list&gt;] - Set / show priority order
+
+Usage: `@config collision priority "list,player,calendar"`, `@config collision priority ""` (clear), `@config collision priority` (show)
+
+Comma-separated agent names used by the `priority` resolution strategy (and as a tiebreaker for `score-rank`). Empty falls back to agent registration order.
+
+## @config collision telemetry emit on|off - Toggle the in-memory ring buffer + JSONL append
+
+Usage: `@config collision telemetry emit on`, `@config collision telemetry emit off`
+
+When on, every detected collision is recorded to a 50-entry ring buffer accessible via `@collision events` and appended to `<sessionDir>/collision-events.jsonl`. Remote upload to Cosmos is gated separately by `@config log db on`.
+
+## @config collision telemetry debugLog on|off - Toggle the debug-channel log
+
+Usage: `@config collision telemetry debugLog on`
+
+When on, every detected collision emits a line on the `typeagent:dispatcher:collision` debug channel. Useful for `DEBUG=typeagent:dispatcher:collision` capture without enabling the ring buffer.
+
+## @config collision telemetry experimentId [&lt;id&gt;] - Tag emitted events with an experiment ID
+
+Usage: `@config collision telemetry experimentId E1.2-2026-05-12`, `@config collision telemetry experimentId ""` (clear), `@config collision telemetry experimentId` (show)
+
+Each emitted `CollisionEvent` is stamped with this string. Cosmos queries can then `WHERE experimentId = "E1.2-…"` to slice events for a specific rollout experiment without joining other tables.
+
+## @collision events - Show recent collision events from the ring buffer
+
+Usage: `@collision events [-n &lt;limit&gt;] [-k &lt;kind&gt;]`
+
+### Flags:
+
+- `-n, --limit <number>` - Maximum number of events to show (default 10).
+- `-k, --kind <name>` - Filter by detection point: `static`, `grammarMatch`, `llmSelect`, or `fuzzy`.
+
+Renders an HTML table of the most recent collision events captured in the in-memory ring buffer (cap 50 events; older events live in `<sessionDir>/collision-events.jsonl`). Columns: relative timestamp, detection point, request, candidates (with schema badges), chosen winner, strategy, elapsed ms. A ⚡ marker flags events where the chosen candidate diverged from the `first-match` counterfactual — a real strategy divergence worth investigating. When telemetry capture is off, an inline reminder tells the tester how to opt in.
 
 ## @config pen on - Turn on Surface Pen Click Handler
 
