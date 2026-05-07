@@ -73,24 +73,22 @@ Two diagnostic operations exposed both as actions (natural-language) and as `@os
 | `syncOsNotifications` | "sync os notifications", "show my notifications", "replay system notifications" | `@osNotifications sync`       | Re-emits currently-present notifications through the agent pipeline (filters, rate limit, dismiss tracking apply).                    |
 | `testOsNotification`  | "test notification saying hi", "send me a test notification with foo"           | `@osNotifications test "msg"` | Synthesizes an `OsNotificationAdded` event and feeds it into `onWatcherEvent` — verifies the agent end-to-end with no real OS source. |
 
-### Sync and the in-chat build prompt
+### Sync and setup
 
 `syncOsNotifications` is Windows-only (Linux's freedesktop spec doesn't expose existing notifications, only new ones — the action surfaces a clear warning instead).
 
-If the Windows helper exe (`OsNotificationListener.exe`) hasn't been built yet, the action returns an `ActionResultSuccess` with `pendingChoice` (via [`createYesNoChoiceResult`](../../agentSdk/src/helpers/actionHelpers.ts)). The dispatcher renders that as an inline yes/no card in the chat (same machinery the desktop agent's autoShell flow uses, see PR #2294):
+On Windows, the agent participates in the dispatcher's [readiness/setup framework](../../dispatcher/dispatcher/src/context/appAgentManager.ts):
+
+- `checkReadiness` → `setup-required` when `OsNotificationListener.exe` isn't present, `ready` otherwise.
+- `setup` → returns the in-chat yes/no card asking whether to build the helper now. Click "Yes" and `buildAndRetrySync` runs the full WinAppSDK build/sign/register pipeline (see "Per-platform setup → Windows" below), then restarts the watcher.
+
+Pre-flight at the dispatcher level means `@osNotifications sync` (or any NL form like "sync os notifications") on a system without the helper is blocked before the agent's code runs and the user is pointed at:
 
 ```
-Yes  →  buildAndRetrySync()
-        ├─ actionIO.appendDisplay("Building OsNotificationListener…")
-        ├─ buildWindowsHelper({ onProgress: line => actionIO.appendDisplay(line, "temporary") })
-        │     spawns `dotnet publish -c Release -r win-x64 -o <projDir>`, streams stdout/stderr live
-        ├─ stop and re-create the watcher so it picks up the freshly-built exe
-        └─ retry watcher.syncNow() → "Build complete and sync requested." (or specific error)
-
-No   →  "Build skipped — sync cancelled."
+@config agent setup osNotifications
 ```
 
-The yes/no flow is wired via the standard `ChoiceManager` + `handleChoice` pattern. `ChoiceManager` lives on `AgentContext`; `handleChoice` on the AppAgent delegates lookups back to it.
+That command surfaces the build prompt. The choice card is wired via the standard `ChoiceManager` + `handleChoice` pattern (`ChoiceManager` lives on `AgentContext`; the AppAgent's `handleChoice` delegates back to it). A build mutex (`AgentContext.buildInProgress`) protects against two clients each clicking "Yes" on their own card before either build completes.
 
 ### Commands sharing the action code path
 
@@ -120,16 +118,59 @@ Defaults live in [`src/osNotificationsConfig.ts`](src/osNotificationsConfig.ts):
 
 The Windows watcher spawns a small .NET console exe that subscribes to `Windows.UI.Notifications.Management.UserNotificationListener` and streams events as JSON-per-line on stdout.
 
+**The exe needs package identity to subscribe to `NotificationChanged`.** That's the API that gives us realtime events (no polling, no 3-second delay). On a plain unpackaged exe the subscription silently fails. We solve this with a [WinAppSDK sparse package](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/grant-identity-to-nonpackaged-apps): a tiny MSIX containing only an `AppxManifest.xml` that declares the identity + `userNotificationListener` capability, signed with our dev cert, and registered against the unpackaged exe via `Add-AppxPackage -ExternalLocation`. The exe carries a side-by-side `<msix>` element in its `app.manifest` linking it to the identity package.
+
+**One-time prereqs:**
+
+1. **Pull the dev code-signing cert from Azure Key Vault** — the dev cert is held in the `aisystems` Key Vault as `TypeAgent-Development-Certificate` (with its PFX password as a sibling secret). The included [`getCert.mjs`](../../../tools/getCert.mjs) tool wraps the download:
+
+    ```powershell
+    # Pull cert + password to %TEMP%\TypeAgent-Development-Certificate.pfx
+    node ts/tools/scripts/getCert.mjs pull
+    ```
+
+2. **Install the cert into both CurrentUser and LocalMachine stores.** AppX deployment runs in SYSTEM context and only honors LocalMachine certs, so the cert must live there for `Add-AppxPackage` to accept the MSIX signature. SignTool itself uses CurrentUser. Use the helper in elevated PowerShell:
+
+    ```powershell
+    node ts/tools/scripts/getCert.mjs install --trusted-root
+    ```
+
+    `install` puts the cert in `CurrentUser\My`, `CurrentUser\TrustedPeople`, `LocalMachine\My`, `LocalMachine\TrustedPeople`. `--trusted-root` additionally adds it to `LocalMachine\Root` so AppX deployment trusts the chain (interactive — Windows will prompt for consent on the root install).
+
+3. **Cert renewal.** If signtool fails with "no Code Signing EKU found", the cert needs a new version with the right EKU:
+
+    ```powershell
+    node ts/tools/scripts/getCert.mjs renew
+    node ts/tools/scripts/getCert.mjs install --trusted-root
+    ```
+
 **Build the helper:**
 
-```powershell
-cd packages/agents/osNotifications/bin/OsNotificationListener
-dotnet publish -c Release -r win-x64 -o ../../dist/bin/OsNotificationListener
+The agent's `setup` hook does this end-to-end — clean + publish the exe, pack the identity manifest, sign the MSIX, register the sparse package. From chat:
+
+```
+@config agent setup osNotifications
 ```
 
-The agent's `postbuild` script (`copyfiles -u 1 "bin/**/*" dist`) only copies the source files — the exe must be built separately and ends up in `dist/bin/OsNotificationListener/OsNotificationListener.exe`. The TypeScript watcher locates the exe via `import.meta.url`.
+The yes/no card spells out what's about to happen. Build progress streams inline.
 
-See [`bin/OsNotificationListener/README.md`](bin/OsNotificationListener/README.md) for build details and the package-identity caveat.
+For manual builds (debugging, CI):
+
+```powershell
+cd ts/packages/agents/osNotifications/bin/OsNotificationListener
+dotnet publish -c Release -r win-x64 -o publish
+
+# pack identity MSIX
+makeappx pack /o /d identity /nv /p TypeAgent.OsNotificationListener.msix
+signtool sign /sha1 <thumbprint> /fd SHA256 TypeAgent.OsNotificationListener.msix
+
+# register sparse package against the unpackaged exe
+Add-AppxPackage -Path TypeAgent.OsNotificationListener.msix -ExternalLocation publish
+```
+
+The exe ends up in `dist/bin/OsNotificationListener/publish/OsNotificationListener.exe`. The TypeScript watcher locates it via `import.meta.url` — checks `publish/` first, falls back to the project root for legacy hand-built copies.
+
+See [`bin/OsNotificationListener/README.md`](bin/OsNotificationListener/README.md) for the C# helper details.
 
 ### Linux
 
@@ -145,11 +186,17 @@ Unsupported. Apple does not expose other apps' notifications via a public API. T
 
 ### Windows: package identity
 
-`UserNotificationListener` was originally a UWP API. Microsoft has loosened the requirement over time, but on some Windows builds the API returns `AccessStatus.Denied` when called from an unpackaged Electron host. The helper emits a `kind:"error"` event in that case; the agent surfaces the error once and stops trying. If you ship via MSIX / sparse package, the API just works.
+`UserNotificationListener` works from unpackaged hosts on most modern builds, but its `NotificationChanged` event (the one that gives us realtime updates instead of polling) requires package identity. The sparse-package setup above gives the helper exe identity without bundling it as a full MSIX app — the WinAppSDK side-by-side manifest (`<msix>` element pointing at `TypeAgent.OsNotificationListener` in the exe's `app.manifest`) tells Windows where to find the identity package at runtime.
+
+If something is wrong with the sparse-package setup (missing cert trust, expired signature, registration failed), the helper emits a `kind:"error"` event with details and the agent surfaces it once. Run `@config agent refresh osNotifications` after fixing the underlying issue.
 
 ### Windows: first-run consent
 
 Windows shows a system-level prompt the first time `RequestAccessAsync` is called. The user can revoke consent later from **Settings → Privacy & security → Notifications**. The helper exits with code 2 if access is denied.
+
+### Windows: cert trust store split
+
+`Add-AppxPackage` runs the signature check from a SYSTEM-context process and only consults `LocalMachine` cert stores. SignTool, which runs as the user, only consults `CurrentUser`. The cert must therefore live in **both** trees, and the chain has to terminate in `LocalMachine\Root` for AppX deployment to accept it. The two-step `getCert.mjs install --trusted-root` flow handles all of that, but the underlying fact is worth knowing — failures present as `CERT_E_UNTRUSTEDROOT (0x800B0109)` from `Add-AppxPackage` even when SignTool succeeded.
 
 ### Windows: WinAppSDK coverage
 
@@ -179,7 +226,9 @@ The freedesktop `Notify` method returns a u32 id, but eavesdropping doesn't see 
 
 - **Reconciliation with `beginAgentThread`.** A parallel work-in-progress feature adds `beginAgentThread()` — an agent-initiated UI message API with its own `bubble | toast | inline` `kind` field. There's overlap with this agent's render-mode config. Worth a design pass once both have landed.
 
-- **Prebuilt Windows binary.** The C# helper exe is shipped as source, not a prebuilt binary — every checkout needs `dotnet publish` to make Windows work. CI should produce and bundle the `.exe` alongside the agent's `dist/`.
+- **Prebuilt Windows artifacts.** The C# helper exe is shipped as source — every checkout needs `dotnet publish` + the sparse-package register flow to make Windows work. CI should produce a signed MSIX + the published exe and bundle them into `dist/`. Bigger lift than just shipping a binary because of the cert + sparse-package angle, but this is the long-pole prereq for a one-click install.
+
+- **Production cert.** Today we use a dev cert from the `aisystems` Key Vault. Shipping outside the dev team needs an actual EV / publicly-trusted cert and a different MSIX publisher subject; the manifest's `<Identity Publisher="...">` is hard-coded today.
 
 ## Files
 
@@ -193,14 +242,15 @@ src/
   watcherProtocol.ts               # added / removed / error wire types (+ fromSync flag)
   watchers/
     index.ts                       # platform dispatcher
-    windowsWatcher.ts              # spawns the C# helper; buildWindowsHelper(); HelperNotBuiltError
+    windowsWatcher.ts              # spawns the helper; isWindowsHelperBuilt(); buildWindowsHelper() (full sign+register pipeline)
     linuxWatcher.ts                # in-process dbus-next eavesdrop
     noopWatcher.ts                 # macOS / unsupported platforms
 
 bin/
   OsNotificationListener/          # C# helper source (Windows only)
-    Program.cs                     # subscribes to UserNotificationListener; reads "sync" stdin commands
-    OsNotificationListener.csproj
+    Program.cs                     # subscribes to UserNotificationListener.NotificationChanged; reads "sync" stdin commands
+    OsNotificationListener.csproj  # net8.0-windows10.x with sparse-package side-by-side <msix> in app.manifest
+    identity/                      # AppxManifest.xml for the sparse identity package (userNotificationListener capability)
     README.md
 ```
 
