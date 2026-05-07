@@ -182,8 +182,8 @@ export function parseGrammarRules(
     content: string,
     /** Whether to track source positions on value nodes (default: true). */
     position?: boolean,
-    /** Enable JavaScript-like value expressions in the `->` position (default: false). */
-    enableValueExpressions: boolean = false,
+    /** Enable JavaScript-like value expressions in the `->` position (default: true). */
+    enableValueExpressions: boolean = true,
 ): GrammarParseResult {
     const parser = new GrammarRuleParser(
         fileName,
