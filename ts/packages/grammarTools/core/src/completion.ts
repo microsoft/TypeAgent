@@ -21,7 +21,6 @@ import type {
 export function previewCompletion(
     g: LoadedGrammar,
     input: string,
-    _cursor?: number,
 ): CompletionPreview {
     const result = matchGrammarCompletion(g.grammar, input);
 

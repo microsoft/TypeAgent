@@ -155,9 +155,12 @@ function extractRange(message: string, text: string): SourceRange {
             end: { line, character: character + 1, offset: offset + 1 },
         };
     }
+    // Fallback: span the first line so the diagnostic is still visible
+    const firstNewline = text.indexOf("\n");
+    const endChar = firstNewline >= 0 ? firstNewline : text.length;
     return {
         start: { line: 0, character: 0, offset: 0 },
-        end: { line: 0, character: 0, offset: 0 },
+        end: { line: 0, character: endChar, offset: endChar },
     };
 }
 
@@ -169,6 +172,9 @@ function positionToOffset(
     let currentLine = 0;
     let offset = 0;
     while (currentLine < line && offset < text.length) {
+        if (text[offset] === "\r" && text[offset + 1] === "\n") {
+            offset++; // skip \r, the \n is handled below
+        }
         if (text[offset] === "\n") {
             currentLine++;
         }

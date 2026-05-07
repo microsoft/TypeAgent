@@ -56,7 +56,7 @@ async function main(): Promise<void> {
                     );
                 } else {
                     console.log(
-                        "Loaded: " + g.identifiers.ruleIds.length + " rules",
+                        `Loaded: ${g.identifiers.ruleIds.length} rules`,
                     );
                 }
             } else {
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
                 } else {
                     console.error("Failed to load grammar:");
                     for (const d of result.diagnostics) {
-                        console.error("  " + d.severity + ": " + d.message);
+                        console.error(`  ${d.severity}: ${d.message}`);
                     }
                 }
                 process.exit(1);
@@ -115,7 +115,20 @@ async function main(): Promise<void> {
                 console.error("Error: file path required");
                 process.exit(1);
             }
-            const source = fs.readFileSync(path.resolve(file), "utf-8");
+            let source: string;
+            try {
+                source = fs.readFileSync(path.resolve(file), "utf-8");
+            } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : String(e);
+                if (jsonFlag) {
+                    console.log(
+                        JSON.stringify({ ok: false, error: msg }, null, 2),
+                    );
+                } else {
+                    console.error(`Error reading file: ${msg}`);
+                }
+                process.exit(1);
+            }
             const formatted = format(source);
             if (jsonFlag) {
                 console.log(JSON.stringify({ formatted }, null, 2));
@@ -137,7 +150,7 @@ async function main(): Promise<void> {
                     console.log(
                         JSON.stringify(
                             {
-                                error: "load_failed",
+                                ok: false,
                                 diagnostics: result.diagnostics,
                             },
                             null,
@@ -147,7 +160,7 @@ async function main(): Promise<void> {
                 } else {
                     console.error("Failed to load grammar:");
                     for (const d of result.diagnostics) {
-                        console.error("  " + d.severity + ": " + d.message);
+                        console.error(`  ${d.severity}: ${d.message}`);
                     }
                 }
                 process.exit(1);

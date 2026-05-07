@@ -241,12 +241,15 @@ connection.onDocumentFormatting((params: DocumentFormattingParams) => {
 
     // Replace entire document
     const lastLine = doc.lineCount - 1;
-    const lastChar = doc.getText(
-        Range.create(lastLine, 0, lastLine + 1, 0),
-    ).length;
+    const lastLineText = doc.getText(
+        Range.create(lastLine, 0, lastLine, Number.MAX_SAFE_INTEGER),
+    );
 
     return [
-        TextEdit.replace(Range.create(0, 0, lastLine, lastChar), formatted),
+        TextEdit.replace(
+            Range.create(0, 0, lastLine, lastLineText.length),
+            formatted,
+        ),
     ];
 });
 
@@ -278,13 +281,41 @@ function getWordAtPosition(uri: string, pos: Position): string | null {
     let start = offset;
     let end = offset;
 
-    // Expand backward to find start of identifier
-    while (start > 0 && isIdentChar(text[start - 1])) {
-        start--;
+    // Check if we're inside a <RuleName> reference
+    // Scan backward for < (or start of identifier)
+    let insideAngleBrackets = false;
+    let scanBack = offset;
+    while (scanBack > 0) {
+        const ch = text[scanBack - 1];
+        if (ch === "<") {
+            insideAngleBrackets = true;
+            start = scanBack; // start after the <
+            break;
+        }
+        if (!isIdentChar(ch)) break;
+        scanBack--;
     }
-    // Expand forward
-    while (end < text.length && isIdentChar(text[end])) {
-        end++;
+
+    if (insideAngleBrackets) {
+        // Scan forward to find >
+        end = offset;
+        while (
+            end < text.length &&
+            text[end] !== ">" &&
+            isIdentChar(text[end])
+        ) {
+            end++;
+        }
+    } else {
+        // Plain identifier: expand backward and forward
+        start = offset;
+        while (start > 0 && isIdentChar(text[start - 1])) {
+            start--;
+        }
+        end = offset;
+        while (end < text.length && isIdentChar(text[end])) {
+            end++;
+        }
     }
 
     if (start === end) return null;

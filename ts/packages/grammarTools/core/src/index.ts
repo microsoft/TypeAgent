@@ -60,12 +60,7 @@ export {
 } from "./types.js";
 
 // Services
-export {
-    loadGrammarFromFile,
-    loadGrammarFromBuffer,
-    loadGrammarFromAgent,
-    loadGrammarFromSnapshot,
-} from "./loader.js";
+export { loadGrammarFromFile, loadGrammarFromBuffer } from "./loader.js";
 export { getSymbolIndex, offsetToPosition } from "./symbols.js";
 export { format } from "./format.js";
 export { previewCompletion } from "./completion.js";
