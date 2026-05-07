@@ -467,7 +467,13 @@ export const httpGet: TaskDefinition<
 
 /** Allowed roots for file operations. Confines access to cwd, home, or tmpdir. */
 function validateFilePath(filePath: string): string {
-    const resolved = resolve(filePath);
+    // Reject null bytes which can truncate paths in C-based fs layers
+    if (filePath.includes("\0")) {
+        throw new Error("Path contains null bytes");
+    }
+    // Normalize separators for cross-platform consistency
+    const normalized = filePath.replace(/\\/g, "/");
+    const resolved = resolve(normalized);
     const allowedRoots = [process.cwd(), homedir(), tmpdir()];
     const isAllowed = allowedRoots.some((root) => {
         const rel = relative(root, resolved);

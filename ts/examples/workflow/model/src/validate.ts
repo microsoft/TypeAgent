@@ -58,9 +58,14 @@ function validateScope(
     const nodeIds = new Set(Object.keys(nodes));
 
     // NOTE: Binding name uniqueness is intentionally NOT validated.
-    // Duplicate bindings are a deliberate design pattern used for
-    // onError recovery (both paths produce the same binding name)
-    // and sequential overwrites.
+    // Duplicate bindings are a deliberate design pattern used for:
+    //  1. onError recovery: both the happy path and the error handler
+    //     produce the same binding name so downstream nodes can consume
+    //     the result regardless of which path executed.
+    //  2. Sequential overwrites: a later node intentionally shadows an
+    //     earlier binding (e.g., refining a value across steps).
+    // The last writer wins at runtime. If this causes confusion during
+    // authoring, consider a lint-level warning (not a hard error).
 
     for (const [id, node] of Object.entries(nodes)) {
         const path = `${prefix}.${id}`;
