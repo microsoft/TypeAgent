@@ -14,6 +14,8 @@ import {
     ReferenceParams,
     HoverParams,
     DocumentFormattingParams,
+    DocumentSymbolParams,
+    SymbolKind,
     TextEdit,
     Range,
     Position,
@@ -48,6 +50,7 @@ connection.onInitialize((_params: InitializeParams): InitializeResult => {
             referencesProvider: true,
             hoverProvider: true,
             documentFormattingProvider: true,
+            documentSymbolProvider: true,
         },
     };
 });
@@ -199,6 +202,32 @@ connection.onHover((params: HoverParams) => {
     return {
         contents: { kind: "markdown" as const, value: lines.join("\n") },
     };
+});
+
+// ---------------------------------------------------------------------------
+// Document symbols (outline)
+// ---------------------------------------------------------------------------
+
+connection.onDocumentSymbol((params: DocumentSymbolParams) => {
+    const index = getIndex(params.textDocument.uri);
+    if (!index) return null;
+
+    return index.symbols.map((sym) => ({
+        name: `<${sym.id}>`,
+        kind: SymbolKind.Function,
+        range: Range.create(
+            sym.location.range.start.line,
+            sym.location.range.start.character,
+            sym.location.range.end.line,
+            sym.location.range.end.character,
+        ),
+        selectionRange: Range.create(
+            sym.location.range.start.line,
+            sym.location.range.start.character,
+            sym.location.range.end.line,
+            sym.location.range.end.character,
+        ),
+    }));
 });
 
 // ---------------------------------------------------------------------------

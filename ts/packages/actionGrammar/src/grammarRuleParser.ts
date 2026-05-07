@@ -1345,7 +1345,7 @@ class GrammarRuleParser implements ValueExprParserContext {
             end === -1 ? this.content.length : end,
         );
 
-        const msg = `${this.fileName}:${lineCol.line}:${lineCol.col}: ${message}\n\n  ${line}\n  ${" ".repeat(lead)}^`;
+        const msg = `${this.fileName}(${lineCol.line},${lineCol.col}): error: ${message}\n\n  ${line}\n  ${" ".repeat(lead)}^`;
         debugParse(msg);
         throw new Error(msg);
     }

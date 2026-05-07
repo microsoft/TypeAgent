@@ -76,7 +76,7 @@ export interface LoadedGrammar {
 // ---------------------------------------------------------------------------
 
 export type LoadResult =
-    | { ok: true; grammar: LoadedGrammar }
+    | { ok: true; grammar: LoadedGrammar; diagnostics?: Diagnostic[] }
     | { ok: false; diagnostics: Diagnostic[]; files: SourceFile[] };
 
 // ---------------------------------------------------------------------------

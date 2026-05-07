@@ -1,7 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-import { loadGrammarRules } from "action-grammar";
+import { loadGrammarRulesNoThrow } from "action-grammar";
 import type { Grammar } from "action-grammar";
 import type {
     GrammarIdentifierIndex,
@@ -11,6 +11,7 @@ import type {
     GrammarSnapshot,
     SourceFile,
     Diagnostic,
+    SourceRange,
 } from "./types.js";
 
 /**
@@ -55,9 +56,17 @@ export function loadGrammarFromSnapshot(
 // ---------------------------------------------------------------------------
 
 function loadFromText(text: string, source: GrammarSource): LoadResult {
-    try {
-        const grammar = loadGrammarRules(sourceId(source), text);
-        const file: SourceFile = { id: sourceId(source), text };
+    const file: SourceFile = { id: sourceId(source), text };
+    const errors: string[] = [];
+    const warnings: string[] = [];
+    const grammar = loadGrammarRulesNoThrow(
+        sourceId(source),
+        text,
+        errors,
+        warnings,
+    );
+
+    if (grammar && errors.length === 0) {
         const identifiers = buildIdentifierIndex(grammar);
         const loaded: LoadedGrammar = {
             source,
@@ -65,21 +74,36 @@ function loadFromText(text: string, source: GrammarSource): LoadResult {
             files: [file],
             identifiers,
         };
+        const diagnostics: Diagnostic[] | undefined =
+            warnings.length > 0
+                ? warnings.map((message) => ({
+                      range: extractRange(message, text),
+                      severity: "warning" as const,
+                      message,
+                      source: "grammar-tools-core" as const,
+                  }))
+                : undefined;
+        if (diagnostics) {
+            return { ok: true, grammar: loaded, diagnostics };
+        }
         return { ok: true, grammar: loaded };
-    } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : String(e);
-        const diag: Diagnostic = {
-            range: {
-                start: { line: 0, character: 0, offset: 0 },
-                end: { line: 0, character: 0, offset: 0 },
-            },
-            severity: "error",
-            message,
-            source: "grammar-tools-core",
-        };
-        const file: SourceFile = { id: sourceId(source), text };
-        return { ok: false, diagnostics: [diag], files: [file] };
     }
+
+    const diagnostics: Diagnostic[] = [
+        ...errors.map((message) => ({
+            range: extractRange(message, text),
+            severity: "error" as const,
+            message,
+            source: "grammar-tools-core" as const,
+        })),
+        ...warnings.map((message) => ({
+            range: extractRange(message, text),
+            severity: "warning" as const,
+            message,
+            source: "grammar-tools-core" as const,
+        })),
+    ];
+    return { ok: false, diagnostics, files: [file] };
 }
 
 function sourceId(source: GrammarSource): string {
@@ -116,4 +140,38 @@ function buildIdentifierIndex(grammar: Grammar): GrammarIdentifierIndex {
     }
 
     return { ruleIds, partIds, ruleIndex };
+}
+
+function extractRange(message: string, text: string): SourceRange {
+    // Match compiler/parser format: file(line,col): ...
+    const match = message.match(/\((\d+),(\d+)\)/);
+    if (match) {
+        const line = parseInt(match[1], 10) - 1; // 0-based
+        const character = parseInt(match[2], 10) - 1;
+        const offset = positionToOffset(text, line, character);
+        return {
+            start: { line, character, offset },
+            end: { line, character: character + 1, offset: offset + 1 },
+        };
+    }
+    return {
+        start: { line: 0, character: 0, offset: 0 },
+        end: { line: 0, character: 0, offset: 0 },
+    };
+}
+
+function positionToOffset(
+    text: string,
+    line: number,
+    character: number,
+): number {
+    let currentLine = 0;
+    let offset = 0;
+    while (currentLine < line && offset < text.length) {
+        if (text[offset] === "\n") {
+            currentLine++;
+        }
+        offset++;
+    }
+    return offset + character;
 }

@@ -76,6 +76,16 @@ Promote into "Queued actions" when scheduling.
   candidate) before chunks 06 / 08 can rely on it. Touches
   `actionGrammar` (compiler emits debug info, writer projects
   `Grammar` → `RuleDefinition`) and `grammar-tools-core`.
+- **Error-tolerant parser.** `parseGrammarRules` currently throws on the
+  first error. Make it recoverable so it can report multiple errors in
+  one pass (e.g. skip to next `;` after a parse failure and continue).
+  Also add a `returnPartial` option to `loadGrammarRulesNoThrow` that
+  returns the `Grammar` even when errors are present (best-effort) so
+  symbol navigation continues working on incomplete files.
+- **Extension bundling.** Consider esbuild/rollup for the agr-language
+  extension to produce a single-file bundle for faster activation and
+  smaller install size. Not blocking for dev, but desirable before
+  publishing.
 
 ## Out of scope for this pass
 
