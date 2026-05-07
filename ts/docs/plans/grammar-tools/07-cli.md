@@ -9,11 +9,9 @@ The CLI is the cheapest smoke-test for each core service; commands ship
 as the corresponding A.\* / B.\* item lands rather than as a single
 batch.
 
-> Directory: `examples/grammarStudio`. Package name (in `package.json`
-> and `pnpm --filter`): `grammar-studio`. **New package**, not an
-> extension of [`examples/schemaStudio`](../../../examples/schemaStudio):
-> grammar and schema authoring are separate concerns and `schemaStudio`
-> stays the schema-only tool.
+> Directory: `packages/grammarTools/cli`. Package name (in `package.json`
+> and `pnpm --filter`): `grammar-studio`. Lives alongside `core` and
+> `ui` in the `grammarTools` family.
 
 ## TL;DR
 
@@ -57,7 +55,7 @@ the CLI does not ship its own fixtures.
 ## Open questions
 
 - ~~New package vs extending `schemaStudio`?~~ New package
-  (`examples/grammarStudio`, kebab name `grammar-studio`).
+  (`packages/grammarTools/cli`, kebab name `grammar-studio`).
 - ~~Output format - human only, or `--json` mode for scripts?~~ Both;
   `--json` mandatory from E.0.
 - REPL detail (history, multi-line input, `help`) - decide during E.0

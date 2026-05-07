@@ -5,28 +5,37 @@
 import { loadGrammarFromFile } from "grammar-tools-core";
 import { previewCompletion } from "grammar-tools-core";
 import { format } from "grammar-tools-core";
+import { traceMatch, formatTrace } from "grammar-tools-core";
 import * as fs from "fs";
 import * as path from "path";
 
 const args = process.argv.slice(2);
-const command = args[0];
+const jsonFlag = args.includes("--json");
+const positionals = args.filter((a) => a !== "--json");
+const command = positionals[0];
 
 function usage(): void {
-    console.log([
-        "grammar-studio - Grammar exploration CLI",
-        "",
-        "Usage:",
-        "  grammar-studio load <file.agr>       Load and validate a grammar file",
-        "  grammar-studio complete <file> <inp> Preview completions for input",
-        "  grammar-studio format <file.agr>     Format a grammar file",
-        "  grammar-studio help                  Show this help",
-    ].join("\n"));
+    console.log(
+        [
+            "grammar-studio - Grammar exploration CLI",
+            "",
+            "Usage:",
+            "  grammar-studio load <file.agr>            Load and validate a grammar file",
+            "  grammar-studio complete <file> <input>    Preview completions for input",
+            "  grammar-studio format <file.agr>          Format a grammar file",
+            "  grammar-studio trace <file> <input>       Trace matcher execution on input",
+            "  grammar-studio help                       Show this help",
+            "",
+            "Options:",
+            "  --json    Output as JSON (machine-readable)",
+        ].join("\n"),
+    );
 }
 
 async function main(): Promise<void> {
     switch (command) {
         case "load": {
-            const file = args[1];
+            const file = positionals[1];
             if (!file) {
                 console.error("Error: file path required");
                 process.exit(1);
@@ -34,7 +43,9 @@ async function main(): Promise<void> {
             const result = await loadGrammarFromFile(path.resolve(file));
             if (result.ok) {
                 const g = result.grammar;
-                console.log("Loaded: " + g.identifiers.ruleIds.length + " rules");
+                console.log(
+                    "Loaded: " + g.identifiers.ruleIds.length + " rules",
+                );
             } else {
                 console.error("Failed to load grammar:");
                 for (const d of result.diagnostics) {
@@ -45,8 +56,8 @@ async function main(): Promise<void> {
             break;
         }
         case "complete": {
-            const file = args[1];
-            const input = args[2];
+            const file = positionals[1];
+            const input = positionals[2];
             if (!file || input === undefined) {
                 console.error("Error: file and input required");
                 process.exit(1);
@@ -61,7 +72,7 @@ async function main(): Promise<void> {
             break;
         }
         case "format": {
-            const file = args[1];
+            const file = positionals[1];
             if (!file) {
                 console.error("Error: file path required");
                 process.exit(1);
@@ -69,6 +80,52 @@ async function main(): Promise<void> {
             const source = fs.readFileSync(path.resolve(file), "utf-8");
             const formatted = format(source);
             process.stdout.write(formatted);
+            break;
+        }
+        case "trace": {
+            const file = positionals[1];
+            const input = positionals.slice(2).join(" ");
+            if (!file || !input) {
+                console.error("Usage: grammar-studio trace <file.agr> <input>");
+                process.exit(1);
+            }
+            const result = await loadGrammarFromFile(path.resolve(file));
+            if (!result.ok) {
+                if (jsonFlag) {
+                    console.log(
+                        JSON.stringify(
+                            {
+                                error: "load_failed",
+                                diagnostics: result.diagnostics,
+                            },
+                            null,
+                            2,
+                        ),
+                    );
+                } else {
+                    console.error("Failed to load grammar:");
+                    for (const d of result.diagnostics) {
+                        console.error("  " + d.severity + ": " + d.message);
+                    }
+                }
+                process.exit(1);
+            }
+            const trace = traceMatch(result.grammar, input);
+            if (jsonFlag) {
+                console.log(
+                    JSON.stringify(
+                        {
+                            input: trace.input,
+                            result: trace.result,
+                            events: trace.events,
+                        },
+                        null,
+                        2,
+                    ),
+                );
+            } else {
+                console.log(formatTrace(trace));
+            }
             break;
         }
         case "help":
